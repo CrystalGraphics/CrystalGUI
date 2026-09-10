@@ -8,10 +8,10 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.crystalgui.mc.fabric.CrystalGUI1201FabricCommon"
+      "com.crystalgui.mc.fabric.CrystalGUIFabricCommon"
     ],
     "client": [
-      "com.crystalgui.mc.fabric.CrystalGUI1201Fabric"
+      "com.crystalgui.mc.fabric.CrystalGUIFabric"
     ]
   },
   "depends": {

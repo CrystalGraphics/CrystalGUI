@@ -15,18 +15,18 @@ compiles against one loader and is used by three.
 
 | Package | What it contains |
 |---|---|
-| `com.crystalgui.mc.platform` | `Lifecycle1201` — **the one class a loader talks to**: bootstrap, client init, the server and client ticks, player join/leave, overlay paint, and the mouse/key offers. Plus `CrystalGUI1201`, which holds the mod id and name |
-| `com.crystalgui.mc.client` | The host: `CgUiScreen1201` (the viewport a desktop attaches to), `CgUiInput1201`, `CgUiHud1201`, `CgUiHostGl1201`, `CgUiKeybinds1201`, `ClientProbe1201` |
-| `com.crystalgui.mc.net` | `Connections1201`, `Peer1201`, `WorkspaceHost1201` (where the served workspace is), and `ServerSmoke1201` |
-| `com.crystalgui.mc.example` | `MachineExample1201` and its client half — the worked example, not engine code |
+| `com.crystalgui.mc.platform` | `LifecycleCrystalGUI` — **the one class a loader talks to**: bootstrap, client init, the server and client ticks, player join/leave, overlay paint, and the mouse/key offers. Plus `CrystalGUI`, which holds the mod id and name |
+| `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `CgUiInput`, `CgUiHud`, `CgUiHostGl`, `CgUiKeybinds`, `ClientProbe` |
+| `com.crystalgui.mc.net` | `Connections`, `Peer`, `WorkspaceHost` (where the served workspace is), and `ServerSmoke` |
+| `com.crystalgui.mc.example` | `MachineExample` and its client half — the worked example, not engine code |
 
 ## Key Design Points
 
-- **`Lifecycle1201` is the seam.** A loader subscribes its own events and forwards; every body on the
+- **`LifecycleCrystalGUI` is the seam.** A loader subscribes its own events and forwards; every body on the
   far side is one call into this module. Anything a loader does beyond registering is in the wrong
   place — see the loader modules' own notes.
 - **The transport is the exception.** Three loaders mean three networking APIs, so each builds its own
-  `CgNetworkChannel` and passes it to `Lifecycle1201.bootstrap`.
+  `CgNetworkChannel` and passes it to `LifecycleCrystalGUI.bootstrap`.
 - **`RenderGuiOverlayEvent` fires once per vanilla overlay ELEMENT** -- hotbar, crosshair, boss bar, chat and
   a dozen more. Painting the compositor from it laid it out and drew it about fifteen times a frame and put
   the game at ten fps. `RenderGuiEvent.Post` fires once; Fabric's `HudRenderCallback` already did.

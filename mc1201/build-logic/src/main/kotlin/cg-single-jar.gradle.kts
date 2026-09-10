@@ -60,7 +60,11 @@ registerSingleJarPipeline(SingleJarSpec(
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
-    libraryProjects = listOf(":core", ":taffy", ":mc-shared"),
+    // Tier 1 (§12) joins the library list rather than any loader's thin jar: one compiled copy of
+    // each LWJGL family, added once for every variant, never remapped. `mc-lwjgl3` holds only its
+    // package declaration until J9's extraction runs -- it is listed now so the wiring is one
+    // question rather than two.
+    libraryProjects = listOf(":core", ":taffy", ":mc-shared", ":mc-lwjgl2", ":mc-lwjgl3"),
 
     // One owner today, and the union is still the mechanism: the language jar ships its own
     // META-INF/services, and a second jar's providers never merge into this one's file.
@@ -126,9 +130,13 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/language/", "org/treesitter/", "assets/crystalgui/engines/",
         ))
         expectSingle.set(listOf("com/crystalgui/ui/"))
+        // COUNTED BY SIMPLE NAME, so a probe class must not have a twin in another tree. J9's suffix
+        // strip gave `mc1710` and `mc/modern` six pairs sharing a name -- CgUiScreen among them -- and
+        // this asked for 3 copies of CgUiScreen.class and found 4. `CgUiKeybinds` has no 1.7.10
+        // counterpart, so it counts the relocation and nothing else.
         relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/platform/Lifecycle1201.class" to 3,
-            "com/crystalgui/mc/client/CgUiScreen1201.class" to 3,
+            "com/crystalgui/mc/modern/platform/LifecycleCrystalGUI.class" to 3,
+            "com/crystalgui/mc/modern/client/CgUiKeybinds.class" to 3,
         ))
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
@@ -138,9 +146,9 @@ registerSingleJarPipeline(SingleJarSpec(
             // Every entry point the descriptors name -- see the language jar's list for what this
             // catches. These four are each loader's own package, which no relocation touches.
             "com/crystalgui/CrystalGUI.class",
-            "com/crystalgui/mc/forge/CrystalGUI1201Forge.class",
-            "com/crystalgui/mc/neoforge/CrystalGUI1201NeoForge.class",
-            "com/crystalgui/mc/fabric/CrystalGUI1201Fabric.class",
+            "com/crystalgui/mc/forge/CrystalGUIForge.class",
+            "com/crystalgui/mc/neoforge/CrystalGUINeoForge.class",
+            "com/crystalgui/mc/fabric/CrystalGUIFabric.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
         ))
@@ -251,8 +259,14 @@ registerSingleJarPipeline(SingleJarSpec(
             "org/objectweb/asm/",
         ))
         expectSingle.set(listOf("com/crystalgui/language/"))
+        // Counted by simple name, as the host jar's own note explains. NOT `ScriptService`: J9's
+        // suffix strip renamed the 1.20.x installer `ScriptService1201` -> `ScriptService`, which is
+        // the simple name of the SPI it installs (`com.crystalgui.language.platform.ScriptService`),
+        // so this counted 4. `LanguageLifecycle` is unique. The name clash itself is a readability
+        // defect rather than a functional one -- the two are in different packages -- but the host
+        // half wants a name of its own; `ModernScriptService` is what the plan asked for.
         relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/lang/ScriptService1201.class" to 3,
+            "com/crystalgui/mc/modern/lang/LanguageLifecycle.class" to 3,
         ))
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
@@ -263,9 +277,9 @@ registerSingleJarPipeline(SingleJarSpec(
             // exist. Only the `com.crystalgui.mc.lang` half is relocated, so the three loader entries
             // keep their own package.
             "com/crystalgui/mc/lang/CrystalGuiLanguage.class",
-            "com/crystalgui/mc/forge/lang/CrystalGuiLanguage1201Forge.class",
-            "com/crystalgui/mc/neoforge/lang/CrystalGuiLanguage1201NeoForge.class",
-            "com/crystalgui/mc/fabric/lang/CrystalGuiLanguage1201Fabric.class",
+            "com/crystalgui/mc/forge/lang/CrystalGuiLanguageForge.class",
+            "com/crystalgui/mc/neoforge/lang/CrystalGuiLanguageNeoForge.class",
+            "com/crystalgui/mc/fabric/lang/CrystalGuiLanguageFabric.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
             "assets/crystalgui/engines/8/index.txt",

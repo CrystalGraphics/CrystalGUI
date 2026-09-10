@@ -113,7 +113,7 @@ supplies the platform classes**, by design, because tier 2 was expected to infer
 |---|---|---|---|
 | Classpath route that fires | `java.class.path` | `getSources()` | `java.class.path` |
 | Platform classes | ECJ infers | `rt.jar` (Java 8) or inference | ECJ infers |
-| `ScriptService` | `NONE` | `ScriptService1710` (live bytes, mappings) | `ScriptService1201` (`cacheRoot()` only) |
+| `ScriptService` | `NONE` | `ScriptService1710` (live bytes, mappings) | `ScriptService` (`cacheRoot()` only) |
 | Live bytes (tier 1) | none | LaunchWrapper | **none — `ByteSource.NONE`** |
 | Compliance | 1.8 | 8 | **21** |
 
@@ -145,7 +145,7 @@ mc1201    : level=21  classpath=125 entries; jrt-fs=true; java.lang.Object=RESOL
 **A service registered for `cacheRoot()` alone still turns the live tier on.** `PlatformTypeBytes.of()`
 reads "a platform is registered" as "the runtime holds bytes worth preferring over the classpath". That is
 true of a remapped 1.7.10 client and false of a service registered so an engine band knows where it may
-extract — and `ScriptService1201` answered `liveBytes()` by borrowing `ScriptService.NONE`'s classloader
+extract — and `ScriptService` answered `liveBytes()` by borrowing `ScriptService.NONE`'s classloader
 view, which answers for **every loadable class, the JDK included**.
 
 So `find()` asked tier 1 for `java/lang/Object`, got bytes, and returned them without consulting the
@@ -181,7 +181,7 @@ the same file went from sixteen errors to zero.
 
 **When this layer misbehaves, reach for that flag first.** "Live" and "file-based" agree nearly
 everywhere, so the one question worth asking early is which of the two is answering. It is forwarded by
-the 1.20.x dev runs; `ClientProbe1201` prints the analysed file's diagnostics as text, so the answer does
+the 1.20.x dev runs; `ClientProbe` prints the analysed file's diagnostics as text, so the answer does
 not have to be read off a screenshot.
 
 ---
@@ -247,7 +247,7 @@ Never by file name — several publishers ship a `mappings.txt`.
 
 Mojang's `client.txt` lives at a content-addressed URL discoverable only through the version manifest, so
 `MappingCoordinates.Source` resolves a URL **and its digest** at fetch time rather than pinning a number
-nobody could verify. `MojangMappings1201` does that lookup; the digest comes back tagged `sha1:`, which
+nobody could verify. `MojangMappings` does that lookup; the digest comes back tagged `sha1:`, which
 `CacheFiles` checks alongside `gitblob:` and bare MD5. The runtime halves live inside archives
 (MCPConfig a zip, Fabric a jar), so a file may name an entry to extract; the digest is verified on the
 **archive**, and presence is the check on what came out of it.
@@ -265,7 +265,7 @@ cancel. **A platform states the what, the where and the how — never the when.*
 
 ### The loader is never named
 
-`ScriptService1201` asks the runtime which namespace it is in — it reads `net/minecraft/class_1937`, a
+`ScriptService` asks the runtime which namespace it is in — it reads `net/minecraft/class_1937`, a
 class only an intermediary runtime has — and picks the probe and the coordinates from the answer. A flag
 someone sets is a flag that will be wrong in exactly the environment nobody tests, and a future loader
 shipping intermediary gets the right answer without being named.

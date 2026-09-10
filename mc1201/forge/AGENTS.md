@@ -11,7 +11,7 @@ MOD for key mappings, FORGE for both sides, FORGE+CLIENT for input and paint -- 
 inner class is the `SimpleChannel` transport.
 
 The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in `:mc1201:common`'s `Lifecycle1201`.
+mod and owns them. Everything this loader forwards to lives in `:mc1201:common`'s `LifecycleCrystalGUI`.
 
 ## Minecraft Source Location
 
