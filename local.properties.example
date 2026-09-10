@@ -30,6 +30,9 @@
 # CrystalGraphics beside it — and deletes the previous pair first, so a loader switch cannot leave a
 # jar built for the other one behind. Unset is fine: the jars go to that module's `build/ship/`.
 
+# The launcher binary itself, which `prodSmoke` drives. Required by that task and nothing else.
+#prismLauncherExe=C:/Users/you/AppData/Local/Programs/PrismLauncher/prismlauncher.exe
+
 #prismLauncher1201ForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Forge
 #prismLauncher1204NeoForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1204 NeoForge
 #prismLauncher1710Dir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1710
