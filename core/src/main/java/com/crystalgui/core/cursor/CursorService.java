@@ -37,7 +37,7 @@ import com.crystalgraphics.platform.CgService;
  * </ul>
  *
  * <p>Both adapters live in CrystalGraphics' {@code mc-lwjgl2} / {@code mc-lwjgl3} tier-1 modules and
- * take a {@code CgCursorImage}: a name, some pixels and a hotspot. <b>Neither enumerates keywords</b>
+ * take a {@code CgCursorService.Image}: a name, some pixels and a hotspot. <b>Neither enumerates keywords</b>
  * — {@link CursorBitmaps#artFor} is the single table and it is here, so adding a {@link Cursor} needs
  * no edit anywhere else. The name is what crosses: an adapter whose toolkit ships that shape natively
  * prefers its own and falls back to our artwork.</p>

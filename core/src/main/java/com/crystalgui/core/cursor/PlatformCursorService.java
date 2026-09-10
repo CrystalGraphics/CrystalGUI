@@ -1,8 +1,8 @@
 package com.crystalgui.core.cursor;
 
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgraphics.platform.service.CgCursorImage;
 import com.crystalgraphics.platform.service.CgCursorService;
+import com.crystalgraphics.platform.service.CgCursorService.Image;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -23,35 +23,35 @@ import java.util.Map;
 final class PlatformCursorService implements CursorService {
 
     /**
-     * One {@link CgCursorImage} per keyword, built once.
+     * One {@link Image} per keyword, built once.
      *
      * <p>Not an optimisation to skip: {@link CursorArt#draw()} rasterises the picture, and
      * {@code setCursor} is called from hover handling — every time the pointer crosses an element.
      * The adapter caches native handles by name; this caches the pixels behind them.
      */
-    private final Map<Cursor, CgCursorImage> images = new EnumMap<>(Cursor.class);
+    private final Map<Cursor, Image> images = new EnumMap<>(Cursor.class);
 
     @Override
     public void setCursor(Cursor cursor) {
         CgPlatform.get(CgCursorService.SERVICE).show(imageFor(cursor));
     }
 
-    private CgCursorImage imageFor(Cursor cursor) {
+    private Image imageFor(Cursor cursor) {
         if (cursor == null) return null;
         // computeIfAbsent is not used: a keyword with no art maps to null, which it cannot store,
         // so every miss would rasterise again.
         if (images.containsKey(cursor)) return images.get(cursor);
 
         CursorArt art = CursorBitmaps.artFor(cursor);
-        CgCursorImage image = null;
+        Image image = null;
         if (art != null) {
             int[] pixels = art.draw();
             // The name travels even when the pixels do: an adapter whose toolkit ships that shape
             // natively prefers its own, and only falls back to ours.
             image = pixels == null
-                    ? CgCursorImage.standard(art.name())
-                    : CgCursorImage.of(art.name(), pixels, CursorBitmaps.SIZE, CursorBitmaps.SIZE,
-                                       art.hotspotX(), art.hotspotY());
+                    ? Image.standard(art.name())
+                    : Image.of(art.name(), pixels, CursorBitmaps.SIZE, CursorBitmaps.SIZE,
+                               art.hotspotX(), art.hotspotY());
         }
         images.put(cursor, image);
         return image;
