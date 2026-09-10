@@ -252,7 +252,11 @@ public final class CgUiScreen1201 extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        if (host == null || !CgUiHostGl1201.contextIsLive()) return;
+        if (host == null) return;
+        // The engine initialises on the first WORLD render and this screen also opens over the title
+        // screen, where there is none. @see CgUiHostGl1201#ensureContext
+        CgUiHostGl1201.ensureContext(surfaceWidth(), surfaceHeight());
+        if (!CgUiHostGl1201.contextIsLive()) return;
         // THE RETRY, and it costs a boolean read once a window exists. @see #awaitingEditorLaunch
         if (awaitingEditorLaunch) bringEditorForward();
         float delta = frameDelta();
@@ -273,10 +277,25 @@ public final class CgUiScreen1201 extends Screen {
         CgUiHostGl1201.enter();
         try {
             host.desktop().paint(DesktopPresentation.DESKTOP, delta, surfaceWidth(), surfaceHeight());
+            painted = true;
         } finally {
             CgUiHostGl1201.leave();
         }
     }
+
+    /**
+     * Whether the desktop has painted a frame, ever.
+     *
+     * <p>The early return at the top of {@link #render} is silent, so a screen that is "open" with no
+     * live GL context draws nothing at all -- and with no level Minecraft does not clear the colour
+     * buffer either, so a screenshot then photographs the PREVIOUS screen. That reads as a working
+     * desktop to anything checking only that a capture exists.</p>
+     */
+    public static boolean hasPainted() {
+        return painted;
+    }
+
+    private static boolean painted;
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {

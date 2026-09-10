@@ -7,6 +7,21 @@ modifications. A javadoc comment naming the source is good practice and is not t
 
 Per-directory detail lives beside the assets it covers; this is the index.
 
+## The notice that ships is not this file
+
+This file describes the **repository**. What an obligation actually asks for is a notice in the hands of
+whoever receives the **binary**, and since J8 there are two binaries carrying different libraries:
+
+| Jar | What it carries | Notice, checked in | Notice, shipped |
+|---|---|---|---|
+| `crystalgui-<version>.jar` | the engine and the workbench: Taffy, the IntelliJ diff port, the icon sets, the fonts | [`notices/crystalgui.md`](notices/crystalgui.md) | `META-INF/NOTICE.md` |
+| `crystalgui-language-<version>.jar` | the scripting stack: tree-sitter and its grammars, ECJ, Rhino, CFR, ASM | [`notices/crystalgui-language.md`](notices/crystalgui-language.md) | `META-INF/NOTICE.md` |
+
+Each jar's `check<Name>Jar` lists `META-INF/NOTICE.md` among its required entries, so a jar that lost
+its notice is not shippable and is deleted rather than left on disk. **Moving a library between the two
+jars means moving its row between the two files in the same commit** — that is the whole failure mode
+this split introduces, and nothing else detects it.
+
 | What | Where | Licence | Notes |
 |---|---|---|---|
 | **IntelliJ diff/merge algorithms** | `core/src/main/java/com/crystalgui/text/diff/` | **Apache 2.0** | © 2000–2024 JetBrains s.r.o. **Ported source, modified** — `DiffRange` (`util/Range`), `DiffIterable` (`comparison/iterables/FairDiffIterable`), `MergeRange` (`util/MergeRange`), `MergeRanges` (`ComparisonMergeUtil.FairMergeBuilder` + `ChangeBuilder`), `ComparisonPolicy` (`comparison/ComparisonPolicy` + the equality half of `ComparisonUtil`). Each class names its upstream file and its modifications in its own javadoc, per § 4(b) |
@@ -15,7 +30,7 @@ Per-directory detail lives beside the assets it covers; this is the index.
 | Minecraft fonts | `core/src/main/resources/assets/crystalgui/ui/fonts/` | Public domain | `Minecraft.otf`, `MinecraftRegular.otf` |
 | JetBrains Mono | `core/src/main/resources/assets/crystalgui/ui/fonts/` | **SIL OFL 1.1** | `JetBrainsMono-Regular.ttf`. The **code** face — the editor and anything carrying `.__syntax__`. See [Fonts](#fonts) |
 | **Taffy** (`taffy-java`) | `taffy/` | **MIT** | © 2026 vfyjxf. A pure-Java port of Rust [Taffy](https://github.com/DioxusLabs/taffy). **VENDORED AND MODIFIED** — the sources of `dev.vfyjxf:taffy:1.1.4`, checked in and forked, because its leaf-measure path is wrong under `flex-wrap: wrap` and the defect is one line inside the flexbox algorithm. [`taffy/MODIFICATIONS.md`](taffy/MODIFICATIONS.md) is the statement of changes MIT requires; `taffy/LICENSE` is the notice. The package stays `dev.vfyjxf.taffy` because `mc1710` relocates it when shipping. The pre-fork sources remain at `research_repos/taffy/` as the diff baseline |
-| fastutil | Gradle dependency, via `taffy/` | **Apache 2.0** | © 2002–2023 Sebastiano Vigna. Taffy's own dependency, for seven types. Shaded and relocated into the mod jar by `mc1710` |
+| ~~fastutil~~ | **no longer used** | Apache 2.0 | © 2002–2023 Sebastiano Vigna. Was Taffy's dependency for seven types, shaded and relocated — **19.65 MB of a 31.20 MB jar**, 12,808 of 15,892 entries. Reimplemented in `dev.vfyjxf.taffy.collection` on 2026-09-10 and the dependency dropped; the jar is 8.44 MB. Row kept because the version that used to sit in `gradle.properties` is the thing somebody will try to add back. See `taffy/MODIFICATIONS.md` §2 |
 | LDLib2 | `research_repos/LDLib2/` | — | In-repo checkout, read for pattern prior art. **Not** a dependency and nothing is copied from it |
 | Minecraft 1.20.1 sources | `research_repos/mc1201_sources/` | Proprietary | Decompiled reference. Not redistributed, not built |
 | tree-sitter binding + six grammars | `lib/tree-sitter/` | MIT | See [lib/tree-sitter/README.md](lib/tree-sitter/README.md) for per-jar provenance |

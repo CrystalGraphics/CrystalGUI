@@ -2,7 +2,6 @@ package com.crystalgui.mc;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.cursor.CursorService;
-import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiHud;
@@ -26,19 +25,6 @@ import com.crystalgui.mc.platform.service.CursorService1710;
  * there — see the comment in {@code CgUiLifecycle.onInit} for what leaks and what it cost.</p>
  */
 public class ClientProxy extends CommonProxy {
-
-    /**
-     * The client has frames, so it can afford the job the fetch runs in. @see CommonProxy#startMappings
-     *
-     * <p>Started here rather than left to the first caller of {@code PlatformMappings.current()}: that
-     * caller is the first Java analysis, which then starts the download and reads the identity in the
-     * same breath. On 1.7.10 every name is obfuscated, so losing that race is the difference between
-     * {@code getMinecraft()} and {@code func_71410_x()} in a freshly opened file.</p>
-     */
-    @Override
-    public void startMappings() {
-        PlatformMappings.start();
-    }
 
     @Override
     public void preInit() {

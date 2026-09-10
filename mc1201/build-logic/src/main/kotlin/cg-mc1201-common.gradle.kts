@@ -27,9 +27,6 @@ dependencies {
     // holds a Taffy NodeId and a JOML Matrix4f as FIELDS, which resolve at class load. Without these
     // javac reports "cannot access UIDocument" rather than a missing dependency. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":taffy"))
-    // :language, for the ScriptService seam. compileOnly here and bundled by the loaders: this module
-    // names the interface, and whether the grammars and engines ship is the loaders' decision.
-    "compileOnly"(project(":language"))
     // Mixin compileOnly — both loaders bundle it at runtime; never shade it.
     "compileOnly"("org.spongepowered:mixin:${property("mc1201.mixin")}")
     // NOTE: mixin annotationProcessor is intentionally omitted here — legacyForge configures
@@ -39,11 +36,45 @@ dependencies {
     "annotationProcessor"("io.github.llamalad7:mixinextras-common:${property("mc1201.mixinextras")}")
 }
 
+// ── The language stack's host half (J8) ──────────────────────────────────────────────────────────
+//
+// A SOURCE SET, not a module of its own: this module's toolchain is already configured for 1.20.1,
+// and a module per loader per era doubles the module count every time an era is added.
+//
+// `main` is on lang's compile classpath and NOT the reverse, so the main jar cannot name the language
+// stack — the compiler enforces the split rather than an import guard noticing it afterwards. Its own
+// package (`com.crystalgui.mc.lang`) because the two source sets end up in two JARS, and two jars
+// sharing a package is a split package that fails module resolution on Forge and NeoForge.
+val lang: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets["main"].compileClasspath + sourceSets["main"].output
+    runtimeClasspath += sourceSets["main"].runtimeClasspath + sourceSets["main"].output
+}
+
+dependencies {
+    // :language reaches THIS source set and not `main`, which is what makes the rule above a compile
+    // error rather than a convention.
+    "langCompileOnly"(project(":language"))
+}
+
+/** The language host, for the loaders' lang thin jars to consume exactly as they consume `jar`. */
+val langJar = tasks.register<Jar>("langJar") {
+    group = "language jar"
+    description = "The language stack's 1.20.x host — the language mod's shared half."
+    archiveClassifier.set("lang")
+    from(lang.output)
+}
+
 // Export compiled JAR so loader subprojects can depend on it as a binary
 configurations.create("commonOutput") {
     isCanBeConsumed = true; isCanBeResolved = false
 }
 artifacts { add("commonOutput", tasks.named("jar")) }
+
+/** The same, for the language half: what each loader's own `lang` source set compiles against. */
+configurations.create("commonLangOutput") {
+    isCanBeConsumed = true; isCanBeResolved = false
+}
+artifacts { add("commonLangOutput", langJar) }
 
 // LegacyForge mode: puts MC 1.20.1 + MinecraftForge (compileOnly) on the classpath.
 // NeoForm 1.20.1 was never published to Maven, so neoFormRuntime{}/neoForge{neoFormVersion=...}

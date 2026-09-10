@@ -55,6 +55,14 @@ legacyForge {
             sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
             sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["main"])
         }
+        // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
+        // leaves it out, which is how the degraded configuration is exercised without building a jar.
+        if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+            create("crystalgui_language") {
+                sourceSet(sourceSets["lang"])
+                sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["lang"])
+            }
+        }
     }
 }
 
@@ -107,23 +115,40 @@ val reobfShadowJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationE
         archiveClassifier.set("srg")
     }
 
-tasks.named("assemble") { dependsOn(reobfShadowJar) }
+// Not on `assemble` (J7): the single jar is the shipping artifact, and reobfuscating a fat jar nothing
+// installs was pure cost. `./gradlew reobfShadowJar` still produces one.
 
-
-// -- Dropping a build into a real client ---------------------------------------------------------
+// -- The thin jar, reobfuscated (J1) --------------------------------------------------------------
 //
-// CrystalGraphics goes too: CrystalGUI does not run without it, and shipping one of a matched pair is
-// how an afternoon disappears. Its reobfuscated jar is `reobfShadowJar` -- no downgrade step there,
-// being Java 17 throughout, where this project shadows core/ and language/ and must downgrade first.
-val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
+// The merge's input from this loader: its own classes plus the relocated :mc1201:common, at SRG
+// names. Reobfuscated for the same reason the shadow jar is -- production runs SRG members and a jar
+// built against official ones calls methods this Minecraft does not have.
+val reobfThinJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension>()
+    .reobfuscate(
+        tasks.named<org.gradle.api.tasks.bundling.AbstractArchiveTask>("thinShadowJar"),
+        sourceSets.main.get()) {
+        archiveClassifier.set("thin")
+    }
 
-// ONLY the -srg pair. `assemble` also leaves a `-java17` jar carrying every class under official
-// names, and a tiny plain one correctly mapped and nearly empty. Both install; neither runs.
-extra["cgDeployKey"] = "prismLauncher1201ForgeDir"
-extra["cgDeployJars"] = listOf(
-        layout.buildDirectory.file("libs/crystalgui-mc1201-forge-$version-srg.jar"),
-        File(crystalGraphicsBuild.projectDir,
-                "mc1201/forge/build/libs/crystalgraphics-mc1201-forge-1.0.0-srg.jar"))
-extra["cgDeployDependsOn"] = listOf(
-        reobfShadowJar, crystalGraphicsBuild.task(":mc1201:forge:reobfShadowJar"))
-apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())
+// Registered by cg-mc1201-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
+tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    jar.set(reobfThinJar.flatMap { it.archiveFile })
+}
+tasks.named("assemble") { dependsOn(reobfThinJar) }
+
+// -- The language thin jar, reobfuscated (J8) -----------------------------------------------------
+//
+// `main` and not `lang` as the second argument: ModDevGradle looks for `<sourceSet>RuntimeElements`,
+// which only `main` has, and what that argument supplies is the REMAPPER's classpath rather than the
+// jar's contents. Passing `lang` fails with "langRuntimeElements not found".
+val reobfLangThinJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension>()
+    .reobfuscate(
+        tasks.named<org.gradle.api.tasks.bundling.AbstractArchiveTask>("langThinShadowJar"),
+        sourceSets.main.get()) {
+        archiveClassifier.set("lang-thin")
+    }
+
+
+// The per-loader `deployMods` is retired (J7). One artifact installs on every loader now, so the root
+// `deploySingleJars` puts that pair into all four instances; a per-loader deploy could only ever
+// install the fat jar this module no longer ships.

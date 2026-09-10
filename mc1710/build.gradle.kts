@@ -1,4 +1,5 @@
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
 
 plugins {
@@ -110,6 +111,10 @@ jvmdg.multiReleaseOriginal.set(false)
 dependencies {
     compileOnly(project(":core"))
 
+    // :mc-shared, for `LoaderProbe` -- which loader this process is, answered once for every variant.
+    // compileOnly because shadowJar bundles the classes itself; see the `from(zipTree(...))` below.
+    compileOnly(project(":mc-shared"))
+
     // :language's engine API, for the DOWNGRADE CLASSPATH ONLY -- see downgradeJar below.
     engineApi(project(path = ":language", configuration = "engineApi"))
 
@@ -139,16 +144,19 @@ dependencies {
 // that fakes it is a special case of where the resource physically lives; one text file reads the same
 // however it is stored. @see EngineBundle
 /**
- * Which bands this jar CARRIES. `-PcgBundleBands=8`, `8,17`, or `none`.
+ * Which bands this build CARRIES from the 1.7.10 side. `-PcgBundleBands=8`, `8,17`, or `none`.
  *
- * Default 8, because that is what a 1.7.10 client runs. A pack that ships lwjgl3ify and Java 17 can bake
- * 17 instead -- or both, at about 29 MB -- and a slim build can bake none and rely entirely on the
- * download. The runtime path is identical either way: bundled is tried first, the download second, and
+ * 8 and 11 by default, and since J8 the consumer is the LANGUAGE jar rather than this module's own:
+ * 8 is what a stock 1.7.10 client runs and 11 what one on lwjgl3ify does, and mc1201 supplies 17.
+ * A jar downloaded for what the bands provide should not then have to fetch one, which is a different
+ * call from the host jar's and is why the default moved. `-PcgBundleBands=8` restores the slim build.
+ *
+ * The runtime path is identical either way: bundled is tried first, the download second, and
  * `firstOf` takes the first non-empty answer.
  */
 val bundledBands: List<Int> = providers.gradleProperty("cgBundleBands").orNull
     ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() && it != "none" }?.map { it.toInt() }
-    ?: listOf(8)
+    ?: listOf(8, 11)
 
 fun configurationForBand(band: Int): Configuration = when (band) {
     8 -> engineBand8
@@ -652,6 +660,7 @@ tasks.shadowJar {
     // Bundle core/ and language/ classes into the shadow JAR so the mod is self-contained
     dependsOn(":core:jar")
     dependsOn(":language:jar")
+    dependsOn(":mc-shared:jar")
 }
 
 // ONE MERGED META-INF/services, and the shipped jar was WRONG without it.
@@ -708,6 +717,14 @@ afterEvaluate {
         val coreJar = project(":core").tasks.named<Jar>("jar").get()
         from(zipTree(coreJar.archiveFile.get())) { exclude("META-INF/services/**") }
 
+        // :mc-shared, which `mixins.crystalgui.json` names as its plugin. UNPACKED rather than
+        // declared as `shadowImplementation` for the same reason :language is: this module relocates
+        // what it shadows, and a relocated plugin class is one the config can no longer name.
+        //
+        // Only until J4, when the root merge adds it once for every loader.
+        val sharedJar = project(":mc-shared").tasks.named<Jar>("jar").get()
+        from(zipTree(sharedJar.archiveFile.get()))
+
         // :language, and the tree-sitter jars it needs.
         //
         // UNPACKED HERE RATHER THAN DECLARED AS `shadowImplementation`, and the difference is not
@@ -728,6 +745,157 @@ afterEvaluate {
     }
 }
 
+// ── The language stack's 1.7.10 host (J8) ───────────────────────────────────────────────────────
+//
+// A SOURCE SET, not a module of its own: this module's toolchain is already configured for 1.7.10,
+// and a module per loader per era doubles the module count every time an era is added.
+//
+// `main` is on lang's compile classpath and NOT the reverse, and `:language` is declared HERE rather
+// than in dependencies.gradle, so a language import in `main` is a compile error rather than
+// something an import guard notices afterwards. Its own package (`com.crystalgui.mc.lang`) because
+// the two source sets end up in two JARS, and two jars sharing a package is a split package.
+val lang: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets["main"].compileClasspath + sourceSets["main"].output
+    runtimeClasspath += sourceSets["main"].runtimeClasspath + sourceSets["main"].output
+}
+
+dependencies {
+    "langCompileOnly"(project(":language"))
+    "langCompileOnly"("org.projectlombok:lombok:1.18.44")
+    "langAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
+}
+
+// A DEV RUN SEES crystalgui_language BECAUSE FML SCANS THE CLASSPATH for @Mod (J8) -- no descriptor
+// needed here, unlike the three ModLauncher/Knot loaders. `-PcgNoLanguage` leaves it off, which is
+// how the degraded configuration is exercised without building a jar.
+if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+    dependencies { "runtimeOnly"(files(lang.output)) }
+}
+
+/** The language host's own classes, the input to its thin jar. */
+val langJar = tasks.register<Jar>("langJar") {
+    group = "language jar"
+    description = "The language stack's 1.7.10 host, the language mod's own half."
+    archiveClassifier.set("lang-dev")
+    from(lang.output)
+}
+
+/**
+ * The language thin jar: this loader's language half at SRG names, the language merge's input.
+ *
+ * Same mapping inputs as `reobfThinJar` and for the same reason: two reobfuscations against
+ * different SRG or CSVs is two things to keep in step.
+ */
+val reobfLangThinJar = tasks.register<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfLangThinJar") {
+    group = "language jar"
+    description = "This loader's language half at SRG names, the language merge's input."
+    archiveClassifier.set("lang")
+
+    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar")
+    inputJar.set(langJar.flatMap { it.archiveFile })
+    mcVersion.set(fat.flatMap { it.mcVersion })
+    srg.set(fat.flatMap { it.srg })
+    fieldCsv.set(fat.flatMap { it.fieldCsv })
+    methodCsv.set(fat.flatMap { it.methodCsv })
+    exceptorCfg.set(fat.flatMap { it.exceptorCfg })
+    recompMcJar.set(fat.flatMap { it.recompMcJar })
+    extraSrgEntries.set(fat.flatMap { it.extraSrgEntries })
+    extraSrgFiles.from(fat.map { it.extraSrgFiles })
+    referenceClasspath.from(fat.map { it.referenceClasspath })
+}
+
+// ── The thin jar (J1) ────────────────────────────────────────────────────────────────────────────
+//
+// One input to the single-jar merge: this loader's own classes and resources at SRG names, and
+// nothing else. `core`, `language`, taffy, the engine band and tree-sitter enter the merge
+// once at the root, so a copy here would ship four times over.
+//
+// ITS INPUT IS `jar`, NOT `shadowJar`. GTNH's `jar` is already exactly this module's output -- the
+// `-dev-preshadow` artifact, 64 entries -- so a separate "assemble the thin contents" task would be
+// a second spelling of a jar that already exists.
+//
+// AND NO DOWNGRADE STEP, which is the difference from the fat chain rather than an omission: the
+// ROOT MERGE downgrades everything it assembles in one pass, so downgrading here would be the same
+// work done twice. The consequence, measured: this jar's classes are major 69 -- the GTNH
+// convention's modern-syntax path emits Java 25 bytecode and `downgradeJar` is what lowers it -- so
+// the thin jar is production-MAPPED but not yet production-VERSIONED, and 52 is asserted at the root
+// rather than here.
+//
+// It also means the merged jar is remapped before it is downgraded, where the per-loader fat jars
+// downgrade first. jvmdg rewrites bytecode and does not read names, so the order is safe; what it
+// costs is the supertype walk failing to resolve SRG-named Minecraft classes, which is the harmless
+// wall of "Could not find class" the fat chain already documents.
+val reobfThinJar = tasks.register<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfThinJar") {
+    group = "build"
+    description = "This loader's own classes at SRG names -- the merge's input."
+    archiveClassifier.set("thin")
+
+    // Every mapping input is TAKEN FROM `reobfJar` rather than re-derived: the two must reobfuscate
+    // against the same SRG, the same CSVs and the same reference classpath, and a second spelling of
+    // that configuration is a second thing to keep in step. Providers, so nothing resolves early.
+    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar")
+    inputJar.set(tasks.named<Jar>("jar").flatMap { it.archiveFile })
+    mcVersion.set(fat.flatMap { it.mcVersion })
+    srg.set(fat.flatMap { it.srg })
+    fieldCsv.set(fat.flatMap { it.fieldCsv })
+    methodCsv.set(fat.flatMap { it.methodCsv })
+    exceptorCfg.set(fat.flatMap { it.exceptorCfg })
+    recompMcJar.set(fat.flatMap { it.recompMcJar })
+    extraSrgEntries.set(fat.flatMap { it.extraSrgEntries })
+    extraSrgFiles.from(fat.map { it.extraSrgFiles })
+    referenceClasspath.from(fat.map { it.referenceClasspath })
+}
+
+// Written out here rather than reusing `cgbuildlogic.CheckThinJar`, which the three 1.20.x loaders
+// share: that class lives in `mc1201/build-logic`, and this module applies the GTNH convention
+// instead, so the class is not on its buildscript classpath. The assertions are the same three.
+val checkThinJar = tasks.register("checkThinJar") {
+    group = "verification"
+    description = "Fails unless the thin jar holds this loader alone."
+    // 69 is Java 25, what this module compiles to before anything downgrades it. Asserted rather
+    // than ignored so a toolchain change is visible here instead of at the root merge.
+    val ceiling = 69
+    val thin = reobfThinJar.flatMap { it.archiveFile }
+    inputs.file(thin).withPropertyName("thinJar")
+    outputs.upToDateWhen { true }
+    doLast {
+        val file = thin.get().asFile
+        val forbidden = listOf(
+            "com/crystalgui/ui/", "com/crystalgui/widget/", "com/crystalgui/style/",
+            "com/crystalgui/workbench/", "com/crystalgui/language/", "dev/vfyjxf/", "org/joml/",
+            "it/unimi/", "org/treesitter/", "assets/crystalgui/engines/")
+        val banned = mutableListOf<String>()
+        val stray = mutableListOf<String>()
+        val tooNew = mutableListOf<String>()
+        var classes = 0
+        ZipFile(file).use { zip ->
+            for (entry in zip.entries()) {
+                if (entry.isDirectory) continue
+                val name = entry.name
+                if (forbidden.any { name.startsWith(it) }) banned += name
+                if (!name.endsWith(".class")) continue
+                classes++
+                if (!name.startsWith("com/crystalgui/")) stray += name
+                val head = ByteArray(8)
+                zip.getInputStream(entry).use { it.read(head) }
+                val major = ((head[6].toInt() and 0xFF) shl 8) or (head[7].toInt() and 0xFF)
+                if (major > ceiling) tooNew += "$name (major $major)"
+            }
+        }
+        if (banned.isNotEmpty() || stray.isNotEmpty() || tooNew.isNotEmpty()) {
+            throw GradleException("${file.name} is not a thin jar."
+                + banned.take(8).joinToString("\n      ", "\n  belongs to the root merge:\n      ", "")
+                + stray.take(8).joinToString("\n      ", "\n  outside com/crystalgui/:\n      ", "")
+                + tooNew.take(8).joinToString("\n      ", "\n  above major 52:\n      ", ""))
+        }
+        logger.lifecycle("[cgui] {}: {} classes, all under com/crystalgui/ and at or below major {}",
+                file.name, classes, ceiling)
+    }
+}
+
+tasks.named("check") { dependsOn(checkThinJar) }
+tasks.named("assemble") { dependsOn(reobfThinJar) }
+
 // -- Dropping a build into a real client ---------------------------------------------------------
 //
 // The SHIPPING jar here is the unclassified one -- GTNH's `reobfJar` output, at SRG names
@@ -736,12 +904,5 @@ afterEvaluate {
 //
 // 1.7.10 needs no mapping DOWNLOAD to be useful, unlike 1.20.x: MCP's data is what the readable
 // namespace is here, and `ScriptService1710` already states its coordinates.
-val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
-
-extra["cgDeployKey"] = "prismLauncher1710Dir"
-extra["cgDeployJars"] = listOf(
-        layout.buildDirectory.file("libs/crystalgui-$version.jar"),
-        File(crystalGraphicsBuild.projectDir, "mc1710/build/libs/crystalgraphics-1.0.0.jar"))
-extra["cgDeployDependsOn"] = listOf(
-        tasks.named("reobfJar"), crystalGraphicsBuild.task(":mc1710:reobfJar"))
-apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())
+// The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
+// into all four instances, and this one could only ever install the fat `reobfJar` nothing ships.

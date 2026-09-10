@@ -43,6 +43,47 @@ repositories {
     maven("https://maven.minecraftforge.net/") { name = "Forge" }
 }
 
+// ── The language stack's entry point on this loader (J8) ────────────────────────────────────────
+//
+// A SOURCE SET, not a module of its own: a module per loader per era doubles the module count every
+// time an era is added, for one entry class of twenty lines each.
+//
+// `main` is on lang's compile classpath and NOT the reverse, and `:language` is declared against THIS
+// source set below, so a language import in `main` is a compile error rather than something an import
+// guard notices afterwards. Declared before `dependencies {}` because langCompileOnly does not exist
+// until the source set does.
+val lang: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets["main"].compileClasspath + sourceSets["main"].output
+    runtimeClasspath += sourceSets["main"].runtimeClasspath + sourceSets["main"].output
+}
+
+// ── KNOWN BROKEN: a 1.20.x DEV RUN does not load the language mod ───────────────────────────────
+//
+// The SHIPPED jars are fine -- all four installed clients register the ScriptService and resolve
+// Minecraft types. This is a dev-run-only hole, and it is worse than it sounds because it is the wrong
+// way round: you meet it while developing and not while testing the artifact. A dev client logs
+//
+//     [crystalgraphics] platform service 'crystalgui:script-platform' was not provided
+//
+// with no `[cgui-lang]` line at all, so grammars are present and scripting is dead.
+//
+// WHAT IS ESTABLISHED, so the next attempt does not re-derive it:
+//  - `mods { create("crystalgui_language") { sourceSet(lang) } }` is declared in forge and neoforge and
+//    does NOT cause discovery. The run gets no `-Dfml.modFolders`, and `clientLegacyClasspath.txt` is
+//    118 cache jars with zero `build/classes` entries -- `main`'s output is not in it either, yet the
+//    host mod loads, so discovery is not that file.
+//  - The line below makes Gradle BUILD the lang source set for the run (`:mc1201:forge:compileLangJava`
+//    and `processLangResources` are in the run's task graph, and the descriptors land in
+//    `build/resources/lang/META-INF/mods.toml` naming `crystalgui_language`). Necessary, not sufficient.
+//  - So the remaining unknown is how ModDevGradle hands `mods {}` to BootstrapLauncher on legacyForge.
+//    Read the plugin, not this comment, and fix it there.
+//
+// Kept because it is a real part of the answer and costs nothing; NOT kept because it works.
+// `-PcgNoLanguage` skips it. Fabric is untested and is likely the same shape.
+if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+    dependencies { "runtimeOnly"(files(lang.output)) }
+}
+
 dependencies {
     // compileOnly: shadowJar bundles these manually (see each loader's build.gradle.kts).
     // runtimeOnly: picked up by Fabric/Loom dev runs via Gradle's standard runtimeClasspath.
@@ -51,17 +92,22 @@ dependencies {
     "compileOnly"(project(":mc1201:common"))
     "compileOnly"(project(":core"))
 
+    // compileOnly and NOT bundled: the merge adds :mc-shared once, under a package no variant
+    // relocates, so all four hosts share the one copy. Bundling it per loader would put four copies of
+    // com.crystalgui.mc.shared in the jar for the merge to reject as a duplicate.
+    "compileOnly"(project(":mc-shared"))
+
     // Taffy and JOML: :core has them compileOnly so they reach nobody transitively, and UIElement holds
     // a NodeId and a Matrix4f as fields. Needed at RUNTIME too -- a field descriptor resolves at class
     // load, so without them the UI classes do not load at all. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":taffy"))
     "runtimeOnly"(project(":taffy"))
 
-    // :language -- the grammars, ECJ and Rhino, plus the ScriptService seam. Bundled rather than
-    // omitted: the editor still opens every file without it, but it colours from core's word-list
-    // lexers and does not analyse, which is not the degradation somebody installing a code editor
-    // wants. plan/platform-mc1201.md 4.3.
-    "compileOnly"(project(":language"))
+    // :language -- the grammars, ECJ and Rhino, plus the ScriptService seam. ON `lang` AND NOT ON
+    // `main` since J8: the language stack ships as its own jar, and this is what stops the host jar
+    // naming it. Its 1.20.x host half comes from :mc1201:common's own lang source set.
+    "langCompileOnly"(project(":language"))
+    "langCompileOnly"(project(path = ":mc1201:common", configuration = "commonLangOutput"))
     // AND ON THE RUNTIME CLASSPATH, like :core and :mc1201:common above. compileOnly alone put it on
     // no run at all: `Lifecycle1201.bootstrapClient` calls `ScriptService1201.install()`, so the first
     // dev client to reach it died with
@@ -98,6 +144,100 @@ dependencies {
 
 // Shared shadow JAR bundling: bundles :core and :mc1201:common into shadowJar.
 cgbuildlogic.configureShadowJarBundling(project)
+
+// ── The thin jar (J1) ────────────────────────────────────────────────────────────────────────────
+//
+// One input to the single-jar merge: this loader's own classes and resources, plus :mc1201:common,
+// and NOTHING else. The engine, the language stack, Taffy, the bands and tree-sitter enter the merge
+// once at the root; a copy here would ship four times over.
+//
+// `common` has to be relocated because the single jar carries THREE remapped copies of it -- SRG on
+// Forge, official on NeoForge, intermediary on Fabric -- and three classes cannot share a name.
+//
+// THE FOUR PACKAGES ARE MOVED INDIVIDUALLY, never their parent: relocating `com.crystalgui.mc` would
+// rewrite this loader's own `com.crystalgui.mc.<loader>` too, into `...<loader>.common.<loader>`.
+// Each keeps its leaf name under the new root rather than being flattened into it, so a class that
+// was `mc.client.CgUiScreen1201` becomes `mc.forge.common.client.CgUiScreen1201` and stays unique.
+val cgCommonPackages = listOf("client", "net", "platform", "example")
+val cgThinRoot = "com.crystalgui.mc.${project.name}.common"
+
+val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("thinShadowJar") {
+    group = "build"
+    description = "This loader plus :mc1201:common, relocated -- the merge's input, before remapping."
+    // DEV NAMES STILL. Forge reobfuscates this, Fabric remaps it, NeoForge ships it as it is; the
+    // classifier says so, so a `-thin-dev` jar is never mistaken for something installable.
+    archiveClassifier.set("thin-dev")
+    configurations = emptyList()
+    from(sourceSets["main"].output)
+    val commonJar = project(":mc1201:common").tasks.named<Jar>("jar")
+    dependsOn(commonJar)
+    from(commonJar.map { zipTree(it.archiveFile) })
+    cgCommonPackages.forEach { relocate("com.crystalgui.mc.$it", "$cgThinRoot.$it") }
+}
+
+// A DEV RUN HAS TO SEE crystalgui_language AS A MOD, which means a descriptor in the lang source set's
+// resources -- the merged one, which is what the shipped jar carries and already describes every
+// loader. Without it the classes are on the run classpath and no loader constructs the entry point,
+// so scripting is silently absent from every dev client while the shipped jar is fine.
+tasks.named<ProcessResources>("processLangResources") {
+    val descriptors = rootProject.tasks.named("generateLanguageDescriptors")
+    dependsOn(descriptors)
+    from(descriptors)
+}
+
+/**
+ * The language merge's input from this loader: its own `lang` classes plus :mc1201:common's, relocated.
+ *
+ * The same relocation as `thinShadowJar` and for the same reason: the language jar carries three
+ * remapped copies of the common half and three classes cannot share a name. The loader's own entry sits
+ * in `com.crystalgui.mc.<loader>.lang`, which the relocation does not touch.
+ */
+val langThinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("langThinShadowJar") {
+    group = "language jar"
+    description = "This loader's language half plus :mc1201:common's, relocated -- before remapping."
+    archiveClassifier.set("lang-thin-dev")
+    configurations.empty()
+    from(lang.output)
+    // The descriptors above are for the DEV RUN. The merge writes its own copy once, from the same
+    // generator, so four thin jars carrying them too is four duplicates for it to arbitrate.
+    exclude("META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta")
+    val commonLangJar = project(":mc1201:common").tasks.named<Jar>("langJar")
+    dependsOn(commonLangJar)
+    from(commonLangJar.map { zipTree(it.archiveFile) })
+    relocate("com.crystalgui.mc.lang", "$cgThinRoot.lang")
+}
+
+// Nothing in :mc1201:common may be NAMED from a descriptor or a service file.
+//
+// The relocation rewrites class references inside the jar; it cannot rewrite a name sitting in
+// `mods.toml`, `fabric.mod.json` or `META-INF/services/...`, so such a name would point at a class
+// that no longer exists under that spelling -- on three loaders, silently, at the moment something
+// asks for it. The loader's OWN packages are fine: they are not relocated.
+val checkDescriptorsNameNoCommon = tasks.register("checkDescriptorsNameNoCommon") {
+    group = "verification"
+    description = "Fails if a descriptor or service file names a class that the thin jar relocates."
+    val resourceRoot = layout.projectDirectory.dir("src/main/resources").asFile
+    val forbidden = cgCommonPackages.map { "com.crystalgui.mc.$it" }
+    inputs.dir(resourceRoot).optional(true).withPropertyName("resources")
+    outputs.upToDateWhen { true }
+    doLast {
+        if (!resourceRoot.isDirectory) return@doLast
+        val hits = resourceRoot.walkTopDown()
+            .filter { it.isFile }
+            .flatMap { file ->
+                val text = runCatching { file.readText() }.getOrDefault("")
+                forbidden.filter { text.contains(it) }.map { file.relativeTo(resourceRoot) to it }
+            }
+            .toList()
+        if (hits.isNotEmpty()) {
+            throw GradleException(
+                "A descriptor or service file names a package the thin jar relocates, so the name "
+                    + "will be wrong on every loader:\n"
+                    + hits.joinToString("\n") { (path, pkg) -> "  $path  names  $pkg" })
+        }
+    }
+}
+tasks.named("check") { dependsOn(checkDescriptorsNameNoCommon) }
 
 // A dev run must BUILD what mods{} makes visible.
 //
@@ -219,27 +359,27 @@ extra["cgMergedServicesDir"] = cgMergedServicesDir
 /**
  * Third-party libraries this jar carries -- EMPTY on 1.20.x, and that is the whole point.
  *
- * A library is bundled only where the platform does not already have it, and 1.20.x has both of the
- * ones this engine needs, at the versions we pin: `fastutil 8.5.12` and `joml 1.10.8` are Minecraft's
- * own libraries. Shipping them again is not merely redundant, it is FATAL -- two modules exporting
- * `it.unimi.dsi.fastutil.ints` fails module resolution before a single mod class loads:
+ * A library is bundled only where the platform does not already have it, and 1.20.x has the one this
+ * engine still needs: `joml 1.10.8` is Minecraft's own. Shipping it again is not merely redundant, it
+ * is FATAL -- two modules exporting one package fails module resolution before a single mod class
+ * loads, which is what this used to say about fastutil:
  *
  *     Modules it.unimi.dsi.fastutil and crystalgui export package it.unimi.dsi.fastutil.ints
  *     to module minecraft
  *
  * A dev run cannot show it. There the classes come off a source-set directory rather than a jar, so
- * nothing declares a second module and the layer resolves.
+ * nothing declares a second module and the layer resolves. The same rule killed ASM in the language
+ * jar at J8, where Forge and NeoForge died with nothing in any log at all.
  *
- * The seam stays because the answer is per platform, not universal. 1.7.10 has neither library, and
- * mc1710 accordingly ships both -- with the two treated DIFFERENTLY, which any new target must copy:
+ * The seam stays because the answer is per platform, not universal:
  *
- *  - **fastutil is CrystalGUI's and is RELOCATED** (`com.crystalgui.shadow.it.unimi.dsi.fastutil`).
- *    Taffy needs it, nothing outside this jar sees those types, and a stock copy in another mod must
- *    not win a classloader race.
  *  - **JOML is CrystalGraphics' and is NOT relocated.** Its types cross the boundary between the two
  *    mods -- `UINode` and `ElementStyle` hold `Matrix4f` FIELDS, and `Quad.pose` takes one -- so
  *    relocating it in one jar and not the other makes two unrelated types with the same name.
  *    CrystalGUI bundles no JOML at all on 1.7.10 and uses CrystalGraphics' copy.
+ *  - **fastutil was the other half of this paragraph and is gone** (2026-09-10). Taffy named seven of
+ *    its types; they are vendored in `dev.vfyjxf.taffy.collection` now, so no loader ships it and the
+ *    question of relocating it does not arise. It was 19.65 MB of the 31.20 MB merged jar.
  *
  * Declared by coordinate rather than resolved off :core or :taffy: those declare JOML and Taffy
  * `compileOnly` so they reach nobody transitively, and reading another project's compileClasspath at
@@ -252,7 +392,7 @@ val engineBand11: Configuration by configurations.creating { isCanBeConsumed = f
 val engineBand17: Configuration by configurations.creating { isCanBeConsumed = false; isCanBeResolved = true }
 
 dependencies {
-    // Nothing in shippedLibs: Minecraft 1.20.x provides joml and fastutil itself. @see shippedLibs
+    // Nothing in shippedLibs: Minecraft 1.20.x provides joml itself, and fastutil is gone entirely.
     add("engineBand8", project(path = ":language", configuration = "engineBand8Bundle"))
     add("engineBand11", project(path = ":language", configuration = "engineBand11Bundle"))
     add("engineBand17", project(path = ":language", configuration = "engineBand17Bundle"))
@@ -419,7 +559,10 @@ val shadeDowngradedShadowJar = tasks.register<ShadeJar>("shadeDowngradedShadowJa
     archiveClassifier.set("java17-shaded")
 }
 
-tasks.named("assemble") { dependsOn(shadeDowngradedShadowJar) }
+// NOT ON `assemble` (J7). The fat per-loader jar is nobody's shipping artifact any more -- the merged
+// single jar is -- and it is the most expensive thing in this build: shadow, downgrade and shade over
+// core, language and every engine band, once per loader. The chain stays defined because Fabric's
+// `remapJar` still ends on it, so `./gradlew shadeDowngradedShadowJar` builds one on request.
 
 /**
  * A server run task's game directory.
@@ -569,3 +712,22 @@ tasks.matching { it.name == "runClient" }.configureEach {
         })
     }
 }
+
+// ── The thin-jar check, registered once for every 1.20.x loader ──────────────────────────────────
+//
+// WHAT A THIN JAR MAY CONTAIN IS THE PROJECT'S ANSWER, not each loader's, so it is stated here rather
+// than in all three. A loader supplies only its own jar, which is the one part that genuinely
+// differs. The task is shared with every project on this build — CrystalGraphics/singlejar-logic.
+tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    allowedPrefixes.set(listOf("com/crystalgui/mc/"))
+    // What CrystalGUI merges at the ROOT, and so must not be here: a copy would ship four times.
+    forbiddenPrefixes.set(listOf(
+        "com/crystalgui/ui/", "com/crystalgui/widget/", "com/crystalgui/style/",
+        "com/crystalgui/workbench/", "com/crystalgui/language/", "com/crystalgraphics/core/",
+        "dev/vfyjxf/", "org/joml/", "it/unimi/", "org/treesitter/", "com/fasterxml/",
+        "de/javagl/", "assets/crystalgui/engines/",
+    ))
+    logTag.set("cgui")
+}
+
+tasks.named("check") { dependsOn("checkThinJar") }

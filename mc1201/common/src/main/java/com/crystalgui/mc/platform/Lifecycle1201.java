@@ -13,13 +13,14 @@ import com.crystalgui.mc.client.CgUiHud1201;
 import com.crystalgui.mc.example.MachineExample1201;
 import com.crystalgui.mc.example.MachineExampleClient1201;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
-import com.crystalgui.language.map.PlatformMappings;
-import com.crystalgui.mc.client.ScriptService1201;
+import com.crystalgui.mc.client.CgUiAutoTest1201;
+import com.crystalgui.mc.client.ClientProbe1201;
 import com.crystalgui.mc.net.Connections1201;
 import com.crystalgui.mc.net.ServerSmoke1201;
 import com.crystalgui.mc.net.WorkspaceHost1201;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.wire.CgNetworkChannel;
+import com.crystalgui.text.syntax.LanguageRegistry;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -59,21 +60,42 @@ public final class Lifecycle1201 {
      * {@link CgUiKeybinds1201#all()} must be read AFTER this runs.
      */
     public static void bootstrapClient() {
-        // Before the announcement: the engine source asks this service where it may write, so a band
-        // bundled in the jar or fetched for this host has nowhere to go until it is registered.
-        ScriptService1201.install();
-        // AND THE MAPPING IS STARTED HERE, not left to whoever asks first. The first asker is the first
-        // Java analysis, which then cannot win its own race -- it starts the download and reads the
-        // identity in the same breath, and nothing re-analyses when the mapping lands. Started at mod
-        // init it has the whole world load to arrive in. @see PlatformMappings#start
-        PlatformMappings.start();
         // THE POINTER IS THIS PLATFORM'S TO DRESS, and it belongs to the process rather than to any one
         // screen -- so a cursor resolves the same whether the desktop has ever been opened or not. GLFW
         // has the whole standard set, so this one is a mapping table; the engine resolves a keyword and asks.
         CgPlatform.provide(CursorService.SERVICE, new CursorService1201());
-        // Behind the loading screen, where the registry's discovery costs nobody anything.
-        LanguageStack1201.announce();
         MachineExampleClient1201.registerClient();
+    }
+
+    /**
+     * Says which tier of the language stack this deployment has, without naming it.
+     *
+     * <p>{@code LanguageRegistry} is {@code core}'s engineless tier, so this compiles and runs with the
+     * language mod absent — which is the whole point since J8 made it a separate jar. An empty
+     * contributor list IS the absent case; the language mod announces its own arrival.</p>
+     *
+     * <p>Worth a line either way: every tier opens a file perfectly and the configurations are
+     * indistinguishable on screen, so nothing else separates "this pack ships no grammars" from "a
+     * contributor failed to load".</p>
+     *
+     * <p><b>ON A TICK, NOT AT BOOTSTRAP, AND THAT IS NOT TIDINESS.</b> Every read of
+     * {@code LanguageRegistry} bootstraps it, and bootstrapping constructs the engines — each of which
+     * captures whether a {@code ScriptService} is registered <em>at that moment</em> and keeps the
+     * answer for the life of the process. The language mod is ordered AFTER this one, so a read from
+     * this method's original home in {@code bootstrapClient} ran first, found no service, and turned
+     * the live tier off permanently: every script reported {@code net.minecraft.client.Minecraft}
+     * unresolvable while the byte source behind it was perfectly healthy. A tick is after every mod's
+     * setup, which is the only ordering that is true on all three loaders.</p>
+     */
+    private static void announceLanguageTier() {
+        List<String> contributors = LanguageRegistry.contributors();
+        if (contributors.isEmpty()) {
+            CrystalGuiCore.LOGGER.info("[cgui-1201] no language stack installed -- source files colour "
+                    + "from core's built-in lexers and are not analysed. Install crystalgui_language for "
+                    + "grammars, analysis and scripting.");
+        } else {
+            CrystalGuiCore.LOGGER.info("[cgui-1201] language contributors: {}", contributors);
+        }
     }
 
     // ── Server ──────────────────────────────────────────────────────────────────────────────────
@@ -114,6 +136,9 @@ public final class Lifecycle1201 {
         clientTickHooks.add(hook);
     }
 
+    /** @see #announceLanguageTier */
+    private static boolean languageTierAnnounced;
+
     private static final List<Runnable> serverTickHooks = new CopyOnWriteArrayList<>();
     private static final List<Runnable> clientTickHooks = new CopyOnWriteArrayList<>();
 
@@ -139,7 +164,12 @@ public final class Lifecycle1201 {
     // ── Client ──────────────────────────────────────────────────────────────────────────────────
 
     public static void clientTick() {
-        com.crystalgui.mc.client.ClientProbe1201.tick();
+        if (!languageTierAnnounced) {
+            languageTierAnnounced = true;
+            announceLanguageTier();
+        }
+        CgUiAutoTest1201.tick();
+        ClientProbe1201.tick();
         CgUiKeybinds1201.tick();
         Connections1201.onClientTick();
         run(clientTickHooks);
