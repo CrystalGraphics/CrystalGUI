@@ -1,5 +1,7 @@
 package com.crystalgui.core.command;
 
+import com.crystalgui.core.dispose.Disposable;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,10 +51,9 @@ public class MenuSectionsTest {
 
     @Test
     public void groupsSurviveTheQuerySoASeparatorCanBeDrawn() {
-        CommandRegistry.global()
-                .register(Command.of("s.paste", "Paste").menu(menu, "2_clipboard", 20))
-                .register(Command.of("s.new", "New").menu(menu, "1_new", 10))
-                .register(Command.of("s.copy", "Copy").menu(menu, "2_clipboard", 10));
+        CommandRegistry.global().register(Command.of("s.paste", "Paste").menu(menu, "2_clipboard", 20));
+        CommandRegistry.global().register(Command.of("s.new", "New").menu(menu, "1_new", 10));
+        CommandRegistry.global().register(Command.of("s.copy", "Copy").menu(menu, "2_clipboard", 10));
 
         List<MenuSection> sections = sections();
         assertEquals("two groups must come back as two sections, not one flat run", 2, sections.size());
@@ -72,10 +73,9 @@ public class MenuSectionsTest {
      */
     @Test
     public void aDisabledCommandIsReportedNotDropped() {
-        CommandRegistry.global()
-                .register(Command.of("s.on", "On").menu(menu, "g", 10))
-                .register(Command.of("s.off", "Off").menu(menu, "g", 20)
-                        .enabledWhen(context -> false));
+        CommandRegistry.global().register(Command.of("s.on", "On").menu(menu, "g", 10));
+        CommandRegistry.global().register(Command.of("s.off", "Off").menu(menu, "g", 20)
+                .enabledWhen(context -> false));
 
         List<MenuEntry> entries = sections().get(0).entries();
         assertEquals("the disabled row must still occupy its place", 2, entries.size());
@@ -121,12 +121,31 @@ public class MenuSectionsTest {
 
     // ── Computed rows ───────────────────────────────────────────────────────────────────────────
 
+    /**
+     * A contributor can be taken back off the menu.
+     *
+     * <p>Contributors are lambdas closing over a panel, so one that outlives its feature keeps that
+     * feature's widgets alive and draws rows for something that is gone — and a menu is only computed
+     * when it opens, so nothing reports it until somebody looks.</p>
+     */
+    @Test
+    public void aWithdrawnContributorStopsContributing() {
+        CommandRegistry.global().register(Command.of("s.a", "A").menu(menu, "1_static", 10));
+        Disposable handle = CommandRegistry.global().contributeMenu(menu, (target, context) -> List.of(
+                MenuEntry.Item.of(Command.of("s.computed", "Computed"), "1_static", 20)));
+        assertEquals(List.of("s.a", "s.computed"), idsOf(sections().get(0)));
+
+        handle.dispose();
+
+        assertEquals("a disposed contributor must stop being asked",
+                List.of("s.a"), idsOf(sections().get(0)));
+    }
+
     @Test
     public void aContributorsRowsMergeByGroupAndOrderLikeAnyOther() {
-        CommandRegistry.global()
-                .register(Command.of("s.a", "A").menu(menu, "1_static", 10))
-                .contributeMenu(menu, (target, context) -> List.of(
-                        MenuEntry.Item.of(Command.of("s.computed", "Computed"), "1_static", 20)));
+        CommandRegistry.global().register(Command.of("s.a", "A").menu(menu, "1_static", 10));
+        CommandRegistry.global().contributeMenu(menu, (target, context) -> List.of(
+                MenuEntry.Item.of(Command.of("s.computed", "Computed"), "1_static", 20)));
 
         assertEquals("a computed row is an ordinary participant, not something pinned to one end",
                 List.of("s.a", "s.computed"), idsOf(sections().get(0)));
@@ -174,10 +193,9 @@ public class MenuSectionsTest {
     @Test
     @SuppressWarnings("deprecation")
     public void theFlatViewStillDropsDisabledCommands() {
-        CommandRegistry.global()
-                .register(Command.of("s.on", "On").menu(menu, "g", 10))
-                .register(Command.of("s.off", "Off").menu(menu, "g", 20)
-                        .enabledWhen(context -> false));
+        CommandRegistry.global().register(Command.of("s.on", "On").menu(menu, "g", 10));
+        CommandRegistry.global().register(Command.of("s.off", "Off").menu(menu, "g", 20)
+                .enabledWhen(context -> false));
         List<Command> flat = CommandRegistry.global().menu(menu, CommandContext.of(null));
         assertEquals(1, flat.size());
         assertSame(CommandRegistry.global().get("s.on"), flat.get(0));

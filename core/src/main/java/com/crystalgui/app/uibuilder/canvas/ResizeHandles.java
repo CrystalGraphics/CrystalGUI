@@ -12,7 +12,6 @@ import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
@@ -120,8 +119,6 @@ public final class ResizeHandles extends UIElement {
 
     private final UiBuilderDocument document;
 
-    private final ConnectionGroup connections = new ConnectionGroup();
-
     private final List<UIElement> handles = new ArrayList<>();
 
     /** The live readout during a drag. @see #showBadge */
@@ -138,6 +135,8 @@ public final class ResizeHandles extends UIElement {
         this.document = document;
         addClass(LAYER_CLASS);
         anchorWithoutCovering(this);
+        whileConnected(() -> ctx.builderSelection().onChanged.connect(this::followSelection));
+        onConnected(this::followSelection);
 
         for (Spot spot : Spot.values()) handles.add(buildHandle(spot));
         badge.addClass(BADGE_CLASS);
@@ -574,9 +573,6 @@ public final class ResizeHandles extends UIElement {
     @Override
     protected void connected() {
         super.connected();
-        connections.add(ctx.builderSelection().onChanged.connect(this::followSelection));
-        followSelection();
-        if (document() == null) return;
         if (DIAGNOSE) CrystalGuiCore.LOGGER.info("[handles] connected, registering afterLayout");
         document().animation().afterLayout(this, delta -> {
             applyVisibility();
@@ -586,9 +582,4 @@ public final class ResizeHandles extends UIElement {
         });
     }
 
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        connections.disconnectAll();
-    }
 }

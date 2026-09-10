@@ -12,6 +12,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.*;
 
@@ -570,5 +571,63 @@ public class TreeViewTest extends UiDocumentTestBase {
     private void press(UIElement row, int detail) {
         document.input().send(row, new com.crystalgui.ui.event.MouseEvent.Down(
                 row, new com.crystalgui.core.data.ReadOnlyVec2f(new org.joml.Vector2f()), 0, detail));
+    }
+
+    /**
+     * <b>A refresh does not announce a selection the person did not make.</b>
+     *
+     * <p>Putting a selection back across a rebuild means taking it apart — clear whatever the clamp
+     * left, then restore the remembered items one at a time. Announced as they happened, those were
+     * several events saying things that were never true, and a listener writing the selection somewhere
+     * else wrote each of them: the row highlighted in the tree and the thing beside it named different
+     * items, and neither was what had been clicked.</p>
+     *
+     * @see com.crystalgui.widget.collection.list.ListView#withoutAnnouncing
+     */
+    @Test
+    public void refreshingDoesNotAnnounceASelectionNobodyChose() {
+        build();
+        tree.setExpanded("a", true);
+        settle();
+        tree.select(indexOf("a1"));
+        settle();
+
+        List<Set<Integer>> announced = new ArrayList<>();
+        tree.onSelectionChanged.connect(announced::add);
+
+        tree.refresh();
+        settle();
+
+        assertTrue("a refresh that changed nothing announced " + announced, announced.isEmpty());
+        assertEquals("and the selection itself survived",
+                Set.of(indexOf("a1")), tree.getSelectedIndices());
+    }
+
+    /** And when a rebuild really does move it, that is ONE announcement rather than several. */
+    @Test
+    public void aRebuildThatMovesTheSelectionAnnouncesItOnce() {
+        build();
+        tree.setExpanded("a", true);
+        settle();
+        tree.select(indexOf("a2"));
+        settle();
+
+        List<Set<Integer>> announced = new ArrayList<>();
+        tree.onSelectionChanged.connect(announced::add);
+
+        // Collapsing takes the selected row out of the tree entirely.
+        tree.setExpanded("a", false);
+        settle();
+
+        assertEquals("a rebuild announced " + announced.size() + " times: " + announced,
+                1, announced.size());
+    }
+
+    private int indexOf(String item) {
+        List<TreeRow<String>> rows = tree.visibleRows();
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i).item().equals(item)) return i;
+        }
+        throw new AssertionError("no row for " + item);
     }
 }

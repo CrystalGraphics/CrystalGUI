@@ -432,10 +432,6 @@ final class PortDefaultEditor {
         ctx.curve()
                 .cubic(x0, y0, x0, y0, x1, target.y(), x1, target.y())
                 .width(view.getWireWidth())
-                // Same zoom-floored ramp NodeWireLayer's own wires use — see GraphView.getWireFeather's
-                // own note for why the ramp stays a constant screen width while the wire's own width
-                // keeps shrinking.
-                .feather(view.getWireFeather())
                 .colors(color, color)
                 .submit();
         ctx.flush();

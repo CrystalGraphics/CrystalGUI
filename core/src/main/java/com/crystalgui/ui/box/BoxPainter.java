@@ -102,11 +102,14 @@ public final class BoxPainter {
             // cover the same pixel; where there is only one, they are the same number.
             if (needsLayer && !mask && !CgUiPaintContext.LEGACY_LAYERS && foldsOpacity(box, style, node)) {
                 FrameProfile.count("layers-elided", 1);
-                ctx.withLayerOpacity(opacity, () -> {
+                float previousOpacity = ctx.pushLayerOpacity(opacity);
+                try {
                     paintSelf(box, style, ctx, radii);
                     paintOverlay(box, style, ctx);
-                    paintOutline(box, style, ctx, radii);
-                });
+                    paintOutline(box, style, ctx);
+                } finally {
+                    ctx.popLayerOpacity(previousOpacity);
+                }
                 return;
             }
 
@@ -116,7 +119,7 @@ public final class BoxPainter {
                 paintChildren(box, ctx, base, scissor);
                 node.paintDecoration(ctx, box);
                 paintOverlay(box, style, ctx);
-                paintOutline(box, style, ctx, radii);
+                paintOutline(box, style, ctx);
                 return;
             }
 
@@ -164,7 +167,7 @@ public final class BoxPainter {
             node.paintDecoration(ctx, box);
             paintOverlay(box, style, ctx);
             // Inside the layer, so the outline fades with the box: CSS puts it in the opacity group.
-            paintOutline(box, style, ctx, radii);
+            paintOutline(box, style, ctx);
             ctx.endLayerFbo();
             if (keep != null) keep.painted();
             ctx.blitLayer(subtreeFbo, opacity, region);
@@ -307,18 +310,21 @@ public final class BoxPainter {
         int borderTop = edgeColor(style.get(StylePropertyRegistry.BORDER_TOP_COLOR), borderColor);
         int borderBottom = edgeColor(style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR), borderColor);
         if (background == CgUiDrawable.EMPTY) {
-            CgUiRect.Fill fill;
+            int fillArgb;
             if (explicitBackgroundColor) {
-                fill = new CgUiRect.Fill.Color(backgroundColor);
+                fillArgb = backgroundColor;
             } else if (borderWidth > 0f) {
                 // Border only: a transparent interior carrying the border's rgb, so the shader's
                 // edge->fill mix has no dark fringe to bleed.
-                fill = new CgUiRect.Fill.Color(borderColor & 0x00FFFFFF);
+                fillArgb = borderColor & 0x00FFFFFF;
             } else {
                 return false;
             }
             ctx.setColor(WHITE);
-            shapedRect(radii, borderWidth, borderColor, borderTop, borderBottom, fill).draw(ctx, 0f, 0f, width, height);
+            shaped(ctx, radii).size(width, height)
+                    .border(borderWidth, borderColor, borderTop, borderBottom)
+                    .fillColor(fillArgb)
+                    .submit();
             return true;
         }
         if (!canPaintRounded(background)) return false;
@@ -330,14 +336,24 @@ public final class BoxPainter {
     private static void paintRoundedLayer(CgUiPaintContext ctx, CgUiDrawable d, float width, float height,
                                           Radii radii, float borderWidth, int borderColor, int borderTop, int borderBottom) {
         if (d instanceof CgUiCrossFade cf) {
-            ctx.withLayerOpacity(1f - cf.getT(), () -> paintRoundedLayer(ctx, cf.getFrom(), width, height,
-                    radii, borderWidth, borderColor, borderTop, borderBottom));
-            ctx.withLayerOpacity(cf.getT(), () -> paintRoundedLayer(ctx, cf.getTo(), width, height,
-                    radii, borderWidth, borderColor, borderTop, borderBottom));
+            float previous = ctx.pushLayerOpacity(1f - cf.getT());
+            try {
+                paintRoundedLayer(ctx, cf.getFrom(), width, height, radii, borderWidth, borderColor, borderTop, borderBottom);
+            } finally {
+                ctx.popLayerOpacity(previous);
+            }
+            previous = ctx.pushLayerOpacity(cf.getT());
+            try {
+                paintRoundedLayer(ctx, cf.getTo(), width, height, radii, borderWidth, borderColor, borderTop, borderBottom);
+            } finally {
+                ctx.popLayerOpacity(previous);
+            }
             return;
         }
-        shapedRect(radii, borderWidth, borderColor, borderTop, borderBottom, ((CgUiRect) d).getFill())
-                .draw(ctx, 0f, 0f, width, height);
+        shaped(ctx, radii).size(width, height)
+                .border(borderWidth, borderColor, borderTop, borderBottom)
+                .fill(((CgUiRect) d).getFill())
+                .submit();
     }
 
     private static int edgeColor(int edge, int fallback) {
@@ -351,35 +367,44 @@ public final class BoxPainter {
         float borderWidth = box.border().left;
         CgUiDrawable maskDrawable = style.get(StylePropertyRegistry.MASK);
         CgUiDrawable source = maskDrawable != CgUiDrawable.EMPTY ? maskDrawable : style.get(StylePropertyRegistry.BACKGROUND);
-        CgUiLayerBox originBox = originBox(box, style.get(StylePropertyRegistry.MASK_ORIGIN));
+        originBox(box, style.get(StylePropertyRegistry.MASK_ORIGIN), ORIGIN_BOX);
         LengthPercent offset = style.get(StylePropertyRegistry.MASK_OFFSET);
-        float offsetX = offset == null ? 0f : offset.resolve(originBox.width());
-        float offsetY = offset == null ? 0f : offset.resolve(originBox.height());
-        CgUiLayerBox laid = CgUiLayerBox.resolve(source,
-                originBox.x() - offsetX, originBox.y() - offsetY,
-                Math.max(0f, originBox.width() + 2f * offsetX),
-                Math.max(0f, originBox.height() + 2f * offsetY),
-                style.get(StylePropertyRegistry.MASK_SIZE), style.get(StylePropertyRegistry.MASK_POSITION));
-        Radii radii = radiiOf(style, laid.width(), laid.height());
+        float offsetX = offset == null ? 0f : offset.resolve(ORIGIN_BOX[2]);
+        float offsetY = offset == null ? 0f : offset.resolve(ORIGIN_BOX[3]);
+        CgUiLayerBox.resolveInto(source,
+                ORIGIN_BOX[0] - offsetX, ORIGIN_BOX[1] - offsetY,
+                Math.max(0f, ORIGIN_BOX[2] + 2f * offsetX),
+                Math.max(0f, ORIGIN_BOX[3] + 2f * offsetY),
+                style.get(StylePropertyRegistry.MASK_SIZE), style.get(StylePropertyRegistry.MASK_POSITION), LAID);
+        Radii radii = radiiOf(style, LAID[2], LAID[3]);
         ctx.setColor(WHITE);
-        paintMaskShape(ctx, source, laid.x(), laid.y(), laid.width(), laid.height(), radii, borderWidth);
+        paintMaskShape(ctx, source, LAID[0], LAID[1], LAID[2], LAID[3], radii, borderWidth);
     }
 
     private static void paintMaskShape(CgUiPaintContext ctx, CgUiDrawable d, float x, float y, float width, float height,
                                        Radii radii, float borderWidth) {
         if (d instanceof CgUiCrossFade cf) {
-            ctx.withLayerOpacity(1f - cf.getT(), () -> paintMaskShape(ctx, cf.getFrom(), x, y, width, height, radii, borderWidth));
-            ctx.withLayerOpacity(cf.getT(), () -> paintMaskShape(ctx, cf.getTo(), x, y, width, height, radii, borderWidth));
+            float previous = ctx.pushLayerOpacity(1f - cf.getT());
+            try {
+                paintMaskShape(ctx, cf.getFrom(), x, y, width, height, radii, borderWidth);
+            } finally {
+                ctx.popLayerOpacity(previous);
+            }
+            previous = ctx.pushLayerOpacity(cf.getT());
+            try {
+                paintMaskShape(ctx, cf.getTo(), x, y, width, height, radii, borderWidth);
+            } finally {
+                ctx.popLayerOpacity(previous);
+            }
             return;
         }
+        CgUiRect.Draw mask = shaped(ctx, radii).at(x, y).size(width, height);
         // A mask that would reveal NOTHING reveals the whole shape instead -- `background: none` and
         // `background: #00000000` must clip the same way.
-        CgUiRect.Fill fill = revealsNothing(d)
-                ? new CgUiRect.Fill.Color(WHITE)
-                : ((CgUiRect) d).getFill();
-        CgUiRect mask = shapedRect(radii, fill);
-        if (borderWidth > 0f) mask = mask.withBorder(borderWidth, 0x00000000);
-        mask.draw(ctx, x, y, width, height);
+        if (revealsNothing(d)) mask.fillColor(WHITE);
+        else mask.fill(((CgUiRect) d).getFill());
+        if (borderWidth > 0f) mask.border(borderWidth, 0x00000000);
+        mask.submit();
     }
 
     // ── Overlay and outline ──────────────────────────────────────────────────
@@ -390,14 +415,13 @@ public final class BoxPainter {
         if (overlay == CgUiDrawable.EMPTY) return;
         // A mark takes the box's `color`; a picture keeps its own palette.
         if (overlay.followsTextColor()) ctx.setColor(style.get(StylePropertyRegistry.COLOR));
-        CgUiLayerBox originBox = originBox(box, style.get(StylePropertyRegistry.OVERLAY_ORIGIN));
-        CgUiLayerBox laid = CgUiLayerBox.resolve(overlay,
-                originBox.x(), originBox.y(), originBox.width(), originBox.height(),
-                style.get(StylePropertyRegistry.OVERLAY_SIZE), style.get(StylePropertyRegistry.OVERLAY_POSITION));
-        overlay.draw(ctx, laid.x(), laid.y(), laid.width(), laid.height());
+        originBox(box, style.get(StylePropertyRegistry.OVERLAY_ORIGIN), ORIGIN_BOX);
+        CgUiLayerBox.resolveInto(overlay, ORIGIN_BOX[0], ORIGIN_BOX[1], ORIGIN_BOX[2], ORIGIN_BOX[3],
+                style.get(StylePropertyRegistry.OVERLAY_SIZE), style.get(StylePropertyRegistry.OVERLAY_POSITION), LAID);
+        overlay.draw(ctx, LAID[0], LAID[1], LAID[2], LAID[3]);
     }
 
-    private static void paintOutline(Box box, ComputedStyle style, CgUiPaintContext ctx, Radii radii) {
+    private static void paintOutline(Box box, ComputedStyle style, CgUiPaintContext ctx) {
         float width = box.width(), height = box.height();
         CgUiDrawable outline = style.get(StylePropertyRegistry.OUTLINE);
         LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
@@ -416,11 +440,17 @@ public final class BoxPainter {
         // The SDF stroke measures inward from the shape's outer edge; a CSS outline grows outward from
         // the offset edge -- so inflate by offset + width and let the inward stroke land in the band.
         float insetTop = top + stroke, insetBottom = bottom + stroke, insetLeft = left + stroke, insetRight = right + stroke;
-        Radii ring = radii.expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
+        // RESOLVED AGAIN rather than carried from paintBox: the children painted in between share the
+        // one scratch. @see #RADII
+        Radii ring = radiiOf(style, width, height)
+                .expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
         int color = style.get(StylePropertyRegistry.OUTLINE_COLOR);
-        CgUiRect rect = shapedRect(ring, new CgUiRect.Fill.Color(color & 0x00FFFFFF))
-                .withBorder(stroke, color);
-        rect.draw(ctx, -insetLeft, -insetTop, width + insetLeft + insetRight, height + insetTop + insetBottom);
+        shaped(ctx, ring)
+                .at(-insetLeft, -insetTop)
+                .size(width + insetLeft + insetRight, height + insetTop + insetBottom)
+                .fillColor(color & 0x00FFFFFF)
+                .border(stroke, color)
+                .submit();
     }
 
     private static float resolve(@Nullable LengthPercent lp, float against) {
@@ -469,10 +499,16 @@ public final class BoxPainter {
         ltrb[3] = bottom;
     }
 
-    /** One of the CSS box-model boxes, in the box's own space. */
-    private static CgUiLayerBox originBox(Box box, @Nullable BoxOrigin origin) {
+    /** One of the CSS box-model boxes, in the box's own space, as {@code x, y, width, height}. */
+    private static void originBox(Box box, @Nullable BoxOrigin origin, float[] out) {
         float width = box.width(), height = box.height();
-        if (origin == null || origin == BoxOrigin.BORDER_BOX) return new CgUiLayerBox(0f, 0f, width, height);
+        if (origin == null || origin == BoxOrigin.BORDER_BOX) {
+            out[0] = 0f;
+            out[1] = 0f;
+            out[2] = width;
+            out[3] = height;
+            return;
+        }
         FloatRect b = box.border();
         float l = b.left, t = b.top, r = b.right, bo = b.bottom;
         if (origin == BoxOrigin.CONTENT_BOX) {
@@ -482,27 +518,26 @@ public final class BoxPainter {
             r += p.right;
             bo += p.bottom;
         }
-        return new CgUiLayerBox(l, t, Math.max(0f, width - l - r), Math.max(0f, height - t - bo));
+        out[0] = l;
+        out[1] = t;
+        out[2] = Math.max(0f, width - l - r);
+        out[3] = Math.max(0f, height - t - bo);
     }
 
     // ── Fills and radii ──────────────────────────────────────────────────────
 
     /**
-     * A rect with the element's radii and the given fill, built HERE rather than by pushing radii into
-     * the background the cascade handed us — that value is shared across frames and elements, and
-     * {@code CgUiRect} equality is what stops a repeated write retargeting a transition.
+     * The context's rect scratch, carrying the element's radii — and NOT a {@code CgUiRect}.
+     *
+     * <p>The radii are applied here rather than pushed into the background the cascade handed us: that
+     * value is shared across frames and elements, and {@code CgUiRect} equality is what stops a repeated
+     * write retargeting a transition. It used to be built as a value all the same, which cost a
+     * {@code Fill}, one or two rects and two capturing lambdas for every element carrying a radius or a
+     * border — per frame, on every themed surface and all ten thousand nodes of a graph.</p>
      */
-    private static CgUiRect shapedRect(Radii radii, CgUiRect.Fill fill) {
-        return new CgUiRect()
-                .withCornerRadius(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
-                        radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL)
-                .withFill(fill);
-    }
-
-    private static CgUiRect shapedRect(Radii radii, float borderWidth, int borderColor, int borderTop,
-                                       int borderBottom, CgUiRect.Fill fill) {
-        CgUiRect rect = shapedRect(radii, fill);
-        return borderWidth > 0f ? rect.withBorder(borderWidth, borderColor, borderTop, borderBottom) : rect;
+    private static CgUiRect.Draw shaped(CgUiPaintContext ctx, Radii radii) {
+        return ctx.rect().radii(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
+                radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL);
     }
 
     /** Whether the rounded wrap can express this background: only a rect has a fill to re-shape. */
@@ -516,15 +551,21 @@ public final class BoxPainter {
         return rect.getFill() instanceof CgUiRect.Fill.Color(int argb) && (argb >>> 24) == 0;
     }
 
-    /** The eight resolved corner radii of a box. */
-    record Radii(float rxTL, float ryTL, float rxTR, float ryTR, float rxBR, float ryBR, float rxBL, float ryBL) {
+    /** The eight resolved corner radii of a box. Filled by {@link #radiiOf}; see {@link #RADII}. */
+    static final class Radii {
+        float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
+
         boolean isZero() {
             return rxTL == 0f && ryTL == 0f && rxTR == 0f && ryTR == 0f && rxBR == 0f && ryBR == 0f && rxBL == 0f && ryBL == 0f;
         }
 
+        /** Grows every non-zero radius IN PLACE, for the outline ring. */
         Radii expand(float dx, float dy) {
-            return new Radii(grow(rxTL, dx), grow(ryTL, dy), grow(rxTR, dx), grow(ryTR, dy),
-                    grow(rxBR, dx), grow(ryBR, dy), grow(rxBL, dx), grow(ryBL, dy));
+            rxTL = grow(rxTL, dx); ryTL = grow(ryTL, dy);
+            rxTR = grow(rxTR, dx); ryTR = grow(ryTR, dy);
+            rxBR = grow(rxBR, dx); ryBR = grow(ryBR, dy);
+            rxBL = grow(rxBL, dx); ryBL = grow(ryBL, dy);
+            return this;
         }
 
         private static float grow(float r, float d) {
@@ -532,15 +573,37 @@ public final class BoxPainter {
         }
     }
 
+    /**
+     * <b>The one radii scratch, and the rule that makes it safe: it is filled immediately before it is
+     * read, and never read across anything that can paint another box.</b>
+     *
+     * <p>So {@link #paintSelf} takes it (it runs before this box's children) while
+     * {@link #paintOutline} resolves it again (it runs after them), and {@link #paintMask} fills it
+     * with its own. A record here was eight floats per box per frame — every box, not only the ones
+     * carrying a radius, since the value is what answers {@code isZero()}.</p>
+     *
+     * <p>Static, like {@link #ORIGIN_BOX} and {@link #LAID}, because painting is already serialised:
+     * it all goes through the {@code CgUiPaintContext} singleton, which holds one bound material, one
+     * pose stack and one rect scratch of its own.</p>
+     */
+    private static final Radii RADII = new Radii();
+
+    /** @see #RADII */
+    private static final float[] ORIGIN_BOX = new float[4];
+
+    /** @see #RADII */
+    private static final float[] LAID = new float[4];
+
+    /** Resolves this box's radii into {@link #RADII} and answers it. */
     static Radii radiiOf(ComputedStyle style, float width, float height) {
-        return new Radii(
-                resolve(style.get(BorderRadiusProperties.TOP_LEFT_X), width),
-                resolve(style.get(BorderRadiusProperties.TOP_LEFT_Y), height),
-                resolve(style.get(BorderRadiusProperties.TOP_RIGHT_X), width),
-                resolve(style.get(BorderRadiusProperties.TOP_RIGHT_Y), height),
-                resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_X), width),
-                resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_Y), height),
-                resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_X), width),
-                resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_Y), height));
+        RADII.rxTL = resolve(style.get(BorderRadiusProperties.TOP_LEFT_X), width);
+        RADII.ryTL = resolve(style.get(BorderRadiusProperties.TOP_LEFT_Y), height);
+        RADII.rxTR = resolve(style.get(BorderRadiusProperties.TOP_RIGHT_X), width);
+        RADII.ryTR = resolve(style.get(BorderRadiusProperties.TOP_RIGHT_Y), height);
+        RADII.rxBR = resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_X), width);
+        RADII.ryBR = resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_Y), height);
+        RADII.rxBL = resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_X), width);
+        RADII.ryBL = resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_Y), height);
+        return RADII;
     }
 }

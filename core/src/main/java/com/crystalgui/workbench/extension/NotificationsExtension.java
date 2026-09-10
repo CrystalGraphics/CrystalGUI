@@ -54,7 +54,7 @@ public final class NotificationsExtension implements WorkbenchExtension {
                         .icon("crystalgui:toolwindows/notifications")
                         .region(DockRegion.AUXILIARY)
                         .side(RegionSide.PRIMARY)
-                        .view(ctx -> view)
+                        .view(view)
                         .toggle(SHOW)
                         .badge((ctx, set) -> {
                             Connection watch = Notifications.onDidChangeUnread.connect(count ->

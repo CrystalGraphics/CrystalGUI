@@ -7,7 +7,6 @@ import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgui.core.notify.StatusBarEntryAccessor;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.AnchoredPlacement;
@@ -128,14 +127,14 @@ public class StatusBarView extends UIElement {
     private final Map<StatusBarEntryAccessor, Slot> slots = new IdentityHashMap<>();
 
     /** Held so the view stops listening when it leaves the tree; the service outlives every view of it. */
-    private final ConnectionGroup subscriptions = new ConnectionGroup();
-
     private final ProgressStatusItem progress = new ProgressStatusItem();
 
     public StatusBarView(StatusBar model) {
         super(NAME);
         this.model = model;
         addClass(BAR_CLASS);
+        whileConnected(() -> model.onDidChange.connect(this::refresh));
+        onConnected(this::refresh);
         // NOT markAsInternal(). Whether this part is internal to its host is the host's decision — the
         // shell adds it with addInternalChild — and stamping it here would recurse over a subtree whose
         // own slots are added and removed publicly, which removeChild silently refuses.
@@ -240,15 +239,8 @@ public class StatusBarView extends UIElement {
      * the "am I attached?" question answers yes on the way in and out.</p>
      */
     @Override
-    protected void disconnected() {
-        subscriptions.disconnectAll();
-    }
-
-    @Override
     protected void connected() {
-        subscriptions.disconnectAll();
-        subscriptions.add(model.onDidChange.connect(this::refresh));
-        refresh();
+        super.connected();
     }
 
     /** Brings the rendered slots in line with the service. Cheap when nothing changed. */

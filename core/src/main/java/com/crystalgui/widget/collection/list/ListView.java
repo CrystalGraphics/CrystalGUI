@@ -942,6 +942,34 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         return index >= 0 && index < model.size();
     }
 
+    /** Depth of {@link #withoutAnnouncing}. */
+    private int quiet;
+
+    /**
+     * Runs a change that is the LIST'S OWN bookkeeping — announced once at the end, and only if the
+     * selection really moved.
+     *
+     * <p>A rebuild has to take the selection apart to put it back: clear what the clamp left, then
+     * restore the remembered items one at a time. Announced as they happen, those are several events
+     * saying things that were never true — "nothing is selected", then each row in turn — and a
+     * listener that writes the selection somewhere else writes each of them. The reported shape is a
+     * row highlighted in the list while something else names a different row, and neither is what was
+     * clicked.</p>
+     *
+     * <p>Row classes still follow inside the block, so what is on screen is never stale; it is only the
+     * signal that waits. Nested calls announce once, at the outermost exit.</p>
+     */
+    protected void withoutAnnouncing(Runnable change) {
+        TreeSet<Integer> before = new TreeSet<>(selected);
+        quiet++;
+        try {
+            change.run();
+        } finally {
+            quiet--;
+        }
+        if (quiet == 0 && !selected.equals(before)) selectionChanged();
+    }
+
     private void selectionChanged() {
         // Realised rows carry the class; unrealised ones get it when they are next bound, which is why
         // applySelectionClass is also called from realise(). Two call sites for one rule, because the
@@ -950,6 +978,8 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         // No guard needed for a stale window: invalidateWindow empties this map, so a selection restored
         // across a re-flatten finds nothing to stamp and realise() applies the class as it rebinds.
         realised.forEach((index, row) -> applySelectionClass(row, index));
+        // The rows above follow either way; only the SIGNAL waits. @see #withoutAnnouncing
+        if (quiet > 0) return;
         onSelectionChanged.emit(Collections.unmodifiableSet(new TreeSet<>(selected)));
     }
 

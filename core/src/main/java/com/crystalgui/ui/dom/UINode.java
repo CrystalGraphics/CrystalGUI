@@ -4,6 +4,8 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsScope;
+import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.style.StyleScope;
 import com.crystalgui.ui.input.keymap.KeymapScope;
@@ -15,6 +17,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 /**
@@ -689,6 +692,103 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     protected void disconnected() {
     }
 
+    // ── Subscriptions that follow the tree ──────────────────────────────────────
+
+    /** Re-subscribed on every attach; the returned connections are dropped on every detach. */
+    @Nullable
+    private List<Supplier<Connection>> subscriptions;
+
+    /** Run after the subscriptions, on every attach. */
+    @Nullable
+    private List<Runnable> onConnected;
+
+    /** What {@link #subscriptions} produced for the attach this node is currently in. */
+    @Nullable
+    private ConnectionGroup live;
+
+    /**
+     * Holds a subscription for exactly as long as this node is in a tree — <b>declare it in the
+     * constructor</b> and never think about it again.
+     *
+     * <pre>{@code
+     * public MyPanel(Model model) {
+     *     whileConnected(() -> model.onChanged.connect(this::refresh));
+     *     whileConnected(() -> tree.onSelectionChanged.connect(this::choose));
+     *     onConnected(this::refresh);            // catch up on what moved while it was out
+     * }
+     * }</pre>
+     *
+     * <p>The supplier runs again on every attach, so what it returns is a fresh connection each time.
+     * Capture the signal, not the connection.</p>
+     *
+     * <p><b>Why this exists rather than a {@code ConnectionGroup} you disconnect yourself.</b>
+     * {@link #disconnected} drops the connections a node holds — it must, since one outliving its node
+     * is what the ownership rule exists to prevent — so a subscription made once in a constructor is
+     * gone the first time the node leaves the tree, and nothing remakes it. Nodes leave for ordinary
+     * reasons: a dock hiding a tool window, a layout rebuilding, a panel being replaced behind a tab.
+     * The failure is total and silent — every subscription goes at once, so it reads as the widget
+     * dying rather than as one feature breaking, and it stays dead until the process restarts.</p>
+     *
+     * <p>Safe to call once the node is already attached: it subscribes on the spot as well as on every
+     * attach after.</p>
+     */
+    protected final void whileConnected(Supplier<Connection> subscribe) {
+        Objects.requireNonNull(subscribe, "subscribe");
+        if (subscriptions == null) subscriptions = new ArrayList<>();
+        subscriptions.add(subscribe);
+        if (isConnected()) liveGroup().add(subscribe.get());
+    }
+
+    /**
+     * Runs on every attach, after {@link #whileConnected}'s subscriptions are live.
+     *
+     * <p>For the catching-up half: a node that comes back is showing what it left with, and whatever it
+     * follows may have moved with nothing listening. Also the place for anything the document owns — a
+     * per-frame hook, a data provider — since those are dropped on detach too.</p>
+     *
+     * <pre>{@code
+     * onConnected(() -> document().animation().every(this, delta -> { tick(); return true; }));
+     * }</pre>
+     */
+    protected final void onConnected(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        if (onConnected == null) onConnected = new ArrayList<>();
+        onConnected.add(action);
+        if (isConnected()) action.run();
+    }
+
+    private ConnectionGroup liveGroup() {
+        if (live == null) live = new ConnectionGroup();
+        return live;
+    }
+
+    /**
+     * Runs the registrations for an attach, then the node's own {@link #connected} hook.
+     *
+     * <p>Called from the attach itself rather than from {@code connected()}, so a subclass that forgets
+     * {@code super.connected()} cannot silently lose its subscriptions — which is the very trap this
+     * mechanism exists to close.</p>
+     */
+    private void enterTree() {
+        if (subscriptions != null) {
+            // BY INDEX, and re-reading the size: an action below may register another subscription,
+            // and one added during the walk still belongs to this attach.
+            for (int i = 0; i < subscriptions.size(); i++) {
+                liveGroup().add(subscriptions.get(i).get());
+            }
+        }
+        if (onConnected != null) {
+            for (int i = 0; i < onConnected.size(); i++) onConnected.get(i).run();
+        }
+        connected();
+    }
+
+    /** The counterpart of {@link #enterTree}; same reason for living here. */
+    private void leaveTree() {
+        if (live != null) live.disconnectAll();
+        disconnected();
+    }
+
     /** Runs when a retained subtree is frozen in place: boxes dropped, hooks stopped, tree intact. */
     protected void frozen() {
     }
@@ -872,7 +972,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
             // such guard -- it is the departure itself, and a node that has come BACK has already
             // queued a fresh `connected` behind it.
             doc.queue(() -> {
-                if (isConnected()) connected();
+                if (isConnected()) enterTree();
             });
         }
         for (UIElement child : children) child.propagate(doc, shadow, observer);
@@ -935,7 +1035,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
                 // silently, because a re-match of something nobody draws produces no symptom at all.
                 doc.styles().onElementDetached(self);
             }
-            doc.queue(this::disconnected);
+            doc.queue(this::leaveTree);
         }
         document = null;
     }

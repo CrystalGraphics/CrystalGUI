@@ -22,8 +22,8 @@ CLASS	net/window/ViewCommands	123	net/window	6.8	copy	in-place
 CLASS	net/window/WindowMount	74	net/window	6.8	copy	in-place
 CLASS	net/window/WindowProtocol	57	net/window	6.8	move	in-place
 CLASS	ui/text/HighlightRegistry	119	ui/text	stays	move	in-place
-CLASS	language/run/view/MappingCommands	174	language/run/view	6.7	move	in-place
-CLASS	language/run/view/RunConsoleView	646	language/run/view	6.7	move	in-place
+CLASS	language/run/view/MappingCommands	180	language/run/view	6.7	move	in-place
+CLASS	language/run/view/RunConsoleView	644	language/run/view	6.7	move	in-place
 CLASS	language/run/view/RunDecorations	124	language/run/view	6.7	move	in-place
 CLASS	language/run/view/RunIndicators	114	language/run/view	6.7	copy	in-place
 CLASS	language/run/view/RunPanel	1074	language/run/view	6.7	copy	in-place
@@ -60,7 +60,7 @@ PART	(unowned)	region-panel	A	1	proposed	leaf in every rule
 PART	(unowned)	region-sidebar	A	1	proposed	leaf in every rule
 PART	(unowned)	resizer-bottom	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-bottom-left	A	3	proposed	leaf in every rule
-PART	(unowned)	resizer-bottom-right	A	4	proposed	leaf in every rule
+PART	(unowned)	resizer-bottom-right	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-left	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-right	A	3	proposed	leaf in every rule
 PART	(unowned)	resizer-top	A	3	proposed	leaf in every rule
@@ -262,7 +262,7 @@ PART	HeaderControl	title	B	1	confirmed	leaf in every rule, scoped by an ancestor
 PART	HierarchyPanel	hierarchy	A	0	proposed	leaf in every rule
 PART	HierarchyPanel	hierarchy-content	B	3	proposed	a rule selects through it (1)
 PART	HierarchyPanel	hierarchy-row	A	1	proposed	leaf in every rule
-PART	HierarchyPanel	label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	HierarchyPanel	label	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	HierarchyPanel	selected	C	7	proposed	state adjective
 PART	HierarchyPanel	twisty	A	0	proposed	leaf in every rule
 PART	HoverHighlight	hover-highlight	A	0	proposed	leaf in every rule
@@ -751,7 +751,8 @@ PART	WindowThumbnail	placeholder	B	4	confirmed	a rule selects through it (2)
 PART	WindowThumbnail	thumbnail	B	0	confirmed	leaf in every rule
 PART	Workbench	content	A	0	confirmed	leaf in every rule
 PART	Workbench	dock	A	0	confirmed	leaf in every rule
-PART	Workbench	file-editor	A	1	confirmed	leaf in every rule
+PART	Workbench	file-editor	A	2	confirmed	leaf in every rule
+PART	Workbench	panel-content	A	1	proposed	leaf in every rule
 PART	Workbench	viewer	A	0	confirmed	leaf in every rule
 PART	Workbench	workbench-content	A	0	confirmed	leaf in every rule
 PART	WorkbenchApplication	content	A	0	proposed	leaf in every rule
