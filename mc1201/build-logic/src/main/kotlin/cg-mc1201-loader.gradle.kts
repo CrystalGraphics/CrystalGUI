@@ -639,3 +639,22 @@ tasks.matching { it.name == "runClient" }.configureEach {
         })
     }
 }
+
+// ── The thin-jar check, registered once for every 1.20.x loader ──────────────────────────────────
+//
+// WHAT A THIN JAR MAY CONTAIN IS THE PROJECT'S ANSWER, not each loader's, so it is stated here rather
+// than in all three. A loader supplies only its own jar, which is the one part that genuinely
+// differs. The task is shared with every project on this build — CrystalGraphics/singlejar-logic.
+tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    allowedPrefixes.set(listOf("com/crystalgui/mc/"))
+    // What CrystalGUI merges at the ROOT, and so must not be here: a copy would ship four times.
+    forbiddenPrefixes.set(listOf(
+        "com/crystalgui/ui/", "com/crystalgui/widget/", "com/crystalgui/style/",
+        "com/crystalgui/workbench/", "com/crystalgui/language/", "com/crystalgraphics/core/",
+        "dev/vfyjxf/", "org/joml/", "it/unimi/", "org/treesitter/", "com/fasterxml/",
+        "de/javagl/", "assets/crystalgui/engines/",
+    ))
+    logTag.set("cgui")
+}
+
+tasks.named("check") { dependsOn("checkThinJar") }
