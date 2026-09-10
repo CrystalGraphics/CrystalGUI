@@ -281,18 +281,24 @@ A command is one declaration that a keybinding, a menu row and the palette all p
 
 ```java
 CommandRegistry commands = CommandRegistry.global();
-commands.register(Command.of("mymod.reload", "Reload Recipes")
+Disposable handle = commands.register(Command.of("mymod.reload", "Reload Recipes")
         .binding("Mod+Alt+R")
         .menu(MenuId.MAIN_FILE, "5_tools", 10)          // menu, group, order within it
         .run(context -> reload())
         .enabledWhen(context -> workbench.activeFilePath() != null));
 ```
 
-The registry is **process-wide**, so this is exactly the case that needs a handle:
+The registry is **process-wide**, so this is exactly the case that needs a handle — and registering
+hands you one. Return it from `activate` and the command goes when your feature does:
 
 ```java
-return () -> commands.unregister("mymod.reload");
+return () -> { handle.dispose(); panel.dispose(); };   // one handle, everything you registered
 ```
+
+Disposing removes the command only if it is still yours, so withdrawing your feature cannot delete an
+override somebody else registered over the top of it. `contributeMenu` answers a handle the same way;
+a contributor is a lambda closing over your panel, and one that outlives the feature keeps that panel
+alive and draws rows for something that is gone.
 
 | Builder | Means |
 |---|---|
@@ -556,7 +562,8 @@ public final class MyFeature implements WorkbenchExtension {
 | An activity-bar panel | `workbench.registerToolWindow(ToolWindowKind.of(...))` | returned |
 | A file type | `workbench.kinds().register(kind)` | returned |
 | …plus its extensions | `workbench.contribute(kind, "recipe", "rcp")` | with the workbench |
-| A command | `CommandRegistry.global().register(Command.of(...))` | **`unregister(id)` yourself** |
+| A command | `CommandRegistry.global().register(Command.of(...))` | returned |
+| A menu's computed rows | `CommandRegistry.global().contributeMenu(menuId, contributor)` | returned |
 | A status entry | `workbench.statusBar().addEntry(entry, id, alignment, priority)` | `accessor.dispose()` |
 | An explorer decoration | `workbench.decorations().addProvider(p)` | returned |
 | Diagnostics | `workbench.markers().forResource(r).changeOne(owner, list)` | `remove(owner)` |
