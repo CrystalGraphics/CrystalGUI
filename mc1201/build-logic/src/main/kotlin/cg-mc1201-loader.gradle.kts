@@ -332,27 +332,27 @@ extra["cgMergedServicesDir"] = cgMergedServicesDir
 /**
  * Third-party libraries this jar carries -- EMPTY on 1.20.x, and that is the whole point.
  *
- * A library is bundled only where the platform does not already have it, and 1.20.x has both of the
- * ones this engine needs, at the versions we pin: `fastutil 8.5.12` and `joml 1.10.8` are Minecraft's
- * own libraries. Shipping them again is not merely redundant, it is FATAL -- two modules exporting
- * `it.unimi.dsi.fastutil.ints` fails module resolution before a single mod class loads:
+ * A library is bundled only where the platform does not already have it, and 1.20.x has the one this
+ * engine still needs: `joml 1.10.8` is Minecraft's own. Shipping it again is not merely redundant, it
+ * is FATAL -- two modules exporting one package fails module resolution before a single mod class
+ * loads, which is what this used to say about fastutil:
  *
  *     Modules it.unimi.dsi.fastutil and crystalgui export package it.unimi.dsi.fastutil.ints
  *     to module minecraft
  *
  * A dev run cannot show it. There the classes come off a source-set directory rather than a jar, so
- * nothing declares a second module and the layer resolves.
+ * nothing declares a second module and the layer resolves. The same rule killed ASM in the language
+ * jar at J8, where Forge and NeoForge died with nothing in any log at all.
  *
- * The seam stays because the answer is per platform, not universal. 1.7.10 has neither library, and
- * mc1710 accordingly ships both -- with the two treated DIFFERENTLY, which any new target must copy:
+ * The seam stays because the answer is per platform, not universal:
  *
- *  - **fastutil is CrystalGUI's and is RELOCATED** (`com.crystalgui.shadow.it.unimi.dsi.fastutil`).
- *    Taffy needs it, nothing outside this jar sees those types, and a stock copy in another mod must
- *    not win a classloader race.
  *  - **JOML is CrystalGraphics' and is NOT relocated.** Its types cross the boundary between the two
  *    mods -- `UINode` and `ElementStyle` hold `Matrix4f` FIELDS, and `Quad.pose` takes one -- so
  *    relocating it in one jar and not the other makes two unrelated types with the same name.
  *    CrystalGUI bundles no JOML at all on 1.7.10 and uses CrystalGraphics' copy.
+ *  - **fastutil was the other half of this paragraph and is gone** (2026-09-10). Taffy named seven of
+ *    its types; they are vendored in `dev.vfyjxf.taffy.collection` now, so no loader ships it and the
+ *    question of relocating it does not arise. It was 19.65 MB of the 31.20 MB merged jar.
  *
  * Declared by coordinate rather than resolved off :core or :taffy: those declare JOML and Taffy
  * `compileOnly` so they reach nobody transitively, and reading another project's compileClasspath at
@@ -365,7 +365,7 @@ val engineBand11: Configuration by configurations.creating { isCanBeConsumed = f
 val engineBand17: Configuration by configurations.creating { isCanBeConsumed = false; isCanBeResolved = true }
 
 dependencies {
-    // Nothing in shippedLibs: Minecraft 1.20.x provides joml and fastutil itself. @see shippedLibs
+    // Nothing in shippedLibs: Minecraft 1.20.x provides joml itself, and fastutil is gone entirely.
     add("engineBand8", project(path = ":language", configuration = "engineBand8Bundle"))
     add("engineBand11", project(path = ":language", configuration = "engineBand11Bundle"))
     add("engineBand17", project(path = ":language", configuration = "engineBand17Bundle"))

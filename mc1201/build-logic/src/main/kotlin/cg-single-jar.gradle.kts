@@ -67,11 +67,12 @@ registerSingleJarPipeline(SingleJarSpec(
     serviceOwners = listOf(":core"),
 
     relocations = listOf(
-        // fastutil is Taffy's and is RELOCATED: nothing outside this jar sees those types, and
-        // Minecraft 1.20.x ships its own copy that a second unrelocated one would collide with as a
-        // split package. 1.7.10 has neither library, so the union ships and relocation makes it safe.
+        // Taffy is RELOCATED so this fork cannot lose a classloader race to a stock copy in another
+        // mod -- our measure fix would go with it. `dev.vfyjxf.taffy.collection` rides the same rule,
+        // which is why the seven vendored collections needed no relocation of their own.
+        //
+        // fastutil is GONE, and that was 19.65 MB of a 31.20 MB jar. @see taffy/build.gradle.kts
         "dev.vfyjxf.taffy" to "com.crystalgui.shadow.dev.vfyjxf.taffy",
-        "it.unimi.dsi.fastutil" to "com.crystalgui.shadow.it.unimi.dsi.fastutil",
 
         // JOML: THE SAME REWRITE CrystalGraphics APPLIES, over no classes of ours.
         //
@@ -113,9 +114,12 @@ registerSingleJarPipeline(SingleJarSpec(
     configureCheck = {
         forbiddenPrefixes.set(listOf(
             "META-INF/versions/",
-            // Unrelocated, these are split packages against Minecraft's own modules on Forge and
+            // Taffy unrelocated would be a split package against Minecraft's own module on Forge and
             // NeoForge, which fails module resolution before a single mod class loads.
-            "it/unimi/dsi/fastutil/", "dev/vfyjxf/taffy/",
+            "dev/vfyjxf/taffy/",
+            // fastutil is not relocated here, it is GONE -- vendored into dev.vfyjxf.taffy.collection.
+            // Kept as a prefix so a transitive dependency cannot quietly put 19.65 MB back.
+            "it/unimi/dsi/fastutil/",
             // THE J8 SPLIT, asserted rather than assumed. The whole point of the second jar is that a
             // player who never writes a script does not download the engines, so one of these
             // reappearing here is the step silently undone.
@@ -173,8 +177,8 @@ registerSingleJarPipeline(SingleJarSpec(
     libraryProjects = listOf(":language"),
     serviceOwners = listOf(":language"),
 
-    // ASM, AND ONLY ASM. Taffy, fastutil and JOML are the host jar's; tree-sitter must NOT be
-    // relocated, because a JNI symbol is named after the mangled package.
+    // ASM, AND ONLY ASM. Taffy and JOML are the host jar's; tree-sitter must NOT be relocated,
+    // because a JNI symbol is named after the mangled package.
     //
     // Unrelocated ASM takes down three of the four loaders and each says something different: Fabric
     // reports a Knot/app loader constraint violation on ClassNode, and Forge and NeoForge simply die
@@ -275,6 +279,7 @@ dependencies {
     "languageJarLibs"("org.ow2.asm:asm-tree:${property("asmVersion")}")
 }
 
-dependencies {
-    "singleJarLibs"("it.unimi.dsi:fastutil:${property("fastutil_version")}")
-}
+// `singleJarLibs` is deliberately EMPTY. It held fastutil until 2026-09-10 -- 19.65 MB of a 31.20 MB
+// jar, 12,808 of 15,892 entries, for the seven collections Taffy names. Those are vendored into
+// `dev.vfyjxf.taffy.collection` now, so the host jar carries no third-party library at all beyond the
+// engine's own code. @see taffy/build.gradle.kts
