@@ -96,6 +96,66 @@ public class FreeTransformTest extends UiDocumentTestBase {
         return node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM);
     }
 
+    /**
+     * <b>A skew follows the pointer, whatever ops the transform happens to be written as.</b>
+     *
+     * <p>{@code TransformGestureTest} asserts the same rule one layer down, but it hands {@code skewBy}
+     * a delta already in the node's frame — so nothing covered the step that PUTS it there, which is
+     * where the frame can be wrong. Asserted in the overlay's own space, on where the handle lands,
+     * because that is the space the hand is in.</p>
+     *
+     * <p>The transform is the scratch document's {@code #hint}: ops in canonical order, so the gesture
+     * reads them straight rather than decomposing, and chosen by the tool itself over several gestures.
+     * They compose to very nearly the identity — the box draws square — while the rotation op alone is
+     * −68°. Measuring the lean through the rotation op therefore projects the pointer onto axes the box
+     * is not drawn on, and the edge leaves the hand at an angle. Every other node in that document has a
+     * rotation op that IS its apparent orientation, which is why one element misbehaved and the rest
+     * were perfect.</p>
+     */
+    @Test
+    public void aSkewFollowsThePointerWhateverTheOpsAreWrittenAs() {
+        Transform woundUp = Transform.IDENTITY
+                .then(Transform.Op.translate(LengthPercent.px(-2.3140755f), LengthPercent.px(-1.0744351f)))
+                .then(Transform.Op.rotate(-1.1991656f))
+                .then(Transform.Op.skew(-1.1886246f, 1.2132671f))
+                .then(Transform.Op.scale(0.3441459f, 0.36104363f));
+        StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> g.transform(woundUp));
+        document.update(W, H);
+
+        enterFreeTransform();
+        document.update(W, H);
+
+        Vector2f before = box().handleAt(Spot.TOP);
+        assertNotNull(before);
+        box().press(new Grip(Kind.SKEW, Spot.TOP));
+        box().dragTo(before.x + 30f, before.y, 30f, 0f, false, false);
+        document.update(W, H);
+
+        Vector2f after = box().handleAt(Spot.TOP);
+        assertNotNull(after);
+        assertEquals("the dragged edge did not end up under the pointer",
+                before.x + 30f, after.x, 0.5f);
+        assertEquals("a horizontal drag moved the edge vertically", before.y, after.y, 0.5f);
+    }
+
+    /** The control: the same drag on an untransformed node, which is the case that always worked. */
+    @Test
+    public void andStillFollowsItWithNoTransformAtAll() {
+        enterFreeTransform();
+        document.update(W, H);
+
+        Vector2f before = box().handleAt(Spot.TOP);
+        assertNotNull(before);
+        box().press(new Grip(Kind.SKEW, Spot.TOP));
+        box().dragTo(before.x + 30f, before.y, 30f, 0f, false, false);
+        document.update(W, H);
+
+        Vector2f after = box().handleAt(Spot.TOP);
+        assertNotNull(after);
+        assertEquals(before.x + 30f, after.x, 0.5f);
+        assertEquals(before.y, after.y, 0.5f);
+    }
+
     /** The box opens on the selection and takes the surface with it. */
     @Test
     public void ctrlTOpensTheBoxOnTheSelection() {
