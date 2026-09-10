@@ -315,6 +315,27 @@ public final class LanguageRegistry {
      * loader is whatever the host left there, and LaunchWrapper's is not the one that defined these
      * classes.</p>
      */
+    /**
+     * Whether {@link #bootstrap()} has already run — <b>asked without causing it</b>.
+     *
+     * <p>The one honest question about ordering, and the reason it is public: a service registered
+     * <em>after</em> the first read is a service the engines built during that read never saw. On a
+     * Minecraft client that is the whole difference between a script resolving {@code Minecraft} and
+     * not, it is silent, and it lasts for the life of the process. A host that installs something the
+     * engines read checks this first and says so.</p>
+     *
+     * <pre>{@code
+     * boolean tooLate = LanguageRegistry.isBootstrapped();   // BEFORE installing
+     * CgPlatform.provide(ScriptServices.SERVICE, service);
+     * if (tooLate) LOGGER.warn("the registry was already read; the live tier is off for this run");
+     * }</pre>
+     *
+     * <p>Every other read here bootstraps, so this is the only way to observe the before-state.</p>
+     */
+    public static synchronized boolean isBootstrapped() {
+        return bootstrapped;
+    }
+
     public static synchronized void bootstrap() {
         if (bootstrapped) return;
         // SET BEFORE THE LOOP. A service's register() legitimately reads the registry back -- an entry
