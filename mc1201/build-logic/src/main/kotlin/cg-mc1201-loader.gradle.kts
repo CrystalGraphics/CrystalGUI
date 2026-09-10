@@ -57,6 +57,33 @@ val lang: SourceSet by sourceSets.creating {
     runtimeClasspath += sourceSets["main"].runtimeClasspath + sourceSets["main"].output
 }
 
+// ── KNOWN BROKEN: a 1.20.x DEV RUN does not load the language mod ───────────────────────────────
+//
+// The SHIPPED jars are fine -- all four installed clients register the ScriptService and resolve
+// Minecraft types. This is a dev-run-only hole, and it is worse than it sounds because it is the wrong
+// way round: you meet it while developing and not while testing the artifact. A dev client logs
+//
+//     [crystalgraphics] platform service 'crystalgui:script-platform' was not provided
+//
+// with no `[cgui-lang]` line at all, so grammars are present and scripting is dead.
+//
+// WHAT IS ESTABLISHED, so the next attempt does not re-derive it:
+//  - `mods { create("crystalgui_language") { sourceSet(lang) } }` is declared in forge and neoforge and
+//    does NOT cause discovery. The run gets no `-Dfml.modFolders`, and `clientLegacyClasspath.txt` is
+//    118 cache jars with zero `build/classes` entries -- `main`'s output is not in it either, yet the
+//    host mod loads, so discovery is not that file.
+//  - The line below makes Gradle BUILD the lang source set for the run (`:mc1201:forge:compileLangJava`
+//    and `processLangResources` are in the run's task graph, and the descriptors land in
+//    `build/resources/lang/META-INF/mods.toml` naming `crystalgui_language`). Necessary, not sufficient.
+//  - So the remaining unknown is how ModDevGradle hands `mods {}` to BootstrapLauncher on legacyForge.
+//    Read the plugin, not this comment, and fix it there.
+//
+// Kept because it is a real part of the answer and costs nothing; NOT kept because it works.
+// `-PcgNoLanguage` skips it. Fabric is untested and is likely the same shape.
+if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+    dependencies { "runtimeOnly"(files(lang.output)) }
+}
+
 dependencies {
     // compileOnly: shadowJar bundles these manually (see each loader's build.gradle.kts).
     // runtimeOnly: picked up by Fabric/Loom dev runs via Gradle's standard runtimeClasspath.
