@@ -12,7 +12,7 @@ One `@Mod` class. Its `Events` inner class registers every listener on `NeoForge
 from the constructor, and its `Network` inner class is the payload-based transport.
 
 The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in `:mc1201:common`'s `Lifecycle1201`.
+mod and owns them. Everything this loader forwards to lives in `:mc1201:common`'s `LifecycleCrystalGUI`.
 
 ## Minecraft Source Location
 

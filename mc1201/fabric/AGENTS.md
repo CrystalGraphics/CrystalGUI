@@ -9,13 +9,13 @@ MC 1.20.1 / Fabric
 **Two entry points, and both are needed.** `fabric.mod.json` names them separately: `main` runs on
 both sides, `client` only on a client, and they are different interfaces.
 
-`CrystalGUI1201FabricCommon` is the `main` one and carries the `Network` transport and the `Events`
-inner class, because a dedicated server needs the channel. `CrystalGUI1201Fabric` is the `client` one
+`CrystalGUIFabricCommon` is the `main` one and carries the `Network` transport and the `Events`
+inner class, because a dedicated server needs the channel. `CrystalGUIFabric` is the `client` one
 and does nothing but call `Events.registerClient()` — the half that touches client-only Fabric APIs a
 server must never load.
 
 The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in `:mc1201:common`'s `Lifecycle1201`.
+mod and owns them. Everything this loader forwards to lives in `:mc1201:common`'s `LifecycleCrystalGUI`.
 
 ## Input is GLFW's callbacks, chained
 

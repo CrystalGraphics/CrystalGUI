@@ -36,18 +36,18 @@ val cgDescriptor = ModDescriptor(
         ),
         Variant(
             loader = "forge", minecraft = "[1.20.1,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.forge.CrystalGUI1201Forge",
+            commonEntry = "com.crystalgui.mc.forge.CrystalGUIForge",
             packFormat = 15,
         ),
         Variant(
             loader = "neoforge", minecraft = "[1.20.4,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.neoforge.CrystalGUI1201NeoForge",
+            commonEntry = "com.crystalgui.mc.neoforge.CrystalGUINeoForge",
             packFormat = 22,
         ),
         Variant(
             loader = "fabric", minecraft = "[1.20.1,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.fabric.CrystalGUI1201FabricCommon",
-            clientEntry = "com.crystalgui.mc.fabric.CrystalGUI1201Fabric",
+            commonEntry = "com.crystalgui.mc.fabric.CrystalGUIFabricCommon",
+            clientEntry = "com.crystalgui.mc.fabric.CrystalGUIFabric",
             fabricDepends = linkedMapOf(
                 "fabricloader" to ">=0.15.0",
                 "minecraft" to "~1.20.1",
@@ -90,17 +90,17 @@ val cgLangDescriptor = ModDescriptor(
         ),
         Variant(
             loader = "forge", minecraft = "[1.20.1,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.forge.lang.CrystalGuiLanguage1201Forge",
+            commonEntry = "com.crystalgui.mc.forge.lang.CrystalGuiLanguageForge",
             packFormat = 15,
         ),
         Variant(
             loader = "neoforge", minecraft = "[1.20.4,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.neoforge.lang.CrystalGuiLanguage1201NeoForge",
+            commonEntry = "com.crystalgui.mc.neoforge.lang.CrystalGuiLanguageNeoForge",
             packFormat = 22,
         ),
         Variant(
             loader = "fabric", minecraft = "[1.20.1,1.21)", era = "modern",
-            clientEntry = "com.crystalgui.mc.fabric.lang.CrystalGuiLanguage1201Fabric",
+            clientEntry = "com.crystalgui.mc.fabric.lang.CrystalGuiLanguageFabric",
             fabricDepends = linkedMapOf(
                 "fabricloader" to ">=0.15.0",
                 "minecraft" to "~1.20.1",

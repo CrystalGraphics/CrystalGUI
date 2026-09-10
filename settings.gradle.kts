@@ -88,6 +88,14 @@ include("language")
 // the toolchains the loader modules below do.
 include("mc-shared")
 
+// Tier 1 (plan/crystalgui/platform-single-jar.md §12): what a window and a mouse look like on each
+// LWJGL family, with no Minecraft type in either. Compiled once, never remapped, one copy in the
+// merged jar however many targets ship — so a new Minecraft version on an LWJGL family already here
+// adds nothing. Unconditional for `mc-shared`'s reason: LWJGL and `core` are all they need, and
+// neither wants a loader toolchain.
+include("mc-lwjgl2")
+include("mc-lwjgl3")
+
 // The MC 1.7.10 loader.
 //
 // `include`, NOT `includeBuild` -- this line read `//includeBuild("mc1710")` for months and could never

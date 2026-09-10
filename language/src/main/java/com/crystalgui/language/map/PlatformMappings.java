@@ -92,7 +92,7 @@ public final class PlatformMappings {
      * <b>Begins acquisition now</b>, so the first analysis does not have to trigger it.
      *
      * <pre>{@code
-     * ScriptService1201.install();   // the service first -- this reads it
+     * ScriptService.install();   // the service first -- this reads it
      * PlatformMappings.start();      // from a loader's CLIENT bootstrap
      * }</pre>
      *

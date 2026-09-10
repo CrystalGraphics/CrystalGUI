@@ -60,7 +60,7 @@ public final class MappingCoordinates {
      * could verify, and the manifest is immutable per Minecraft version.</p>
      *
      * <pre>{@code
-     * coordinates.readable("client.txt", MojangMappings1201.clientMappings("1.20.1"), null);
+     * coordinates.readable("client.txt", MojangMappings.clientMappings("1.20.1"), null);
      * }</pre>
      *
      * <p>Called on the fetching thread, never on the caller of {@code mappings()} — so a resolver may do

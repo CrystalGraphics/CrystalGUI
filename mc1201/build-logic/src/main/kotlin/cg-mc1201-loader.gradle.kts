@@ -109,7 +109,7 @@ dependencies {
     "langCompileOnly"(project(":language"))
     "langCompileOnly"(project(path = ":mc1201:common", configuration = "commonLangOutput"))
     // AND ON THE RUNTIME CLASSPATH, like :core and :mc1201:common above. compileOnly alone put it on
-    // no run at all: `Lifecycle1201.bootstrapClient` calls `ScriptService1201.install()`, so the first
+    // no run at all: `LifecycleCrystalGUI.bootstrapClient` calls `ScriptService.install()`, so the first
     // dev client to reach it died with
     //
     //     NoClassDefFoundError: com/crystalgui/language/platform/ScriptService
@@ -154,11 +154,13 @@ cgbuildlogic.configureShadowJarBundling(project)
 // `common` has to be relocated because the single jar carries THREE remapped copies of it -- SRG on
 // Forge, official on NeoForge, intermediary on Fabric -- and three classes cannot share a name.
 //
-// THE FOUR PACKAGES ARE MOVED INDIVIDUALLY, never their parent: relocating `com.crystalgui.mc` would
-// rewrite this loader's own `com.crystalgui.mc.<loader>` too, into `...<loader>.common.<loader>`.
-// Each keeps its leaf name under the new root rather than being flattened into it, so a class that
-// was `mc.client.CgUiScreen1201` becomes `mc.forge.common.client.CgUiScreen1201` and stays unique.
-val cgCommonPackages = listOf("client", "net", "platform", "example")
+// ONE RULE OVER `com.crystalgui.mc.modern`, which is what J9's package move bought. This used to
+// name each of `client`, `net`, `platform` and `example` individually, because the only alternative
+// was relocating `com.crystalgui.mc` -- and that would have rewritten this loader's own
+// `com.crystalgui.mc.<loader>` too, into `...<loader>.common.<loader>`. Now the era tree has a root
+// of its own, that hazard is gone and a new sub-package needs no edit here.
+// A class that was `mc.modern.client.CgUiScreen` becomes `mc.forge.common.client.CgUiScreen`.
+val cgCommonRoot = "com.crystalgui.mc.modern"
 val cgThinRoot = "com.crystalgui.mc.${project.name}.common"
 
 val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("thinShadowJar") {
@@ -172,7 +174,7 @@ val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.ta
     val commonJar = project(":mc1201:common").tasks.named<Jar>("jar")
     dependsOn(commonJar)
     from(commonJar.map { zipTree(it.archiveFile) })
-    cgCommonPackages.forEach { relocate("com.crystalgui.mc.$it", "$cgThinRoot.$it") }
+    relocate(cgCommonRoot, cgThinRoot)
 }
 
 // A DEV RUN HAS TO SEE crystalgui_language AS A MOD, which means a descriptor in the lang source set's
@@ -204,7 +206,7 @@ val langThinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shado
     val commonLangJar = project(":mc1201:common").tasks.named<Jar>("langJar")
     dependsOn(commonLangJar)
     from(commonLangJar.map { zipTree(it.archiveFile) })
-    relocate("com.crystalgui.mc.lang", "$cgThinRoot.lang")
+    relocate("$cgCommonRoot.lang", "$cgThinRoot.lang")
 }
 
 // Nothing in :mc1201:common may be NAMED from a descriptor or a service file.
@@ -217,7 +219,7 @@ val checkDescriptorsNameNoCommon = tasks.register("checkDescriptorsNameNoCommon"
     group = "verification"
     description = "Fails if a descriptor or service file names a class that the thin jar relocates."
     val resourceRoot = layout.projectDirectory.dir("src/main/resources").asFile
-    val forbidden = cgCommonPackages.map { "com.crystalgui.mc.$it" }
+    val forbidden = listOf(cgCommonRoot)
     inputs.dir(resourceRoot).optional(true).withPropertyName("resources")
     outputs.upToDateWhen { true }
     doLast {
@@ -250,8 +252,8 @@ tasks.named("check") { dependsOn(checkDescriptorsNameNoCommon) }
 // nothing had compiled into. The symptom is a NoClassDefFoundError for a class that plainly exists on
 // disk, at a call site that plainly compiles:
 //
-//     NoClassDefFoundError: com/crystalgui/mc/platform/Lifecycle1201
-//         at com.crystalgui.mc.forge.CrystalGUI1201Forge.<init>
+//     NoClassDefFoundError: com/crystalgui/mc/platform/LifecycleCrystalGUI
+//         at com.crystalgui.mc.forge.CrystalGUIForge.<init>
 //
 // which reads as a packaging or classloader fault rather than as a missing build step.
 tasks.matching { it.name.startsWith("run") || it.name.startsWith("prepare") }.configureEach {
@@ -700,7 +702,7 @@ tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach 
 //
 //   ./gradlew :mc1201:forge:runClient -Dcrystalgui.clientProbe=true [-PcgWorld="Some World"]
 //
-// ClientProbe1201 can only start once there is a world, and nothing in a dev run reaches the title
+// ClientProbe can only start once there is a world, and nothing in a dev run reaches the title
 // screen on its own. A missing world is not reported usefully -- the client just sits on the menu --
 // so the name is a property and the run logs which one it asked for.
 val cgProbeWorld = (project.findProperty("cgWorld") as String?) ?: "New World"
