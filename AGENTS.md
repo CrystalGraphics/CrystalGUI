@@ -1213,19 +1213,23 @@ each carrying its own absent-value):
 | UI sounds | `CgPlatform.sound()` | `platform/service/CgSoundService` |
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
 | Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
-| **Presenting a cursor** | `CgPlatform.get(CursorService.SERVICE)` | **`core.cursor`, ours** — see below |
+| **Presenting a cursor** | `CursorService.setCursor(...)` | **`core.cursor`, ours** — see below |
 
-> **The cursor is CrystalGUI's, and it is a slot rather than a bundle method.** It was
-> `CgCursorService`/`CgCursor`/`CgCursorBitmaps` in `platform/` until `CgService` existed — CrystalGUI
-> could own no service, so anything a loader supplied went into the one registry there. Nothing about a
-> cursor is a rendering concern, and everything that *decides* one is here: the `cursor` property, its
-> inheritance, the `auto` rule, `Input`'s gesture override.
+> **The cursor is split, and the split is the point.** *Deciding* one is CrystalGUI's — the `cursor`
+> property, its inheritance, the `auto` rule, `Input`'s gesture override, and `CursorBitmaps.artFor`,
+> the single keyword→picture table. *Presenting* one is a toolkit's, and lives in CrystalGraphics'
+> tier-1 `mc-lwjgl2`/`mc-lwjgl3` modules as `CgCursorService`, which takes a
+> `CgCursorService.Image` — a name, some ARGB pixels, a hotspot — and has never heard of a keyword.
 >
-> **A new cursor never touches a loader.** `CursorBitmaps.artFor` is the single keyword→picture table for
-> every platform; an adapter reads it, caches natives by the returned `CursorArt`, and enumerates no
-> keywords of its own. It used to be copied into each adapter and the copies drifted — `slide-arrow`
-> reached the two LWJGL2 ones and not GLFW, `crosshair` the reverse. The one table a loader still owns is
-> the set of shapes *its own toolkit* ships natively, keyed on `CursorArt.name()`.
+> **`CursorService` is a class with one static method, and nothing registers anything.** It resolves the
+> keyword and hands the picture over; a host names no cursor service, no adapter, and neither LWJGL
+> module. It was an interface plus a `CgService` slot from when each loader wrote its own adapter, which
+> left a one-method interface with one implementation nobody filled.
+>
+> **A new cursor still touches nothing but the table.** An adapter caches natives by the image's *name*
+> and enumerates no keywords of its own. That table used to be copied into each adapter and the copies
+> drifted — `slide-arrow` reached the two LWJGL2 ones and not GLFW, `crosshair` the reverse. The only
+> table an adapter owns is the set of shapes *its own toolkit* ships natively, keyed on the same name.
 
 > **The clipboard is on `CgInputService`, not a service of its own.** It is not conceptually input, but it
 > is reached the same way and needed by exactly the code that handles keys — two methods do not earn a
@@ -1297,7 +1301,9 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                checked so the RENDERER decides), MenuContributor (rows computed at open
                                time — the Window menu's editor list). CommandRegistry.sections() is the
                                one query every menu renderer reads; menu() is its deprecated flat view
-  .cursor                      Cursor (the keyword set — CSS UI 4's, plus six the web never named:
+  .cursor                      CursorService (a CLASS, one static method -- resolves a keyword to a
+                               picture and hands it to CrystalGraphics' CgCursorService, whose LWJGL
+                               adapters know no keywords), Cursor (the keyword set — CSS UI 4's, plus six the web never named:
                                slide-arrow, four rotate-*, skew, pivot), CursorBitmaps (procedural 32x32
                                ARGB art, AND `artFor` — the ONE keyword->picture table every platform
                                reads), CursorArt (one picture: name, drawing, hotspot; shared across the
@@ -1374,7 +1380,7 @@ com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platfo
   (root)                       CgPlatform (the registry, both halves), CgPlatformService (the CLOSED
                                bundle a loader registers), CgService (the OPEN half — a slot a consumer
                                declares, a loader fills and anyone reads, each with its own absent-value.
-                               CursorService.SERVICE and CgNetworkChannel.SERVICE are ours)
+                               CgCursorService.SERVICE and CgNetworkChannel.SERVICE are ours)
   .input                       CgSystemInput (raw Mouse/Keyboard event sink + event types),
                                CgKeyCodes (LWJGL2-shaped, no LWJGL import), CgMouseCodes,
                                CgModifiers (bitmask)
