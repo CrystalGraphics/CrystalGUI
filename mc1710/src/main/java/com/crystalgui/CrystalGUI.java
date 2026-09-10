@@ -98,14 +98,14 @@ public class CrystalGUI {
      * Says which tier of the language stack this deployment has, without naming it.
      *
      * <p>{@code LanguageRegistry} is {@code core}'s engineless tier, so this compiles and runs with the
-     * language mod absent. An empty contributor list IS the absent case; {@code crystalgui_lang}
+     * language mod absent. An empty contributor list IS the absent case; {@code crystalgui_language}
      * announces its own arrival.</p>
      */
     private void announceLanguageTier() {
         List<String> contributors = LanguageRegistry.contributors();
         if (contributors.isEmpty()) {
             LOGGER.info("{}: no language stack installed -- source files colour from core's built-in "
-                    + "lexers and are not analysed. Install crystalgui_lang for grammars, analysis "
+                    + "lexers and are not analysed. Install crystalgui_language for grammars, analysis "
                     + "and scripting.", NAME);
         } else {
             LOGGER.info("{}: language contributors: {}", NAME, contributors);

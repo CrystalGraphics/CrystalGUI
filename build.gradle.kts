@@ -53,7 +53,7 @@ apply(from = rootProject.file("gradle/local-settings.gradle.kts").toURI())
 // CrystalGraphics goes with it: CrystalGUI does not run without it, and shipping one of a matched
 // pair is how an afternoon disappears.
 //
-// `-PcgNoLanguage` leaves `crystalgui_lang` out, which is the degraded configuration J8 exists to
+// `-PcgNoLanguage` leaves `crystalgui_language` out, which is the degraded configuration J8 exists to
 // make possible and therefore the one worth being able to run: the editor opens, colours from core's
 // built-in lexers, and the log says the stack is absent.
 //
@@ -70,7 +70,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
     if (cgWithLanguage) dependsOn("checkLanguageJar")
 
     val guiJar = layout.buildDirectory.file("libs/crystalgui-$version.jar")
-    val langJar = layout.buildDirectory.file("libs/crystalgui_lang-$version.jar")
+    val langJar = layout.buildDirectory.file("libs/crystalgui-language-$version.jar")
     val graphicsJar = File(crystalGraphics.projectDir, "build/libs/crystalgraphics-$version.jar")
     val withLanguage = cgWithLanguage
     val localProperties = rootProject.file("local.properties")
@@ -91,7 +91,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             add(graphicsJar)
         }
         jars.filterNot { it.isFile }.forEach { throw GradleException("${it.name} was not built") }
-        if (!withLanguage) logger.lifecycle("[cgui] -PcgNoLanguage: crystalgui_lang is NOT deployed")
+        if (!withLanguage) logger.lifecycle("[cgui] -PcgNoLanguage: crystalgui_language is NOT deployed")
 
         instanceKeys.forEach { key ->
             val dir = settings.getProperty(key)
@@ -105,10 +105,14 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             // to delete -- and the names being deleted include the RETIRED per-loader ones, so an
             // instance that had `crystalgui-mc1201-forge-...-srg.jar` does not end up with both.
             //
-            // `crystalgui_lang-` is listed in its own right: it is not a prefix of `crystalgui-`, so
-            // without it `-PcgNoLanguage` would leave the previous run's language jar installed and
-            // measure the wrong configuration.
-            val oursPrefixes = listOf("crystalgui-", "crystalgui_lang-", "crystalgraphics-")
+            // `crystalgui_` IS A RETIRED NAME AND STAYS IN THIS LIST. The language jar was
+            // `crystalgui_lang-1.0.0.jar` until 2026-09-10; dropping the prefix when the name changed
+            // left the old jar beside the new one in every instance, and two jars exporting
+            // `com.crystalgui.language` is a split package -- Forge died straight after "Initialized
+            // transformers" with nothing in any log, exactly as an unrelocated ASM does. A name this
+            // task stops matching is a name it stops CLEANING UP, so retired spellings are added here,
+            // never removed.
+            val oursPrefixes = listOf("crystalgui-", "crystalgui_", "crystalgraphics-")
             mods.listFiles().orEmpty()
                 .filter { file -> oursPrefixes.any { file.name.startsWith(it) } }
                 .forEach { it.delete() }

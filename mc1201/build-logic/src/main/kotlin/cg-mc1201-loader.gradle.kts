@@ -148,7 +148,7 @@ val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.ta
     cgCommonPackages.forEach { relocate("com.crystalgui.mc.$it", "$cgThinRoot.$it") }
 }
 
-// A DEV RUN HAS TO SEE crystalgui_lang AS A MOD, which means a descriptor in the lang source set's
+// A DEV RUN HAS TO SEE crystalgui_language AS A MOD, which means a descriptor in the lang source set's
 // resources -- the merged one, which is what the shipped jar carries and already describes every
 // loader. Without it the classes are on the run classpath and no loader constructs the entry point,
 // so scripting is silently absent from every dev client while the shipped jar is fine.

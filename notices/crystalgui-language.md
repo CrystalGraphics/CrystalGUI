@@ -1,6 +1,6 @@
-# Third-party notices — `crystalgui_lang.jar`
+# Third-party notices — `crystalgui_language.jar`
 
-This file ships **inside** `crystalgui_lang-<version>.jar` as `META-INF/NOTICE.md`. Most of this jar
+This file ships **inside** `crystalgui-language-<version>.jar` as `META-INF/NOTICE.md`. Most of this jar
 by weight is somebody else's work, and EPL-2.0 and MPL-2.0 both require the notice to reach whoever
 receives the binary — so it travels in the binary. `checkLanguageJar` asserts it is present.
 

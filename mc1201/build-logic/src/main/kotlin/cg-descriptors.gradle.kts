@@ -70,7 +70,7 @@ registerDescriptorTasks(cgDescriptor, "cgui")
 // CLIENT, and structurally: every entry point installs against a live Minecraft instance. A dedicated
 // server that finds it in `mods/` still loads the jar; nothing in it registers.
 val cgLangDescriptor = ModDescriptor(
-    id = "crystalgui_lang",
+    id = "crystalgui_language",
     name = "CrystalGUI Language",
     version = property("modVersion").toString(),
     description = "Grammars, code analysis and scripting for CrystalGUI's editor.",
@@ -85,22 +85,22 @@ val cgLangDescriptor = ModDescriptor(
     variants = listOf(
         Variant(
             loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
-            commonEntry = "com.crystalgui.mc.lang.CrystalGuiLang",
+            commonEntry = "com.crystalgui.mc.lang.CrystalGuiLanguage",
             packFormat = 1,
         ),
         Variant(
             loader = "forge", minecraft = "[1.20.1,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.forge.lang.CrystalGuiLang1201Forge",
+            commonEntry = "com.crystalgui.mc.forge.lang.CrystalGuiLanguage1201Forge",
             packFormat = 15,
         ),
         Variant(
             loader = "neoforge", minecraft = "[1.20.4,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.neoforge.lang.CrystalGuiLang1201NeoForge",
+            commonEntry = "com.crystalgui.mc.neoforge.lang.CrystalGuiLanguage1201NeoForge",
             packFormat = 22,
         ),
         Variant(
             loader = "fabric", minecraft = "[1.20.1,1.21)", era = "modern",
-            clientEntry = "com.crystalgui.mc.fabric.lang.CrystalGuiLang1201Fabric",
+            clientEntry = "com.crystalgui.mc.fabric.lang.CrystalGuiLanguage1201Fabric",
             fabricDepends = linkedMapOf(
                 "fabricloader" to ">=0.15.0",
                 "minecraft" to "~1.20.1",

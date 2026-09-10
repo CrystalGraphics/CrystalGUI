@@ -14,12 +14,12 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
  * Ordered after {@code crystalgui} by {@code mods.toml}, so {@code CgPlatform} and the command registry
  * are already up.</p>
  */
-@Mod(CrystalGuiLang1201Forge.MODID)
-public final class CrystalGuiLang1201Forge {
+@Mod(CrystalGuiLanguage1201Forge.MODID)
+public final class CrystalGuiLanguage1201Forge {
 
-    public static final String MODID = "crystalgui_lang";
+    public static final String MODID = "crystalgui_language";
 
-    public CrystalGuiLang1201Forge() {
+    public CrystalGuiLanguage1201Forge() {
         // CLIENT ONLY, and structurally so: the script service registers against a live Minecraft
         // instance and a dedicated server has none. FMLClientSetupEvent fires on no server at all,
         // which is a stronger guarantee than a Dist check somebody has to remember to write.

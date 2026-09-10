@@ -5,7 +5,7 @@ and the SIL OFL all require the notice to travel with the distribution rather th
 repository. `checkSingleJar` asserts it is present.
 
 The scripting stack — tree-sitter, ECJ, Rhino, CFR and ASM — is **not in this jar**. It ships in
-`crystalgui_lang-<version>.jar`, which carries [its own notice](../notices/crystalgui_lang.md).
+`crystalgui-language-<version>.jar`, which carries [its own notice](../notices/crystalgui-language.md).
 
 The repository-level index, with the full reasoning behind each entry, is
 [`THIRD-PARTY.md`](../THIRD-PARTY.md).
