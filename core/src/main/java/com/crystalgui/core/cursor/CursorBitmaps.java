@@ -66,6 +66,8 @@ public final class CursorBitmaps {
     private static final CursorArt FOUR_WAY         = CursorArt.centred("four-way",         CursorBitmaps::fourWayArrow);
     private static final CursorArt TEXT_BEAM        = CursorArt.centred("text-beam",        CursorBitmaps::textBeam);
     private static final CursorArt SLIDE_ARROW      = CursorArt.centred("slide-arrow",      CursorBitmaps::slideArrow);
+    private static final CursorArt OPEN_HAND        = CursorArt.centred("open-hand",        CursorBitmaps::openHand);
+    private static final CursorArt CLOSED_HAND      = CursorArt.centred("closed-hand",      CursorBitmaps::closedHand);
     private static final CursorArt ROTATE_NE        = CursorArt.centred("rotate-ne",        CursorBitmaps::rotateNe);
     private static final CursorArt ROTATE_NW        = CursorArt.centred("rotate-nw",        CursorBitmaps::rotateNw);
     private static final CursorArt ROTATE_SE        = CursorArt.centred("rotate-se",        CursorBitmaps::rotateSe);
@@ -87,12 +89,19 @@ public final class CursorBitmaps {
         art(VERTICAL_ARROW,   Cursor.NS_RESIZE, Cursor.ROW_RESIZE, Cursor.N_RESIZE, Cursor.S_RESIZE);
         art(DIAGONAL_NWSE,    Cursor.NWSE_RESIZE, Cursor.NW_RESIZE, Cursor.SE_RESIZE);
         art(DIAGONAL_NESW,    Cursor.NESW_RESIZE, Cursor.NE_RESIZE, Cursor.SW_RESIZE);
-        art(FOUR_WAY,         Cursor.MOVE, Cursor.ALL_SCROLL, Cursor.GRABBING);
+        art(FOUR_WAY,         Cursor.MOVE, Cursor.ALL_SCROLL);
         art(TEXT_BEAM,        Cursor.TEXT);
         art(CROSSHAIR,        Cursor.CROSSHAIR);
         // `pointer` is the most common cursor in any UI -- every button, link and menu row asks for it --
         // so it is the one keyword worth artwork beyond the resize set.
-        art(POINTING_HAND,    Cursor.POINTER, Cursor.GRAB);
+        art(POINTING_HAND,    Cursor.POINTER);
+        // A HAND OPEN AND A HAND CLOSED, which is what these two keywords mean and what every application
+        // that uses them draws. They borrowed from their neighbours before -- `grab` took the pointing
+        // hand, which says "click this", and `grabbing` took the four-way move arrow, which says "this
+        // travels in four directions" and is the largest picture here: it covered anything drawn near the
+        // pointer, which is how it was found. @see com.crystalgui.ui.service.RotationCursor
+        art(OPEN_HAND,        Cursor.GRAB);
+        art(CLOSED_HAND,      Cursor.GRABBING);
         // Bare opposed triangles, NOT the horizontal arrow above. A node editor puts a scrubbable number
         // inside a resizable panel, so "this value slides" and "this edge moves" appear pixels apart and
         // have to be distinguishable.
@@ -267,6 +276,54 @@ public final class CursorBitmaps {
 
         // Thumb: a step out to the left rather than a taper. At this size it is three pixels of silhouette.
         block(body, 5, 17, 3, 5);
+
+        return outline(body);
+    }
+
+    /**
+     * An open hand — {@code cursor: grab}, "you can pick this up".
+     *
+     * <p>Blocks and a derived outline like {@link #pointingHand}, and for its reasons: at twenty usable
+     * pixels a hand is a silhouette with a one-pixel rim, and the gaps between the fingers are single
+     * empty columns that {@link #outline} fills as the black divisions between them.</p>
+     *
+     * <p>Centred rather than tipped. A pointing hand is aimed with its fingertip, so its hotspot is
+     * there; an open hand is aimed with its palm, and centring puts the grab point under the middle of
+     * the picture where a user reads it.</p>
+     */
+    public static int[] openHand() {
+        boolean[] body = new boolean[SIZE * SIZE];
+
+        // Four fingers, the middle one tallest, each separated by one empty column.
+        block(body, 10, 6, 3, 11);
+        block(body, 14, 4, 3, 13);
+        block(body, 18, 6, 3, 11);
+        block(body, 22, 9, 3, 8);
+
+        block(body, 10, 15, 15, 10);   // the palm, spanning exactly what the fingers stand on
+        block(body, 6, 15, 4, 6);      // the thumb, stepped out to the left
+
+        return outline(body);
+    }
+
+    /**
+     * A closed fist — {@code cursor: grabbing}, "you have hold of it".
+     *
+     * <p>{@link #openHand} with the fingers curled: the same palm and thumb, and four bumps along the top
+     * where four raised fingers were. Keeping the two that close means the change between them reads as
+     * one hand closing rather than as two unrelated pictures, which is the whole signal a press gives.</p>
+     */
+    public static int[] closedHand() {
+        boolean[] body = new boolean[SIZE * SIZE];
+
+        // The curled fingers: the same columns, cut down to knuckles.
+        block(body, 10, 11, 3, 5);
+        block(body, 14, 10, 3, 6);
+        block(body, 18, 11, 3, 5);
+        block(body, 22, 12, 3, 4);
+
+        block(body, 10, 15, 15, 10);   // the same palm as the open hand
+        block(body, 6, 16, 4, 5);      // and the same thumb, a pixel lower across the front
 
         return outline(body);
     }
