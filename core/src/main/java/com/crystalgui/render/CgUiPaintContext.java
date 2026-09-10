@@ -6,6 +6,7 @@ import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
+import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
@@ -28,6 +29,7 @@ import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.text.FontFamilyCache;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -42,6 +44,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
+import java.util.function.Consumer;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -347,6 +350,16 @@ public final class CgUiPaintContext {
      */
     @Getter
     private float layerOpacity = 1f;
+
+    /**
+     * The one {@code _LayerOpacity} binder, shared by every site that syncs the value.
+     *
+     * <p>A field rather than a lambda per call site. It captures {@code this} and reads the field
+     * when it runs, so one instance is correct for every value it will ever carry — written inline
+     * it was a fresh capture per material switch, on the path every SDF drawable takes for every
+     * element of every frame.</p>
+     */
+    private final Consumer<CgShaderBindings> layerOpacityBinder = b -> b.set1f("_LayerOpacity", layerOpacity);
 
     @Getter
     private final CgFont font = loadDefaultFont();
@@ -1012,6 +1025,28 @@ public final class CgUiPaintContext {
         return renderer.quad();
     }
 
+    /** The one rect scratch, handed out by {@link #rect()}. */
+    private final CgUiRect.Draw rectScratch = new CgUiRect.Draw();
+
+    /**
+     * Starts a rounded and/or bordered rectangle — {@link #quad()}'s counterpart for anything the
+     * frame batch cannot express, and the path {@code CgUiRect} itself draws through.
+     *
+     * <pre>{@code
+     * ctx.rect().at(x, y).size(w, h).fillColor(argb).submit();
+     * ctx.rect().at(x, y).size(w, h).radius(6f, 6f).border(1f, edge).fillColor(bg).submit();
+     * }</pre>
+     *
+     * <p>A plain rect (no radius, no border) still goes through the batch; {@code submit()} picks.
+     * The fill tint is {@link #getColor()} at submit time, so set it first as any drawable expects.</p>
+     *
+     * <p><b>Build and {@code submit()} in one expression</b> — the returned instance is this context's
+     * shared scratch, exactly as {@link #quad()}'s is, and the next {@code rect()} resets it.</p>
+     */
+    public CgUiRect.Draw rect() {
+        return rectScratch.begin(this);
+    }
+
     /**
      * Starts a Bézier stroke, with this context's pose already applied — the curve counterpart to
      * {@link #quad()}, and identical in every convention that matters.
@@ -1117,7 +1152,7 @@ public final class CgUiPaintContext {
         activePath = InstancePath.CURVE;
         // Layer opacity is a material property, so it has to be re-applied on the material actually
         // being bound — the value living on boxModelMaterial says nothing about this one.
-        curveMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        curveMaterial.applyProperties(layerOpacityBinder);
         renderer.useCurveMaterial(activeCurveMaterial());
         currentTexture = null;
     }
@@ -1143,7 +1178,7 @@ public final class CgUiPaintContext {
         } finally {
             curveMaterialOverride = saved;
             if (activePath == InstancePath.CURVE) {
-                curveMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+                curveMaterial.applyProperties(layerOpacityBinder);
                 renderer.useCurveMaterial(activeCurveMaterial());
             }
         }
@@ -1495,7 +1530,7 @@ public final class CgUiPaintContext {
         flush();
         currentMaterial = material;
         currentTexture = null;
-        material.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        material.applyProperties(layerOpacityBinder);
 
         // useMaterial() is called TWICE around drawBody on purpose, and both calls are load-bearing.
         //
@@ -1518,7 +1553,7 @@ public final class CgUiPaintContext {
 
         // Properties before the bind here, so the restored box-model material uploads the current
         // layer opacity on this bind rather than trailing a frame behind.
-        boxModelMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        boxModelMaterial.applyProperties(layerOpacityBinder);
         bindQuadPath(boxModelMaterial);
         currentMaterial = boxModelMaterial;
         currentTexture = null;
@@ -1536,6 +1571,28 @@ public final class CgUiPaintContext {
      * touching that drawable's own ambient tint/alpha.</p>
      */
     public void withLayerOpacity(float opacity, Runnable drawBody) {
+        float previous = pushLayerOpacity(opacity);
+        try {
+            drawBody.run();
+        } finally {
+            popLayerOpacity(previous);
+        }
+    }
+
+    /**
+     * {@link #withLayerOpacity} without the lambda, paired with {@link #popLayerOpacity} the way
+     * {@link #pushScissor} is with {@code popScissor}.
+     *
+     * <pre>{@code
+     * float previous = ctx.pushLayerOpacity(0.5f);
+     * try { ... } finally { ctx.popLayerOpacity(previous); }
+     * }</pre>
+     *
+     * <p>For a caller on the per-element paint path, where the lambda is a fresh capture per element
+     * per frame. Pass the returned value back to {@code popLayerOpacity} — it is what was in effect
+     * before, not what this call set.</p>
+     */
+    public float pushLayerOpacity(float opacity) {
         flush();
         float previous = layerOpacity;
         // Compose with the enclosing scope rather than overwriting it — a retargeted texture-valued
@@ -1544,12 +1601,16 @@ public final class CgUiPaintContext {
         // every enclosing opacity, leaving the outer transition's own progress with zero visual
         // effect on whatever it wraps.
         layerOpacity = previous * opacity;
-        currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        currentMaterial.applyProperties(layerOpacityBinder);
         bindQuadPath(currentMaterial);
-        drawBody.run();
+        return previous;
+    }
+
+    /** Restores what {@link #pushLayerOpacity} returned. */
+    public void popLayerOpacity(float previous) {
         flush();
         layerOpacity = previous;
-        currentMaterial.applyProperties(b -> b.set1f("_LayerOpacity", layerOpacity));
+        currentMaterial.applyProperties(layerOpacityBinder);
         bindQuadPath(currentMaterial);
     }
 

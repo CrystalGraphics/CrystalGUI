@@ -753,7 +753,7 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 | Group | Methods |
 |---|---|
 | Frame | `beginFrame(w,h)` / `endFrame()` — save/restore GL via `CgGlScope`, redirect the whole tree into `frameFbo` and composite it back once, ortho projection, bind `crystalgui:shaders/gui_quad.shader`, reset `ScissorStack` |
-| Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
+| Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `rect()`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
 
 > **`curve()` is `quad()`'s twin, and switching between them flushes.** Bézier strokes go through
 > `CgVectorRenderer` with their own instance buffer and their own material (`gui_curve.shader`), and GL
@@ -769,6 +769,20 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 > and stroke widths are scaled by the pose too, so a 2px stroke stays 2 *logical* px at any `uiScale`,
 > the same as a 2px border.
 
+> **`rect()` is `quad()`'s shape-aware twin, and the only place a rounded or bordered rect is drawn.**
+> `ctx.rect().at(x,y).size(w,h).radius(6f,6f).border(1f,edge).fillColor(bg).submit()` — same scratch rule
+> as `quad()` (build and `submit()` in one expression), and `submit()` picks the batch or the SDF material
+> by asking whether the rect is plain. **`CgUiRect` is a VALUE and drawing one must not build one**: its
+> `with` methods each answer a copy, which is right for something the cascade shares and ruinous for a
+> painter that needs a rect per element per frame. `BoxPainter` composes the element's radii, its border
+> and the background's own `Fill` straight into this scratch, so a shaped element allocates nothing;
+> `CgUiRect.draw` does the same with its own fields. The scratch is also its own `Runnable` and
+> `Consumer`, because `withMaterial` and `applyProperties` each take a callback and a lambda over the
+> draw's arguments is a fresh capture every frame — the same reason every other material-owning drawable
+> (`CgUiGradient`, `CgUiGrid`, `CgUiColorField`, `CgUiBackdropFilter`) holds its two callbacks as fields
+> over per-draw scratch rather than writing them inline. Per-draw scratch is not part of a drawable's
+> value: nothing in it is read by `equals` and nothing survives the draw.
+>
 > `quad()` returns `CgQuadRenderer.Quad` — `ctx.quad().at(x,y).size(w,h).uv(...).color(argb).submit()`,
 > then `flush()` to draw (`submit()` only queues). **Never call `.pose(...)` on it**: `CgUiRenderer.quad()`
 > is the single place the `PoseStack` is applied, and overwriting it silently drops `uiScale` and the
@@ -777,7 +791,7 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 > expression, never hold it.
 | Clip | `pushScissor` / `popScissor` |
 | Material | `withMaterial(material, body)` |
-| Layers | `withLayerOpacity(opacity, body)`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `retain(key, region, revision)` |
+| Layers | `withLayerOpacity(opacity, body)` and its lambda-free pair `pushLayerOpacity`/`popLayerOpacity`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `retain(key, region, revision)` |
 | Lifecycle | `hasInstance()`, `destroy()` |
 
 > **`destroy()` must be called on GL-context destruction.** The instance is `static`, so it outlives

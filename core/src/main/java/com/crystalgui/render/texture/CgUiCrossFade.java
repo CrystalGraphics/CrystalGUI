@@ -53,8 +53,20 @@ public final class CgUiCrossFade implements CgUiDrawable {
 
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
-        ctx.withLayerOpacity(1f - t, () -> from.draw(ctx, mouseX, mouseY, x, y, width, height));
-        ctx.withLayerOpacity(t, () -> to.draw(ctx, mouseX, mouseY, x, y, width, height));
+        // Push/pop rather than the lambda form: a cross-fade is on the per-element paint path for as
+        // long as a `background` transition runs, and each lambda captures six arguments.
+        float previous = ctx.pushLayerOpacity(1f - t);
+        try {
+            from.draw(ctx, mouseX, mouseY, x, y, width, height);
+        } finally {
+            ctx.popLayerOpacity(previous);
+        }
+        previous = ctx.pushLayerOpacity(t);
+        try {
+            to.draw(ctx, mouseX, mouseY, x, y, width, height);
+        } finally {
+            ctx.popLayerOpacity(previous);
+        }
     }
 
     /** Interpolates the two sides' natural sizes so a fitted layer ({@code overlay-size: none} etc.)

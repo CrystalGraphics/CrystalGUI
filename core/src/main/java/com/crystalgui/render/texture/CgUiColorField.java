@@ -1,6 +1,7 @@
 package com.crystalgui.render.texture;
 
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -72,6 +73,20 @@ public final class CgUiColorField implements CgUiDrawable {
     private int toArgb = 0xFFFFFFFF;
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
+    /**
+     * <b>Per-draw scratch for {@link #quadBody} and {@link #writeProperties}</b>, which are held as
+     * FIELDS so a draw allocates neither.
+     *
+     * <p>{@code withMaterial} and {@code applyProperties} each take a callback, and a lambda over the
+     * draw's arguments is a fresh capture every time one runs — on a path that is per element per
+     * frame. A method reference stored once costs nothing after construction. These fields are not
+     * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
+     */
+    private CgUiPaintContext drawCtx;
+    private float drawX, drawY, drawWidth, drawHeight;
+    private final Runnable quadBody = this::quadBody;
+    private final java.util.function.Consumer<CgShaderBindings> propertyWriter = this::writeProperties;
+
     public CgUiColorField setMode(Mode value) {
         this.mode = value == null ? Mode.GRADIENT : value;
         return this;
@@ -129,19 +144,24 @@ public final class CgUiColorField implements CgUiDrawable {
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
-        CgMaterial mat = material();
-        ctx.withMaterial(mat, () -> {
-            mat.applyProperties(b -> {
-                b.set1f("_Mode", mode.ordinal());
-                b.set1f("_Hue", hue);
-                b.set1f("_InnerRadius", innerRadius);
-                b.colorARGB("_ColorA", fromArgb);
-                b.colorARGB("_ColorB", toArgb);
-                b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
-                b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
-                b.vec2("_BoxSize", width, height);
-            });
-            ctx.quad().at(x, y).size(width, height).color(ctx.getColor()).submit();
-        });
+        drawCtx = ctx;
+        drawX = x; drawY = y; drawWidth = width; drawHeight = height;
+        ctx.withMaterial(material(), quadBody);
+    }
+
+    private void quadBody() {
+        material().applyProperties(propertyWriter);
+        drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawCtx.getColor()).submit();
+    }
+
+    private void writeProperties(CgShaderBindings b) {
+        b.set1f("_Mode", mode.ordinal());
+        b.set1f("_Hue", hue);
+        b.set1f("_InnerRadius", innerRadius);
+        b.colorARGB("_ColorA", fromArgb);
+        b.colorARGB("_ColorB", toArgb);
+        b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
+        b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
+        b.vec2("_BoxSize", drawWidth, drawHeight);
     }
 }
