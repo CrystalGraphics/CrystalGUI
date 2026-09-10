@@ -59,14 +59,22 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
      *
      * <p>{@code withMaterial} and {@code applyProperties} each take a callback, and a lambda over the
      * draw's arguments is a fresh capture every time one runs — on a path that is per element per
-     * frame. A method reference stored once costs nothing after construction. These fields are not
+     * frame. A method reference stored once costs nothing after the first draw. These fields are not
      * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
      */
     private CgUiPaintContext drawCtx;
     private float drawX, drawY, drawWidth, drawHeight;
     private int drawTint;
     private final Runnable quadBody = this::quadBody;
-    private final java.util.function.Consumer<CgShaderBindings> propertyWriter = this::writeProperties;
+    // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
+    // names CgShaderBindings, so resolving it loads a CrystalGraphics CORE class. A dedicated server
+    // builds drawables and never paints, which is what headlessTest asserts by running without core.
+    private java.util.function.Consumer<CgShaderBindings> propertyWriter;
+
+    private java.util.function.Consumer<CgShaderBindings> propertyWriter() {
+        if (propertyWriter == null) propertyWriter = this::writeProperties;
+        return propertyWriter;
+    }
 
     /**
      * @param cellWidth  horizontal cell pitch, in logical pixels
@@ -148,7 +156,7 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
     }
 
     private void quadBody() {
-        MATERIAL.applyProperties(propertyWriter);
+        MATERIAL.applyProperties(propertyWriter());
         drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawTint).submit();
     }
 
