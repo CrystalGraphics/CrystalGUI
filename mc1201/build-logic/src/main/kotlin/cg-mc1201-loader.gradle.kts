@@ -51,6 +51,11 @@ dependencies {
     "compileOnly"(project(":mc1201:common"))
     "compileOnly"(project(":core"))
 
+    // compileOnly and NOT bundled: the merge adds :mc-shared once, under a package no variant
+    // relocates, so all four hosts share the one copy. Bundling it per loader would put four copies of
+    // com.crystalgui.mc.shared in the jar for the merge to reject as a duplicate.
+    "compileOnly"(project(":mc-shared"))
+
     // Taffy and JOML: :core has them compileOnly so they reach nobody transitively, and UIElement holds
     // a NodeId and a Matrix4f as fields. Needed at RUNTIME too -- a field descriptor resolves at class
     // load, so without them the UI classes do not load at all. plan/platform-mc1201.md 4.3.
@@ -481,7 +486,10 @@ val shadeDowngradedShadowJar = tasks.register<ShadeJar>("shadeDowngradedShadowJa
     archiveClassifier.set("java17-shaded")
 }
 
-tasks.named("assemble") { dependsOn(shadeDowngradedShadowJar) }
+// NOT ON `assemble` (J7). The fat per-loader jar is nobody's shipping artifact any more -- the merged
+// single jar is -- and it is the most expensive thing in this build: shadow, downgrade and shade over
+// core, language and every engine band, once per loader. The chain stays defined because Fabric's
+// `remapJar` still ends on it, so `./gradlew shadeDowngradedShadowJar` builds one on request.
 
 /**
  * A server run task's game directory.

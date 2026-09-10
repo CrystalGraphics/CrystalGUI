@@ -107,7 +107,8 @@ val reobfShadowJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationE
         archiveClassifier.set("srg")
     }
 
-tasks.named("assemble") { dependsOn(reobfShadowJar) }
+// Not on `assemble` (J7): the single jar is the shipping artifact, and reobfuscating a fat jar nothing
+// installs was pure cost. `./gradlew reobfShadowJar` still produces one.
 
 // -- The thin jar, reobfuscated (J1) --------------------------------------------------------------
 //
@@ -130,20 +131,6 @@ tasks.named("check") { dependsOn("checkThinJar") }
 tasks.named("assemble") { dependsOn(reobfThinJar) }
 
 
-// -- Dropping a build into a real client ---------------------------------------------------------
-//
-// CrystalGraphics goes too: CrystalGUI does not run without it, and shipping one of a matched pair is
-// how an afternoon disappears. Its reobfuscated jar is `reobfShadowJar` -- no downgrade step there,
-// being Java 17 throughout, where this project shadows core/ and language/ and must downgrade first.
-val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
-
-// ONLY the -srg pair. `assemble` also leaves a `-java17` jar carrying every class under official
-// names, and a tiny plain one correctly mapped and nearly empty. Both install; neither runs.
-extra["cgDeployKey"] = "prismLauncher1201ForgeDir"
-extra["cgDeployJars"] = listOf(
-        layout.buildDirectory.file("libs/crystalgui-mc1201-forge-$version-srg.jar"),
-        File(crystalGraphicsBuild.projectDir,
-                "mc1201/forge/build/libs/crystalgraphics-mc1201-forge-1.0.0-srg.jar"))
-extra["cgDeployDependsOn"] = listOf(
-        reobfShadowJar, crystalGraphicsBuild.task(":mc1201:forge:reobfShadowJar"))
-apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())
+// The per-loader `deployMods` is retired (J7). One artifact installs on every loader now, so the root
+// `deploySingleJars` puts that pair into all four instances; a per-loader deploy could only ever
+// install the fat jar this module no longer ships.

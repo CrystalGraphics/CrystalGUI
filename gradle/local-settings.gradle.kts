@@ -5,7 +5,7 @@
 // must never reach the remote, and equally must not be retyped on every invocation as `-P` flags.
 //
 //   cp local.properties.example local.properties     # then edit
-//   ./gradlew :mc1201:forge:deployMods
+//   ./gradlew deploySingleJars
 //
 // EVERY key in the file is loaded, whatever it is called. Nothing here enumerates them, so adding a
 // setting is editing one file and reading it by name wherever it is wanted.

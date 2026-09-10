@@ -105,6 +105,33 @@ by absence and reaches no loader; the GL harness is a client with a context by d
                                                   # refuses to accept it for you.
 ```
 
+### The single jar, and driving four real clients
+
+**One artifact installs on all four loaders.** `./gradlew singleJar` merges four *thin* jars — each
+loader's own classes plus `mc1201/common` relocated under `com.crystalgui.mc.<loader>.common`, so three
+remapped copies can share the jar without sharing a name — with `core`, `language`, `taffy` and
+`mc-shared` added once. A class file is inert until something defines it, and every loader's scanner
+reads with ASM rather than defining, so the variants it does not want cost it nothing.
+
+```bash
+./gradlew singleJar          # build it: build/libs/crystalgui-<version>.jar
+./gradlew deploySingleJars   # and CrystalGraphics' into every instance in local.properties
+./gradlew prodSmoke          # boot all four installed clients, photograph each, fail if one did not
+./gradlew prodSmoke -PcgNoDeploy -PcgTargets=1201forge   # drive what is installed; one target
+```
+
+**`prodSmoke` is the only thing that can see a packaging defect.** A dev run resolves classes from
+source-set *directories*, so nothing in one can observe relocation, remapping, downgrading or a merged
+manifest — the four failures this build is most likely to have. It arms each instance's `instance.cfg`,
+launches all four, and each client loads a world, opens the editor, photographs it and quits. Captures
+land in `build/prodSmoke/<target>-early.png` and `-late.png`; ~75s for all four with `-PcgNoDeploy`.
+
+> **A capture is not a paint.** It proves a frame was read back, not that this engine drew it: with no
+> live GL context a screen's `render` returns at once, and outside a level Minecraft never clears the
+> colour buffer, so the frame still holds the previous screen. The autotest logs `desktop painted:
+> true|false` beside every capture and `prodSmoke` fails on a stated `false` — a photograph of the main
+> menu once passed every other check.
+
 > **`serverSmoke` is the one to reach for first.** Three fatal defects — CrystalGraphics building its
 > platform services eagerly, `CgPlatform.register` demanding a GL backend, a client-only guard one level
 > too high — shipped undetected because every one is a *runtime* property ("a client-only class is
@@ -189,7 +216,8 @@ own), while CrystalGraphics is a submodule that is a composite `includeBuild`. C
 | `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`). 17 CrystalGUI scenes. The only way to run the UI. |
 | `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
 | `mc1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :mc1710:compileJava`), whatever older notes here said. Holds the real 1.7.10 host, and since W3 that is a HOST rather than a product: `CgUiScreen` (the viewport the desktop attaches to), `CgUiInput`, `CgUiHud`, `CgUiOverlayInput`, and `CgUiWorkspaceHost` answering the `HostServices`/`WorkspaceHost` seams. `Mc1710Workspace` and `CgUiWindowMount` were **deleted** there; anything still naming them is describing history. **Verified by `serverSmoke` and by running the client**; a green compile was never the claim. |
-| `mc1201/` | ✅ | **In the build and running**, whatever older notes here said. `common` holds the host — `CgUiScreen1201`, `CgUiInput1201`, `CgUiHud1201`, `Connections1201`, `WorkspaceHost1201` and `Lifecycle1201`, which is **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only and forward into it. All three compile, boot a dedicated server and pass `./gradlew :mc1201:<loader>:serverSmoke`. **`neoforge` is MC 1.20.4** — NeoForge published no 20.1.x series — so `common` is compiled against 1.20.1 and consumed by a 1.20.4 module; see `plan/platform-mc1201.md` §3.8.6. **All three boot a dedicated server and pass `serverSmoke`**; the desktop scene has been run on 1.20.1. |
+| `mc1201/` | ✅ | **In the build and running**, whatever older notes here said. `common` holds the host — `CgUiScreen1201`, `CgUiInput1201`, `CgUiHud1201`, `Connections1201`, `WorkspaceHost1201` and `Lifecycle1201`, which is **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only and forward into it. All three compile, boot a dedicated server and pass `./gradlew :mc1201:<loader>:serverSmoke`. **`neoforge` is MC 1.20.4** — NeoForge published no 20.1.x series — so `common` is compiled against 1.20.1 and consumed by a 1.20.4 module; see `plan/platform-mc1201.md` §3.8.6. **All three boot a dedicated server and pass `serverSmoke`**; the desktop scene has been run on 1.20.1. Each loader also builds a **thin** jar — its own classes plus `common` relocated under `com.crystalgui.mc.<loader>.common` — which is what the root merge consumes; the fat per-loader jars still build on request and are on nobody's `assemble`. |
+| `mc-shared/` | ✅ | **Java 8, and the one package no variant relocates**, so all four hosts share the single copy the merge adds. `LoaderProbe` answers which loader this process is (from the Mixin service name, then resource probes) and `CrashVariant` turns that into the line a crash report needs — with one jar carrying a host per loader, a trace naming `com.crystalgui.mc.forge.common.*` is the only thing that says which ran. Compiled against Mixin 0.8.5 and asm-tree, `compileOnly` everywhere: bundling it per loader would put four copies in the merge for it to reject. |
 
 `core/build.gradle.kts` runs an **import guard** as a `doLast` on `compileJava`: any source line
 importing `net.minecraft.*`, `cpw.mods.fml.*`, `net.minecraftforge.*`, or `org.lwjgl.*` fails the

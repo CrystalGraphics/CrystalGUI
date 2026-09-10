@@ -215,6 +215,15 @@ abstract class ProdSmoke : DefaultTask() {
         val capture = captureOf(out, target, "early")
         if (!capture.isFile) return "NO CAPTURE: the client ran and never reached the autotest" + logTail(target)
         if (capture.length() < 4096) return "EMPTY CAPTURE: ${capture.length()} bytes" + logTail(target)
+        // A CAPTURE IS NOT A PAINT. It proves a frame was read back, not that this engine drew it: with
+        // no live GL context the screen's render returns at once, and outside a level Minecraft never
+        // clears the colour buffer -- so the frame still holds the previous screen and a photograph of
+        // the main menu passed every check above. The autotest states which it was; a stated `false` is
+        // a failure however convincing the PNG looks. Absence is not: 1.7.10 captures from INSIDE its
+        // paint method, so there is nothing there for a flag to add.
+        if (logSays(target, "desktop painted: false")) {
+            return "DID NOT PAINT: the capture is a stale frame, not this engine's" + logTail(target)
+        }
         return null
     }
 
@@ -224,10 +233,21 @@ abstract class ProdSmoke : DefaultTask() {
      * <p>Without it every failure reads the same -- "no capture" -- whether the jar never loaded, the
      * autotest was never armed, or the desktop threw on its first frame.</p>
      */
-    private fun logTail(target: Target): String {
+    private fun logFile(target: Target): File? {
         val logs = File(target.dir, ".minecraft/logs")
-        val log = listOf("latest.log", "fml-client-latest.log")
-            .map { File(logs, it) }.firstOrNull { it.isFile } ?: return "\n      (no log found in $logs)"
+        return listOf("latest.log", "fml-client-latest.log")
+            .map { File(logs, it) }.firstOrNull { it.isFile }
+    }
+
+    /** Whether the client's own log carries `needle`. */
+    private fun logSays(target: Target, needle: String): Boolean {
+        val log = logFile(target) ?: return false
+        return runCatching { log.readLines().any { it.contains(needle) } }.getOrDefault(false)
+    }
+
+    private fun logTail(target: Target): String {
+        val log = logFile(target)
+            ?: return "\n      (no log found in ${File(target.dir, ".minecraft/logs")})"
         val lines = runCatching { log.readLines() }.getOrElse { return "\n      (${log.name} unreadable)" }
         val autotest = lines.filter { it.contains("AUTOTEST") }.takeLast(3)
         val tail = if (autotest.isNotEmpty()) autotest else lines.takeLast(5)
