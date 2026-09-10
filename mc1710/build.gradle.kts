@@ -115,12 +115,6 @@ dependencies {
     // compileOnly because shadowJar bundles the classes itself; see the `from(zipTree(...))` below.
     compileOnly(project(":mc-shared"))
 
-    // Tier 1 for this LWJGL family (§12): `Lwjgl2CursorService` lives there because it names no
-    // Minecraft class at all -- the keyword->picture table is core's, and this side only turns a
-    // CursorArt into an LWJGL2 native. compileOnly for :mc-shared's reason: the merge adds the
-    // module once for every variant rather than each loader bundling a copy.
-    compileOnly(project(":mc-lwjgl2"))
-
     // :language's engine API, for the DOWNGRADE CLASSPATH ONLY -- see downgradeJar below.
     engineApi(project(path = ":language", configuration = "engineApi"))
 

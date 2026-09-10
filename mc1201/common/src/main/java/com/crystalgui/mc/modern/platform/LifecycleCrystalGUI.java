@@ -7,8 +7,6 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.cursor.CursorService;
-import com.crystalgui.mc.modern.platform.service.GlfwCursorService;
 
 import com.crystalgui.mc.modern.client.CgUiHud;
 import com.crystalgui.mc.modern.example.MachineExample;
@@ -61,10 +59,6 @@ public final class LifecycleCrystalGUI {
      * {@link CgUiKeybinds#all()} must be read AFTER this runs.
      */
     public static void bootstrapClient() {
-        // THE POINTER IS THIS PLATFORM'S TO DRESS, and it belongs to the process rather than to any one
-        // screen -- so a cursor resolves the same whether the desktop has ever been opened or not. GLFW
-        // has the whole standard set, so this one is a mapping table; the engine resolves a keyword and asks.
-        CgPlatform.provide(CursorService.SERVICE, new GlfwCursorService());
         MachineExampleClient.registerClient();
     }
 

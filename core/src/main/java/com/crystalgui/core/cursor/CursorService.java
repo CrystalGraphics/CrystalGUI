@@ -6,9 +6,15 @@ import com.crystalgraphics.platform.CgService;
  * Shows a mouse cursor — the seam between whoever <em>decides</em> on one and whoever <em>presents</em> it.
  *
  * <pre>{@code
- * CgPlatform.provide(CursorService.SERVICE, cursor -> setNativeCursor(nativeFor(cursor)));  // a loader
- * CgPlatform.get(CursorService.SERVICE).setCursor(Cursor.POINTER);                          // anyone
+ * CgPlatform.get(CursorService.SERVICE).setCursor(Cursor.POINTER);   // anyone; this is the whole API
  * }</pre>
+ *
+ * <p><b>A loader registers nothing.</b> The default is {@code PlatformCursorService}, which resolves
+ * the keyword to a picture through {@link CursorBitmaps#artFor} and hands it to CrystalGraphics'
+ * {@code CgCursorService} — whose LWJGL2 and LWJGL3 adapters ship with CrystalGraphics and know
+ * nothing about this package. So a host gets working cursors without naming a cursor service, an
+ * adapter, or the module either lives in. Filling the slot is still possible, for a test or a host
+ * that wants to intercept.</p>
  *
  * <h3>Why this is CrystalGUI's and no longer CrystalGraphics'</h3>
  *
@@ -20,18 +26,21 @@ import com.crystalgraphics.platform.CgService;
  * CSS property, its inheritance, the {@code auto} context rule, and {@code Input}'s override for a live
  * gesture.</p>
  *
- * <h3>Presenting one is loader-specific to an awkward degree</h3>
+ * <h3>Presenting one is toolkit-specific to an awkward degree — and that is CrystalGraphics' half</h3>
  *
  * <ul>
  *   <li><b>LWJGL3 / GLFW</b> (MC 1.20.x) has standard system cursors, the resize set included. A
  *       mapping table is most of the implementation.</li>
  *   <li><b>LWJGL2</b> (MC 1.7.10, and the harness) has <b>no standard cursors at all</b>:
- *       {@code Mouse.setNativeCursor} takes a cursor built from raw pixel data, which is what
- *       {@link CursorBitmaps} exists to supply.</li>
+ *       {@code Mouse.setNativeCursor} takes a cursor built from raw pixel data — bottom-up, unlike
+ *       every other toolkit — which is what {@link CursorBitmaps} exists to supply.</li>
  * </ul>
  *
- * <p>Neither adapter enumerates keywords: {@link CursorBitmaps#artFor} is the single table, so adding a
- * {@link Cursor} needs no edit in any loader.</p>
+ * <p>Both adapters live in CrystalGraphics' {@code mc-lwjgl2} / {@code mc-lwjgl3} tier-1 modules and
+ * take a {@code CgCursorImage}: a name, some pixels and a hotspot. <b>Neither enumerates keywords</b>
+ * — {@link CursorBitmaps#artFor} is the single table and it is here, so adding a {@link Cursor} needs
+ * no edit anywhere else. The name is what crosses: an adapter whose toolkit ships that shape natively
+ * prefers its own and falls back to our artwork.</p>
  *
  * <h3>{@link #NONE} is the absent-value, unlike the closed bundle's services</h3>
  *
@@ -63,7 +72,7 @@ public interface CursorService {
      * that has one. {@code Input.setCursorSink} is the per-document escape hatch for a test or a loader
      * that genuinely wants to intercept.</p>
      */
-    CgService<CursorService> SERVICE = CgService.of("crystalgui:cursor", NONE);
+    CgService<CursorService> SERVICE = CgService.of("crystalgui:cursor", new PlatformCursorService());
 
     /**
      * Shows {@code cursor}.
