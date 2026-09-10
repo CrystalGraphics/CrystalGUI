@@ -6,6 +6,7 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 import java.io.File
@@ -64,8 +65,14 @@ abstract class ProdSmoke : DefaultTask() {
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
-    /** The launcher binary. */
+    /**
+     * The launcher binary. Read from `prismLauncherExe` in `local.properties` unless set here.
+     *
+     * <p>Machine-local like the instance directories beside it, and gitignored for the same reason:
+     * where somebody installed PrismLauncher is not a fact about this repository.</p>
+     */
     @get:Input
+    @get:Optional
     abstract val launcher: Property<String>
 
     /** Seconds to wait for a client to appear, and then for it to finish. */
@@ -82,7 +89,6 @@ abstract class ProdSmoke : DefaultTask() {
     init {
         group = "verification"
         description = "Launches every installed client on the single jar and fails if one did not draw."
-        launcher.convention("C:/Users/mazen/AppData/Local/Programs/PrismLauncher/prismlauncher.exe")
         // A client boots, loads its world, opens the desktop, takes two captures and quits in well
         // under a minute; a world load is about ten seconds. So this is a ceiling on a STUCK client,
         // not a budget for a slow one -- generous enough to survive four clients sharing a GPU, and
@@ -107,6 +113,12 @@ abstract class ProdSmoke : DefaultTask() {
         val settings = Properties().apply { localProperties.inputStream().use { load(it) } }
         val out = outputDir.get().asFile.also { it.mkdirs() }
         val only = onlyTargets.get()
+
+        val exe = launcher.orNull?.takeIf { it.isNotBlank() }
+            ?: settings.getProperty("prismLauncherExe")?.takeIf { it.isNotBlank() }
+            ?: throw GradleException("local.properties names no prismLauncherExe, so prodSmoke cannot "
+                + "find the launcher. Add e.g. prismLauncherExe=C:/path/to/prismlauncher.exe")
+        if (!File(exe).isFile) throw GradleException("prismLauncherExe is not a file: $exe")
 
         val targets = mutableListOf<Target>()
         for (spec in instances.get()) {
@@ -137,7 +149,7 @@ abstract class ProdSmoke : DefaultTask() {
         try {
             targets.forEach { arm(it.cfg, out, it.name) }
             logger.lifecycle("[prodSmoke] armed {}", targets.joinToString(", ") { it.name })
-            startLauncher()
+            startLauncher(exe)
             // Prism rewrites an instance.cfg from its own model, so the arming has to survive the
             // launcher READING it as well as being written. Asked here rather than inferred from a
             // missing capture, which cannot tell a config the launcher discarded from a client that
@@ -158,7 +170,7 @@ abstract class ProdSmoke : DefaultTask() {
                 captureOf(out, target, "early").delete()
                 captureOf(out, target, "late").delete()
                 logger.lifecycle("[prodSmoke] {}: launching {}", target.name, target.uuid)
-                powershell("Start-Process -FilePath '${launcher.get()}' -ArgumentList '--launch','${target.uuid}'")
+                powershell("Start-Process -FilePath '$exe' -ArgumentList '--launch','${target.uuid}'")
                 Thread.sleep(LAUNCHER_SETTLE_MS)
             }
 
@@ -333,8 +345,8 @@ abstract class ProdSmoke : DefaultTask() {
      * immediately, and started as a child of the Gradle daemon it exits at once with no game and
      * nothing written anywhere.</p>
      */
-    private fun startLauncher() {
-        powershell("Start-Process -FilePath '${launcher.get()}'")
+    private fun startLauncher(exe: String) {
+        powershell("Start-Process -FilePath '$exe'")
         // It reads every instance.cfg as it comes up, and a `--launch` served before that read is
         // served from settings it has not loaded yet.
         Thread.sleep(LAUNCHER_READ_MS)
