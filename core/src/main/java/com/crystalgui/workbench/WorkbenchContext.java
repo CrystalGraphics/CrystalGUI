@@ -204,7 +204,13 @@ public interface WorkbenchContext extends SettingsScope {
 
     // ── Contributing ────────────────────────────────────────────────────────────────────────────
 
-    /** Adds a file type. @see DocumentKind */
+    /**
+     * Adds a file type. @see DocumentKind
+     *
+     * <p>Fluent, for an application declaring what it opens. An <em>extension</em> wants
+     * {@code kinds().register(kind)} instead — same registration, and it hands back the
+     * {@link Disposable} {@code WorkbenchExtension.activate} has to return.</p>
+     */
     WorkbenchContext contribute(DocumentKind kind);
 
     /** Adds a file type, plus the extensions that open into it. */

@@ -1,6 +1,7 @@
 package com.crystalgui.core.command;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.dispose.Disposable;
 
 import com.crystalgui.ui.input.keymap.Keymap;
 
@@ -34,19 +35,34 @@ public final class CommandRegistry {
     private final Map<String, Command> byId = new LinkedHashMap<>();
 
     /**
-     * Registers {@code command}, replacing any previous one with the same id.
+     * Registers {@code command}, replacing any previous one with the same id, and hands back the way to
+     * withdraw it.
+     *
+     * <pre>{@code
+     * public Disposable activate(WorkbenchContext workbench) {
+     *     return CommandRegistry.global().register(Command.of("mymod.build", "Build")
+     *             .runs(ctx -> build()));
+     * }
+     * }</pre>
+     *
+     * <p>An extension registering into the {@link #global()} registry is registering process-wide, so
+     * the handle is what makes it removable — see {@code WorkbenchExtension}, whose contract is that
+     * {@code activate} hands back everything it registered. Disposing removes the command only if it is
+     * still the one registered, so withdrawing a feature cannot take a later override with it.</p>
      *
      * <p>Replacement is allowed rather than rejected, because that is how a theme or a mod overrides a
      * built-in action — the same way re-adding a stylesheet is allowed. It is logged, because silently
      * shadowing somebody else's command is otherwise undiagnosable.</p>
      */
-    public CommandRegistry register(Command command) {
+    public Disposable register(Command command) {
         Command previous = byId.put(command.getId(), command);
         version++;
         if (previous != null && previous != command) {
             CrystalGuiCore.LOGGER.info("Command '{}' was replaced by a later registration", command.getId());
         }
-        return this;
+        return () -> {
+            if (byId.get(command.getId()) == command) unregister(command.getId());
+        };
     }
 
     /**
@@ -172,9 +188,14 @@ public final class CommandRegistry {
      * menu's contributor whether it has anything to say. Additive: several contributors may serve one
      * menu, and they merge by {@code (group, order)} like everything else.</p>
      */
-    public CommandRegistry contributeMenu(MenuId menu, MenuContributor contributor) {
-        menuContributors.computeIfAbsent(menu, key -> new CopyOnWriteArrayList<>()).add(contributor);
-        return this;
+    public Disposable contributeMenu(MenuId menu, MenuContributor contributor) {
+        List<MenuContributor> forMenu = menuContributors.computeIfAbsent(menu, key -> new CopyOnWriteArrayList<>());
+        forMenu.add(contributor);
+        version++;
+        return () -> {
+            forMenu.remove(contributor);
+            version++;
+        };
     }
 
     /** Local contributors, then global ones — the same fall-through {@link #all()} makes. */

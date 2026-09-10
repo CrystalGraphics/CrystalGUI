@@ -1,6 +1,7 @@
 package com.crystalgui.core.command;
 
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -199,6 +200,44 @@ public class CommandRegistryGlobalTest {
     public void menuIdsAreInterned() {
         assertEquals(MenuId.GRAPH_CONTEXT, MenuId.of("graph/context"));
         assertNull(CommandRegistry.global().get("nothing"));
+    }
+
+    /**
+     * <b>Registering hands back the way to withdraw.</b>
+     *
+     * <p>{@code WorkbenchExtension.activate} returns everything it registered as one {@link Disposable},
+     * and the global registry is named in its contract as the thing that needs one — anything scoped to
+     * a workbench goes when the workbench does. Without a handle here an extension has to remember its
+     * own ids and call {@code unregister} by hand, which is the boilerplate the seam exists to remove.</p>
+     */
+    @Test
+    public void registeringHandsBackTheWayToWithdraw() {
+        Disposable handle = CommandRegistry.global().register(Command.of("t.go", "Go"));
+        assertTrue("registered", CommandRegistry.global().contains("t.go"));
+
+        handle.dispose();
+
+        assertFalse("disposing the handle must take the command with it",
+                CommandRegistry.global().contains("t.go"));
+    }
+
+    /**
+     * And withdrawing does not take somebody else's override with it.
+     *
+     * <p>Replacement by id is deliberate — it is how a mod overrides a built-in — so a handle that
+     * removed by id alone would let a feature being unloaded silently delete the command that
+     * displaced it, and the loser would be whoever registered LAST.</p>
+     */
+    @Test
+    public void withdrawingDoesNotTakeALaterOverrideWithIt() {
+        Disposable first = CommandRegistry.global().register(Command.of("t.go", "Go"));
+        CommandRegistry.global().register(Command.of("t.go", "Go, but the mod's"));
+
+        first.dispose();
+
+        assertNotNull("the override must survive the withdrawal of what it replaced",
+                CommandRegistry.global().get("t.go"));
+        assertEquals("Go, but the mod's", CommandRegistry.global().get("t.go").getLabel());
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
