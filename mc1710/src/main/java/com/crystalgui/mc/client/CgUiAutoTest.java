@@ -1,19 +1,6 @@
 package com.crystalgui.mc.client;
 
-import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.language.run.ScriptCommands;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.language.java.classpath.HostClasspath;
-import com.crystalgui.language.platform.ScriptService;
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
-import com.crystalgui.language.run.ScriptRuntime;
-import com.crystalgui.text.TextBuffer;
-import com.crystalgui.text.lang.CompletionItem;
-import com.crystalgui.text.lang.CompletionList;
-import com.crystalgui.text.lang.CompletionProvider;
-import com.crystalgui.text.lang.LanguageServices;
-import com.crystalgui.text.syntax.LanguageRegistry;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -23,7 +10,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiMainMenu;
 import net.minecraft.world.WorldSettings;
 import net.minecraft.world.WorldType;
-import net.minecraft.launchwrapper.LaunchClassLoader;
 
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
@@ -34,11 +20,11 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Collections;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+import java.util.TreeMap;
+
 
 /**
  * Drives the client unattended: open the editor, screenshot it, quit.
@@ -130,48 +116,6 @@ public final class CgUiAutoTest {
     /** Frames in the world before opening, so the render pipeline has really run. */
     private static final int IN_WORLD_SETTLE_TICKS = 40;
 
-    /**
-     * A script to compile and run once the editor is up, or null to run nothing.
-     *
-     * <p>{@code -PcgScript=Probe.java} — the EXTENSION picks the language, which is the whole point: the
-     * same probe run as {@code .java} and as {@code .js} is the only honest comparison when one works and
-     * the other does not.</p>
-     */
-    private static final String SCRIPT = emptyToNull(System.getProperty("crystalgui.autotest.script"));
-
-    /**
-     * What that script says. One line, because the failure being chased is not in the script.
-     *
-     * <p>{@code System.out.println} is deliberate: it is the first thing anybody writes, it exercises the
-     * output capture, and it is what the report that prompted this named.</p>
-     */
-    private static final String SCRIPT_SOURCE = System.getProperty(
-            "crystalgui.autotest.scriptSource", "System.out.println(\"moo\");");
-
-    /**
-     * A class to compare LIVE bytes against DISK bytes, or null.
-     *
-     * <p>{@code -PcgBytes=net/minecraft/client/Minecraft}. The whole claim of §15.5 A is that a
-     * file-based classpath cannot see what a transformer produced, and this is what makes that visible
-     * rather than asserted — the difference between the two byte sources IS the capability.</p>
-     */
-    private static final String BYTES_PROBE = emptyToNull(System.getProperty("crystalgui.autotest.bytes"));
-
-    /**
-     * Whether to ask the live editor what its member list actually holds — {@code -PcgComplete}.
-     *
-     * <p>Because every layer answers correctly everywhere it can be driven from a test: the analyser, the
-     * provider on a fresh analysis and on a stale one, and the whole services stack for a compilation unit
-     * and for a bare snippet. The harness reports 46 rows for {@code System.out.} through the same call
-     * this makes. Only the client disagrees, so the question is what is different about the CLIENT — and
-     * a classpath assembled by LaunchWrapper is the obvious candidate that no test JVM can have.</p>
-     */
-    private static final boolean COMPLETE_PROBE =
-            Boolean.parseBoolean(System.getProperty("crystalgui.autotest.complete", "false"));
-
-    /** Which painted frame runs it — before {@link #CAPTURE_ON_FRAME}, so a capture still happens. */
-    static final int RUN_SCRIPT_ON_FRAME =
-            SCRIPT == null ? -1 : Integer.getInteger("crystalgui.autotest.scriptFrame", 5);
 
     private static String emptyToNull(String value) {
         return value == null || value.isEmpty() ? null : value;
@@ -182,12 +126,43 @@ public final class CgUiAutoTest {
     private static int ticks;
     private static boolean opened;
     private static boolean captured;
-    private static boolean scriptRun;
-    private static boolean bytesProbed;
-    private static boolean completionProbed;
 
-    /** A newline, spelled once — a probe source is written inline and every one of them needs one. */
-    private static final String NL = String.valueOf((char) 10);
+    /**
+     * Extra work another jar wants run on a painted frame, keyed by frame number.
+     *
+     * <p><b>The seam the language mod's own probes arrive through</b>, and the reason this class names
+     * nothing in {@code language/}: since J8 the scripting half ships in a second jar, so its steps
+     * cannot be called from here by name. A step registered for a frame that has already passed simply
+     * never runs — registration happens at mod init, long before the first paint.</p>
+     */
+    private static final Map<Integer, List<Runnable>> FRAME_STEPS = new TreeMap<>();
+
+    /**
+     * Runs {@code step} on the {@code frame}-th painted frame of the editor.
+     *
+     * <pre>{@code
+     * CgUiAutoTest.onFrame(5, MyProbe::runOnce);   // from mod init, before anything paints
+     * }</pre>
+     *
+     * <p>Frames are counted by {@link CgUiScreen}, from 1. Several steps may share a frame and run in
+     * registration order; a step that throws is logged and the rest still run.</p>
+     */
+    public static void onFrame(int frame, Runnable step) {
+        FRAME_STEPS.computeIfAbsent(frame, unused -> new ArrayList<>()).add(step);
+    }
+
+    /** Called once per painted frame by {@link CgUiScreen#drawScreen}. */
+    static void runFrameSteps(int framesPainted) {
+        List<Runnable> steps = FRAME_STEPS.get(framesPainted);
+        if (steps == null) return;
+        for (Runnable step : steps) {
+            try {
+                step.run();
+            } catch (RuntimeException failed) {
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST frame {} step failed", framesPainted, failed);
+            }
+        }
+    }
 
     private CgUiAutoTest() {
     }
@@ -257,315 +232,6 @@ public final class CgUiAutoTest {
         }
     }
 
-    /**
-     * Compiles and runs one script, on the client thread, logging every step.
-     *
-     * <h3>Why this bypasses the Run command</h3>
-     *
-     * <p>It is a bisect, not a substitute. Going through the command would exercise the keymap, the
-     * action's enablement, the panel and the console as well as the runtime — so a failure anywhere in
-     * that chain looks the same. This calls {@code ScriptRuntimes.forFile} + {@code compileScript} +
-     * {@code runAsync} and nothing else, so if the game still dies the language stack owns it and if it
-     * does not, the shell does.</p>
-     *
-     * <p><b>On the client thread deliberately.</b> That is where the Run command's compile happens, and a
-     * probe on a worker thread would prove nothing about a failure that reaches Minecraft's game loop —
-     * {@code Minecraft.run} catches {@code MinecraftError} silently and then runs
-     * {@code shutdownMinecraftApplet}, which is a clean exit 0 with no crash report and nothing in the log
-     * to search for. The compile is the half that runs here; {@code runAsync} takes a daemon thread of its
-     * own, so a fault after that line is the script's and not the game's.</p>
-     *
-     * <p>Every step is logged before it is attempted rather than after, because the failure being chased
-     * leaves nothing behind — the last line printed is the answer.</p>
-     */
-    static void runScriptOnce() {
-        if (!ENABLED || SCRIPT == null || scriptRun) return;
-        scriptRun = true;
-        // THROUGH THE COMMAND, which is the path a user takes. It used to reach into a ScriptWorkbench
-        // the screen was holding, resolve a runtime and compile by hand -- a second way to start a
-        // script than the button, the keybinding and the palette, and therefore a probe that could pass
-        // while the real one was broken. The screen holds no ScriptWorkbench since W6, and this is the
-        // better question anyway: does pressing Run run it.
-        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: running {} through the Run command", SCRIPT);
-        if (!CommandRegistry.global().run(ScriptCommands.RUN)) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: '{}' did not run -- no engine band, or "
-                    + "nothing in front to run", ScriptCommands.RUN);
-        }
-    }
-
-    /**
-     * Reports every member the LIVE runtime declares and the class FILE does not.
-     *
-     * <h3>What this is proving</h3>
-     *
-     * <p>§26.4 exists for one claim: a member can exist only because a transformer produced it, and no
-     * list of file paths can ever resolve it. That is easy to assert and hard to believe, so this reads
-     * both sources in the running client and prints the difference.</p>
-     *
-     * <p>It needs no mixin of its own. CrystalGraphics already mixes into {@code Minecraft},
-     * {@code EntityRenderer} and {@code RenderGlobal} in this very client, for reasons that have nothing
-     * to do with scripting — which makes it a better witness than one written to pass: the members it
-     * finds were put there by somebody else, for their own purposes, before this feature existed.</p>
-     *
-     * <p>Both sides are read through the SAME parse, so a difference cannot be an artefact of reading
-     * them differently. The live side is {@link com.crystalgui.mc.platform.service.script.LaunchWrapperBytes} — exactly
-     * what the compiler's name environment asks — and the disk side is the raw pre-transform bytes
-     * LaunchWrapper itself hands out.</p>
-     */
-    static void probeLiveBytesOnce() {
-        if (!ENABLED || BYTES_PROBE == null || bytesProbed) return;
-        bytesProbed = true;
-        try {
-            ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
-            if (platform == ScriptService.NONE) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: no platform registered");
-                return;
-            }
-            byte[] live = platform.liveBytes().bytesOf(BYTES_PROBE);
-            byte[] raw = rawBytesOf(BYTES_PROBE);
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST bytes: {} live={} raw={}",
-                    BYTES_PROBE, live == null ? -1 : live.length, raw == null ? -1 : raw.length);
-            if (live == null || raw == null) return;
-
-            if (live.length == raw.length) {
-                CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST bytes: live and raw are the same size — "
-                        + "no transformer changed this class, so it proves nothing");
-            }
-            Set<String> onlyLive = new LinkedHashSet<>(stringsIn(live));
-            onlyLive.removeAll(stringsIn(raw));
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST bytes: {} constants exist in the LIVE class "
-                    + "and in NO file on disk", onlyLive.size());
-            int shown = 0;
-            for (String constant : onlyLive) {
-                if (shown++ >= 40) break;
-                CrystalGuiCore.LOGGER.info("CGUI AUTOTEST bytes:     {}", constant);
-            }
-        } catch (Throwable failed) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: FAILED\n{}", describe(failed));
-        }
-    }
-
-    /**
-     * <b>What the member list holds in the CLIENT</b>, asked of the provider directly.
-     *
-     * <p>Reported twice as an empty popup on {@code System.out.} — and a popup with no rows that stays on
-     * screen is a specific thing, not merely "no answer": a session whose filter empties the list closes
-     * itself, so a list that renders as nothing but a hint strip was answered with zero items and marked
-     * INCOMPLETE. That is a provider answer, so this asks the provider.</p>
-     *
-     * <p>The classpath is logged first because it is the one input a test JVM cannot reproduce. Under
-     * LaunchWrapper the disk view is assembled by the launcher, and on a Java 8 host the class library is
-     * {@code rt.jar} inside {@code java.home} — which is on no URL list, in no system property, and in
-     * nothing {@code getSources()} returns. Every JVM this has been driven from resolves {@code java.lang}
-     * through the JRT filesystem instead, which needs no classpath entry at all and therefore hides the
-     * gap completely.</p>
-     */
-    static void probeCompletionOnce() {
-        if (!ENABLED || !COMPLETE_PROBE || completionProbed) return;
-        completionProbed = true;
-        try {
-            List<String> classpath = HostClasspath.detect();
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: java {} home {}",
-                    System.getProperty("java.version"), System.getProperty("java.home"));
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: classpath has {} entries", classpath.size());
-            boolean library = false;
-            for (String entry : classpath) {
-                String lower = entry.toLowerCase(java.util.Locale.ROOT);
-                if (lower.endsWith("rt.jar") || lower.endsWith("jce.jar") || lower.endsWith("jrt-fs.jar")) {
-                    library = true;
-                    CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:   class library {}", entry);
-                }
-            }
-            if (!library) {
-                CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST complete: NO class library on the classpath — "
-                        + "if this host has no JRT filesystem then java.lang resolves to nothing");
-            }
-
-            openProbe("a field receiver", "System.out." + NL, "System.out.");
-            openProbe("a type receiver", "System." + NL, "System.");
-            openProbe("a call receiver", "new java.util.ArrayList<String>()." + NL,
-                    "new java.util.ArrayList<String>().");
-            // THE MIXIN-ADDED MEMBER, asked of the EDITOR rather than of the compiler.
-            //
-            // A script calling it compiles, which is exit criterion 3 -- and that says nothing about
-            // whether anyone could have WRITTEN the call. The compiler and the analyser reach the live
-            // bytes through different entry points, and this session's whole defect was those two
-            // disagreeing: every script resolved perfectly while the member list beside it was empty.
-            // So the popup is asked directly.
-            openProbe("a minecraft receiver",
-                    "net.minecraft.client.Minecraft.getMinecraft()." + NL,
-                    "net.minecraft.client.Minecraft.getMinecraft().", "cgMixinProbe");
-            openProbe("a jdk-only line", "String s = \"x\"; int n = s.length(); s." + NL, "s.");
-            // THE DISCRIMINATOR. Identical receiver, identical caret, the only difference being that this
-            // one declares a type and so is analysed AS WRITTEN, where a bare body is wrapped in a prelude
-            // and every offset translated back. If a unit answers fully and a snippet answers with one
-            // interface method, the fault is in that translation and not in the member walk.
-            openProbe("a unit, string receiver",
-                    "class P { void m() { String s = \"x\"; s." + NL + " } }", "s.");
-        } catch (Throwable failed) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: FAILED" + NL + "{}", describe(failed));
-        }
-    }
-
-    /** One pending probe: services kept alive so the debounced analysis can actually land. */
-    private static final class Probe {
-        final String what;
-        final String source;
-        final int caret;
-        final LanguageServices services;
-        /** A member the list must contain, or null. @see #reportCompletionProbes */
-        final String expect;
-
-        Probe(String what, String source, int caret, LanguageServices services, String expect) {
-            this.what = what;
-            this.source = source;
-            this.caret = caret;
-            this.services = services;
-            this.expect = expect;
-        }
-    }
-
-    private static final List<Probe> PENDING = new ArrayList<Probe>();
-
-    /**
-     * Opens services over {@code source} and <b>leaves them open</b>.
-     *
-     * <p>Asking on the same frame is what the first version of this did, and it measured the wrong thing:
-     * the analysis is debounced and runs on a worker that drains on the UI thread, so a probe that opens
-     * and asks within one call is guaranteed to find {@code analysis.get() == null} — and the provider's
-     * answer to that is an EMPTY, COMPLETE list. Every shape reported zero rows for that reason alone,
-     * which is indistinguishable in the log from the defect being chased. The one probe that returned
-     * anything was the last, and only because the four before it had given the scheduler time.</p>
-     */
-    private static void openProbe(String what, String source, String upTo) {
-        openProbe(what, source, upTo, null);
-    }
-
-    /** As above, and asserts in the log that {@code expect} is among the members offered. */
-    private static void openProbe(String what, String source, String upTo, String expect) {
-        LanguageRegistry.Entry entry = LanguageRegistry.forFileName("Probe.java");
-        if (entry == null) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no Java entry registered");
-            return;
-        }
-        TextBuffer buffer = new TextBuffer(source);
-        LanguageServices services = entry.newServices(buffer, null);
-        if (services == null) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no services for {}", what);
-            return;
-        }
-        PENDING.add(new Probe(what, source, source.indexOf(upTo) + upTo.length(), services, expect));
-    }
-
-    /** Asks every pending probe, once the frames in between have let their analyses land. */
-    static void reportCompletionProbes() {
-        if (!ENABLED || !COMPLETE_PROBE || PENDING.isEmpty()) return;
-        for (Probe probe : PENDING) {
-            try {
-                final List<com.crystalgui.text.diagnostic.Diagnostic>[] problems = new List[]{null};
-                probe.services.onDiagnostics(announced ->
-                        problems[0] = announced.orElse(java.util.Collections.<com.crystalgui.text.diagnostic.Diagnostic>emptyList()));
-
-                final CompletionList[] got = {CompletionList.EMPTY};
-                probe.services.completion().complete(
-                        CompletionProvider.Request.character(probe.caret, "", "."),
-                        answer -> got[0] = answer.orElse(CompletionList.EMPTY));
-                List<CompletionItem> items = got[0].items();
-                StringBuilder first = new StringBuilder();
-                for (int i = 0; i < Math.min(8, items.size()); i++) {
-                    first.append(i == 0 ? "" : ", ").append(items.get(i).label());
-                }
-                CrystalGuiCore.LOGGER.info(
-                        "CGUI AUTOTEST complete: {} — {} rows, incomplete={}, {} problems [{}]",
-                        probe.what, items.size(), got[0].incomplete(),
-                        problems[0] == null ? "no" : String.valueOf(problems[0].size()), first);
-                if (probe.expect != null) {
-                    boolean offered = false;
-                    for (CompletionItem item : items) {
-                        if (probe.expect.equals(item.filterKey())) offered = true;
-                    }
-                    CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {} offered by the editor: {}",
-                            probe.expect, offered ? "YES" : "NO");
-                }
-                if (problems[0] != null) {
-                    int shown = 0;
-                    for (com.crystalgui.text.diagnostic.Diagnostic problem : problems[0]) {
-                        if (shown++ >= 4) break;
-                        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {}", problem.message());
-                    }
-                }
-            } catch (Throwable failed) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} FAILED" + NL + "{}",
-                        probe.what, describe(failed));
-            } finally {
-                probe.services.close();
-            }
-        }
-        PENDING.clear();
-    }
-
-    /** Pre-transform bytes — what a file-based classpath would see. */
-    private static byte[] rawBytesOf(String internalName) {
-        ClassLoader loader = CgUiAutoTest.class.getClassLoader();
-        if (!(loader instanceof LaunchClassLoader)) return null;
-        try {
-            return ((LaunchClassLoader) loader).getClassBytes(internalName.replace('/', '.'));
-        } catch (IOException unavailable) {
-            return null;
-        }
-    }
-
-    /**
-     * Printable strings in a class file — its constant pool, without parsing one.
-     *
-     * <h3>Why not ASM</h3>
-     *
-     * <p>This module compiles against <b>LaunchWrapper's</b> ASM 5.0.3, where {@code Opcodes.ASM9} does
-     * not exist and {@code ClassRemapper} is still {@code RemappingClassAdapter} — the same 5.0.3 that
-     * forced the mod's own ASM to be relocated. Writing a class visitor here would compile against one
-     * ASM and, after relocation, run against another; that is a trap, and this probe does not need a
-     * parser to make its point.</p>
-     *
-     * <p>Every method name, field name and descriptor is a UTF-8 constant, so a scan for printable runs
-     * finds all of them plus some noise. Noise is harmless: it appears on <b>both</b> sides and cancels
-     * in the difference. What survives is what one class file has and the other does not.</p>
-     */
-    private static Set<String> stringsIn(byte[] classFile) {
-        Set<String> found = new LinkedHashSet<>();
-        StringBuilder run = new StringBuilder();
-        for (byte raw : classFile) {
-            int character = raw & 0xFF;
-            if (character >= 0x21 && character <= 0x7E) {
-                run.append((char) character);
-                continue;
-            }
-            if (run.length() >= 6) found.add(run.toString());
-            run.setLength(0);
-        }
-        if (run.length() >= 6) found.add(run.toString());
-        return found;
-    }
-
-    /**
-     * A throwable as plain text, with its causes — safe to hand a logger.
-     *
-     * <p>Built here rather than with {@code Throwables.getStackTraceAsString} or a {@code PrintWriter}
-     * because the point is that <b>no {@code Throwable} object reaches log4j</b>. Frame classes are named
-     * as the strings they already are; nothing is loaded to describe them.</p>
-     */
-    private static String describe(Throwable failed) {
-        StringBuilder text = new StringBuilder();
-        for (Throwable at = failed; at != null; at = at.getCause()) {
-            text.append(at == failed ? "" : "Caused by: ")
-                .append(at.getClass().getName()).append(": ").append(at.getMessage()).append('\n');
-            StackTraceElement[] frames = at.getStackTrace();
-            for (int i = 0; i < frames.length && i < 18; i++) {
-                text.append("\tat ").append(frames[i]).append('\n');
-            }
-            if (at.getCause() == at) break;
-        }
-        return text.toString();
-    }
 
     /**
      * Reads the bound framebuffer back to a PNG, then quits.

@@ -39,6 +39,17 @@ public final class CgUiHostGl1201 {
     }
 
     /**
+     * Brings a context up if there is not one yet, for painting OUTSIDE a world render.
+     *
+     * <p>The engine initialises lazily on the first world pass, and this desktop also opens over the
+     * TITLE SCREEN, where no world pass ever runs — so {@link #contextIsLive()} answered false for the
+     * life of the process and every paint was skipped in silence.</p>
+     */
+    public static void ensureContext(int width, int height) {
+        if (width > 0 && height > 0) CgGraphicsLifecycle.ensureContext(width, height);
+    }
+
+    /**
      * Minecraft writes GL state behind CrystalGraphics' back every frame, so our shadow must be dropped
      * before we paint or each stale field is a bind we skip. Cheap: it drops trust, it does not read the
      * driver.

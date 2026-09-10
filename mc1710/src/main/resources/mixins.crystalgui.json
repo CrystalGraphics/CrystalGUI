@@ -2,6 +2,7 @@
   "required": true,
   "minVersion": "0.7.11",
   "package": "com.crystalgui.mixins",
+  "plugin": "com.crystalgui.mixins.CrystalGuiMixins",
   "refmap": "mixins.crystalgui.refmap.json",
   "target": "@env(DEFAULT)",
   "compatibilityLevel": "JAVA_8",

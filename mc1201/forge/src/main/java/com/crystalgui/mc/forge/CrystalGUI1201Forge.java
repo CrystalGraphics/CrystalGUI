@@ -2,6 +2,7 @@ package com.crystalgui.mc.forge;
 
 import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.platform.Lifecycle1201;
+import com.crystalgui.mc.shared.CrashVariant;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -17,6 +18,7 @@ import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.CrashReportCallables;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
@@ -40,6 +42,12 @@ import static com.crystalgui.mc.platform.CrystalGUI1201.MODID;
 public final class CrystalGUI1201Forge {
     
     public CrystalGUI1201Forge() {
+        // WHICH VARIANT, in the crash report itself. One jar carries a host per loader, each relocated
+        // under its own prefix, so a trace naming com.crystalgui.mc.forge.common.* is the only thing
+        // that says which one ran -- and asking a reporter to work that out is asking them to know how
+        // the jar is built. @see CrashVariant
+        CrashReportCallables.registerCrashCallable(CrashVariant.LABEL,
+                () -> CrashVariant.report(CrystalGUI1201Forge.class));
         Lifecycle1201.bootstrap(Network.register());
     }
 

@@ -1,15 +1,15 @@
 package com.crystalgui;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.text.syntax.LanguageRegistry;
-import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.mc.ClientProxy;
 import com.crystalgui.mc.CommonProxy;
+import com.crystalgui.mc.shared.CrashVariant;
 
-import com.crystalgui.mc.platform.service.script.ScriptService1710;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cpw.mods.fml.common.FMLCommonHandler;
+import cpw.mods.fml.common.ICrashCallable;
 import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.SidedProxy;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
@@ -18,7 +18,7 @@ import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.mc.net.CgUiServerSmoke;
 
-import java.io.File;
+import java.util.List;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
@@ -65,23 +65,23 @@ public class CrystalGUI {
         serverSide = "com.crystalgui.mc.CommonProxy")
     public static CommonProxy proxy;
 
-    /**
-     * {@code .minecraft} on a client, {@code <serverdir>} on a dedicated server — where
-     * {@code crystalgui/} goes.
-     *
-     * <p>Read off {@code FMLPreInitializationEvent}'s config directory, which is the only event that
-     * carries either, and taken one level up: the config directory is Forge's, and CrystalGUI's own
-     * root is beside it rather than inside it. @see ScriptService1710#cacheRoot()</p>
-     */
-    private File gameDirectory;
-
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         LOGGER.info("{}: preInit", NAME);
-        // Captured here because this is the only event that carries it, and it is the side-agnostic
-        // answer to "where does crystalgui/ go" -- .minecraft on a client, <serverdir> on a dedicated
-        // server. Forge hands over its own config directory; ours is its sibling.
-        this.gameDirectory = event.getModConfigurationDirectory().getParentFile();
+        // WHICH VARIANT, in the crash report itself. One jar carries a host per loader, each relocated
+        // under its own prefix, so a trace naming com.crystalgui.mc.fml1710.common.* is the only thing
+        // that says which one ran. @see CrashVariant
+        FMLCommonHandler.instance().registerCrashCallable(new ICrashCallable() {
+            @Override
+            public String getLabel() {
+                return CrashVariant.LABEL;
+            }
+
+            @Override
+            public String call() {
+                return CrashVariant.report(CrystalGUI.class);
+            }
+        });
         proxy.preInit();
     }
 
@@ -89,16 +89,38 @@ public class CrystalGUI {
     public void init(FMLInitializationEvent event) {
         LOGGER.info("{}: init", NAME);
         proxy.init();
-        scriptInit();
-        // AFTER scriptInit, which registers the ScriptService this reads. Started before it, the
-        // decision finds no platform, says so, and KEEPS THE CLAIM -- identity names for the life of
-        // the process. @see CommonProxy#startMappings
-        proxy.startMappings();
+    }
+
+    /**
+     * Says which tier of the language stack this deployment has, without naming it.
+     *
+     * <p>{@code LanguageRegistry} is {@code core}'s engineless tier, so this compiles and runs with the
+     * language mod absent. An empty contributor list IS the absent case; {@code crystalgui_language}
+     * announces its own arrival.</p>
+     *
+     * <p><b>From postInit, not init, and that is not tidiness.</b> Every read of the registry
+     * bootstraps it, and bootstrapping constructs the engines -- each of which captures whether a
+     * {@code ScriptService} is registered <em>at that moment</em> and keeps the answer for the life of
+     * the process. FML runs init for every mod before postInit for any, and the language mod is
+     * ordered after this one, so a read from init ran first, found no service, and turned the live tier
+     * off permanently: every script reported {@code net.minecraft.client.Minecraft} unresolvable while
+     * the byte source behind it was healthy.</p>
+     */
+    private void announceLanguageTier() {
+        List<String> contributors = LanguageRegistry.contributors();
+        if (contributors.isEmpty()) {
+            LOGGER.info("{}: no language stack installed -- source files colour from core's built-in "
+                    + "lexers and are not analysed. Install crystalgui_language for grammars, analysis "
+                    + "and scripting.", NAME);
+        } else {
+            LOGGER.info("{}: language contributors: {}", NAME, contributors);
+        }
     }
 
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
         LOGGER.info("{}: postInit", NAME);
+        announceLanguageTier();
     }
 
     /**
@@ -126,23 +148,5 @@ public class CrystalGUI {
     @Mod.EventHandler
     public void serverStopping(FMLServerStoppingEvent event) {
         CgUiConnections.closeAll("server stopping");
-    }
-
-    private void scriptInit() {
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710(gameDirectory));
-        // WARMING, NOT WIRING. `language/` declares its grammars and engines as a LanguageKinds
-        // service, so the registry finds them on its own first read -- this only decides WHEN that is
-        // paid. Measured at 443ms, and the first read is otherwise the keystroke that opens an editor;
-        // here a loading screen is already up and nobody is waiting. Dropping this line costs the stall
-        // and not the languages, which is the whole point of the service.
-        LanguageRegistry.bootstrap();
-
-        // NOTHING DRIVES THE MAPPING FROM HERE, and that is the correction. `language/` decides a
-        // fetch is owed and asks this service HOW to run it; the loader's answer is
-        // `ScriptService1710.runInBackground`. A platform states the what, the where and the how.
-        //
-        // It also fixes a real defect: this ran from `init`, which fires on BOTH sides, so a dedicated
-        // server submitted a job that only `UIDocument.frame` could ever drain. An obfuscated server
-        // with no cached mapping waited for one for ever with nothing to say why.
     }
 }

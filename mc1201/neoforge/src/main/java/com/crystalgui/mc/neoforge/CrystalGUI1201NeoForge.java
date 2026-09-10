@@ -1,8 +1,10 @@
 package com.crystalgui.mc.neoforge;
 
 import java.util.function.BiConsumer;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.platform.Lifecycle1201;
+import com.crystalgui.mc.shared.CrashVariant;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.mojang.logging.LogUtils;
 import net.minecraft.network.FriendlyByteBuf;
@@ -41,6 +43,11 @@ public final class CrystalGUI1201NeoForge {
     
     
     public CrystalGUI1201NeoForge(IEventBus modBus) {
+        // WHICH VARIANT, in the log rather than the crash report: NeoForge 20.4 exposes no crash
+        // callable — CrashReportExtender is its own — so unlike Forge and 1.7.10 there is nothing to
+        // register with, and `latest.log` is the file a report is attached with anyway. @see CrashVariant
+        CrystalGuiCore.LOGGER.info("[cgui] {}: {}", CrashVariant.LABEL,
+                CrashVariant.report(CrystalGUI1201NeoForge.class));
         Lifecycle1201.bootstrap(Network.get());
         Events.register(modBus);
     }

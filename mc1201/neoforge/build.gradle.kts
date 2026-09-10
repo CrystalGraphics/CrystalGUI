@@ -63,6 +63,14 @@ neoForge {
             sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
             sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["main"])
         }
+        // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
+        // leaves it out, which is how the degraded configuration is exercised without building a jar.
+        if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+            create("crystalgui_language") {
+                sourceSet(sourceSets["lang"])
+                sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["lang"])
+            }
+        }
     }
 }
 
@@ -101,19 +109,22 @@ val extractMcSources by tasks.registering(Sync::class) {
 // Wire it into classes so build/mc-src/ is always populated after a normal compile.
 tasks.named("classes") { dependsOn(extractMcSources) }
 
-// -- Dropping a build into a real client ---------------------------------------------------------
+// -- The thin jar (J1) ----------------------------------------------------------------------------
 //
-// NO REOBFUSCATION HERE, and that is the difference from forge rather than an omission: NeoForge runs
-// official Minecraft names, so the jar this module already builds is the one that ships. The mapping
-// stack agrees -- the namespace probe answers "already readable" on this loader and fetches nothing.
-val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
+// NO REMAPPING STEP, for the same reason `assemble` has no reobfuscation here: NeoForge runs official
+// Minecraft names, so `thinShadowJar` already IS the production artifact. It therefore takes the
+// `thin` classifier directly rather than the `thin-dev` the other two carry until they are mapped.
+tasks.named<AbstractArchiveTask>("thinShadowJar") { archiveClassifier.set("thin") }
 
-extra["cgDeployKey"] = "prismLauncher1204NeoForgeDir"
-extra["cgDeployJars"] = listOf(
-        layout.buildDirectory.file("libs/crystalgui-mc1201-neoforge-$version-java17-shaded.jar"),
-        File(crystalGraphicsBuild.projectDir,
-                "mc1201/neoforge/build/libs/crystalgraphics-mc1201-neoforge-1.0.0-all.jar"))
-extra["cgDeployDependsOn"] = listOf(
-        tasks.named("shadeDowngradedShadowJar"),
-        crystalGraphicsBuild.task(":mc1201:neoforge:shadowJar"))
-apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())
+// Registered by cg-mc1201-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
+tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    jar.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
+}
+tasks.named("assemble") { dependsOn("thinShadowJar") }
+
+// The language half, and the same reasoning: official names, so no remapping step. (J8)
+tasks.named<AbstractArchiveTask>("langThinShadowJar") { archiveClassifier.set("lang-thin") }
+
+// The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
+// into all four instances. NeoForge needing no reobfuscation — it runs official Minecraft names, and
+// the namespace probe answers "already readable" here — is now a fact about the merge, not this file.

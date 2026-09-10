@@ -2,8 +2,6 @@ modLoader = "javafml"
 loaderVersion = "[40,)"
 license = "LGPL-3.0-or-later"
 
-[[mixins]]
-    config = "crystalgui.forge.mixins.json"
 
 [[dependencies.crystalgui]]
     modId = "forge"

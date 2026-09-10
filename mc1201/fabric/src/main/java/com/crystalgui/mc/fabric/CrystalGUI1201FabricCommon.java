@@ -1,7 +1,9 @@
 package com.crystalgui.mc.fabric;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.platform.Lifecycle1201;
+import com.crystalgui.mc.shared.CrashVariant;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -44,6 +46,10 @@ public final class CrystalGUI1201FabricCommon implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        // WHICH VARIANT, in the log rather than the crash report: Fabric Loader exposes no crash
+        // callable, so unlike Forge and 1.7.10 there is nothing to register with. @see CrashVariant
+        CrystalGuiCore.LOGGER.info("[cgui] {}: {}", CrashVariant.LABEL,
+                CrashVariant.report(CrystalGUI1201FabricCommon.class));
         Lifecycle1201.bootstrap(Network.get());
         Events.registerCommon();
     }

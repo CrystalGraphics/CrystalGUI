@@ -34,10 +34,14 @@ dependencies {
 
     // The language stack -- tree-sitter grammars and the ECJ/Rhino engine bands.
     //
+    // ON THE `lang` SOURCE SET AND NOT ON `main` (J8), which is what makes the split structural: a
+    // language import in `main` is a compile error rather than something a guard notices afterwards.
+    // The declaration lives in build.gradle.kts because langCompileOnly does not exist until the source
+    // set is created, which happens after this file is applied.
+    //
     // compileOnly for the same reason :core is: :language compiles to Java 21 bytecode, and FML's
     // ModDiscoverer opens every jar on the dev run classpath with asm-debug-all-5.0.3, which cannot read
     // it. The classes reach runtime through the shadow jar, downgraded by jvmdg.
-    compileOnly project(':language')
 
     // ASM: SHADED, and required at RUNTIME by :language — which nothing was shipping.
     //

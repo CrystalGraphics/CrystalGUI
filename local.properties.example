@@ -19,16 +19,19 @@
 # ── PrismLauncher instances ─────────────────────────────────────────────────────────────────────
 #
 # The instance DIRECTORY — the one containing `instance.cfg` and `.minecraft`, not the `mods/` folder
-# inside it. `deployMods` appends `.minecraft/mods` itself, which keeps `logs/latest.log` and
+# inside it. `deploySingleJars` appends `.minecraft/mods` itself, which keeps `logs/latest.log` and
 # `crash-reports/` reachable from the same setting when a failure has to be read back.
 #
 # One key per instance, because a target is a version AND a loader, and they fail differently: Forge
 # 1.20.1 runs SRG members, NeoForge 1.20.4 runs official names and needs no mapping at all, Fabric
 # runs intermediary, 1.7.10 is a different engine again.
 #
-# `deployMods` copies BOTH CrystalGraphics' and CrystalGUI's jars — CrystalGUI does not run without
+# `deploySingleJars` copies BOTH CrystalGraphics' and CrystalGUI's jars — CrystalGUI does not run without
 # CrystalGraphics beside it — and deletes the previous pair first, so a loader switch cannot leave a
-# jar built for the other one behind. Unset is fine: the jars go to that module's `build/ship/`.
+# jar built for the other one behind. Unset is fine: that instance is skipped and the task says so.
+
+# The launcher binary itself, which `prodSmoke` drives. Required by that task and nothing else.
+#prismLauncherExe=C:/Users/you/AppData/Local/Programs/PrismLauncher/prismlauncher.exe
 
 #prismLauncher1201ForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Forge
 #prismLauncher1204NeoForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1204 NeoForge

@@ -101,6 +101,33 @@ tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
     inputFile.set(shadedShadowJar.flatMap { it.archiveFile })
 }
 
+// -- The thin jar, remapped (J1) -------------------------------------------------------------------
+//
+// A SECOND remap task rather than a reconfiguration of the first: `remapJar` produces the fat jar
+// this loader ships today, and both artifacts have to keep building until the root merge replaces
+// the fat one. Remapping is what makes a thin jar production-shaped here, exactly as reobfuscation
+// does on Forge -- intermediary is what a Fabric mod's class references must be.
+val remapThinJar = tasks.register<net.fabricmc.loom.task.RemapJarTask>("remapThinJar") {
+    group = "build"
+    description = "The thin jar at intermediary names -- the merge's input from this loader."
+    inputFile.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
+    archiveClassifier.set("thin")
+}
+
+// Registered by cg-mc1201-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
+tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    jar.set(remapThinJar.flatMap { it.archiveFile })
+}
+tasks.named("assemble") { dependsOn(remapThinJar) }
+
+/** The language half of the same thing (J8) — remapped for the same reason the host half is. */
+val remapLangThinJar = tasks.register<net.fabricmc.loom.task.RemapJarTask>("remapLangThinJar") {
+    group = "language jar"
+    description = "The language thin jar at intermediary names -- the language merge's input."
+    inputFile.set(tasks.named<AbstractArchiveTask>("langThinShadowJar").flatMap { it.archiveFile })
+    archiveClassifier.set("lang-thin")
+}
+
 // Extracts Fabric MC 1.20.1 sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when jars change between toolchain version bumps.
 val extractMcSources by tasks.registering(Sync::class) {
@@ -161,16 +188,5 @@ tasks.named("ideaSyncTask") { dependsOn(extractMcSources) }
 configurations.named("runtimeClasspath") { exclude(group = "com.crystalgraphics") }
 
 
-// -- Dropping a build into a real client ---------------------------------------------------------
-//
-// CrystalGraphics goes too: CrystalGUI does not run without it. Its shippable jar is its own
-// `remapJar` output -- the plain one, no classifier. Both `assemble`s also leave an `-all` (shadow,
-// named namespace) and a `-dev` jar; those install and neither runs.
-extra["cgDeployKey"] = "prismLauncher1201FabricDir"
-extra["cgDeployJars"] = listOf(
-        tasks.named<AbstractArchiveTask>("remapJar").flatMap { it.archiveFile },
-        File(crystalGraphicsBuild.projectDir,
-                "mc1201/fabric/build/libs/crystalgraphics-mc1201-fabric-1.0.0.jar"))
-extra["cgDeployDependsOn"] = listOf(
-        tasks.named("remapJar"), crystalGraphicsBuild.task(":mc1201:fabric:remapJar"))
-apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())
+// The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
+// into all four instances.
