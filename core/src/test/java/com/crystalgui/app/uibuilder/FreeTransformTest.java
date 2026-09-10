@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -53,6 +54,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
     private UiBuilderDocument model;
     private BuilderEditor editor;
     private UIElement node;
+    private UIElement host;
     private Disposable commands;
 
     @Before
@@ -65,7 +67,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         model.root().append(node);
 
         editor = new BuilderEditor(model);
-        UIElement host = new UIElement().layout(l -> l.width(400).height(300));
+        host = new UIElement().layout(l -> l.width(400).height(300));
         host.append(editor.view());
         document.append(host);
         document.update(W, H);
@@ -154,6 +156,69 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertNotNull(after);
         assertEquals(before.x + 30f, after.x, 0.5f);
         assertEquals(before.y, after.y, 0.5f);
+    }
+
+    /**
+     * <b>The rotate band draws its arrow, and the arrow goes when the node does.</b>
+     *
+     * <p>A native cursor cannot turn, so the rotate arrow is drawn and the cursor under it is a plain
+     * hand — Paint.NET's split. What that buys in smoothness it owes in lifetime: the art is cleared by
+     * a per-frame hook the node owns, and a node removed mid-gesture never gets the frame that would
+     * clear it, so the arrow would stay on screen with nothing left to take it down.</p>
+     */
+    @Test
+    public void theRotateBandDrawsItsArrowAndTakesItAwayAgain() {
+        enterFreeTransform();
+        document.update(W, H);
+
+        Vector2f corner = box().handleAt(Spot.TOP_RIGHT);
+        assertNotNull(corner);
+        float bandX = corner.x + 8f;
+        float bandY = corner.y - 8f;
+        assertEquals("the fixture must actually be over the rotate band",
+                Kind.ROTATE, box().grip(bandX, bandY, false).kind());
+        assertEquals("the band takes a hand; the arrow is drawn, not presented",
+                Cursor.GRAB, TransformBox.cursorFor(box().grip(bandX, bandY, false)));
+
+        box().hoverAt(bandX, bandY);
+        document.frame(0.016f, W, H);
+
+        assertNotNull("nothing was drawn at the pointer over the rotate band",
+                document.input().cursorDecoration());
+
+        document.remove(host);
+        document.frame(0.016f, W, H);
+
+        assertNull("the node went and left its arrow behind",
+                document.input().cursorDecoration());
+    }
+
+    /**
+     * <b>The arrow keeps following the hand for the whole rotation, not just the grab.</b>
+     *
+     * <p>A drag does not come through {@code pointerMoved}: {@code pointerDown} hands the pointer to
+     * {@code Drag}, which drives {@link TransformBox#dragTo} until it ends. So an angle read from the
+     * HOVER position is written once, at the press, and then never again — the arrow points where the
+     * hand was when you grabbed and stays there for the rest of the turn, which is the one stretch
+     * anybody is looking at it.</p>
+     */
+    @Test
+    public void theRotationArrowFollowsTheHandForTheWholeGesture() {
+        enterFreeTransform();
+        document.update(W, H);
+
+        Vector2f corner = box().handleAt(Spot.TOP_RIGHT);
+        assertNotNull(corner);
+        box().hoverAt(corner.x + 8f, corner.y - 8f);
+        float atGrab = box().rotationArtAngle();
+
+        box().press(new Grip(Kind.ROTATE, Spot.TOP_RIGHT));
+        box().setDragging(true);
+        // A quarter of the way round the box, which is what the Drag listener reports.
+        box().dragTo(corner.x - 60f, corner.y + 60f, -60f, 60f, false, false);
+
+        assertNotEquals("the arrow was left pointing where the hand grabbed",
+                atGrab, box().rotationArtAngle(), 0.05f);
     }
 
     /** The box opens on the selection and takes the surface with it. */

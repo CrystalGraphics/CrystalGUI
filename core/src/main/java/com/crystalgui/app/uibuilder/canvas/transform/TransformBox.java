@@ -13,6 +13,9 @@ import com.google.gson.JsonElement;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.cursor.Cursor;
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.ui.service.CursorDecoration;
+import com.crystalgui.ui.service.RotationCursor;
 import com.crystalgraphics.platform.input.CgModifiers;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
@@ -187,20 +190,104 @@ public final class TransformBox extends UIElement {
         });
     }
 
+    /**
+     * The decoration outlives the hook that clears it, so it is cleared here too.
+     *
+     * <p>{@link #refreshCursor} runs from a node-owned {@code afterLayout} hook and takes the art down
+     * on the first frame the band is not live. A node REMOVED while rotating never gets that frame, and
+     * the arrow would stay on screen with nothing left to clear it.</p>
+     */
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        clearRotationArt();
+    }
+
+    private void clearRotationArt() {
+        if (rotationArtHandle == null) return;
+        rotationArtHandle.dispose();
+        rotationArtHandle = null;
+    }
+
     /** Notes where the pointer is; the cursor itself is decided per frame. @see #connected */
     public void hoverAt(float viewportX, float viewportY) {
+        pointerAt(viewportX, viewportY);
+    }
+
+    /**
+     * The ONE place the pointer lands, and why it is not just {@link #hoverAt}.
+     *
+     * <p>A drag does not come through {@code pointerMoved}: {@code pointerDown} hands the gesture to
+     * {@link com.crystalgui.ui.service.Drag}, which owns the pointer until it ends and drives
+     * {@link #dragTo} instead. So a rotation's angle, read from the hover position, was whatever it was
+     * at the press and never moved again — the arrow pointed where the hand had BEEN.</p>
+     */
+    private void pointerAt(float viewportX, float viewportY) {
         hoverX = viewportX;
         hoverY = viewportY;
+        Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
+        // MEASURED IN THIS OVERLAY'S SPACE, and handed over as an ANGLE rather than as points: an angle
+        // between two points survives whatever translation and scale sits between here and the space the
+        // decoration draws in, and a point would not.
+        if (pivot != null) artAngle = (float) Math.atan2(hoverY - pivot.y, hoverX - pivot.x);
     }
 
     /** Whether a gesture is in progress, in which case the cursor is the one that was pressed. */
     public void setDragging(boolean dragging) {
         this.dragging = dragging;
+        // THE HAND CLOSES. refreshCursor leaves the pressed cursor alone for the rest of the gesture, so
+        // the one moment it can change is this one.
+        if (dragging && gesture.grip().kind() == Kind.ROTATE) ctx.cursors().set(Cursor.GRABBING);
     }
 
+    /** Pivot toward pointer, in this overlay's space. Declared FIRST: an initialiser below that reads
+     * it is an illegal forward reference. @see RotationCursor#paint */
+    private float artAngle;
+
+    /**
+     * ONE instance, set and cleared per frame — a lambda built in {@link #refreshCursor} would allocate
+     * on a hook that runs every frame. It reads {@link #artAngle}, so the shape follows without the
+     * decoration itself being rebuilt.
+     */
+    private final CursorDecoration rotationArt = (paint, x, y) -> RotationCursor.paint(paint, x, y, artAngle);
+
+    /** Held rather than re-set per frame, and it is what {@link #disconnected} clears through: by then
+     * {@code document()} is already null, so a node that goes mid-gesture has no way back to the
+     * service. The handle closes over it. */
+    @Nullable
+    private Disposable rotationArtHandle;
+
     private void refreshCursor() {
+        Grip live = liveGrip();
+        boolean rotating = active && live != null && live.kind() == Kind.ROTATE;
+        if (rotating) {
+            if (rotationArtHandle == null) {
+                rotationArtHandle = document().input().setCursorDecoration(rotationArt);
+            }
+        } else {
+            clearRotationArt();
+        }
+
         if (!active || dragging || Float.isNaN(hoverX)) return;
-        ctx.cursors().set(cursorFor(grip(hoverX, hoverY, CgModifiers.hasCtrl(modifiersNow()))));
+        ctx.cursors().set(cursorFor(live));
+    }
+
+    /**
+     * Which way the rotation arrow is pointing, in radians — pivot toward pointer.
+     *
+     * <p>Public so the thing that goes wrong here is assertable: it is read once per frame by the
+     * decoration and written from wherever the pointer lands, and the failure is that a path forgets to
+     * report one. @see #pointerAt</p>
+     */
+    public float rotationArtAngle() {
+        return artAngle;
+    }
+
+    /** What the pointer is over, or what it pressed while a gesture owns it. */
+    @Nullable
+    private Grip liveGrip() {
+        if (Float.isNaN(hoverX)) return null;
+        return dragging ? gesture.grip() : grip(hoverX, hoverY, CgModifiers.hasCtrl(modifiersNow()));
     }
 
     private static int modifiersNow() {
@@ -219,14 +306,11 @@ public final class TransformBox extends UIElement {
         Spot spot = grip.spot();
         switch (grip.kind()) {
             case ROTATE:
-                // THE BEND THAT HUGS THIS CORNER. One shape for all four would curl away from three of
-                // them, and a rotate cursor pointing at nothing is worse than none: it is the only thing
-                // telling you the band is there at all.
-                if (spot == null) return Cursor.ROTATE_NE;
-                if (spot.yDirection() < 0) {
-                    return spot.xDirection() > 0 ? Cursor.ROTATE_NE : Cursor.ROTATE_NW;
-                }
-                return spot.xDirection() > 0 ? Cursor.ROTATE_SE : Cursor.ROTATE_SW;
+                // A HAND, and the arrow is DRAWN -- Paint.NET's split. The four rotate-* pictures curled
+                // toward a fixed corner, so on a band you travel continuously around they are wrong
+                // everywhere between them; a native cursor is one picture and cannot turn. RotationCursor
+                // follows the angle exactly, and the hand under it stays crisp and instant.
+                return Cursor.GRAB;
             case SKEW:
                 return Cursor.SKEW;
             case PIVOT:
@@ -653,6 +737,7 @@ public final class TransformBox extends UIElement {
     public void dragTo(float viewportX, float viewportY, float dx, float dy,
                        boolean aspect, boolean aboutPivot) {
         if (!active) return;
+        pointerAt(viewportX, viewportY);
         switch (gesture.grip().kind()) {
             case SCALE -> {
                 Vector2f point = toScaleSpace(viewportX, viewportY);
