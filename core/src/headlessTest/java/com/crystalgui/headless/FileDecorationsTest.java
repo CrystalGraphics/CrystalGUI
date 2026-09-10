@@ -57,11 +57,11 @@ public class FileDecorationsTest {
      */
     @Test
     public void twoProvidersMergePerField() {
-        FileDecorations decorations = new FileDecorations()
-                .addProvider(provider("git",
+        FileDecorations decorations = new FileDecorations();
+        decorations.addProvider(provider("git",
                         FileDecoration.of(FileDecoration.WEIGHT_MODIFIED, "decoration-modified", "M", "Modified"),
-                        MAIN))
-                .addProvider(provider("errors",
+                        MAIN));
+        decorations.addProvider(provider("errors",
                         new FileDecoration(FileDecoration.WEIGHT_ERROR, "decoration-error", null, "1 error",
                                 false, true),
                         MAIN));
@@ -80,7 +80,8 @@ public class FileDecorationsTest {
      */
     @Test
     public void aFolderInheritsFromItsDescendants() {
-        FileDecorations decorations = new FileDecorations().addProvider(provider("git",
+        FileDecorations decorations = new FileDecorations();
+        decorations.addProvider(provider("git",
                 FileDecoration.of(FileDecoration.WEIGHT_MODIFIED, "decoration-modified", "M", "Modified"),
                 MAIN));
 
@@ -99,7 +100,8 @@ public class FileDecorationsTest {
      */
     @Test
     public void aBubbledDecorationLosesItsBadge() {
-        FileDecorations decorations = new FileDecorations().addProvider(provider("git",
+        FileDecorations decorations = new FileDecorations();
+        decorations.addProvider(provider("git",
                 FileDecoration.of(FileDecoration.WEIGHT_MODIFIED, "decoration-modified", "M", "Modified"),
                 MAIN));
 
@@ -115,7 +117,8 @@ public class FileDecorationsTest {
      */
     @Test
     public void aNonBubblingDecorationDoesNotClimb() {
-        FileDecorations decorations = new FileDecorations().addProvider(provider("readonly",
+        FileDecorations decorations = new FileDecorations();
+        decorations.addProvider(provider("readonly",
                 FileDecoration.of(FileDecoration.WEIGHT_INFO, "decoration-readonly", null, "Read-only")
                         .withBubble(false),
                 MAIN));
@@ -133,7 +136,8 @@ public class FileDecorationsTest {
      */
     @Test
     public void aFolderDoesNotBubbleIntoItself() {
-        FileDecorations decorations = new FileDecorations().addProvider(provider("git",
+        FileDecorations decorations = new FileDecorations();
+        decorations.addProvider(provider("git",
                 FileDecoration.of(FileDecoration.WEIGHT_MODIFIED, "decoration-modified", "M", "Modified"),
                 SRC));
 
