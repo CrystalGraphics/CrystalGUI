@@ -113,16 +113,36 @@ project does to ship this way. Read it before touching anything under `singlejar
 
 **One artifact installs on all four loaders.** `./gradlew singleJar` merges four *thin* jars — each
 loader's own classes plus `mc1201/common` relocated under `com.crystalgui.mc.<loader>.common`, so three
-remapped copies can share the jar without sharing a name — with `core`, `language`, `taffy` and
-`mc-shared` added once. A class file is inert until something defines it, and every loader's scanner
-reads with ASM rather than defining, so the variants it does not want cost it nothing.
+remapped copies can share the jar without sharing a name — with `core`, `taffy` and `mc-shared` added
+once. A class file is inert until something defines it, and every loader's scanner reads with ASM
+rather than defining, so the variants it does not want cost it nothing.
+
+**Two mods ship from this build, not one.** `crystalgui_lang` is the language stack — six tree-sitter
+grammars with their natives, ECJ and Rhino per Java band, `language/` itself — and it is **optional**:
+34 MB that only somebody who writes a script uses. The same pipeline, registered a second time.
+
+| | Task | Size | Carries |
+|---|---|---|---|
+| `crystalgui-<version>.jar` | `singleJar` · `checkSingle` | 31.2 MB | the engine, the workbench, the four loader hosts |
+| `crystalgui_lang-<version>.jar` | `languageJar` · `checkLanguage` | 47.8 MB | grammars, analysis, scripting, three engine bands |
 
 ```bash
-./gradlew singleJar          # build it: build/libs/crystalgui-<version>.jar
-./gradlew deploySingleJars   # and CrystalGraphics' into every instance in local.properties
-./gradlew prodSmoke          # boot all four installed clients, photograph each, fail if one did not
+./gradlew singleJar languageJar   # build both: build/libs/
+./gradlew deploySingleJars        # both, plus CrystalGraphics', into every instance in local.properties
+./gradlew deploySingleJars -PcgNoLanguage   # the host jar alone — the degraded path, worth running
+./gradlew prodSmoke               # boot all four installed clients, photograph each, fail if one did not
 ./gradlew prodSmoke -PcgNoDeploy -PcgTargets=1201forge   # drive what is installed; one target
 ```
+
+> **The host jar may not name the language stack, and a source set is what enforces it.** `:language`
+> is on the `lang` source sets' `compileOnly` and not on `main`'s — in `mc1710`, `mc1201/common` and
+> each 1.20.x loader — so a language import in a host class is a compile error rather than something a
+> guard notices afterwards. The language mod installs itself from its own entry point; the host only
+> reports which tier it has, by reading `core`'s `LanguageRegistry.contributors()`. Where the host needs
+> the other jar to run something, it publishes a seam it cannot name — `CgUiAutoTest.onFrame`.
+>
+> **Cross-jar `ServiceLoader` resolves on all four loaders**, ModLauncher included; measured on
+> installed clients, not assumed.
 
 **`prodSmoke` is the only thing that can see a packaging defect.** A dev run resolves classes from
 source-set *directories*, so nothing in one can observe relocation, remapping, downgrading or a merged
@@ -213,7 +233,7 @@ own), while CrystalGraphics is a submodule that is a composite `includeBuild`. C
 | Module | In build? | State |
 |---|---|---|
 | `core/` | ✅ | The engine. Java 21 → Java 8 bytecode. Everything below lives here. |
-| `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and ECJ's ~13MB off a dedicated server. `.grammar` (six tree-sitter grammars), `.engine` (band selection, the ONE shared loader per band — `EngineHost` — the language-neutral `Analysis` answer and the `AnalysedLanguageServices` attachment every engine extends), `.java` (everything Java, split by what a class is FOR — `.ecj` the adapters, `.classpath` what a script compiles against, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog over `.fix.catalog`/`.fix.ast`/`.fix.edit`, `.exec` the `ScriptHost` runtime), `.js` (everything JavaScript, split by WHICH LOADER defines a class — `.host` may name `language.run`/`language.java` and never Rhino, `.rhino` is the reverse and holds `.rhino.resolve`/`.rhino.fix`/`.rhino.exec`), `.map` (the readable↔runtime boundary, on ASM), `.run` (the **engine-neutral** Run shell: `ScriptRuntime` SPI + `ScriptRuntimes` registry and `ScriptPolicy` at the root — which lives there because three of its four consumers are not JavaScript — over `.exec` (capture, stop, cache), `.console` (the transcript, UI-free) and `.view` (the only one that may import `com.crystalgui.ui`). `RunShellIsEngineNeutralTest` forbids the whole tree naming `.java`, `.js`, ECJ or Rhino, and still needs no change after the split because it matches by path PREFIX). `.resolve` is reserved.
+| `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and ECJ's ~13MB off a dedicated server. **Since J8 it ships as its OWN MOD, `crystalgui_lang`**, and the rule now reaches the loader hosts too: `:language` is on their `lang` source sets and not on `main`, so no host class can name it. Its 1.7.10 and 1.20.x hosts are `mc1710/src/lang` and `mc1201/common/src/lang`, plus one entry class per 1.20.x loader. `.grammar` (six tree-sitter grammars), `.engine` (band selection, the ONE shared loader per band — `EngineHost` — the language-neutral `Analysis` answer and the `AnalysedLanguageServices` attachment every engine extends), `.java` (everything Java, split by what a class is FOR — `.ecj` the adapters, `.classpath` what a script compiles against, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog over `.fix.catalog`/`.fix.ast`/`.fix.edit`, `.exec` the `ScriptHost` runtime), `.js` (everything JavaScript, split by WHICH LOADER defines a class — `.host` may name `language.run`/`language.java` and never Rhino, `.rhino` is the reverse and holds `.rhino.resolve`/`.rhino.fix`/`.rhino.exec`), `.map` (the readable↔runtime boundary, on ASM), `.run` (the **engine-neutral** Run shell: `ScriptRuntime` SPI + `ScriptRuntimes` registry and `ScriptPolicy` at the root — which lives there because three of its four consumers are not JavaScript — over `.exec` (capture, stop, cache), `.console` (the transcript, UI-free) and `.view` (the only one that may import `com.crystalgui.ui`). `RunShellIsEngineNeutralTest` forbids the whole tree naming `.java`, `.js`, ECJ or Rhino, and still needs no change after the split because it matches by path PREFIX). `.resolve` is reserved.
 
 > **The two `java`/`js` axes differ on purpose.** In `.java` the loader question is mechanical — a class that imports `org.eclipse.jdt` is child-side, and that is thirty-six of its fifty — so directories spend themselves on the axis that is *not* readable off the file. In `.js` it is the loader question that cannot be read: six classes import neither Rhino nor anything of ours and are child-side only because every one of their callers is. *(Was `syntax-treesitter/` until M4.)* |
 | `taffy/` | ✅ | **The layout engine, VENDORED.** Git submodule ([`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), branch `master`) — so `git clone --recursive`, like the other two. A fork of the published sources of `dev.vfyjxf:taffy:1.1.4` (MIT), carrying our own fixes to its measure path — see `taffy/MODIFICATIONS.md`, which is the statement of changes MIT requires, and `plan/engine-rewrite.md` D3. The package stays `dev.vfyjxf.taffy` because `mc1710` relocates it when shipping, so 165 call sites needed no edit and a stock copy in another mod cannot win a classloader race. Pulls **fastutil**, whose cost is recorded in `gradle.properties`. |

@@ -100,7 +100,15 @@ registerSingleJarPipeline(SingleJarSpec(
     ),
     fabricThinJar = ":mc1201:fabric" to "remapThinJar",
 
-    // Nothing extra since J8: the tree-sitter jars and the engine bands moved to the language jar.
+    // THE NOTICE TRAVELS WITH THE BINARY (G7). MIT, Apache 2.0 and the OFL each require it to reach
+    // whoever receives the jar, and a file in the source repository does not. J8 moved code between
+    // jars, so there is a file per jar naming what THAT jar carries.
+    extraContent = {
+        from(project.rootProject.file("notices/crystalgui.md")) {
+            into("META-INF")
+            rename { "NOTICE.md" }
+        }
+    },
 
     configureCheck = {
         forbiddenPrefixes.set(listOf(
@@ -123,6 +131,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "mixins.crystalgui.json",
             "com/crystalgui/mc/shared/LoaderProbe.class",
             "com/crystalgui/mixins/CrystalGuiMixins.class",
+            // G7: the notice for what THIS jar carries, in the jar.
+            "META-INF/NOTICE.md",
         ))
         requiredManifest.set(mapOf(
             "FMLCorePluginContainsFMLMod" to "true",
@@ -163,8 +173,21 @@ registerSingleJarPipeline(SingleJarSpec(
     libraryProjects = listOf(":language"),
     serviceOwners = listOf(":language"),
 
-    // NO RELOCATIONS. Taffy, fastutil and JOML are the host jar's and are relocated there; this jar
-    // names none of them, and relocating what it does carry would rename tree-sitter's JNI symbols.
+    // ASM, AND ONLY ASM. Taffy, fastutil and JOML are the host jar's; tree-sitter must NOT be
+    // relocated, because a JNI symbol is named after the mangled package.
+    //
+    // Unrelocated ASM takes down three of the four loaders and each says something different: Fabric
+    // reports a Knot/app loader constraint violation on ClassNode, and Forge and NeoForge simply die
+    // after "Initialized transformers" with nothing in any log -- ModLauncher itself runs on ASM, so a
+    // game-layer jar exporting org.objectweb.asm is a split package against the boot layer and the
+    // module graph is refused before a mod class loads. Only 1.7.10 survives it, having no modules.
+    //
+    // The nested engine jars under assets/ are untouched: shadow rewrites .class entries and copies
+    // everything else verbatim, which is what keeps ECJ's own string-keyed reflection working.
+    relocations = listOf(
+        "org.objectweb.asm" to "com.crystalgui.lang.shadow.org.objectweb.asm",
+    ),
+
     manifest = mapOf(
         // No TweakClass and no MixinConfigs: this mod has no mixin and is not a coremod. FML 1.7.10
         // still needs to be told it holds an @Mod class, since the jar carries no mcmod.info route of
@@ -178,6 +201,13 @@ registerSingleJarPipeline(SingleJarSpec(
     descriptorsTask = "generateLanguageDescriptors",
 
     extraContent = {
+        // THE NOTICE, in the binary (G7). Most of this jar by weight is somebody else's work, and
+        // EPL-2.0 and MPL-2.0 both require the notice to reach whoever receives it.
+        from(project.rootProject.file("notices/crystalgui_lang.md")) {
+            into("META-INF")
+            rename { "NOTICE.md" }
+        }
+
         // The tree-sitter jars go in VERBATIM and are never relocated: each carries the JNI natives
         // for its grammar, and a JNI symbol is named after the mangled package -- renaming it renames
         // the symbol the .dll does not export, and the first parser built throws UnsatisfiedLinkError.
@@ -206,6 +236,9 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/ui/", "com/crystalgui/widget/", "com/crystalgui/style/",
             "com/crystalgui/workbench/", "com/crystalgui/desktop/",
             "it/unimi/dsi/fastutil/", "dev/vfyjxf/taffy/", "org/joml/",
+            // Unrelocated ASM is a split package against ModLauncher's own, and three of the four
+            // loaders die before a mod class loads -- two of them with nothing in any log.
+            "org/objectweb/asm/",
         ))
         expectSingle.set(listOf("com/crystalgui/language/"))
         relocatedClasses.set(mapOf(
@@ -214,6 +247,8 @@ registerSingleJarPipeline(SingleJarSpec(
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             "com/crystalgui/mc/lang/CrystalGuiLang.class",
+            // G7: the notice for what THIS jar carries, in the jar.
+            "META-INF/NOTICE.md",
             "assets/crystalgui/engines/8/index.txt",
             "assets/crystalgui/engines/11/index.txt",
             "assets/crystalgui/engines/17/index.txt",
