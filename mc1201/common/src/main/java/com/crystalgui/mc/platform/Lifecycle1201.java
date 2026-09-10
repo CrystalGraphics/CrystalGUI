@@ -64,23 +64,28 @@ public final class Lifecycle1201 {
         // screen -- so a cursor resolves the same whether the desktop has ever been opened or not. GLFW
         // has the whole standard set, so this one is a mapping table; the engine resolves a keyword and asks.
         CgPlatform.provide(CursorService.SERVICE, new CursorService1201());
-        // WHAT THIS DEPLOYMENT CAN DO WITH A SOURCE FILE, read from core and naming no language
-        // class: the language stack is a separate mod since J8, and this host must work without it.
-        // LanguageRegistry is core's, so asking costs nothing and compiles with the jar absent.
-        announceLanguageTier();
         MachineExampleClient1201.registerClient();
     }
 
     /**
      * Says which tier of the language stack this deployment has, without naming it.
      *
-     * <p>{@code LanguageRegistry} is {@code core}'s enginless tier, so this compiles and runs with the
+     * <p>{@code LanguageRegistry} is {@code core}'s engineless tier, so this compiles and runs with the
      * language mod absent — which is the whole point since J8 made it a separate jar. An empty
      * contributor list IS the absent case; the language mod announces its own arrival.</p>
      *
      * <p>Worth a line either way: every tier opens a file perfectly and the configurations are
      * indistinguishable on screen, so nothing else separates "this pack ships no grammars" from "a
      * contributor failed to load".</p>
+     *
+     * <p><b>ON A TICK, NOT AT BOOTSTRAP, AND THAT IS NOT TIDINESS.</b> Every read of
+     * {@code LanguageRegistry} bootstraps it, and bootstrapping constructs the engines — each of which
+     * captures whether a {@code ScriptService} is registered <em>at that moment</em> and keeps the
+     * answer for the life of the process. The language mod is ordered AFTER this one, so a read from
+     * this method's original home in {@code bootstrapClient} ran first, found no service, and turned
+     * the live tier off permanently: every script reported {@code net.minecraft.client.Minecraft}
+     * unresolvable while the byte source behind it was perfectly healthy. A tick is after every mod's
+     * setup, which is the only ordering that is true on all three loaders.</p>
      */
     private static void announceLanguageTier() {
         List<String> contributors = LanguageRegistry.contributors();
@@ -131,6 +136,9 @@ public final class Lifecycle1201 {
         clientTickHooks.add(hook);
     }
 
+    /** @see #announceLanguageTier */
+    private static boolean languageTierAnnounced;
+
     private static final List<Runnable> serverTickHooks = new CopyOnWriteArrayList<>();
     private static final List<Runnable> clientTickHooks = new CopyOnWriteArrayList<>();
 
@@ -156,6 +164,10 @@ public final class Lifecycle1201 {
     // ── Client ──────────────────────────────────────────────────────────────────────────────────
 
     public static void clientTick() {
+        if (!languageTierAnnounced) {
+            languageTierAnnounced = true;
+            announceLanguageTier();
+        }
         CgUiAutoTest1201.tick();
         ClientProbe1201.tick();
         CgUiKeybinds1201.tick();

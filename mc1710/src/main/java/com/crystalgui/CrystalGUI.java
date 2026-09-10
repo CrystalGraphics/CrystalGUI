@@ -89,9 +89,6 @@ public class CrystalGUI {
     public void init(FMLInitializationEvent event) {
         LOGGER.info("{}: init", NAME);
         proxy.init();
-        // WHAT THIS DEPLOYMENT CAN DO WITH A SOURCE FILE, read from core and naming no language class:
-        // the language stack is a separate mod since J8, and this host must work without it.
-        announceLanguageTier();
     }
 
     /**
@@ -100,6 +97,14 @@ public class CrystalGUI {
      * <p>{@code LanguageRegistry} is {@code core}'s engineless tier, so this compiles and runs with the
      * language mod absent. An empty contributor list IS the absent case; {@code crystalgui_language}
      * announces its own arrival.</p>
+     *
+     * <p><b>From postInit, not init, and that is not tidiness.</b> Every read of the registry
+     * bootstraps it, and bootstrapping constructs the engines -- each of which captures whether a
+     * {@code ScriptService} is registered <em>at that moment</em> and keeps the answer for the life of
+     * the process. FML runs init for every mod before postInit for any, and the language mod is
+     * ordered after this one, so a read from init ran first, found no service, and turned the live tier
+     * off permanently: every script reported {@code net.minecraft.client.Minecraft} unresolvable while
+     * the byte source behind it was healthy.</p>
      */
     private void announceLanguageTier() {
         List<String> contributors = LanguageRegistry.contributors();
@@ -115,6 +120,7 @@ public class CrystalGUI {
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
         LOGGER.info("{}: postInit", NAME);
+        announceLanguageTier();
     }
 
     /**

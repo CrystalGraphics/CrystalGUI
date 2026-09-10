@@ -52,7 +52,18 @@ public class CrystalGuiLanguage {
         // Forge hands over its own config directory; ours is its sibling. This is the only event that
         // carries either, which is why it is captured rather than asked for later.
         this.gameDirectory = event.getModConfigurationDirectory().getParentFile();
+
+        // ASKED BEFORE INSTALLING, because after it the answer is always yes. If anything read
+        // LanguageRegistry first, the engines it built captured "no ScriptService" and kept it for the
+        // life of the process -- scripts then report every Minecraft type unresolvable while the byte
+        // source behind them is healthy. @see LanguageRegistry#isBootstrapped
+        boolean registryAlreadyRead = LanguageRegistry.isBootstrapped();
         CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710(gameDirectory));
+        if (registryAlreadyRead) {
+            CrystalGuiCore.LOGGER.error("[cgui-lang] the language registry was read BEFORE this mod "
+                    + "installed its ScriptService, so the engines built during that read captured no "
+                    + "platform. Scripts will not resolve Minecraft types this run.");
+        }
         if (FMLCommonHandler.instance().getSide() == Side.CLIENT) {
             LanguageAutoTest1710.register();
         }

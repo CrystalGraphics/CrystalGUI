@@ -2,6 +2,9 @@ package com.crystalgui.mc.lang;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.language.engine.bridge.TypeBytes;
+import com.crystalgui.language.java.classpath.HostClasspath;
+import com.crystalgui.language.java.classpath.PlatformTypeBytes;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
@@ -39,9 +42,24 @@ public final class LanguageLifecycle1201 {
         if (installed) return;
         installed = true;
 
+        // ASKED BEFORE INSTALLING, because after it the answer is always yes. If anything read
+        // LanguageRegistry first, the engines it built captured "no ScriptService" and kept it for the
+        // life of the process -- scripts then report every Minecraft type unresolvable while the byte
+        // source behind them is healthy. It is silent, it survives a world reload, and it cost a
+        // session once. @see LanguageRegistry#isBootstrapped
+        boolean registryAlreadyRead = LanguageRegistry.isBootstrapped();
+
         // FIRST: the engine source asks this service where it may write, so a band bundled in the jar
         // or fetched for this host has nowhere to go until it is registered.
         ScriptService1201.install();
+
+        if (registryAlreadyRead) {
+            CrystalGuiCore.LOGGER.error("[cgui-lang] the language registry was read BEFORE this mod "
+                    + "installed its ScriptService, so the engines built during that read captured no "
+                    + "platform. Scripts will not resolve Minecraft types this run. Something in the "
+                    + "host read LanguageRegistry during mod setup -- it must wait until every mod has "
+                    + "set up.");
+        }
 
         // AND THE MAPPING IS STARTED HERE, not left to whoever asks first. The first asker is the first
         // Java analysis, which then cannot win its own race -- it starts the download and reads the
@@ -72,6 +90,46 @@ public final class LanguageLifecycle1201 {
         } else {
             CrystalGuiCore.LOGGER.info("[cgui-lang] scripts: {}, live bytes from {}", scripts,
                     scripts.liveBytes().getClass().getName());
+            reportResolution(scripts);
+        }
+    }
+
+    /**
+     * Whether a script can actually see Minecraft, and by which of the two routes.
+     *
+     * <p>One line, at install, because "the type does not resolve" has two completely different causes
+     * and the editor shows the same red squiggle for both: the CLASSPATH index (what Go to File
+     * searches, from {@code HostClasspath}) and the LIVE tier (what the compiler's name environment
+     * reads). Since the language stack became its own jar, both are reached from a classloader in that
+     * jar rather than the host's, which is exactly the kind of change that moves one and not the other.</p>
+     *
+     * <p><b>Asked through {@link TypeBytes#readable}, not the raw byte source.</b> The raw source speaks
+     * whatever namespace the runtime does — intermediary on Fabric — so asking it for
+     * {@code net/minecraft/client/Minecraft} answers null there and looks like a fault when nothing is
+     * wrong. {@code readable} is the composition of the source WITH the mapping, and it is what the
+     * compiler resolves against, so it is the only layer whose answer means what this line claims.</p>
+     */
+    private static void reportResolution(ScriptService scripts) {
+        // The SIZE only. A "does any entry look like Minecraft" count was tried and is worthless: every
+        // path on a Prism install contains `.minecraft`, so it matched all of them and read as healthy.
+        CrystalGuiCore.LOGGER.info("[cgui-lang] classpath: {} entries", HostClasspath.detect().size());
+
+        // The one type every script names, and the exact call the compiler makes for it. `NONE` here is
+        // the failure this probe exists for: it means the engines were built before the ScriptService
+        // was registered, and no amount of healthy classpath will resolve a Minecraft type.
+        String probe = "net/minecraft/client/Minecraft";
+        try {
+            TypeBytes types = PlatformTypeBytes.of();
+            if (types == TypeBytes.NONE) {
+                CrystalGuiCore.LOGGER.error("[cgui-lang] the live tier is OFF -- no ScriptService was "
+                        + "registered when the engines were built. Scripts cannot resolve Minecraft.");
+                return;
+            }
+            byte[] bytes = types.readable(probe);
+            CrystalGuiCore.LOGGER.info("[cgui-lang] {} resolves to {}", probe,
+                    bytes == null ? "NULL -- scripts cannot resolve it" : bytes.length + " bytes");
+        } catch (RuntimeException failed) {
+            CrystalGuiCore.LOGGER.warn("[cgui-lang] resolving {} FAILED: {}", probe, failed.toString());
         }
     }
 }
