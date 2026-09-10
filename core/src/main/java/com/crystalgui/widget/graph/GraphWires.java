@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 import org.joml.Vector2f;
 
 import com.crystalgui.graph.EdgeData;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.graph.PortRef;
 
 /**
@@ -214,13 +215,31 @@ final class GraphWires {
         this.baseWidth = Math.max(0.1f, width);
     }
 
-    /** The width handed to {@code ctx.curve().width(...)}, in pre-pose units. Unclamped — the pose
-     * (which already includes the plane's own zoom) is what makes this thicker zoomed in and thinner
-     * zoomed out, same as {@link #DEFAULT_WIDTH}'s own note about matching a real border's
-     * behaviour under scale. The sub-pixel dropout an earlier version floored this against is the
-     * RENDERER's job now: {@code CgVectorRenderer.FEATHER_ANTIALIAS} holds the coverage ramp at one
-     * device pixel whatever the zoom, so a wire thinner than a pixel fades rather than flickering. */
+/** A wire is never thinner than this ON SCREEN, in device pixels of HALF-width.
+     *
+     * <p>Below it a stroke does not merely get thinner, it gets fainter with it: {@code
+     * stroke_coverage} peaks at {@code 0.5 + halfWidth / ramp} on the centreline, so a half-width of
+     * 0.05 device px draws at 23% opacity smeared over two pixels rather than as a thin line.
+     * Measured on {@code cgui-hairline-probe}. A graph zoomed far out lost its wires to that, which
+     * is a different thing from showing them small.</p>
+     *
+     * <p>THIS IS THE THICKNESS DIAL, and it trades against how solid the wire reads, because the
+     * renderer's 1.5px reconstruction filter clips the peak of anything narrower than 0.75:
+     * 0.75 gives a 1.5px wire at alpha 1.00, 0.5 a 1px wire at 0.83, 0.35 a 0.7px wire at 0.73.
+     * 0.5 is the classic hairline and is where this sits — 0.75 was solid but read heavy against
+     * the small nodes of a zoomed-out graph. See {@code CgVectorRenderer.FEATHER_ANTIALIAS}.</p>
+     */
+    private static final float MIN_DEVICE_HALF_WIDTH = 0.5f;
+
+    /** The width handed to {@code ctx.curve().width(...)}, in pre-pose units, floored so the wire
+     * never goes sub-pixel on screen. The pose (which already carries the plane's zoom and the
+     * {@code uiScale}) is what makes it thicker zoomed in and thinner zoomed out, matching a real
+     * border's behaviour under scale — until it would stop being a line at all; see
+     * {@link #MIN_DEVICE_HALF_WIDTH}. */
     float width() {
-        return baseWidth;
+        UIDocument doc = view.document();
+        float deviceScale = doc == null ? 1f : doc.boxes().uiScale();
+        float onScreen = Math.max(1e-4f, deviceScale * Math.max(1e-4f, view.getZoom()));
+        return Math.max(baseWidth, MIN_DEVICE_HALF_WIDTH / onScreen);
     }
 }
