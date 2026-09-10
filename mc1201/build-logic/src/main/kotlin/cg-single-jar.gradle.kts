@@ -60,11 +60,7 @@ registerSingleJarPipeline(SingleJarSpec(
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
-    // Tier 1 (§12) joins the library list rather than any loader's thin jar: one compiled copy of
-    // each LWJGL family, added once for every variant, never remapped. `mc-lwjgl3` holds only its
-    // package declaration until J9's extraction runs -- it is listed now so the wiring is one
-    // question rather than two.
-    libraryProjects = listOf(":core", ":taffy", ":mc-shared", ":mc-lwjgl2", ":mc-lwjgl3"),
+    libraryProjects = listOf(":core", ":taffy", ":mc-shared"),
 
     // One owner today, and the union is still the mechanism: the language jar ships its own
     // META-INF/services, and a second jar's providers never merge into this one's file.

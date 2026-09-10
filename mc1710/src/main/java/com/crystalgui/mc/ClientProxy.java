@@ -1,7 +1,6 @@
 package com.crystalgui.mc;
 
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.core.cursor.CursorService;
 import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiHud;
@@ -13,7 +12,6 @@ import com.crystalgui.mc.net.CgUiTwoClientProbe;
 import com.crystalgui.mc.net.CgUiRemoteWorkspaceProbe;
 import com.crystalgui.mc.net.CgUiWireProbe;
 import com.crystalgui.mc.net.CgUiSessionProbe;
-import com.crystalgui.mc.lwjgl2.Lwjgl2CursorService;
 
 /**
  * The client half: register the key binding and the input pump.
@@ -32,10 +30,6 @@ public class ClientProxy extends CommonProxy {
         
         CgUiLifecycle.register();
         // THE POINTER IS THIS PLATFORM'S TO DRESS, and it is a property of the process rather than of
-        // any one screen: installing it here means a cursor resolves the same whether the desktop has
-        // ever been opened or not. LWJGL2 has no standard cursors at all, so this one draws them from
-        // CursorBitmaps; the engine only ever resolves a keyword and asks.
-        CgPlatform.provide(CursorService.SERVICE, new Lwjgl2CursorService());
         CgUiInput.register();
         // W14: pinned windows paint over the running game. Costs one no-op branch per frame when
         // nothing is pinned, which is every frame until somebody pins something.

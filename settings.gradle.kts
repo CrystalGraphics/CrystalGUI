@@ -88,13 +88,10 @@ include("language")
 // the toolchains the loader modules below do.
 include("mc-shared")
 
-// Tier 1 (plan/crystalgui/platform-single-jar.md §12): what a window and a mouse look like on each
-// LWJGL family, with no Minecraft type in either. Compiled once, never remapped, one copy in the
-// merged jar however many targets ship — so a new Minecraft version on an LWJGL family already here
-// adds nothing. Unconditional for `mc-shared`'s reason: LWJGL and `core` are all they need, and
-// neither wants a loader toolchain.
-include("mc-lwjgl2")
-include("mc-lwjgl3")
+// NO TIER-1 MODULES HERE. They existed briefly and held one class between them, the cursor adapters,
+// which are CrystalGraphics' now: a cursor is a toolkit's job and this engine only decides WHICH one.
+// `core`'s CursorService turns a keyword into a picture and hands it to CgCursorService, so no host
+// of ours names a cursor service, an adapter, or the LWJGL module either lives in.
 
 // The MC 1.7.10 loader.
 //
