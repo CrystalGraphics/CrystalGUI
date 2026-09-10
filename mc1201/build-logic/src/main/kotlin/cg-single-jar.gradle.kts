@@ -74,15 +74,13 @@ registerSingleJarPipeline(SingleJarSpec(
         // fastutil is GONE, and that was 19.65 MB of a 31.20 MB jar. @see taffy/build.gradle.kts
         "dev.vfyjxf.taffy" to "com.crystalgui.shadow.dev.vfyjxf.taffy",
 
-        // JOML: THE SAME REWRITE CrystalGraphics APPLIES, over no classes of ours.
+        // NO JOML ROW. It used to mirror CrystalGraphics' relocation so the two mods named one
+        // type; CrystalGraphics does not relocate it any more, so neither may we -- our `UINode` and
+        // `ElementStyle` hold `Matrix4f` FIELDS, and a rewrite here against a plain `org.joml` there
+        // would make them two unrelated types at class load.
         //
-        // CrystalGraphics ships the one copy, relocated, because a jar containing `org/joml` is a
-        // split package against Minecraft's own module on Forge and NeoForge, and 1.7.10 has no JOML
-        // at all. Its types cross the boundary between the two mods -- `UINode` and `ElementStyle`
-        // hold `Matrix4f` FIELDS -- so this jar's references have to be rewritten to the same name or
-        // they are two unrelated types. Safe because no loader host of ours names JOML, so nothing
-        // hands a matrix to or from Minecraft. J9 replaces both with a vendored math package.
-        "org.joml" to "com.crystalgraphics.shadow.org.joml",
+        // Neither jar carries JOML now: the game supplies it on 1.19.3+, and 1.7.10 takes
+        // CrystalGraphics' `crystalgraphics-joml` companion. See D2 and its measurement.
     ),
 
     // What each loader reads out of the manifest, in one manifest.
