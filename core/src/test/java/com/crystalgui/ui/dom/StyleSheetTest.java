@@ -7,6 +7,8 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import dev.vfyjxf.taffy.style.BoxSizing;
+import com.crystalgui.render.texture.CgUiRect;
+import com.crystalgui.render.texture.CgUiSprite;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import org.junit.Test;
 
@@ -375,14 +377,24 @@ public class StyleSheetTest extends UiDocumentTestBase {
 
     // ── sprite() tiling args, end-to-end through the stylesheet parser ──────────────────────────
 
-    private static com.crystalgui.render.texture.CgUiSprite parseSpriteValue(String extraArgs) {
+    /**
+     * The sprite behind a {@code background: sprite(...)}.
+     *
+     * <p><b>A sprite is a FILL, not a drawable.</b> Every {@code background} computes to the one
+     * drawable there is — a {@link CgUiRect} — and the sprite is what fills it, which is why
+     * {@code CgUiSprite.toRect()} exists for a caller that owes a {@code CgUiDrawable}. Both halves are
+     * asserted here so a regression in either says which one.</p>
+     */
+    private static CgUiSprite parseSpriteValue(String extraArgs) {
         var decls = StyleSheet.parse(".a { background: sprite(\"t.png\", \"0 0 16 16\", \"4 4 4 4\""
                 + extraArgs + "); }").getRules().get(0).declarations();
         assertEquals(1, decls.size());
         Object value = decls.get(0).value().compute();
-        assertTrue("expected a CgUiSprite, got " + value,
-                value instanceof com.crystalgui.render.texture.CgUiSprite);
-        return (com.crystalgui.render.texture.CgUiSprite) value;
+        assertTrue("expected a CgUiRect, got " + value, value instanceof CgUiRect);
+        CgUiRect.Fill fill = ((CgUiRect) value).getFill();
+        assertTrue("expected the rect to be filled with a sprite, got " + fill,
+                fill instanceof CgUiRect.Fill.Sprite);
+        return ((CgUiRect.Fill.Sprite) fill).sprite();
     }
 
     @Test
