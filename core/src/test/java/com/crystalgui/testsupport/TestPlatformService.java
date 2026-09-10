@@ -4,17 +4,13 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.CgPlatformService;
 import com.crystalgraphics.platform.gl.CgGLBackend;
 import com.crystalgraphics.platform.gl.CgGLContext;
-import com.crystalgui.core.cursor.Cursor;
-import com.crystalgui.core.cursor.CursorService;
+
 import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgraphics.platform.service.CgLifecycleService;
 import com.crystalgraphics.platform.service.CgReloadService;
 import com.crystalgraphics.platform.service.CgRenderingService;
 import com.crystalgraphics.platform.service.CgResourceService;
 import com.crystalgraphics.platform.service.CgSoundService;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * The {@link CgPlatformService} the unit tests run against — a mutable bundle whose UI-facing services
@@ -27,9 +23,8 @@ import java.util.List;
  * build a whole bundle, so instead there is one bundle, registered once, whose two UI services are
  * fields — {@link #input(CgInputService)} and {@link #sound(CgSoundService)}.</p>
  *
- * <p>The cursor is not among them: it is CrystalGUI's own {@link CursorService#SERVICE}, a slot on the
- * open half of the platform stack rather than a bundle member, and {@link #install()} clears it here for
- * the same reason it resets the others.</p>
+ * <p>The cursor is not among them and needs no reset: {@code CursorService} is a static class over
+ * CrystalGraphics' {@code CgCursorService} slot, which no test fills, so there is nothing to leak.</p>
  *
  * <p>The six GL-facing services all answer {@code null}. Nothing in a unit test reaches them —
  * {@code CgPlatform.register} only stores {@code gl()} and {@code capabilities()} into static fields, and
@@ -38,8 +33,8 @@ import java.util.List;
  *
  * <h3>Registration is idempotent and state is reset, both on purpose</h3>
  * <p>{@link #install()} runs from {@link UiTestBase}'s {@code @Before}, i.e. once per test method, and
- * resets the three services to their defaults each time. JUnit gives every test class a fresh instance but
- * <em>not</em> a fresh JVM, so without the reset a test that installed a recording cursor service would
+ * resets the two services to their defaults each time. JUnit gives every test class a fresh instance but
+ * <em>not</em> a fresh JVM, so without the reset a test that installed a fake clipboard would
  * leave it installed for every test that ran afterwards — the exact cross-test leakage that used to make
  * some of these classes pass only because an earlier one had filled in a static field.</p>
  */
@@ -79,7 +74,7 @@ public final class TestPlatformService implements CgPlatformService {
      * bindings were covered, and the one thing nobody could reach was whether anything CALLED it. It
      * did not: {@code setChords} had no callers, so every shortcut in the application was inert.</p>
      *
-     * <p>Reset by {@link #install()}, like the three services, so a test that holds Ctrl down cannot
+     * <p>Reset by {@link #install()}, like the two services, so a test that holds Ctrl down cannot
      * leak it into the next one.</p>
      */
     public static void holdModifiers(int mask) {
@@ -93,11 +88,11 @@ public final class TestPlatformService implements CgPlatformService {
 
     private TestPlatformService() {}
 
-    /** Registers the bundle and resets every swappable service — the cursor holder included. */
+    /** Registers the bundle and resets every swappable service. */
     public static TestPlatformService install() {
         INSTANCE.input = STUB_INPUT;
         INSTANCE.sound = SILENT_SOUND;
-        CgPlatform.provide(CursorService.SERVICE, null);
+
         modifiers = 0;
         CgPlatform.register(INSTANCE);
         return INSTANCE;
@@ -120,18 +115,12 @@ public final class TestPlatformService implements CgPlatformService {
         return this;
     }
 
-    /**
-     * Provides a {@link CursorService} that appends every cursor it is shown to the returned list.
-     *
-     * <p>Convenience for the common assertion shape — what the engine <em>resolved</em> is only observable
-     * as the sequence of values it handed the service. {@link #install()} clears the slot, so a recording
-     * service cannot outlive the test that wanted it.</p>
-     */
-    public List<Cursor> recordCursors() {
-        List<Cursor> shown = new ArrayList<>();
-        CgPlatform.provide(CursorService.SERVICE, shown::add);
-        return shown;
-    }
+    // recordCursors() lived here, handing the cursor slot a list that appended every keyword shown.
+    // The slot is gone -- CursorService is a static class over CrystalGraphics' CgCursorService now --
+    // and nothing had ever called this, so it went with it rather than being ported. What it offered
+    // cannot be rebuilt from the CgCursorService side: CursorBitmaps maps several keywords onto one
+    // picture, so the pictures a test could record no longer say which keyword resolved. Anything
+    // wanting that assertion again should observe where the keyword still exists, in Input.
 
     @Override public CgInputService input() { return input; }
     @Override public CgSoundService sound() { return sound; }

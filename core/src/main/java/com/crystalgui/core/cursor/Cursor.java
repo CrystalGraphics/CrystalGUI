@@ -28,7 +28,7 @@ package com.crystalgui.core.cursor;
  * <h3>{@link #AUTO} is the caller's problem, never the service's</h3>
  * <p>{@code AUTO} means "decide from context" and cannot be presented. CrystalGUI resolves it — the CSS rule
  * is "behaves as {@code text} over editable elements and {@code default} otherwise" — before dispatching, so
- * a {@code CursorService} implementation only ever sees a concrete value. {@link #needsResolution()} is
+ * {@code CursorService} only ever sees a concrete value. {@link #needsResolution()} is
  * the predicate for anyone else doing the same.</p>
  */
 public enum Cursor {

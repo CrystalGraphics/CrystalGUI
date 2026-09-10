@@ -30,6 +30,11 @@ val submoduleData = listOf(
                 "projectPath" to ":core"),
             mapOf("module" to "com.crystalgraphics:platform",
                 "projectPath" to ":platform"),
+            // Tier 1 for LWJGL2 (plan/crystalgui/platform-single-jar.md §12). The harness takes it for
+            // the cursor adapter, which is toolkit code and not Minecraft's -- so the harness stops
+            // carrying a copy of one.
+            mapOf("module" to "com.crystalgraphics:mc-lwjgl2",
+                "projectPath" to ":mc-lwjgl2"),
             // Must be added and removed in the same commit as :mc1201:common in CrystalGraphics'
             // settings.gradle.kts: a substitution naming a project that is not in the target build
             // fails configuration for every task, and the error names the module, not this file.

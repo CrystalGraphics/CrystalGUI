@@ -78,14 +78,6 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     }
 
     /**
-     * Where a RESOLVED cursor goes — never {@code auto}. Installed by a host, so nothing here has to
-     * reach a platform service and a headless tree pays nothing.
-     */
-    public interface CursorSink {
-        void present(Cursor cursor);
-    }
-
-    /**
      * {@code detail} on a click synthesized from the keyboard — <b>zero</b>, the DOM's own signal
      * that no pointer caused it. A real press can never be 0, and a widget whose press means "the
      * pointer went down here" rather than "activate me" needs to be able to tell.
@@ -223,7 +215,6 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         }
         return defaultChords;
     }
-    private @Nullable CursorSink cursors;
 
     /** Beats the CSS answer while a gesture owns the pointer. @see #setCursorOverride */
     private @Nullable Cursor cursorOverride;
@@ -290,13 +281,6 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     }
 
     /**
-     * Intercepts the resolved cursor, instead of letting it reach the platform.
-     *
-     * <p>Optional: with no sink the cursor goes to {@link CursorService#SERVICE}, which is where one
-     * comes from anyway. A host installs one to take it somewhere else — a test that asserts on the
-     * cursor, or a loader presenting it through its own screen.</p>
-     */
-    /**
      * Forces a cursor for as long as it is set, over whatever the cascade resolves.
      *
      * <pre>{@code
@@ -313,10 +297,6 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return this;
     }
 
-    public Input setCursorSink(@Nullable CursorSink cursors) {
-        this.cursors = cursors;
-        return this;
-    }
 
     // ── Frame ────────────────────────────────────────────────────────────────
 
@@ -369,13 +349,8 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         Cursor resolved = cursorOverride != null ? cursorOverride : resolveCursor(hovered);
         if (resolved == lastCursor) return;
         lastCursor = resolved;
-        if (cursors != null) {
-            cursors.present(resolved);
-            return;
-        }
-        // No sink: the host's slot, which answers NONE until a loader provides one -- so an unhosted
-        // engine costs a virtual call rather than the throw-and-latch CgPlatform.cursor() needed.
-        CgPlatform.get(CursorService.SERVICE).setCursor(resolved);
+        // Inert until CrystalGraphics has a cursor adapter, which is correct for a headless tree.
+        CursorService.setCursor(resolved);
     }
 
     /**
