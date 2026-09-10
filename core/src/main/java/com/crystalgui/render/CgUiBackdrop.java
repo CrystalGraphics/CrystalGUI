@@ -9,6 +9,7 @@ import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.FrameProfile;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
@@ -200,8 +201,20 @@ final class CgUiBackdrop {
     /** The blur's REACH is three sigma: a tap beyond that carries under half a percent of the weight. */
     private static final float REACH_PER_SIGMA = 3f;
 
+    /**
+     * Pins the working scale to 1, 2 or 4 whatever the radius asks for. 0 (the default) picks per
+     * radius. {@code -Dcrystalgui.glass.forceScale=2}.
+     *
+     * <p>DIAGNOSTIC. The scale steps at a radius of exactly 12 and 24, so anything that looks different
+     * either side of one of those is either the scale or a coincidence, and there is no way to tell
+     * them apart while the radius decides. Holding the scale still and sweeping the radius across the
+     * step separates them in one run.</p>
+     */
+    private static final int FORCED_SCALE = Integer.getInteger("crystalgui.glass.forceScale", 0);
+
     /** The scale a radius wants, capped at the largest the 4-tap box prefilter reduces cleanly. */
     private static int scaleFor(float radiusPx) {
+        if (FORCED_SCALE == 1 || FORCED_SCALE == 2 || FORCED_SCALE == 4) return FORCED_SCALE;
         float sigma = radiusPx / REACH_PER_SIGMA;
         int scale = 1;
         while (sigma / scale > MAX_WORKING_SIGMA && scale < 4) scale *= 2;
@@ -284,8 +297,50 @@ final class CgUiBackdrop {
         CgTexture2D sharp = (CgTexture2D) captureFbo.getColorTexture(0);
         CgTexture2D blurred = blurredBackdrop(blurRadiusPx);
         if (sharp == null || blurred == null) return null;
+        if (GEOMETRY_LOG && blurRadiusPx != loggedRadius) {
+            loggedRadius = blurRadiusPx;
+            logGeometry(blurRadiusPx, px0, py0, px1, py1, w, h, vTop, vBottom, blurred);
+        }
         return new CgUiPaintContext.Backdrop(sharp, blurred, u0, vBottom, u1, vTop);
     }
+
+    /**
+     * Every number the backdrop's placement depends on, one line per radius change.
+     * {@code -Dcrystalgui.glass.geometry=true}.
+     *
+     * <p>DIAGNOSTIC. The sheet samples ONE normalised rect from both the capture and the blurred
+     * result, so the two agree only if the band covers a whole {@code scale} multiple of source rows.
+     * {@code bandRows} is what it covers and {@code capH} what exists; the difference is the deliberate
+     * overshoot, under {@code scale} rows, that {@code _Bounds} clamps. Anything else means the band was
+     * sized from a fraction again. @see #blurredBackdrop</p>
+     */
+    private void logGeometry(float radiusPx, int px0, int py0, int px1, int py1, int w, int h,
+                             float vTop, float vBottom, CgTexture2D blurred) {
+        CgFrameBuffer[] pair = blurTargets.get(blurScale);
+        int tw = pair == null ? -1 : pair[0].getWidth();
+        int th = pair == null ? -1 : pair[0].getHeight();
+        float fracW = capW / (float) w, fracH = capH / (float) h;
+        int qw = tw < 0 ? -1 : (capW + blurScale - 1) / blurScale;
+        int qh = th < 0 ? -1 : (capH + blurScale - 1) / blurScale;
+        CrystalGuiCore.LOGGER.info(String.format(
+                "[glass] r=%.1f scale=%d pad=%d screen=%dx%d elem=(%d,%d)..(%d,%d)",
+                radiusPx, blurScale, (int) Math.ceil(radiusPx) + 4, w, h, px0, py0, px1, py1));
+        CrystalGuiCore.LOGGER.info(String.format(
+                "[glass]   capture origin=(%d,%d) size=%dx%d  frac=%.6f x %.6f",
+                capX0, capY0, capW, capH, fracW, fracH));
+        CrystalGuiCore.LOGGER.info(String.format(
+                "[glass]   blurTarget=%dx%d quad=%dx%d  bandRows=%d capH=%d overshoot=%d",
+                tw, th, qw, qh, qh * blurScale, capH, qh * blurScale - capH));
+        CrystalGuiCore.LOGGER.info(String.format(
+                "[glass]   blurredTex=%dx%d  v: top=%.6f bottom=%.6f  elemRowsInCapture=%d..%d",
+                blurred.getWidth(), blurred.getHeight(), vTop, vBottom, py0 - capY0, py1 - capY0));
+    }
+
+    /** @see #logGeometry */
+    private static final boolean GEOMETRY_LOG = Boolean.getBoolean("crystalgui.glass.geometry");
+
+    /** @see #logGeometry */
+    private float loggedRadius = Float.NaN;
 
     /**
      * Grabs the scene, then everything the UI has painted over it so far.
@@ -535,21 +590,37 @@ final class CgUiBackdrop {
         CgFrameBuffer[] pair = targetsFor(scale);
         CgFrameBuffer blurA = pair[0], blurB = pair[1];
 
+        // WHOLE TEXELS FIRST, fraction derived from them -- never the screen fraction rounded into the
+        // target's grid. A band of round(targetH * capH/H) texels spans capH source rows at capH/that
+        // rows each, which is not `scale`: with capH odd, 344 texels covered 687 rows at 1.997 apiece
+        // and the drift reached a full pixel by the bottom of the band, where a taskbar sits. Sized from
+        // ceil(capH/scale) instead, source row r lands at texel r/scale and the consumer's own
+        // v = 1 - r/H is exact at every scale.
+        int redW = (capW + scale - 1) / scale;
+        int redH = (capH + scale - 1) / scale;
+        float redFracW = redW / (float) blurA.getWidth();
+        float redFracH = redH / (float) blurA.getHeight();
+
         CgFrameBuffer result;
         if (scale > 1) {
-            downsamplePass(captured, blurA, scale, fracW, fracH);
+            // The quad's uv span covers redW*scale source texels, which overshoots the capture by up to
+            // scale-1: exactly what makes each output texel a whole scale x scale block. _Bounds still
+            // names the real content, so the overshoot clamps to the edge rather than reading the clear.
+            downsamplePass(captured, blurA, scale, redW, redH,
+                    redW * scale / (float) Math.max(1, ctx.screenWidth),
+                    redH * scale / (float) Math.max(1, ctx.screenHeight), fracW, fracH);
             CgTexture2D reduced = (CgTexture2D) blurA.getColorTexture(0);
             if (reduced == null) return null;
-            blurPass(reduced, blurB, 1f, 0f, sigma, taps, fracW, fracH);
+            blurPass(reduced, blurB, 1f, 0f, sigma, taps, redW, redH, redFracW, redFracH);
             CgTexture2D horizontal = (CgTexture2D) blurB.getColorTexture(0);
             if (horizontal == null) return null;
-            blurPass(horizontal, blurA, 0f, 1f, sigma, taps, fracW, fracH);
+            blurPass(horizontal, blurA, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
             result = blurA;
         } else {
-            blurPass(captured, blurA, 1f, 0f, sigma, taps, fracW, fracH);
+            blurPass(captured, blurA, 1f, 0f, sigma, taps, redW, redH, redFracW, redFracH);
             CgTexture2D horizontal = (CgTexture2D) blurA.getColorTexture(0);
             if (horizontal == null) return null;
-            blurPass(horizontal, blurB, 0f, 1f, sigma, taps, fracW, fracH);
+            blurPass(horizontal, blurB, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
             result = blurB;
         }
 
@@ -575,16 +646,18 @@ final class CgUiBackdrop {
      * block. A source decimated without this aliases, and an aliased source blurred is what a comb looks
      * like. @see gui_downsample.shader</p>
      */
-    private void downsamplePass(CgTexture2D source, CgFrameBuffer target, int scale, float fracW, float fracH) {
+    private void downsamplePass(CgTexture2D source, CgFrameBuffer target, int scale,
+                                int quadW, int quadH, float uvSpanW, float uvSpanH,
+                                float srcFracW, float srcFracH) {
         float halfU = 0.5f / Math.max(1, source.getWidth());
         float halfV = 0.5f / Math.max(1, source.getHeight());
         float offset = scale / 4f;
         ctx.downsampleMaterial.applyProperties(b -> {
             b.sampler("_MainTex", 0, source);
             b.vec2("_TexelSize", offset / Math.max(1, source.getWidth()), offset / Math.max(1, source.getHeight()));
-            b.vec4("_Bounds", halfU, 1f - fracH + halfV, fracW - halfU, 1f - halfV);
+            b.vec4("_Bounds", halfU, 1f - srcFracH + halfV, srcFracW - halfU, 1f - halfV);
         });
-        runFilter(ctx.downsampleMaterial, target, fracW, fracH);
+        runFilter(ctx.downsampleMaterial, target, quadW, quadH, uvSpanW, uvSpanH);
     }
 
     /**
@@ -595,7 +668,7 @@ final class CgUiBackdrop {
      * {@code sigma} and {@code taps} are in the same texels. @see gui_blur.shader</p>
      */
     private void blurPass(CgTexture2D source, CgFrameBuffer target, float dirU, float dirV,
-                          float sigma, int taps, float fracW, float fracH) {
+                          float sigma, int taps, int quadW, int quadH, float fracW, float fracH) {
         // PROPERTIES BEFORE THE BIND, and this is not style. withMaterial binds the material, and
         // binding VALIDATES the samplers it currently holds - which, on the frame after a resize, are
         // the textures the resize deleted. Maximising the window crashed with "CgTexture2D has been
@@ -617,22 +690,29 @@ final class CgUiBackdrop {
             // the sub-rect rather than the whole texture now that the capture is a region.
             b.vec4("_Bounds", halfU, 1f - fracH + halfV, fracW - halfU, 1f - halfV);
         });
-        runFilter(ctx.blurMaterial, target, fracW, fracH);
+        runFilter(ctx.blurMaterial, target, quadW, quadH, fracW, fracH);
     }
 
     /**
      * Draws one full-sub-rect filter pass with {@code material} into {@code target}.
      *
-     * <p>The quad is drawn {@code uv(0, 1, fracW, 1 - fracH)} - the SAME flip {@link #drawOver} uses, and
+     * <p>The quad is {@code quadW x quadH} WHOLE TEXELS of {@code target}, carrying {@code uvSpanW x
+     * uvSpanH} of the source. The two are given separately because they are different questions: a
+     * reduced target holds {@code ceil(cap/scale)} texels, and the span that fills them is that many
+     * times {@code scale} source texels, which is not the capture's own fraction. Deriving one from the
+     * other is what stretched the band. @see #blurredBackdrop</p>
+     *
+     * <p>The quad is drawn {@code uv(0, 1, ..., 1 - ...)} - the SAME flip {@link #drawOver} uses, and
      * the agreement is load-bearing rather than incidental. A layer FBO is bottom-left origin while the
      * UI is top-left, so every full-surface blit into one carries the flip. The pyramid this replaced
      * drew its passes unflipped and got away with it only because an equal number of down and up passes
      * cancelled: correct output from two errors, which is the kind of thing that stays true right up
      * until somebody changes the level count.</p>
      */
-    private void runFilter(CgMaterial material, CgFrameBuffer target, float fracW, float fracH) {
-        int qw = Math.max(1, Math.round(target.getWidth() * fracW));
-        int qh = Math.max(1, Math.round(target.getHeight() * fracH));
+    private void runFilter(CgMaterial material, CgFrameBuffer target,
+                           int quadW, int quadH, float uvSpanW, float uvSpanH) {
+        int qw = Math.max(1, Math.min(target.getWidth(), quadW));
+        int qh = Math.max(1, Math.min(target.getHeight(), quadH));
         ctx.beginLayerFbo(target);
         // The ortho as well as the viewport: beginLayerFbo sets only the viewport, which is enough for a
         // screen-sized layer and not for a blur target at a working scale above 1 -- a full-size quad
@@ -649,7 +729,7 @@ final class CgUiBackdrop {
                 ctx.poseStack.pushPose();
                 ctx.poseStack.setIdentity();
                 ctx.quad().at(0, 0).size(qw, qh)
-                      .uv(0f, 1f, fracW, 1f - fracH).color(0xFFFFFFFF).submit();
+                      .uv(0f, 1f, uvSpanW, 1f - uvSpanH).color(0xFFFFFFFF).submit();
                 ctx.flush();
                 ctx.poseStack.popPose();
             }));
