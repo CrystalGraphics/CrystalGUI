@@ -3,8 +3,10 @@ package com.crystalgui.mc.client;
 import com.crystalgui.core.CrystalGuiCore;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.screens.worldselection.WorldOpenFlows;
 
 import java.io.File;
+import java.lang.reflect.Method;
 
 /**
  * Opens the editor, photographs it and quits — with no hand on the mouse.
@@ -19,12 +21,15 @@ import java.io.File;
  * JvmArgs=-Dcrystalgui.autotest=true -Dcrystalgui.autotest.out=X:/out/shot.png
  * </pre>
  *
- * <p>Mirrors {@code CgUiAutoTest} on 1.7.10, which has done this since before the single jar. The
- * difference is that this one <b>stays on the title screen</b>: loading a save needs a
- * version-specific call, and `mc1201/common` is compiled against 1.20.1 and run on 1.20.4 as well.
- * The desktop opens over the menu just as it does over a world, so the capture still exercises the
- * whole render path — context, paint context, compositor, taskbar. What it cannot show is the editor
- * application itself, which needs a server.</p>
+ * <p>Mirrors {@code CgUiAutoTest} on 1.7.10, which has done this since before the single jar.</p>
+ *
+ * <p>It LOADS A WORLD first, given {@code -Dcrystalgui.autotest.world}. It did not, on the reasoning
+ * that the desktop opens over the menu just as it does over a world — and the capture that produced
+ * was a photograph of the title screen, because the editor needs a SERVER, so the desktop came up
+ * empty and painted nothing over a colour buffer Minecraft does not clear without a level. A
+ * singleplayer world brings an integrated server, and with it something on the desktop to photograph.
+ * Loading one needs a version-specific call and this module runs on 1.20.1 and 1.20.4 both, which is
+ * what {@link #loadWorld} is for.</p>
  *
  * <p>Easy to get wrong: {@code -Dcrystalgui.autotest.out} must contain no space. Prism strips quotes
  * from a {@code JvmArgs} value and splits on spaces anyway, gluing the tail onto the next argument,
@@ -64,7 +69,21 @@ public final class CgUiAutoTest1201 {
 
     private static final long MOVE_RETRY_MS = 20;
 
+    /**
+     * The save to load before opening, or null to stay on the title screen. {@code *} takes the first.
+     *
+     * <p>Worth loading one: the editor application needs a SERVER, so on the title screen the desktop
+     * comes up empty and a capture of it proves only that the screen opened. A singleplayer world
+     * brings an integrated server with it, which is what lets {@code crystalgui:editor} launch.</p>
+     *
+     * <p>NO SPACE IN THE VALUE. Prism splits a {@code JvmArgs} value on spaces whatever the quoting,
+     * so {@code -Dcrystalgui.autotest.world=New World} arrives as two arguments and the JVM dies
+     * naming a main class it cannot find — which is why {@code *} exists.</p>
+     */
+    private static final String WORLD = emptyToNull(System.getProperty("crystalgui.autotest.world"));
+
     private static int ticks;
+    private static boolean worldRequested;
     private static boolean opened;
     private static boolean captured;
     private static boolean captureLate;
@@ -83,6 +102,20 @@ public final class CgUiAutoTest1201 {
         // why a tick count is not by itself a statement that there is a game to open a desktop over.
         if (mc.getOverlay() != null) return;
         ticks++;
+
+        if (WORLD != null && !worldRequested) {
+            if (ticks < OPEN_AFTER_TICKS) return;
+            worldRequested = true;
+            ticks = 0;
+            loadWorld(mc);
+            return;
+        }
+        // Chunk loading, the integrated server starting and the resource reload that comes with it all
+        // land after the request returns, so the clock only starts once there is a level.
+        if (WORLD != null && mc.level == null) {
+            ticks = 0;
+            return;
+        }
 
         if (!opened) {
             if (ticks < OPEN_AFTER_TICKS) return;
@@ -109,6 +142,72 @@ public final class CgUiAutoTest1201 {
             captureLate = true;
             quit();
         }
+    }
+
+    /**
+     * Asks Minecraft to load {@link #WORLD}, through whichever entry point this version has.
+     *
+     * <p>1.20.1 is the compiled path and 1.20.4 the reflective one, because there is no common method
+     * and this module runs on both: 1.20.1 has {@code loadLevel(Screen, String)} and 1.20.4
+     * deleted it in favour of {@code checkForBackupAndLoad(String, Runnable)}.</p>
+     */
+    private static void loadWorld(Minecraft mc) {
+        String name = resolveWorld(mc);
+        if (name == null) {
+            CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST no save under {}; staying on the title screen",
+                    new File(mc.gameDirectory, "saves"));
+            return;
+        }
+        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST loading world '{}'", name);
+        WorldOpenFlows flows = mc.createWorldOpenFlows();
+        // A COMPILED call, not a reflective one: each loader's thin jar is remapped as it is built, so
+        // this becomes the SRG member on Forge and the intermediary one on Fabric. A reflective lookup
+        // by Mojang name is a plain string and no remapper rewrites a string, so it resolved on
+        // NeoForge -- which runs official names -- and on neither of the others.
+        try {
+            flows.loadLevel(mc.screen, name);
+            return;
+        } catch (NoSuchMethodError deletedIn1204) {
+            // 1.20.4 dropped loadLevel. That build DOES run official names, so the lookup below works
+            // there for the same reason it failed above.
+        }
+        // The Runnable is the GIVE-UP path -- taken when the save cannot be read -- not a completion
+        // callback, so there is nothing to do in it.
+        if (call(flows, "checkForBackupAndLoad", new Class<?>[] {String.class, Runnable.class},
+                name, (Runnable) () -> { })) return;
+        CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST {} offers no world-open method this build knows",
+                flows.getClass().getName());
+    }
+
+    /** @return true when the method EXISTS, whether or not the call itself then succeeded. */
+    private static boolean call(Object target, String name, Class<?>[] types, Object... args) {
+        Method method;
+        try {
+            method = target.getClass().getMethod(name, types);
+        } catch (NoSuchMethodException otherVersion) {
+            return false;
+        }
+        try {
+            method.invoke(target, args);
+        } catch (Throwable failed) {
+            CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST {} threw", name, failed);
+        }
+        return true;
+    }
+
+    /** The named save, or the first one on disk when {@code *}; null when there is none. */
+    private static String resolveWorld(Minecraft mc) {
+        if (!"*".equals(WORLD)) return WORLD;
+        File[] saves = new File(mc.gameDirectory, "saves").listFiles();
+        if (saves == null) return null;
+        for (File save : saves) {
+            if (new File(save, "level.dat").isFile()) return save.getName();
+        }
+        return null;
+    }
+
+    private static String emptyToNull(String value) {
+        return value == null || value.isEmpty() ? null : value;
     }
 
     private static void shoot(String path) {
