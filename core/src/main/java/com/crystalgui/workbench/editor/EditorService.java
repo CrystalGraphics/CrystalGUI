@@ -15,6 +15,7 @@ import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Backup;
@@ -292,8 +293,8 @@ public final class EditorService implements Disposable {
             pendingActivation = null;
             return;
         }
-        DocumentEditor view = pending.editor;
-        if (view == null || view.view().document() == null) return;
+        UIElement element = pending.viewElement();
+        if (element == null || element.document() == null) return;
         pendingActivation = null;
         pending.setActive(true);
     }
@@ -410,6 +411,9 @@ public final class EditorService implements Disposable {
         private DocumentReference reference;
         @Nullable
         private DocumentEditor editor;
+        /** Asked of the editor once. @see #viewElement() */
+        @Nullable
+        private UIElement viewElement;
         @Nullable
         private ReplyError failure;
         private DocumentState state = DocumentState.LOADING;
@@ -420,6 +424,22 @@ public final class EditorService implements Disposable {
 
         public EditorInput input() {
             return input;
+        }
+
+        /**
+         * This tab's element, asked of the editor <b>once</b>.
+         *
+         * <p>Everything the engine does with a view — showing it in the dock, stamping the editor class
+         * on it, naming it as the Inspector's closed subject — has to be the same element or each does
+         * its work to a different one. Asking once here is what makes that true whatever an
+         * implementation of {@link DocumentEditor#view()} does.</p>
+         */
+        @Nullable
+        public UIElement viewElement() {
+            DocumentEditor held = editor;
+            if (held == null) return null;
+            if (viewElement == null) viewElement = held.view();
+            return viewElement;
         }
 
         public Resource resource() {
@@ -473,7 +493,7 @@ public final class EditorService implements Disposable {
             // dock group, so the bottom two corners of the document ARE the island's -- and a square view
             // squares the island off under it. Only `texteditor` said so, so a .cgui and a shadergraph
             // came out pointed against a rounded panel.
-            editor.view().addClass(Workbench.FILE_EDITOR_CLASS);
+            viewElement().addClass(Workbench.FILE_EDITOR_CLASS);
             // THE OPENING'S, applied to the VIEW. A read-only opening and an editable one are two tabs
             // over ONE document -- which is what lets a diff's left pane sit beside the live file --
             // so the refusal cannot live on the model without taking the other tab down with it.
@@ -535,7 +555,7 @@ public final class EditorService implements Disposable {
             // from itself -- the status bar is resolved through its own data context -- so telling it
             // while the dock still has it detached publishes nothing and reports nothing. Parked, and
             // said again on the first frame it can be heard. @see #flushPendingActivation
-            if (isActive && view != null && view.view().document() == null) {
+            if (isActive && view != null && viewElement().document() == null) {
                 pendingActivation = this;
                 return;
             }
@@ -550,10 +570,11 @@ public final class EditorService implements Disposable {
                 // BEFORE disposing it, while its element is still worth naming. An inspector RETAINS
                 // a detached subject on purpose, so without this a closed document kept its sections on
                 // screen over whatever was opened next.
-                InspectorRegistry.subjectClosed(view.view());
+                InspectorRegistry.subjectClosed(viewElement());
                 view.disposeView();
             }
             editor = null;
+            viewElement = null;
             if (reference != null) reference.dispose();
             reference = null;
         }
