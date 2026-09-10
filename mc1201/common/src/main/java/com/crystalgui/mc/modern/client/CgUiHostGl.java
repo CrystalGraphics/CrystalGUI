@@ -20,6 +20,16 @@ import org.lwjgl.opengl.GL13;
  * to make. {@link #enter()} repairs our shadow on the way in, {@link #leave()} repairs Minecraft's on the
  * way out.
  */
+/*
+ * NOT SPLIT INTO A TIER-1 BODY AND A TIER-2 MIRROR, and that is a decision rather than an omission.
+ * §12.2 lists this class for the same treatment the GL backends got, on the reasonable guess that it
+ * had a toolkit half. It does not: `enter` is one call into CrystalGraphics' own state manager, which
+ * tier 2 can make directly, and `leave` is ENTIRELY the host handoff. Splitting would leave a tier-1
+ * superclass holding one line and no reason to exist.
+ *
+ * The rule the tiers encode is "a class lives in the lowest tier its dependencies allow". This class
+ * depends on Blaze3D by its nature -- it is the handoff -- so tier 2 is the lowest tier it allows.
+ */
 public final class CgUiHostGl {
 
     private CgUiHostGl() {}
