@@ -182,16 +182,5 @@ tasks.named("ideaSyncTask") { dependsOn(extractMcSources) }
 configurations.named("runtimeClasspath") { exclude(group = "com.crystalgraphics") }
 
 
-// -- Dropping a build into a real client ---------------------------------------------------------
-//
-// CrystalGraphics goes too: CrystalGUI does not run without it. Its shippable jar is its own
-// `remapJar` output -- the plain one, no classifier. Both `assemble`s also leave an `-all` (shadow,
-// named namespace) and a `-dev` jar; those install and neither runs.
-extra["cgDeployKey"] = "prismLauncher1201FabricDir"
-extra["cgDeployJars"] = listOf(
-        tasks.named<AbstractArchiveTask>("remapJar").flatMap { it.archiveFile },
-        File(crystalGraphicsBuild.projectDir,
-                "mc1201/fabric/build/libs/crystalgraphics-mc1201-fabric-1.0.0.jar"))
-extra["cgDeployDependsOn"] = listOf(
-        tasks.named("remapJar"), crystalGraphicsBuild.task(":mc1201:fabric:remapJar"))
-apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())
+// The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
+// into all four instances.

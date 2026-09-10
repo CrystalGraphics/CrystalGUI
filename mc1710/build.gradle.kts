@@ -842,12 +842,5 @@ tasks.named("assemble") { dependsOn(reobfThinJar) }
 //
 // 1.7.10 needs no mapping DOWNLOAD to be useful, unlike 1.20.x: MCP's data is what the readable
 // namespace is here, and `ScriptService1710` already states its coordinates.
-val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
-
-extra["cgDeployKey"] = "prismLauncher1710Dir"
-extra["cgDeployJars"] = listOf(
-        layout.buildDirectory.file("libs/crystalgui-$version.jar"),
-        File(crystalGraphicsBuild.projectDir, "mc1710/build/libs/crystalgraphics-1.0.0.jar"))
-extra["cgDeployDependsOn"] = listOf(
-        tasks.named("reobfJar"), crystalGraphicsBuild.task(":mc1710:reobfJar"))
-apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())
+// The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
+// into all four instances, and this one could only ever install the fat `reobfJar` nothing ships.

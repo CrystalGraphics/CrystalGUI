@@ -5,11 +5,14 @@ import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.mc.ClientProxy;
 import com.crystalgui.mc.CommonProxy;
+import com.crystalgui.mc.shared.CrashVariant;
 
 import com.crystalgui.mc.platform.service.script.ScriptService1710;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import cpw.mods.fml.common.FMLCommonHandler;
+import cpw.mods.fml.common.ICrashCallable;
 import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.SidedProxy;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
@@ -78,6 +81,20 @@ public class CrystalGUI {
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         LOGGER.info("{}: preInit", NAME);
+        // WHICH VARIANT, in the crash report itself. One jar carries a host per loader, each relocated
+        // under its own prefix, so a trace naming com.crystalgui.mc.fml1710.common.* is the only thing
+        // that says which one ran. @see CrashVariant
+        FMLCommonHandler.instance().registerCrashCallable(new ICrashCallable() {
+            @Override
+            public String getLabel() {
+                return CrashVariant.LABEL;
+            }
+
+            @Override
+            public String call() {
+                return CrashVariant.report(CrystalGUI.class);
+            }
+        });
         // Captured here because this is the only event that carries it, and it is the side-agnostic
         // answer to "where does crystalgui/ go" -- .minecraft on a client, <serverdir> on a dedicated
         // server. Forge hands over its own config directory; ours is its sibling.

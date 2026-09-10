@@ -116,19 +116,6 @@ tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
 tasks.named("check") { dependsOn("checkThinJar") }
 tasks.named("assemble") { dependsOn("thinShadowJar") }
 
-// -- Dropping a build into a real client ---------------------------------------------------------
-//
-// NO REOBFUSCATION HERE, and that is the difference from forge rather than an omission: NeoForge runs
-// official Minecraft names, so the jar this module already builds is the one that ships. The mapping
-// stack agrees -- the namespace probe answers "already readable" on this loader and fetches nothing.
-val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
-
-extra["cgDeployKey"] = "prismLauncher1204NeoForgeDir"
-extra["cgDeployJars"] = listOf(
-        layout.buildDirectory.file("libs/crystalgui-mc1201-neoforge-$version-java17-shaded.jar"),
-        File(crystalGraphicsBuild.projectDir,
-                "mc1201/neoforge/build/libs/crystalgraphics-mc1201-neoforge-1.0.0-all.jar"))
-extra["cgDeployDependsOn"] = listOf(
-        tasks.named("shadeDowngradedShadowJar"),
-        crystalGraphicsBuild.task(":mc1201:neoforge:shadowJar"))
-apply(from = rootProject.file("gradle/module_integration/deploy-mods.gradle.kts").toURI())
+// The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
+// into all four instances. NeoForge needing no reobfuscation — it runs official Minecraft names, and
+// the namespace probe answers "already readable" here — is now a fact about the merge, not this file.
