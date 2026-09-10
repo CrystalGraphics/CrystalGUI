@@ -589,6 +589,7 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 
 | Signal | Owner | Replaced |
 |---|---|---|
+| `onDidChangeActive` | `EditorService` | the Design panel's per-frame poll, and the Inspector's three-source workaround |
 | `onDidChangeActivePanel` | `DockArea` | three per-frame polls at once |
 | `onDidClosePanel` | `DockArea` | nothing — the fact nobody could state |
 | `onDidOpenDocument` / `onDidCloseDocument` | `Workbench` | `onDocumentLoaded`, and its missing half |

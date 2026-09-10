@@ -2,7 +2,6 @@ package com.crystalgui.app.uibuilder.canvas;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.transform.Transform;
@@ -38,8 +37,6 @@ public final class HoverHighlight extends UIElement {
 
     private final SurfaceContext ctx;
 
-    private final ConnectionGroup connections = new ConnectionGroup();
-
     private final UIText tag = new UIText();
 
     @Nullable
@@ -59,7 +56,7 @@ public final class HoverHighlight extends UIElement {
         tag.set(Attribute.PART, TAG_PART);
         appendStructural(tag);
 
-        connections.add(ctx.picking().onDidChangeHover.connect(this::follow));
+        whileConnected(() -> ctx.picking().onDidChangeHover.connect(this::follow));
     }
 
     /** What the outline is on, or null. */
@@ -121,17 +118,10 @@ public final class HoverHighlight extends UIElement {
     @Override
     protected void connected() {
         super.connected();
-        if (document() == null) return;
         document().animation().afterLayout(this, delta -> {
             placeTag();
             return true;
         });
-    }
-
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        connections.disconnectAll();
     }
 
     @Override

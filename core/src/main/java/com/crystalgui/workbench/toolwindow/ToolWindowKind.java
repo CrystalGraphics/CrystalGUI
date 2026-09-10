@@ -3,6 +3,7 @@ package com.crystalgui.workbench.toolwindow;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.Objects;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
@@ -26,15 +27,13 @@ import com.crystalgui.workbench.region.RegionSide;
  *         ToolWindowKind.of("mymod:problems", "Problems")
  *                 .icon("mymod:icons/problems")
  *                 .anchor(DockDropZone.SPLIT_DOWN)
- *                 .view(ctx -> myPanel)
+ *                 .view(myPanel)
  *                 .toggle("mymod.showProblems")
  *                 .openByDefault());
  * }</pre>
  *
  * <p>{@code registerToolWindow} hands back a {@link Disposable}, so an extension that goes takes its
- * panel, its rail button and its command with it. Build the view eagerly and return the same instance:
- * the dock caches what a factory answers, so a placeholder returned "for this frame" is what it hands
- * back for the rest of the session.</p>
+ * panel, its rail button and its command with it.</p>
  *
  * <h3>Where it opens is a DEFAULT, never a rule</h3>
  *
@@ -127,10 +126,40 @@ public final class ToolWindowKind {
         return this;
     }
 
-    /** The panel's content. Built once, lazily, when the dock first asks for it. */
+    /**
+     * The panel's content, which you already have.
+     *
+     * <pre>{@code
+     * MyPanel panel = new MyPanel(workbench);
+     * workbench.registerToolWindow(ToolWindowKind.of("mine", "Mine").view(panel));
+     * }</pre>
+     *
+     * <p><b>Prefer this to the factory overload.</b> The dock asks for a view once and keeps the answer
+     * for the session, so a factory that returns a placeholder until something has loaded returns the
+     * placeholder for good — and only sometimes, depending on which frame the dock first asked. An
+     * instance cannot express that mistake.</p>
+     */
+    public ToolWindowKind view(UIElement panel) {
+        Objects.requireNonNull(panel, "panel");
+        return view(ctx -> panel);
+    }
+
+    /**
+     * The panel's content, built once and lazily, the first time the dock asks.
+     *
+     * <p>For a panel that needs the {@link WorkbenchContext} it cannot get otherwise, or one costly
+     * enough to be worth not building until it is opened. <b>Return the same instance every time</b> —
+     * and see {@link #view(UIElement)}, which is the shorter answer whenever you already hold one.</p>
+     */
     public ToolWindowKind view(Function<WorkbenchContext, UIElement> factory) {
         this.single = factory;
         return this;
+    }
+
+    /** A named view in this container — several make a container with a header per view. */
+    public ToolWindowKind view(String viewId, String title, UIElement panel) {
+        Objects.requireNonNull(panel, "panel");
+        return view(viewId, title, ctx -> panel);
     }
 
     /** A named view in this container — several make a container with a header per view. */

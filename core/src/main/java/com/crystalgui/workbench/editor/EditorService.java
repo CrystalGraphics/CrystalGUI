@@ -91,6 +91,25 @@ public final class EditorService implements Disposable {
 
     public final Signal.Value<Tab> onDidClose = new Signal.Value<>();
 
+    /**
+     * A different tab is in front. <b>The one to follow for "show me whatever is being edited"</b>, and
+     * null when the last editor closed.
+     *
+     * <p>Not the dock's {@code onDidChangeActivePanel}, which announces a PANEL and fires while the read
+     * behind it is still in flight; not {@link #onDidOpen}, which says nothing when you click between two
+     * files that are already open. This fires from {@link #activate}, after {@link #active()} has moved,
+     * so a listener reading it gets the new tab.</p>
+     *
+     * <pre>{@code
+     * whileConnected(() -> workbench.editors().onDidChangeActive.connect(tab -> follow()));
+     * }</pre>
+     *
+     * <p>The tab's {@link Tab#editor()} may still be null at this moment — activation and the content
+     * landing are different events. A panel that needs the document waits for {@link #onDidLoad} as
+     * well, or re-reads on both.</p>
+     */
+    public final Signal.Value<Tab> onDidChangeActive = new Signal.Value<>();
+
     /** A tab's state moved — what a tab strip redraws its decoration from. */
     public final Signal.Value<Tab> onDidChangeState = new Signal.Value<>();
 
@@ -203,6 +222,8 @@ public final class EditorService implements Disposable {
         if (active != null) active.setActive(false);
         active = tab;
         if (tab != null) tab.setActive(true);
+        // AFTER the field moves, so a listener that reads active() gets the new one.
+        onDidChangeActive.emit(tab);
     }
 
     /**
@@ -215,11 +236,15 @@ public final class EditorService implements Disposable {
      */
     public void close(Tab tab) {
         if (tabs.remove(tab.input()) == null) return;
-        if (active == tab) {
+        boolean wasInFront = active == tab;
+        if (wasInFront) {
             active = null;
             tab.setActive(false);
         }
         tab.release();
+        // CLOSING THE FRONT TAB LEAVES NOTHING IN FRONT, and a panel following the editor has to hear
+        // that as readily as a switch -- otherwise it keeps describing a document that is gone.
+        if (wasInFront) onDidChangeActive.emit(null);
         onDidClose.emit(tab);
     }
 

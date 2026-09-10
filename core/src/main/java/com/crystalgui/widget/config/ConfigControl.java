@@ -2,7 +2,6 @@ package com.crystalgui.widget.config;
 
 import java.util.Objects;
 import com.crystalgui.core.signal.Connection;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -77,26 +76,6 @@ public abstract class ConfigControl extends UIElement {
     public final Signal.Value<Boolean> interacting = new Signal.Value<>();
 
     /**
-     * The live subscriptions, rebuilt from {@link #follows} whenever this control enters a tree.
-     *
-     * <h3>Why a control follows anything at all</h3>
-     *
-     * <p>So that an edit made <em>elsewhere</em> reaches the widget — {@code settings.onChanged},
-     * {@code document.onChanged}. Those stores outlive the control by a long way: a {@code Settings} lives
-     * as long as the application and a {@code GraphDocument} as long as the file is open, while a control
-     * is rebuilt every time an inspector's subject changes.</p>
-     *
-     * <p>Nothing disconnected them, so a store accumulated one listener per row per rebuild, each holding
-     * a widget that had already left the tree. Invisible from both ends: the host subscribed, the store
-     * notified, nothing failed, and the only symptom was a session that got slower the longer it ran.</p>
-     *
-     * <p><b>Private on purpose.</b> A public group invites a binder to register a connection directly,
-     * which is the manual-lifetime pattern {@link #follows} exists to remove — and one that would then go
-     * missing on the first re-attach, since this is cleared wholesale.</p>
-     */
-    private final ConnectionGroup connections = new ConnectionGroup();
-
-    /**
      * Declares how this control follows something that outlives it. <b>The engine decides when.</b>
      *
      * <h3>Nobody releases these, because nobody can be trusted to</h3>
@@ -124,34 +103,12 @@ public abstract class ConfigControl extends UIElement {
      */
     public void follows(Supplier<Connection> subscribe) {
         if (subscribe == null) return;
-        follows.add(subscribe);
-        // Bound NOW when this is already in a tree, since onWindowChanged has been and gone. A binder
-        // may run either side of attachment -- SettingsConfigurator builds into a detached panel, and
-        // NodeFieldBinder rebuilds a port editor on a live plane -- and neither should have to know.
-        if (document() != null) connections.add(subscribe.get());
-    }
-
-    /** @see #follows */
-    private final List<Supplier<Connection>> follows = new ArrayList<>();
-
-    /**
-     * Subscribes what {@link #follows} declared, once this control is in a tree.
-     *
-     * <p>{@code onWindowChanged(previous, current)} has no counterpart here — the node tree reports
-     * connect and disconnect separately rather than as one transition — and the split is faithful
-     * rather than lossy. The old hook disconnected unconditionally and re-subscribed only if there was
-     * a window, which is exactly {@link #disconnected} then {@link #connected}; a move BETWEEN
-     * documents fires both, in that order, so the case its comment called out is still covered.</p>
-     */
-    @Override
-    protected void connected() {
-        connections.disconnectAll();
-        for (Supplier<Connection> subscribe : follows) connections.add(subscribe.get());
-    }
-
-    @Override
-    protected void disconnected() {
-        connections.disconnectAll();
+        // The engine's, since M6.5 -- this class had its own copy of it, which is what
+        // UINode.whileConnected was generalised FROM. A binder may run either side of attachment
+        // (SettingsConfigurator builds into a detached panel, NodeFieldBinder rebuilds a port editor on
+        // a live plane) and that method binds now or on the next attach as needed, so neither has to
+        // know which it is.
+        whileConnected(subscribe);
     }
 
     private final ConfigDescriptor descriptor;
