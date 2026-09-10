@@ -22,6 +22,9 @@ import com.crystalgui.ui.input.ButtonState;
 import com.crystalgui.ui.input.keymap.KeyEventType;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 import com.crystalgui.ui.input.keymap.KeymapResolver;
+import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.render.CgUiPaintContext;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -229,6 +232,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private @Nullable Cursor cursorOverride;
     private Cursor lastCursor = Cursor.DEFAULT;
 
+    /** Art drawn AT the pointer, over the tree. @see #setCursorDecoration */
+    private @Nullable CursorDecoration decoration;
+
     /**
      * Whether the default sink has been resolved, and to what.
      *
@@ -411,6 +417,44 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     /** The cursor currently presented. Resolved, so never {@link Cursor#AUTO}. */
     public Cursor currentCursor() {
         return lastCursor;
+    }
+
+    /**
+     * Draws {@code decoration} at the pointer until it is replaced or cleared. @see CursorDecoration
+     *
+     * <p>For art a real cursor cannot express — anything that has to follow an angle, since a cursor is
+     * a native picture and can only be quantised. Keep a real cursor set underneath it.</p>
+     *
+     * <p>One at a time, and setting is idempotent, so a gesture may call this every frame with the
+     * instance it holds and pass {@code null} when it ends. The returned handle is for the other shape —
+     * set once, released later — and clears only if this decoration is still the one set, so a consumer
+     * letting go cannot take a later one with it.</p>
+     *
+     * @return a handle that clears it
+     */
+    public Disposable setCursorDecoration(@Nullable CursorDecoration decoration) {
+        this.decoration = decoration;
+        return () -> {
+            if (this.decoration == decoration) this.decoration = null;
+        };
+    }
+
+    /**
+     * Draws whatever a gesture put under the pointer.
+     *
+     * <p>Called by {@code UIDocument.paint} AFTER the tree, which is what puts it above everything,
+     * outside every scissor and outside layer retention — a decoration follows the pointer, and no box
+     * moved to say so.</p>
+     */
+    /** What is being drawn at the pointer, or null. The read half of {@link #setCursorDecoration}. */
+    @Nullable
+    public CursorDecoration cursorDecoration() {
+        return decoration;
+    }
+
+    public void paintCursorDecoration(CgUiPaintContext ctx) {
+        CursorDecoration held = decoration;
+        if (held != null) held.paint(ctx, position.x, position.y);
     }
 
     // ── The pointer ──────────────────────────────────────────────────────────
