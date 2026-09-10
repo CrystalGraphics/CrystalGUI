@@ -79,7 +79,7 @@ public final class ProjectExtension implements WorkbenchExtension {
                 ToolWindowKind.of(TYPE, "Project")
                         .icon("crystalgui:folder")
                         .anchor(DockDropZone.SPLIT_LEFT)
-                        .view(ctx -> tree)
+                        .view(tree)
                         .openByDefault());
         Disposable slice = workbench.registerSessionSlice(live.slice);
 

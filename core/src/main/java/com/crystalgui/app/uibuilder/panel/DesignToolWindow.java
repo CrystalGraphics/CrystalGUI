@@ -5,14 +5,10 @@ import javax.annotation.Nullable;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.document.DocumentEditor;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.WorkbenchContext;
-
-import dev.vfyjxf.taffy.style.FlexDirection;
 
 /**
  * The <b>Design</b> tool window: the hierarchy of whatever {@code .cgui} is in front.
@@ -43,47 +39,17 @@ public final class DesignToolWindow extends UIElement {
         super(NAME);
         this.workbench = workbench;
         addClass(PANEL_CLASS);
-        StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).heightPercent(100f).flexDirection(FlexDirection.COLUMN));
-        follow();
+        // WHICH TAB, and then WHETHER ITS CONTENT IS IN -- a tab is announced before the read behind it
+        // lands, so the first answer has an active tab with no editor on it yet.
+        whileConnected(() -> workbench.editors().onDidChangeActive.connect(tab -> follow()));
+        whileConnected(() -> workbench.editors().onDidLoad.connect(tab -> follow()));
+        onConnected(this::follow);
     }
 
     /** The hierarchy currently shown, or null when the tab in front is not a {@code .cgui}. */
     @Nullable
     public HierarchyPanel hierarchy() {
         return hierarchy;
-    }
-
-    /**
-     * Asked each frame, because <b>there is no announcement to listen to</b>.
-     *
-     * <p>Three were tried. The dock's {@code onDidChangeActivePanel} fires while the read behind the tab
-     * is still in flight, so the panel is announced before it has an editor; {@code onDidOpenDocument}
-     * and the editor service's own signals fire at moments when {@code editors().active()} is still
-     * null. Measured on the real path, {@code follow()} ran five times before the document arrived and
-     * not once after — which is exactly the empty panel, and why patching the signal list twice fixed
-     * nothing.</p>
-     *
-     * <p>What is actually missing is an <em>active editor changed</em> signal; the Inspector works around
-     * the same gap with three sources of its own. Until that exists this asks, which costs two field
-     * reads and a reference comparison and stops when the panel leaves the tree.</p>
-     */
-    @Override
-    protected void connected() {
-        super.connected();
-        UIDocument window = document();
-        if (window == null) return;
-        // UNGUARDED, as the Inspector registers its own and for the same reason. `Animation.tick` drops a
-        // hook the moment its owner is disconnected, and the dock detaches and re-attaches every panel
-        // when it rebuilds -- which switching tabs does. A flag guarding the registration is then wrong
-        // in the one direction that matters: if the detach and the re-attach coalesce into one mutation
-        // the element never observes a `disconnected()`, so the flag stays set while the hook is already
-        // gone, and the panel is dead for the rest of the session. Measured: it came up once and never
-        // again. A duplicate registration costs a second `follow()`, which early-returns.
-        window.animation().every(this, delta -> {
-            follow();
-            return true;
-        });
     }
 
     /** Points the panel at whatever builder is in front, and rebuilds only when that changed. */

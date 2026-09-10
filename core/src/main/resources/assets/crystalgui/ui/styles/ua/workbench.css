@@ -24,6 +24,26 @@ dockarea {
     flex-direction: column;
 }
 
+/* ── EVERY TOOL WINDOW'S VIEW FILLS THE PANEL IT IS DOCKED IN ─────────────────────
+ *
+ * Stamped by Workbench.built on the view of every registered ToolWindowKind, so an extension author
+ * declares what goes INSIDE their panel and never that the panel itself has a size.
+ *
+ * It had to be said by hand before, and the failure is silent in the worst way: the tab's pane fills
+ * its group correctly, the panel inside it is content-sized, so a panel whose rows exist lays out at
+ * zero height and reads as "the panel is empty" rather than as a missing declaration. The same
+ * omission was found and patched into the dock, a RegionHost, a ViewContainer and `tabview .__pane__`
+ * one at a time; this is the last container in that chain and the only one an extension owns.
+ *
+ * The fill idiom rather than `height: 100%` — a percentage inside a parent that is still distributing
+ * resolves against nothing. `flex-shrink` is left alone, as it is in all four. */
+.__panel-content__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    flex-direction: column;
+}
+
 dockgroup {
     flex-direction: column;
     background: var(--dock-bg, #2B2B2B);

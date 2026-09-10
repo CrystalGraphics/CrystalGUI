@@ -11,7 +11,6 @@ import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -63,8 +62,6 @@ public final class HierarchyPanel extends UIElement {
     public static final String LABEL_CLASS = "__label__";
 
     private final BuilderContext builder;
-
-    private final ConnectionGroup connections = new ConnectionGroup();
 
     private final TreeView<UIElement> tree;
 
@@ -136,35 +133,23 @@ public final class HierarchyPanel extends UIElement {
         append(content);
         content.append(tree);
 
-    }
-
-    /**
-     * Every subscription this panel holds, remade each time it joins a tree.
-     *
-     * <p><b>Here rather than in the constructor, and paired with {@code disconnected}.</b> That method
-     * drops every connection -- which it must, since one outliving its node is what the engine's
-     * ownership rule exists to prevent -- so a subscription made once at construction is gone the first
-     * time this panel leaves the tree and is never remade. The dock takes a tool window out for
-     * ordinary reasons: hiding it, rebuilding a layout, replacing the panel behind a tab.</p>
-     *
-     * <p>All three go at once, which is why it presents as the panel dying rather than as one feature
-     * failing: rows stop selecting anything, the tree stops following the canvas, and it stops rebuilding
-     * when the document changes. Nothing re-registers, so it stays dead until the process restarts --
-     * reported exactly that way. {@code ResizeHandles} had the same defect for the same reason.</p>
-     */
-    @Override
-    protected void connected() {
-        super.connected();
+        // DECLARED HERE AND HELD BY THE ENGINE. Each is remade on every attach and dropped on every
+        // detach, which a dock does for ordinary reasons -- hiding the panel, rebuilding a layout,
+        // replacing what is behind a tab. @see UINode#whileConnected
+        //
         // SELECTION, not activation: a single click on a row is choosing that node, and activation is
-        // the double-click that will open a template. The two are separate signals for exactly this.
-        connections.add(tree.onSelectionChanged.connect(this::chooseRows));
-        connections.add(builder.builderSelection().onChanged.connect(this::followSelection));
-        connections.add(builder.getDocument().onChanged().connect(this::refresh));
-        // WHAT IT MISSED WHILE IT WAS OUT. The document may have been edited, and the canvas selection
-        // moved, with nothing listening -- so a panel that comes back showing the tree it left with is
+        // the double-click that will open a template.
+        whileConnected(() -> tree.onSelectionChanged.connect(this::chooseRows));
+        whileConnected(() -> builder.builderSelection().onChanged.connect(this::followSelection));
+        whileConnected(() -> builder.getDocument().onChanged().connect(this::refresh));
+        // WHAT IT MISSED WHILE IT WAS OUT: the document may have been edited and the canvas selection
+        // moved, with nothing listening, so a panel that comes back showing the tree it left with is
         // showing a stale one.
-        refresh();
-        followSelection();
+        onConnected(() -> {
+            refresh();
+            followSelection();
+        });
+
     }
 
     /** The tree, for a test and for whoever wants to expand a branch. */
@@ -286,12 +271,6 @@ public final class HierarchyPanel extends UIElement {
         // NOTHING ON SCREEN ANSWERED. Every selected node may be inside a collapsed branch, and leaving
         // the previous highlight up would name a node that is not the one selected.
         if (first) tree.clearSelection();
-    }
-
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        connections.disconnectAll();
     }
 
     /** One row: the name, and whether it is the selected node. */

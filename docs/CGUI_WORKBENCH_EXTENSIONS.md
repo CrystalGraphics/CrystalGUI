@@ -47,7 +47,7 @@ public final class MyFeature implements WorkbenchExtension {
         return workbench.registerToolWindow(
                 ToolWindowKind.of("myfeature", "My Feature")
                         .icon("mymod:icons/feature")
-                        .view(ctx -> new MyPanel()));
+                        .view(new MyPanel()));
     }
 }
 ```
@@ -127,7 +127,7 @@ Disposable panel = workbench.registerToolWindow(
                 .icon("mymod:icons/feature")
                 .region(DockRegion.AUXILIARY)          // left rail is SIDEBAR, bottom is PANEL
                 .side(RegionSide.PRIMARY)              // which half of that region
-                .view(ctx -> panelInstance)
+                .view(panelInstance)
                 .toggle("mymod.showMyFeature", "Mod+Shift+M")
                 .openByDefault());
 ```
@@ -137,20 +137,12 @@ Disposable panel = workbench.registerToolWindow(
 | `.icon(name)` | The rail button's glyph. An SVG under `assets/<ns>/ui/icons/`. |
 | `.region(...)` / `.side(...)` | Where it opens **by default**. |
 | `.anchor(DockDropZone.SPLIT_DOWN)` | The same statement in the dock's own words. |
-| `.view(factory)` | Builds the panel. |
-| `.view(id, title, factory)` | Call it more than once for a panel with several tabs. |
+| `.view(panel)` | The panel. A factory overload exists for building it lazily. |
+| `.view(id, title, panel)` | Call it more than once for a panel with several tabs. |
 | `.toggle(commandId[, accel])` | Registers a show/hide command and binds it. |
 | `.badge(installer)` | A dot or a count on the rail button. |
 | `.openByDefault()` | Open on a workspace with no session record yet. |
 | `.persistent()` | Keep the panel's state while it is closed. |
-
-**Build the view eagerly and return the same instance.** The dock caches what a factory answers, so a
-placeholder returned "just for this frame" is what it hands back for the rest of the session.
-
-```java
-MyPanel view = new MyPanel();                       // eager
-... .view(ctx -> view);                             // same instance, every time
-```
 
 A badge is an installer rather than a value, because it is a *subscription* — the engine hands you the
 sink and keeps the handle, so a withdrawn extension stops writing to a button that is gone:
@@ -166,6 +158,59 @@ sink and keeps the handle, so a withdrawn extension stops writing to a button th
 > Where a panel opens is a **default, never a rule**. A placement restored from a session outranks all
 > three of `region`, `side` and `anchor` — a panel the user dragged to the other rail stays there, which
 > is the whole point of persisting one.
+
+### A panel that works the second time
+
+Four of the things a panel used to have to do by hand are the engine's now. What is left is genuinely
+yours.
+
+**Declare what you follow; the engine decides when.** A subscription made in a constructor used to be
+gone the first time the dock took the panel out — hiding it, rebuilding a layout, replacing what is
+behind a tab — and nothing remade it.
+
+```java
+public MyPanel(WorkbenchContext workbench) {
+    whileConnected(() -> workbench.editors().onDidChangeActive.connect(tab -> follow()));
+    whileConnected(() -> model.onChanged.connect(this::refresh));
+    onConnected(this::refresh);        // ...and catch up on what moved while it was out
+}
+```
+
+`whileConnected` re-subscribes on every attach and drops on every detach. `onConnected` runs after
+them, and is where anything the document owns goes — a per-frame hook, a data provider — since those
+are dropped on detach too. Both are `UINode`'s, so every widget has them, and both work when called
+after the node is already in a tree.
+
+**Follow the active editor with a signal, not a poll.** `editors().onDidChangeActive` fires when a
+different tab comes to the front, and null when the last one closes. Pair it with `onDidLoad` if you
+need the document itself: a tab is announced before the read behind it lands, so the first answer has
+an active tab whose `editor()` is still null.
+
+**Hand `view(...)` the panel, not a factory.**
+
+```java
+.view(new MyPanel(workbench))       // an instance; the trap below cannot be expressed
+```
+
+The dock asks for a view once and keeps the answer, so a factory returning a placeholder until
+something loads returns the placeholder for good. The factory overload is still there for a panel that
+needs the context or is worth building lazily — return the same instance every time.
+
+**Being docked sizes your panel.** The engine stamps `__panel-content__` on every registered view and
+the sheet gives it the fill idiom. What goes *inside* is yours, and a list or tree in a column still
+needs `width: 100%; flex-basis: 0; flex-grow: 1` or it lays out at zero height — the rows exist, the
+panel is the right size, and it reads as "the panel is empty". Assert on the box, not the model: a test
+counting `visibleRows()` reports green against a blank panel.
+
+**What is still a design decision.** One panel for the workbench, re-pointed as the tab changes, or one
+per document — the Design panel takes the first, and empties rather than disappearing when the tab in
+front is not its kind. A tool window that comes and goes moves everything beside it, and "the panel I
+docked has gone" is indistinguishable from a bug.
+
+`DesignToolWindow` + `HierarchyPanel` (`app/uibuilder/panel/`) is the worked example, and
+`DesignPanelFollowsTheOpenDocumentTest` drives it through a real `Workbench` over a transport — which
+is how to test one. A directly-constructed panel passes while the running one is empty: what a panel
+can *build* is never the question; what it is *told*, and whether that is still current, is.
 
 ---
 
@@ -384,14 +429,17 @@ lifetime.add(workbench.markers().onDidChange.connect(resource -> recount()));
 
 | Signal | Fires when |
 |---|---|
-| `dock().onDidChangeActivePanel` | **The tab in front changed.** What you want for "follow the editor". |
+| `editors().onDidChangeActive` | **A different editor is in front**, and null when the last one closed. What you want for "follow the editor". Its `editor()` may still be null — activation and the content landing are different events. |
+| `editors().onDidLoad` | That tab's content is in. Pair it with the one above when you need the document itself. |
+| `dock().onDidChangeActivePanel` | The active *panel* changed — a tool window taking focus counts, and it fires while a read behind a tab is still in flight. |
 | `onDidOpenDocument()` | A file's *content* landed. Not a tab change — it says nothing when you click between two files that are already open. |
 | `documents().onDidOpen` | A document was opened, for indexing. |
 | `markers().onDidChange` | Diagnostics moved. |
 
-Subscribe to **both** of the first two if you follow the active file: the panel is announced as soon as
-the dock has built its tree, which can be before the document behind it exists, and a restored tab's
-content arrives some frames later.
+Subscribe through `whileConnected` ([§3](#3-an-activity-bar-panel)) rather than holding the connections
+yourself, and take `onDidChangeActive` with `onDidLoad` if you follow the active file: a tab is announced
+as soon as the dock has built its tree, which can be before the document behind it exists, and a restored
+tab's content arrives some frames later.
 
 Reading what is in front:
 
@@ -510,14 +558,17 @@ public final class MyFeature implements WorkbenchExtension {
 | Session state | `workbench.registerSessionSlice(slice)` | returned |
 | A whole application | `ApplicationKind.of(...)` + an `ApplicationKinds` service | — |
 
-**Five things that are silent when you get them wrong**
+**Six things that are silent when you get them wrong**
 
-1. A panel view built lazily — the dock caches the first answer for the session. Build it eagerly.
-2. A process-wide registration with no handle — it outlives the workbench and the next one inherits it.
-3. Following `onDidOpenDocument` alone — it is not a tab change.
-4. `activate` asking for a window, a document or geometry — none exists yet.
-5. An extension id in a manifest that nothing ships — a log line, not an error. Check the log if your
+1. A process-wide registration with no handle — it outlives the workbench and the next one inherits it.
+2. Following `onDidOpenDocument` alone — it is not a tab change. Use `editors().onDidChangeActive`.
+3. `activate` asking for a window, a document or geometry — none exists yet.
+4. An extension id in a manifest that nothing ships — a log line, not an error. Check the log if your
    feature simply is not there.
+5. A subscription made in a constructor and held by hand — use `whileConnected`, or it is gone the first
+   time the node leaves the tree. [§3](#3-an-activity-bar-panel)
+6. A list or tree inside a panel with no fill idiom — it lays out at zero height and reads as "the panel
+   is empty". Assert on the box, not the model. [§3](#3-an-activity-bar-panel)
 
 ---
 
@@ -531,5 +582,7 @@ public final class MyFeature implements WorkbenchExtension {
 | The widgets you can put in a panel | [`CGUI_WIDGETS.md`](CGUI_WIDGETS.md) |
 
 Worked examples in this repository, in increasing size: `NotesKind` (a file type, one class),
-`InspectorExtension` (a panel that follows focus), `ProblemsExtension` (a panel, a status entry and an
-index), `ScriptWorkbench` (an extension living outside `core/` entirely).
+`InspectorExtension` (a panel that follows focus), `UiBuilderContribution` (a file type and a panel that
+follows the active editor — the reference for everything in §3's *A panel that works the second time*),
+`ProblemsExtension` (a panel, a status entry and an index), `ScriptWorkbench` (an extension living outside
+`core/` entirely).

@@ -278,6 +278,7 @@ divided into:
 | Shadow tree | `attachShadow(delegatesFocus)`, `shadowRoot()`, `part` names; `appendStructural`/`insertStructuralAt` for a widget's own parts |
 | Composed tree | `composedChildren()`, `composedSubtree()` — what paint and hit-testing walk |
 | Lifecycle hooks | `connected()`, `disconnected()`, `slotChanged()` — queued during a mutation, drained after it |
+| Subscriptions | `whileConnected(supplier)` and `onConnected(runnable)` — **declare them in the constructor**; the engine re-subscribes on every attach and drops them on every detach |
 | Styleable | everything the cascade asks: id/classes/type, the light parent and the COMPOSED parent (two different questions), nine state predicates, the shadow host and part name |
 | Interaction state | `setFocused`/`setHovered`/`setPressed` — the services write it, the cascade reads it |
 | Focus | `setFocusPolicy`, `focusable()`, `tabbable()`, `delegatesFocus` |
@@ -1044,6 +1045,7 @@ Eight that bite most often, and each is one line because the full row is in that
 | `flex-shrink` defaults to **0** here | A `flex-grow: 1` child overflows its parent rather than shrinking. The fill idiom is `width: 100%; height: 0; flex-grow: 1` |
 | `font-size` does **not** effectively inherit | `default.css` opens with `* { font-size: 10 }`, which is a candidate on every element |
 | A listener on a shadow host can **never see its own parts** | `getTarget()` is retargeted before it runs. Attach inside the shadow tree |
+| A subscription held by hand dies on the first detach | `disconnected()` drops what a node holds and nothing remakes it. Use `whileConnected` |
 | What GL permits is **not** what the host tolerates | Blaze3D models twelve texture units; binding above it corrupts unit 0 for whoever samples it next |
 
 # Global coding rules

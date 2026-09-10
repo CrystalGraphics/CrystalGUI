@@ -6,7 +6,6 @@ import com.crystalgui.core.notify.NotificationDisplay;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.NotificationGroups;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -117,11 +116,13 @@ public class NotificationBalloons extends UIElement {
 
     private final List<Live> live = new ArrayList<>();
 
-    private final ConnectionGroup subscriptions = new ConnectionGroup();
-
     public NotificationBalloons() {
         super(NAME);
         addClass(LAYER_CLASS);
+        whileConnected(() -> Notifications.onDidChange.connect(this::apply));
+        // The hook is dropped with the detach, so it needs no "am I still in that window" guard of its
+        // own -- which is what the flag this used to keep got wrong. @see UINode#onConnected
+        onConnected(() -> document().animation().every(this, this::tickFrame));
         // NOT setHitTest(false): that applies to the whole subtree, so the balloons' own close buttons and
         // action links would stop taking the pointer too. The layer is sized to its content instead, so
         // there is nothing of it to click beside them.
@@ -143,22 +144,8 @@ public class NotificationBalloons extends UIElement {
      * old registration to expire on its next frame while the new one is already live.</p>
      */
     @Override
-    protected void disconnected() {
-        subscriptions.disconnectAll();
-    }
-
-    /**
-     * <p>{@code onWindowChanged(previous, current)} has no counterpart — the node tree reports
-     * connect and disconnect separately — and the split is faithful: the old hook released
-     * unconditionally and re-subscribed only when there was a window.</p>
-     */
-    @Override
     protected void connected() {
-        subscriptions.disconnectAll();
-        UIDocument current = document();
-        if (current == null) return;
-        subscriptions.add(Notifications.onDidChange.connect(this::apply));
-        current.animation().every(this, delta -> document() == current && tickFrame(delta));
+        super.connected();
     }
 
     /**

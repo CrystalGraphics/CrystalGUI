@@ -4,7 +4,6 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.widget.config.ConfigControl;
 
 import java.util.ArrayList;
@@ -86,6 +85,21 @@ public class Inspector extends UIElement {
         super(NAME);
         addClass(INSPECTOR_CLASS);
         append(tabs);
+
+        // ALL THREE OUTLIVE THIS ELEMENT -- two are static and one belongs to the window -- so an
+        // inspector that subscribed and was then discarded would stay connected for the life of the
+        // process, holding a detached subtree behind it. @see UINode#whileConnected
+        //
+        // Blender's notifier: anything that changes what is inspected says so, and every inspector
+        // re-asks. Deferred and deduplicated, so emitting freely is the intended usage.
+        whileConnected(() -> InspectorRegistry.onDidChangeSubject.connect(this::refresh));
+        // AND A SUBJECT THAT HAS BEEN CLOSED, which the retention rules would otherwise hold forever:
+        // a detached source is kept on purpose, and a source nothing can describe is kept on purpose, so
+        // a document whose editor was released stayed on screen with its tabs intact. @see #forget
+        whileConnected(() -> InspectorRegistry.onDidCloseSubject.connect(this::forget));
+        // AND THE FOCUS OWNER, which is where the subject actually comes from -- see subjectFrom.
+        whileConnected(() -> document().focus().onDidChangeFocus.connect(this::onFocusChanged));
+        onConnected(() -> document().animation().every(this, this::tickFrame));
     }
 
     /**
@@ -100,32 +114,8 @@ public class Inspector extends UIElement {
     private boolean pending;
 
     @Override
-    protected void disconnected() {
-        subscriptions.disconnectAll();
-    }
-
-    @Override
     protected void connected() {
-        UIDocument current = document();
-        // RELEASED FIRST, and unconditionally. Both signals below outlive this element -- one is static
-        // and one belongs to the window -- so an inspector that subscribed and was then discarded would
-        // stay connected for the life of the process, holding a detached subtree. That is the same
-        // failure ConfigControl.connections() exists for, and it would only become unbounded once there
-        // is more than one Inspector, which is exactly the second-area feature this design allows.
-        subscriptions.disconnectAll();
-        if (current == null) return;
-        document().animation().every(this, this::tickFrame);
-
-        // Blender's notifier: anything that changes what is inspected says so, and every inspector
-        // re-asks. Deferred and deduplicated below, so emitting freely is the intended usage.
-        subscriptions.add(InspectorRegistry.onDidChangeSubject.connect(this::refresh));
-        // AND A SUBJECT THAT HAS BEEN CLOSED, which the retention rules would otherwise hold forever:
-        // a detached source is kept on purpose, and a source nothing can describe is kept on purpose, so
-        // a document whose editor was released stayed on screen with its tabs intact. @see #forget
-        subscriptions.add(InspectorRegistry.onDidCloseSubject.connect(this::forget));
-        // AND THE FOCUS OWNER, which is where the subject actually comes from — see subjectFrom.
-        subscriptions.add(current.focus().onDidChangeFocus.connect(this::onFocusChanged));
-
+        super.connected();
         // AND RE-ASK, because entering a tree is itself a reason the answer may have changed.
         //
         // A RegionHost re-parents its occupant on every sync -- SplitView.paneContent clears and re-adds
@@ -138,19 +128,10 @@ public class Inspector extends UIElement {
         // the "nothing can describe it, keep the last subject" rule below tests. Clearing it disables that
         // rule for one rebuild -- and a rebuild is exactly what a re-parent triggers.
         //
-        // Closing a region does BOTH at once. The press moves focus to the header's close button, so
-        // inspect(thatButton) is queued; hiding the region re-parents this element; and the rebuild then
-        // ran against a button with the retention rule switched off. The panel blanked, and clicking the
-        // graph brought it back -- which is precisely what a lost subject looks like rather than a lost
-        // layout.
-        //
         // Setting pending alone is enough: a genuinely different answer has a different key and gets
         // through on its own merit, and one that resolves to nothing is held back as it should be.
         pending = true;
     }
-
-    /** Everything this inspector subscribed to that outlives it. @see #connected */
-    private final ConnectionGroup subscriptions = new ConnectionGroup();
 
     /**
      * <b>The focus owner is the subject</b> — Blender's {@code context.object}, IntelliJ's data context

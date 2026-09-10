@@ -47,7 +47,7 @@ import com.crystalgui.workbench.toolwindow.ToolWindowManager;
  * <pre>{@code
  * public Disposable activate(WorkbenchContext workbench) {
  *     Disposable panel = workbench.registerToolWindow(ToolWindowKind.of("mymod:panel", "My Panel")
- *             .view(ctx -> myView).openByDefault());
+ *             .view(myView).openByDefault());
  *     Disposable kind  = workbench.kinds().register(MY_FILE_TYPE);
  *     workbench.onDidOpenDocument().connect(path -> ...);
  *     return () -> { kind.dispose(); panel.dispose(); };

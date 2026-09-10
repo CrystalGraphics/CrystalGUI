@@ -1352,10 +1352,24 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         UIElement built = toolWindowViews.get(viewId);
         if (built != null) return built;
         built = factory.apply(this);
+        // BEING DOCKED DOES NOT SIZE A PANEL, and every one of them had to say so itself. The tab's pane
+        // fills its group and the panel inside it was still content-sized, so a panel with rows in it
+        // laid out at nothing and read as empty -- the fourth time this same omission was found and
+        // given to one more container by hand. The class is the engine's half; ua/workbench.css has the
+        // three declarations. @see PANEL_CONTENT_CLASS
+        built.addClass(PANEL_CONTENT_CLASS);
         if (kind.isPersistent()) built.set(Attribute.SESSION_PERSISTENT, true);
         toolWindowViews.put(viewId, built);
         return built;
     }
+
+    /**
+     * On the view of every registered tool window, so the sheet can give it the fill idiom.
+     *
+     * <p>A panel author states what goes <em>inside</em> their panel; that the panel itself fills the
+     * dock is the dock's business and is no longer theirs to remember.</p>
+     */
+    public static final String PANEL_CONTENT_CLASS = "__panel-content__";
 
     /** What {@link #registerToolWindow} has built, so a rebuilt strip gets the same panel back. */
     private final Map<String, UIElement> toolWindowViews = new HashMap<>();
