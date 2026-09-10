@@ -49,7 +49,7 @@ public final class InspectorExtension implements WorkbenchExtension {
                 ToolWindowKind.of(TYPE, "Inspector")
                         .icon("crystalgui:package")
                         .region(DockRegion.AUXILIARY)
-                        .view(ctx -> inspector)
+                        .view(inspector)
                         .openByDefault());
 
         // A SEED, NOT THE POLICY. The workbench states what it just put in front so a restored tab has a

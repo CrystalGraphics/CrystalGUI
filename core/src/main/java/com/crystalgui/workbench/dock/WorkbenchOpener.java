@@ -484,7 +484,9 @@ public final class WorkbenchOpener {
             // that does not move the answer. @see #refreshPanelForTab
             if (view != null) {
                 workbench.placeholders.remove(ref);
-                return view.view();
+                // THROUGH THE TAB, which asks the editor once -- the dock memoises what this factory
+                // answers, so a second element here would be the one on screen forever.
+                return tab.viewElement();
             }
             workbench.placeholders.put(ref, tab == null ? DocumentState.LOADING : tab.state());
             return new UIElement();

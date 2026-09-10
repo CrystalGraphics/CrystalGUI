@@ -5,6 +5,7 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -45,10 +46,22 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     /** Shared, like every other drawable's material. {@code gui_backdrop_filter.shader} declares its own buffer. */
     private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_backdrop_filter.shader");
 
-    /** Drawn instead of the filter when there is no backdrop to sample. @see #setFallbackColor */
-    private final CgUiRect fallback = new CgUiRect();
-
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
+
+    /**
+     * <b>Per-draw scratch for {@link #quadBody} and {@link #writeProperties}</b>, which are held as
+     * FIELDS so a draw allocates neither.
+     *
+     * <p>{@code withMaterial} and {@code applyProperties} each take a callback, and a lambda over the
+     * draw's arguments is a fresh capture every time one runs — on a path that is per element per
+     * frame. A method reference stored once costs nothing after construction. These fields are not
+     * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
+     */
+    private CgUiPaintContext drawCtx;
+    private CgUiPaintContext.Backdrop drawBackdrop;
+    private float drawX, drawY, drawWidth, drawHeight;
+    private final Runnable quadBody = this::quadBody;
+    private final java.util.function.Consumer<CgShaderBindings> propertyWriter = this::writeProperties;
 
     /** Radius of the Gaussian, in logical px. */
     @Getter @Setter
@@ -158,9 +171,12 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         // panel that darkened as the radius grew. A separable blur has one number and no mapping.
         CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius);
         if (backdrop == null || backdrop.sharp() == null || backdrop.blurred() == null) {
-            fallback.withCornerRadius(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
-            fallback.withFillColor(fallbackColorArgb);
-            fallback.draw(ctx, mouseX, mouseY, x, y, width, height);
+            // The context's scratch, so a glass panel with nothing behind it does not allocate a rect
+            // per frame to say so. @see #setFallbackColor
+            ctx.rect().at(x, y).size(width, height)
+                    .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
+                    .fillColor(fallbackColorArgb)
+                    .submit();
             return;
         }
 
@@ -171,37 +187,44 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         MATERIAL.toggleKeyword("WITH_SPECULAR", specular > 0f);
         MATERIAL.toggleKeyword("WITH_NOISE", noise > 0f);
 
+        drawCtx = ctx;
+        drawBackdrop = backdrop;
+        drawX = x; drawY = y; drawWidth = width; drawHeight = height;
         // BEFORE withMaterial: binding validates the samplers the material already holds, and after a
         // surface resize those are textures the rebuild deleted. @see CgUiBackdropFilter#blurPass
-        MATERIAL.applyProperties(b -> {
-                b.sampler("_MainTex", 0, backdrop.blurred());
-                b.sampler("_SharpTex", 1, backdrop.sharp());
-                b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
-                b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
-                b.vec2("_BoxSize", width, height);
-                b.vec4("_BackdropRect", backdrop.u0(), backdrop.v0(),
-                        backdrop.u1(), backdrop.v1());
-                b.colorARGB("_Tint", tintArgb);
-                b.set1f("_Saturation", saturation);
-                b.set1f("_Luminosity", luminosity);
-                b.set1f("_Bezel", bezel);
-                b.set1f("_Ior", ior);
-                b.set1f("_Specular", specular);
-                b.set1f("_Glow", glow);
-                b.set1f("_EdgeHighlight", edgeHighlight);
-                b.set1f("_EdgeWidth", edgeWidth);
-                b.set1f("_RimAmbient", rimAmbient);
-                b.set1f("_Chromatic", chromatic);
-                b.set1f("_Noise", noise);
-                // Fixed in ELEMENT space, not screen space, so the highlight does not swim across the
-                // surface when the window it belongs to is dragged. Up and to the left, which is where
-                // every UI toolkit has put its light since bevels were invented.
-                // 45 degrees, which is where both references put it -- and with a symmetric
-                // highlight the axis is a diagonal rather than a direction, so a diagonal is the
-                // honest spelling of it.
-                b.vec2("_LightDir", -0.7071f, -0.7071f);
-        });
-        ctx.withMaterial(MATERIAL, () ->
-                ctx.quad().at(x, y).size(width, height).color(ctx.getColor()).submit());
+        MATERIAL.applyProperties(propertyWriter);
+        ctx.withMaterial(MATERIAL, quadBody);
+    }
+
+    private void quadBody() {
+        drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawCtx.getColor()).submit();
+    }
+
+    private void writeProperties(CgShaderBindings b) {
+        b.sampler("_MainTex", 0, drawBackdrop.blurred());
+        b.sampler("_SharpTex", 1, drawBackdrop.sharp());
+        b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
+        b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
+        b.vec2("_BoxSize", drawWidth, drawHeight);
+        b.vec4("_BackdropRect", drawBackdrop.u0(), drawBackdrop.v0(),
+                drawBackdrop.u1(), drawBackdrop.v1());
+        b.colorARGB("_Tint", tintArgb);
+        b.set1f("_Saturation", saturation);
+        b.set1f("_Luminosity", luminosity);
+        b.set1f("_Bezel", bezel);
+        b.set1f("_Ior", ior);
+        b.set1f("_Specular", specular);
+        b.set1f("_Glow", glow);
+        b.set1f("_EdgeHighlight", edgeHighlight);
+        b.set1f("_EdgeWidth", edgeWidth);
+        b.set1f("_RimAmbient", rimAmbient);
+        b.set1f("_Chromatic", chromatic);
+        b.set1f("_Noise", noise);
+        // Fixed in ELEMENT space, not screen space, so the highlight does not swim across the surface
+        // when the window it belongs to is dragged. Up and to the left, which is where every UI toolkit
+        // has put its light since bevels were invented. 45 degrees, which is where both references put
+        // it -- and with a symmetric highlight the axis is a diagonal rather than a direction, so a
+        // diagonal is the honest spelling of it.
+        b.vec2("_LightDir", -0.7071f, -0.7071f);
     }
 }

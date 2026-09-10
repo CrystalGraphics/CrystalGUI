@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.decoration;
 
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.CgPath;
 
@@ -43,12 +44,24 @@ public final class FileDecorations {
 
     private final List<FileDecorationProvider> providers = new ArrayList<>();
 
-    public FileDecorations addProvider(FileDecorationProvider provider) {
-        if (provider != null && !providers.contains(provider)) {
+    /**
+     * Adds a provider, and hands back the way to withdraw it.
+     *
+     * <pre>{@code
+     * Disposable handle = workbench.decorations().addProvider(myProvider);
+     * }</pre>
+     *
+     * <p>The handle rather than the fluent {@code this} it used to answer: every other registration on
+     * the extension surface returns one, and an extension that has to remember the provider instance to
+     * pass back to {@link #removeProvider} is keeping a lifetime by hand for no reason.</p>
+     */
+    public Disposable addProvider(FileDecorationProvider provider) {
+        if (provider == null) return () -> { };
+        if (!providers.contains(provider)) {
             providers.add(provider);
             onChanged.emit();
         }
-        return this;
+        return () -> removeProvider(provider);
     }
 
     public FileDecorations removeProvider(FileDecorationProvider provider) {

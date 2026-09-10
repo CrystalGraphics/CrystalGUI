@@ -409,30 +409,35 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
             if (row != null) selectedItems.add(row.item());
         }
 
-        // ONE announcement, not one per row. A ListView rebuilds its realised window on every change, so
-        // adding a flattened tree row by row rebuilt it once per row -- and each rebuild discarded the
-        // horizontal scroll extent and re-measured it, which is what made the scrollbar flicker on every
-        // refresh.
-        getModel().setAll(flattened);
+        // ONE ANNOUNCEMENT FOR THE WHOLE REBUILD. Putting the selection back means taking it apart --
+        // clear what the clamp left, then restore the remembered items one by one -- and every step of
+        // that used to be announced as though a person had done it. @see ListView#withoutAnnouncing
+        withoutAnnouncing(() -> {
+            // ONE announcement, not one per row. A ListView rebuilds its realised window on every change, so
+            // adding a flattened tree row by row rebuilt it once per row -- and each rebuild discarded the
+            // horizontal scroll extent and re-measured it, which is what made the scrollbar flicker on every
+            // refresh.
+            getModel().setAll(flattened);
 
-        // CLEARED FIRST, and this is the half that was missing. ListView's clamp only discards indices that
-        // are now OUT OF RANGE -- an index that is still in range survives and quietly points at a
-        // different row. Restoring the remembered items on top of that leaves BOTH: the stale index and the
-        // real one, selected together.
-        //
-        // It showed as the file tree gaining a selected row on every flip of the search mode. Nothing was
-        // additive; each flip left one more index behind, so the selection grew by one and looked like
-        // repeated clicking. The remembered items above are the whole truth about what is selected, so
-        // anything the clamp happened to leave is noise.
-        clearSelection();
+            // CLEARED FIRST, and this is the half that was missing. ListView's clamp only discards indices that
+            // are now OUT OF RANGE -- an index that is still in range survives and quietly points at a
+            // different row. Restoring the remembered items on top of that leaves BOTH: the stale index and the
+            // real one, selected together.
+            //
+            // It showed as the file tree gaining a selected row on every flip of the search mode. Nothing was
+            // additive; each flip left one more index behind, so the selection grew by one and looked like
+            // repeated clicking. The remembered items above are the whole truth about what is selected, so
+            // anything the clamp happened to leave is noise.
+            clearSelection();
 
-        if (selectedItems.isEmpty()) return;
-        for (int index = 0; index < flattened.size(); index++) {
-            // toggle(), because it is the additive one -- select() replaces, so restoring a multi-selection
-            // through it would leave only the last row. Anything no longer in the tree simply drops out,
-            // which is what a deleted or collapsed-away row should do.
-            if (selectedItems.contains(flattened.get(index).item()) && !isSelected(index)) toggle(index);
-        }
+            if (selectedItems.isEmpty()) return;
+            for (int index = 0; index < flattened.size(); index++) {
+                // toggle(), because it is the additive one -- select() replaces, so restoring a multi-selection
+                // through it would leave only the last row. Anything no longer in the tree simply drops out,
+                // which is what a deleted or collapsed-away row should do.
+                if (selectedItems.contains(flattened.get(index).item()) && !isSelected(index)) toggle(index);
+            }
+        });
     }
 
     private void flatten(T item, int depth, int parentIndex, List<TreeRow<T>> out) {

@@ -4,7 +4,6 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.scroll.ScrollerView;
@@ -98,8 +97,6 @@ public class NotificationsView extends UIElement {
     private final ScrollerView list = new ScrollerView();
     private final UIText empty = new UIText("No notifications");
 
-    private final ConnectionGroup subscriptions = new ConnectionGroup();
-
     /**
      * The card showing each notification, so a repeat or an eviction can reach the one already on screen.
      *
@@ -111,6 +108,12 @@ public class NotificationsView extends UIElement {
     public NotificationsView() {
         super(NAME);
         addClass(PANEL_CLASS);
+        whileConnected(() -> Notifications.onDidChange.connect(this::apply));
+        // OPENING THE PANEL IS READING IT, which is why the mark is here and not in a click handler.
+        onConnected(() -> {
+            rebuild();
+            Notifications.markAllRead();
+        });
 
         head.addClass(HEAD_CLASS);
         title.addClass(TITLE_CLASS);
@@ -146,26 +149,6 @@ public class NotificationsView extends UIElement {
      * messages stay until "Clear all". Folding the two together is how a panel you opened once quietly
      * threw away the thing you opened it for.</p>
      */
-    @Override
-    protected void disconnected() {
-        subscriptions.disconnectAll();
-    }
-
-    /**
-     * <p>{@code onWindowChanged(previous, current)} has no counterpart — the node tree reports
-     * connect and disconnect separately — and the split is faithful: the old hook released
-     * unconditionally and re-subscribed only when there was a window.</p>
-     */
-    @Override
-    protected void connected() {
-        subscriptions.disconnectAll();
-        UIDocument current = document();
-        if (current == null) return;
-        subscriptions.add(Notifications.onDidChange.connect(this::apply));
-        rebuild();
-        Notifications.markAllRead();
-    }
-
     /** One change, applied where it landed. @see NotificationsView */
     private void apply(NotificationEvent event) {
         switch (event.kind()) {

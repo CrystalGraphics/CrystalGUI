@@ -75,7 +75,7 @@ public final class ProblemsExtension implements WorkbenchExtension {
                 ToolWindowKind.of(TYPE, "Problems")
                         .icon("crystalgui:toolwindows/problems")
                         .anchor(DockDropZone.SPLIT_DOWN)
-                        .view(ctx -> panel)
+                        .view(panel)
                         .toggle(SHOW)
                         .openByDefault());
 

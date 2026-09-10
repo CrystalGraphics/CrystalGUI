@@ -1,6 +1,5 @@
 package com.crystalgui.desktop.taskbar;
 
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -161,8 +160,6 @@ public class Taskbar extends UIElement {
     /** Entries mid-arrival. @see #exiting */
     private final Map<WindowFrame, TaskbarEntryMotion> entering = new LinkedHashMap<>();
 
-    private final ConnectionGroup subscriptions = new ConnectionGroup();
-
     /**
      * Built by {@link Desktop}; public because a tag needs a factory.
      *
@@ -173,6 +170,10 @@ public class Taskbar extends UIElement {
      */
     public Taskbar() {
         super(NAME);
+        // `desktop()` walks parents, so it can only answer once this is in a tree -- which is exactly
+        // when the supplier runs. @see UINode#whileConnected
+        whileConnected(() -> desktop().registry().onDidChange.connect(this::refresh));
+        onConnected(this::refresh);
         // THE HAIRLINE FIRST, so it paints under the entries rather than over them. Absolute, so the row
         // below still centres its island as if the edge were not there.
         UIElement edge = new UIElement();
@@ -254,19 +255,8 @@ public class Taskbar extends UIElement {
      * reason: the registry outlives any taskbar that has left the tree.
      */
     @Override
-    protected void disconnected() {
-        super.disconnected();
-        subscriptions.disconnectAll();
-    }
-
-    @Override
     protected void connected() {
         super.connected();
-        subscriptions.disconnectAll();
-        Desktop desktop = desktop();
-        if (desktop == null) return;
-        subscriptions.add(desktop.registry().onDidChange.connect(this::refresh));
-        refresh();
     }
 
     /** The desktop this strip belongs to — always its parent, and null only while detached. */

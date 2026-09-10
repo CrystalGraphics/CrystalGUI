@@ -103,7 +103,7 @@ public final class TransformGesture {
         // THE ORDERED WALK IS THE FAST PATH, and it is exact: ops already in the order this gesture
         // composes them are read straight into the fields, so a value written by this tool comes back
         // as the numbers that were typed rather than as their matrix rounded off.
-        if (!inCanonicalOrder(existing)) {
+        if (!inCanonicalOrder(existing) || carriesBothShears(existing)) {
             return decomposeMatrix(existing);
         }
 
@@ -189,6 +189,29 @@ public final class TransformGesture {
         skewX = (float) Math.atan(shear);
         skewY = 0f;
         return true;
+    }
+
+    /**
+     * Whether a {@code skew} carries BOTH shears, which is a parameterisation the handles cannot drive.
+     *
+     * <p>The fields hold seven numbers for a six-degree-of-freedom matrix and {@code skewY} is the spare,
+     * so a canonical reading always puts the shear in {@code skewX} alone. That is not a tidiness rule.
+     * Changing {@code skewX} moves the dragged edge along the ROTATION's axis and nothing else — it falls
+     * out of the derivative, {@code R · dK/d(tanX) · S}, whatever the pointer is measured through — so the
+     * handle only tracks the hand while the rotation op IS the box's apparent orientation. Two large
+     * shears cancel part of the rotation, and then it is not.</p>
+     *
+     * <p>This tool writes {@code skewY} when a side edge is dragged, so it can wind its own output up over
+     * several gestures. The scratch document's {@code #hint} was one: {@code rotate(-1.199)
+     * skew(-1.189, 1.213) scale(0.344, 0.361)}, which draws square while its rotation op is −68°, so a
+     * 30px drag moved the edge 4px — {@code cos²} of the error. Decomposing gives the same matrix back
+     * with the rotation the box is really at.</p>
+     */
+    private static boolean carriesBothShears(Transform transform) {
+        for (Transform.Op op : transform.ops()) {
+            if (op.kind() == Transform.Kind.SKEW && op.fx() != 0f && op.fy() != 0f) return true;
+        }
+        return false;
     }
 
     /** Whether the ops are already in the order the fields compose them in. @see #decomposeMatrix */

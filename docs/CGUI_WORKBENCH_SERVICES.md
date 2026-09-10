@@ -358,12 +358,18 @@ One type. A command carries its id, title, enablement, default bindings **and** 
 registered into `CommandRegistry.global()`.
 
 ```java
-CommandRegistry.global().register(Command.of("graph.delete", "Delete")
+Disposable handle = CommandRegistry.global().register(Command.of("graph.delete", "Delete")
         .binding("Delete", "Backspace")
         .menu(MenuId.GRAPH_CONTEXT, "modify", 10)
         .enabledWhereData(context -> context.has(GraphView.GRAPH_VIEW))
         .runWithData(context -> context.require(GraphView.GRAPH_VIEW).deleteSelection()));
 ```
+
+**`register` and `contributeMenu` both answer a `Disposable`**, which is what a `WorkbenchExtension`
+returns from `activate` — the registry is process-wide, so this is the class of registration that
+otherwise outlives the workbench that made it. Disposing removes the command only if it is still the
+one registered, so unloading a feature cannot delete an override somebody put over the top of it.
+`unregister(id)` is still there as the imperative form.
 
 > There was briefly a separate `Action`/`ActionRegistry` beside this. It was the same concept under a
 > second name — a command with menu and binding metadata — so it was folded back in. If you find a
@@ -589,6 +595,7 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 
 | Signal | Owner | Replaced |
 |---|---|---|
+| `onDidChangeActive` | `EditorService` | the Design panel's per-frame poll, and the Inspector's three-source workaround |
 | `onDidChangeActivePanel` | `DockArea` | three per-frame polls at once |
 | `onDidClosePanel` | `DockArea` | nothing — the fact nobody could state |
 | `onDidOpenDocument` / `onDidCloseDocument` | `Workbench` | `onDocumentLoaded`, and its missing half |

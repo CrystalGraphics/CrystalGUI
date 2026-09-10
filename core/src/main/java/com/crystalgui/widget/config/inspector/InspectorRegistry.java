@@ -3,6 +3,7 @@ package com.crystalgui.widget.config.inspector;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.ui.dom.UIElement;
 import javax.annotation.Nullable;
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 
 import java.util.ArrayList;
@@ -66,9 +67,12 @@ public final class InspectorRegistry {
     }
 
     /** Idempotent per instance, so a contribution that runs twice does not double every form. */
-    public static void register(InspectorSection section) {
-        if (section == null || SECTIONS.contains(section)) return;
-        SECTIONS.add(section);
+    public static Disposable register(InspectorSection section) {
+        if (section == null) return () -> { };
+        if (!SECTIONS.contains(section)) SECTIONS.add(section);
+        // The handle rather than nothing, so a caller need not pair this with `remove` by hand. A
+        // contribution installed more than once wants SectionSet, which counts its holders.
+        return () -> remove(section);
     }
 
     /**

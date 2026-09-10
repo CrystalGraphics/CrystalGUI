@@ -24,7 +24,6 @@ import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
@@ -92,10 +91,6 @@ public final class TransformBox extends UIElement {
      * <p>Half the dot plus a pixel of tolerance, so the scale zone is what the eye sees plus a hair.</p>
      */
     private static final float GRAB = HANDLE_SIZE * 0.5f + 1f;
-
-    /** Fully rounded, so the square is a circle at any size. @see #HANDLE_SIZE */
-    private final CgUiRect dot = new CgUiRect()
-            .withCornerRadius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f);
 
     private static final float PIVOT_SIZE = 9f;
 
@@ -770,12 +765,16 @@ public final class TransformBox extends UIElement {
             edge(paint, corners[i], corners[(i + 1) % 4], colour);
         }
 
-        dot.withFillColor(colour);
+        // Fully rounded, so each square handle is a circle at any size. @see #HANDLE_SIZE
         for (Spot spot : Spot.values()) {
             Vector2f at = handleAt(spot);
             if (at == null) continue;
-            dot.draw(paint, 0f, 0f, at.x - HANDLE_SIZE * 0.5f, at.y - HANDLE_SIZE * 0.5f,
-                    HANDLE_SIZE, HANDLE_SIZE);
+            paint.rect()
+                    .at(at.x - HANDLE_SIZE * 0.5f, at.y - HANDLE_SIZE * 0.5f)
+                    .size(HANDLE_SIZE, HANDLE_SIZE)
+                    .radius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f)
+                    .fillColor(colour)
+                    .submit();
         }
 
         Vector2f pivot = toViewport(gesture.originX(), gesture.originY());

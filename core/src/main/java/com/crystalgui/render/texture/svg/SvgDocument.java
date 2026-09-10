@@ -79,7 +79,6 @@ public final class SvgDocument {
      * multisampled target never sees this ramp twice — measured: a pixel-aligned edge under 4x MSAA
      * reads exactly 0 / 1 with it, and a stroke with no ramp is simply aliased.</p>
      */
-    private static final float STROKE_FEATHER = 1f;
 
     /** Path to parsed document; see {@link #of}. */
     private static final Map<String, SvgDocument> CACHE = new ConcurrentHashMap<>();
@@ -584,8 +583,10 @@ public final class SvgDocument {
 
             SvgScene.Stroke stroke = node.stroke();
             if (stroke != null) {
+                // Both ends, because SVG has no per-end linecap: stroke.cap() is the one value
+                // `stroke-linecap` parsed, not the start/end pair CgVectorRenderer packs.
                 SvgGeometry.Segments segments = SvgGeometry.segmentsOf(
-                        node.contours(), stroke.cap() & 3, (stroke.cap() >> 2) & 3);
+                        node.contours(), stroke.cap(), stroke.cap());
                 if (segments.data().length > 0) {
                     SvgScene.Solid paint = (SvgScene.Solid) stroke.paint();
                     ops.add(new DrawOp(false, segments.data(), null, null, null, null, true,
@@ -825,19 +826,14 @@ public final class SvgDocument {
         CgProfiler.count("svg.strokeSegments", op.data().length / 4);
         try (CgProfiler.Scope ignored = CgProfiler.scope("svg.drawStroke")) {
         float[] s = op.data();
-        float feather = STROKE_FEATHER / ctx.deviceScale();
         for (int i = 0; i < s.length; i += 4) {
             // Per SEGMENT, not per op: the caps were decided where the contour structure was still known,
             // so an interior joint gets one round cap and the stroke's real ends keep what the file asked
             // for. See SvgGeometry.segmentsOf.
             int[] caps = op.segmentCaps();
-            int packed = caps == null ? op.cap() : caps[i / 4];
+            // op.cap() is one linecap, so it goes to both ends -- see segmentsOf above.
+            int packed = caps == null ? (op.cap() & 3) | ((op.cap() & 3) << 2) : caps[i / 4];
             ctx.curve()
-                    // The feather is a logical distance the pose scales like a width; the ramp is
-                    // stated in device pixels, so divide the scale out. It was zero here once, on the
-                    // theory that MSAA already antialiased the edge -- it never did, the shader runs
-                    // once per pixel, and a "crisp" stroke was an aliased one.
-                    .feather(feather)
                     .line(x + s[i] * scale, y + s[i + 1] * scale,
                             x + s[i + 2] * scale, y + s[i + 3] * scale)
                     .width(halfWidth)

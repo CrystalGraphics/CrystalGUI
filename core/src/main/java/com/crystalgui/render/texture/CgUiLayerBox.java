@@ -25,14 +25,28 @@ public record CgUiLayerBox(float x, float y, float width, float height) {
     public static CgUiLayerBox resolve(CgUiDrawable drawable,
                                        float boxX, float boxY, float boxWidth, float boxHeight,
                                        DrawableFit fit, DrawableAlign align) {
+        float[] out = new float[4];
+        resolveInto(drawable, boxX, boxY, boxWidth, boxHeight, fit, align, out);
+        return new CgUiLayerBox(out[0], out[1], out[2], out[3]);
+    }
+
+    /**
+     * {@link #resolve} writing {@code x, y, width, height} into {@code out} instead of answering a
+     * record — for the painter, which lays out a mask and an overlay per element per frame.
+     */
+    public static void resolveInto(CgUiDrawable drawable,
+                                   float boxX, float boxY, float boxWidth, float boxHeight,
+                                   DrawableFit fit, DrawableAlign align, float[] out) {
         if (fit == DrawableFit.FILL) {
-            return new CgUiLayerBox(boxX, boxY, boxWidth, boxHeight);
+            fill(out, boxX, boxY, boxWidth, boxHeight);
+            return;
         }
 
         float naturalWidth = drawable.intrinsicWidth();
         float naturalHeight = drawable.intrinsicHeight();
         if (naturalWidth <= 0f || naturalHeight <= 0f) {
-            return new CgUiLayerBox(boxX, boxY, boxWidth, boxHeight);
+            fill(out, boxX, boxY, boxWidth, boxHeight);
+            return;
         }
 
         float width;
@@ -59,8 +73,14 @@ public record CgUiLayerBox(float x, float y, float width, float height) {
         }
 
         // Leftover can be negative (COVER), in which case the factors pick which side overflows.
-        float x = boxX + align.xFactor() * (boxWidth - width);
-        float y = boxY + align.yFactor() * (boxHeight - height);
-        return new CgUiLayerBox(x, y, width, height);
+        fill(out, boxX + align.xFactor() * (boxWidth - width),
+                boxY + align.yFactor() * (boxHeight - height), width, height);
+    }
+
+    private static void fill(float[] out, float x, float y, float width, float height) {
+        out[0] = x;
+        out[1] = y;
+        out[2] = width;
+        out[3] = height;
     }
 }

@@ -6,7 +6,6 @@ import java.util.List;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.theme.ThemeRegistry;
 import com.crystalgui.style.theme.UiTheme;
@@ -60,8 +59,6 @@ public final class BuilderToolbar extends UIElement {
 
     private final BuilderSurfaceHost host;
 
-    private final ConnectionGroup connections = new ConnectionGroup();
-
     private final List<float[]> presets = new ArrayList<>();
 
     private final Dropdown preset = new Dropdown("Size");
@@ -89,16 +86,16 @@ public final class BuilderToolbar extends UIElement {
             preset.addOption(Math.round(size[0]) + " x " + Math.round(size[1]));
         }
         preset.select(0);
-        connections.add(preset.onSelectionChanged.connect(this::choosePreset));
+        whileConnected(() -> preset.onSelectionChanged.connect(this::choosePreset));
 
         for (int each : UI_SCALES) scale.addOption(each + "x");
         scale.select(0);
-        connections.add(scale.onSelectionChanged.connect(this::chooseScale));
+        whileConnected(() -> scale.onSelectionChanged.connect(this::chooseScale));
 
         for (UiTheme installed : ThemeRegistry.themes()) theme.addOption(installed.id());
         String active = UiThemeManager.getInstance().activeThemeId();
         if (active != null) theme.select(active);
-        connections.add(theme.onSelectionChanged.connect(this::chooseTheme));
+        whileConnected(() -> theme.onSelectionChanged.connect(this::chooseTheme));
 
         preview.addClass(PREVIEW_CLASS);
         preview.onPressed.connect(() -> setPreview(host.isDesignMode()));
@@ -186,9 +183,4 @@ public final class BuilderToolbar extends UIElement {
         }
     }
 
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        connections.disconnectAll();
-    }
 }

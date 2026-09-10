@@ -1,11 +1,13 @@
 package com.crystalgui.render.texture;
 
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * A rectangle with a {@link Fill} — the one drawable behind every {@code background}, and the
@@ -42,9 +44,21 @@ import java.util.Objects;
  * atlas sprite wants.</p>
  *
  * <p><b>IMMUTABLE, which is what makes that safe.</b> Every configuration method returns a new rect,
- * so a background the cascade is holding cannot be reshaped by whoever paints it — {@code BoxPainter}
- * builds its own from the element's radii and the background's fill. A shared value that could be
- * mutated is a value in name only, and this one is shared by every element a rule matches.</p>
+ * so a background the cascade is holding cannot be reshaped by whoever paints it. A shared value that
+ * could be mutated is a value in name only, and this one is shared by every element a rule matches.</p>
+ *
+ * <h3>Building one to draw it is the wrong way round</h3>
+ *
+ * <p>The copies are affordable where a value is parsed once and cascaded. They are not affordable per
+ * element per frame, which is what a painter does — so a painter does not build one at all:
+ * {@link Draw}, reached as {@code ctx.rect()}, is a single reusable scratch that draws the same
+ * picture and allocates nothing. {@code BoxPainter} composes the element's radii, its border and the
+ * background's own {@code Fill} straight into it, and {@link #draw} does the same with this value's
+ * fields.</p>
+ *
+ * <pre>{@code
+ * ctx.rect().at(x, y).size(w, h).radius(6f, 6f).border(1f, edge).fillColor(bg).submit();
+ * }</pre>
  */
 public final class CgUiRect implements CgUiDrawable {
 
@@ -108,6 +122,32 @@ public final class CgUiRect implements CgUiDrawable {
         this.borderColorArgb = borderColorArgb;
         this.borderTopColorArgb = borderTopColorArgb;
         this.borderBottomColorArgb = borderBottomColorArgb;
+    }
+
+    /**
+     * <b>The whole rect at once</b> — every field, one object.
+     *
+     * <p>For a caller that already holds all of it, which is what a PAINTER does: the fluent
+     * {@code with} methods each answer a copy, so building the same rect through them allocates one
+     * object per call and throws away all but the last. That is affordable where a value is built once
+     * and cascaded; it is not affordable per element per frame. {@code BoxPainter} builds one of these
+     * for every element carrying a radius or a border, which on a canvas holding ten thousand nodes is
+     * forty thousand objects a frame through the chain and ten thousand through this.</p>
+     *
+     * <pre>{@code
+     * CgUiRect.shaped(fill, rx, ry, rx, ry, rx, ry, rx, ry, 1f, edge, edge, edge)
+     *         .draw(ctx, 0f, 0f, width, height);
+     * }</pre>
+     *
+     * <p>Radii are per corner and per axis in CSS {@code border-radius} order (TL, TR, BR, BL), each an
+     * (rx, ry) pair. Pass {@code borderColorArgb} for all three colours for an unsliced border — the
+     * shader only engages {@code SPLIT_BORDER} when top or bottom actually differs.</p>
+     */
+    public static CgUiRect shaped(Fill fill, float rxTL, float ryTL, float rxTR, float ryTR,
+                                  float rxBR, float ryBR, float rxBL, float ryBL, float borderWidth,
+                                  int borderColorArgb, int borderTopColorArgb, int borderBottomColorArgb) {
+        return new CgUiRect(fill, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL,
+                borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb);
     }
 
     /** A flat fill, which is what a {@code #rrggbb} or {@code rgba()} background parses to. */
@@ -183,26 +223,18 @@ public final class CgUiRect implements CgUiDrawable {
         return fill instanceof Fill.Sprite(CgUiSprite sprite) ? sprite.sourceHeight() : -1f;
     }
 
+    /**
+     * Draws this rect through the paint context's shared {@link Draw} scratch, which is where every
+     * rect in the engine is actually drawn.
+     */
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
-        if (width <= 0f || height <= 0f) return;
-        switch (fill) {
-            case Fill.Color(int argb) -> {
-                if (isPlain()) ctx.fillRect(x, y, width, height, ArgbMath.multiply(argb, ctx.getColor()));
-                else drawShaped(ctx, x, y, width, height, ctx.getColor(), argb, null, null);
-            }
-            case Fill.Texture(CgTexture2D texture) -> {
-                if (texture == null) return;
-                if (isPlain()) {
-                    ctx.bindTexture(texture);
-                    ctx.quad().at(x, y).size(width, height).color(ctx.getColor()).submit();
-                    ctx.flush();
-                } else {
-                    drawShaped(ctx, x, y, width, height, ctx.getColor(), 0, texture, null);
-                }
-            }
-            case Fill.Sprite(CgUiSprite sprite) -> drawSprite(ctx, sprite, x, y, width, height);
-        }
+        ctx.rect()
+                .at(x, y).size(width, height)
+                .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
+                .border(borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb)
+                .fill(fill)
+                .submit();
     }
 
     /** Whether the frame's own batch can express this rect: no radius, no border. */
@@ -212,92 +244,265 @@ public final class CgUiRect implements CgUiDrawable {
                 && rxBR == 0f && ryBR == 0f && rxBL == 0f && ryBL == 0f;
     }
 
-    private void drawSprite(CgUiPaintContext ctx, CgUiSprite sprite,
-                            float x, float y, float width, float height) {
-        CgTexture2D resolved = sprite.resolveForDraw();
-        if (resolved == null) return;
-        int tint = ArgbMath.multiply(sprite.getTint(), ctx.getColor());
-        boolean missing = sprite.isFallback(resolved);
-
-        // A MISSING TEXTURE IS NOT WORTH SLICING, and a whole sprite was never sliced. The fallback
-        // checkerboard has no meaningful sub-rect, so cropping into it samples an arbitrary corner and a
-        // broken sprite reads as a solid colour instead of as missing -- which is also the one case the
-        // sliced path cannot serve, since that samples the sprite's own atlas UVs. One stretched copy of
-        // the whole checkerboard says "missing" at any size. CgUiPaintContext.drawImage is the only
-        // other site that can be handed a fallback.
-        if (missing || (!sprite.hasBorder() && isPlain())) {
-            ctx.bindTexture(resolved);
-            CgQuadRenderer.Quad q = ctx.quad().at(x, y).size(width, height).color(tint);
-            if (!missing) q.uv(sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3());
-            q.submit();
-            ctx.flush();
-            return;
-        }
-        // EVERY SHAPED SPRITE GOES DOWN THE SLICED PATH, bordered or not. With zero borders the nine
-        // regions degenerate to one — inner UVs equal outer, so the centre stretches the sprite's own
-        // sub-rect — which is the point: the old wrap handed the raw texture to a plain texture fill and
-        // dropped the sub-rect, so an ATLAS sprite with a border-radius sampled the whole sheet. It also
-        // means a borderless sprite finally honours its repeat modes under a radius.
-        drawShaped(ctx, x, y, width, height, tint, 0, null, sprite);
-    }
-
     /**
-     * The SDF path — a radius, a border, or a 9-slice, none of which the batch can express.
+     * <b>A rect being drawn</b> — the paint context's single scratch, reached as {@code ctx.rect()}
+     * and the counterpart to {@code ctx.quad()} in every convention that matters.
      *
-     * <p>Exactly one of {@code texture}/{@code sprite} is non-null, or neither for a flat fill.</p>
+     * <pre>{@code
+     * ctx.rect().at(x, y).size(w, h).fillColor(argb).submit();
+     * ctx.rect().at(x, y).size(w, h).radius(6f, 6f).border(1f, edge).fillColor(bg).submit();
+     * ctx.rect().at(x, y).size(w, h).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
+     *           .fill(background.getFill()).submit();
+     * }</pre>
+     *
+     * <p><b>Build and {@code submit()} in one expression.</b> The next {@code ctx.rect()} resets and
+     * reuses this instance, so holding one past its {@code submit()} is not safe. Anything left unset
+     * is what a bare {@link CgUiRect} carries: no radius, no border, an opaque white fill. The tint
+     * comes from {@code ctx.getColor()} at submit time, exactly as it does for a drawable.</p>
+     *
+     * <p><b>This is the allocation-free path, and it is why it exists.</b> {@link CgUiRect} is a value
+     * the cascade holds and shares, so every {@code with} method answers a copy — right for a value,
+     * ruinous for a painter. {@code BoxPainter} needs a rect for every element carrying a
+     * {@code border-radius} or a border, which is most of a themed screen and all ten thousand nodes of
+     * a graph: through the value that was a {@code Fill}, one or two {@code CgUiRect}s, and the two
+     * capturing lambdas the draw itself needed, per element per frame. A painter that HAS radii and a
+     * fill but no rect comes straight here and builds none of them.</p>
+     *
+     * <p>It is its own {@code Runnable} and {@code Consumer} for the same reason: {@code withMaterial}
+     * and {@code applyProperties} each take a callback, and a lambda over the draw's arguments is a
+     * fresh capture every time one runs.</p>
      */
-    private void drawShaped(CgUiPaintContext ctx, float x, float y, float width, float height,
-                            int quadTint, int fillColorArgb, CgTexture2D texture, CgUiSprite sprite) {
-        MATERIAL.toggleKeyword("WITH_BORDER", borderWidth > 0f);
-        // Only ever true when the 4-arg setBorder was called with a top or bottom that actually
-        // differs from the uniform colour — the 2-arg overload delegates here with all three equal,
-        // which keeps every existing caller (the outline ring, the mask border, every uniform-border
-        // widget) on the exact same shader path as before this feature existed.
-        MATERIAL.toggleKeyword("SPLIT_BORDER",
-                borderTopColorArgb != borderColorArgb || borderBottomColorArgb != borderColorArgb);
-        boolean with9SliceFill = sprite != null;
-        boolean withTextureFill = !with9SliceFill && texture != null;
-        MATERIAL.toggleKeyword("WITH_TEXTURE_FILL", withTextureFill);
-        MATERIAL.toggleKeyword("WITH_9SLICE_FILL", with9SliceFill);
+    public static final class Draw implements Runnable, Consumer<CgShaderBindings> {
 
-        ctx.withMaterial(MATERIAL, () -> {
-            MATERIAL.applyProperties(b -> {
-                b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
-                b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
-                b.set1f("_BorderWidth", borderWidth);
-                b.colorARGB("_BorderColor", borderColorArgb);
-                b.colorARGB("_BorderColorTop", borderTopColorArgb);
-                b.colorARGB("_BorderColorBottom", borderBottomColorArgb);
-                b.colorARGB("_FillColor", fillColorArgb);
-                b.vec2("_BoxSize", width, height);
-                if (with9SliceFill) {
-                    b.sampler("_MainTex", 0, sprite.getTexture());
-                    float scale = sprite.getBorderScale();
-                    float bL = sprite.getBorderLeft() * scale, bT = sprite.getBorderTop() * scale;
-                    float bR = sprite.getBorderRight() * scale, bB = sprite.getBorderBottom() * scale;
-                    b.vec4("_NineSliceBorder", bL, bT, bR, bB);
-                    b.vec4("_NineSliceOuterUV", sprite.getU0(), sprite.getV0(),
-                            sprite.getU3(), sprite.getV3());
-                    b.vec4("_NineSliceInnerUV", sprite.getU1(), sprite.getV1(),
-                            sprite.getU2(), sprite.getV2());
+        /** What fill was last set. Distinguishes a colour fill from a texture fill whose texture is
+         * null, which draws nothing rather than drawing white. */
+        private enum Kind { COLOR, TEXTURE, SPRITE }
 
-                    // Tile counts are computed HERE, in Java, and handed to the shader — rather than
-                    // letting the shader derive them from source sizes, so the rounding happens once.
-                    float centerSpanX = Math.max(0f, width - bL - bR);
-                    float centerSpanY = Math.max(0f, height - bT - bB);
-                    float srcW = sprite.centerSourceWidth();
-                    float srcH = sprite.centerSourceHeight();
-                    float nx = sprite.getRepeatX().tileCount(centerSpanX, srcW);
-                    float ny = sprite.getRepeatY().tileCount(centerSpanY, srcH);
-                    b.vec4("_NineSliceTiles", nx, ny, srcW, srcH);
-                    b.vec2("_NineSliceRepeat", sprite.getRepeatX().ordinal(), sprite.getRepeatY().ordinal());
-                    b.vec2("_NineSliceFlags", sprite.isFillCenter() ? 1f : 0f, 0f);
-                } else if (withTextureFill) {
-                    b.sampler("_MainTex", 0, texture);
+        private CgUiPaintContext ctx;
+        private float x, y, width, height;
+        private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
+        private float borderWidth;
+        private int borderColorArgb, borderTopColorArgb, borderBottomColorArgb;
+        private Kind kind;
+        private int fillColorArgb;
+        private CgTexture2D texture;
+        private CgUiSprite sprite;
+
+        /** Set by {@link #drawShaped} for {@link #run} and {@link #accept} to read: the SDF path's two
+         * callbacks take no arguments, so what they draw with lives here. */
+        private int quadTint, shaderFillArgb;
+
+        /** Resets to a bare rect and binds the context. {@code CgUiPaintContext.rect()} is the way in;
+         * nothing else should call this. */
+        public Draw begin(CgUiPaintContext ctx) {
+            this.ctx = ctx;
+            x = 0f; y = 0f; width = 0f; height = 0f;
+            rxTL = 0f; ryTL = 0f; rxTR = 0f; ryTR = 0f;
+            rxBR = 0f; ryBR = 0f; rxBL = 0f; ryBL = 0f;
+            borderWidth = 0f;
+            borderColorArgb = 0xFF000000;
+            borderTopColorArgb = 0xFF000000;
+            borderBottomColorArgb = 0xFF000000;
+            kind = Kind.COLOR;
+            fillColorArgb = 0xFFFFFFFF;
+            texture = null;
+            sprite = null;
+            return this;
+        }
+
+        public Draw at(float x, float y) {
+            this.x = x;
+            this.y = y;
+            return this;
+        }
+
+        public Draw size(float width, float height) {
+            this.width = width;
+            this.height = height;
+            return this;
+        }
+
+        /** The same elliptical radius on all four corners. */
+        public Draw radius(float rx, float ry) {
+            return radii(rx, ry, rx, ry, rx, ry, rx, ry);
+        }
+
+        /** Per corner and per axis, CSS {@code border-radius} order (TL, TR, BR, BL). */
+        public Draw radii(float rxTL, float ryTL, float rxTR, float ryTR,
+                          float rxBR, float ryBR, float rxBL, float ryBL) {
+            this.rxTL = rxTL; this.ryTL = ryTL;
+            this.rxTR = rxTR; this.ryTR = ryTR;
+            this.rxBR = rxBR; this.ryBR = ryBR;
+            this.rxBL = rxBL; this.ryBL = ryBL;
+            return this;
+        }
+
+        public Draw border(float width, int colorArgb) {
+            return border(width, colorArgb, colorArgb, colorArgb);
+        }
+
+        /** @see CgUiRect#withBorder(float, int, int, int) for what the top/bottom pair is for. */
+        public Draw border(float width, int uniformColorArgb, int topColorArgb, int bottomColorArgb) {
+            this.borderWidth = width;
+            this.borderColorArgb = uniformColorArgb;
+            this.borderTopColorArgb = topColorArgb;
+            this.borderBottomColorArgb = bottomColorArgb;
+            return this;
+        }
+
+        // Each fill setter CLEARS THE OTHERS. On the immutable value these three were alternatives in a
+        // sealed type; here they are fields, and the SDF path picks its keywords by asking which are
+        // non-null -- so a second fill call on the same scratch would otherwise draw a colour through
+        // the texture variant.
+        public Draw fillColor(int colorArgb) {
+            this.kind = Kind.COLOR;
+            this.fillColorArgb = colorArgb;
+            this.texture = null;
+            this.sprite = null;
+            return this;
+        }
+
+        public Draw fillTexture(CgTexture2D texture) {
+            this.kind = Kind.TEXTURE;
+            this.texture = texture;
+            this.sprite = null;
+            return this;
+        }
+
+        public Draw fillSprite(CgUiSprite sprite) {
+            this.kind = Kind.SPRITE;
+            this.sprite = sprite;
+            this.texture = null;
+            return this;
+        }
+
+        /** Takes a {@link Fill} the caller already holds — a cascaded rect's, typically, which is
+         * shared and must not be rebuilt merely to be drawn. */
+        public Draw fill(Fill fill) {
+            return switch (fill) {
+                case Fill.Color(int argb) -> fillColor(argb);
+                case Fill.Texture(CgTexture2D t) -> fillTexture(t);
+                case Fill.Sprite(CgUiSprite s) -> fillSprite(s);
+            };
+        }
+
+        /** Draws it. Everything set here is spent; the next {@code ctx.rect()} clears the scratch. */
+        public void submit() {
+            if (width <= 0f || height <= 0f) return;
+            switch (kind) {
+                case COLOR -> {
+                    if (isPlain()) ctx.fillRect(x, y, width, height, ArgbMath.multiply(fillColorArgb, ctx.getColor()));
+                    else drawShaped(ctx.getColor(), fillColorArgb);
                 }
-            });
+                case TEXTURE -> {
+                    if (texture == null) return;
+                    if (isPlain()) {
+                        ctx.bindTexture(texture);
+                        ctx.quad().at(x, y).size(width, height).color(ctx.getColor()).submit();
+                        ctx.flush();
+                    } else {
+                        drawShaped(ctx.getColor(), 0);
+                    }
+                }
+                case SPRITE -> drawSprite();
+            }
+        }
+
+        /** Whether the frame's own batch can express this rect: no radius, no border. */
+        private boolean isPlain() {
+            return borderWidth <= 0f
+                    && rxTL == 0f && ryTL == 0f && rxTR == 0f && ryTR == 0f
+                    && rxBR == 0f && ryBR == 0f && rxBL == 0f && ryBL == 0f;
+        }
+
+        private void drawSprite() {
+            CgTexture2D resolved = sprite.resolveForDraw();
+            if (resolved == null) return;
+            int tint = ArgbMath.multiply(sprite.getTint(), ctx.getColor());
+            boolean missing = sprite.isFallback(resolved);
+
+            // A MISSING TEXTURE IS NOT WORTH SLICING, and a whole sprite was never sliced. The fallback
+            // checkerboard has no meaningful sub-rect, so cropping into it samples an arbitrary corner and a
+            // broken sprite reads as a solid colour instead of as missing -- which is also the one case the
+            // sliced path cannot serve, since that samples the sprite's own atlas UVs. One stretched copy of
+            // the whole checkerboard says "missing" at any size. CgUiPaintContext.drawImage is the only
+            // other site that can be handed a fallback.
+            if (missing || (!sprite.hasBorder() && isPlain())) {
+                ctx.bindTexture(resolved);
+                CgQuadRenderer.Quad q = ctx.quad().at(x, y).size(width, height).color(tint);
+                if (!missing) q.uv(sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3());
+                q.submit();
+                ctx.flush();
+                return;
+            }
+            // EVERY SHAPED SPRITE GOES DOWN THE SLICED PATH, bordered or not. With zero borders the nine
+            // regions degenerate to one -- inner UVs equal outer, so the centre stretches the sprite's own
+            // sub-rect -- which is the point: the old wrap handed the raw texture to a plain texture fill and
+            // dropped the sub-rect, so an ATLAS sprite with a border-radius sampled the whole sheet. It also
+            // means a borderless sprite finally honours its repeat modes under a radius.
+            drawShaped(tint, 0);
+        }
+
+        /**
+         * The SDF path — a radius, a border, or a 9-slice, none of which the batch can express.
+         *
+         * <p>{@code this} goes to both callbacks rather than a lambda; see the class doc.</p>
+         */
+        private void drawShaped(int quadTint, int shaderFillArgb) {
+            this.quadTint = quadTint;
+            this.shaderFillArgb = shaderFillArgb;
+            MATERIAL.toggleKeyword("WITH_BORDER", borderWidth > 0f);
+            // Only ever true when the 4-arg border was given a top or bottom that actually differs from
+            // the uniform colour -- the 2-arg overload passes all three equal, which keeps every existing
+            // caller (the outline ring, the mask border, every uniform-border widget) on the exact same
+            // shader path as before this feature existed.
+            MATERIAL.toggleKeyword("SPLIT_BORDER",
+                    borderTopColorArgb != borderColorArgb || borderBottomColorArgb != borderColorArgb);
+            MATERIAL.toggleKeyword("WITH_TEXTURE_FILL", sprite == null && texture != null);
+            MATERIAL.toggleKeyword("WITH_9SLICE_FILL", sprite != null);
+            ctx.withMaterial(MATERIAL, this);
+        }
+
+        @Override
+        public void run() {
+            MATERIAL.applyProperties(this);
             ctx.quad().at(x, y).size(width, height).color(quadTint).submit();
-        });
+        }
+
+        @Override
+        public void accept(CgShaderBindings b) {
+            b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
+            b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
+            b.set1f("_BorderWidth", borderWidth);
+            b.colorARGB("_BorderColor", borderColorArgb);
+            b.colorARGB("_BorderColorTop", borderTopColorArgb);
+            b.colorARGB("_BorderColorBottom", borderBottomColorArgb);
+            b.colorARGB("_FillColor", shaderFillArgb);
+            b.vec2("_BoxSize", width, height);
+            if (sprite != null) {
+                b.sampler("_MainTex", 0, sprite.getTexture());
+                float scale = sprite.getBorderScale();
+                float bL = sprite.getBorderLeft() * scale, bT = sprite.getBorderTop() * scale;
+                float bR = sprite.getBorderRight() * scale, bB = sprite.getBorderBottom() * scale;
+                b.vec4("_NineSliceBorder", bL, bT, bR, bB);
+                b.vec4("_NineSliceOuterUV", sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3());
+                b.vec4("_NineSliceInnerUV", sprite.getU1(), sprite.getV1(), sprite.getU2(), sprite.getV2());
+
+                // Tile counts are computed HERE, in Java, and handed to the shader -- rather than
+                // letting the shader derive them from source sizes, so the rounding happens once.
+                float centerSpanX = Math.max(0f, width - bL - bR);
+                float centerSpanY = Math.max(0f, height - bT - bB);
+                float srcW = sprite.centerSourceWidth();
+                float srcH = sprite.centerSourceHeight();
+                float nx = sprite.getRepeatX().tileCount(centerSpanX, srcW);
+                float ny = sprite.getRepeatY().tileCount(centerSpanY, srcH);
+                b.vec4("_NineSliceTiles", nx, ny, srcW, srcH);
+                b.vec2("_NineSliceRepeat", sprite.getRepeatX().ordinal(), sprite.getRepeatY().ordinal());
+                b.vec2("_NineSliceFlags", sprite.isFillCenter() ? 1f : 0f, 0f);
+            } else if (texture != null) {
+                b.sampler("_MainTex", 0, texture);
+            }
+        }
     }
 
     /**

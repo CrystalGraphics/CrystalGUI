@@ -59,15 +59,11 @@ public final class UiBuilderContribution implements WorkbenchExtension {
         // empty the inspector under the second. The graph's own note, and the same shape.
         Disposable sections = BuilderInspectorSections.register();
 
-        // BUILT EAGERLY, like the Inspector's: the dock caches a panel factory's result permanently, so
-        // handing back a placeholder while waiting for a document hands back the placeholder for the
-        // rest of the session.
-        DesignToolWindow design = new DesignToolWindow(workbench);
         Disposable panel = workbench.registerToolWindow(
                 ToolWindowKind.of(DESIGN_PANEL, "Design")
                         .icon("crystalgui:toolwindows/hierarchy")
                         .region(DockRegion.SIDEBAR)
-                        .view(ctx -> design)
+                        .view(new DesignToolWindow(workbench))
                         .openByDefault());
 
         return () -> {

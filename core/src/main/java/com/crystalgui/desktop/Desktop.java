@@ -28,7 +28,6 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.easing.Easing;
 import com.crystalgui.style.easing.ProgressFunctions;
@@ -209,6 +208,7 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public Desktop() {
         super(NAME);
+        whileConnected(() -> document().focus().onDidChangeFocus.connect(this::focusMoved));
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.flexDirection(FlexDirection.COLUMN));
         // THE CLASS IS THE WHOLE OF THE LAYER'S GEOMETRY. Without it `desktop .__windows__` matches
@@ -624,7 +624,6 @@ public class Desktop extends UIElement implements DataProvider {
         // does, and it deliberately touches no window's state -- so what is recorded here is exactly what
         // was on the desktop.
         savePersistedState();
-        subscriptions.disconnectAll();
         UIDocument previous = lastDocument;
         lastDocument = null;
         if (previous != null) previous.removeDataProvider(this);
@@ -644,14 +643,12 @@ public class Desktop extends UIElement implements DataProvider {
         // persistTo is called on a fresh one -- would otherwise have no window to register its
         // one-shot restore pass with.
         armRestorePass();
-        subscriptions.disconnectAll();
         // THE WINDOW-LEVEL ANSWER TO "which window is this about", and the LAST resort by construction:
         // DataContext walks the element chain first and only asks the window's providers when nothing
         // answered. So a command invoked from inside a frame gets that frame, one invoked from a taskbar
         // entry gets the entry's frame, and one invoked from the palette with nothing focused gets the
         // active window -- which is the only sensible answer there and the reason this exists.
         current.addDataProvider(this);
-        subscriptions.add(current.focus().onDidChangeFocus.connect(this::focusMoved));
     }
 
     /**
@@ -665,8 +662,6 @@ public class Desktop extends UIElement implements DataProvider {
      */
     @Nullable
     private UIDocument lastDocument;
-
-    private final ConnectionGroup subscriptions = new ConnectionGroup();
 
     /** @see #connected — the window-level fallback for {@link WindowFrame#WINDOW_FRAME}. */
     @Override
