@@ -72,6 +72,8 @@ val deploySingleJars = tasks.register("deploySingleJars") {
     val guiJar = layout.buildDirectory.file("libs/crystalgui-$version.jar")
     val langJar = layout.buildDirectory.file("libs/crystalgui-language-$version.jar")
     val graphicsJar = File(crystalGraphics.projectDir, "build/libs/crystalgraphics-$version.jar")
+    // JOML, FOR THE LWJGL2 TARGETS ONLY -- see the note where it is installed below.
+    val jomlJar = File(crystalGraphics.projectDir, "build/libs/crystalgraphics-joml-$version.jar")
     val withLanguage = cgWithLanguage
     val localProperties = rootProject.file("local.properties")
     val instanceKeys = listOf(
@@ -90,7 +92,8 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             if (withLanguage) add(langJar.get().asFile)
             add(graphicsJar)
         }
-        jars.filterNot { it.isFile }.forEach { throw GradleException("${it.name} was not built") }
+        (jars + jomlJar).filterNot { it.isFile }
+            .forEach { throw GradleException("${it.name} was not built") }
         if (!withLanguage) logger.lifecycle("[cgui] -PcgNoLanguage: crystalgui_language is NOT deployed")
 
         instanceKeys.forEach { key ->
@@ -116,7 +119,15 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             mods.listFiles().orEmpty()
                 .filter { file -> oursPrefixes.any { file.name.startsWith(it) } }
                 .forEach { it.delete() }
-            jars.forEach { source ->
+            // JOML GOES TO 1.7.10 AND NOWHERE ELSE, and it is the one artefact with that shape.
+            //
+            // MC 1.19.3+ ships JOML as a real named module, so a second copy in `mods/` is a split
+            // package -- measured, E-J9-JOML: Forge dies in module resolution before it writes a log
+            // line. 1.7.10 has no JOML at all and no module system to object, so it needs exactly
+            // this. Installing it everywhere would break three of the four instances.
+            val instanceJars = if (key == "prismLauncher1710Dir") jars + jomlJar else jars
+
+            instanceJars.forEach { source ->
                 val target = File(mods, source.name)
                 // A RUNNING CLIENT HOLDS ITS MOD JARS OPEN on Windows, and Kotlin's copyTo reports
                 // that as "tried to overwrite the destination, but failed to delete it" -- which
