@@ -118,7 +118,10 @@ val deploySingleJars = tasks.register("deploySingleJars") {
 //   ./gradlew prodSmoke
 //   ./gradlew prodSmoke -PcgTargets=1710,1201forge
 val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
-    dependsOn(deploySingleJars)
+    // -PcgNoDeploy drives whatever is ALREADY installed. Rebuilding and redeploying both single jars is
+    // minutes and driving the clients is seconds, so paying for the first while iterating on the second
+    // is most of the wall clock for no answer.
+    if (!providers.gradleProperty("cgNoDeploy").isPresent) dependsOn(deploySingleJars)
     instances.set(listOf(
         "prismLauncher1710Dir=1710",
         "prismLauncher1201ForgeDir=1201forge",
