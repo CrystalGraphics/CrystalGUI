@@ -27,7 +27,7 @@ import javax.annotation.Nullable;
  * from the body rather than drawn separately, so the two can never disagree.</p>
  *
  * <p><b>Origin is top-left here.</b> LWJGL2 wants cursor images bottom-up with the hotspot measured
- * from the bottom, and that conversion happens once, in {@code Lwjgl2CursorService} — not in these
+ * from the bottom, and that conversion happens once, in CrystalGraphics' {@code Lwjgl2CursorService} — not in these
  * functions, which would otherwise all have to be read upside-down.</p>
  */
 public final class CursorBitmaps {
