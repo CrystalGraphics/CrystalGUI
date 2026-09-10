@@ -13,6 +13,8 @@ import com.crystalgui.mc.client.CgUiHud1201;
 import com.crystalgui.mc.example.MachineExample1201;
 import com.crystalgui.mc.example.MachineExampleClient1201;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
+import com.crystalgui.mc.client.CgUiAutoTest1201;
+import com.crystalgui.mc.client.ClientProbe1201;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.mc.client.ScriptService1201;
 import com.crystalgui.mc.net.Connections1201;
@@ -139,8 +141,8 @@ public final class Lifecycle1201 {
     // ── Client ──────────────────────────────────────────────────────────────────────────────────
 
     public static void clientTick() {
-        com.crystalgui.mc.client.CgUiAutoTest1201.tick();
-        com.crystalgui.mc.client.ClientProbe1201.tick();
+        CgUiAutoTest1201.tick();
+        ClientProbe1201.tick();
         CgUiKeybinds1201.tick();
         Connections1201.onClientTick();
         run(clientTickHooks);

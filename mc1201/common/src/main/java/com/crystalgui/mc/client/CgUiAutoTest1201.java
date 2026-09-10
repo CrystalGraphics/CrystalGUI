@@ -59,6 +59,11 @@ public final class CgUiAutoTest1201 {
     /** A SECOND capture, later, beside the first with a {@code -late} suffix. 0 disables it. */
     private static final int LATE_CAPTURE_TICKS = Integer.getInteger("crystalgui.autotest.lateFrame", 0);
 
+    /** How long to keep trying to move a capture out of {@code screenshots/}: 150 x 20ms = 3s. */
+    private static final int MOVE_ATTEMPTS = 150;
+
+    private static final long MOVE_RETRY_MS = 20;
+
     private static int ticks;
     private static boolean opened;
     private static boolean captured;
@@ -70,9 +75,14 @@ public final class CgUiAutoTest1201 {
     /** Called once per client tick. Cheap when off: one static boolean read. */
     public static void tick() {
         if (!ENABLED) return;
-        ticks++;
         Minecraft mc = Minecraft.getInstance();
         if (mc == null) return;
+        // A client tick already fires underneath the loading overlay, so a countdown started before
+        // the game is up expires while Mojang's splash is still the only thing drawn -- and the splash
+        // is then what gets photographed. Fabric captured exactly that where Forge did not, which is
+        // why a tick count is not by itself a statement that there is a game to open a desktop over.
+        if (mc.getOverlay() != null) return;
+        ticks++;
 
         if (!opened) {
             if (ticks < OPEN_AFTER_TICKS) return;
@@ -106,12 +116,49 @@ public final class CgUiAutoTest1201 {
         File file = new File(path);
         File parent = file.getParentFile();
         if (parent != null) parent.mkdirs();
-        // Screenshot.grab takes a DIRECTORY and a name, so the target is split rather than passed
-        // whole; it writes exactly the frame the player would see, target and all.
-        Screenshot.grab(parent == null ? new File(".") : parent, file.getName(),
-                mc.getMainRenderTarget(), message -> { });
-        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST wrote {}x{} capture to {}",
-                mc.getMainRenderTarget().width, mc.getMainRenderTarget().height, file.getAbsolutePath());
+        // Screenshot.grab's first argument is the GAME DIRECTORY, not the output directory: it writes
+        // to <dir>/screenshots/<name> and creates that subdirectory itself. So the frame is grabbed
+        // into it and then moved to the path that was actually asked for -- otherwise a caller that
+        // waits for its own path sees nothing and calls a successful run a failure.
+        File gameDir = parent == null ? new File(".") : parent;
+        Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), message -> { });
+
+        // The PNG is encoded on Util.ioPool(), so it does NOT exist when grab returns -- and the first
+        // capture additionally pays for that pool starting its thread, which is why an immediate move
+        // left the early one behind in screenshots/ and moved the late one. Retrying is also what
+        // makes a partial file safe: renameTo fails while the writer still holds it, so a rename that
+        // succeeds is itself the proof that the write finished.
+        File written = new File(new File(gameDir, "screenshots"), file.getName());
+        boolean moved = written.equals(file);
+        for (int attempt = 0; !moved && attempt < MOVE_ATTEMPTS; attempt++) {
+            if (written.isFile()) {
+                file.delete();
+                moved = written.renameTo(file);
+            }
+            if (!moved) sleep(MOVE_RETRY_MS);
+        }
+        if (!moved) {
+            // Never claim the path that was asked for unless the file is on it: this line is the only
+            // evidence a caller has, and an unconditional one reported a capture that was not there.
+            CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST capture stayed at {}; nothing was written to {}",
+                    written.getAbsolutePath(), file.getAbsolutePath());
+            return;
+        }
+        // WHETHER THE DESKTOP ACTUALLY PAINTED, beside the file. A capture proves only that a frame was
+        // read back: with no live GL context the screen's render() returns at once, and with no level
+        // Minecraft does not clear the colour buffer, so the frame still holds the PREVIOUS screen and
+        // a photograph of the main menu is indistinguishable from a working desktop.
+        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST wrote {}x{} capture to {} (desktop painted: {})",
+                mc.getMainRenderTarget().width, mc.getMainRenderTarget().height, file.getAbsolutePath(),
+                CgUiScreen1201.hasPainted());
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static void quit() {
