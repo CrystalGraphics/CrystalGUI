@@ -108,12 +108,10 @@ tasks.named("classes") { dependsOn(extractMcSources) }
 // `thin` classifier directly rather than the `thin-dev` the other two carry until they are mapped.
 tasks.named<AbstractArchiveTask>("thinShadowJar") { archiveClassifier.set("thin") }
 
-tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
+// Registered by cg-mc1201-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
+tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
     jar.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
-    allowedPrefixes.set(listOf("com/crystalgui/mc/"))
 }
-
-tasks.named("check") { dependsOn("checkThinJar") }
 tasks.named("assemble") { dependsOn("thinShadowJar") }
 
 // The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact

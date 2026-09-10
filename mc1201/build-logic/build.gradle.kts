@@ -17,5 +17,8 @@ dependencies {
     // Shadow, so ShadowJar is a type these scripts can name. The version matches the pin in
     // settings.gradle.kts that every loader applies; two spellings of one version is the hazard
     // gradle.properties spends a paragraph on.
+    // The shared single-jar tasks: CheckSingleJar and ModDescriptor. @see CrystalGraphics/singlejar-logic
+    implementation("com.crystalgraphics.build:singlejar-logic")
+
     implementation("com.gradleup.shadow:shadow-gradle-plugin:9.2.2")
 }

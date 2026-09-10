@@ -114,12 +114,10 @@ val remapThinJar = tasks.register<net.fabricmc.loom.task.RemapJarTask>("remapThi
     archiveClassifier.set("thin")
 }
 
-tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
+// Registered by cg-mc1201-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
+tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
     jar.set(remapThinJar.flatMap { it.archiveFile })
-    allowedPrefixes.set(listOf("com/crystalgui/mc/"))
 }
-
-tasks.named("check") { dependsOn("checkThinJar") }
 tasks.named("assemble") { dependsOn(remapThinJar) }
 
 // Extracts Fabric MC 1.20.1 sources and resources into build/mc-src for local navigation.
