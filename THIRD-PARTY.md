@@ -7,6 +7,21 @@ modifications. A javadoc comment naming the source is good practice and is not t
 
 Per-directory detail lives beside the assets it covers; this is the index.
 
+## The notice that ships is not this file
+
+This file describes the **repository**. What an obligation actually asks for is a notice in the hands of
+whoever receives the **binary**, and since J8 there are two binaries carrying different libraries:
+
+| Jar | What it carries | Notice, checked in | Notice, shipped |
+|---|---|---|---|
+| `crystalgui-<version>.jar` | the engine and the workbench: Taffy, fastutil, the IntelliJ diff port, the icon sets, the fonts | [`notices/crystalgui.md`](notices/crystalgui.md) | `META-INF/NOTICE.md` |
+| `crystalgui_lang-<version>.jar` | the scripting stack: tree-sitter and its grammars, ECJ, Rhino, CFR, ASM | [`notices/crystalgui_lang.md`](notices/crystalgui_lang.md) | `META-INF/NOTICE.md` |
+
+Each jar's `check<Name>Jar` lists `META-INF/NOTICE.md` among its required entries, so a jar that lost
+its notice is not shippable and is deleted rather than left on disk. **Moving a library between the two
+jars means moving its row between the two files in the same commit** — that is the whole failure mode
+this split introduces, and nothing else detects it.
+
 | What | Where | Licence | Notes |
 |---|---|---|---|
 | **IntelliJ diff/merge algorithms** | `core/src/main/java/com/crystalgui/text/diff/` | **Apache 2.0** | © 2000–2024 JetBrains s.r.o. **Ported source, modified** — `DiffRange` (`util/Range`), `DiffIterable` (`comparison/iterables/FairDiffIterable`), `MergeRange` (`util/MergeRange`), `MergeRanges` (`ComparisonMergeUtil.FairMergeBuilder` + `ChangeBuilder`), `ComparisonPolicy` (`comparison/ComparisonPolicy` + the equality half of `ComparisonUtil`). Each class names its upstream file and its modifications in its own javadoc, per § 4(b) |
