@@ -57,12 +57,14 @@ registerSingleJarPipeline(SingleJarSpec(
         ":mc1201:neoforge" to "thinShadowJar",
         ":mc1201:fabric" to "remapThinJar",
     ),
-    libraryProjects = listOf(":core", ":language", ":taffy", ":mc-shared"),
+    // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_lang`, the second
+    // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
+    // and used by whoever writes a script.
+    libraryProjects = listOf(":core", ":taffy", ":mc-shared"),
 
-    // `core` and `language` each ship a WorkbenchExtension file, and a copy keeps whichever arrived
-    // first while silently dropping the other -- the jar then carries eight extensions and loses the
-    // Run panel, with nothing reporting it.
-    serviceOwners = listOf(":core", ":language"),
+    // One owner today, and the union is still the mechanism: the language jar ships its own
+    // META-INF/services, and a second jar's providers never merge into this one's file.
+    serviceOwners = listOf(":core"),
 
     relocations = listOf(
         // fastutil is Taffy's and is RELOCATED: nothing outside this jar sees those types, and
@@ -98,25 +100,7 @@ registerSingleJarPipeline(SingleJarSpec(
     ),
     fabricThinJar = ":mc1201:fabric" to "remapThinJar",
 
-    extraContent = {
-        // The tree-sitter jars go in VERBATIM and are never relocated: each carries the JNI natives
-        // for its grammar, and a JNI symbol is named after the mangled package -- renaming it renames
-        // the symbol the .dll does not export, and the first parser built throws UnsatisfiedLinkError.
-        project.rootProject.file("lib/tree-sitter").listFiles()
-            ?.filter { it.name.endsWith(".jar") }
-            ?.sortedBy { it.name }
-            ?.forEach { from(project.zipTree(it)) }
-
-        // Both bands: 8 is what a 1.7.10 client runs and 17 what 1.20.x does, and one jar serves
-        // both. Taken from the two loaders that already bundle them rather than re-resolved here.
-        listOf(":mc1710" to "bundleEngineBands", ":mc1201:forge" to "bundleEngineBands",
-               ":mc1710" to "writeEngineManifests", ":mc1201:forge" to "writeEngineManifests")
-            .forEach { (path, task) ->
-                val producer = project.project(path).tasks.named(task)
-                dependsOn(producer)
-                from(producer)
-            }
-    },
+    // Nothing extra since J8: the tree-sitter jars and the engine bands moved to the language jar.
 
     configureCheck = {
         forbiddenPrefixes.set(listOf(
@@ -124,8 +108,12 @@ registerSingleJarPipeline(SingleJarSpec(
             // Unrelocated, these are split packages against Minecraft's own modules on Forge and
             // NeoForge, which fails module resolution before a single mod class loads.
             "it/unimi/dsi/fastutil/", "dev/vfyjxf/taffy/",
+            // THE J8 SPLIT, asserted rather than assumed. The whole point of the second jar is that a
+            // player who never writes a script does not download the engines, so one of these
+            // reappearing here is the step silently undone.
+            "com/crystalgui/language/", "org/treesitter/", "assets/crystalgui/engines/",
         ))
-        expectSingle.set(listOf("com/crystalgui/ui/", "com/crystalgui/language/"))
+        expectSingle.set(listOf("com/crystalgui/ui/"))
         relocatedClasses.set(mapOf(
             "com/crystalgui/mc/platform/Lifecycle1201.class" to 3,
             "com/crystalgui/mc/client/CgUiScreen1201.class" to 3,
@@ -143,12 +131,114 @@ registerSingleJarPipeline(SingleJarSpec(
             "MixinConfigs" to "mixins.crystalgui.json",
             "Fabric-Loom-Mixin-Remap-Type" to "",
         ))
+        // core's own eight, which is the whole of what this jar contributes since J8. The language
+        // stack's two providers are asserted on the LANGUAGE jar, below.
         expectServices.set(mapOf(
-            "com.crystalgui.workbench.extension.WorkbenchExtension" to "com.crystalgui.language",
-            "com.crystalgui.text.syntax.LanguageKinds" to "com.crystalgui.language.LanguageStack",
+            "com.crystalgui.workbench.extension.WorkbenchExtension" to "com.crystalgui.workbench",
         ))
     },
 ))
+
+// ── The language stack, as its own jar (J8) ─────────────────────────────────────────────────────
+//
+// The same pipeline, registered a second time. What it carries is what a player who never writes a
+// script does not have to download: :language's classes, the six tree-sitter grammars with their JNI
+// natives, and all THREE engine bands with their manifests.
+//
+// Three bands is ~40 MB and is the right call for THIS jar: it is downloaded for what the bands
+// provide, and a band already on disk is the difference between an editor that analyses on first open
+// and one that shows a progress bar.
+registerSingleJarPipeline(SingleJarSpec(
+    name = "language",
+    modId = "crystalgui_lang",
+    fileName = "crystalgui_lang-${project.version}.jar",
+    shadePath = "com/crystalgui/lang/shadow",
+
+    thinJars = listOf(
+        ":mc1710" to "reobfLangThinJar",
+        ":mc1201:forge" to "reobfLangThinShadowJar",
+        ":mc1201:neoforge" to "langThinShadowJar",
+        ":mc1201:fabric" to "remapLangThinJar",
+    ),
+    libraryProjects = listOf(":language"),
+    serviceOwners = listOf(":language"),
+
+    // NO RELOCATIONS. Taffy, fastutil and JOML are the host jar's and are relocated there; this jar
+    // names none of them, and relocating what it does carry would rename tree-sitter's JNI symbols.
+    manifest = mapOf(
+        // No TweakClass and no MixinConfigs: this mod has no mixin and is not a coremod. FML 1.7.10
+        // still needs to be told it holds an @Mod class, since the jar carries no mcmod.info route of
+        // its own that it would find first.
+        "FMLCorePluginContainsFMLMod" to true,
+        "ForceLoadAsMod" to true,
+        "Implementation-Version" to project.version.toString(),
+        "Automatic-Module-Name" to "crystalgui_lang",
+    ),
+    fabricThinJar = ":mc1201:fabric" to "remapLangThinJar",
+    descriptorsTask = "generateLanguageDescriptors",
+
+    extraContent = {
+        // The tree-sitter jars go in VERBATIM and are never relocated: each carries the JNI natives
+        // for its grammar, and a JNI symbol is named after the mangled package -- renaming it renames
+        // the symbol the .dll does not export, and the first parser built throws UnsatisfiedLinkError.
+        project.rootProject.file("lib/tree-sitter").listFiles()
+            ?.filter { it.name.endsWith(".jar") }
+            ?.sortedBy { it.name }
+            ?.forEach { from(project.zipTree(it)) }
+
+        // ALL THREE BANDS and their manifests. 8 is what a 1.7.10 client runs, 17 what 1.20.x does,
+        // and 11 what a 1.7.10 client on lwjgl3ify may. Taken from the two loaders that already
+        // resolve them rather than re-resolved here.
+        listOf(":mc1710" to "bundleEngineBands", ":mc1201:forge" to "bundleEngineBands",
+               ":mc1710" to "writeEngineManifests", ":mc1201:forge" to "writeEngineManifests")
+            .forEach { (path, task) ->
+                val producer = project.project(path).tasks.named(task)
+                dependsOn(producer)
+                from(producer)
+            }
+    },
+
+    configureCheck = {
+        forbiddenPrefixes.set(listOf(
+            "META-INF/versions/",
+            // THE SPLIT, from the other side: the engine and the workbench are the host jar's, and a
+            // copy here is two definitions of every UI class across two mods.
+            "com/crystalgui/ui/", "com/crystalgui/widget/", "com/crystalgui/style/",
+            "com/crystalgui/workbench/", "com/crystalgui/desktop/",
+            "it/unimi/dsi/fastutil/", "dev/vfyjxf/taffy/", "org/joml/",
+        ))
+        expectSingle.set(listOf("com/crystalgui/language/"))
+        relocatedClasses.set(mapOf(
+            "com/crystalgui/mc/lang/ScriptService1201.class" to 3,
+        ))
+        requiredEntries.set(listOf(
+            "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
+            "com/crystalgui/mc/lang/CrystalGuiLang.class",
+            "assets/crystalgui/engines/8/index.txt",
+            "assets/crystalgui/engines/11/index.txt",
+            "assets/crystalgui/engines/17/index.txt",
+        ))
+        requiredManifest.set(mapOf(
+            "FMLCorePluginContainsFMLMod" to "true",
+            "ForceLoadAsMod" to "true",
+            "Fabric-Loom-Mixin-Remap-Type" to "",
+        ))
+        expectServices.set(mapOf(
+            "com.crystalgui.text.syntax.LanguageKinds" to "com.crystalgui.language.LanguageStack",
+            "com.crystalgui.workbench.extension.WorkbenchExtension" to "com.crystalgui.language",
+        ))
+    },
+))
+
+dependencies {
+    // ASM, which :language's `.map` reads class bytes with and which reached the merged jar through no
+    // route at all before J8: the fat 1.7.10 jar declared it `shadowImplementation` and the merge takes
+    // thin jars, which carry no dependencies. It belongs to this jar because every reference to it is
+    // inside :language.
+    "languageJarLibs"("org.ow2.asm:asm:${property("asmVersion")}")
+    "languageJarLibs"("org.ow2.asm:asm-commons:${property("asmVersion")}")
+    "languageJarLibs"("org.ow2.asm:asm-tree:${property("asmVersion")}")
+}
 
 dependencies {
     "singleJarLibs"("it.unimi.dsi:fastutil:${property("fastutil_version")}")

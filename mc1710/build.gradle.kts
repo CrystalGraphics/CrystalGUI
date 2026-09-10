@@ -144,16 +144,19 @@ dependencies {
 // that fakes it is a special case of where the resource physically lives; one text file reads the same
 // however it is stored. @see EngineBundle
 /**
- * Which bands this jar CARRIES. `-PcgBundleBands=8`, `8,17`, or `none`.
+ * Which bands this build CARRIES from the 1.7.10 side. `-PcgBundleBands=8`, `8,17`, or `none`.
  *
- * Default 8, because that is what a 1.7.10 client runs. A pack that ships lwjgl3ify and Java 17 can bake
- * 17 instead -- or both, at about 29 MB -- and a slim build can bake none and rely entirely on the
- * download. The runtime path is identical either way: bundled is tried first, the download second, and
+ * 8 and 11 by default, and since J8 the consumer is the LANGUAGE jar rather than this module's own:
+ * 8 is what a stock 1.7.10 client runs and 11 what one on lwjgl3ify does, and mc1201 supplies 17.
+ * A jar downloaded for what the bands provide should not then have to fetch one, which is a different
+ * call from the host jar's and is why the default moved. `-PcgBundleBands=8` restores the slim build.
+ *
+ * The runtime path is identical either way: bundled is tried first, the download second, and
  * `firstOf` takes the first non-empty answer.
  */
 val bundledBands: List<Int> = providers.gradleProperty("cgBundleBands").orNull
     ?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() && it != "none" }?.map { it.toInt() }
-    ?: listOf(8)
+    ?: listOf(8, 11)
 
 fun configurationForBand(band: Int): Configuration = when (band) {
     8 -> engineBand8
@@ -740,6 +743,65 @@ afterEvaluate {
             ?.filter { it.name.endsWith(".jar") }
             ?.forEach { from(zipTree(it)) }
     }
+}
+
+// ── The language stack's 1.7.10 host (J8) ───────────────────────────────────────────────────────
+//
+// A SOURCE SET, not a module of its own: this module's toolchain is already configured for 1.7.10,
+// and a module per loader per era doubles the module count every time an era is added.
+//
+// `main` is on lang's compile classpath and NOT the reverse, and `:language` is declared HERE rather
+// than in dependencies.gradle, so a language import in `main` is a compile error rather than
+// something an import guard notices afterwards. Its own package (`com.crystalgui.mc.lang`) because
+// the two source sets end up in two JARS, and two jars sharing a package is a split package.
+val lang: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets["main"].compileClasspath + sourceSets["main"].output
+    runtimeClasspath += sourceSets["main"].runtimeClasspath + sourceSets["main"].output
+}
+
+dependencies {
+    "langCompileOnly"(project(":language"))
+    "langCompileOnly"("org.projectlombok:lombok:1.18.44")
+    "langAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
+}
+
+// A DEV RUN SEES crystalgui_lang BECAUSE FML SCANS THE CLASSPATH for @Mod (J8) -- no descriptor
+// needed here, unlike the three ModLauncher/Knot loaders. `-PcgNoLanguage` leaves it off, which is
+// how the degraded configuration is exercised without building a jar.
+if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+    dependencies { "runtimeOnly"(files(lang.output)) }
+}
+
+/** The language host's own classes, the input to its thin jar. */
+val langJar = tasks.register<Jar>("langJar") {
+    group = "language jar"
+    description = "The language stack's 1.7.10 host, the language mod's own half."
+    archiveClassifier.set("lang-dev")
+    from(lang.output)
+}
+
+/**
+ * The language thin jar: this loader's language half at SRG names, the language merge's input.
+ *
+ * Same mapping inputs as `reobfThinJar` and for the same reason: two reobfuscations against
+ * different SRG or CSVs is two things to keep in step.
+ */
+val reobfLangThinJar = tasks.register<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfLangThinJar") {
+    group = "language jar"
+    description = "This loader's language half at SRG names, the language merge's input."
+    archiveClassifier.set("lang")
+
+    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar")
+    inputJar.set(langJar.flatMap { it.archiveFile })
+    mcVersion.set(fat.flatMap { it.mcVersion })
+    srg.set(fat.flatMap { it.srg })
+    fieldCsv.set(fat.flatMap { it.fieldCsv })
+    methodCsv.set(fat.flatMap { it.methodCsv })
+    exceptorCfg.set(fat.flatMap { it.exceptorCfg })
+    recompMcJar.set(fat.flatMap { it.recompMcJar })
+    extraSrgEntries.set(fat.flatMap { it.extraSrgEntries })
+    extraSrgFiles.from(fat.map { it.extraSrgFiles })
+    referenceClasspath.from(fat.map { it.referenceClasspath })
 }
 
 // ── The thin jar (J1) ────────────────────────────────────────────────────────────────────────────

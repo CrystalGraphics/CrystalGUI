@@ -43,6 +43,20 @@ repositories {
     maven("https://maven.minecraftforge.net/") { name = "Forge" }
 }
 
+// ── The language stack's entry point on this loader (J8) ────────────────────────────────────────
+//
+// A SOURCE SET, not a module of its own: a module per loader per era doubles the module count every
+// time an era is added, for one entry class of twenty lines each.
+//
+// `main` is on lang's compile classpath and NOT the reverse, and `:language` is declared against THIS
+// source set below, so a language import in `main` is a compile error rather than something an import
+// guard notices afterwards. Declared before `dependencies {}` because langCompileOnly does not exist
+// until the source set does.
+val lang: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets["main"].compileClasspath + sourceSets["main"].output
+    runtimeClasspath += sourceSets["main"].runtimeClasspath + sourceSets["main"].output
+}
+
 dependencies {
     // compileOnly: shadowJar bundles these manually (see each loader's build.gradle.kts).
     // runtimeOnly: picked up by Fabric/Loom dev runs via Gradle's standard runtimeClasspath.
@@ -62,11 +76,11 @@ dependencies {
     "compileOnly"(project(":taffy"))
     "runtimeOnly"(project(":taffy"))
 
-    // :language -- the grammars, ECJ and Rhino, plus the ScriptService seam. Bundled rather than
-    // omitted: the editor still opens every file without it, but it colours from core's word-list
-    // lexers and does not analyse, which is not the degradation somebody installing a code editor
-    // wants. plan/platform-mc1201.md 4.3.
-    "compileOnly"(project(":language"))
+    // :language -- the grammars, ECJ and Rhino, plus the ScriptService seam. ON `lang` AND NOT ON
+    // `main` since J8: the language stack ships as its own jar, and this is what stops the host jar
+    // naming it. Its 1.20.x host half comes from :mc1201:common's own lang source set.
+    "langCompileOnly"(project(":language"))
+    "langCompileOnly"(project(path = ":mc1201:common", configuration = "commonLangOutput"))
     // AND ON THE RUNTIME CLASSPATH, like :core and :mc1201:common above. compileOnly alone put it on
     // no run at all: `Lifecycle1201.bootstrapClient` calls `ScriptService1201.install()`, so the first
     // dev client to reach it died with
@@ -132,6 +146,38 @@ val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.ta
     dependsOn(commonJar)
     from(commonJar.map { zipTree(it.archiveFile) })
     cgCommonPackages.forEach { relocate("com.crystalgui.mc.$it", "$cgThinRoot.$it") }
+}
+
+// A DEV RUN HAS TO SEE crystalgui_lang AS A MOD, which means a descriptor in the lang source set's
+// resources -- the merged one, which is what the shipped jar carries and already describes every
+// loader. Without it the classes are on the run classpath and no loader constructs the entry point,
+// so scripting is silently absent from every dev client while the shipped jar is fine.
+tasks.named<ProcessResources>("processLangResources") {
+    val descriptors = rootProject.tasks.named("generateLanguageDescriptors")
+    dependsOn(descriptors)
+    from(descriptors)
+}
+
+/**
+ * The language merge's input from this loader: its own `lang` classes plus :mc1201:common's, relocated.
+ *
+ * The same relocation as `thinShadowJar` and for the same reason: the language jar carries three
+ * remapped copies of the common half and three classes cannot share a name. The loader's own entry sits
+ * in `com.crystalgui.mc.<loader>.lang`, which the relocation does not touch.
+ */
+val langThinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("langThinShadowJar") {
+    group = "language jar"
+    description = "This loader's language half plus :mc1201:common's, relocated -- before remapping."
+    archiveClassifier.set("lang-thin-dev")
+    configurations.empty()
+    from(lang.output)
+    // The descriptors above are for the DEV RUN. The merge writes its own copy once, from the same
+    // generator, so four thin jars carrying them too is four duplicates for it to arbitrate.
+    exclude("META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta")
+    val commonLangJar = project(":mc1201:common").tasks.named<Jar>("langJar")
+    dependsOn(commonLangJar)
+    from(commonLangJar.map { zipTree(it.archiveFile) })
+    relocate("com.crystalgui.mc.lang", "$cgThinRoot.lang")
 }
 
 // Nothing in :mc1201:common may be NAMED from a descriptor or a service file.
