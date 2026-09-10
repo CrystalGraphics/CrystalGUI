@@ -552,6 +552,8 @@ public final class UIDocument extends UIElement {
     /** Paints the laid-out document through the shared paint context (5.4). */
     public void paint(CgUiPaintContext ctx) {
         boxes().paint(ctx);
+        // AFTER the tree: cursor art belongs over everything and inside no scissor. @see CursorDecoration
+        input().paintCursorDecoration(ctx);
     }
 
     /**
