@@ -15,13 +15,12 @@ import com.crystalgui.mc.example.MachineExampleClient1201;
 import com.crystalgui.mc.client.CgUiKeybinds1201;
 import com.crystalgui.mc.client.CgUiAutoTest1201;
 import com.crystalgui.mc.client.ClientProbe1201;
-import com.crystalgui.language.map.PlatformMappings;
-import com.crystalgui.mc.client.ScriptService1201;
 import com.crystalgui.mc.net.Connections1201;
 import com.crystalgui.mc.net.ServerSmoke1201;
 import com.crystalgui.mc.net.WorkspaceHost1201;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.wire.CgNetworkChannel;
+import com.crystalgui.text.syntax.LanguageRegistry;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -61,21 +60,37 @@ public final class Lifecycle1201 {
      * {@link CgUiKeybinds1201#all()} must be read AFTER this runs.
      */
     public static void bootstrapClient() {
-        // Before the announcement: the engine source asks this service where it may write, so a band
-        // bundled in the jar or fetched for this host has nowhere to go until it is registered.
-        ScriptService1201.install();
-        // AND THE MAPPING IS STARTED HERE, not left to whoever asks first. The first asker is the first
-        // Java analysis, which then cannot win its own race -- it starts the download and reads the
-        // identity in the same breath, and nothing re-analyses when the mapping lands. Started at mod
-        // init it has the whole world load to arrive in. @see PlatformMappings#start
-        PlatformMappings.start();
         // THE POINTER IS THIS PLATFORM'S TO DRESS, and it belongs to the process rather than to any one
         // screen -- so a cursor resolves the same whether the desktop has ever been opened or not. GLFW
         // has the whole standard set, so this one is a mapping table; the engine resolves a keyword and asks.
         CgPlatform.provide(CursorService.SERVICE, new CursorService1201());
-        // Behind the loading screen, where the registry's discovery costs nobody anything.
-        LanguageStack1201.announce();
+        // WHAT THIS DEPLOYMENT CAN DO WITH A SOURCE FILE, read from core and naming no language
+        // class: the language stack is a separate mod since J8, and this host must work without it.
+        // LanguageRegistry is core's, so asking costs nothing and compiles with the jar absent.
+        announceLanguageTier();
         MachineExampleClient1201.registerClient();
+    }
+
+    /**
+     * Says which tier of the language stack this deployment has, without naming it.
+     *
+     * <p>{@code LanguageRegistry} is {@code core}'s enginless tier, so this compiles and runs with the
+     * language mod absent — which is the whole point since J8 made it a separate jar. An empty
+     * contributor list IS the absent case; the language mod announces its own arrival.</p>
+     *
+     * <p>Worth a line either way: every tier opens a file perfectly and the configurations are
+     * indistinguishable on screen, so nothing else separates "this pack ships no grammars" from "a
+     * contributor failed to load".</p>
+     */
+    private static void announceLanguageTier() {
+        List<String> contributors = LanguageRegistry.contributors();
+        if (contributors.isEmpty()) {
+            CrystalGuiCore.LOGGER.info("[cgui-1201] no language stack installed -- source files colour "
+                    + "from core's built-in lexers and are not analysed. Install crystalgui_lang for "
+                    + "grammars, analysis and scripting.");
+        } else {
+            CrystalGuiCore.LOGGER.info("[cgui-1201] language contributors: {}", contributors);
+        }
     }
 
     // ── Server ──────────────────────────────────────────────────────────────────────────────────

@@ -59,3 +59,56 @@ val cgDescriptor = ModDescriptor(
 )
 
 registerDescriptorTasks(cgDescriptor, "cgui")
+
+// ── And what the LANGUAGE mod says about itself (J8) ─────────────────────────────────────────────
+//
+// A second mod from the same source tree: the grammars, the analysis engines and the scripting
+// runtime, ~50 MB that a player who never writes a script does not download. It ships no per-loader
+// descriptor of its own -- the fat jars are retired and only the merged jar exists -- so this
+// registers the generator alone.
+//
+// CLIENT, and structurally: every entry point installs against a live Minecraft instance. A dedicated
+// server that finds it in `mods/` still loads the jar; nothing in it registers.
+val cgLangDescriptor = ModDescriptor(
+    id = "crystalgui_lang",
+    name = "CrystalGUI Language",
+    version = property("modVersion").toString(),
+    description = "Grammars, code analysis and scripting for CrystalGUI's editor.",
+    license = "LGPL-3.0-or-later",
+    environment = Side.CLIENT,
+    dependencies = listOf(
+        // AFTER, and required: this mod installs itself into seams the host owns -- CgPlatform's
+        // ScriptService slot and core's command registry -- so a language stack that loads first
+        // registers into nothing and reports success.
+        Dependency("crystalgui", "[1.0.0,)", ordering = Ordering.AFTER),
+    ),
+    variants = listOf(
+        Variant(
+            loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
+            commonEntry = "com.crystalgui.mc.lang.CrystalGuiLang",
+            packFormat = 1,
+        ),
+        Variant(
+            loader = "forge", minecraft = "[1.20.1,1.21)", era = "modern",
+            commonEntry = "com.crystalgui.mc.forge.lang.CrystalGuiLang1201Forge",
+            packFormat = 15,
+        ),
+        Variant(
+            loader = "neoforge", minecraft = "[1.20.4,1.21)", era = "modern",
+            commonEntry = "com.crystalgui.mc.neoforge.lang.CrystalGuiLang1201NeoForge",
+            packFormat = 22,
+        ),
+        Variant(
+            loader = "fabric", minecraft = "[1.20.1,1.21)", era = "modern",
+            clientEntry = "com.crystalgui.mc.fabric.lang.CrystalGuiLang1201Fabric",
+            fabricDepends = linkedMapOf(
+                "fabricloader" to ">=0.15.0",
+                "minecraft" to "~1.20.1",
+                "crystalgui" to "*",
+            ),
+            packFormat = 15,
+        ),
+    ),
+)
+
+registerDescriptorTasks(cgLangDescriptor, "cgui-lang", name = "language", checkShipped = false)

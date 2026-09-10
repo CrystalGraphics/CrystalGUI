@@ -581,19 +581,10 @@ public final class CgUiScreen extends GuiScreen {
         CgGlState.invalidateAllIfPresent();
 
         framesPainted++;
-        // UNATTENDED SCRIPT RUN, off unless asked for. On the CLIENT THREAD, which is where the Run
-        // command runs too -- a probe on a worker would prove nothing about a failure that reaches the
-        // game loop. @see CgUiAutoTest#runScriptOnce
-        if (framesPainted == CgUiAutoTest.RUN_SCRIPT_ON_FRAME) {
-            CgUiAutoTest.runScriptOnce();
-        }
-        // The §15.5 A proof, on the same frame budget. @see CgUiAutoTest#probeLiveBytesOnce
-        if (framesPainted == 5) CgUiAutoTest.probeLiveBytesOnce();
-        // And what the member list actually holds here. @see CgUiAutoTest#probeCompletionOnce
-        if (framesPainted == 6) CgUiAutoTest.probeCompletionOnce();
-        // ...and asked much later, because the analysis behind each one is debounced onto a worker that
-        // drains on THIS thread. @see CgUiAutoTest#reportCompletionProbes
-        if (framesPainted == 60) CgUiAutoTest.reportCompletionProbes();
+        // WHATEVER ELSE IS INSTALLED wants doing on this frame. The scripting probes used to be named
+        // here one by one; since J8 they ship in the language jar and register themselves, so this host
+        // runs them without being able to name them. @see CgUiAutoTest#onFrame
+        CgUiAutoTest.runFrameSteps(framesPainted);
         if (framesPainted == CgUiAutoTest.CAPTURE_ON_FRAME) {
             CgUiAutoTest.captureAndQuit(mc, mc.displayWidth, mc.displayHeight);
         }

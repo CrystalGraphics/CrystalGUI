@@ -55,6 +55,14 @@ legacyForge {
             sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
             sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["main"])
         }
+        // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
+        // leaves it out, which is how the degraded configuration is exercised without building a jar.
+        if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+            create("crystalgui_lang") {
+                sourceSet(sourceSets["lang"])
+                sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["lang"])
+            }
+        }
     }
 }
 
@@ -127,6 +135,18 @@ tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
     jar.set(reobfThinJar.flatMap { it.archiveFile })
 }
 tasks.named("assemble") { dependsOn(reobfThinJar) }
+
+// -- The language thin jar, reobfuscated (J8) -----------------------------------------------------
+//
+// `main` and not `lang` as the second argument: ModDevGradle looks for `<sourceSet>RuntimeElements`,
+// which only `main` has, and what that argument supplies is the REMAPPER's classpath rather than the
+// jar's contents. Passing `lang` fails with "langRuntimeElements not found".
+val reobfLangThinJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension>()
+    .reobfuscate(
+        tasks.named<org.gradle.api.tasks.bundling.AbstractArchiveTask>("langThinShadowJar"),
+        sourceSets.main.get()) {
+        archiveClassifier.set("lang-thin")
+    }
 
 
 // The per-loader `deployMods` is retired (J7). One artifact installs on every loader now, so the root

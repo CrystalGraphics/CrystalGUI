@@ -63,6 +63,14 @@ neoForge {
             sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
             sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["main"])
         }
+        // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
+        // leaves it out, which is how the degraded configuration is exercised without building a jar.
+        if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+            create("crystalgui_lang") {
+                sourceSet(sourceSets["lang"])
+                sourceSet(project(":mc1201:common").extensions.getByType<SourceSetContainer>()["lang"])
+            }
+        }
     }
 }
 
@@ -113,6 +121,9 @@ tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
     jar.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
 }
 tasks.named("assemble") { dependsOn("thinShadowJar") }
+
+// The language half, and the same reasoning: official names, so no remapping step. (J8)
+tasks.named<AbstractArchiveTask>("langThinShadowJar") { archiveClassifier.set("lang-thin") }
 
 // The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
 // into all four instances. NeoForge needing no reobfuscation — it runs official Minecraft names, and

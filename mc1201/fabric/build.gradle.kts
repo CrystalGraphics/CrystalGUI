@@ -120,6 +120,23 @@ tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
 }
 tasks.named("assemble") { dependsOn(remapThinJar) }
 
+// A DEV RUN SEES crystalgui_lang BECAUSE KNOT SCANS THE CLASSPATH (J8). Loom's run resolves from
+// `main`'s runtime classpath, and Knot treats any entry carrying a fabric.mod.json as a mod -- so the
+// lang source set's output directory IS the second mod, with the descriptor `processLangResources`
+// put there. Forge and NeoForge take theirs through `mods {}` instead; putting it on both would
+// define every class twice.
+if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+    dependencies { "runtimeOnly"(files(sourceSets["lang"].output)) }
+}
+
+/** The language half of the same thing (J8) — remapped for the same reason the host half is. */
+val remapLangThinJar = tasks.register<net.fabricmc.loom.task.RemapJarTask>("remapLangThinJar") {
+    group = "language jar"
+    description = "The language thin jar at intermediary names -- the language merge's input."
+    inputFile.set(tasks.named<AbstractArchiveTask>("langThinShadowJar").flatMap { it.archiveFile })
+    archiveClassifier.set("lang-thin")
+}
+
 // Extracts Fabric MC 1.20.1 sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when jars change between toolchain version bumps.
 val extractMcSources by tasks.registering(Sync::class) {

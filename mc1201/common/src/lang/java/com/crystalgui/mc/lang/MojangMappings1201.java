@@ -1,4 +1,4 @@
-package com.crystalgui.mc.client;
+package com.crystalgui.mc.lang;
 
 import com.crystalgui.language.cache.Download;
 import com.crystalgui.language.cache.Downloads;

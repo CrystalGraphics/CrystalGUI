@@ -1,4 +1,4 @@
-package com.crystalgui.mc.client;
+package com.crystalgui.mc.lang;
 
 import java.io.IOException;
 import java.nio.file.Path;
