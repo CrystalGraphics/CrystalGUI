@@ -107,6 +107,10 @@ by absence and reaches no loader; the GL harness is a client with a context by d
 
 ### The single jar, and driving four real clients
 
+📄 **[CrystalGraphics/singlejar-logic/README.md](CrystalGraphics/singlejar-logic/README.md)** — the
+build itself: why one jar is possible, the pipeline, the traps it exists to prevent, and what a NEW
+project does to ship this way. Read it before touching anything under `singlejar-logic/`.
+
 **One artifact installs on all four loaders.** `./gradlew singleJar` merges four *thin* jars — each
 loader's own classes plus `mc1201/common` relocated under `com.crystalgui.mc.<loader>.common`, so three
 remapped copies can share the jar without sharing a name — with `core`, `language`, `taffy` and
