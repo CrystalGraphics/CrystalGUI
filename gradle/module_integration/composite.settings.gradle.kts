@@ -23,7 +23,7 @@ val submoduleData = listOf(
         // includeBuild — projectPath values are relative to that build root.
         "substitutions" to listOf(
             mapOf("module" to "com.crystalgraphics:crystalgraphics",
-                "projectPath" to ":mc1710"),
+                "projectPath" to ":runtime:mc:1710"),
             mapOf("module" to "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings",
                 "projectPath" to ":freetype-msdfgen-harfbuzz-bindings"),
             mapOf("module" to "com.crystalgraphics:core",
@@ -34,16 +34,16 @@ val submoduleData = listOf(
             // the cursor adapter, which is toolkit code and not Minecraft's -- so the harness stops
             // carrying a copy of one.
             mapOf("module" to "com.crystalgraphics:mc-lwjgl2",
-                "projectPath" to ":mc-lwjgl2"),
-            // Must be added and removed in the same commit as :mc1201:common in CrystalGraphics'
+                "projectPath" to ":runtime:lwjgl:2"),
+            // Must be added and removed in the same commit as :runtime:mc:modern:common in CrystalGraphics'
             // settings.gradle.kts: a substitution naming a project that is not in the target build
             // fails configuration for every task, and the error names the module, not this file.
             mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-common",
-                "projectPath" to ":mc1201:common"),
+                "projectPath" to ":runtime:mc:modern:common"),
             // The 1.20.1 Forge MOD, for a consumer that wants CrystalGraphics in its own dev run's mod
             // list rather than merely on its compile classpath.
             mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-forge",
-                "projectPath" to ":mc1201:forge")
+                "projectPath" to ":runtime:mc:modern:forge")
         ),
 
         // mc1710-specific bootstrap args injected into RunMinecraftTask by integration.gradle.kts.
@@ -51,7 +51,7 @@ val submoduleData = listOf(
         // NO COREMOD. CrystalGraphicsCoremod and the whole ASM redirect layer were deleted on
         // 2026-07-31 -- see CrystalGraphics/AGENTS.md "GL state" for why the GL mirror could never be
         // made reliable and what replaced it. `coreModClass` is correspondingly empty in
-        // CrystalGraphics/mc1710/gradle.properties.
+        // CrystalGraphics/runtime/mc/1710/gradle.properties.
         //
         // The entry outlived the class by three months and would have been a hard launch failure the
         // next time anyone ran the client: FML reports it as a coremod class-load problem, which reads
@@ -77,11 +77,11 @@ fun Map<String, *>.mapList(key: String): List<Map<String, String>> =
 
 // Loader substitutions go with the loaders. CrystalGraphics drops its own loaders when neither it nor
 // CrystalGUI is the build being invoked, and a substitution naming a missing project then fails
-// configuration for every task -- "Project with path ':mc1201:common' not found in build
+// configuration for every task -- "Project with path ':runtime:mc:modern:common' not found in build
 // ':CrystalGUI:CrystalGraphics'". Matched on the path so a loader added later is covered.
 val embeddedHere = gradle.parent != null
 
-fun isLoaderPath(projectPath: String): Boolean = projectPath == ":mc1710"
+fun isLoaderPath(projectPath: String): Boolean = projectPath == ":runtime:mc:1710"
 
 submoduleData.forEach { mod ->
     includeBuild(mod.string("buildPath")) {

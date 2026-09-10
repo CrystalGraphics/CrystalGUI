@@ -4,9 +4,9 @@ import java.util.Properties
 // Root project — pure build coordinator. No source lives here.
 //
 // MC version subprojects:
-//   :mc1710         — Minecraft 1.7.10 + Forge (LWJGL 2, gtnhconvention)
-//   :mc1201:common  — the 1.20.x platform seam, shared by all three loaders
-//   :mc1201:{forge,neoforge,fabric} — registration only
+//   :runtime:mc:1710         — Minecraft 1.7.10 + Forge (LWJGL 2, gtnhconvention)
+//   :runtime:mc:modern:common  — the 1.20.x platform seam, shared by all three loaders
+//   :runtime:mc:modern:{forge,neoforge,fabric} — registration only
 //
 // Platform-agnostic subprojects:
 //   :core     — platform-agnostic UI engine
@@ -172,9 +172,9 @@ tasks.register("assembleConsumerRuntime") {
     group = "crystalgui"
     description = "Builds every jar a consuming mod's dev run puts on its classpath."
 
-    dependsOn(":core:jar", ":taffy:jar", ":mc1201:common:jar", ":mc1201:forge:jar")
+    dependsOn(":core:jar", ":taffy:jar", ":runtime:mc:modern:common:jar", ":runtime:mc:modern:forge:jar")
 
     listOf(":core:jar", ":platform:jar", ":freetype-msdfgen-harfbuzz-bindings:jar",
-           ":mc1201:common:jar", ":mc1201:forge:jar")
+           ":runtime:mc:modern:common:jar", ":runtime:mc:modern:forge:jar")
         .forEach { dependsOn(gradle.includedBuild("CrystalGraphics").task(it)) }
 }

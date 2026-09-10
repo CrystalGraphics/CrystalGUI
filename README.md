@@ -18,7 +18,7 @@ sessions).
 ./gradlew :core:headlessTest   # deliberately without it — the server-safety guard
 ```
 
-The UI runs today only in the GL debug harness; neither `mc1710` nor `mc1201` is wired into
+The UI runs today only in the GL debug harness; neither `runtime/mc/1710` nor `runtime/mc/modern` is wired into
 `settings.gradle.kts` yet:
 
 ```bash

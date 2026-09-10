@@ -43,7 +43,7 @@ import com.crystalgui.widget.control.Switch;
  * <p>{@link MachineTrace} stamps every line with the thread it ran on, and in this demo every one of
  * them says {@code main} — one thread driving both halves, deliberately, because a loopback demo has
  * nothing to schedule. That is the contrast worth having: run the same panel in game
- * ({@code :mc1710:runClient}, F8) and the identical lines split into {@code Server thread} and
+ * ({@code :runtime:mc:1710:runClient}, F8) and the identical lines split into {@code Server thread} and
  * {@code Client thread}, from one process, in single player. The traces are here so the two runs are
  * comparable, not because this one has anything to reveal.</p>
  *
@@ -51,7 +51,7 @@ import com.crystalgui.widget.control.Switch;
  *
  * <p>Both ends are in one JVM sharing one heap, so nothing here would catch a class that only the
  * client can load, or a server path that touches a font. That is what {@code :core:headlessTest}
- * (CrystalGraphics deliberately off the classpath) and {@code :mc1710:serverSmoke} (a real dedicated
+ * (CrystalGraphics deliberately off the classpath) and {@code :runtime:mc:1710:serverSmoke} (a real dedicated
  * server) are for. A loopback demo proves the protocol; it does not prove the split.</p>
  */
 public final class MachineDemo {

@@ -4,7 +4,7 @@
 /.vscode/
 /run/
 /build/
-# Every module's, not only the root's: /build/ is anchored, so a module added later (mc-shared) has
+# Every module's, not only the root's: /build/ is anchored, so a module added later (runtime/mc/shared) has
 # its outputs staged the first time anything runs `git add` over it.
 **/build/
 /eclipse/

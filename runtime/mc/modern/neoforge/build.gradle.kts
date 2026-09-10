@@ -1,0 +1,130 @@
+// NOTE: Despite living under runtime/mc/modern/, this subproject targets MC 1.20.4 / NeoForge 20.4.x.
+// NeoForge 20.1.x (MC 1.20.1) was never published to the NeoForge Maven; the earliest
+// available stable series is 20.4.x (MC 1.20.4). Version pins live in gradle.properties
+// under mc1204.* keys. The directory name runtime/mc/modern/neoforge/ is retained for continuity.
+
+plugins {
+    id("cg-mc1201-loader")
+    id("net.neoforged.moddev")
+    id("com.gradleup.shadow")
+}
+
+group = property("modGroup").toString()
+version = property("modVersion").toString()
+base { archivesName.set("crystalgui-mc1201-neoforge") }
+
+// Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
+apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
+
+// ADHOC: Re-declare two Maven repos that net.neoforged.moddev.repositories (settings plugin)
+// should provide at project level. The cg-mc1201-loader convention plugin's repositories block
+// runs at project configuration time and takes precedence over settings-level repos in Gradle 9,
+// causing moddev's NeoForge/Mojang repos to go missing during dependency resolution.
+//
+// Removal condition: if ModDevGradle changes its settings plugin to use
+// DependencyResolutionManagement (exclusive, settings-owned) instead of per-project repos,
+// these declarations can be removed and the dependency resolution failure will confirm it.
+repositories {
+    maven("https://maven.neoforged.net/mojang-meta/") { name = "NeoForge Mojang Meta" }
+    maven("https://libraries.minecraft.net/") {
+        name = "MC Libraries"
+        metadataSources { mavenPom() }
+    }
+}
+
+neoForge {
+    version = property("mc1204.neoforge").toString()
+
+    parchment {
+        minecraftVersion = property("mc1204.parchment.mc").toString()
+        mappingsVersion = property("mc1204.parchment").toString()
+    }
+
+    runs {
+        create("client") {
+            client()
+            gameDirectory = project.file("runs/client")
+        }
+        // A server run, so serverSmoke has something to boot here too. Without it this loader is the
+        // one that cannot be checked for the server-side class-loading contract.
+        create("server") {
+            server()
+            gameDirectory = project.file("runs/server")
+        }
+    }
+
+    mods {
+        create("crystalgui") {
+            sourceSet(sourceSets.main.get())
+            // Dev-run classpath: core and mc1201:common are compileOnly for production
+            // (shadowJar bundles them via from(zipTree(...))), but ModDevGradle dev runs only see
+            // what's declared in this mods{} block. Adding their source sets here puts their
+            // compiled classes in the mod's virtual JAR, making them visible to ModuleClassLoader.
+            sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
+            sourceSet(project(":runtime:mc:modern:common").extensions.getByType<SourceSetContainer>()["main"])
+        }
+        // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
+        // leaves it out, which is how the degraded configuration is exercised without building a jar.
+        if (!providers.gradleProperty("cgNoLanguage").isPresent) {
+            create("crystalgui_language") {
+                sourceSet(sourceSets["lang"])
+                sourceSet(project(":runtime:mc:modern:common").extensions.getByType<SourceSetContainer>()["lang"])
+            }
+        }
+    }
+}
+
+// Puts CrystalGraphics on this run: its MC-free jars as libraries, its loader as a mod. BELOW the
+// loader block on purpose -- ModDevGradle creates additionalRuntimeClasspath while that extension is
+// configured, not when its plugin is applied, so an apply above it fails with "Configuration with
+// name 'additionalRuntimeClasspath' not found".
+apply(from = rootProject.file("gradle/module_integration/crystalgraphics-run.gradle.kts").toURI())
+
+// Extracts NeoForge + MC 1.20.4 sources and resources into build/mc-src for local navigation.
+// Sync (not Copy) removes stale files when the source jar changes between toolchain version bumps.
+val extractMcSources by tasks.registering(Sync::class) {
+    description = "Extracts NeoForge + MC 1.20.4 sources and resources into build/mc-src for local navigation."
+    group = "crystalgui"
+
+    // dependsOn (not mustRunAfter) — mustRunAfter only orders tasks already scheduled; it does not
+    // cause createMinecraftArtifacts to run, so the jar would be absent on a clean checkout.
+    dependsOn("createMinecraftArtifacts")
+
+    // Lazy providers resolved at execution time — never at configuration time (Gradle 9 rule).
+    // fileTree scan is the fallback because ModDevGradle does not expose a public typed output
+    // property for the sources or client-extra jars.
+    val sourcesJar = layout.buildDirectory.dir("moddev/artifacts").map { dir ->
+        dir.asFileTree.matching { include("*-sources.jar") }.singleFile
+    }
+    val resourcesJar = layout.buildDirectory.dir("moddev/artifacts").map { dir ->
+        dir.asFileTree.matching { include("client-extra-*.jar") }.singleFile
+    }
+
+    from(zipTree(sourcesJar)) { into("java") }
+    from(zipTree(resourcesJar)) { into("resources") }
+    into(layout.buildDirectory.dir("mc-src"))
+}
+
+// extractMcSources is cheap (unzips an already-present jar — createMinecraftArtifacts ran first).
+// Wire it into classes so build/mc-src/ is always populated after a normal compile.
+tasks.named("classes") { dependsOn(extractMcSources) }
+
+// -- The thin jar (J1) ----------------------------------------------------------------------------
+//
+// NO REMAPPING STEP, for the same reason `assemble` has no reobfuscation here: NeoForge runs official
+// Minecraft names, so `thinShadowJar` already IS the production artifact. It therefore takes the
+// `thin` classifier directly rather than the `thin-dev` the other two carry until they are mapped.
+tasks.named<AbstractArchiveTask>("thinShadowJar") { archiveClassifier.set("thin") }
+
+// Registered by cg-mc1201-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
+tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    jar.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
+}
+tasks.named("assemble") { dependsOn("thinShadowJar") }
+
+// The language half, and the same reasoning: official names, so no remapping step. (J8)
+tasks.named<AbstractArchiveTask>("langThinShadowJar") { archiveClassifier.set("lang-thin") }
+
+// The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
+// into all four instances. NeoForge needing no reobfuscation — it runs official Minecraft names, and
+// the namespace probe answers "already readable" here — is now a fact about the merge, not this file.

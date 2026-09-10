@@ -23,7 +23,7 @@ import com.crystalgui.ui.dom.UIElement;
  *
  * <p>Exactly one thing: call {@link ClientWindowContext#userClosed} when the <em>user</em> closes it. Not
  * when the server does, not when the connection drops — the host already knows about those, and reporting
- * them would echo. The mc1710 mount gets it from {@code WindowFrame.onDestroyed}.</p>
+ * them would echo. The 1.7.10 mount gets it from {@code WindowFrame.onDestroyed}.</p>
  */
 public interface WindowMount {
 

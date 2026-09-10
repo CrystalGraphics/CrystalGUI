@@ -64,43 +64,43 @@ philosophy, which outlives the milestone.
 ./gradlew :core:test              # unit tests, CrystalGraphics ON the classpath
 ./gradlew :core:headlessTest      # server-side tests, CrystalGraphics CORE deliberately absent
 ./gradlew :core:check             # both test tasks
-./gradlew :mc1710:compileJava     # the 1.7.10 loader — IS in the build, NOT in :core:check, and
+./gradlew :runtime:mc:1710:compileJava     # the 1.7.10 loader — IS in the build, NOT in :core:check, and
                                   # therefore the one thing a deletion from core/ can break silently
 ```
 
 > ~~There is **no in-game Minecraft integration reachable from this build.**~~ **False since Phase 4,
 > corrected 2026-08-21.** This paragraph told three sessions in a row that only `core/` and the harness
 > could be run end to end, and ended with *"do not claim otherwise"* — so it read as a rule rather than
-> as a fact that had gone stale. `mc1710` is in `settings.gradle.kts` and carries the whole networking
+> as a fact that had gone stale. `runtime/mc/1710` is in `settings.gradle.kts` and carries the whole networking
 > integration: `CgUiScreen`, `CgUiConnections`, `CgUiWorkspaceHost`, `Mc1710NetworkChannel` and four
 > probes. **Every server-side defect found this week was found by running it**, and none of them was
-> reachable from `core/` or the harness — see [Running Minecraft](#running-minecraft-mc1710-is-in-the-build).
+> reachable from `core/` or the harness — see [Running Minecraft](#running-minecraft-the-1710-loader-is-in-the-build).
 
-## Running Minecraft — `mc1710` IS in the build
+## Running Minecraft: the 1.7.10 loader IS in the build
 
 **For anything that crosses the loader seam — networking, the workspace over a wire, platform services,
 class loading on a server — a LOADER MODULE is the only thing that can see it.** `headlessTest` asserts
 by absence and reaches no loader; the GL harness is a client with a context by design.
 
-> **`mc1201` answers the same seam on three loaders and is also in the build** — it was `mc1710` alone
+> **`runtime/mc/modern` answers the same seam on three loaders and is also in the build** — it was `runtime/mc/1710` alone
 > until 2026-09-05. Its own `serverSmoke` found one defect per loader, none of them alike and none
 > reachable from `core/`, so the sentence above is now about a *kind* of module rather than about one.
 
 ```bash
-./gradlew :mc1710:runClient                       # the dev client
-./gradlew :mc1710:runServer                       # a dedicated server
-./gradlew :mc1710:serverSmoke                     # boot a server, assert the stack came up, stop. ~48s
-./gradlew :mc1710:runObfClient                    # SRG names — production, and the only run that is
-./gradlew :mc1710:runClient -PcgJoin=localhost:25565   # join a server: TWO PROCESSES, ONE SOCKET
-./gradlew :mc1710:runClient -PcgSessionProbe      # a real Server/ClientUiSession pair over the wire
-./gradlew :mc1710:runClient -PcgNetProbe          # the raw transport, below the session layer
+./gradlew :runtime:mc:1710:runClient                       # the dev client
+./gradlew :runtime:mc:1710:runServer                       # a dedicated server
+./gradlew :runtime:mc:1710:serverSmoke                     # boot a server, assert the stack came up, stop. ~48s
+./gradlew :runtime:mc:1710:runObfClient                    # SRG names — production, and the only run that is
+./gradlew :runtime:mc:1710:runClient -PcgJoin=localhost:25565   # join a server: TWO PROCESSES, ONE SOCKET
+./gradlew :runtime:mc:1710:runClient -PcgSessionProbe      # a real Server/ClientUiSession pair over the wire
+./gradlew :runtime:mc:1710:runClient -PcgNetProbe          # the raw transport, below the session layer
 ```
 
 ```bash
 **1.20.x** — `<loader>` is `forge` | `neoforge` | `fabric`. `neoforge` is MC 1.20.4, the other two 1.20.1.
-./gradlew :mc1201:<loader>:runClient
-./gradlew :mc1201:<loader>:runServer
-./gradlew :mc1201:<loader>:serverSmoke            # boots, asserts, stops. Needs -PcgAcceptEula once
+./gradlew :runtime:mc:modern:<loader>:runClient
+./gradlew :runtime:mc:modern:<loader>:runServer
+./gradlew :runtime:mc:modern:<loader>:serverSmoke            # boots, asserts, stops. Needs -PcgAcceptEula once
                                                   # per run dir: the build detects Mojang's EULA and
                                                   # refuses to accept it for you.
 ```
@@ -112,8 +112,8 @@ build itself: why one jar is possible, the pipeline, the traps it exists to prev
 project does to ship this way. Read it before touching anything under `singlejar-logic/`.
 
 **One artifact installs on all four loaders.** `./gradlew singleJar` merges four *thin* jars — each
-loader's own classes plus `mc1201/common` relocated under `com.crystalgui.mc.<loader>.common`, so three
-remapped copies can share the jar without sharing a name — with `core`, `taffy` and `mc-shared` added
+loader's own classes plus `runtime/mc/modern/common` relocated under `com.crystalgui.mc.<loader>.common`, so three
+remapped copies can share the jar without sharing a name — with `core`, `taffy` and `runtime/mc/shared` added
 once. A class file is inert until something defines it, and every loader's scanner reads with ASM
 rather than defining, so the variants it does not want cost it nothing.
 
@@ -137,7 +137,7 @@ grammars with their natives, ECJ and Rhino per Java band, `language/` itself —
 ```
 
 > **The host jar may not name the language stack, and a source set is what enforces it.** `:language`
-> is on the `lang` source sets' `compileOnly` and not on `main`'s — in `mc1710`, `mc1201/common` and
+> is on the `lang` source sets' `compileOnly` and not on `main`'s — in `runtime/mc/1710`, `runtime/mc/modern/common` and
 > each 1.20.x loader — so a language import in a host class is a compile error rather than something a
 > guard notices afterwards. The language mod installs itself from its own entry point; the host only
 > reports which tier it has, by reading `core`'s `LanguageRegistry.contributors()`. Where the host needs
@@ -235,15 +235,15 @@ own), while CrystalGraphics is a submodule that is a composite `includeBuild`. C
 | Module | In build? | State |
 |---|---|---|
 | `core/` | ✅ | The engine. Java 21 → Java 8 bytecode. Everything below lives here. |
-| `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and ECJ's ~13MB off a dedicated server. **Since J8 it ships as its OWN MOD, `crystalgui_language`**, and the rule now reaches the loader hosts too: `:language` is on their `lang` source sets and not on `main`, so no host class can name it. Its 1.7.10 and 1.20.x hosts are `mc1710/src/lang` and `mc1201/common/src/lang`, plus one entry class per 1.20.x loader. `.grammar` (six tree-sitter grammars), `.engine` (band selection, the ONE shared loader per band — `EngineHost` — the language-neutral `Analysis` answer and the `AnalysedLanguageServices` attachment every engine extends), `.java` (everything Java, split by what a class is FOR — `.ecj` the adapters, `.classpath` what a script compiles against, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog over `.fix.catalog`/`.fix.ast`/`.fix.edit`, `.exec` the `ScriptHost` runtime), `.js` (everything JavaScript, split by WHICH LOADER defines a class — `.host` may name `language.run`/`language.java` and never Rhino, `.rhino` is the reverse and holds `.rhino.resolve`/`.rhino.fix`/`.rhino.exec`), `.map` (the readable↔runtime boundary, on ASM), `.run` (the **engine-neutral** Run shell: `ScriptRuntime` SPI + `ScriptRuntimes` registry and `ScriptPolicy` at the root — which lives there because three of its four consumers are not JavaScript — over `.exec` (capture, stop, cache), `.console` (the transcript, UI-free) and `.view` (the only one that may import `com.crystalgui.ui`). `RunShellIsEngineNeutralTest` forbids the whole tree naming `.java`, `.js`, ECJ or Rhino, and still needs no change after the split because it matches by path PREFIX). `.resolve` is reserved.
+| `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and ECJ's ~13MB off a dedicated server. **Since J8 it ships as its OWN MOD, `crystalgui_language`**, and the rule now reaches the loader hosts too: `:language` is on their `lang` source sets and not on `main`, so no host class can name it. Its 1.7.10 and 1.20.x hosts are `runtime/mc/1710/src/lang` and `runtime/mc/modern/common/src/lang`, plus one entry class per 1.20.x loader. `.grammar` (six tree-sitter grammars), `.engine` (band selection, the ONE shared loader per band — `EngineHost` — the language-neutral `Analysis` answer and the `AnalysedLanguageServices` attachment every engine extends), `.java` (everything Java, split by what a class is FOR — `.ecj` the adapters, `.classpath` what a script compiles against, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog over `.fix.catalog`/`.fix.ast`/`.fix.edit`, `.exec` the `ScriptHost` runtime), `.js` (everything JavaScript, split by WHICH LOADER defines a class — `.host` may name `language.run`/`language.java` and never Rhino, `.rhino` is the reverse and holds `.rhino.resolve`/`.rhino.fix`/`.rhino.exec`), `.map` (the readable↔runtime boundary, on ASM), `.run` (the **engine-neutral** Run shell: `ScriptRuntime` SPI + `ScriptRuntimes` registry and `ScriptPolicy` at the root — which lives there because three of its four consumers are not JavaScript — over `.exec` (capture, stop, cache), `.console` (the transcript, UI-free) and `.view` (the only one that may import `com.crystalgui.ui`). `RunShellIsEngineNeutralTest` forbids the whole tree naming `.java`, `.js`, ECJ or Rhino, and still needs no change after the split because it matches by path PREFIX). `.resolve` is reserved.
 
 > **The two `java`/`js` axes differ on purpose.** In `.java` the loader question is mechanical — a class that imports `org.eclipse.jdt` is child-side, and that is thirty-six of its fifty — so directories spend themselves on the axis that is *not* readable off the file. In `.js` it is the loader question that cannot be read: six classes import neither Rhino nor anything of ours and are child-side only because every one of their callers is. *(Was `syntax-treesitter/` until M4.)* |
-| `taffy/` | ✅ | **The layout engine, VENDORED.** Git submodule ([`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), branch `master`) — so `git clone --recursive`, like the other two. A fork of the published sources of `dev.vfyjxf:taffy:1.1.4` (MIT), carrying our own fixes to its measure path — see `taffy/MODIFICATIONS.md`, which is the statement of changes MIT requires, and `plan/engine-rewrite.md` D3. The package stays `dev.vfyjxf.taffy` because `mc1710` relocates it when shipping, so 165 call sites needed no edit and a stock copy in another mod cannot win a classloader race. **Depends on nothing** since 2026-09-10: the seven fastutil types it used are reimplemented in `dev.vfyjxf.taffy.collection`, which took the merged jar from 31.20 MB to 8.44 — fastutil was 63% of it. `MODIFICATIONS.md` §2 has the two behaviours that are silent when wrong. |
+| `taffy/` | ✅ | **The layout engine, VENDORED.** Git submodule ([`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), branch `master`) — so `git clone --recursive`, like the other two. A fork of the published sources of `dev.vfyjxf:taffy:1.1.4` (MIT), carrying our own fixes to its measure path — see `taffy/MODIFICATIONS.md`, which is the statement of changes MIT requires, and `plan/engine-rewrite.md` D3. The package stays `dev.vfyjxf.taffy` because `runtime/mc/1710` relocates it when shipping, so 165 call sites needed no edit and a stock copy in another mod cannot win a classloader race. **Depends on nothing** since 2026-09-10: the seven fastutil types it used are reimplemented in `dev.vfyjxf.taffy.collection`, which took the merged jar from 31.20 MB to 8.44 — fastutil was 63% of it. `MODIFICATIONS.md` §2 has the two behaviours that are silent when wrong. |
 | `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`). 17 CrystalGUI scenes. The only way to run the UI. |
 | `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
-| `mc1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :mc1710:compileJava`), whatever older notes here said. Holds the real 1.7.10 host, and since W3 that is a HOST rather than a product: `CgUiScreen` (the viewport the desktop attaches to), `CgUiInput`, `CgUiHud`, `CgUiOverlayInput`, and `CgUiWorkspaceHost` answering the `HostServices`/`WorkspaceHost` seams. `Mc1710Workspace` and `CgUiWindowMount` were **deleted** there; anything still naming them is describing history. **Verified by `serverSmoke` and by running the client**; a green compile was never the claim. |
-| `mc1201/` | ✅ | **In the build and running**, whatever older notes here said. `common` holds the host — `CgUiScreen`, `CgUiInput`, `CgUiHud`, `Connections`, `WorkspaceHost` and `LifecycleCrystalGUI`, which is **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only and forward into it. All three compile, boot a dedicated server and pass `./gradlew :mc1201:<loader>:serverSmoke`. **`neoforge` is MC 1.20.4** — NeoForge published no 20.1.x series — so `common` is compiled against 1.20.1 and consumed by a 1.20.4 module; see `plan/platform-mc1201.md` §3.8.6. **All three boot a dedicated server and pass `serverSmoke`**; the desktop scene has been run on 1.20.1. Each loader also builds a **thin** jar — its own classes plus `common` relocated under `com.crystalgui.mc.<loader>.common` — which is what the root merge consumes; the fat per-loader jars still build on request and are on nobody's `assemble`. |
-| `mc-shared/` | ✅ | **Java 8, and the one package no variant relocates**, so all four hosts share the single copy the merge adds. `LoaderProbe` answers which loader this process is (from the Mixin service name, then resource probes) and `CrashVariant` turns that into the line a crash report needs — with one jar carrying a host per loader, a trace naming `com.crystalgui.mc.forge.common.*` is the only thing that says which ran. Compiled against Mixin 0.8.5 and asm-tree, `compileOnly` everywhere: bundling it per loader would put four copies in the merge for it to reject. |
+| `runtime/mc/1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :runtime:mc:1710:compileJava`), whatever older notes here said. Holds the real 1.7.10 host, and since W3 that is a HOST rather than a product: `CgUiScreen` (the viewport the desktop attaches to), `CgUiInput`, `CgUiHud`, `CgUiOverlayInput`, and `CgUiWorkspaceHost` answering the `HostServices`/`WorkspaceHost` seams. `Mc1710Workspace` and `CgUiWindowMount` were **deleted** there; anything still naming them is describing history. **Verified by `serverSmoke` and by running the client**; a green compile was never the claim. |
+| `runtime/mc/modern/` | ✅ | **In the build and running**, whatever older notes here said. `common` holds the host — `CgUiScreen`, `CgUiInput`, `CgUiHud`, `Connections`, `WorkspaceHost` and `LifecycleCrystalGUI`, which is **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only and forward into it. All three compile, boot a dedicated server and pass `./gradlew :runtime:mc:modern:<loader>:serverSmoke`. **`neoforge` is MC 1.20.4** — NeoForge published no 20.1.x series — so `common` is compiled against 1.20.1 and consumed by a 1.20.4 module; see `plan/platform-mc1201.md` §3.8.6. **All three boot a dedicated server and pass `serverSmoke`**; the desktop scene has been run on 1.20.1. Each loader also builds a **thin** jar — its own classes plus `common` relocated under `com.crystalgui.mc.<loader>.common` — which is what the root merge consumes; the fat per-loader jars still build on request and are on nobody's `assemble`. |
+| `runtime/mc/shared/` | ✅ | **Java 8, and the one package no variant relocates**, so all four hosts share the single copy the merge adds. `LoaderProbe` answers which loader this process is (from the Mixin service name, then resource probes) and `CrashVariant` turns that into the line a crash report needs — with one jar carrying a host per loader, a trace naming `com.crystalgui.mc.forge.common.*` is the only thing that says which ran. Compiled against Mixin 0.8.5 and asm-tree, `compileOnly` everywhere: bundling it per loader would put four copies in the merge for it to reject. |
 
 `core/build.gradle.kts` runs an **import guard** as a `doLast` on `compileJava`: any source line
 importing `net.minecraft.*`, `cpw.mods.fml.*`, `net.minecraftforge.*`, or `org.lwjgl.*` fails the
@@ -1218,7 +1218,7 @@ each carrying its own absent-value):
 > **The cursor is split, and the split is the point.** *Deciding* one is CrystalGUI's — the `cursor`
 > property, its inheritance, the `auto` rule, `Input`'s gesture override, and `CursorBitmaps.artFor`,
 > the single keyword→picture table. *Presenting* one is a toolkit's, and lives in CrystalGraphics'
-> tier-1 `mc-lwjgl2`/`mc-lwjgl3` modules as `CgCursorService`, which takes a
+> tier-1 `runtime/lwjgl/2`/`runtime/lwjgl/3` modules as `CgCursorService`, which takes a
 > `CgCursorService.Image` — a name, some ARGB pixels, a hotspot — and has never heard of a keyword.
 >
 > **`CursorService` is a class with one static method, and nothing registers anything.** It resolves the
@@ -1767,7 +1767,7 @@ them still does — which `PlanCitationsResolveTest` runs under `:core:check`.
 - **Monaco** — an in-repo checkout at `research_repos/monaco`, which is where every "VS Code does
   X" claim in `com.crystalgui.text.cursor` was read rather than remembered. See *Port, don't reinvent*.
 - **Minecraft sources** — not extracted at the paths the MC modules would produce
-  (`mc1201/*/build/mc-src/`, `build/rfg/minecraft-src/java`), since neither MC module is in the build.
+  (`runtime/mc/modern/*/build/mc-src/`, `build/rfg/minecraft-src/java`), since neither MC module is in the build.
   **But an extracted 1.20.1 tree is checked in** at `research_repos/mc1201_sources/`
   (`com/`, `mcp/`, `net/`). Cite that path, not the build ones.
 

@@ -30,7 +30,7 @@
  *   <tr><td>4</td><td>{@link com.crystalgui.app.machine.MachineDemo}</td>
  *       <td>Both ends in one process, with the wire printed.
  *           {@code ./gradlew :core:runExample}</td></tr>
- *   <tr><td>5</td><td>{@code mc1710/…/mc/example/MachineExample}
+ *   <tr><td>5</td><td>{@code runtime/mc/1710/…/mc/example/MachineExample}
  *                     + {@code MachineExampleClient}</td>
  *       <td>The same thing in game, on a real socket. Press <b>F8</b>.</td></tr>
  * </table>
@@ -210,7 +210,7 @@
  *
  * <h2>Running it in game</h2>
  *
- * <p>{@code ./gradlew :mc1710:runClient}, join a world, press <b>F8</b>. The panel opens as a window
+ * <p>{@code ./gradlew :runtime:mc:1710:runClient}, join a world, press <b>F8</b>. The panel opens as a window
  * on the desktop {@code CgUiScreen} already owns — beside the editor, in the same taskbar. It is
  * emphatically <b>not</b> a second {@code GuiScreen}: there is one, and a second would be a second
  * claim on the input pump, the GL state handoff, the desktop's persistence and the modal stack, with
@@ -242,7 +242,7 @@
  *   <li>{@code docs/CGUI_SERVER_AND_SERIALIZATION.md} — the reference this example is the tutorial
  *       for: codecs, content addressing, the four-kind envelope, the wire.</li>
  *   <li>{@code docs/CGUI_WIDGETS.md} — every widget, and which ones can carry state over a wire.</li>
- *   <li>{@code mc1710/…/mc/net/CgUiSessionProbe.java} — the same shape against a real Minecraft
+ *   <li>{@code runtime/mc/1710/…/mc/net/CgUiSessionProbe.java} — the same shape against a real Minecraft
  *       connection, with a ten-point checklist instead of a narrative.</li>
  * </ul>
  */
