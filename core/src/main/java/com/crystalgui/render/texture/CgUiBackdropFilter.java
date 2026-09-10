@@ -54,14 +54,22 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
      *
      * <p>{@code withMaterial} and {@code applyProperties} each take a callback, and a lambda over the
      * draw's arguments is a fresh capture every time one runs — on a path that is per element per
-     * frame. A method reference stored once costs nothing after construction. These fields are not
+     * frame. A method reference stored once costs nothing after the first draw. These fields are not
      * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
      */
     private CgUiPaintContext drawCtx;
     private CgUiPaintContext.Backdrop drawBackdrop;
     private float drawX, drawY, drawWidth, drawHeight;
     private final Runnable quadBody = this::quadBody;
-    private final java.util.function.Consumer<CgShaderBindings> propertyWriter = this::writeProperties;
+    // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
+    // names CgShaderBindings, so resolving it loads a CrystalGraphics CORE class. A dedicated server
+    // builds drawables and never paints, which is what headlessTest asserts by running without core.
+    private java.util.function.Consumer<CgShaderBindings> propertyWriter;
+
+    private java.util.function.Consumer<CgShaderBindings> propertyWriter() {
+        if (propertyWriter == null) propertyWriter = this::writeProperties;
+        return propertyWriter;
+    }
 
     /** Radius of the Gaussian, in logical px. */
     @Getter @Setter
@@ -192,7 +200,7 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         drawX = x; drawY = y; drawWidth = width; drawHeight = height;
         // BEFORE withMaterial: binding validates the samplers the material already holds, and after a
         // surface resize those are textures the rebuild deleted. @see CgUiBackdropFilter#blurPass
-        MATERIAL.applyProperties(propertyWriter);
+        MATERIAL.applyProperties(propertyWriter());
         ctx.withMaterial(MATERIAL, quadBody);
     }
 
