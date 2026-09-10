@@ -352,7 +352,7 @@ public final class ProjectIndex implements ProjectSources {
         // workspace -- the harness, every test -- runs the callback inside `read` above, so the text is
         // already here; returning null because of the guard below would throw away an answer we hold.
         // This is also the difference between the two hosts: the harness resolves a cold file on the
-        // first run and mc1710 cannot, because there the read is a round trip.
+        // first run and 1.7.10 cannot, because there the read is a round trip.
         String immediate = answer.get();
         if (immediate != null) return immediate;
 

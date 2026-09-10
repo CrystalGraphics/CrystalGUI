@@ -77,7 +77,7 @@ import com.crystalgui.ui.dom.UIElement;
  * {@link #serve} may name server-only types and {@link #client} may name client-only ones, because
  * each is a method body invoked only on its own side. <b>Measured rather than assumed:</b> a probe
  * naming {@code org.lwjgl.input.Keyboard} — genuinely absent on a dedicated server — in both a method
- * body and a method signature loaded and ran there, and {@code :mc1710:serverSmoke} still reported no
+ * body and a method signature loaded and ran there, and {@code :runtime:mc:1710:serverSmoke} still reported no
  * client-only class loaded.</p>
  *
  * <h3>The model is a parameter, not a field</h3>

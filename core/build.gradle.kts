@@ -35,7 +35,7 @@ repositories {
 }
 
 dependencies {
-    // CrystalGraphics API — resolved via composite build substitution to CG's mc1710 subproject
+    // CrystalGraphics API — resolved via composite build substitution to CG's 1.7.10 subproject
 //    compileOnly("com.crystalgraphics:crystalgraphics:1.0.0")
     compileOnly("com.crystalgraphics:core:1.0.0")
     compileOnly("com.crystalgraphics:platform:1.0.0")
@@ -73,7 +73,7 @@ dependencies {
     // Compiling against beta9 binds them all to the varargs overload, which every later log4j still
     // has, so the harness and the tests (running 2.26.1) are unaffected. API ONLY: core names just
     // LogManager and Logger. The implementation stays modern and runtime-scoped, which also keeps it
-    // off mc1710's classpath, where Minecraft supplies its own.
+    // off 1.7.10's classpath, where Minecraft supplies its own.
     compileOnly("org.apache.logging.log4j:log4j-api:2.0-beta9")
     runtimeOnly("org.apache.logging.log4j:log4j-core:2.26.1")
     testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
@@ -347,7 +347,7 @@ tasks.named<JavaCompile>("compileJava") {
 // text that deflates to under 3 MB, and full bodies mean the quoted declaration keeps the author's real
 // layout. The transform is what makes a 43 MB `src.zip` viable, not this.
 //
-// It reaches the mod jar for free: `:mc1710`'s shadowJar copies `core.jar` with `from(zipTree(...))`,
+// It reaches the mod jar for free: `:runtime:mc:1710`'s shadowJar copies `core.jar` with `from(zipTree(...))`,
 // which takes every entry including these.
 tasks.jar {
     from(sourceSets.main.get().allJava) { into("assets/crystalgui/sources") }

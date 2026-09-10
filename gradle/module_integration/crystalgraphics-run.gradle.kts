@@ -1,4 +1,4 @@
-// Puts CrystalGraphics into a ModDevGradle dev run -- applied from mc1201/forge and mc1201/neoforge,
+// Puts CrystalGraphics into a ModDevGradle dev run -- applied from runtime/mc/modern/forge and runtime/mc/modern/neoforge,
 // which are the same mechanism aimed at different Minecraft versions. Fabric is NOT here: Loom's Knot
 // classloader does not delegate com.crystalgraphics.*, so that loader bundles jars instead.
 //
@@ -102,8 +102,8 @@ val modClassesValue = (
         + bundledProjects
             .flatMap { modClasses("crystalgui", mainSourceSet(it).output.classesDirs.files) }
         + modClasses("crystalgui", treeSitterJars)
-        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/common"))
-        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "mc1201/$loader"))
+        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "runtime/mc/modern/common"))
+        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "runtime/mc/modern/$loader"))
     // FML splits MOD_CLASSES on the PLATFORM's path separator, not on a semicolon.
     ).joinToString(File.pathSeparator)
 
@@ -120,8 +120,8 @@ tasks.matching {
     // everything correctly.
     inputs.property("cgModClasses", modClassesValue)
     dependsOn(stageDevResources)
-    dependsOn(crystalGraphics.task(":mc1201:common:classes"))
-    dependsOn(crystalGraphics.task(":mc1201:$loader:classes"))
+    dependsOn(crystalGraphics.task(":runtime:mc:modern:common:classes"))
+    dependsOn(crystalGraphics.task(":runtime:mc:modern:$loader:classes"))
 
     // And the jars the runtime classpath is made of. These arrive as substituted coordinates, which
     // ModDevGradle resolves with nothing ordering them before the launch -- so a jar could still be

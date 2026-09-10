@@ -1209,10 +1209,10 @@ ClientWindows.of(c).setMount(myWindowMount);
 | `com.crystalgui.app.machine` | All of this, runnable. **Start here** — and `docs/CGUI_BUILDING_UIS.md` is its written half |
 | `docs/CGUI_SERVER_AND_SERIALIZATION.md` | The same ground as a reference: codecs, hashing, the headless contract |
 | `core/src/headlessTest/` | CrystalGraphics deliberately absent. If it loads here, it runs on a server |
-| `mc1710/…/CgUiSessionProbe` | The whole stack against a real MC connection, as a ten-point checklist |
-| `mc1710/…/CgUiTwoClientProbe` | Two clients on one dedicated server: a writer edits, a watcher reports what reached it. Everything the watcher, presence and the conflict path exist for is a claim about a SECOND client |
+| `runtime/mc/1710/…/CgUiSessionProbe` | The whole stack against a real MC connection, as a ten-point checklist |
+| `runtime/mc/1710/…/CgUiTwoClientProbe` | Two clients on one dedicated server: a writer edits, a watcher reports what reached it. Everything the watcher, presence and the conflict path exist for is a claim about a SECOND client |
 | `plan/net-window-host.md` | Why the layer above the sessions exists: the audit that produced it, and the seventeen findings |
-| `./gradlew :mc1710:serverSmoke` | Boots a dedicated server, asserts the stack came up, stops. ~48s |
+| `./gradlew :runtime:mc:1710:serverSmoke` | Boots a dedicated server, asserts the stack came up, stops. ~48s |
 
 ---
 

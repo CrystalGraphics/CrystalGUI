@@ -78,7 +78,7 @@ val rhinoBand8 = "1.7.15.1"    // last release whose class files are Java 8
 // note above this block already describes.
 val eclipseTextBand8 = "3.11.0"
 // Real classes are major 49; only module-info is 53. In gradle.properties because a LOADER has to ship
-// this jar and must ship the same version -- see mc1710/dependencies.gradle.
+// this jar and must ship the same version -- see runtime/mc/1710/dependencies.gradle.
 val asmVersion = providers.gradleProperty("asmVersion").get()
 val rhinoModern = "1.9.1"      // needs Java 11 -- so bands 11 and 17 SHARE it; see EngineBand
 // THE ONE BAND ARTIFACT WITH NO PER-BAND PIN, and that is a property of CFR rather than a shortcut.
@@ -159,7 +159,7 @@ val bandCeiling = mapOf("8" to 52, "11" to 55, "17" to 61)
 // A module that BUNDLES this module's class files still has to be able to NAME them. jvmDowngrader
 // walks the supertypes of every referenced type while deciding what needs a Java 8 stub, and a type it
 // cannot open is reported as `Could not find class` and then treated as having no supertypes at all --
-// 1,820 error lines on every `:mc1710:downgradeJar`, for exactly the 140 types in these four jars.
+// 1,820 error lines on every `:runtime:mc:1710:downgradeJar`, for exactly the 140 types in these four jars.
 //
 // Consumable rather than re-declared on the other side: two spellings of a version is the hazard this
 // file already spends a paragraph on, and a platform module pinning `jdt.core:3.26.0` itself would be a

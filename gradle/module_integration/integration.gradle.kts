@@ -1,10 +1,10 @@
-// Kotlin script — applied from mc1710/build.gradle.kts and mc1201/*/build.gradle.kts.
+// Kotlin script — applied from runtime/mc/1710/build.gradle.kts and runtime/mc/modern/*/build.gradle.kts.
 // Replaces integration.gradle (Groovy) and mc1201-integration.gradle (Groovy).
 //
 // Reads submoduleMods data from rootProject.extra (set at settings time by composite.settings.gradle.kts).
 // Applies context-specific logic:
-//   - :mc1710            → dev dependencies + bootstrap args injection into RunMinecraftTask
-//   - :mc1201:*          → compileOnly + runtimeOnly dependencies for CrystalGraphics APIs
+//   - :runtime:mc:1710            → dev dependencies + bootstrap args injection into RunMinecraftTask
+//   - :runtime:mc:modern:*          → compileOnly + runtimeOnly dependencies for CrystalGraphics APIs
 
 @Suppress("UNCHECKED_CAST")
 val submoduleMods = rootProject.extra["submoduleMods"] as List<Map<String, Any>>
@@ -14,7 +14,7 @@ fun stringList(m: Map<String, Any>, key: String): List<String> {
     return if (v is List<*>) v.filterIsInstance<String>() else emptyList()
 }
 
-if (project.path == ":mc1710") {
+if (project.path == ":runtime:mc:1710") {
     // --- mc1710: dev dependencies ---
     dependencies {
         submoduleMods.flatMap { stringList(it, "devDependencies") }
@@ -53,7 +53,7 @@ if (project.path == ":mc1710") {
             }
         }
     }
-} else if (project.path.startsWith(":mc1201")) {
+} else if (project.path.startsWith(":runtime:mc:modern")) {
     // --- mc1201: compile + runtime dependencies ---
     dependencies {
         submoduleMods.flatMap { stringList(it, "mc1201CompileDeps") }

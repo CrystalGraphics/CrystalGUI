@@ -29,7 +29,7 @@ this split introduces, and nothing else detects it.
 | Feather icons | `core/src/main/resources/assets/crystalgui/ui/icons/` | MIT | © 2013–2023 Cole Bemis. Verbatim |
 | Minecraft fonts | `core/src/main/resources/assets/crystalgui/ui/fonts/` | Public domain | `Minecraft.otf`, `MinecraftRegular.otf` |
 | JetBrains Mono | `core/src/main/resources/assets/crystalgui/ui/fonts/` | **SIL OFL 1.1** | `JetBrainsMono-Regular.ttf`. The **code** face — the editor and anything carrying `.__syntax__`. See [Fonts](#fonts) |
-| **Taffy** (`taffy-java`) | `taffy/` | **MIT** | © 2026 vfyjxf. A pure-Java port of Rust [Taffy](https://github.com/DioxusLabs/taffy). **VENDORED AND MODIFIED** — the sources of `dev.vfyjxf:taffy:1.1.4`, checked in and forked, because its leaf-measure path is wrong under `flex-wrap: wrap` and the defect is one line inside the flexbox algorithm. [`taffy/MODIFICATIONS.md`](taffy/MODIFICATIONS.md) is the statement of changes MIT requires; `taffy/LICENSE` is the notice. The package stays `dev.vfyjxf.taffy` because `mc1710` relocates it when shipping. The pre-fork sources remain at `research_repos/taffy/` as the diff baseline |
+| **Taffy** (`taffy-java`) | `taffy/` | **MIT** | © 2026 vfyjxf. A pure-Java port of Rust [Taffy](https://github.com/DioxusLabs/taffy). **VENDORED AND MODIFIED** — the sources of `dev.vfyjxf:taffy:1.1.4`, checked in and forked, because its leaf-measure path is wrong under `flex-wrap: wrap` and the defect is one line inside the flexbox algorithm. [`taffy/MODIFICATIONS.md`](taffy/MODIFICATIONS.md) is the statement of changes MIT requires; `taffy/LICENSE` is the notice. The package stays `dev.vfyjxf.taffy` because `runtime/mc/1710` relocates it when shipping. The pre-fork sources remain at `research_repos/taffy/` as the diff baseline |
 | ~~fastutil~~ | **no longer used** | Apache 2.0 | © 2002–2023 Sebastiano Vigna. Was Taffy's dependency for seven types, shaded and relocated — **19.65 MB of a 31.20 MB jar**, 12,808 of 15,892 entries. Reimplemented in `dev.vfyjxf.taffy.collection` on 2026-09-10 and the dependency dropped; the jar is 8.44 MB. Row kept because the version that used to sit in `gradle.properties` is the thing somebody will try to add back. See `taffy/MODIFICATIONS.md` §2 |
 | LDLib2 | `research_repos/LDLib2/` | — | In-repo checkout, read for pattern prior art. **Not** a dependency and nothing is copied from it |
 | Minecraft 1.20.1 sources | `research_repos/mc1201_sources/` | Proprietary | Decompiled reference. Not redistributed, not built |
@@ -123,9 +123,9 @@ classloader boundary without linking against modified copies — which is a cons
 isolation `EngineClassLoader` exists for, not a coincidence.
 
 > **This is now a LIVE obligation, and the note here used to say it was not.** It read "nothing in this
-> build distributes an engine today … `mc1710/` and `mc1201/` are commented out of
+> build distributes an engine today … `runtime/mc/1710/` and `runtime/mc/modern/` are commented out of
 > `settings.gradle.kts`". Both halves stopped being true at M12: `settings.gradle.kts` carries
-> `include("mc1710")`, and that module's jar task bundles a band — **by default band 8's fifteen jars,
+> `include("runtime:mc:1710")`, and that module's jar task bundles a band — **by default band 8's fifteen jars,
 > about 13 MB**, which a client with no engine staged falls back to. This is the sentence the old note
 > asked somebody to come back and change.
 >
@@ -144,7 +144,7 @@ isolation `EngineClassLoader` exists for, not a coincidence.
 >
 > **What to check before a release**, since a row in this table is an index and not a discharge: that the
 > band is still bundled as whole jars (a future shadow/relocation step would break both the notices and
-> the unmodified-binary reasoning), and that `mc1201/` gets the same treatment when it lands rather than
+> the unmodified-binary reasoning), and that `runtime/mc/modern/` gets the same treatment when it lands rather than
 > merging classes.
 
 ## Minecraft name mappings (fetched, never redistributed)
