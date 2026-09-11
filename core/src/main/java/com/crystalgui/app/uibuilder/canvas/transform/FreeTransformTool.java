@@ -12,6 +12,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Grip;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.widget.surface.SurfaceContext;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -27,7 +28,8 @@ import com.crystalgui.widget.surface.snap.SnapSuspend;
  * <p>Modal in the strict sense: <b>every</b> press is consumed while it is up, so nothing else can be
  * selected and no widget underneath is pressed. Enter commits, Escape cancels, and either one hands the
  * surface back to Select. Its numbers are a {@link TransformOptionsBar}, shown in the editor's context
- * toolbar for as long as the tool is current.</p>
+ * toolbar for as long as the tool is current, and Ctrl+Z steps back through the box's own {@link #history}
+ * without leaving it.</p>
  *
  * <pre>{@code
  * ctx.registerTool(ToolKind.of(FreeTransformTool.ID, "Free Transform")
@@ -94,6 +96,12 @@ public final class FreeTransformTool implements Tool {
     @Override
     public UIElement options() {
         return options;
+    }
+
+    /** The box's own history, which Ctrl+Z reaches through the surface while this tool is current. */
+    @Override
+    public UndoStack history() {
+        return box.history();
     }
 
     /**
@@ -196,29 +204,14 @@ public final class FreeTransformTool implements Tool {
     @Override
     public boolean keyPressed(int key, int modifiers, boolean repeat) {
         if (!box.isActive()) return false;
-        boolean enter = key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_NUMPADENTER;
         // A MODE IS ASKED BEFORE THE TREE, so swallowing everything left no text field in the application
-        // typeable while the box was up. A field with focus gets its keys back; the modal claim is over the
-        // CANVAS, not over the keyboard.
-        TextField typing = fieldBeingTypedInto();
-        if (typing != null) {
-            if (!UINode.isShadowIncludingInclusiveAncestor(options, typing)) return false;
-            // EXCEPT THAT ENTER AND ESCAPE STILL END THE TRANSFORM from its own numbers, as they do from
-            // Blender's numeric input. Enter lands what was typed first, so the number showing is the one
-            // committed.
-            if (enter) {
-                typing.commit();
-                box.commit();
-                backToSelect();
-                return true;
-            }
-            if (key == CgKeyCodes.KEY_ESCAPE) {
-                box.cancel();
-                backToSelect();
-                return true;
-            }
-            return false;
-        }
+        // typeable while the box was up. A field with focus gets every key back -- Enter and Escape too,
+        // which the toolbar row turns into "land this field" and "drop what was typed" before handing the
+        // keyboard back. Photoshop's: Enter applies a field, and the next Enter is the transform's.
+        if (fieldBeingTypedInto() != null) return false;
+        // AND UNDO GOES WHERE UNDO ALWAYS GOES: edit.undo, which finds this tool's history while it is
+        // current. Handled here instead, it would reach nothing from a field -- and a scrub leaves one focused.
+        if (isHistoryChord(key, modifiers)) return false;
         if (key == CgKeyCodes.KEY_ESCAPE) {
             box.cancel();
             backToSelect();
@@ -237,21 +230,7 @@ public final class FreeTransformTool implements Tool {
                 return false;
             }
         }
-
-        // THE GESTURE'S OWN HISTORY, not the document's. Nothing has been written yet -- the whole
-        // transform is one edit made on commit -- so a Ctrl+Z falling through would undo whatever was
-        // done BEFORE the box opened, which is never what the hand meant. Still swallowed once the
-        // gesture is back at its start, so it cannot reach past the modal state either.
-        if (key == CgKeyCodes.KEY_Z && CgModifiers.hasCtrl(modifiers)) {
-            if (CgModifiers.hasShift(modifiers)) box.redoStep();
-            else box.undoStep();
-            return true;
-        }
-        if (key == CgKeyCodes.KEY_Y && CgModifiers.hasCtrl(modifiers)) {
-            box.redoStep();
-            return true;
-        }
-        if (enter) {
+        if (key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_NUMPADENTER) {
             box.commit();
             backToSelect();
             return true;
@@ -259,6 +238,11 @@ public final class FreeTransformTool implements Tool {
         // EVERYTHING ELSE IS SWALLOWED. A modal gesture that let an arrow key through would nudge the
         // selection out from under a live preview, and the two writes are on different channels.
         return true;
+    }
+
+    /** The chords {@code UndoCommands} binds, which a mode swallowing keys must let through to the keymap. */
+    private static boolean isHistoryChord(int key, int modifiers) {
+        return CgModifiers.hasCtrl(modifiers) && (key == CgKeyCodes.KEY_Z || key == CgKeyCodes.KEY_Y);
     }
 
     /** Whether a key starts a number. */

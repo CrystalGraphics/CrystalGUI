@@ -36,12 +36,15 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import com.crystalgui.widget.surface.SurfacePolicy;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.config.control.NumberControl;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
 /**
@@ -99,6 +102,13 @@ public class FreeTransformTest extends UiDocumentTestBase {
 
     private Transform written() {
         return node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM);
+    }
+
+    /** A point in the box overlay's own space, in the window coordinates input is fed in. */
+    private int[] worldOf(Vector2f inOverlay) {
+        Vector3f at = new Matrix4f(box().box().localToWorld())
+                .transformPosition(new Vector3f(inOverlay.x, inOverlay.y, 0f));
+        return new int[] {Math.round(at.x), Math.round(at.y)};
     }
 
     /**
@@ -647,19 +657,19 @@ public class FreeTransformTest extends UiDocumentTestBase {
         box().press(new Grip(Kind.ROTATE, Spot.TOP_RIGHT));
         box().gesture().rotateBy(0.5f, false);
         box().release();
-        assertEquals(2, box().undoDepth());
+        assertEquals(2, box().history().undoDepth());
 
-        assertTrue(box().undoStep());
+        assertTrue(box().history().undo());
         assertEquals("the rotation should be gone", 0f, box().gesture().rotation(), 0.001f);
         assertEquals("and the scale before it untouched", afterFirst, box().gesture().scaleX(), 0.001f);
         assertTrue("the box has to stay up", box().isActive());
         assertEquals("and nothing may reach the document", clean, model.version());
 
-        assertTrue(box().undoStep());
+        assertTrue(box().history().undo());
         assertTrue("back to where it opened", box().gesture().isIdentity());
-        assertFalse("nothing left to step back", box().undoStep());
+        assertFalse("nothing left to step back", box().history().undo());
 
-        assertTrue("and forward again", box().redoStep());
+        assertTrue("and forward again", box().history().redo());
         assertEquals(afterFirst, box().gesture().scaleX(), 0.001f);
     }
 
@@ -672,8 +682,80 @@ public class FreeTransformTest extends UiDocumentTestBase {
         box().press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
         box().release();
 
-        assertEquals(0, box().undoDepth());
-        assertFalse(box().undoStep());
+        assertEquals(0, box().history().undoDepth());
+        assertFalse(box().history().undo());
+    }
+
+    /**
+     * <b>A scrub on the bar is one step of the box's history, and Mod+Z steps it back from the field the
+     * scrub left focused</b> — through the ordinary {@code edit.undo}, which finds the tool's history while
+     * it is current, so nothing reaches the document.
+     */
+    @Test
+    public void aScrubIsOneStepAndModZStepsItBackFromTheFocusedField() {
+        long clean = model.version();
+        enterFreeTransform();
+        document.update(W, H);
+        NumberControl angle = editor.options().fieldFor(Kind.ROTATE);
+        int[] at = centreOf(angle.parentElement().children().get(0));
+
+        press(at[0], at[1]);
+        move(at[0] + 20, at[1]);
+        move(at[0] + 40, at[1]);
+        release(at[0] + 40, at[1]);
+        float scrubbed = box().gesture().rotation();
+        assertNotEquals("the scrub turned the box", 0f, scrubbed, 1e-6f);
+        assertEquals("a whole scrub is one step", 1, box().history().undoDepth());
+        assertTrue("and it left the field focused", angle.field().isFocused());
+
+        assertTrue("Mod+Z was not handled", chord(CgKeyCodes.KEY_Z, CgModifiers.CTRL));
+        releaseModifiers();
+        assertEquals("Mod+Z from the field stepped the box back", 0f, box().gesture().rotation(), 1e-4f);
+        assertTrue("the box is still up", box().isActive());
+        assertEquals("and the document was never touched", clean, model.version());
+
+        document.focus().requestFocus(editor.surface());
+        assertTrue(chord(CgKeyCodes.KEY_Y, CgModifiers.CTRL));
+        releaseModifiers();
+        assertEquals("Mod+Y from the canvas steps it forward again", scrubbed, box().gesture().rotation(), 1e-4f);
+    }
+
+    /**
+     * <b>The box's cursor is the canvas's, and stops at its edge.</b>
+     *
+     * <p>The tool re-decides the cursor every frame from where the pointer last was on the canvas, and a
+     * pointer that leaves for another panel reports nowhere — so an override that applied everywhere held
+     * the whole window in a move cursor over the inspector. It is withheld out there rather than dropped,
+     * so coming back needs no new gesture.</p>
+     */
+    @Test
+    public void theCursorStopsAtTheSurfacesEdge() {
+        UIElement elsewhere = new UIElement().layout(l -> l.width(200).height(200));
+        document.append(elsewhere);
+        enterFreeTransform();
+        frame();
+
+        // INSIDE, but off the pivot at the middle and clear of the handles: both answer a cursor of
+        // their own, and what is being asserted here is the plain one.
+        Vector2f left = box().handleAt(Spot.LEFT);
+        Vector2f right = box().handleAt(Spot.RIGHT);
+        assertNotNull(left);
+        assertNotNull(right);
+        int[] inside = worldOf(new Vector2f(left.x + (right.x - left.x) * 0.7f, right.y));
+        move(inside[0], inside[1]);
+        frame();
+        assertEquals("inside the box, the canvas says what a press would do",
+                Cursor.MOVE, document.input().currentCursor());
+
+        int[] outside = centreOf(elsewhere);
+        move(outside[0], outside[1]);
+        frame();
+        assertEquals("another panel is not the canvas's to point at",
+                Cursor.DEFAULT, document.input().currentCursor());
+
+        move(inside[0], inside[1]);
+        frame();
+        assertEquals("and it is back on return", Cursor.MOVE, document.input().currentCursor());
     }
 
     /**
@@ -700,6 +782,54 @@ public class FreeTransformTest extends UiDocumentTestBase {
                 new TreeSelectTool(editor.surface()).claimsEveryPress());
     }
 
+    /**
+     * <b>What floats over the canvas keeps its own press.</b>
+     *
+     * <p>A modal tool claims every press on the surface, and the surface is asked by POSITION — so the
+     * overflow popover, which hangs off the toolbar and over the plane, had its presses taken by the box
+     * underneath: scrubbing a field in it translated the element instead. The same is true of any menu,
+     * dropdown or tooltip over a canvas, which is why the rule is the top layer's rather than the bar's.</p>
+     */
+    @Test
+    public void aModalToolYieldsToWhatFloatsOverTheCanvas() {
+        enterFreeTransform();
+        document.update(W, H);
+        // INSIDE THE BOX BUT OFF THE PIVOT, which sits at the middle and answers a grip of its own --
+        // dragging that moves the crosshair, not the element, so it is no control for this.
+        Vector2f left = box().handleAt(Spot.LEFT);
+        Vector2f right = box().handleAt(Spot.RIGHT);
+        assertNotNull(left);
+        assertNotNull(right);
+        int[] over = worldOf(new Vector2f(left.x + (right.x - left.x) * 0.7f, right.y));
+
+        UIElement floating = new UIElement().layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
+                .left(over[0] - 20f).top(over[1] - 20f).width(40).height(40));
+        document.append(floating);
+        document.promote(floating);
+        frame();
+
+        press(over[0], over[1]);
+        move(over[0] + 30, over[1]);
+        release(over[0] + 30, over[1]);
+
+        assertEquals("the press belonged to what was on top, not to the box under it",
+                0f, box().gesture().translateX(), 0.01f);
+        assertTrue("and the box is still up", box().isActive());
+
+        // THE CONTROL, in the same fixture and at the same point: without something on top the identical
+        // drag has to move the box. Otherwise the assertion above passes for any reason the press failed
+        // to arrive -- which is most of the ways a press test goes wrong.
+        document.demote(floating);
+        document.remove(floating);
+        frame();
+
+        press(over[0], over[1]);
+        move(over[0] + 30, over[1]);
+        release(over[0] + 30, over[1]);
+        assertTrue("with nothing over it, the same drag is the box's",
+                Math.abs(box().gesture().translateX()) > 1f);
+    }
+
     /** <b>The bar shows what a drag did, and a typed number reaches the gesture.</b> */
     @Test
     public void theOptionsBarWorksBothWays() {
@@ -724,36 +854,141 @@ public class FreeTransformTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>The reference widget decides what a typed number holds still.</b>
+     * <b>The grid is the pivot</b>: a cell puts it there without moving the box, and a typed scale then
+     * holds it still.
      *
-     * <p>A drag knows which handle it grabbed and holds the opposite edge; a typed 300% knows nothing, so
-     * the 3×3 grid is the answer and the bar applies it.</p>
+     * <p>A drag knows which handle it grabbed and holds the opposite edge; a typed 300% knows nothing, so it
+     * scales about the pivot — Photoshop's reference point, which is what the grid places.</p>
      */
     @Test
-    public void theReferencePointHoldsStillWhenTyping() {
+    public void theGridPlacesThePivotAndATypedScaleHoldsIt() {
         enterFreeTransform();
         document.update(W, H);
         TransformOptionsBar bar = editor.options();
-        bar.setAnchor(-1, -1);
+        Vector2f corner = box().gesture().apply(0f, 0f);
 
-        Vector2f before = box().gesture().apply(0f, 0f);
+        bar.placePivot(-1, -1);
+        assertEquals("the pivot is on the top-left", 0f, box().gesture().originX(), 0.01f);
+        assertEquals(0f, box().gesture().originY(), 0.01f);
+        Vector2f placed = box().gesture().apply(0f, 0f);
+        assertEquals("and putting it there did not move the box", corner.x, placed.x, 0.01f);
+        assertEquals(corner.y, placed.y, 0.01f);
+
         bar.fieldFor(Kind.SCALE).field().setText("300");
         Vector2f after = box().gesture().apply(0f, 0f);
-
-        assertEquals("the top-left was chosen, so the top-left stays", before.x, after.x, 0.01f);
-        assertEquals(before.y, after.y, 0.01f);
+        assertEquals("a typed scale holds the pivot still", corner.x, after.x, 0.01f);
+        assertEquals(corner.y, after.y, 0.01f);
         assertEquals(3f, box().gesture().scaleX(), 0.01f);
     }
 
     /**
-     * <b>A number typed over the canvas lands in the bar, survives the frame, and Enter commits it.</b>
+     * <b>X and Y are the element's own movement, and choosing a reference point is not one.</b>
+     *
+     * <p>They were the translate, which placing the pivot rewrites in order to hold the box still — so the
+     * numbers jumped by that compensation while nothing on screen moved, and two cells on one motionless
+     * box disagreed for no reason a designer could see. Measured at the centre, because a corner swings
+     * when the box turns in place and that is not a move either.</p>
+     */
+    @Test
+    public void theBarsPositionIsTheElementsOwnMovement() {
+        enterFreeTransform();
+        document.update(W, H);
+        TransformOptionsBar bar = editor.options();
+        bar.sync();
+        assertEquals("nothing has moved it yet", 0d, bar.fieldFor(Kind.MOVE).getValue(), 0.01d);
+
+        // Turned about the middle, where the box stays put. About a corner it would genuinely swing, and
+        // reporting that is the point of measuring the element rather than the transform's own numbers.
+        bar.fieldFor(Kind.ROTATE).field().setText("30");
+        assertEquals("turning in place is not a move", 0d, bar.fieldFor(Kind.MOVE).getValue(), 0.5d);
+
+        bar.placePivot(-1, -1);
+        assertEquals("nor is choosing a cell", 0d, bar.fieldFor(Kind.MOVE).getValue(), 0.01d);
+
+        bar.fieldFor(Kind.MOVE).field().setText("40");
+        float half = box().gesture().width() * 0.5f;
+        assertEquals("typed, it moves the element itself",
+                40f, box().gesture().apply(half, box().gesture().height() * 0.5f).x - half, 0.01f);
+    }
+
+    /**
+     * <b>The pivot has numbers of its own</b> — a percentage of the box, so the nine cells are the round
+     * values of the same pair — and typing one moves it without moving the box.
+     */
+    @Test
+    public void thePivotHasItsOwnNumbers() {
+        enterFreeTransform();
+        document.update(W, H);
+        TransformOptionsBar bar = editor.options();
+        bar.sync();
+        assertEquals("it starts in the middle", 50d, bar.fieldFor(Kind.PIVOT).getValue(), 0.01d);
+
+        bar.placePivot(1, 1);
+        assertEquals("a cell is the same pair, rounder", 100d, bar.fieldFor(Kind.PIVOT).getValue(), 0.01d);
+
+        // TYPED LAST, because a field holding an edit nobody landed is left alone by every sync -- the
+        // config kit's rule, so asserting a readout after typing into it would assert the typing.
+        Vector2f corner = box().gesture().apply(0f, 0f);
+        bar.fieldFor(Kind.PIVOT).field().setText("0");
+        assertEquals("typed to the left edge", 0f, box().gesture().originX(), 0.01f);
+        assertEquals("and the box stayed where it was", corner.x, box().gesture().apply(0f, 0f).x, 0.01f);
+    }
+
+    /**
+     * <b>A scrub is worth the same wherever the field started.</b>
+     *
+     * <p>The rate used to follow the value's magnitude, so the same 120 pixels of hand moved the pivot
+     * 3.6% from zero and 36% from a hundred — the bottom of every field on this bar, which is where they
+     * all begin, crawled badly enough to read as the number being stuck rather than slow.</p>
+     */
+    @Test
+    public void aScrubsRateDoesNotDependOnWhereItStarted() {
+        enterFreeTransform();
+        document.update(W, H);
+        NumberControl pivotX = editor.options().fieldFor(Kind.PIVOT);
+
+        assertEquals("sixty pixels is sixty percent, from zero", 60d, scrubBy(pivotX, 0d, 60), 0.5d);
+        assertEquals("and the same sixty from halfway", 110d, scrubBy(pivotX, 50d, 60), 0.5d);
+    }
+
+    /** Drags a field's label right by {@code pixels}, from {@code from}, and answers where it landed. */
+    private double scrubBy(NumberControl control, double from, int pixels) {
+        control.setValue(from);
+        int[] at = centreOf(control.parentElement().children().get(0));
+        press(at[0], at[1]);
+        move(at[0] + 8, at[1]);
+        move(at[0] + pixels, at[1]);
+        Double landed = control.getValue();
+        release(at[0] + pixels, at[1]);
+        return landed == null ? 0d : landed;
+    }
+
+    /** <b>Linked, W takes H with it at the ratio the two had</b> — Photoshop's chain. Unlinked, each is its own. */
+    @Test
+    public void linkedWidthAndHeightScaleTogether() {
+        enterFreeTransform();
+        document.update(W, H);
+        TransformOptionsBar bar = editor.options();
+
+        bar.fieldFor(Kind.SCALE).field().setText("200");
+        assertEquals("unlinked, H stays", 1f, box().gesture().scaleY(), 0.001f);
+
+        bar.setLinked(true);
+        bar.fieldFor(Kind.SCALE).field().setText("300");
+        assertEquals(3f, box().gesture().scaleX(), 0.001f);
+        assertEquals("linked, H keeps the ratio the two had", 1.5f, box().gesture().scaleY(), 0.001f);
+    }
+
+    /**
+     * <b>A number typed over the canvas lands in the bar and survives the frame; Enter lands it, and the
+     * next Enter commits the transform</b> — Photoshop's options bar.
      *
      * <p>Through {@code consumeKeyboardEvent}, the character arriving after its key as GLFW sends it, with
      * a whole frame between keystrokes: the bar re-reads the box every frame, and a field it overwrote on
      * each one could not be typed into at all.</p>
      */
     @Test
-    public void aNumberTypedOverTheCanvasSurvivesTheFrameAndEnterCommitsIt() {
+    public void aNumberTypedOverTheCanvasLandsOnEnterAndTheNextEnterCommits() {
         enterFreeTransform();
         document.frame(0f, W, H);
         box().press(new Grip(Kind.ROTATE, null));
@@ -764,7 +999,12 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertEquals("the frame overwrote what was typed", "45", angle.field().getText());
 
         key(CgKeyCodes.KEY_RETURN, true);
-        assertFalse("Enter commits the transform", box().isActive());
+        assertTrue("the first Enter lands the number and leaves the box up", box().isActive());
+        assertEquals(Math.PI / 4d, box().gesture().rotation(), 0.001d);
+        assertFalse("and hands the keyboard back", angle.field().isFocused());
+
+        key(CgKeyCodes.KEY_RETURN, true);
+        assertFalse("the next Enter commits", box().isActive());
         enterFreeTransform();
         document.update(W, H);
         assertEquals("and what was typed is what was committed",

@@ -32,9 +32,9 @@ import com.crystalgui.widget.surface.snap.SnapTargets;
  * <ul>
  *   <li><b>A move snaps the drawn box's bounds</b>, against points and gaps. Its line marks the drawn
  *       corners that lie on it, never the empty corners of the bounds.</li>
- *   <li><b>A handle snaps only while the box is square to the page</b> — a whole number of quarter
- *       turns and no shear, tldraw's rule. At a quarter turn a side handle travels on the other axis and
- *       snaps there.</li>
+ *   <li><b>A handle snaps only while the box is square to the page</b> — tldraw's rule, asked of the
+ *       drawing rather than of the rotation. @see #isSquare. At a quarter turn a side handle travels on
+ *       the other axis and snaps there.</li>
  *   <li>{@code layoutX}/{@code layoutY} is the node's layout position in its parent's own space — its
  *       {@code Box.x()} less the parent's scroll, where the scene is — and the gesture's (0, 0).</li>
  * </ul>
@@ -44,8 +44,10 @@ final class TransformSnap {
     /** A tolerance for round two, in solver units: the handle's point came back through two matrices. */
     static final float ROUND_TWO = 0.05f;
 
-    /** A rotation this close to a quarter turn, or a shear this close to none, is square. */
-    private static final float SQUARE = 1e-3f;
+    /** How far a drawn edge may lean off its axis and still be a line an axis can land on. */
+    private static final float SQUARE_DEGREES = 2f;
+
+    private static final float SQUARE_SLOPE = (float) Math.tan(Math.toRadians(SQUARE_DEGREES));
 
     /** The four corners and the centre, as fractions of the box. */
     private static final float[] AT_X = {0f, 1f, 1f, 0f, 0.5f};
@@ -161,10 +163,32 @@ final class TransformSnap {
         return List.copyOf(found);
     }
 
-    /** A whole number of quarter turns and no shear: when an edge is a line an axis can land on. */
+    /**
+     * Whether each drawn edge runs along an axis, to within {@link #SQUARE_DEGREES} — when an edge is a
+     * line an axis can land on.
+     *
+     * <p><b>Asked of the drawing, and as an ANGLE.</b> tldraw asks its shape for a whole number of quarter
+     * turns, which it can because its own rotate quantises to the degree; a gesture here leaves a fraction
+     * of one behind, and a box half a degree off square is a box the eye calls square. A tolerance in
+     * pixels cannot say that: the same half-degree crosses it as soon as the element is large or the canvas
+     * zoomed, which is where a handle snap is wanted most.</p>
+     */
     static boolean isSquare(TransformGesture g) {
-        return Math.abs(Math.IEEEremainder(g.rotation(), Math.PI / 2)) < SQUARE
-                && Math.abs(g.skewXRadians()) < SQUARE && Math.abs(g.skewYRadians()) < SQUARE;
+        Vector2f origin = g.apply(0f, 0f);
+        Vector2f alongX = g.apply(g.width(), 0f);
+        Vector2f alongY = g.apply(0f, g.height());
+        float runX = alongX.x - origin.x;
+        float riseX = alongX.y - origin.y;
+        float runY = alongY.x - origin.x;
+        float riseY = alongY.y - origin.y;
+        boolean upright = leansLittle(runX, riseX) && leansLittle(riseY, runY);
+        boolean turned = leansLittle(riseX, runX) && leansLittle(runY, riseY);
+        return upright || turned;
+    }
+
+    /** Whether an edge reaching {@code along} its axis and {@code off} it leans within the tolerance. */
+    private static boolean leansLittle(float along, float off) {
+        return Math.abs(off) <= SQUARE_SLOPE * Math.abs(along);
     }
 
     /** Which way a handle's own axis runs once drawn: at a quarter turn the right handle moves vertically. */

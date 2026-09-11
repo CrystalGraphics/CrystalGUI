@@ -620,10 +620,10 @@ public final class TransformGesture {
     /**
      * Setters for the options bar, which states a value instead of arriving at one.
      *
-     * <p>None of them holds anything still. A drag knows which edge it grabbed and can hold the opposite
-     * one; a typed number does not, so <b>which point stays put is the reference widget's answer</b> and
-     * the caller applies it — see {@code TransformOptionsBar}. Putting an anchor rule in here would give
-     * two of them, disagreeing.</p>
+     * <p>None of them holds anything still but the pivot, and that needs no help: the origin is the one
+     * point every rotate, skew and scale leaves where it is. A drag knows which edge it grabbed and holds
+     * the opposite one; a typed number has only the pivot — which is what {@code TransformOptionsBar}'s
+     * grid places.</p>
      */
     public void setScale(float scaleX, float scaleY) {
         sx = clampScale(scaleX);
@@ -647,7 +647,7 @@ public final class TransformGesture {
         ty = y;
     }
 
-    /** Moves by a delta, which is how a caller puts a reference point back. @see #setScale */
+    /** Moves by a delta — how a snap, or a typed position, puts the box where it is wanted. @see #setScale */
     public void nudgeTranslate(float dx, float dy) {
         tx += dx;
         ty += dy;

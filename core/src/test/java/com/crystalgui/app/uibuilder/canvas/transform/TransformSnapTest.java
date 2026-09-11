@@ -106,6 +106,30 @@ public class TransformSnapTest {
     }
 
     /**
+     * <b>A hand's leftover half-degree is still square — at any size, at any zoom.</b> The tilt a gesture
+     * leaves behind is an angle, so the rule is one too: measured in pixels instead, the very same box
+     * stops snapping once it is large or the canvas is zoomed in, which is where a handle snap is wanted
+     * most. A big box, and then eight times the zoom, are the two cases that rule failed.
+     */
+    @Test
+    public void aHairOfTiltIsStillSquare() {
+        TransformGesture g = box(600f, 200f);
+        g.setRotation((float) Math.toRadians(0.5));
+        g.setSkew(0.0021924248f, 0f);
+        Vector2f h = handle(g, Spot.RIGHT);
+        SnapScene scene = only(new SnapScene.Rect(h.x + 1.5f, h.y - 8f, 10f, 20f));
+
+        TransformSnap.Result seen = TransformSnap.scale(g, Spot.RIGHT, false, false, 0f, 0f,
+                TOLERANCE, 1f, scene);
+        assertEquals(1.5f, seen.dx(), 0.01f);
+
+        // The same window on the same scene -- only the zoom moves, so nothing else can explain a miss.
+        TransformSnap.Result zoomedIn = TransformSnap.scale(g, Spot.RIGHT, false, false, 0f, 0f,
+                TOLERANCE * 8f, 8f, scene);
+        assertEquals("zoom is not tilt", 1.5f, zoomedIn.dx(), 0.01f);
+    }
+
+    /**
      * <b>Ratio held, the nearer snap leads</b> and the other axis follows along the handle's diagonal —
      * tldraw's rule. Landing both would change the shape.
      */

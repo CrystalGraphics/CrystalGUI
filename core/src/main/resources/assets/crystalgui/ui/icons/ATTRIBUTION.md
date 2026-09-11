@@ -91,6 +91,9 @@ one file tree is the cost.
 <https://github.com/feathericons/feather>
 
 `folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`, `x.svg`, `more-vertical.svg`,
+`general/action/link-2.svg` (the Free Transform bar's W/H chain, filed with the actions it sits among —
+Feather's geometry, with its relative commands written out absolute and its `<line>` as a path, as
+`x.svg`'s are),
 and the three severity
 marks the notification cards draw — `info.svg`, `alert-triangle.svg`, `alert-circle.svg`. Stroked, 24×24,
 authored as `stroke="currentColor"` — which is what makes them theme from the cascade for free, and why
@@ -133,6 +136,9 @@ in `core/src/test/resources/` and not here: it is the SVG renderer's torture tes
 `pinHovered`, `pinSelected`, `reformatCode`, `refresh`, `run`, `rerun`, `save`, `scrollDown`,
 `softWrap`, `stop` — action icons from the IntelliJ
 Platform, © 2000-2023 JetBrains s.r.o. and contributors, used under the Apache License 2.0.
+
+**`link-2.svg` is not one of them.** It is Feather's, under the MIT notice above, filed here beside the
+actions it sits among in a toolbar.
 
 The line this directory is split along is **whether the colour carries meaning**, and it is the same line
 `general/search/` sits on the far side of.
