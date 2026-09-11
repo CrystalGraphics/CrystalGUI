@@ -1,8 +1,8 @@
 package com.crystalgui;
 
+import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.mc.CommonProxy;
-import com.crystalgui.mc.shared.CrashVariant;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -73,7 +73,7 @@ public class CrystalGUI {
         FMLCommonHandler.instance().registerCrashCallable(new ICrashCallable() {
             @Override
             public String getLabel() {
-                return CrashVariant.LABEL;
+                return CrashVariant.label(NAME);
             }
 
             @Override
