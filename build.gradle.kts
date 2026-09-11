@@ -458,7 +458,7 @@ tasks.register("checkDownloadLocations") {
 }
 
 tasks.register("verifyDownloadLocations") {
-    group = "verification"
+    group = "distribution"
     description = "Fetches every address in download/locations.json and checks what it serves. Needs the network."
     doLast {
         val json = readDownloadLocations()
@@ -467,6 +467,8 @@ tasks.register("verifyDownloadLocations") {
         val samples = mapOf("{minecraft}" to "1.20.1", "{java}" to "17")
         val file = File(temporaryDir, "fetched")
         val unserved = mutableListOf<String>()
+        var live = 0
+        var dead = 0
         for (line in downloadLines(json) + DownloadLine("self", null, self, self, null)) {
             var served = 0
             for (template in line.urls) {
@@ -480,9 +482,12 @@ tasks.register("verifyDownloadLocations") {
                 if (why == null) served++ else logger.warn("${line.id}: $url -- $why")
             }
             if (served == 0) unserved += line.id
+            live += served
+            dead += line.urls.size - served
         }
         if (unserved.isNotEmpty()) throw GradleException("no address serves: " + unserved.joinToString(", "))
-        println("every download has an address that serves it; a dead one is warned above")
+        println("every download is served, by $live of ${live + dead} addresses" +
+            if (dead == 0) "" else "; the dead ones are warned above")
     }
 }
 
