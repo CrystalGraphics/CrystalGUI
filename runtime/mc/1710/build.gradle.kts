@@ -111,8 +111,9 @@ jvmdg.multiReleaseOriginal.set(false)
 dependencies {
     compileOnly(project(":core"))
 
-    // :runtime:mc:shared, for `LoaderProbe` -- which loader this process is, answered once for every variant.
-    // compileOnly because shadowJar bundles the classes itself; see the `from(zipTree(...))` below.
+    // :runtime:mc:shared -- empty today. `LoaderProbe` and `CrashVariant` are CrystalGraphics', declared in
+    // dependencies.gradle beside core and platform. compileOnly because shadowJar bundles the module's
+    // classes itself; see the `from(zipTree(...))` below.
     compileOnly(project(":runtime:mc:shared"))
 
     // :language's engine API, for the DOWNGRADE CLASSPATH ONLY -- see downgradeJar below.
@@ -717,11 +718,9 @@ afterEvaluate {
         val coreJar = project(":core").tasks.named<Jar>("jar").get()
         from(zipTree(coreJar.archiveFile.get())) { exclude("META-INF/services/**") }
 
-        // :runtime:mc:shared, which `mixins.crystalgui.json` names as its plugin. UNPACKED rather than
-        // declared as `shadowImplementation` for the same reason :language is: this module relocates
-        // what it shadows, and a relocated plugin class is one the config can no longer name.
-        //
-        // Only until J4, when the root merge adds it once for every loader.
+        // :runtime:mc:shared -- empty today, so this copies nothing; kept so whatever lands there ships.
+        // UNPACKED rather than declared as `shadowImplementation` for the same reason :language is: this
+        // module relocates what it shadows.
         val sharedJar = project(":runtime:mc:shared").tasks.named<Jar>("jar").get()
         from(zipTree(sharedJar.archiveFile.get()))
 

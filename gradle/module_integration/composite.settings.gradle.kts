@@ -15,6 +15,7 @@ val submoduleData = listOf(
         "mc1201CompileDeps" to listOf(
             "com.crystalgraphics:core:1.0.0",
             "com.crystalgraphics:platform:1.0.0",
+            "com.crystalgraphics:mc-shared:1.0.0",
             "com.crystalgraphics:crystalgraphics-mc1201-common:1.0.0",
             "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings:1.0.0"
         ),
@@ -33,8 +34,12 @@ val submoduleData = listOf(
             // Tier 1 for LWJGL2 (plan/crystalgui/platform-single-jar.md §12). The harness takes it for
             // the cursor adapter, which is toolkit code and not Minecraft's -- so the harness stops
             // carrying a copy of one.
-            mapOf("module" to "com.crystalgraphics:mc-lwjgl2",
+            mapOf("module" to "com.crystalgraphics:lwjgl2",
                 "projectPath" to ":runtime:lwjgl:2"),
+            // LoaderProbe and CrashVariant. CrystalGUI's hosts use CrystalGraphics' copies rather than
+            // carrying their own; not a loader path, so it survives an embedded build.
+            mapOf("module" to "com.crystalgraphics:mc-shared",
+                "projectPath" to ":runtime:mc:shared"),
             // Must be added and removed in the same commit as :runtime:mc:modern:common in CrystalGraphics'
             // settings.gradle.kts: a substitution naming a project that is not in the target build
             // fails configuration for every task, and the error names the module, not this file.

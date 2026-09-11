@@ -1,8 +1,8 @@
 package com.crystalgui.mc.forge;
 
+import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
-import com.crystalgui.mc.shared.CrashVariant;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -29,6 +29,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.MODID;
+import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
 
 /**
  * Everything Forge — the mod entry point, its {@link Network} transport and its {@link Events}
@@ -46,7 +47,7 @@ public final class CrystalGUIForge {
         // under its own prefix, so a trace naming com.crystalgui.mc.forge.common.* is the only thing
         // that says which one ran -- and asking a reporter to work that out is asking them to know how
         // the jar is built. @see CrashVariant
-        CrashReportCallables.registerCrashCallable(CrashVariant.LABEL,
+        CrashReportCallables.registerCrashCallable(CrashVariant.label(NAME),
                 () -> CrashVariant.report(CrystalGUIForge.class));
         LifecycleCrystalGUI.bootstrap(Network.register());
     }

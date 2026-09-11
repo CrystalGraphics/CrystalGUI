@@ -31,6 +31,9 @@ dependencies {
     // registries, one of which is empty.
     compileOnly("com.crystalgraphics:core:1.0.0")
     compileOnly("com.crystalgraphics:platform:1.0.0")
+    // LoaderProbe and CrashVariant, which the mixin plugin and the @Mod class name -- CrystalGraphics'
+    // copies since 2026-09-11, declared here for the same reason as the two above.
+    compileOnly("com.crystalgraphics:mc-shared:1.0.0")
 
     // The language stack -- tree-sitter grammars and the ECJ/Rhino engine bands.
     //

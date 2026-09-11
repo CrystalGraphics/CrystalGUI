@@ -122,6 +122,9 @@ registerSingleJarPipeline(SingleJarSpec(
             // player who never writes a script does not download the engines, so one of these
             // reappearing here is the step silently undone.
             "com/crystalgui/language/", "org/treesitter/", "assets/crystalgui/engines/",
+            // CrystalGraphics ships its own jar. A second copy of any of its packages here is a split
+            // package on ModLauncher, and LoaderProbe/CrashVariant are the ones a refactor would drag in.
+            "com/crystalgraphics/",
         ))
         expectSingle.set(listOf("com/crystalgui/ui/"))
         // COUNTED BY SIMPLE NAME, so a probe class must not have a twin in another tree. J9's suffix
@@ -135,7 +138,6 @@ registerSingleJarPipeline(SingleJarSpec(
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             "mixins.crystalgui.json",
-            "com/crystalgui/mc/shared/LoaderProbe.class",
             "com/crystalgui/mixins/CrystalGuiMixins.class",
             // Every entry point the descriptors name -- see the language jar's list for what this
             // catches. These four are each loader's own package, which no relocation touches.
