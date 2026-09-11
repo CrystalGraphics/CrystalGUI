@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.InputMode;
 import com.crystalgui.widget.surface.SurfaceContext;
 import com.crystalgui.widget.surface.SurfacePolicy;
@@ -46,6 +47,12 @@ final class SurfaceMode implements InputMode {
         if (!ctx.surface().contains(x, y)) return false;
         int modifiers = SelectTool.modifiersNow();
         if (!pressed) return tool.pointerUp(x, y, button, modifiers);
+        // WHAT FLOATS OVER THE CANVAS KEEPS ITS OWN PRESS, and this is asked BEFORE the modal exemption
+        // below. The gate above is positional, and the top layer is not on the plane: a popover, a menu
+        // or a dropdown opened from the toolbar hangs over the surface, so a press inside one arbitrated
+        // as a press on the canvas -- scrubbing a field in the overflow panel translated the element
+        // underneath it instead. `picking` cannot answer this; it knows the plane's own items.
+        if (landedAbove(x, y)) return false;
         // A MODAL TOOL IS NOT ARBITRATED. Its handles can sit anywhere -- rotate a box near the edge of
         // the page and half of them are over empty plane, where the policy answers TREE and the press was
         // being declined before the tool saw it.
@@ -76,6 +83,21 @@ final class SurfaceMode implements InputMode {
     public boolean keyPressed(int key, int modifiers, boolean repeat) {
         Tool tool = modes.current();
         return tool != null && tool.keyPressed(key, modifiers, repeat);
+    }
+
+    /**
+     * Whether the press landed on something ABOVE the canvas rather than on the canvas itself.
+     *
+     * <p>The engine's own hit, not the plane's: {@code hoverTarget} resolves the top layer and a pointer
+     * capture, which is exactly what a press inside a popover over the surface has to be judged by. A
+     * drag the surface itself started captures on an element inside the surface, so it stays claimed.</p>
+     */
+    private boolean landedAbove(float x, float y) {
+        UIElement view = modes.view();
+        UIDocument window = view == null ? null : view.document();
+        if (window == null) return false;
+        UIElement hit = window.input().hoverTarget();
+        return hit != null && !UINode.isShadowIncludingInclusiveAncestor(view, hit);
     }
 
     /** Whether the press belongs to the surface rather than to the widget under it. */
