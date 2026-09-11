@@ -59,9 +59,9 @@ public class CursorArtTest {
      * anti-aliased attempt rasterised two pixels thick on diagonals and read as ragged. It also means the
      * art needs no 8-bit-alpha capability from the driver, which is one fewer thing to degrade.</p>
      *
-     * <p><b>The curved three are excluded, and the list here is the statement of that.</b> An arc has no
-     * orientation that aliases cleanly, so a mask draws it as a chain of blocks — the rule is about the
-     * kind of edge, not a blanket ban, and {@link #theCurvedCursorsAreSmooth} asserts the other half.</p>
+     * <p><b>Skew and pivot are excluded, and the list here is the statement of that.</b> A slant or a ring
+     * has no orientation that aliases cleanly, so a mask draws it as a chain of blocks — the rule is about
+     * the kind of edge, not a blanket ban, and {@link #theCurvedCursorsAreSmooth} asserts the other half.</p>
      */
     @Test
     public void allArtworkIsOneBit() {
@@ -75,24 +75,15 @@ public class CursorArtTest {
     }
 
     /**
-     * <b>The curved three carry partial coverage, which is the whole reason they are drawn differently.</b>
+     * <b>The anti-aliased two carry partial coverage, which is the whole reason they are drawn differently.</b>
      *
      * <p>The counterpart to {@link #allArtworkIsOneBit}: an arc rasterised as a mask reads as a staircase,
      * so the curves are built from signed distance fields instead. Asserted as "there are grey pixels"
      * because that is exactly what a well-meaning simplification back to a boolean body would remove, and
      * the result would still be a recognisable cursor — just a dated-looking one.</p>
-     *
-     * <p><b>Rotate is a hybrid and carries far fewer</b>: its arc is a field, but its two arrowheads are
-     * the resize arrows' own mask, because a quarter turn ends on the axes and an axis-aligned head has
-     * nothing but orientations that alias cleanly. So the bound is low enough to admit a short curve and
-     * still fail a shape with no curve left in it at all.</p>
      */
     @Test
     public void theCurvedCursorsAreSmooth() {
-        assertSmooth("rotate-ne", CursorBitmaps.rotateNe());
-        assertSmooth("rotate-nw", CursorBitmaps.rotateNw());
-        assertSmooth("rotate-se", CursorBitmaps.rotateSe());
-        assertSmooth("rotate-sw", CursorBitmaps.rotateSw());
         assertSmooth("skew", CursorBitmaps.skew());
         assertSmooth("pivot", CursorBitmaps.pivot());
     }
@@ -118,10 +109,7 @@ public class CursorArtTest {
     @Test
     public void theCurvedCursorsStayOnTheCanvas() {
         int n = CursorBitmaps.SIZE;
-        for (int[] art : new int[][] {
-                CursorBitmaps.rotateNe(), CursorBitmaps.rotateNw(),
-                CursorBitmaps.rotateSe(), CursorBitmaps.rotateSw(),
-                CursorBitmaps.skew(), CursorBitmaps.pivot() }) {
+        for (int[] art : new int[][] {CursorBitmaps.skew(), CursorBitmaps.pivot()}) {
             for (int i = 0; i < n; i++) {
                 assertEquals("top row", 0, alpha(art[i]));
                 assertEquals("bottom row", 0, alpha(art[(n - 1) * n + i]));

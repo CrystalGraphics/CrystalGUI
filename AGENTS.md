@@ -1303,8 +1303,8 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                one query every menu renderer reads; menu() is its deprecated flat view
   .cursor                      CursorService (a CLASS, one static method -- resolves a keyword to a
                                picture and hands it to CrystalGraphics' CgCursorService, whose LWJGL
-                               adapters know no keywords), Cursor (the keyword set — CSS UI 4's, plus six the web never named:
-                               slide-arrow, four rotate-*, skew, pivot), CursorBitmaps (procedural 32x32
+                               adapters know no keywords), Cursor (the keyword set — CSS UI 4's, plus three the web never named:
+                               slide-arrow, skew, pivot), CursorBitmaps (procedural 32x32
                                ARGB art, AND `artFor` — the ONE keyword->picture table every platform
                                reads), CursorArt (one picture: name, drawing, hotspot; shared across the
                                keywords that want it, so an adapter caches one native per PICTURE),
