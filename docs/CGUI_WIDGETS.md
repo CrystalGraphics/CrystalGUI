@@ -420,6 +420,45 @@ a removed tab to ordinarily-tabbable on the way out.
 - Scenes: `cgui-tabview` (four sides, strip overflow, focus exclusion), `cgui-gallery`
 - Known gap: tabs and panes do **not** round-trip through the codec — they live in internal containers.
 
+## 9b. `ContextToolbar`
+
+One toolbar row whose page follows what is going on — Photoshop's options bar, Inkscape's tool
+controls, Blender's tool header.
+
+```java
+ContextToolbar bar = new ContextToolbar(documentToolbar);   // the base: shown while nothing claims the row
+column.append(bar, canvas);
+
+Disposable claim = bar.claim(transformOptions);             // shown in the toolbar's place
+claim.dispose();                                            // and back; disposing twice is harmless
+bar.shown();                                                // the page on show
+```
+
+A surface wires every tool in one call, and each tool's `options()` page then comes and goes with it:
+
+```java
+surface.modes().showOptionsIn(bar);
+
+// on the Tool: build once, return the same element every time
+public UIElement options() {
+    if (options == null) options = new BrushOptions(ctx);
+    return options;
+}
+```
+
+- **The row's height is the sheet's, never a page's** — `contexttoolbar` has a definite height and
+  clips, so a page swapping in cannot move what is under the bar. Blender fixes its tool header the same
+  way.
+- **Claims stack.** The newest live claim shows; releasing it reveals the one under it — a modal gesture
+  over a tool's options, as Blender's modal header text sits over the tool header.
+- **A page is added on its first claim and kept**, hidden between claims as Inkscape and `GtkStack` keep
+  theirs, so its fields keep what they hold.
+- **A page hidden while it holds focus gives focus back** to whatever had it before focus entered the bar.
+- Pages arrive through `claim` and `setBase`. A child appended directly is not a page and is never hidden.
+
+- Tag `contexttoolbar` · pages carry `__context-page__`
+- Scenes: none yet — the UI builder's toolbar row is the consumer
+
 ---
 
 ## 10. `Tooltip`
