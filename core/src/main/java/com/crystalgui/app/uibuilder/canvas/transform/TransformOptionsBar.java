@@ -2,6 +2,8 @@ package com.crystalgui.app.uibuilder.canvas.transform;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.ObjDoubleConsumer;
+import java.util.function.ToDoubleFunction;
 
 import org.joml.Vector2f;
 
@@ -9,17 +11,20 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.widget.config.control.NumberControl;
 import com.crystalgui.widget.text.UIText;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
 
 /**
- * The numbers behind a Free Transform, live in both directions.
+ * The numbers behind a Free Transform, live in both directions — the tool's page in the editor's
+ * {@code ContextToolbar}, as Photoshop's options bar belongs to the transform while its box is up.
  *
- * <p>Photoshop's options bar. Everything the box can be dragged into, it can also be typed: the position
- * of a chosen reference point, the scale as a percentage beside the size it produces, the angle, the two
- * skews and the pivot. It shows only while the box is up.</p>
+ * <p>Everything the box can be dragged into can also be typed: the position of a chosen reference point,
+ * the scale as a percentage beside the size it produces, the angle, the two skews and the pivot. A typed
+ * value lands on Enter, Tab or a click away; until then the field keeps what is being typed and the others
+ * go on following the box.</p>
  *
  * <h3>The reference widget decides what stays still</h3>
  *
@@ -29,12 +34,8 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * the translate back so that point has not moved. {@code TransformGesture} deliberately holds no anchor
  * rule of its own; two of them would disagree.</p>
  *
- * <h3>Writing back is guarded</h3>
- *
- * <p>A control fires {@code changed} whether a person or this class set it, so a sync would be read
- * straight back as an edit. {@code writing} is the latch that tells the two apart — the alternative,
- * comparing values for equality, silently drops a real edit that happens to round to what is displayed.
- * </p>
+ * <p>Each field writes only its own quantity. The rest are shown rounded, and writing them back as well
+ * would round the whole transform every time one number was typed.</p>
  */
 public final class TransformOptionsBar extends UIElement {
 
@@ -60,15 +61,14 @@ public final class TransformOptionsBar extends UIElement {
 
     private final TransformBox box;
 
-    private final NumberControl positionX = number("x");
-    private final NumberControl positionY = number("y");
-    private final NumberControl scaleWidth = number("w");
-    private final NumberControl scaleHeight = number("h");
-    private final NumberControl angle = number("angle");
-    private final NumberControl leanX = number("skewX");
-    private final NumberControl leanY = number("skewY");
-    private final NumberControl pivotX = number("pivotX");
-    private final NumberControl pivotY = number("pivotY");
+    private final List<Field> fields = new ArrayList<>();
+
+    /** The fields a number typed over the canvas can land in. @see #fieldFor */
+    private final Field positionX;
+    private final Field scaleWidth;
+    private final Field angle;
+    private final Field leanX;
+    private final Field pivotX;
 
     private final UIText size = new UIText();
 
@@ -79,39 +79,42 @@ public final class TransformOptionsBar extends UIElement {
 
     private int anchorY;
 
-    /** @see TransformOptionsBar the note on why this is a latch and not an equality check */
-    private boolean writing;
+    /**
+     * One number on the bar: how it reads off the gesture, and how a typed value goes back.
+     *
+     * @param holdsReference false for X and Y, which ARE the reference point's position and so cannot also
+     *                       be measured against it
+     */
+    private record Field(NumberControl control, ToDoubleFunction<TransformGesture> read,
+                         ObjDoubleConsumer<TransformGesture> write, boolean holdsReference) {
+    }
 
     public TransformOptionsBar(TransformBox box) {
         super(NAME);
         this.box = box;
         addClass(BAR_CLASS);
-        setDisplayed(false);
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).flexDirection(FlexDirection.ROW));
 
         appendStructural(buildAnchorGrid());
-        field("X", positionX);
-        field("Y", positionY);
-        field("W%", scaleWidth);
-        field("H%", scaleHeight);
+        positionX = field("X", "x", g -> movedReference(g).x, this::placeReferenceX, false);
+        field("Y", "y", g -> movedReference(g).y, this::placeReferenceY, false);
+        scaleWidth = field("W%", "w", g -> g.scaleX() * 100d,
+                (g, v) -> g.setScale((float) (v / 100d), g.scaleY()), true);
+        field("H%", "h", g -> g.scaleY() * 100d,
+                (g, v) -> g.setScale(g.scaleX(), (float) (v / 100d)), true);
         size.addClass(SIZE_CLASS);
         appendStructural(size);
-        field("Angle", angle);
-        field("Skew X", leanX);
-        field("Skew Y", leanY);
-        field("Pivot X", pivotX);
-        field("Pivot Y", pivotY);
-
-        positionX.changed.connect(ignored -> edited(false));
-        positionY.changed.connect(ignored -> edited(false));
-        scaleWidth.changed.connect(ignored -> edited(true));
-        scaleHeight.changed.connect(ignored -> edited(true));
-        angle.changed.connect(ignored -> edited(true));
-        leanX.changed.connect(ignored -> edited(true));
-        leanY.changed.connect(ignored -> edited(true));
-        pivotX.changed.connect(ignored -> edited(true));
-        pivotY.changed.connect(ignored -> edited(true));
+        angle = field("Angle", "angle", g -> Math.toDegrees(g.rotation()),
+                (g, v) -> g.setRotation((float) Math.toRadians(v)), true);
+        leanX = field("Skew X", "skewX", g -> Math.toDegrees(g.skewXRadians()),
+                (g, v) -> g.setSkew((float) Math.toRadians(v), g.skewYRadians()), true);
+        field("Skew Y", "skewY", g -> Math.toDegrees(g.skewYRadians()),
+                (g, v) -> g.setSkew(g.skewXRadians(), (float) Math.toRadians(v)), true);
+        pivotX = field("Pivot X", "pivotX", g -> percentOf(g.originX(), g.width()),
+                (g, v) -> g.setOrigin((float) (v / 100d) * g.width(), g.originY()), true);
+        field("Pivot Y", "pivotY", g -> percentOf(g.originY(), g.height()),
+                (g, v) -> g.setOrigin(g.originX(), (float) (v / 100d) * g.height()), true);
     }
 
     /**
@@ -130,12 +133,10 @@ public final class TransformOptionsBar extends UIElement {
         });
     }
 
-    private static NumberControl number(String id) {
-        return new NumberControl(ConfigDescriptor.number(id, ""), 0d);
-    }
-
-    /** A label that also scrubs its own control, as every other number in the application does. */
-    private void field(String caption, NumberControl control) {
+    /** A labelled number, whose label also scrubs it as every other number in the application does. */
+    private Field field(String caption, String id, ToDoubleFunction<TransformGesture> read,
+                        ObjDoubleConsumer<TransformGesture> write, boolean holdsReference) {
+        NumberControl control = new NumberControl(ConfigDescriptor.number(id, ""), 0d);
         UIElement group = new UIElement();
         group.addClass(FIELD_CLASS);
         StyleGroup.defaultPipeline(group.getStyle().getLayoutGroup(),
@@ -146,6 +147,11 @@ public final class TransformOptionsBar extends UIElement {
         group.append(label, control);
         control.scrubWith(label);
         appendStructural(group);
+
+        Field field = new Field(control, read, write, holdsReference);
+        control.changed.connect(ignored -> edited(field));
+        fields.add(field);
+        return field;
     }
 
     private UIElement buildAnchorGrid() {
@@ -162,7 +168,7 @@ public final class TransformOptionsBar extends UIElement {
                 final int cellY = row;
                 UIElement cell = new UIElement();
                 cell.addClass(ANCHOR_CELL_CLASS);
-                cell.events.getGroup(com.crystalgui.ui.event.MouseEvent.Down.class)
+                cell.events.getGroup(MouseEvent.Down.class)
                         .attachListener((element, event) -> {
                             setAnchor(cellX, cellY);
                             event.stopPropagation();
@@ -196,71 +202,56 @@ public final class TransformOptionsBar extends UIElement {
     }
 
     /** The reference point in the node's own pixels. */
-    private Vector2f referencePoint() {
-        TransformGesture gesture = box.gesture();
+    private Vector2f referencePoint(TransformGesture gesture) {
         return new Vector2f(gesture.width() * (anchorX + 1) * 0.5f,
                 gesture.height() * (anchorY + 1) * 0.5f);
     }
 
-    /**
-     * Applies a typed value, holding the reference point where it was.
-     *
-     * @param holdReference false for X and Y, which ARE the reference point's position and so cannot also
-     *                      be measured against it
-     */
-    private void edited(boolean holdReference) {
-        if (writing || !box.isActive()) return;
+    /** How far the gesture has carried the reference point from where it sits untransformed. */
+    private Vector2f movedReference(TransformGesture gesture) {
+        Vector2f reference = referencePoint(gesture);
+        return gesture.apply(reference.x, reference.y).sub(reference);
+    }
+
+    /** X states where the reference point ends up, so the translate absorbs whatever else moved it. */
+    private void placeReferenceX(TransformGesture gesture, double x) {
+        Vector2f reference = referencePoint(gesture);
+        Vector2f now = gesture.apply(reference.x, reference.y);
+        gesture.nudgeTranslate((float) (reference.x + x) - now.x, 0f);
+    }
+
+    /** @see #placeReferenceX */
+    private void placeReferenceY(TransformGesture gesture, double y) {
+        Vector2f reference = referencePoint(gesture);
+        Vector2f now = gesture.apply(reference.x, reference.y);
+        gesture.nudgeTranslate(0f, (float) (reference.y + y) - now.y);
+    }
+
+    /** Applies a typed or scrubbed value, holding the reference point where it was. */
+    private void edited(Field field) {
+        Double value = field.control().getValue();
+        if (value == null || !box.isActive()) return;
         TransformGesture gesture = box.gesture();
-        Vector2f reference = referencePoint();
+        Vector2f reference = referencePoint(gesture);
         Vector2f before = gesture.apply(reference.x, reference.y);
-
-        gesture.setScale((float) (scaleWidth.getValue() / 100d), (float) (scaleHeight.getValue() / 100d));
-        gesture.setRotation((float) Math.toRadians(angle.getValue()));
-        gesture.setSkew((float) Math.toRadians(leanX.getValue()),
-                (float) Math.toRadians(leanY.getValue()));
-        gesture.setOrigin((float) (pivotX.getValue() / 100d) * gesture.width(),
-                (float) (pivotY.getValue() / 100d) * gesture.height());
-
-        if (holdReference) {
+        field.write().accept(gesture, value);
+        if (field.holdsReference()) {
             Vector2f after = gesture.apply(reference.x, reference.y);
             gesture.nudgeTranslate(before.x - after.x, before.y - after.y);
-        } else {
-            // X and Y state where the reference point should END UP, measured from where it starts with
-            // no transform at all -- so the translate absorbs whatever the rest of the gesture did to it.
-            Vector2f now = gesture.apply(reference.x, reference.y);
-            gesture.nudgeTranslate(
-                    (float) (reference.x + positionX.getValue()) - now.x,
-                    (float) (reference.y + positionY.getValue()) - now.y);
         }
         box.preview();
         sync();
     }
 
-    /** Shows the bar and its numbers, or hides it. Called every frame by the box. */
+    /** Shows the box's numbers, leaving alone a field that is being typed into. */
     public void sync() {
-        boolean wanted = box.isActive();
-        if (isDisplayed() != wanted) setDisplayed(wanted);
-        if (!wanted) return;
-
+        if (!box.isActive()) return;
         TransformGesture gesture = box.gesture();
-        Vector2f reference = referencePoint();
-        Vector2f moved = gesture.apply(reference.x, reference.y);
-        writing = true;
-        try {
-            positionX.setValue(round(moved.x - reference.x));
-            positionY.setValue(round(moved.y - reference.y));
-            scaleWidth.setValue(round(gesture.scaleX() * 100f));
-            scaleHeight.setValue(round(gesture.scaleY() * 100f));
-            angle.setValue(round((float) Math.toDegrees(gesture.rotation())));
-            leanX.setValue(round((float) Math.toDegrees(gesture.skewXRadians())));
-            leanY.setValue(round((float) Math.toDegrees(gesture.skewYRadians())));
-            pivotX.setValue(round(percentOf(gesture.originX(), gesture.width())));
-            pivotY.setValue(round(percentOf(gesture.originY(), gesture.height())));
-            size.setText(Math.round(gesture.width() * Math.abs(gesture.scaleX())) + " x "
-                    + Math.round(gesture.height() * Math.abs(gesture.scaleY())) + " px");
-        } finally {
-            writing = false;
+        for (Field field : fields) {
+            field.control().setLiveValue(round(field.read().applyAsDouble(gesture)));
         }
+        size.setText(Math.round(gesture.width() * Math.abs(gesture.scaleX())) + " x "
+                + Math.round(gesture.height() * Math.abs(gesture.scaleY())) + " px");
     }
 
     private static float percentOf(float value, float extent) {
@@ -268,18 +259,19 @@ public final class TransformOptionsBar extends UIElement {
     }
 
     /** Two decimals, so a readout does not jitter through six digits while a handle is dragged. */
-    private static double round(float value) {
-        return Math.round(value * 100f) / 100d;
+    private static double round(double value) {
+        return Math.round(value * 100d) / 100d;
     }
 
-    /** The field a mid-gesture number goes into, for the grip being dragged. */
+    /** The field a number typed over the canvas goes into, for the grip last dragged. */
     public NumberControl fieldFor(TransformGesture.Kind kind) {
-        return switch (kind) {
+        Field field = switch (kind) {
             case ROTATE -> angle;
             case SKEW -> leanX;
             case PIVOT -> pivotX;
             case MOVE -> positionX;
             default -> scaleWidth;
         };
+        return field.control();
     }
 }

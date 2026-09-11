@@ -12,6 +12,7 @@ import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
 import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.widget.layout.ContextToolbar;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.core.undo.Edit;
@@ -70,6 +71,7 @@ public final class BuilderEditor implements DocumentEditor {
     private final TransformBox transformBox;
 
     private final TransformOptionsBar options;
+    private final ContextToolbar contextBar;
     private final MoveOutOfFlow moveGesture;
     private final TextEditGesture textEditing;
     private final BuilderPane pane;
@@ -113,10 +115,11 @@ public final class BuilderEditor implements DocumentEditor {
         // is a live gesture, not a view a designer turns on, and it draws nothing at all while down.
         this.transformBox = new TransformBox(surface, document);
         surface.surface().addOverlay(transformBox);
+        this.options = new TransformOptionsBar(transformBox);
         // NO ICON: nothing reads one yet (the tool strip is L9.7), and naming a file that is not there
         // is a claim the build cannot check.
         surface.registerTool(ToolKind.of(FreeTransformTool.ID, "Free Transform")
-                .tool(context -> new FreeTransformTool(context, transformBox)));
+                .tool(context -> new FreeTransformTool(context, transformBox, options)));
         // DESIGN-TIME CHROME, so it goes with the mode. The overlays registered as kinds are hidden by
         // BuilderOverlaysExtension; the handles are mounted directly and would otherwise stay on screen
         // over a UI that is being used.
@@ -138,9 +141,11 @@ public final class BuilderEditor implements DocumentEditor {
         // being used, but a Button drawn there still consumes a press -- so listening after it meant the
         // menu opened over blank page and over nothing else.
         ContextMenu.attach(surface, CommandRegistry.global(), element -> menuFor(pointedAt()), true);
-        this.options = new TransformOptionsBar(transformBox);
-        transformBox.showNumbersIn(options);
-        this.pane = new BuilderPane(toolbar, options, surface);
+        // ONE ROW, whose page follows the tool: Free Transform's numbers take the toolbar's place rather
+        // than pushing the plane down a row.
+        this.contextBar = new ContextToolbar(toolbar);
+        surface.modes().showOptionsIn(contextBar);
+        this.pane = new BuilderPane(contextBar, surface);
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.
         surface.onDidConnect.connect(this::installSheets);
@@ -253,6 +258,11 @@ public final class BuilderEditor implements DocumentEditor {
     /** The toolbar above the canvas. */
     public BuilderToolbar toolbar() {
         return toolbar;
+    }
+
+    /** The row the toolbar sits in, which a tool's options take over while it is current. */
+    public ContextToolbar contextToolbar() {
+        return contextBar;
     }
 
     @Override

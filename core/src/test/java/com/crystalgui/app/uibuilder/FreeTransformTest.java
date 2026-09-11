@@ -40,6 +40,9 @@ import com.crystalgui.widget.surface.SurfacePolicy;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.config.control.NumberControl;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
 
 /**
  * <b>L4.5a — Free Transform as a modal state over one selection.</b>
@@ -692,7 +695,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertEquals("the gate the box has to be exempt from",
                 SurfacePolicy.PressOwner.TREE, new TreePolicy(artboard).ownerOf(offThePage));
         assertTrue("so the tool has to claim everything",
-                new FreeTransformTool(editor.surface(), box()).claimsEveryPress());
+                new FreeTransformTool(editor.surface(), box(), editor.options()).claimsEveryPress());
         assertFalse("and an ordinary tool must not — a marquee belongs to the page",
                 new TreeSelectTool(editor.surface()).claimsEveryPress());
     }
@@ -740,6 +743,75 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertEquals("the top-left was chosen, so the top-left stays", before.x, after.x, 0.01f);
         assertEquals(before.y, after.y, 0.01f);
         assertEquals(3f, box().gesture().scaleX(), 0.01f);
+    }
+
+    /**
+     * <b>A number typed over the canvas lands in the bar, survives the frame, and Enter commits it.</b>
+     *
+     * <p>Through {@code consumeKeyboardEvent}, the character arriving after its key as GLFW sends it, with
+     * a whole frame between keystrokes: the bar re-reads the box every frame, and a field it overwrote on
+     * each one could not be typed into at all.</p>
+     */
+    @Test
+    public void aNumberTypedOverTheCanvasSurvivesTheFrameAndEnterCommitsIt() {
+        enterFreeTransform();
+        document.frame(0f, W, H);
+        box().press(new Grip(Kind.ROTATE, null));
+        box().release();
+
+        typeOverTheCanvas("45");
+        NumberControl angle = editor.options().fieldFor(Kind.ROTATE);
+        assertEquals("the frame overwrote what was typed", "45", angle.field().getText());
+
+        key(CgKeyCodes.KEY_RETURN, true);
+        assertFalse("Enter commits the transform", box().isActive());
+        enterFreeTransform();
+        document.update(W, H);
+        assertEquals("and what was typed is what was committed",
+                Math.PI / 4d, box().gesture().rotation(), 0.001d);
+    }
+
+    /** <b>A number still being typed lands when the tool changes</b>: leaving by any route but Escape keeps the work. */
+    @Test
+    public void aNumberStillBeingTypedLandsWhenTheToolChanges() {
+        enterFreeTransform();
+        document.frame(0f, W, H);
+        box().press(new Grip(Kind.ROTATE, null));
+        box().release();
+
+        typeOverTheCanvas("30");
+        editor.surface().modes().use(TreeSelectTool.ID);
+        enterFreeTransform();
+        document.update(W, H);
+        assertEquals("the typed number was dropped with the tool",
+                Math.PI / 6d, box().gesture().rotation(), 0.001d);
+    }
+
+    /** <b>Opening Free Transform swaps the toolbar row's page, and the canvas under it stays put.</b> */
+    @Test
+    public void openingFreeTransformDoesNotMoveTheCanvas() {
+        withDefaultStyles();
+        document.update(W, H);
+        float before = editor.surface().box().y();
+        assertSame(editor.toolbar(), editor.contextToolbar().shown());
+
+        enterFreeTransform();
+        document.update(W, H);
+        assertSame(editor.options(), editor.contextToolbar().shown());
+        assertEquals("the canvas moved when the numbers appeared",
+                before, editor.surface().box().y(), 0.01f);
+
+        editor.surface().modes().use(TreeSelectTool.ID);
+        assertSame(editor.toolbar(), editor.contextToolbar().shown());
+    }
+
+    /** Each digit as its key and then its character, with a frame after each. */
+    private void typeOverTheCanvas(String digits) {
+        for (char c : digits.toCharArray()) {
+            key(c == '0' ? CgKeyCodes.KEY_0 : CgKeyCodes.KEY_1 + (c - '1'), true);
+            document.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(c, 0, true, false, 0L));
+            document.frame(0f, W, H);
+        }
     }
 
     /** <b>Transform Again gives the next element the last one's treatment.</b> */

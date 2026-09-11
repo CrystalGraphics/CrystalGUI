@@ -4,18 +4,19 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.layout.ContextToolbar;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
 
 /**
- * What a {@code .cgui} tab actually contains: the toolbar, and the plane under it.
+ * What a {@code .cgui} tab actually contains: one toolbar row, and the plane under it.
  *
  * <p>A tab is one element, and the canvas is no longer the whole of one — so this is what
- * {@code DocumentEditor.view()} answers.</p>
+ * {@code DocumentEditor.view()} answers. The row is a {@link ContextToolbar} over the builder's toolbar,
+ * so a tool with options of its own takes the toolbar's place instead of pushing the plane down.</p>
  *
  * <h3>It answers the plane's data keys, and that is not a convenience</h3>
  *
@@ -33,7 +34,7 @@ public final class BuilderPane extends UIElement implements DataProvider {
 
     private final BuilderSurface surface;
 
-    BuilderPane(BuilderToolbar toolbar, TransformOptionsBar options, BuilderSurface surface) {
+    BuilderPane(ContextToolbar bar, BuilderSurface surface) {
         super(NAME);
         this.surface = surface;
         addClass(PANE_CLASS);
@@ -45,9 +46,7 @@ public final class BuilderPane extends UIElement implements DataProvider {
                 l -> l.widthPercent(100f).heightPercent(100f).flexDirection(FlexDirection.COLUMN));
         StyleGroup.defaultPipeline(surface.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).height(0f).flexGrow(1f));
-        // BETWEEN the two, which is where Photoshop puts it and why it is not on the canvas: the
-        // numbers describe the selection and would otherwise sit on top of it.
-        append(toolbar, options, surface);
+        append(bar, surface);
     }
 
     /** The plane, for a caller that has the pane and wants what is in it. */

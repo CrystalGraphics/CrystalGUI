@@ -15,6 +15,7 @@ import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
 import com.crystalgui.widget.surface.SurfaceContext;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.surface.mode.Tool;
@@ -25,11 +26,12 @@ import com.crystalgui.widget.surface.snap.SnapSuspend;
  *
  * <p>Modal in the strict sense: <b>every</b> press is consumed while it is up, so nothing else can be
  * selected and no widget underneath is pressed. Enter commits, Escape cancels, and either one hands the
- * surface back to Select.</p>
+ * surface back to Select. Its numbers are a {@link TransformOptionsBar}, shown in the editor's context
+ * toolbar for as long as the tool is current.</p>
  *
  * <pre>{@code
  * ctx.registerTool(ToolKind.of(FreeTransformTool.ID, "Free Transform")
- *         .tool(surface -> new FreeTransformTool(surface, box)));
+ *         .tool(surface -> new FreeTransformTool(surface, box, new TransformOptionsBar(box))));
  * }</pre>
  *
  * <h3>What each drag means</h3>
@@ -55,6 +57,8 @@ public final class FreeTransformTool implements Tool {
 
     private final TransformBox box;
 
+    private final TransformOptionsBar options;
+
     /**
      * Whether the transform box is the current tool on this surface.
      *
@@ -68,9 +72,10 @@ public final class FreeTransformTool implements Tool {
         return ID.equals(ctx.modes().currentId());
     }
 
-    public FreeTransformTool(SurfaceContext ctx, TransformBox box) {
+    public FreeTransformTool(SurfaceContext ctx, TransformBox box, TransformOptionsBar options) {
         this.ctx = ctx;
         this.box = box;
+        this.options = options;
     }
 
     /**
@@ -85,13 +90,12 @@ public final class FreeTransformTool implements Tool {
         box.begin(ctx.selection().size() == 1 ? ctx.selection().items().get(0) : null);
     }
 
-    /**
-     * <b>Commits.</b>
-     *
-     * <p>Photoshop's rule, and the safe one either way: leaving by any route other than Escape keeps the
-     * work. A tool that cancelled here would throw the gesture away when the user clicked another tool,
-     * and a live preview left behind with no box to reach it is worse than both.</p>
-     */
+    /** The box's numbers, in place of the editor's toolbar while the box is up. */
+    @Override
+    public UIElement options() {
+        return options;
+    }
+
     /**
      * <b>Yes.</b> The box is modal over one selection, and its handles are wherever the gesture has put
      * them — often over empty plane once the element is rotated or scaled up.
@@ -101,10 +105,25 @@ public final class FreeTransformTool implements Tool {
         return true;
     }
 
+    /**
+     * <b>Commits.</b>
+     *
+     * <p>Photoshop's rule, and the safe one either way: leaving by any route other than Escape keeps the
+     * work. A tool that cancelled here would throw the gesture away when the user clicked another tool,
+     * and a live preview left behind with no box to reach it is worse than both. A number still being
+     * typed into the box's fields is part of the work, so it lands first.</p>
+     */
     @Override
     public void deactivated() {
+        landTypedNumber();
         box.commit();
         ctx.cursors().clear();
+    }
+
+    /** Lands a number typed into the box's own fields and not yet entered. */
+    private void landTypedNumber() {
+        TextField typing = fieldBeingTypedInto();
+        if (typing != null && UINode.isShadowIncludingInclusiveAncestor(options, typing)) typing.commit();
     }
 
     /**
@@ -177,29 +196,45 @@ public final class FreeTransformTool implements Tool {
     @Override
     public boolean keyPressed(int key, int modifiers, boolean repeat) {
         if (!box.isActive()) return false;
+        boolean enter = key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_NUMPADENTER;
         // A MODE IS ASKED BEFORE THE TREE, so swallowing everything left no text field in the application
-        // typeable while the box was up -- the options bar's own numbers included, which is the one thing
-        // that has to work here. A field with focus gets its keys back; the modal claim is over the
+        // typeable while the box was up. A field with focus gets its keys back; the modal claim is over the
         // CANVAS, not over the keyboard.
-        if (typingIntoAField()) return false;
+        TextField typing = fieldBeingTypedInto();
+        if (typing != null) {
+            if (!UINode.isShadowIncludingInclusiveAncestor(options, typing)) return false;
+            // EXCEPT THAT ENTER AND ESCAPE STILL END THE TRANSFORM from its own numbers, as they do from
+            // Blender's numeric input. Enter lands what was typed first, so the number showing is the one
+            // committed.
+            if (enter) {
+                typing.commit();
+                box.commit();
+                backToSelect();
+                return true;
+            }
+            if (key == CgKeyCodes.KEY_ESCAPE) {
+                box.cancel();
+                backToSelect();
+                return true;
+            }
+            return false;
+        }
         if (key == CgKeyCodes.KEY_ESCAPE) {
             box.cancel();
             backToSelect();
             return true;
         }
         // BLENDER'S TRICK: type a number and it lands in the field for whatever was last grabbed, so a
-        // gesture can be finished exactly without the hand leaving the canvas to find the box. The first
-        // character seeds the field and takes focus; everything after it is ordinary typing, because a
-        // focused field gets its keys back above.
-        String typed = digit(key);
-        if (typed != null && !CgModifiers.hasCtrl(modifiers)) {
-            TransformOptionsBar bar = box.options();
-            if (bar != null) {
-                TextField field = bar.fieldFor(box.lastGrip().kind()).field();
-                field.setText(typed);
-                UIDocument window = box.document();
-                if (window != null) window.focus().requestFocus(field);
-                return true;
+        // gesture can be finished exactly without the hand leaving the canvas. The field takes focus with
+        // its text selected and THIS key goes on to it, so the digit replaces what was there and the rest
+        // is ordinary typing -- the same whether the platform sends the character with the key or after it.
+        if (isNumberKey(key) && !CgModifiers.hasCtrl(modifiers)) {
+            TextField field = options.fieldFor(box.lastGrip().kind()).field();
+            UIDocument window = box.document();
+            if (window != null) {
+                window.focus().requestFocus(field);
+                field.selectAll();
+                return false;
             }
         }
 
@@ -216,7 +251,7 @@ public final class FreeTransformTool implements Tool {
             box.redoStep();
             return true;
         }
-        if (key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_NUMPADENTER) {
+        if (enter) {
             box.commit();
             backToSelect();
             return true;
@@ -226,26 +261,21 @@ public final class FreeTransformTool implements Tool {
         return true;
     }
 
-    /** The character a key stands for, or null when it is not part of a number. */
-    @Nullable
-    private static String digit(int key) {
-        if (key >= CgKeyCodes.KEY_1 && key <= CgKeyCodes.KEY_9) {
-            return String.valueOf((char) ('1' + (key - CgKeyCodes.KEY_1)));
-        }
-        if (key == CgKeyCodes.KEY_0) return "0";
-        if (key == CgKeyCodes.KEY_MINUS) return "-";
-        if (key == CgKeyCodes.KEY_PERIOD) return ".";
-        return null;
+    /** Whether a key starts a number. */
+    private static boolean isNumberKey(int key) {
+        return key >= CgKeyCodes.KEY_1 && key <= CgKeyCodes.KEY_9 || key == CgKeyCodes.KEY_0
+                || key == CgKeyCodes.KEY_MINUS || key == CgKeyCodes.KEY_PERIOD;
     }
 
-    /** @see #keyPressed */
-    private boolean typingIntoAField() {
+    /** The text field holding focus, wherever it is, or null. */
+    @Nullable
+    private TextField fieldBeingTypedInto() {
         UIDocument window = box.document();
-        if (window == null) return false;
+        if (window == null) return null;
         for (UIElement at = window.focus().focused(); at != null; at = at.composedParent()) {
-            if (at instanceof TextField) return true;
+            if (at instanceof TextField field) return field;
         }
-        return false;
+        return null;
     }
 
     private void backToSelect() {
