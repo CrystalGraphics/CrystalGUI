@@ -100,9 +100,9 @@ public final class CgUiPaintContext {
     /** {@code namespace:path} resolved through {@link CgIO}'s waterfall (filesystem override →
      * MC resource manager → classpath) — works identically in-game and in the harness/tests,
      * unlike the hardcoded absolute Windows path this replaced ({@code C:\WINDOWS\Fonts\arial.ttf},
-     * which only ever worked on the original dev's machine). Reuses a font CrystalGraphics already
-     * bundles rather than shipping a duplicate. */
-    private static final String DEFAULT_FONT_ASSET = "crystalgraphics:IBMPlexSans-Regular.ttf";
+     * which only ever worked on the original dev's machine). CrystalGUI ships it; CrystalGraphics
+     * carries no fonts. */
+    private static final String DEFAULT_FONT_ASSET = "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
 
     /**
      * The same preference order {@code StylePropertyRegistry.FONT_FAMILY} declares, and it has to stay

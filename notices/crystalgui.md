@@ -17,6 +17,7 @@ The repository-level index, with the full reasoning behind each entry, is
 | **IntelliJ Platform icons** | `assets/crystalgui/ui/icons/filetypes/` | Apache 2.0 — © 2000–2021 JetBrains s.r.o. | Verbatim. See `assets/crystalgui/ui/icons/ATTRIBUTION.md`, which ships beside them |
 | **Feather icons** | `assets/crystalgui/ui/icons/` | MIT — © 2013–2023 Cole Bemis | Verbatim |
 | **JetBrains Mono** | `assets/crystalgui/ui/fonts/JetBrainsMono-Regular.ttf` | SIL OFL 1.1 | Verbatim |
+| **IBM Plex Sans** | `assets/crystalgui/ui/fonts/IBMPlexSans-Regular.ttf` | SIL OFL 1.1 — © 2017 IBM Corp., Reserved Font Name "Plex" | Verbatim. Licence: `IBMPlexSans-OFL.txt`, beside it |
 | Minecraft fonts | `assets/crystalgui/ui/fonts/Minecraft*.otf` | Public domain | Verbatim |
 | **jvmDowngrader** runtime stubs | `com/crystalgui/shadow/xyz/wagyourtail/` | MIT — © wagyourtail | Emitted by the downgrade that makes one jar load on Java 8 and Java 17 alike |
 

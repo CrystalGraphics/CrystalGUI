@@ -2,6 +2,7 @@ package com.crystalgui.mc.modern.client;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.util.Locale;
 
 import javax.annotation.Nullable;
 
@@ -131,7 +132,7 @@ public final class CgUiScreen extends Screen {
         host.document().addClass(ROOT_CLASS);
     }
 
-    /** The three things only this platform can answer. @see HostServices */
+    /** The four things only this platform can answer. @see HostServices */
     private static final class ModernHost implements HostServices {
 
         @Override
@@ -171,6 +172,13 @@ public final class CgUiScreen extends Screen {
             // Re-asked every frame, so a reconnect is a different object carrying the same workspace and
             // DesktopHost rebinds rather than rebuilds. Null means no server right now: supported.
             return Connections.client();
+        }
+
+        /** The game's language setting, {@code "ja_jp"} on 1.20.x. */
+        @Override
+        public Locale locale() {
+            Minecraft mc = Minecraft.getInstance();
+            return HostServices.gameLocale(mc == null ? null : mc.options.languageCode);
         }
     }
 
