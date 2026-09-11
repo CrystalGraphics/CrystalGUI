@@ -165,6 +165,11 @@ PART	ConflictDialog	conflict	B	4	confirmed	a rule selects through it (3)
 PART	ConflictDialog	conflict-actions	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ConflictDialog	conflict-message	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ConflictDialog	conflict-who	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	ContextToolbar	context-overflow	A	0	proposed	leaf in every rule
+PART	ContextToolbar	context-overflow-panel	B	3	proposed	a rule selects through it (2)
+PART	ContextToolbar	context-page	A	0	proposed	leaf in every rule
+PART	ContextToolbar	context-separator	B	3	proposed	a rule selects through it (1)
+PART	ContextToolbar	context-separator-line	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	CreateMenu	category	A	0	proposed	leaf in every rule
 PART	CreateMenu	category-segment	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	CreateMenu	category-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
@@ -346,7 +351,7 @@ PART	MergeView	merge-panes	B	4	confirmed	a rule selects through it (3)
 PART	MergeView	merge-status	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MergeView	merge-toolbar	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MoveGesture	moving	C	0	proposed	state adjective
-PART	MoveOutOfFlow	smart-guides	A	0	proposed	leaf in every rule
+PART	MoveOutOfFlow	move-out-of-flow	A	0	proposed	leaf in every rule
 PART	NavigatorView	nav-arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	NavigatorView	nav-back	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-detail	B	0	confirmed	leaf in every rule
@@ -501,7 +506,7 @@ PART	Resizer	resizer	A	1	proposed	leaf in every rule
 PART	RunConsoleView	over-link	A	0	proposed	leaf in every rule
 PART	RunConsoleView	run-console	A	0	proposed	leaf in every rule
 PART	RunIndicators	running	A	0	proposed	leaf in every rule
-PART	RunPanel	on	C	3	proposed	state adjective
+PART	RunPanel	on	C	5	proposed	state adjective
 PART	RunPanel	run-action	A	0	proposed	leaf in every rule
 PART	RunPanel	run-bar	A	0	proposed	leaf in every rule
 PART	RunPanel	run-body	A	0	proposed	leaf in every rule
@@ -527,7 +532,7 @@ PART	Scroller	vertical	C	12	confirmed	state adjective
 PART	ScrollerView	scroll-view	A	1	proposed	leaf in every rule
 PART	SearchField	focused	C	1	confirmed	state adjective
 PART	SearchField	not-found	B	2	confirmed	a rule selects through it (1)
-PART	SearchField	on	C	3	confirmed	state adjective
+PART	SearchField	on	C	5	confirmed	state adjective
 PART	SearchField	search-field	B	14	confirmed	a rule selects through it (6)
 PART	SearchField	search-option	A	4	confirmed	leaf in every rule
 PART	SearchReplaceBar	expanded	C	1	confirmed	state adjective
@@ -558,6 +563,8 @@ PART	ShaderPropertyNodes	exposed-dot	B	1	confirmed	leaf in every rule, scoped by
 PART	ShaderPropertyNodes	property-linked	B	4	confirmed	leaf in every rule
 PART	ShaderPropertyNodes	property-node	B	20	confirmed	a rule selects through it (14)
 PART	SliderControl	slider	B	6	confirmed	a rule selects through it (5)
+PART	SmartGuides	smart-guides	A	0	proposed	leaf in every rule
+PART	SmartGuides	snap-gap-label	A	1	proposed	leaf in every rule
 PART	SplitView	divider	B	6	confirmed	leaf in every rule, scoped by an ancestor in 6
 PART	SplitView	dragging	C	2	confirmed	state adjective
 PART	SplitView	first	B	0	confirmed	state adjective
@@ -674,13 +681,13 @@ PART	ToolWindowFrame	tool-window	B	10	confirmed	a rule selects through it (9)
 PART	ToolWindowFrame	windowed	C	0	confirmed	state adjective
 PART	Tooltip	wait	A	1	proposed	leaf in every rule
 PART	TransformBox	transform-box	A	0	proposed	leaf in every rule
-PART	TransformOptionsBar	on	C	3	proposed	state adjective
+PART	TransformOptionsBar	on	C	5	proposed	state adjective
 PART	TransformOptionsBar	transform-anchor	B	2	proposed	a rule selects through it (1)
 PART	TransformOptionsBar	transform-anchor-cell	A	2	proposed	leaf in every rule
-PART	TransformOptionsBar	transform-field	B	2	proposed	a rule selects through it (1)
-PART	TransformOptionsBar	transform-label	A	1	proposed	leaf in every rule
+PART	TransformOptionsBar	transform-field	B	3	proposed	a rule selects through it (2)
+PART	TransformOptionsBar	transform-label	A	2	proposed	leaf in every rule
+PART	TransformOptionsBar	transform-link	A	4	proposed	leaf in every rule
 PART	TransformOptionsBar	transform-options	A	0	proposed	leaf in every rule
-PART	TransformOptionsBar	transform-size	A	1	proposed	leaf in every rule
 PART	TreeSearch	dimmed	C	1	confirmed	state adjective
 PART	TreeSearch	find-bar	B	32	confirmed	a rule selects through it (31)
 PART	TreeSearch	find-close	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -691,7 +698,7 @@ PART	TreeSearch	find-next	B	5	confirmed	leaf in every rule, scoped by an ancesto
 PART	TreeSearch	find-prev	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	TreeSearch	match	C	2	confirmed	state adjective
 PART	TreeSearch	off	C	2	confirmed	state adjective
-PART	TreeSearch	on	C	4	confirmed	state adjective
+PART	TreeSearch	on	C	6	confirmed	state adjective
 PART	TreeSearch	option-match-case	B	1	confirmed	leaf in every rule
 PART	TreeSearch	option-regex	B	1	confirmed	leaf in every rule
 PART	TreeSearch	option-words	B	1	confirmed	leaf in every rule

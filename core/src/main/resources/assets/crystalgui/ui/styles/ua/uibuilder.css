@@ -118,6 +118,17 @@ builderpane > contexttoolbar > .__context-page__ {
     gap: 4;
 }
 
+/* ONE SIZE FOR THE WHOLE ROW, a step under the rest of the chrome -- Photoshop's and Paint.NET's density.
+ * On the text itself, because font-size does not inherit here: `* { font-size: 10 }` is a candidate on
+ * every element, and a button's label is a part of its own. */
+builderpane > contexttoolbar > .__context-overflow__::part(label),
+buildertoolbar > button::part(label),
+buildertoolbar > dropdown::part(label),
+.__transform-label__,
+.__transform-field__ textfield {
+    font-size: 8;
+}
+
 /* NOTHING HERE FOR THE ENTRIES. They are outlined controls because every workbench control is --
  * @see `workbench button, workbench dropdown` in ua/workbench.css -- and a copy of that rule scoped to
  * this toolbar would be a second place to change it and a second place to forget. */
@@ -126,10 +137,11 @@ builderpane > contexttoolbar > .__context-page__ {
  *
  * Free Transform's page in the row above, which gives it its height, ground and gaps. */
 
+/* Dense, as Photoshop's and Paint.NET's bars are: a letter per number, and the unit inside the value. */
 .__transform-field__ {
     flex-direction: row;
     align-items: center;
-    gap: 3;
+    gap: 2;
 }
 
 /* The label is also the scrub handle -- pressing it and sliding changes the number -- so it carries the
@@ -140,22 +152,52 @@ builderpane > contexttoolbar > .__context-page__ {
 }
 
 .__transform-field__ > numbercontrol {
-    width: 52;
+    width: 38;
 }
 
-.__transform-size__ {
+/* Photoshop's chain between W and H: dim while each scales alone, the accent while they go together. An
+ * icon button, so the workbench's outline -- a rule for LABELLED buttons -- never reaches it. */
+.__transform-link__ {
+    width: 14px;
+    height: 14px;
+    min-width: 0px;
+    min-height: 0px;
+    padding: 1px;
+    border-radius: 2px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:general/action/link-2");
+    overlay-origin: content-box;
+    overlay-size: contain;
     color: var(--tree-dimmed-fg, #9DA0A8);
 }
 
-/* ── The reference point ─────────────────────────────────────────────────────────────────────────────
+/* The panel header's icon hover: a brighter mark on a square behind it. */
+.__transform-link__:hover {
+    color: var(--panel-header-icon-hover, #E0E0E0);
+    background: none;
+    background-color: var(--panel-header-icon-hover-bg, #393B40);
+}
+
+.__transform-link__.__on__,
+.__transform-link__.__on__:hover {
+    color: var(--builder-selected, #3574F0);
+}
+
+/* ── The pivot ───────────────────────────────────────────────────────────────────────────────────────
  *
- * Photoshop's 3x3: which point of the box a TYPED number is measured against. Nine cells rather than a
- * dropdown because the thing being chosen is a position, and a picture of the box is the only spelling
- * that does not need reading. */
+ * Photoshop's 3x3 reference point: the cell the pivot sits on, and a click puts it on another. Nine cells
+ * rather than a dropdown because the thing being chosen is a position, and a picture of the box is the only
+ * spelling that does not need reading. None lights while the pivot is dragged between them. */
 .__transform-anchor__ {
     flex-direction: column;
+    justify-content: center;
     gap: 1;
     padding-right: 4px;
+    /* THE ROW'S FULL HEIGHT, with the nine cells centred in it: this is what the grid's tooltip hangs
+     * from, and a box only as tall as the cells put it four pixels above every other tooltip on the
+     * bar -- over the toolbar rather than under it. */
+    height: 100%;
 }
 
 .__transform-anchor__ > * {
@@ -229,6 +271,12 @@ transformbox {
      * back to when the transform is removed. Deliberately the quieter of the two -- it is a reference,
      * and a second line as loud as the gesture's own reads as two things being transformed. */
     border-color: var(--builder-selected-parent, #55607A);
+    /* THE PIVOT, which is the one mark that may NOT share the accent: it sits on the element being
+     * transformed, and a selected element is usually that same blue -- so the crosshair vanished into
+     * exactly the thing it belongs to. A light mark over a dark halo reads on either. BORROWED
+     * properties: this overlay draws no outline and no text. @see TransformBox#paintPivot */
+    outline-color: var(--builder-pivot, #FFFFFF);
+    text-decoration-color: var(--builder-pivot-halo, #0D0F14C0);
 }
 
 .__handle-top-left__, .__handle-bottom-right__ { cursor: nwse-resize; }

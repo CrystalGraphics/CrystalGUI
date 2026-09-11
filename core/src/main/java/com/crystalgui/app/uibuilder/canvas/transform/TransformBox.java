@@ -1,7 +1,5 @@
 package com.crystalgui.app.uibuilder.canvas.transform;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -13,6 +11,8 @@ import org.joml.Vector3f;
 import com.google.gson.JsonElement;
 
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.ui.service.CursorDecoration;
@@ -104,6 +104,12 @@ public final class TransformBox extends UIElement {
 
     private static final float PIVOT_SIZE = 9f;
 
+    /** Half-width of every line the box draws — its edges, and the pivot's mark. One logical pixel. */
+    private static final float HAIRLINE = 0.5f;
+
+    /** The pivot's under-pass, wider, so the mark reads on a pale element as well as a dark one. */
+    private static final float PIVOT_HALO = 1.1f;
+
     /**
      * How close a press has to be to the pivot, and it is NOT {@link #PIVOT_SIZE}.
      *
@@ -145,10 +151,12 @@ public final class TransformBox extends UIElement {
 
     private boolean dragging;
 
-    /** One entry per completed adjustment. @see #undoStep */
-    private final Deque<TransformGesture.State> undone = new ArrayDeque<>();
+    /** @see #history */
+    private final UndoStack history = new UndoStack().setMergeWindowMillis(0L);
 
-    private final Deque<TransformGesture.State> redone = new ArrayDeque<>();
+    /** Where the gesture was when the current drag began, so the whole drag is one step. */
+    @Nullable
+    private TransformGesture.State pressState;
 
     /** The most recent press, KEPT after release: what a typed number is understood to be about. */
     private Grip lastGrip = Grip.NONE;
@@ -439,8 +447,8 @@ public final class TransformBox extends UIElement {
         // rest of the session.
         dragging = false;
         hoverX = Float.NaN;
-        undone.clear();
-        redone.clear();
+        history.clear();
+        pressState = null;
         gesture.release();
         pressOuter = null;
         scene = null;
@@ -596,30 +604,71 @@ public final class TransformBox extends UIElement {
     }
 
     /**
-     * Steps back one adjustment <b>without leaving the box</b>.
+     * This box's own history, one step per drag, scrub or typed number — what Ctrl+Z reaches while the tool
+     * is current. @see FreeTransformTool#history
      *
-     * <p>Photoshop's rule, and the reason it is not the document's undo: nothing has reached the document
-     * yet. The whole gesture is one edit, written on commit, so while the box is up the only history that
-     * exists is the one kept here — and a Ctrl+Z falling through to the document would undo whatever was
-     * done BEFORE the transform started, which is never what the hand meant.</p>
+     * <p>Photoshop's rule, and the reason it is not the document's: nothing has reached the document yet.
+     * The whole gesture is one edit, written on commit, so while the box is up this is the only history
+     * there is — and a Ctrl+Z falling through to the document would undo whatever was done BEFORE the
+     * transform started. Emptied when the box closes.</p>
      *
-     * @return whether there was anything to step back
+     * <pre>{@code
+     * box.history().beginMergeRun();                      // a scrub: one step however many frames it writes
+     * box.step(() -> box.gesture().setRotation(angle));
+     * box.history().endMergeRun();
+     * }</pre>
      */
-    public boolean undoStep() {
-        if (!active || undone.isEmpty()) return false;
-        redone.push(gesture.snapshot());
-        gesture.restore(undone.pop());
-        preview();
-        return true;
+    public UndoStack history() {
+        return history;
     }
 
-    /** @see #undoStep */
-    public boolean redoStep() {
-        if (!active || redone.isEmpty()) return false;
-        undone.push(gesture.snapshot());
-        gesture.restore(redone.pop());
-        preview();
-        return true;
+    /** Makes one change to the gesture as a step of {@link #history}. A change that moved nothing is none. */
+    public void step(Runnable change) {
+        TransformGesture.State before = gesture.snapshot();
+        change.run();
+        record(before);
+    }
+
+    private void record(@Nullable TransformGesture.State before) {
+        if (!active || before == null) return;
+        TransformGesture.State after = gesture.snapshot();
+        if (!before.equals(after)) history.push(new Step(before, after));
+    }
+
+    /** One step of {@link #history}: the gesture before it and after it. */
+    private final class Step implements Edit {
+
+        private final TransformGesture.State before;
+        private final TransformGesture.State after;
+
+        Step(TransformGesture.State before, TransformGesture.State after) {
+            this.before = before;
+            this.after = after;
+        }
+
+        @Override
+        public void apply() {
+            gesture.restore(after);
+            preview();
+        }
+
+        @Override
+        public void undo() {
+            gesture.restore(before);
+            preview();
+        }
+
+        @Override
+        public String label() {
+            return "Transform";
+        }
+
+        /** Offered only inside a held run -- the history's window is off -- so a scrub's frames are one step. */
+        @Override
+        @Nullable
+        public Edit mergeWith(Edit next) {
+            return next instanceof Step step ? new Step(before, step.after) : null;
+        }
     }
 
     /** Whether there is a transform to apply again. */
@@ -709,11 +758,6 @@ public final class TransformBox extends UIElement {
         return lastGrip;
     }
 
-    /** How many adjustments can still be stepped back. For a test. */
-    public int undoDepth() {
-        return undone.size();
-    }
-
     /**
      * Begins a drag on whatever {@link #grip} answered.
      *
@@ -721,10 +765,8 @@ public final class TransformBox extends UIElement {
      * gives. Pinned here rather than recomputed there so there is exactly one moment it is taken.</p>
      */
     public void press(Grip grip) {
-        // BEFORE the drag, so stepping back lands where the hand started. Discarded again on release if
-        // nothing actually moved -- a press that turns out to be a click should not cost an undo.
-        undone.push(gesture.snapshot());
-        redone.clear();
+        // WHERE THE HAND STARTED, so the drag is one step of the history and a click is none.
+        pressState = gesture.snapshot();
         lastGrip = grip;
         gesture.press(grip);
         Matrix4f frame = frame();
@@ -903,7 +945,8 @@ public final class TransformBox extends UIElement {
     }
 
     public void release() {
-        if (!undone.isEmpty() && undone.peek().equals(gesture.snapshot())) undone.pop();
+        record(pressState);
+        pressState = null;
         gesture.release();
         pressOuter = null;
         scene = null;
@@ -959,10 +1002,45 @@ public final class TransformBox extends UIElement {
 
         Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
         if (pivot != null) {
-            float arm = PIVOT_SIZE * 0.5f;
-            edge(paint, new Vector2f(pivot.x - arm, pivot.y), new Vector2f(pivot.x + arm, pivot.y), colour);
-            edge(paint, new Vector2f(pivot.x, pivot.y - arm), new Vector2f(pivot.x, pivot.y + arm), colour);
+            paintPivot(paint, pivot,
+                    getStyle().computed().get(StylePropertyRegistry.OUTLINE_COLOR),
+                    getStyle().computed().get(StylePropertyRegistry.TEXT_DECORATION_COLOR));
         }
+    }
+
+    /**
+     * The pivot — a ring with four arms, each pass drawn over a wider halo.
+     *
+     * <p><b>Two colours, and neither is the chrome's.</b> In the chrome colour it was invisible on
+     * anything selected-blue, which is most of what a builder points at, and a mark that disappears into
+     * the element it belongs to cannot say where the transform turns. The halo is what carries it over a
+     * pale element as well as a dark one, which no single colour does: After Effects' anchor point and
+     * Blender's 3D cursor are both two-tone for the same reason. The ring is Photoshop's shape, and it is
+     * what tells the mark apart from a snap guide's cross.</p>
+     *
+     * <p>{@code outline-color} and {@code text-decoration-color} are BORROWED — this overlay draws
+     * neither an outline nor text, and the sheet has to have somewhere to say them. @see ua/uibuilder.css</p>
+     */
+    private static void paintPivot(CgUiPaintContext paint, Vector2f at, int mark, int halo) {
+        pivotPass(paint, at, halo, PIVOT_HALO);
+        pivotPass(paint, at, mark, HAIRLINE);
+    }
+
+    /** One pass of the mark: the ring, then the four arms outside it. @see #paintPivot */
+    private static void pivotPass(CgUiPaintContext paint, Vector2f at, int colour, float width) {
+        float arm = PIVOT_SIZE * 0.5f;
+        float radius = PIVOT_SIZE * 0.28f;
+        paint.rect()
+                .at(at.x - radius, at.y - radius)
+                .size(radius * 2f, radius * 2f)
+                .radius(radius, radius)
+                .border(width * 2f, colour)
+                .fillColor(0)
+                .submit();
+        stroke(paint, at.x - arm, at.y, at.x - radius, at.y, colour, width);
+        stroke(paint, at.x + radius, at.y, at.x + arm, at.y, colour, width);
+        stroke(paint, at.x, at.y - arm, at.x, at.y - radius, colour, width);
+        stroke(paint, at.x, at.y + radius, at.x, at.y + arm, colour, width);
     }
 
     /**
@@ -976,11 +1054,20 @@ public final class TransformBox extends UIElement {
      * without a multisampled target underneath it.</p>
      */
     private static void edge(CgUiPaintContext paint, Vector2f from, Vector2f to, int colour) {
-        float dx = to.x - from.x;
-        float dy = to.y - from.y;
+        stroke(paint, from.x, from.y, to.x, to.y, colour, HAIRLINE);
+    }
+
+    /**
+     * One segment at a given stroke half-width.
+     *
+     * <p>Half-width, so {@link #HAIRLINE} is one logical pixel — and it stays one LOGICAL pixel,
+     * because the pose scales stroke widths as it scales everything else.</p>
+     */
+    private static void stroke(CgUiPaintContext paint, float x0, float y0, float x1, float y1,
+                               int colour, float width) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
         if (dx * dx + dy * dy < 0.0001f) return;
-        // Half-width: `width` is the half, so this is the same one logical pixel as before -- and it
-        // stays one LOGICAL pixel, because the pose scales stroke widths as it scales everything else.
-        paint.curve().line(from.x, from.y, to.x, to.y).width(0.5f).color(colour).submit();
+        paint.curve().line(x0, y0, x1, y1).width(width).color(colour).submit();
     }
 }
