@@ -39,6 +39,7 @@ import com.crystalgui.widget.surface.overlay.Geometry;
 import com.crystalgui.widget.surface.overlay.OverlayLayer;
 import com.crystalgui.widget.surface.select.Picking;
 import com.crystalgui.widget.surface.insert.InsertSource;
+import com.crystalgui.widget.surface.mode.Tool;
 import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.widget.surface.overlay.OverlayKind;
 import com.crystalgui.widget.surface.overlay.ViewModeKind;
@@ -226,7 +227,7 @@ public class SurfaceEditor extends CanvasView
         });
         this.geometry = new Geometry(surface);
         this.overlays = new OverlayLayer(this);
-        this.cursors = new Cursors(this::document);
+        this.cursors = new Cursors(this::document, () -> this);
         this.modes = new Modes(this, () -> this);
         // A SURFACE MUST BE ABLE TO HOLD FOCUS, or none of its keys work: requestFocus refuses anything
         // whose policy is NONE, so every command that resolves a surface from the focused element
@@ -297,10 +298,15 @@ public class SurfaceEditor extends CanvasView
         return keymap;
     }
 
-    /** The consumer's history, so Ctrl+Z resolved from focus finds the right one. */
+    /**
+     * The history Ctrl+Z reaches from focus: the current tool's own while it keeps one — a modal tool's
+     * session, Photoshop's Free Transform — and the consumer's otherwise.
+     */
     @Override
     public UndoStack undoStack() {
-        return edits.history();
+        Tool tool = modes.current();
+        UndoStack own = tool == null ? null : tool.history();
+        return own != null ? own : edits.history();
     }
 
     // ── The seam ────────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ package com.crystalgui.widget.surface.mode;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -60,6 +61,25 @@ public interface Tool {
      */
     @Nullable
     default UIElement options() {
+        return null;
+    }
+
+    /**
+     * The tool's own history while it is current, or null for the document's — for a modal tool whose work
+     * reaches the document only when it ends, as Photoshop's Free Transform does.
+     *
+     * <pre>{@code
+     * public UndoStack history() {
+     *     return session;   // cleared when the tool commits or cancels
+     * }
+     * }</pre>
+     *
+     * <p>The surface answers it as its undo stack, so the ordinary {@code edit.undo} reaches it from
+     * anywhere focus can be — the canvas, or a field in the tool's own options. A tool that also swallows
+     * keys must let the undo chords through for that to happen.</p>
+     */
+    @Nullable
+    default UndoStack history() {
         return null;
     }
 
