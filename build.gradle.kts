@@ -61,6 +61,40 @@ apply(from = rootProject.file("gradle/local-settings.gradle.kts").toURI())
 // fresh clone has none and must still build -- so a missing key skips that instance and says so.
 val cgWithLanguage = !providers.gradleProperty("cgNoLanguage").isPresent
 
+// ── Which instances to install into ──────────────────────────────────────────────────────────────
+//
+//   prismInstance.<label> = <dir>       one line per instance; <label> is prodSmoke's target name
+//   prismInstanceJoml     = 1710,1171   those whose Minecraft ships no JOML -- see below
+//
+// A LIST rather than four fixed keys, so adding a target is a line in a gitignored file instead of an
+// edit here. The four `prismLauncher<X>Dir` keys are still read when the file names no
+// `prismInstance.` key, so a local.properties written before this keeps working.
+//
+// JOML IS OPT-IN PER INSTANCE and cannot be derived from the label. Minecraft ships JOML from 1.19.3
+// on; below that the companion jar is required and above it a second copy is a split package that
+// kills Forge in module resolution. 1.7.10 needs it, and so does anything else pre-1.19.3.
+data class PrismInstance(val key: String, val label: String, val needsJoml: Boolean)
+
+val prismInstances: List<PrismInstance> = run {
+    val file = rootProject.file("local.properties")
+    val settings = Properties().apply { if (file.isFile) file.inputStream().use { load(it) } }
+    val prefix = "prismInstance."
+    val joml = (settings.getProperty("prismInstanceJoml") ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    val declared = settings.stringPropertyNames()
+        .filter { it.startsWith(prefix) && !settings.getProperty(it).isNullOrBlank() }
+        .sorted()
+        .map { key -> key.removePrefix(prefix).let { PrismInstance(key, it, it in joml) } }
+    declared.ifEmpty {
+        listOf(
+            PrismInstance("prismLauncher1710Dir", "1710", true),
+            PrismInstance("prismLauncher1201ForgeDir", "1201forge", false),
+            PrismInstance("prismLauncher1204NeoForgeDir", "1204neoforge", false),
+            PrismInstance("prismLauncher1201FabricDir", "1201fabric", false),
+        )
+    }
+}
+
 val deploySingleJars = tasks.register("deploySingleJars") {
     group = "crystalgui"
     description = "Puts every single jar into every Prism instance named in local.properties."
@@ -76,10 +110,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
     val jomlJar = File(crystalGraphics.projectDir, "build/libs/crystalgraphics-joml-$version.jar")
     val withLanguage = cgWithLanguage
     val localProperties = rootProject.file("local.properties")
-    val instanceKeys = listOf(
-        "prismLauncher1710Dir", "prismLauncher1201ForgeDir",
-        "prismLauncher1204NeoForgeDir", "prismLauncher1201FabricDir",
-    )
+    val instances = prismInstances
 
     doLast {
         if (!localProperties.isFile) {
@@ -96,7 +127,8 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             .forEach { throw GradleException("${it.name} was not built") }
         if (!withLanguage) logger.lifecycle("[cgui] -PcgNoLanguage: crystalgui_language is NOT deployed")
 
-        instanceKeys.forEach { key ->
+        instances.forEach { inst ->
+            val key = inst.key
             val dir = settings.getProperty(key)
             if (dir.isNullOrBlank()) {
                 logger.lifecycle("[cgui] {} is not set; skipping", key)
@@ -119,13 +151,14 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             mods.listFiles().orEmpty()
                 .filter { file -> oursPrefixes.any { file.name.startsWith(it) } }
                 .forEach { it.delete() }
-            // JOML GOES TO 1.7.10 AND NOWHERE ELSE, and it is the one artefact with that shape.
+            // JOML GOES ONLY WHERE MINECRAFT SHIPS NONE, and it is the one artefact with that shape.
             //
             // MC 1.19.3+ ships JOML as a real named module, so a second copy in `mods/` is a split
             // package -- measured, E-J9-JOML: Forge dies in module resolution before it writes a log
             // line. 1.7.10 has no JOML at all and no module system to object, so it needs exactly
-            // this. Installing it everywhere would break three of the four instances.
-            val instanceJars = if (key == "prismLauncher1710Dir") jars + jomlJar else jars
+            // this. Installing it everywhere would break every 1.19.3+ instance, so it is declared
+            // per instance in local.properties (prismInstanceJoml) rather than inferred here.
+            val instanceJars = if (inst.needsJoml) jars + jomlJar else jars
 
             instanceJars.forEach { source ->
                 val target = File(mods, source.name)
@@ -156,12 +189,9 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     // minutes and driving the clients is seconds, so paying for the first while iterating on the second
     // is most of the wall clock for no answer.
     if (!providers.gradleProperty("cgNoDeploy").isPresent) dependsOn(deploySingleJars)
-    instances.set(listOf(
-        "prismLauncher1710Dir=1710",
-        "prismLauncher1201ForgeDir=1201forge",
-        "prismLauncher1204NeoForgeDir=1204neoforge",
-        "prismLauncher1201FabricDir=1201fabric",
-    ))
+    // The same list `deploySingleJars` installs into, so a target added to local.properties is driven
+    // without being named twice. `-PcgTargets` filters it by label.
+    instances.set(prismInstances.map { "${it.key}=${it.label}" })
     outputDir.set(layout.buildDirectory.dir("prodSmoke"))
     onlyTargets.set(
         (providers.gradleProperty("cgTargets").orNull ?: "")
