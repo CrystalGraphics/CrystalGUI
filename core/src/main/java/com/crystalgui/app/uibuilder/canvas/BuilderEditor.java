@@ -97,6 +97,8 @@ public final class BuilderEditor implements DocumentEditor {
                 surface.setDesignMode(design);
             }
         });
+        // UNDER THE HANDLES, so a guide through a corner never covers the dot on it.
+        surface.surface().addOverlay(surface.smartGuides());
         this.handles = new ResizeHandles(surface, document);
         // DIRECTLY, not through OverlayLayer: that path sets `hit-test: false` on whatever it mounts,
         // which is right for something that only draws and fatal for eight handles that have to take a

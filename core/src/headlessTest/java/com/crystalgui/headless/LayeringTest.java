@@ -125,6 +125,7 @@ public class LayeringTest {
             "com/crystalgui/widget/surface/overlay/",
             "com/crystalgui/widget/surface/insert/",
             "com/crystalgui/widget/surface/extension/",
+            "com/crystalgui/widget/surface/snap/",
             "com/crystalgui/widget/graph/",
             // The node's own BUILD half: the widget factory's callers, the field binder and the
             // create menu. GraphNode, NodePort and PortDefaultEditor are NOT here and cannot be --

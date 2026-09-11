@@ -130,7 +130,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         Vector2f before = box().handleAt(Spot.TOP);
         assertNotNull(before);
         box().press(new Grip(Kind.SKEW, Spot.TOP));
-        box().dragTo(before.x + 30f, before.y, 30f, 0f, false, false);
+        box().dragTo(before.x + 30f, before.y, 30f, 0f, false, false, false);
         document.update(W, H);
 
         Vector2f after = box().handleAt(Spot.TOP);
@@ -149,7 +149,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         Vector2f before = box().handleAt(Spot.TOP);
         assertNotNull(before);
         box().press(new Grip(Kind.SKEW, Spot.TOP));
-        box().dragTo(before.x + 30f, before.y, 30f, 0f, false, false);
+        box().dragTo(before.x + 30f, before.y, 30f, 0f, false, false, false);
         document.update(W, H);
 
         Vector2f after = box().handleAt(Spot.TOP);
@@ -215,7 +215,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         box().press(new Grip(Kind.ROTATE, Spot.TOP_RIGHT));
         box().setDragging(true);
         // A quarter of the way round the box, which is what the Drag listener reports.
-        box().dragTo(corner.x - 60f, corner.y + 60f, -60f, 60f, false, false);
+        box().dragTo(corner.x - 60f, corner.y + 60f, -60f, 60f, false, false, false);
 
         assertNotEquals("the arrow was left pointing where the hand grabbed",
                 atGrab, box().rotationArtAngle(), 0.05f);
@@ -389,17 +389,57 @@ public class FreeTransformTest extends UiDocumentTestBase {
 
         float toX = handle.x + 60f;
         float toY = handle.y + 30f;
-        box().dragTo(toX, toY, 60f, 30f, false, false);
+        box().dragTo(toX, toY, 60f, 30f, false, false, false);
         float firstX = box().gesture().scaleX();
         float firstY = box().gesture().scaleY();
 
-        for (int i = 0; i < 8; i++) box().dragTo(toX, toY, 60f, 30f, false, false);
+        for (int i = 0; i < 8; i++) box().dragTo(toX, toY, 60f, 30f, false, false, false);
 
         assertEquals("the scale walked while the pointer stood still", firstX,
                 box().gesture().scaleX(), 0.0001f);
         assertEquals(firstY, box().gesture().scaleY(), 0.0001f);
         assertTrue("dragging the corner out has to make it bigger, not smaller", firstX > 1f);
         assertTrue(firstY > 1f);
+    }
+
+    /**
+     * <b>A handle nudged a few pixels snaps back to the layout box</b> — the outline the transform is
+     * read against is a target too, so "this edge where it started" is one snap.
+     */
+    @Test
+    public void aHandleNudgedFromWhereItStartedSnapsBack() {
+        enterFreeTransform();
+        document.update(W, H);
+        Vector2f handle = box().handleAt(Spot.RIGHT);
+        assertNotNull(handle);
+        box().press(new Grip(Kind.SCALE, Spot.RIGHT));
+
+        box().dragTo(handle.x + 5f, handle.y, 5f, 0f, false, false, true);
+        assertEquals("back to the width it had", 1f, box().gesture().scaleX(), 0.0001f);
+
+        box().dragTo(handle.x + 5f, handle.y, 5f, 0f, false, false, false);
+        assertTrue("and with snapping off the same nudge scales it", box().gesture().scaleX() > 1f);
+    }
+
+    /**
+     * <b>Shift latches a move's axis</b>, as the out-of-flow move's does: chosen once the hand has
+     * committed, and held when the pointer later crosses the diagonal — where deciding it afresh every
+     * frame flipped it.
+     */
+    @Test
+    public void shiftLatchesAMovesAxis() {
+        enterFreeTransform();
+        document.update(W, H);
+        Vector2f from = box().handleAt(Spot.TOP_LEFT);
+        assertNotNull(from);
+        box().press(new Grip(Kind.MOVE, null));
+
+        box().dragTo(from.x + 40f, from.y + 6f, 40f, 6f, true, false, false);
+        assertEquals("the minor axis is dropped", 0f, box().gesture().translateY(), 0.01f);
+
+        box().dragTo(from.x + 40f, from.y + 60f, 40f, 60f, true, false, false);
+        assertEquals("and stays dropped past the diagonal", 0f, box().gesture().translateY(), 0.01f);
+        assertTrue(box().gesture().translateX() > 0f);
     }
 
     /**
@@ -433,7 +473,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         Vector2f handle = box().handleAt(Spot.BOTTOM_RIGHT);
         assertNotNull(handle);
         box().press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
-        box().dragTo(handle.x + 50f, handle.y + 40f, 50f, 40f, false, false);
+        box().dragTo(handle.x + 50f, handle.y + 40f, 50f, 40f, false, false, false);
         document.update(W, H);
 
         assertEquals("the button's own layout width changed — that is a resize",

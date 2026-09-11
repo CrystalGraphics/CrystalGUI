@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -12,7 +13,11 @@ import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.canvas.CanvasRects;
 import com.crystalgui.app.uibuilder.canvas.MoveOutOfFlow;
-import com.crystalgui.app.uibuilder.canvas.Snap;
+import com.crystalgui.widget.surface.snap.BoxTargets;
+import com.crystalgui.widget.surface.snap.SnapAxis;
+import com.crystalgui.widget.surface.snap.SnapBase;
+import com.crystalgui.widget.surface.snap.SnapSolution;
+import com.crystalgui.widget.surface.snap.Snapper;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -62,42 +67,64 @@ public class ResizeAndMoveTest extends UiDocumentTestBase {
                 MoveOutOfFlow.isMovable(inFlow));
     }
 
+    /** Solves one axis at zoom 1, which is what a caller does per drag update. */
+    private SnapSolution solveX(float wanted) {
+        return new Snapper(SnapAxis.HORIZONTAL, wanted, moving.box().width(), 6f, 1f)
+                .solve(BoxTargets.around(moving));
+    }
+
     /** A proposed position near a sibling's left edge takes it, and says which line it took. */
     @Test
     public void aPositionNearASiblingEdgeSnapsToIt() {
-        Snap.Result snapped = Snap.of(moving, 97f, 200f, 6f);
+        SnapSolution x = solveX(97f);
 
-        assertEquals("did not snap to the sibling's left edge", 100f, snapped.x(), 0.01f);
-        assertEquals("the other axis had nothing to snap to and must not move",
-                200f, snapped.y(), 0.01f);
-        assertFalse("a snap that draws no guide cannot be explained", snapped.guides().isEmpty());
+        assertEquals("did not snap to the sibling's left edge", 100f, x.value(), 0.01f);
+        assertTrue(x.taken());
+        assertNotNull("a snap that cannot say what it took cannot be explained", x.target());
     }
 
-    /** Out of range, nothing moves — which is what makes the snap usable rather than magnetic. */
+    /**
+     * Out of range, nothing moves — which is what makes the snap usable rather than magnetic.
+     *
+     * <p>90 rather than the 80 this used to say. 80 is where a 50-wide box's RIGHT edge lands on the
+     * sibling's centre, and that pairing did not exist while the table was written out by hand — so the
+     * old fixture was out of range only because the engine could not see it.</p>
+     */
     @Test
     public void aPositionOutOfRangeIsLeftAlone() {
-        Snap.Result snapped = Snap.of(moving, 80f, 200f, 6f);
+        SnapSolution x = solveX(90f);
 
-        assertEquals(80f, snapped.x(), 0.01f);
-        assertTrue(snapped.guides().isEmpty());
+        assertEquals(90f, x.value(), 0.01f);
+        assertFalse(x.taken());
     }
 
     /** Centres count too: aligning to the middle of a sibling is the same gesture. */
     @Test
     public void aCentreCountsAsAnAlignment() {
         // The sibling's centre is at x = 130; a 50-wide box centred there starts at 105.
-        Snap.Result snapped = Snap.of(moving, 107f, 5f, 6f);
-
-        assertEquals(105f, snapped.x(), 0.01f);
+        assertEquals(105f, solveX(107f).value(), 0.01f);
     }
 
     /** The parent's own content box is an alignment, and beats a sibling at the same distance. */
     @Test
     public void theParentsEdgeIsAnAlignment() {
-        Snap.Result snapped = Snap.of(moving, 3f, 200f, 6f);
-
         assertEquals("flush with the container is what somebody aiming at zero meant",
-                0f, snapped.x(), 0.01f);
+                0f, solveX(3f).value(), 0.01f);
+    }
+
+    /**
+     * <b>All nine base-against-target pairings exist</b>, not the three that were written out.
+     *
+     * <p>The moving box's TRAILING edge against a sibling's CENTRE — one of the six that the hand-written
+     * pairing table left out, and an alignment a designer means as often as any of the three it had.</p>
+     */
+    @Test
+    public void aTrailingEdgeMeetsASiblingsCentre() {
+        // The sibling's centre is at x = 130, so a 50-wide box whose RIGHT edge lands there starts at 80.
+        SnapSolution x = solveX(78f);
+
+        assertEquals(80f, x.value(), 0.01f);
+        assertEquals(SnapBase.TRAILING, x.base());
     }
 
     /**

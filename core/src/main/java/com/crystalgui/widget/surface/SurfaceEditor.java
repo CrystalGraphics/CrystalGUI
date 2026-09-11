@@ -37,7 +37,6 @@ import com.crystalgui.widget.surface.mode.Cursors;
 import com.crystalgui.widget.surface.mode.Modes;
 import com.crystalgui.widget.surface.overlay.Geometry;
 import com.crystalgui.widget.surface.overlay.OverlayLayer;
-import com.crystalgui.widget.surface.overlay.Snapping;
 import com.crystalgui.widget.surface.select.Picking;
 import com.crystalgui.widget.surface.insert.InsertSource;
 import com.crystalgui.widget.surface.mode.ToolKind;
@@ -97,7 +96,6 @@ public class SurfaceEditor extends CanvasView
     private final Picking picking;
     private final Geometry geometry;
     private final OverlayLayer overlays;
-    private final Snapping snapping = new Snapping();
     private final Cursors cursors;
     private final Modes modes;
 
@@ -340,11 +338,6 @@ public class SurfaceEditor extends CanvasView
     @Override
     public OverlayLayer overlays() {
         return overlays;
-    }
-
-    @Override
-    public Snapping snapping() {
-        return snapping;
     }
 
     @Override

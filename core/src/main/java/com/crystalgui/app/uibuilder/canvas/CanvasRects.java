@@ -105,6 +105,30 @@ public final class CanvasRects {
     }
 
     /**
+     * How many of {@code overlay}'s pixels one of {@code space}'s own is — the zoom, the artboard's page
+     * scale and every ancestor's transform together.
+     *
+     * <pre>{@code
+     * float scale = CanvasRects.scaleOf(node.parentElement(), overlay);
+     * float layoutDx = pointerDx / scale;   // and a snap tolerance in screen pixels is measured through it
+     * }</pre>
+     *
+     * <p>Not the surface's zoom, which leaves the page scale out: at a page scale of 2 a drag divided by
+     * the zoom alone ran at twice the pointer's speed. 1 when either has no box.</p>
+     */
+    public static float scaleOf(@Nullable UIElement space, @Nullable UIElement overlay) {
+        return scaleOf(of(space, overlay), space == null ? null : space.box());
+    }
+
+    /** As above, from {@code space}'s drawn box already measured with {@link #of}. */
+    public static float scaleOf(@Nullable float[] drawn, @Nullable Box space) {
+        if (drawn == null || space == null) return 1f;
+        if (space.width() > 1e-3f) return drawn[2] / space.width();
+        if (space.height() > 1e-3f) return drawn[3] / space.height();
+        return 1f;
+    }
+
+    /**
      * Whether a WORLD point falls inside {@code node}'s layout box.
      *
      * <p>What design-time picking asks, so that the mouse agrees with every other piece of chrome. The
