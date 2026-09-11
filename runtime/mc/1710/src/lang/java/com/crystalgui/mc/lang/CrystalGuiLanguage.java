@@ -2,6 +2,7 @@ package com.crystalgui.mc.lang;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
@@ -58,7 +59,10 @@ public class CrystalGuiLanguage {
         // life of the process -- scripts then report every Minecraft type unresolvable while the byte
         // source behind them is healthy. @see LanguageRegistry#isBootstrapped
         boolean registryAlreadyRead = LanguageRegistry.isBootstrapped();
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService1710(gameDirectory));
+        ScriptService1710 service = new ScriptService1710(gameDirectory);
+        CgPlatform.provide(ScriptServices.SERVICE, service);
+        // On both sides: an obfuscated server fetches its mappings too.
+        DownloadLocations.useCacheRoot(service.cacheRoot());
         if (registryAlreadyRead) {
             CrystalGuiCore.LOGGER.error("[cgui-lang] the language registry was read BEFORE this mod "
                     + "installed its ScriptService, so the engines built during that read captured no "

@@ -1,7 +1,5 @@
-package com.crystalgui.language.cache;
+package com.crystalgui.core.cache;
 
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -72,6 +70,7 @@ import java.util.regex.Pattern;
  *       configured; it never guesses a URL.</li>
  *   <li>A copy that is not JSON, or declares a {@code format} other than {@value #FORMAT}, is ignored
  *       whole: an old jar keeps what it shipped with rather than misread a newer layout.</li>
+ *   <li>A host calls {@link #useCacheRoot} at startup; without it master's copy is fetched every session.</li>
  *   <li>{@code -Dcrystalgui.download.remote=false} never reads master's copy. The tests run that way.</li>
  * </ul>
  */
@@ -126,6 +125,9 @@ public final class DownloadLocations {
 
     private static volatile DownloadLocations shared;
 
+    /** Where this installation keeps its cache; until a host says, master's copy is held in memory only. */
+    private static volatile Path cacheRoot;
+
     private final Copy bundled;
     private final Copy override;
     private final Supplier<Path> remoteFile;
@@ -154,6 +156,20 @@ public final class DownloadLocations {
             }
         }
         return local;
+    }
+
+    /**
+     * Where this installation keeps its cache, so master's copy of the file survives a restart.
+     *
+     * <pre>{@code
+     * DownloadLocations.useCacheRoot(StorageLayout.cacheIn(gameDirectory));   // a host, at startup
+     * }</pre>
+     *
+     * <p>Until one is given, master's copy is still fetched and used, and kept in memory only. A null root
+     * changes nothing, so a caller that does not know one need not check.</p>
+     */
+    public static void useCacheRoot(@Nullable Path root) {
+        if (root != null) cacheRoot = root;
     }
 
     /**
@@ -502,8 +518,8 @@ public final class DownloadLocations {
     }
 
     private static @Nullable Path underCacheRoot() {
-        Path cacheRoot = CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
-        return cacheRoot == null ? null : cacheRoot.resolve("download").resolve("locations.json");
+        Path root = cacheRoot;
+        return root == null ? null : root.resolve("download").resolve("locations.json");
     }
 
     private static byte[] readBounded(InputStream in) throws IOException {

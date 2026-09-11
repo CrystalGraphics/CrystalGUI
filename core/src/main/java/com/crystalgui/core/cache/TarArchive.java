@@ -1,4 +1,4 @@
-package com.crystalgui.language.cache;
+package com.crystalgui.core.cache;
 
 import java.io.ByteArrayOutputStream;
 import java.io.Closeable;

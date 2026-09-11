@@ -1,7 +1,7 @@
 package com.crystalgui.language.platform;
 
-import com.crystalgui.language.cache.DownloadLocations;
-import com.crystalgui.language.cache.Downloads;
+import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgui.core.cache.Downloads;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;

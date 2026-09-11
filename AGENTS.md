@@ -1301,6 +1301,11 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                A host answers WHERE its installation is and nothing else; nothing
                                outside StorageLayout may spell those segments.
                                plan/crystalgui/fs-rewrite/fs-storage-layout.md
+  .cache                       FETCHING A FILE AND KEEPING IT, for any module. Downloads (a described
+                               transfer: named, reported, cancellable, resumed, retried, verified),
+                               DownloadLocations (download/locations.json -- every address in one
+                               file, repairable from master after release), CacheFiles (verified,
+                               atomic installs), TarArchive. The language stack was its first user
   .command                     Command (a named invocable action), CommandContext, CommandRegistry —
                                what a key binding, a menu item and the palette all point at. Plus the
                                MENU MODEL: MenuId (a named place a menu is drawn, interned, with nested
@@ -1732,7 +1737,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 
 # Runtime downloads: one file, repairable after release
 
-**Every address the language mod downloads from is in [`download/locations.json`](download/locations.json),
+**Every address CrystalGUI downloads from is in [`download/locations.json`](download/locations.json),
 and nowhere else** — [`download/README.md`](download/README.md) is the guide to editing it. A URL compiled
 into a shipped class cannot change after release, and every host eventually moves; so code names an *id* —
 `fabric/intermediary/1.20.1`, `engine/17/<jar>` — and the file says where it lives, as URLs or as Maven
@@ -1742,8 +1747,8 @@ host is one line.
 
 | Copy | Where | What it may do |
 |---|---|---|
-| **The jar's** | `assets/crystalgui/download/locations.json`, from `:language:processResources` | Names the ids a jar knows, and holds **the only digests it trusts** |
-| **Master's** | read from the file's own `self` addresses; kept at `<cache>/download/locations.json` | **Adds addresses** — URLs for ids the jar lists, and more addresses for a repository. Fetched before a session's first download when a day old, and once more when every URL has failed. Its digests, any id the jar lacks, and a copy in another `format` are ignored |
+| **The jar's** | `assets/crystalgui/download/locations.json` in `crystalgui-<version>.jar`, from `:core:processResources` | Names the ids a jar knows, and holds **the only digests it trusts** |
+| **Master's** | read from the file's own `self` addresses; kept at `<cache>/download/locations.json`, under the cache root a host hands `DownloadLocations.useCacheRoot` | **Adds addresses** — URLs for ids the jar lists, and more addresses for a repository. Fetched before a session's first download when a day old, and once more when every URL has failed. Its digests, any id the jar lacks, and a copy in another `format` are ignored |
 | **An override** | `-Dcrystalgui.download.locations=<file>` | The same rule, tried first: a pack's own mirror, an offline machine |
 
 **Master's copy can move an artifact and never change one**, which is why nothing is signed: a bad address
@@ -1757,11 +1762,13 @@ read; the tests run that way.
 | **Before a release** | `./gradlew :language:verifyDownloadLocations` fetches every URL and checks what it serves. Online; a dead extra URL is a warning, a download with no working URL a failure |
 | **The mirror changes** | `./gradlew :language:stageDownloadMirror` collects every download that comes from the `mirror` repository — this repository's `download-mirror` release — verified, and prints the `gh release` commands. Only what `mirrorLicences` in `language/build.gradle.kts` covers may be mirrored — never MCP's, MCPConfig's or Mojang's data. Publishing is by hand |
 
-Code reaches a location through `Downloads.located(id)` or `MappingCoordinates.Source.located(id)`;
-`Downloads.from(url)` is for an address only known at run time, such as one Mojang's manifest names.
-`DownloadUrlsLiveInOneFileTest` fails on a `"https://` literal in code in `language/` or any `lang` source
-set, on an id a host asks for that the shipped file does not list, and when the runtime's reading of the
-file stops expanding to the addresses the build verifies.
+The machinery is `com.crystalgui.core.cache`, so any module can download; the language stack is only its
+first user. Code reaches a location through `Downloads.located(id)` or
+`MappingCoordinates.Source.located(id)`; `Downloads.from(url)` is for an address only known at run time,
+such as one Mojang's manifest names. `DownloadUrlsLiveInOneFileTest`, in core's `headlessTest`, fails on an
+address literal in code anywhere in `core/`, `language/` or a loader's sources, on an id a host asks for
+that the shipped file does not list, and when the runtime's reading of the file stops expanding to the
+addresses the build verifies.
 
 ---
 
