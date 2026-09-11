@@ -1,5 +1,6 @@
 package com.crystalgui.language.engine;
 
+import com.crystalgui.language.cache.DownloadLocations;
 import com.crystalgui.language.cache.Downloads;
 import com.crystalgui.core.async.Progress;
 import com.crystalgui.language.cache.CacheFiles;
@@ -203,7 +204,7 @@ public interface EngineSource {
     }
 
     /**
-     * Fetches a band from the URLs in its shipped manifest, into {@code into}.
+     * Fetches a band from the locations {@code download/locations.json} lists for it, into {@code into}.
      *
      * <h3>The fallback, not the mechanism</h3>
      *
@@ -212,10 +213,10 @@ public interface EngineSource {
      * which on 1.7.10 means lwjgl3ify and GTNH. Offline, it answers empty and the editor colours without
      * analysing, exactly as it does when nothing is bundled.</p>
      *
-     * <h3>Verified against the manifest's digest, and that is worth more than it looks</h3>
+     * <h3>Verified against the jar's pin, and that is worth more than it looks</h3>
      *
-     * <p>Unlike the mapping data — whose upstream publishes no checksums, so its digests are still an open
-     * item — these are hashed at build time from the artifacts Gradle resolved. So a fetched jar is
+     * <p>A band's jars are the ids {@code engine/<band>/<file>}, pinned to the artifacts Gradle resolved —
+     * {@code checkDownloadLocations} fails the build when they drift. So a fetched jar is
      * checked against the exact bytes the build was tested with, and {@code CacheFiles.install} writes
      * through a {@code .part} and deletes on mismatch, so a bad transfer leaves nothing behind to be
      * mistaken for a good one next launch.</p>
@@ -224,41 +225,43 @@ public interface EngineSource {
      * is worse than none, because the engine opens and then fails on whichever class was in the jar that
      * did not arrive — so one failure abandons the whole band and says so.</p>
      */
-    static EngineSource downloadedFrom(ClassLoader loader, String resourceRoot, Path into,
-                                       Progress progress) {
+    static EngineSource downloadedFrom(DownloadLocations locations, Path into, Progress progress) {
         return new EngineSource() {
             @Override
             public List<URL> jarsFor(EngineBand band) throws IOException {
-                String prefix = resourceRoot + "/" + band.minimumFeatureVersion() + "/";
-                List<EngineManifest> rows = EngineManifest.listing(loader, prefix);
-                if (rows.isEmpty()) return Collections.emptyList();
+                String prefix = "engine/" + band.minimumFeatureVersion() + "/";
+                List<String> ids = locations.idsUnder(prefix);
+                if (ids.isEmpty()) return Collections.emptyList();
 
                 Path directory = into.resolve(String.valueOf(band.minimumFeatureVersion()));
-                List<Path> present = new ArrayList<>(rows.size());
-                List<EngineManifest> missing = new ArrayList<>();
-                for (EngineManifest row : rows) {
-                    Path target = directory.resolve(row.fileName());
-                    if (CacheFiles.isValid(target, row.md5())) {
-                        present.add(target);
-                    } else {
-                        missing.add(row);
+                List<Path> jars = new ArrayList<>(ids.size());
+                List<Downloads.Artifact> missing = new ArrayList<>();
+                for (String id : ids) {
+                    String fileName = id.substring(prefix.length());
+                    // The guard EngineBundle applies: a name out of a shipped file becomes a path, so it
+                    // may not climb out of the directory it belongs in.
+                    if (fileName.indexOf('/') >= 0 || fileName.indexOf('\\') >= 0 || fileName.contains("..")) {
+                        continue;
+                    }
+                    Path target = directory.resolve(fileName);
+                    jars.add(target);
+                    Downloads.Request request = Downloads.located(locations, id);
+                    if (!CacheFiles.isValid(target, request.digest())) {
+                        missing.add(new Downloads.Artifact(fileName, request));
                     }
                 }
-                if (missing.isEmpty()) return urlsOf(present);
+                if (missing.isEmpty()) return urlsOf(jars);
 
                 // ONE BATCH, ONE BAR. Sizes are totalled first so it is determinate from its first
                 // frame, each artifact names itself on the detail line, and a failure abandons the set
                 // rather than leaving a partial band -- which loads and then fails on a class nobody can
                 // explain. All of that is Downloads.Batch's, not this method's: it was fifty lines here
                 // and the next consumer would have written them again.
-                List<Downloads.Artifact> artifacts = new ArrayList<>(missing.size());
-                for (EngineManifest row : missing) {
-                    artifacts.add(new Downloads.Artifact(row.fileName(), row.url(), row.md5()));
-                }
+                //
                 // NO `cancelledWhen` HERE, and that is a statement rather than an omission: this runs from
                 // EngineHost, which has no JobContext to ask -- the band is acquired before there is a
                 // workbench to cancel from. When it grows one, this is the line that takes the flag.
-                Downloads.Batch.Result fetched = Downloads.batch(artifacts)
+                Downloads.Batch.Result fetched = Downloads.batch(missing)
                         .named("Downloading Java engine (band " + band.minimumFeatureVersion() + ")")
                         .reporting(progress)
                         .into(directory);
@@ -268,8 +271,8 @@ public interface EngineSource {
                             + "); the editor will colour but not analyse");
                     return Collections.emptyList();
                 }
-                for (EngineManifest row : missing) present.add(directory.resolve(row.fileName()));
-                return urlsOf(present);
+                // In id order, so the classpath is the same whichever jars happened to be cached.
+                return urlsOf(jars);
             }
 
             private List<URL> urlsOf(List<Path> jars) throws IOException {
@@ -280,7 +283,7 @@ public interface EngineSource {
 
             @Override
             public String toString() {
-                return "EngineSource.downloadedFrom(" + resourceRoot + " -> " + into + ")";
+                return "EngineSource.downloadedFrom(engine/<band>/ -> " + into + ")";
             }
         };
     }

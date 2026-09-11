@@ -286,8 +286,8 @@ public class SourceArchivesTest {
      * A package path becomes a resource path, so it may not climb out of the prefix.
      *
      * <p>Every name reaching it today comes from a binding rather than from user text — which is a fact
-     * about today, and the same guard {@code EngineBundle} and {@code EngineManifest} already apply to
-     * names read out of a shipped file.</p>
+     * about today, and the same guard {@code EngineBundle} and {@code EngineSource.downloadedFrom} already
+     * apply to names read out of a shipped file.</p>
      */
     @Test
     public void aBundledPathCannotClimbOutOfItsPrefix() throws Exception {

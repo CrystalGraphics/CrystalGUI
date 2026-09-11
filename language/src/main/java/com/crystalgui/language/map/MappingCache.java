@@ -7,9 +7,6 @@ import com.crystalgui.language.platform.MappingCoordinates;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -136,11 +133,7 @@ public final class MappingCache {
         for (String fileName : coordinates.files()) {
             Path target = directory.resolve(fileName);
             String archiveEntry = coordinates.archiveEntryOf(fileName);
-            // AN EXTRACTED ENTRY CANNOT BE CHECKED AGAINST THE ARCHIVE'S DIGEST. What upstream publishes
-            // is a hash of the zip, so verification happens on the download and presence is the check on
-            // what came out of it. Comparing the two would fail every time and re-download every launch.
-            String cachedDigest = archiveEntry == null ? coordinates.digestOf(fileName) : null;
-            if (CacheFiles.isValid(target, cachedDigest)) {
+            if (CacheFiles.isValid(target, cachedDigestOf(coordinates, fileName))) {
                 present.add(target);
                 continue;
             }
@@ -148,16 +141,15 @@ public final class MappingCache {
                 // RESOLVED HERE, on the fetching thread. An address that has to be looked up upstream is
                 // network work, and doing it when the coordinates were declared would put it on whatever
                 // asked for them -- which is the frame thread. @see MappingCoordinates.Source
-                MappingCoordinates.Source source = coordinates.sourceOf(fileName);
-                String url = source.url();
-                String digest = source.digest();
+                //
                 // NO `reporting` HERE ON PURPOSE. PlatformMappings has already announced this as a
                 // SWEEP -- the two CSVs are small and their host declares no length worth trusting, so a
                 // bar would be invented rather than measured -- and a second announce from inside would
                 // retarget the very thing that decided a sweep was the honest answer.
+                Downloads.Request request = coordinates.sourceOf(fileName).request().cancelledWhen(cancelled);
                 boolean arrived = archiveEntry == null
-                        ? Downloads.from(url).verifying(digest).cancelledWhen(cancelled).into(target)
-                        : extract(url, digest, archiveEntry, target, cancelled);
+                        ? request.into(target)
+                        : extract(request, archiveEntry, target);
                 if (!arrived) {
                     return new Result(State.UNAVAILABLE, MappingSet.IDENTITY,
                             fileName + " did not match its expected digest and was discarded; "
@@ -207,17 +199,16 @@ public final class MappingCache {
      *
      * @return false when the download did not match its digest, exactly as a plain fetch reports it
      */
-    private static boolean extract(String url, String digest, String entryName, Path target,
-                                   BooleanSupplier cancelled) throws IOException {
+    private static boolean extract(Downloads.Request request, String entryName, Path target) throws IOException {
         Path archive = target.resolveSibling(target.getFileName() + ".archive");
         try {
-            if (!Downloads.from(url).verifying(digest).cancelledWhen(cancelled).into(archive)) {
+            if (!request.into(archive)) {
                 return false;
             }
             try (ZipFile zip = new ZipFile(archive.toFile())) {
                 ZipEntry entry = zip.getEntry(entryName);
                 if (entry == null) {
-                    throw new IOException("no entry '" + entryName + "' in " + url);
+                    throw new IOException("no entry '" + entryName + "' in the archive for " + target.getFileName());
                 }
                 try (InputStream contents = zip.getInputStream(entry)) {
                     // No digest: what upstream pinned was the archive, and that has been checked already.
@@ -268,13 +259,6 @@ public final class MappingCache {
         return joined.withUnqualifiedMembers();
     }
 
-    /**
-     * A stream over one URL, with timeouts and redirects followed.
-     *
-     * <p>Redirects matter here: the canonical source is a {@code raw.githubusercontent.com} URL, which
-     * redirects, and a connection that does not follow one reports a 302 body as the file. That failure
-     * arrives as a digest mismatch, which reads as corruption rather than as a redirect.</p>
-     */
     /** Where {@code load} caches — exposed so a caller can report or clear it. */
     public static Path directoryFor(MappingCoordinates coordinates, Path cacheRoot) {
         if (coordinates == null || coordinates.isNone() || cacheRoot == null) return null;
@@ -288,10 +272,19 @@ public final class MappingCache {
         Path directory = directoryFor(coordinates, cacheRoot);
         if (directory == null || !Files.isDirectory(directory)) return false;
         for (String fileName : coordinates.files()) {
-            if (!CacheFiles.isValid(directory.resolve(fileName), coordinates.digestOf(fileName))) {
+            if (!CacheFiles.isValid(directory.resolve(fileName), cachedDigestOf(coordinates, fileName))) {
                 return false;
             }
         }
         return true;
+    }
+
+    /**
+     * What the cached copy of {@code fileName} must hash to: its pin, or null for an entry taken out of
+     * an archive — upstream pins the archive, so the entry could never match and would re-download on
+     * every launch. Presence is the check on what came out of a verified download.
+     */
+    private static String cachedDigestOf(MappingCoordinates coordinates, String fileName) {
+        return coordinates.archiveEntryOf(fileName) == null ? coordinates.digestOf(fileName) : null;
     }
 }

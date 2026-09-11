@@ -1,0 +1,119 @@
+{
+  "$comment": "Every address CrystalGUI downloads from at run time. README.md, beside this file, says how to edit it.",
+  "format": 1,
+  "self": [
+    "https://raw.githubusercontent.com/CrystalGraphics/CrystalGUI/master/download/locations.json",
+    "https://cdn.jsdelivr.net/gh/CrystalGraphics/CrystalGUI@master/download/locations.json"
+  ],
+  "repositories": {
+    "maven-central": ["https://repo1.maven.org/maven2/{path}"],
+    "forge": ["https://maven.minecraftforge.net/{path}"],
+    "fabric": ["https://maven.fabricmc.net/{path}"],
+    "mirror": ["https://github.com/CrystalGraphics/CrystalGUI/releases/download/download-mirror/{file}"]
+  },
+  "files": {
+    "mcp/stable-12/methods.csv": {
+      "urls": ["https://raw.githubusercontent.com/MinecraftForge/FML/a099592d3d1418245e3af65eda195da244287188/conf/methods.csv"],
+      "digest": "gitblob:4861d2b6c224122c25ba39ac224f4886b6ddd938"
+    },
+    "mcp/stable-12/fields.csv": {
+      "urls": ["https://raw.githubusercontent.com/MinecraftForge/FML/a099592d3d1418245e3af65eda195da244287188/conf/fields.csv"],
+      "digest": "gitblob:db4063eab8c1dc742791c59d071be22772ae462c"
+    },
+    "mojang/version-manifest": {
+      "urls": ["https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"]
+    },
+    "mojang/1.20.1/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/client.txt"],
+      "digest": "sha1:6c48521eed01fe2e8ecdadbd5ae348415f3c47da"
+    },
+    "forge/mcp-config/1.20.1": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.20.1@zip",
+      "from": ["forge"],
+      "digest": "sha1:c7d29380ddb38becad7c0819b5b325e43bca23f0"
+    },
+    "forge/mcp-config/{minecraft}": {
+      "maven": "de.oceanlabs.mcp:mcp_config:{minecraft}@zip",
+      "from": ["forge"]
+    },
+    "fabric/intermediary/1.20.1": {
+      "maven": "net.fabricmc:intermediary:1.20.1:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:20ba9399cb5a23aa06ea901eff0a84e648d866db"
+    },
+    "fabric/intermediary/{minecraft}": {
+      "maven": "net.fabricmc:intermediary:{minecraft}:v2",
+      "from": ["fabric"]
+    },
+    "jdk-sources/{java}": {
+      "urls": ["https://api.adoptium.net/v3/binary/latest/{java}/ga/linux/x64/sources/hotspot/normal/eclipse"]
+    }
+  },
+  "engines": {
+    "from": ["maven-central", "mirror"],
+    "bands": {
+      "8": {
+        "org.benf:cfr:0.152": "sha1:48ef4892cfe8feffddbbd0ff077735140557db74",
+        "org.eclipse.jdt:org.eclipse.jdt.core:3.26.0": "sha1:547020f8d8e7e180650503cc1199c4a3b5aa847c",
+        "org.eclipse.platform:org.eclipse.core.commands:3.9.800": "sha1:919244ac9a904ba3fb8ac00e9986c0acf19f42b2",
+        "org.eclipse.platform:org.eclipse.core.contenttype:3.7.1000": "sha1:0b83f4495cd4fe41bd24e174f299ddede26027c0",
+        "org.eclipse.platform:org.eclipse.core.expressions:3.7.100": "sha1:f3913b7fc9500b590b9bccb3cfa027b1e3698f84",
+        "org.eclipse.platform:org.eclipse.core.filesystem:1.9.300": "sha1:3fb2635403c3b937d4f226b52a668efd5fa50e29",
+        "org.eclipse.platform:org.eclipse.core.jobs:3.11.0": "sha1:2af29d95566cdfed3b542a3a5315ee9bbf793892",
+        "org.eclipse.platform:org.eclipse.core.resources:3.14.0": "sha1:157a642ed19ccd08bdc9716a1be8a63b020a85ec",
+        "org.eclipse.platform:org.eclipse.core.runtime:3.20.100": "sha1:9949de7af204559712d8d6d633154e8be8450eac",
+        "org.eclipse.platform:org.eclipse.equinox.app:1.5.100": "sha1:4d9ccbdc40d7df5a5435fdb98fe8a8ad48eef6f0",
+        "org.eclipse.platform:org.eclipse.equinox.common:3.14.100": "sha1:92a269e95128851c957ba5c9c3a74ca7907e9861",
+        "org.eclipse.platform:org.eclipse.equinox.preferences:3.9.100": "sha1:7ecb53af1b8056be97390f186477acb58f8a6db2",
+        "org.eclipse.platform:org.eclipse.equinox.registry:3.10.100": "sha1:896c26f8452405c86fd2deb07a04903baa10714c",
+        "org.eclipse.platform:org.eclipse.osgi:3.16.100": "sha1:7ddb312f386b799d6e004d193a01c50169bf69f3",
+        "org.eclipse.platform:org.eclipse.text:3.11.0": "sha1:aef4747b6b51c8507c574ee77d87dbcf2b93871e",
+        "org.mozilla:rhino:1.7.15.1": "sha1:19e9dc99dc138dbde2f1ae8a142250d9be9ceb2f"
+      },
+      "11": {
+        "org.benf:cfr:0.152": "sha1:48ef4892cfe8feffddbbd0ff077735140557db74",
+        "org.eclipse.jdt:ecj:3.33.0": "sha1:4041d27ffea3c9351e3121f9bfe94dea4723d583",
+        "org.eclipse.jdt:org.eclipse.jdt.core:3.33.0": "sha1:3c65275f9a04f0b4060c4f71e0d88d854ce64825",
+        "org.eclipse.platform:org.eclipse.core.commands:3.10.400": "sha1:a26ed7e92791df24dea863e432800513df0c62f3",
+        "org.eclipse.platform:org.eclipse.core.contenttype:3.8.200": "sha1:f6fcc7f94b709d31bdf79187dc071f32cda96cbf",
+        "org.eclipse.platform:org.eclipse.core.expressions:3.8.200": "sha1:e67dcc5aefd397507afd0eb5d32aef7712d930bf",
+        "org.eclipse.platform:org.eclipse.core.filesystem:1.9.500": "sha1:49f4543ca2a4d959e2ee6fa20b68c38b03f38c36",
+        "org.eclipse.platform:org.eclipse.core.jobs:3.13.300": "sha1:4578b0aee17e8fb58da9c389311ef2de08d1d633",
+        "org.eclipse.platform:org.eclipse.core.resources:3.18.200": "sha1:d3166739e315fc9f99920ca74628370015690d10",
+        "org.eclipse.platform:org.eclipse.core.runtime:3.26.100": "sha1:83c77ee0cfc948ea33f5054dda3f5c39250a7ed5",
+        "org.eclipse.platform:org.eclipse.equinox.app:1.6.400": "sha1:8767a9073685844f0584d06592fa13b9bb9e89d9",
+        "org.eclipse.platform:org.eclipse.equinox.common:3.18.200": "sha1:8b0862ac581d17b0ebea3df77dd653d45a9aa584",
+        "org.eclipse.platform:org.eclipse.equinox.preferences:3.10.400": "sha1:5af57c8b8dc918ea89ee6fe7492798d7f7eb6a67",
+        "org.eclipse.platform:org.eclipse.equinox.registry:3.11.400": "sha1:3a3f66bc442d95eff95bfc9377eaec4604103307",
+        "org.eclipse.platform:org.eclipse.osgi:3.24.200": "sha1:c0ab2038a8bd0dc6639dfc306fc340fd5a1836f6",
+        "org.eclipse.platform:org.eclipse.text:3.12.300": "sha1:a27ad248716eb83726c5eb78f811f1e3c992aefe",
+        "org.mozilla:rhino:1.9.1": "sha1:caa26cd1a2914fd620532242220b82b91ec05221",
+        "org.osgi:org.osgi.service.prefs:1.1.2": "sha1:44351fdfb119ee920394c1a27c938288c93c03c8",
+        "org.osgi:osgi.annotation:8.0.1": "sha1:593d823753aa6e128129da357d7891758e66aa1d"
+      },
+      "17": {
+        "net.java.dev.jna:jna-platform:5.18.1": "sha1:dd817f391efc492041c9ae91127527c13750a789",
+        "net.java.dev.jna:jna:5.18.1": "sha1:b27ba04287cc4abe769642fe8318d39fc89bf937",
+        "org.benf:cfr:0.152": "sha1:48ef4892cfe8feffddbbd0ff077735140557db74",
+        "org.eclipse.jdt:ecj:3.46.0": "sha1:e962128cf16c864b61633b5a1c75709b0ba2f017",
+        "org.eclipse.jdt:org.eclipse.jdt.core:3.46.0": "sha1:40f33bb01461ec6461708d71654c345091ab3f5c",
+        "org.eclipse.platform:org.eclipse.core.commands:3.12.500": "sha1:a8ef3b8fc16a231344c60b39678fce43a9bf5a4d",
+        "org.eclipse.platform:org.eclipse.core.contenttype:3.9.800": "sha1:4151ef1a441039404e6e3d2b805c00c288cd822b",
+        "org.eclipse.platform:org.eclipse.core.expressions:3.9.600": "sha1:642cf1519b53405483af871309c5dd2eed0c6c90",
+        "org.eclipse.platform:org.eclipse.core.filesystem:1.11.400": "sha1:b5fbf4563858e95d83717dd397674ddf8786a4e3",
+        "org.eclipse.platform:org.eclipse.core.jobs:3.15.700": "sha1:b9bca244ec975304f467de46f6e14ae75948156f",
+        "org.eclipse.platform:org.eclipse.core.resources:3.24.0": "sha1:22953d34a6c2af26d41cc88e80aaa6af190b0597",
+        "org.eclipse.platform:org.eclipse.core.runtime:3.34.200": "sha1:191091a9e664983a294c32fb0a588467217a6b7b",
+        "org.eclipse.platform:org.eclipse.equinox.app:1.7.600": "sha1:0851769e1cd1efda62d55ddd01d419af64f05a19",
+        "org.eclipse.platform:org.eclipse.equinox.common:3.20.400": "sha1:765de9c100b18a24bc3ae13902eff852291abb85",
+        "org.eclipse.platform:org.eclipse.equinox.preferences:3.12.100": "sha1:31ec4b200952d71e06ef4546dceb8fed08fefd34",
+        "org.eclipse.platform:org.eclipse.equinox.registry:3.12.600": "sha1:0d62997e162e9ee21e957ee4d88048b83c8b34f9",
+        "org.eclipse.platform:org.eclipse.osgi:3.24.200": "sha1:c0ab2038a8bd0dc6639dfc306fc340fd5a1836f6",
+        "org.eclipse.platform:org.eclipse.text:3.14.700": "sha1:1d1d297c32755d5b89ec17343a79153cb1d417f0",
+        "org.mozilla:rhino:1.9.1": "sha1:caa26cd1a2914fd620532242220b82b91ec05221",
+        "org.osgi:org.osgi.service.prefs:1.1.2": "sha1:44351fdfb119ee920394c1a27c938288c93c03c8",
+        "org.osgi:osgi.annotation:8.0.1": "sha1:593d823753aa6e128129da357d7891758e66aa1d"
+      }
+    }
+  }
+}

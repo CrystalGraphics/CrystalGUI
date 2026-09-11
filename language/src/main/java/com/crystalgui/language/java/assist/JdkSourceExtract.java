@@ -3,6 +3,7 @@ package com.crystalgui.language.java.assist;
 import com.crystalgui.core.async.Progress;
 import com.crystalgui.language.cache.CacheFiles;
 import com.crystalgui.language.cache.Download;
+import com.crystalgui.language.cache.DownloadLocations;
 import com.crystalgui.language.cache.Downloads;
 import com.crystalgui.language.cache.TarArchive;
 
@@ -15,6 +16,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -74,25 +76,6 @@ public final class JdkSourceExtract {
      */
     public static final String SOURCES_PROPERTY = "crystalgui.jdk.sources";
 
-    /** Where to fetch from, when the shipped default is not what a deployment wants. */
-    public static final String URL_PROPERTY = "crystalgui.jdk.sources.url";
-
-    /**
-     * Adoptium's published <b>sources</b> artifact for a feature version.
-     *
-     * <p>Eclipse Adoptium is where most modded players' runtimes come from, it publishes over HTTPS, and
-     * its {@code sources} image is the unmodified OpenJDK tree. The {@code linux/x64} segments are
-     * required by the API's path shape and are irrelevant to the content, which is platform-independent
-     * text.</p>
-     *
-     * <p><b>Unverified from this repository.</b> Nothing in the build reaches the network, so this URL's
-     * shape is taken from Adoptium's published API and not from a request anybody here has made. If it
-     * has moved, {@link #URL_PROPERTY} is the answer and the failure is one reported line rather than
-     * anything broken — which is why the fetch is a command somebody runs rather than a startup step.</p>
-     */
-    private static final String DEFAULT_URL =
-            "https://api.adoptium.net/v3/binary/latest/%d/ga/linux/x64/sources/hotspot/normal/eclipse";
-
     /**
      * <b>The public API of {@code java.base}</b> — which is what this list adds up to, measured rather
      * than chosen.
@@ -132,7 +115,7 @@ public final class JdkSourceExtract {
         CACHED,
         /** Fetched, stripped and installed. */
         INSTALLED,
-        /** No URL to fetch from — the default was cleared and nothing replaced it. */
+        /** Nowhere to fetch from: {@code download/locations.json} lists no sources for this JVM. */
         NOT_CONFIGURED,
         /** Reached for and did not arrive: offline, moved, refused, or nothing usable inside. */
         UNAVAILABLE,
@@ -241,20 +224,33 @@ public final class JdkSourceExtract {
     /**
      * Fetches, strips and installs the extract for the running JVM, reporting into {@code progress}.
      *
-     * <p>Blocking, and on whatever thread the caller chose — the same contract {@code PlatformMappings}
-     * has, and for the same reason: this module must not reach for a scheduler, because a dedicated
-     * server has no frame to drain one on.</p>
+     * <pre>{@code
+     * JdkSourceExtract.Result result = JdkSourceExtract.acquire(cacheRoot, progress, cancelled);
+     * }</pre>
+     *
+     * <ul>
+     *   <li>Fetched from {@code jdk-sources/<feature>} in {@code download/locations.json} — Adoptium's
+     *       published sources image, unless that file says otherwise. {@link State#NOT_CONFIGURED} when it
+     *       lists nothing for this JVM.</li>
+     *   <li>Blocking, on whatever thread the caller chose. This module must not reach for a scheduler: a
+     *       dedicated server has no frame to drain one on.</li>
+     * </ul>
      */
-    public static Result acquire(Path cacheRoot, Progress progress,
-                                 java.util.function.BooleanSupplier cancelled) {
+    public static Result acquire(Path cacheRoot, Progress progress, BooleanSupplier cancelled) {
+        return acquire(cacheRoot, progress, cancelled, DownloadLocations.get());
+    }
+
+    /** The same, from {@code locations} rather than the process's own. */
+    static Result acquire(Path cacheRoot, Progress progress, BooleanSupplier cancelled,
+                          DownloadLocations locations) {
         int feature = runningFeatureVersion();
         Path target = extractFile(cacheRoot, feature);
         if (CacheFiles.isValid(target, null)) {
             return new Result(State.CACHED, target.toString());
         }
-        String url = urlFor(feature);
-        if (url == null || url.isEmpty()) {
-            return new Result(State.NOT_CONFIGURED, "no " + URL_PROPERTY + " and no default");
+        String id = "jdk-sources/" + feature;
+        if (!locations.lists(id)) {
+            return new Result(State.NOT_CONFIGURED, "download/locations.json lists no " + id);
         }
 
         Path scratch = target.resolveSibling(target.getFileName() + ".building");
@@ -266,18 +262,20 @@ public final class JdkSourceExtract {
             Files.createDirectories(target.getParent());
 
             int written;
-            try (Download download = Downloads.from(url)
+            String from;
+            try (Download download = Downloads.located(locations, id)
                          .named("Downloading JDK sources").reporting(progress)
                          .cancelledWhen(cancelled).open();
                  TarArchive archive = TarArchive.gzip(download.stream());
                  OutputStream file = Files.newOutputStream(scratch);
                  ZipOutputStream out = new ZipOutputStream(file)) {
+                from = download.url();
                 progress.detail("Java " + feature);
                 written = build(archive, out, progress);
             }
             if (written == 0) {
                 Files.deleteIfExists(scratch);
-                return new Result(State.UNAVAILABLE, "nothing usable in the archive at " + url);
+                return new Result(State.UNAVAILABLE, "nothing usable in the archive at " + from);
             }
             // THROUGH CacheFiles so the atomic-install rule has one implementation. The extra copy of a
             // few megabytes is the price of not writing the .part-then-move dance a second time.
@@ -287,7 +285,7 @@ public final class JdkSourceExtract {
                 }
             }
             System.setProperty(SOURCES_PROPERTY, target.toAbsolutePath().toString());
-            return new Result(State.INSTALLED, written + " files from " + url,
+            return new Result(State.INSTALLED, written + " files from " + from,
                     written, Files.size(target));
         } catch (IOException | RuntimeException unavailable) {
             // THE CLASS NAME FOR THE LOG, THE SENTENCE FOR THE PERSON. `toString` is what somebody
@@ -302,12 +300,6 @@ public final class JdkSourceExtract {
                 // A scratch file we could not remove is litter, not a failure of the fetch.
             }
         }
-    }
-
-    private static String urlFor(int feature) {
-        String override = System.getProperty(URL_PROPERTY);
-        if (override != null) return override.trim();
-        return String.format(DEFAULT_URL, feature);
     }
 
     // ── The transform half, which is what the tests drive ───────────────────────────────────────

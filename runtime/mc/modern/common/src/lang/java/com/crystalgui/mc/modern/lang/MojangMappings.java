@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.lang;
 
 import com.crystalgui.language.cache.Download;
+import com.crystalgui.language.cache.DownloadLocations;
 import com.crystalgui.language.cache.Downloads;
 import com.crystalgui.language.platform.MappingCoordinates;
 
@@ -14,23 +15,22 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Where Mojang's official mappings for a Minecraft version live, asked of Mojang.
+ * Where Mojang's official mappings for a Minecraft version live.
  *
  * <pre>{@code
- * MappingCoordinates.of("1.20.1", "forge-srg", forgeVersion)
+ * MappingCoordinates.of("1.20.1", "srg", "1.20.1")
  *     .readable("client.txt", MojangMappings.clientMappings("1.20.1"), null)
- *     .runtime("joined.tsrg", mcpConfigZipUrl, null, "config/joined.tsrg");
+ *     .runtime("joined.tsrg", Source.located("forge/mcp-config/1.20.1"), "config/joined.tsrg");
  * }</pre>
  *
- * <h3>Resolved, not pinned — and that is the honest option rather than the lazy one</h3>
- *
- * <p>{@code client.txt} is served from a content-addressed URL that contains its own SHA-1, and the only
- * way to learn it is the version manifest. Writing one into the source would mean recording a number
- * nobody here can verify; asking Mojang yields <b>both the URL and the digest from the same authority
- * that published the bytes</b>, and a version's entry never changes once released.</p>
- *
- * <p>Two hops — the manifest, then that version's own JSON — resolved once and remembered. It happens on
- * the fetching thread, which is what {@link MappingCoordinates.Source} exists to allow.</p>
+ * <ul>
+ *   <li>A version {@code download/locations.json} pins — {@code mojang/<version>/client.txt} — is read from
+ *       its entry there, digest included.</li>
+ *   <li>Any other is asked of Mojang. {@code client.txt} lives at a content-addressed URL that contains its
+ *       own SHA-1, and the version manifest yields <b>both the URL and the digest from the authority that
+ *       published the bytes</b>; a version's entry never changes once released. Two hops — the manifest,
+ *       then that version's own JSON — resolved once, on the fetching thread.</li>
+ * </ul>
  *
  * <h3>Gson, at the version Minecraft ships</h3>
  *
@@ -40,14 +40,13 @@ import java.nio.charset.StandardCharsets;
  */
 public final class MojangMappings {
 
-    private static final String VERSION_MANIFEST =
-            "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
-
     private MojangMappings() {
     }
 
-    /** The client mappings for {@code minecraftVersion}, resolved when they are first fetched. */
+    /** The client mappings for {@code minecraftVersion}: pinned when the locations file pins them. */
     public static MappingCoordinates.Source clientMappings(String minecraftVersion) {
+        String pinned = "mojang/" + minecraftVersion + "/client.txt";
+        if (DownloadLocations.get().lists(pinned)) return MappingCoordinates.Source.located(pinned);
         return new MappingCoordinates.Source() {
 
             private String url;
@@ -77,7 +76,7 @@ public final class MojangMappings {
 
     /** The {@code downloads.client_mappings} object for one version. */
     private static JsonObject clientMappingsEntry(String minecraftVersion) throws IOException {
-        JsonObject manifest = fetch(VERSION_MANIFEST);
+        JsonObject manifest = read(Downloads.located("mojang/version-manifest"));
         String versionUrl = null;
         for (JsonElement entry : manifest.getAsJsonArray("versions")) {
             JsonObject version = entry.getAsJsonObject();
@@ -89,7 +88,7 @@ public final class MojangMappings {
         if (versionUrl == null) {
             throw new IOException("Mojang's manifest lists no Minecraft " + minecraftVersion);
         }
-        JsonObject downloads = fetch(versionUrl).getAsJsonObject("downloads");
+        JsonObject downloads = read(Downloads.from(versionUrl)).getAsJsonObject("downloads");
         if (downloads == null || !downloads.has("client_mappings")) {
             // True of every version before 1.14.4, and the message has to say so: "no mappings" and "the
             // download failed" produce the same runtime names and are entirely different things.
@@ -98,12 +97,12 @@ public final class MojangMappings {
         return downloads.getAsJsonObject("client_mappings");
     }
 
-    private static JsonObject fetch(String url) throws IOException {
-        try (Download download = Downloads.from(url).named("Minecraft version manifest").open();
+    private static JsonObject read(Downloads.Request request) throws IOException {
+        try (Download download = request.named("Minecraft version manifest").open();
              Reader json = new InputStreamReader(download.stream(), StandardCharsets.UTF_8)) {
             JsonElement parsed = new JsonParser().parse(json);
             if (parsed == null || !parsed.isJsonObject()) {
-                throw new IOException("expected a JSON object from " + url);
+                throw new IOException("expected a JSON object from " + download.url());
             }
             return parsed.getAsJsonObject();
         }

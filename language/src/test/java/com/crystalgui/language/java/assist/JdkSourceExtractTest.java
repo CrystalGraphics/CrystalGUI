@@ -1,6 +1,7 @@
 package com.crystalgui.language.java.assist;
 
 import com.crystalgui.core.async.Progress;
+import com.crystalgui.language.cache.DownloadLocations;
 import com.crystalgui.language.cache.TarArchive;
 import org.junit.Assume;
 import org.junit.Test;
@@ -319,22 +320,26 @@ public class JdkSourceExtractTest {
         };
 
         Path cache = Files.createTempDirectory("cgui-jdk-announce");
-        String saved = System.getProperty(JdkSourceExtract.URL_PROPERTY);
-        try {
-            // A url that fails as fast as anything can, so the ONLY reason begin could have been reached
-            // is that it comes first.
-            System.setProperty(JdkSourceExtract.URL_PROPERTY,
-                    new File(cache.toFile(), "absent.tar.gz").toURI().toString());
-            JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, recorder, () -> false);
+        // A location that fails as fast as anything can, so the ONLY reason begin could have been reached
+        // is that it comes first.
+        DownloadLocations locations = DownloadLocations.of("""
+                {"files": {"jdk-sources/{java}": {"urls": ["%s"]}}}
+                """.formatted(new File(cache.toFile(), "absent.tar.gz").toURI()), null, null, false);
+        JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, recorder, () -> false, locations);
 
-            assertEquals(JdkSourceExtract.State.UNAVAILABLE, result.state());
-            assertFalse("the fetch reported nothing at all", announced.isEmpty());
-            assertTrue("the work must be announced before it can block, not after",
-                    announced.get(0).startsWith("begin:"));
-        } finally {
-            if (saved == null) System.clearProperty(JdkSourceExtract.URL_PROPERTY);
-            else System.setProperty(JdkSourceExtract.URL_PROPERTY, saved);
-        }
+        assertEquals(JdkSourceExtract.State.UNAVAILABLE, result.state());
+        assertFalse("the fetch reported nothing at all", announced.isEmpty());
+        assertTrue("the work must be announced before it can block, not after",
+                announced.get(0).startsWith("begin:"));
+    }
+
+    /** A JVM nobody lists sources for is not configured, which a user reads differently from unreachable. */
+    @Test
+    public void aJvmWithNoListedSourcesIsNotConfigured() throws Exception {
+        Path cache = Files.createTempDirectory("cgui-jdk-unlisted");
+        JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, Progress.NONE, () -> false,
+                DownloadLocations.of("{}", null, null, false));
+        assertEquals(JdkSourceExtract.State.NOT_CONFIGURED, result.state());
     }
 
     // ── Fixture: a tar.gz, written by hand ──────────────────────────────────────────────────────

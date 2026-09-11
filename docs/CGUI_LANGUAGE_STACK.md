@@ -64,7 +64,8 @@ EngineSource.firstOf(configuredSource(), bundledSource(), downloadedSource(progr
 
 - **configured** — `-Dcrystalgui.engines.dir`, what a dev run sets from `:language:stageEngines`
 - **bundled** — `assets/crystalgui/engines/<band>/` inside the mod jar, extracted on first use
-- **downloaded** — the band's `name|md5|url` manifest, fetched and verified
+- **downloaded** — the band's jars as `download/locations.json` lists them, each checked against the
+  pin its own jar shipped with
 
 **Both of the last two begin by asking `ScriptService.cacheRoot()` where they may write.** That is the
 non-obvious coupling in this stack: a host that registers no `ScriptService` does not merely lose scripting,
