@@ -39,6 +39,16 @@ public interface BuilderContext extends SurfaceContext {
     Artboard artboard();
 
     /**
+     * Where a gesture shows what it snapped to — one layer for every gesture that snaps.
+     *
+     * <pre>{@code
+     * ctx.smartGuides().show(node.parentElement(), snap.indicators());   // each update
+     * ctx.smartGuides().clear();                                          // when the gesture ends
+     * }</pre>
+     */
+    SmartGuides smartGuides();
+
+    /**
      * What is selected, as the hierarchy and the inspector see it.
      *
      * <p>Not {@link #selection()}, which is the ENGINE's set of items a gesture moves. The two are kept

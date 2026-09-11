@@ -124,32 +124,6 @@ public final class CgUiRect implements CgUiDrawable {
         this.borderBottomColorArgb = borderBottomColorArgb;
     }
 
-    /**
-     * <b>The whole rect at once</b> — every field, one object.
-     *
-     * <p>For a caller that already holds all of it, which is what a PAINTER does: the fluent
-     * {@code with} methods each answer a copy, so building the same rect through them allocates one
-     * object per call and throws away all but the last. That is affordable where a value is built once
-     * and cascaded; it is not affordable per element per frame. {@code BoxPainter} builds one of these
-     * for every element carrying a radius or a border, which on a canvas holding ten thousand nodes is
-     * forty thousand objects a frame through the chain and ten thousand through this.</p>
-     *
-     * <pre>{@code
-     * CgUiRect.shaped(fill, rx, ry, rx, ry, rx, ry, rx, ry, 1f, edge, edge, edge)
-     *         .draw(ctx, 0f, 0f, width, height);
-     * }</pre>
-     *
-     * <p>Radii are per corner and per axis in CSS {@code border-radius} order (TL, TR, BR, BL), each an
-     * (rx, ry) pair. Pass {@code borderColorArgb} for all three colours for an unsliced border — the
-     * shader only engages {@code SPLIT_BORDER} when top or bottom actually differs.</p>
-     */
-    public static CgUiRect shaped(Fill fill, float rxTL, float ryTL, float rxTR, float ryTR,
-                                  float rxBR, float ryBR, float rxBL, float ryBL, float borderWidth,
-                                  int borderColorArgb, int borderTopColorArgb, int borderBottomColorArgb) {
-        return new CgUiRect(fill, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL,
-                borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb);
-    }
-
     /** A flat fill, which is what a {@code #rrggbb} or {@code rgba()} background parses to. */
     public static CgUiRect ofColor(int colorArgb) {
         return new CgUiRect().withFill(new Fill.Color(colorArgb));

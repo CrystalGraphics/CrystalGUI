@@ -11,22 +11,27 @@ import com.crystalgraphics.platform.input.CgModifiers;
 
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.surface.snap.AxisLock;
+import com.crystalgui.widget.surface.snap.BoxTargets;
+import com.crystalgui.widget.surface.snap.SnapAxis;
+import com.crystalgui.widget.surface.snap.SnapIndicator;
+import com.crystalgui.widget.surface.snap.SnapScene;
+import com.crystalgui.widget.surface.snap.SnapSolver;
+import com.crystalgui.widget.surface.snap.SnapSuspend;
 
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /**
- * Dragging an <b>out-of-flow</b> node, with snapping and the guides that explain it.
+ * Dragging an <b>out-of-flow</b> node, with snapping.
  *
  * <p>Only for a node whose {@code position} is absolute. An in-flow node is placed by its parent's
  * layout, so dragging it means reorder or reparent — a different gesture, and not this one. That split is
@@ -40,21 +45,13 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * designed panel drift. So the axis is written on whichever side the node already states, and only
  * {@code left}/{@code top} when it states neither.</p>
  *
- * <p>The overlay draws the guides it snapped to. They are viewport-space and one pixel at any zoom, like
- * every other canvas overlay, and they are gone the moment the drag ends — a guide that outlives its
- * gesture is a line the designer has to work out the meaning of.</p>
+ * <p>It draws nothing itself: what a move snapped to goes to {@link SmartGuides}.</p>
  */
 public final class MoveOutOfFlow extends UIElement {
 
-    public static final Name NAME = Name.of("smartguides");
+    public static final Name NAME = Name.of("moveoutofflow");
 
-    public static final String LAYER_CLASS = "__smart-guides__";
-
-    /** How close counts, in SCREEN pixels — so it feels the same at every zoom. */
-    private static final float TOLERANCE = 6f;
-
-    /** Matched to {@code SelectionOutline}'s: the two mark the same edge and must read as one line. */
-    private static final float GUIDE_THICKNESS = 1f;
+    public static final String LAYER_CLASS = "__move-out-of-flow__";
 
     private final BuilderContext ctx;
 
@@ -63,7 +60,14 @@ public final class MoveOutOfFlow extends UIElement {
     @Nullable
     private UIElement moving;
 
-    private List<Snap.Guide> guides = List.of();
+    /** What the move can snap to, gathered once: an out-of-flow node reflows nothing as it moves. */
+    @Nullable
+    private SnapScene scene;
+
+    private List<SnapIndicator> indicators = List.of();
+
+    /** Shift's constraint, latched for the gesture. @see AxisLock */
+    private final AxisLock lock = new AxisLock();
 
     public MoveOutOfFlow(BuilderContext ctx, UiBuilderDocument document) {
         super(NAME);
@@ -89,9 +93,9 @@ public final class MoveOutOfFlow extends UIElement {
         return moving;
     }
 
-    /** The alignments the last update took. For a test, and for anyone reading the overlay. */
-    public List<Snap.Guide> guides() {
-        return List.copyOf(guides);
+    /** What the last update snapped to. For a test. */
+    public List<SnapIndicator> indicators() {
+        return indicators;
     }
 
     /**
@@ -105,34 +109,13 @@ public final class MoveOutOfFlow extends UIElement {
         float startX = box.x();
         float startY = box.y();
         JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
-        float zoom = Math.max(0.0001f, ctx.surface().zoom());
+        float scale = Math.max(0.0001f, CanvasRects.scaleOf(node.parentElement(), this));
         moving = node;
 
         Drag.start(this, rawX, rawY, new Drag.Listener() {
             @Override
             public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                int modifiers = modifiersNow();
-                float wantX = startX + dx / zoom;
-                float wantY = startY + dy / zoom;
-
-                // SHIFT CONSTRAINS to the axis the hand actually committed to, which is measured from the
-                // whole gesture rather than the last frame -- otherwise a slow diagonal flickers between
-                // the two.
-                if (CgModifiers.hasShift(modifiers)) {
-                    if (Math.abs(dx) >= Math.abs(dy)) wantY = startY;
-                    else wantX = startX;
-                }
-
-                // ALT SUSPENDS SNAPPING for the drag. Every editor spends Alt on this, because the one
-                // thing you cannot do with snapping on is put something NEAR an edge.
-                if (CgModifiers.hasAlt(modifiers)) {
-                    guides = List.of();
-                    write(node, wantX, wantY);
-                    return;
-                }
-                Snap.Result snapped = Snap.of(node, wantX, wantY, TOLERANCE / zoom);
-                guides = snapped.guides();
-                write(node, snapped.x(), snapped.y());
+                dragged(node, startX, startY, scale, dx, dy, modifiersNow());
             }
 
             @Override
@@ -150,9 +133,72 @@ public final class MoveOutOfFlow extends UIElement {
         return true;
     }
 
+    /**
+     * One drag update, with the modifiers passed in rather than read.
+     *
+     * <p>Package-private and taking its own state so the constraint is assertable without a pointer:
+     * what goes wrong here is that two writers disagree about one number, and that is a property of this
+     * method rather than of the gesture around it.</p>
+     *
+     * @param scale screen pixels per layout pixel in the parent. @see CanvasRects#scaleOf
+     * @param dx    how far the pointer has come since the press, in SCREEN pixels
+     */
+    void dragged(UIElement node, float startX, float startY, float scale,
+                 float dx, float dy, int modifiers) {
+        // SHIFT CONSTRAINS, and the lock LATCHES: the axis is chosen once, when the hand has
+        // committed far enough to mean it, and held while Shift is. @see AxisLock
+        SnapAxis free = lock.update(CgModifiers.hasShift(modifiers), dx, dy);
+        float wantX = free == SnapAxis.VERTICAL ? startX : startX + dx / scale;
+        float wantY = free == SnapAxis.HORIZONTAL ? startY : startY + dy / scale;
+
+        // CTRL SUSPENDS SNAPPING for the drag, and Alt does too here -- it is what this gesture has
+        // always spent on it, and unlike a resize it has nothing else to spend it on. The one thing you
+        // cannot do with snapping on is put something deliberately NEAR an edge. @see SnapSuspend
+        if (SnapSuspend.isSuspended(modifiers) || CgModifiers.hasAlt(modifiers)) {
+            show(node, List.of());
+            write(node, wantX, wantY);
+            return;
+        }
+
+        if (scene == null) scene = BoxTargets.sceneFor(node, ctx == null ? null : ctx.artboard());
+
+        // THE BOX AS DRAWN, where the move would put it: a transform travels with its box, so the drawing
+        // sits the same distance from the layout origin wherever the box goes. What snaps is what is seen.
+        Box box = node.box();
+        SnapScene.Outline drawn = BoxTargets.outlineIn(node, node.parentElement());
+        if (box == null || drawn == null) {
+            show(node, List.of());
+            write(node, wantX, wantY);
+            return;
+        }
+        float[] xs = drawn.xs().clone();
+        float[] ys = drawn.ys().clone();
+        for (int i = 0; i < xs.length; i++) {
+            xs[i] += wantX - box.x();
+            ys[i] += wantY - box.y();
+        }
+
+        // A PINNED AXIS IS NEVER OFFERED TO THE SOLVER, which is the whole of the fix rather
+        // than a guard on top of one: solving it and restoring afterwards is what the constraint
+        // used to do, and the solver's answer won because it was written last.
+        SnapSolver.ShapeSnap snapped = SnapSolver.moveShape(xs, ys, lock.isPinned(SnapAxis.HORIZONTAL),
+                lock.isPinned(SnapAxis.VERTICAL), SnapSolver.SCREEN_TOLERANCE, scale, scene);
+        show(node, snapped.indicators());
+        write(node, wantX + snapped.dx(), wantY + snapped.dy());
+    }
+
+    /** Keeps what this update snapped to, and hands it to the guides layer. */
+    private void show(UIElement node, List<SnapIndicator> found) {
+        indicators = List.copyOf(found);
+        if (ctx != null) ctx.smartGuides().show(node.parentElement(), indicators);
+    }
+
     private void end() {
         moving = null;
-        guides = List.of();
+        scene = null;
+        indicators = List.of();
+        if (ctx != null) ctx.smartGuides().clear();
+        lock.reset();
     }
 
     /**
@@ -172,22 +218,50 @@ public final class MoveOutOfFlow extends UIElement {
                 && !node.getStyle().computed().isSet(LayoutProperties.TOP);
     }
 
-    /** @see MoveOutOfFlow the note on writing the inset the node is anchored by */
+    /**
+     * Puts {@code node}'s BORDER box at {@code x}, {@code y} — through the inset it is anchored by.
+     *
+     * @see MoveOutOfFlow the note on writing the inset the node is anchored by
+     * @see #leftInset
+     */
     private static void write(UIElement node, float x, float y) {
         boolean rightAnchored = anchorsRight(node);
         boolean bottomAnchored = anchorsBottom(node);
+        Box box = node.box();
         Box parent = node.parentElement() == null ? null : node.parentElement().box();
-        float parentWidth = parent == null ? 0f : parent.width();
-        float parentHeight = parent == null ? 0f : parent.height();
-        float width = node.box() == null ? 0f : node.box().width();
-        float height = node.box() == null ? 0f : node.box().height();
+        // A far-side inset is measured from the parent's inner far edge to the node's far margin.
+        float farX = box == null || parent == null ? 0f
+                : parent.width() - parent.border().right - box.margin().right - box.width();
+        float farY = box == null || parent == null ? 0f
+                : parent.height() - parent.border().bottom - box.margin().bottom - box.height();
 
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
-            if (rightAnchored) l.right(Math.round(parentWidth - x - width));
-            else l.left(Math.round(x));
-            if (bottomAnchored) l.bottom(Math.round(parentHeight - y - height));
-            else l.top(Math.round(y));
+            if (rightAnchored) l.right(Math.round(farX - x));
+            else l.left(Math.round(leftInset(node, x)));
+            if (bottomAnchored) l.bottom(Math.round(farY - y));
+            else l.top(Math.round(topInset(node, y)));
         });
+    }
+
+    /**
+     * The {@code left} that puts {@code node}'s BORDER box at {@code x} — the position {@code Box.x()}
+     * reports and a snap solves for.
+     *
+     * <p>CSS places the MARGIN box at the inset, measured from inside the containing block's border, so
+     * both come off. Written straight in, a margined node landed its margin further on than the guides
+     * said, and again at the start of every drag.</p>
+     */
+    static float leftInset(UIElement node, float x) {
+        Box box = node.box();
+        Box parent = node.parentElement() == null ? null : node.parentElement().box();
+        return x - (parent == null ? 0f : parent.border().left) - (box == null ? 0f : box.margin().left);
+    }
+
+    /** @see #leftInset */
+    static float topInset(UIElement node, float y) {
+        Box box = node.box();
+        Box parent = node.parentElement() == null ? null : node.parentElement().box();
+        return y - (parent == null ? 0f : parent.border().top) - (box == null ? 0f : box.margin().top);
     }
 
     /** One edit for the gesture, as the resize handles do. */
@@ -200,45 +274,5 @@ public final class MoveOutOfFlow extends UIElement {
     private static int modifiersNow() {
         var input = CgPlatform.input();
         return input == null ? 0 : input.getCurrentModifiers();
-    }
-
-    @Override
-    public void paintContent(CgUiPaintContext paint, Box box) {
-        if (box == null || guides.isEmpty() || moving == null) return;
-        UIElement parent = moving.parentElement();
-        if (parent == null) return;
-        float[] area = CanvasRects.ofLayout(parent, this);
-        if (area == null) return;
-        float zoom = Math.max(0.0001f, ctx.surface().zoom());
-        int colour = getStyle().computed().get(StylePropertyRegistry.COLOR);
-
-        // CENTRED ON THE LINE IT MARKS, not starting at it.
-        //
-        // A guide and the selection outline mark the same edge and have to look like one line. The
-        // outline hugs its box from OUTSIDE, so it occupies the pixel before the edge; a guide drawn
-        // from the coordinate occupies the pixel after it, and the two sit side by side as a two-pixel
-        // band where a reader expects one. They coincided before the outline moved out, which is why
-        // this only started reading as crooked then.
-        //
-        // Half the stroke, so the coordinate stays the guide's CENTRE at any zoom -- which is also what
-        // makes it agree with an edge it aligned to on the far side of the canvas, where there is no
-        // outline to match and the true line is all there is.
-        // A STROKE, so the line is smooth wherever the zoom puts it. Centring a fill on a coordinate is
-        // exact only when that coordinate is a whole pixel, and on a canvas that pans and zooms it never
-        // is: the guide's own centring made the ragged edge worse, not better. The stroke path takes the
-        // centre line directly and computes coverage from it.
-        float half = GUIDE_THICKNESS * 0.5f;
-        for (Snap.Guide guide : guides) {
-            float at = guide.at() * zoom;
-            float from = guide.from() * zoom;
-            float to = Math.max(from + 1f, guide.to() * zoom);
-            if (guide.vertical()) {
-                paint.curve().line(area[0] + at, area[1] + from, area[0] + at, area[1] + to)
-                        .width(half).color(colour).submit();
-            } else {
-                paint.curve().line(area[0] + from, area[1] + at, area[0] + to, area[1] + at)
-                        .width(half).color(colour).submit();
-            }
-        }
     }
 }

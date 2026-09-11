@@ -68,10 +68,6 @@ public final class CursorBitmaps {
     private static final CursorArt SLIDE_ARROW      = CursorArt.centred("slide-arrow",      CursorBitmaps::slideArrow);
     private static final CursorArt OPEN_HAND        = CursorArt.centred("open-hand",        CursorBitmaps::openHand);
     private static final CursorArt CLOSED_HAND      = CursorArt.centred("closed-hand",      CursorBitmaps::closedHand);
-    private static final CursorArt ROTATE_NE        = CursorArt.centred("rotate-ne",        CursorBitmaps::rotateNe);
-    private static final CursorArt ROTATE_NW        = CursorArt.centred("rotate-nw",        CursorBitmaps::rotateNw);
-    private static final CursorArt ROTATE_SE        = CursorArt.centred("rotate-se",        CursorBitmaps::rotateSe);
-    private static final CursorArt ROTATE_SW        = CursorArt.centred("rotate-sw",        CursorBitmaps::rotateSw);
     private static final CursorArt SKEW             = CursorArt.centred("skew",             CursorBitmaps::skew);
     private static final CursorArt PIVOT            = CursorArt.centred("pivot",            CursorBitmaps::pivot);
 
@@ -106,12 +102,8 @@ public final class CursorBitmaps {
         // inside a resizable panel, so "this value slides" and "this edge moves" appear pixels apart and
         // have to be distinguishable.
         art(SLIDE_ARROW,      Cursor.SLIDE_ARROW);
-        // The transform box's. Rotate especially: its zone is the band OUTSIDE a corner, where nothing is
-        // drawn, so the cursor is the whole affordance rather than a hint about a dot.
-        art(ROTATE_NE,        Cursor.ROTATE_NE);
-        art(ROTATE_NW,        Cursor.ROTATE_NW);
-        art(ROTATE_SE,        Cursor.ROTATE_SE);
-        art(ROTATE_SW,        Cursor.ROTATE_SW);
+        // The transform box's. Its rotate band has no cursor of its own: RotationCursor draws an arrow
+        // that turns with the gesture, beside a grab hand.
         art(SKEW,             Cursor.SKEW);
         art(PIVOT,            Cursor.PIVOT);
     }
@@ -500,81 +492,9 @@ public final class CursorBitmaps {
     //
     // The arrows above are 1-bit masks: a boolean body, an outline generated from it, every edge hard.
     // That is right for an arrow, whose edges are axis-aligned or exactly diagonal and so alias into
-    // clean stair-steps. It is wrong for a curve -- an arc drawn as a mask reads as a chain of blocks,
-    // which is the one dated thing about Photoshop's own rotate cursor. So the three below are
-    // rasterised from signed distance fields, with the outline dilated from the same field. Same
-    // white-body-black-outline convention, same 32x32, smooth edges.
-
-    /**
-     * A curved double-headed arrow bending around the <b>top-right</b> corner: drag to rotate.
-     *
-     * <p>Presented just outside a corner of the Free Transform box, which is where every editor puts the
-     * rotate zone and the only affordance it has: nothing is drawn there, so the cursor IS the
-     * advertisement. Each corner gets the bend that hugs it — see {@link #rotateNw()} and the other two,
-     * which are this one MIRRORED rather than redrawn, so all four are the same artwork by construction
-     * and tuning one tunes them all.</p>
-     */
-    public static int[] rotateNe() {
-        // EXACTLY A QUARTER, and that is what buys the heads their definition. The tangent is horizontal
-        // at the top of a circle and vertical at its right, so this one sweep is the only one whose ends
-        // are both on an axis -- which means the heads can be the SAME artwork the resize arrows use,
-        // plotted on the pixel grid, instead of arbitrary-angle triangles that rasterise soft on all four
-        // edges and read as mush at 32 pixels.
-        //
-        // So this shape is drawn two ways at once: the arc from a distance field, because a curve has no
-        // orientation that aliases cleanly, and the heads from a boolean mask, because an axis-aligned
-        // arrowhead has nothing but orientations that do. Neither half looks right drawn the other way.
-        final float cx = 11f;
-        final float cy = 20f;
-        // BIGGER THAN A HEAD IS WIDE. Two ten-pixel heads set on a small arc simply meet, and the mark
-        // comes out a solid wedge with no turn visible in it.
-        final float radius = 11f;
-        final float half = 1.8f;
-
-        boolean[] heads = new boolean[SIZE * SIZE];
-        // Each head's BASE row lands on the arc's end, which is what makes the join a clean step rather
-        // than something needing a fillet to hide it. The lower head is set two pixels IN from the arc's
-        // end rather than centred on it: the arc arrives from the left there, so a centred head leaves
-        // the outer half of its base hanging off the curve with nothing behind it.
-        arrowHead(heads, 6, 9, 1, true);
-        arrowHead(heads, 22, 25, -1, false);
-
-        return rasterise((x, y) -> sdArc(x, y, cx, cy, radius, half, 260f, 370f), heads, 1f);
-    }
-
-    /** {@link #rotateNe()} mirrored across the vertical: the bend hugs the top-LEFT corner. */
-    public static int[] rotateNw() {
-        return mirror(rotateNe(), true, false);
-    }
-
-    /** {@link #rotateNe()} mirrored across the horizontal: the bend hugs the bottom-RIGHT corner. */
-    public static int[] rotateSe() {
-        return mirror(rotateNe(), false, true);
-    }
-
-    /** {@link #rotateNe()} mirrored both ways: the bend hugs the bottom-LEFT corner. */
-    public static int[] rotateSw() {
-        return mirror(rotateNe(), true, true);
-    }
-
-    /**
-     * A copy flipped about the canvas centre on either axis.
-     *
-     * <p>Pixels, not geometry. Re-deriving each corner from its own angles would give four shapes that
-     * drift apart the moment one is tuned, and a mirror of a symmetric-by-eye arrowhead is exactly the
-     * same arrowhead — there is nothing in this mark whose handedness carries meaning.</p>
-     */
-    private static int[] mirror(int[] art, boolean flipX, boolean flipY) {
-        int[] out = new int[SIZE * SIZE];
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                int sourceX = flipX ? SIZE - 1 - x : x;
-                int sourceY = flipY ? SIZE - 1 - y : y;
-                out[y * SIZE + x] = art[sourceY * SIZE + sourceX];
-            }
-        }
-        return out;
-    }
+    // clean stair-steps. It is wrong for a slant or a curve, which a mask draws as a chain of blocks. So
+    // the two below are rasterised from signed distance fields, with the outline dilated from the same
+    // field. Same white-body-black-outline convention, same 32x32, smooth edges.
 
     /**
      * Two opposed arrows on parallel rails: <b>drag to lean this edge.</b>
@@ -622,35 +542,6 @@ public final class CursorBitmaps {
      * {@code alpha = body + outline*(1-body)} and a grey level of {@code body/alpha}, which is the only
      * arithmetic here and is what keeps a curve smooth instead of stepped.</p>
      */
-    /**
-     * As {@link #rasterise(Sdf, float)}, plus a 1-bit mask unioned in at full coverage.
-     *
-     * <p>For a shape that is part curve and part axis-aligned arrow: the field half is anti-aliased
-     * because a curve has no orientation that aliases cleanly, the mask half is not because an
-     * arrowhead has nothing but orientations that do. The mask brings its own outline from its own
-     * neighbours, so its stair-steps keep a crisp one-pixel edge instead of the field's soft ramp.</p>
-     */
-    private static int[] rasterise(Sdf shape, boolean[] mask, float outlineWidth) {
-        int[] pixels = new int[SIZE * SIZE];
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                int i = y * SIZE + x;
-                float distance = shape.at(x + 0.5f, y + 0.5f);
-                float body = mask[i] ? 1f : coverage(distance);
-                float outline = mask[i] || adjacentToBody(mask, x, y)
-                        ? 1f : Math.max(coverage(distance - outlineWidth), body);
-                float alpha = body + outline * (1f - body);
-                if (alpha <= 0.004f) {
-                    pixels[i] = TRANSPARENT;
-                    continue;
-                }
-                int level = Math.round(255f * clamp(body / alpha));
-                pixels[i] = (Math.round(255f * clamp(alpha)) << 24) | (level << 16) | (level << 8) | level;
-            }
-        }
-        return pixels;
-    }
-
     private static int[] rasterise(Sdf shape, float outlineWidth) {
         int[] pixels = new int[SIZE * SIZE];
         for (int y = 0; y < SIZE; y++) {
@@ -684,12 +575,6 @@ public final class CursorBitmaps {
         float best = values[0];
         for (float value : values) best = Math.min(best, value);
         return best;
-    }
-
-    private static float[] onCircle(float cx, float cy, float radius, float degrees) {
-        double radians = Math.toRadians(degrees);
-        return new float[]{cx + radius * (float) Math.cos(radians),
-                cy + radius * (float) Math.sin(radians)};
     }
 
     /** The unit tangent at an angle, with {@code sign} choosing which way round. */
@@ -730,28 +615,6 @@ public final class CursorBitmaps {
         float t = ((x - x0) * ex + (y - y0) * ey) / Math.max(1e-6f, ex * ex + ey * ey);
         t = clamp(t);
         return length(x - (x0 + ex * t), y - (y0 + ey * t)) - half;
-    }
-
-    /**
-     * An arc of a ring, capped at both ends.
-     *
-     * <p>Outside the sweep it falls back to the nearer cap, which is what makes the join with an
-     * arrowhead continuous: a bare angular test leaves the ends square, and a head planted on a square
-     * end shows the corner.</p>
-     */
-    private static float sdArc(float x, float y, float cx, float cy, float radius, float half,
-                               float fromDegrees, float toDegrees) {
-        float angle = (float) Math.toDegrees(Math.atan2(y - cy, x - cx));
-        if (angle < 0f) angle += 360f;
-        // A SWEEP MAY CROSS THE SEAM: `to` is allowed past 360, so a quarter turn either side of the
-        // right-hand extreme can be written as one range instead of two arcs meeting at a join.
-        if (angle < fromDegrees) angle += 360f;
-        if (angle >= fromDegrees && angle <= toDegrees) {
-            return Math.abs(length(x - cx, y - cy) - radius) - half;
-        }
-        float[] from = onCircle(cx, cy, radius, fromDegrees);
-        float[] to = onCircle(cx, cy, radius, toDegrees);
-        return Math.min(length(x - from[0], y - from[1]), length(x - to[0], y - to[1])) - half;
     }
 
     /**

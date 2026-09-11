@@ -20,7 +20,6 @@ import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.widget.surface.overlay.Geometry;
 import com.crystalgui.widget.surface.overlay.OverlayKind;
 import com.crystalgui.widget.surface.overlay.OverlayLayer;
-import com.crystalgui.widget.surface.overlay.Snapping;
 import com.crystalgui.widget.surface.select.Picking;
 import com.crystalgui.widget.surface.select.SurfaceSelection;
 
@@ -74,9 +73,6 @@ public interface SurfaceContext {
 
     /** What is drawn over the plane, and whether each is showing. */
     OverlayLayer overlays();
-
-    /** Where a dragged value settles. */
-    Snapping snapping();
 
     /** What the pointer looks like while a gesture owns it. */
     Cursors cursors();
