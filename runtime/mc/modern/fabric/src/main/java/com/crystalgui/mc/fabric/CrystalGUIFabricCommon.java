@@ -1,9 +1,9 @@
 package com.crystalgui.mc.fabric;
 
+import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
-import com.crystalgui.mc.shared.CrashVariant;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -30,6 +30,7 @@ import org.lwjgl.glfw.GLFWScrollCallback;
 import java.util.function.BiConsumer;
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.MODID;
+import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
 
 /**
  * Everything Fabric that runs on <b>both sides</b> — the common entry point, the {@link Network}
@@ -48,7 +49,7 @@ public final class CrystalGUIFabricCommon implements ModInitializer {
     public void onInitialize() {
         // WHICH VARIANT, in the log rather than the crash report: Fabric Loader exposes no crash
         // callable, so unlike Forge and 1.7.10 there is nothing to register with. @see CrashVariant
-        CrystalGuiCore.LOGGER.info("[cgui] {}: {}", CrashVariant.LABEL,
+        CrystalGuiCore.LOGGER.info("[cgui] {}: {}", CrashVariant.label(NAME),
                 CrashVariant.report(CrystalGUIFabricCommon.class));
         LifecycleCrystalGUI.bootstrap(Network.get());
         Events.registerCommon();

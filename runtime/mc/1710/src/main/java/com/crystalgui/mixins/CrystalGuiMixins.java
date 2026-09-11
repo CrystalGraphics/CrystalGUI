@@ -1,6 +1,6 @@
 package com.crystalgui.mixins;
 
-import com.crystalgui.mc.shared.LoaderProbe;
+import com.crystalgraphics.mc.shared.LoaderProbe;
 import org.spongepowered.asm.lib.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;

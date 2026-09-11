@@ -1,8 +1,8 @@
-// mc-shared — what every loader variant in the single jar shares, and what none of them may name.
+// runtime/mc/shared — what every loader variant of CrystalGUI's single jar shares. EMPTY, and kept.
 //
-// One copy in the merged jar, never relocated and never remapped, because it names no Minecraft
-// class and no loader: only Mixin's own API. That is what lets one config plugin decide, for four
-// loaders at once, whose mixins may apply.
+// `LoaderProbe` and `CrashVariant` lived here and are CrystalGraphics' now: CrystalGUI requires
+// CrystalGraphics on every loader, so a second copy bought nothing. Anything added here is merged once,
+// never relocated and never remapped, so it may name no Minecraft class and no loader.
 //
 // JAVA 8 SOURCE AND TARGET. Its classes run under FML 1.7.10, whose ModDiscoverer reads every entry
 // of every jar with asm-debug-all-5.0.3 and refuses anything above major 52 -- and unlike `core`,
