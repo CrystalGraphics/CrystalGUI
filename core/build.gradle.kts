@@ -173,6 +173,12 @@ sourceSets.main {
     }
 }
 
+// download/locations.json -- where every runtime download comes from -- beside DownloadLocations, which
+// reads it. The file is the repository's rather than this module's; download/README.md says how to edit it.
+tasks.processResources {
+    from(rootProject.file("download/locations.json")) { into("assets/crystalgui/download") }
+}
+
 val headlessTest: SourceSet by sourceSets.creating {
     compileClasspath += sourceSets["main"].output
     runtimeClasspath += sourceSets["main"].output
@@ -216,6 +222,10 @@ val headlessTestTask = tasks.register<Test>("headlessTest") {
     testClassesDirs = headlessTest.output.classesDirs
     classpath = headlessTest.runtimeClasspath
     useJUnit()
+    // The repository root, which DownloadUrlsLiveInOneFileTest scans for download addresses written in code.
+    systemProperty("cgui.test.repoRoot", rootProject.projectDir.absolutePath)
+    // Never master's copy of download/locations.json: a test answers from the bundled file alone.
+    systemProperty("crystalgui.download.remote", "false")
 }
 
 tasks.named("check") { dependsOn(headlessTestTask) }

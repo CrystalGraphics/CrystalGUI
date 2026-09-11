@@ -7,8 +7,10 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.platform.MappingCoordinates;
+import com.crystalgui.language.platform.MappingCoordinates.Source;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
@@ -59,7 +61,9 @@ public final class ScriptServiceModern implements ScriptService {
     public static void install() {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.gameDirectory == null) return;
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptServiceModern(mc.gameDirectory.toPath()));
+        ScriptServiceModern service = new ScriptServiceModern(mc.gameDirectory.toPath());
+        CgPlatform.provide(ScriptServices.SERVICE, service);
+        DownloadLocations.useCacheRoot(service.cacheRoot());
     }
 
     /**
@@ -145,17 +149,12 @@ public final class ScriptServiceModern implements ScriptService {
         if (isIntermediary()) {
             return MappingCoordinates.of(version, "intermediary", version)
                     .readable("client.txt", MojangMappings.clientMappings(version), null)
-                    .runtime("mappings.tiny",
-                            "https://maven.fabricmc.net/net/fabricmc/intermediary/"
-                                    + version + "/intermediary-" + version + "-v2.jar",
-                            null, "mappings/mappings.tiny");
+                    .runtime("mappings.tiny", Source.located("fabric/intermediary/" + version),
+                            "mappings/mappings.tiny");
         }
         return MappingCoordinates.of(version, "srg", version)
                 .readable("client.txt", MojangMappings.clientMappings(version), null)
-                .runtime("joined.tsrg",
-                        "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/"
-                                + version + "/mcp_config-" + version + ".zip",
-                        null, "config/joined.tsrg")
+                .runtime("joined.tsrg", Source.located("forge/mcp-config/" + version), "config/joined.tsrg")
                 // Official CLASS names with SRG MEMBERS -- what Forge has run since 1.17. MCPConfig's
                 // own class vocabulary is `net/minecraft/src/C_NNNN_` and no runtime speaks it.
                 .runtimeKeepsReadableClassNames();

@@ -147,6 +147,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/fabric/CrystalGUIFabric.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
+            // Where every download comes from, beside core's DownloadLocations, which reads it.
+            "assets/crystalgui/download/locations.json",
         ))
         requiredManifest.set(mapOf(
             "FMLCorePluginContainsFMLMod" to "true",
@@ -230,16 +232,14 @@ registerSingleJarPipeline(SingleJarSpec(
             ?.sortedBy { it.name }
             ?.forEach { from(project.zipTree(it)) }
 
-        // ALL THREE BANDS and their manifests. 8 is what a 1.7.10 client runs, 17 what 1.20.x does,
-        // and 11 what a 1.7.10 client on lwjgl3ify may. Taken from the two loaders that already
-        // resolve them rather than re-resolved here.
-        listOf(":runtime:mc:1710" to "bundleEngineBands", ":runtime:mc:modern:forge" to "bundleEngineBands",
-               ":runtime:mc:1710" to "writeEngineManifests", ":runtime:mc:modern:forge" to "writeEngineManifests")
-            .forEach { (path, task) ->
-                val producer = project.project(path).tasks.named(task)
-                dependsOn(producer)
-                from(producer)
-            }
+        // ALL THREE BANDS. 8 is what a 1.7.10 client runs, 17 what 1.20.x does, and 11 what a 1.7.10
+        // client on lwjgl3ify may. Taken from the two loaders that already resolve them rather than
+        // re-resolved here.
+        listOf(":runtime:mc:1710", ":runtime:mc:modern:forge").forEach { path ->
+            val producer = project.project(path).tasks.named("bundleEngineBands")
+            dependsOn(producer)
+            from(producer)
+        }
     },
 
     configureCheck = {
@@ -253,6 +253,8 @@ registerSingleJarPipeline(SingleJarSpec(
             // Unrelocated ASM is a split package against ModLauncher's own, and three of the four
             // loaders die before a mod class loads -- two of them with nothing in any log.
             "org/objectweb/asm/",
+            // The host jar's, beside the code that reads it. A copy here could be an older one.
+            "assets/crystalgui/download/",
         ))
         expectSingle.set(listOf("com/crystalgui/language/"))
         // Counted by simple name, as the host jar's own note explains. NOT `ScriptService`: J9's

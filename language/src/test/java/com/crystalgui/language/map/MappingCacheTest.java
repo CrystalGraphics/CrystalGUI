@@ -1,5 +1,6 @@
 package com.crystalgui.language.map;
 
+import com.crystalgui.core.cache.CacheFiles;
 import com.crystalgui.language.platform.MappingCoordinates;
 
 import org.junit.Rule;
@@ -153,7 +154,7 @@ public class MappingCacheTest {
         Path file = Files.createTempFile("cgui-md5", ".tmp");
         try {
             Files.write(file, contents.getBytes(StandardCharsets.UTF_8));
-            return com.crystalgui.language.cache.CacheFiles.digestOf(file);
+            return CacheFiles.digestOf(file);
         } finally {
             Files.deleteIfExists(file);
         }

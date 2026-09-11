@@ -1,4 +1,4 @@
-package com.crystalgui.language.cache;
+package com.crystalgui.core.cache;
 
 import com.crystalgui.core.async.Progress;
 import org.junit.Rule;
@@ -216,6 +216,42 @@ public class DownloadsTest {
             long took = System.currentTimeMillis() - started;
             assertTrue("it retried a failure that cannot change: took " + took + "ms", took < 3000);
         }
+    }
+
+    /**
+     * <b>A location that is gone, or serves other bytes, is passed over for the next.</b> A mirror
+     * serving something else must neither install nor stop the one after it being tried.
+     */
+    @Test
+    public void aDeadOrWrongLocationIsPassedOverForTheNext() throws Exception {
+        File right = sourceOf(2048);
+        File wrong = folder.newFile("wrong.bin");
+        Files.write(wrong.toPath(), "not the artifact".getBytes(StandardCharsets.UTF_8));
+        String dead = new File(folder.getRoot(), "gone.bin").toURI().toString();
+        String pin = "md5:" + CacheFiles.digestOf(right.toPath());
+        DownloadLocations locations = DownloadLocations.of("""
+                {"files": {"x.bin": {"digest": "%s", "urls": ["%s", "%s", "%s"]}}}
+                """.formatted(pin, dead, wrong.toURI(), right.toURI()), null, null, false);
+
+        Path target = folder.getRoot().toPath().resolve("x.bin");
+        assertTrue(Downloads.located(locations, "x.bin").named("Test").into(target));
+        assertEquals(pin, "md5:" + CacheFiles.digestOf(target));
+    }
+
+    /** Every location serving other bytes installs nothing, and answers false rather than throwing. */
+    @Test
+    public void whenEveryLocationServesOtherBytesNothingIsInstalled() throws Exception {
+        File one = folder.newFile("one.bin");
+        File two = folder.newFile("two.bin");
+        Files.write(one.toPath(), "one".getBytes(StandardCharsets.UTF_8));
+        Files.write(two.toPath(), "two".getBytes(StandardCharsets.UTF_8));
+        DownloadLocations locations = DownloadLocations.of("""
+                {"files": {"x.bin": {"digest": "md5:00000000000000000000000000000000", "urls": ["%s", "%s"]}}}
+                """.formatted(one.toURI(), two.toURI()), null, null, false);
+
+        Path target = folder.getRoot().toPath().resolve("x.bin");
+        assertFalse(Downloads.located(locations, "x.bin").named("Test").into(target));
+        assertFalse(Files.exists(target));
     }
 
     /** Counts the reports so a cancel can be asked for partway rather than up front. */

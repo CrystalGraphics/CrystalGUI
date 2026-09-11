@@ -1,6 +1,7 @@
 package com.crystalgui.language.engine;
 
 import com.crystalgui.core.async.Progress;
+import com.crystalgui.core.cache.DownloadLocations;
 
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
@@ -252,12 +253,11 @@ public final class EngineHost implements Closeable {
         return Files.isDirectory(root) ? EngineSource.directory(root) : EngineSource.NONE;
     }
 
-    /** The fallback: fetch the band this host needs, verified against the shipped manifest. */
+    /** The fallback: fetch the band this host needs, from where {@code download/locations.json} lists it. */
     private static EngineSource downloadedSource(Progress progress) {
         Path cacheRoot = CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
         if (cacheRoot == null) return EngineSource.NONE;
-        return EngineSource.downloadedFrom(EngineHost.class.getClassLoader(),
-                BUNDLED_ENGINES_ROOT, cacheRoot.resolve("engines"),
+        return EngineSource.downloadedFrom(DownloadLocations.get(), cacheRoot.resolve("engines"),
                 progress == null ? Progress.NONE : progress);
     }
 

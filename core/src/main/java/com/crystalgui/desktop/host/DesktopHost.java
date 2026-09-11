@@ -5,6 +5,7 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.desktop.Desktop;
@@ -88,6 +89,8 @@ public final class DesktopHost implements Disposable {
         Desktop desktop = Desktop.of(document).useStorage(services.installationDirectory());
         this.config = desktop.config();
         this.cacheRoot = desktop.cacheRoot();
+        // Downloads keep master's copy of download/locations.json under it between launches.
+        DownloadLocations.useCacheRoot(cacheRoot);
         // AND THE ARRANGEMENT, which the compositor owns reading, applying and writing again.
         desktop.useLocalWorld(services::localWorldDirectory);
         desktop.persistAs(services.desktopId());

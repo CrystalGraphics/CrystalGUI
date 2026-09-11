@@ -1,30 +1,50 @@
-package com.crystalgui.language.cache;
+package com.crystalgui.core.cache;
 
 import com.crystalgui.core.async.Progress;
 
+import java.io.Closeable;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.net.ConnectException;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.UnknownHostException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 /**
  * <b>The way this project fetches things.</b> Describe a transfer, then open it or complete it.
  *
  * <pre>{@code
+ * // An artifact download/locations.json lists: every URL it names, checked against the jar's pin.
+ * Downloads.located("fabric/intermediary/1.20.1").named("Minecraft mappings").reporting(progress).into(target);
+ *
  * // A stream to read through something else.
- * try (Download open = Downloads.from(url).named("JDK sources").reporting(progress).open()) {
+ * try (Download open = Downloads.located("jdk-sources/17").named("JDK sources").reporting(progress).open()) {
  *     read(open.stream());
  * }
  *
- * // A file, verified and installed atomically.
- * Downloads.from(url).named("Minecraft mappings").verifying(md5).reporting(progress).into(target);
+ * // An address only known at run time, such as one Mojang's manifest names.
+ * Downloads.from(url).verifying("sha1:" + sha1).into(target);
  *
  * // Many files under ONE bar, with one aggregate total.
  * Downloads.batch(artifacts).named("Downloading Java engine (band 8)").reporting(progress).into(dir);
  * }</pre>
+ *
+ * <h3>Located rather than addressed</h3>
+ *
+ * <p>A URL written into a shipped class is one no released jar can repair when its host moves, so what
+ * this project downloads is named by an id and {@link DownloadLocations} says where it is. A located
+ * transfer tries each URL in order, does not retry one host while another remains, and when all have
+ * failed re-reads the locations from master once and tries whatever that adds.</p>
  *
  * <h3>Why a described transfer rather than a method with five parameters</h3>
  *
@@ -74,9 +94,9 @@ public final class Downloads {
      * for, and they are the reason the loop exists at all.</p>
      */
     private static boolean worthRetrying(IOException failure) {
-        if (failure instanceof java.net.UnknownHostException) return false;
+        if (failure instanceof UnknownHostException) return false;
         // A 404 is an answer, and it will be the same answer next time.
-        return !(failure instanceof java.io.FileNotFoundException);
+        return !(failure instanceof FileNotFoundException);
     }
 
     /**
@@ -89,46 +109,65 @@ public final class Downloads {
      */
     public static String describe(Throwable failure) {
         if (failure == null) return "unknown error";
-        if (failure instanceof java.net.UnknownHostException) {
+        if (failure instanceof UnknownHostException) {
             return "could not reach " + failure.getMessage() + " — check your connection";
         }
-        if (failure instanceof java.net.SocketTimeoutException) return "the connection timed out";
-        if (failure instanceof java.io.FileNotFoundException) {
+        if (failure instanceof SocketTimeoutException) return "the connection timed out";
+        if (failure instanceof FileNotFoundException) {
             return "the server does not have it any more";
         }
-        if (failure instanceof java.io.InterruptedIOException) return "stopped";
-        if (failure instanceof java.net.ConnectException) return "the connection was refused";
+        if (failure instanceof InterruptedIOException) return "stopped";
+        if (failure instanceof ConnectException) return "the connection was refused";
         String message = failure.getMessage();
         return message == null || message.isEmpty() ? failure.getClass().getSimpleName() : message;
     }
 
-    private static void sleep(long millis) throws java.io.InterruptedIOException {
+    private static void sleep(long millis) throws InterruptedIOException {
         try {
             Thread.sleep(millis);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             // THE FLAG IS RESTORED AND THE WAIT IS ABANDONED. Swallowing this is how a job that was asked
             // to stop keeps going, which is the defect the cancel work in this same file just fixed.
-            throw new java.io.InterruptedIOException("interrupted while waiting to retry");
+            throw new InterruptedIOException("interrupted while waiting to retry");
         }
     }
 
     private Downloads() {
     }
 
-    /** One artifact in a {@link Batch}: what to call it, where it is, and what it should hash to. */
-    public record Artifact(String fileName, String url, String md5) {
+    /** One artifact in a {@link Batch}: what to call it on disk, and the transfer that fetches it. */
+    public record Artifact(String fileName, Request request) {
     }
 
     // ── Describing one transfer ─────────────────────────────────────────────────────────────────
 
     /** A transfer of {@code url}, undescribed. Add what it is called and where to report it. */
     public static Request from(String url) {
-        return new Request(url, "Downloading", null, Progress.NONE, NEVER_CANCELLED);
+        return new Request(Collections.singletonList(url), "Downloading", null, Progress.NONE,
+                NEVER_CANCELLED, null, null);
+    }
+
+    /**
+     * A transfer of the artifact {@code id} in {@code download/locations.json}: every URL the file lists,
+     * checked against the digest the jar pins.
+     *
+     * @throws FileNotFoundException when the jar's copy of the file does not list {@code id}
+     */
+    public static Request located(String id) throws IOException {
+        return located(DownloadLocations.get(), id);
+    }
+
+    /** The same, against {@code locations} rather than the process's own. */
+    public static Request located(DownloadLocations locations, String id) throws IOException {
+        DownloadLocations.Location where = locations.find(id);
+        if (where == null) throw new FileNotFoundException("download/locations.json lists no " + id);
+        return new Request(where.urls(), "Downloading", where.digest(), Progress.NONE, NEVER_CANCELLED,
+                locations, id);
     }
 
     /** The default: a transfer nobody can stop, which is what an unattended one is. */
-    private static final java.util.function.BooleanSupplier NEVER_CANCELLED = () -> false;
+    private static final BooleanSupplier NEVER_CANCELLED = () -> false;
 
     /**
      * An immutable description of one transfer.
@@ -138,29 +177,35 @@ public final class Downloads {
      */
     public static final class Request {
 
-        private final String url;
+        private final List<String> urls;
         private final String what;
-        private final String md5;
+        private final String digest;
         private final Progress progress;
-        private final java.util.function.BooleanSupplier cancelled;
+        private final BooleanSupplier cancelled;
+        /** Where {@link #urls} came from, so a transfer that runs out can ask again; null when addressed. */
+        private final DownloadLocations locations;
+        private final String id;
 
-        private Request(String url, String what, String md5, Progress progress,
-                        java.util.function.BooleanSupplier cancelled) {
-            this.url = url;
+        private Request(List<String> urls, String what, String digest, Progress progress,
+                        BooleanSupplier cancelled, DownloadLocations locations, String id) {
+            this.urls = urls;
             this.what = what;
-            this.md5 = md5;
+            this.digest = digest;
             this.progress = progress;
             this.cancelled = cancelled;
+            this.locations = locations;
+            this.id = id;
         }
 
         /** The line the chrome shows, present tense — {@code "Downloading engine band 17"}. */
         public Request named(String what) {
-            return new Request(url, what, md5, progress, cancelled);
+            return new Request(urls, what, digest, progress, cancelled, locations, id);
         }
 
         /** Where to report. Defaults to {@link Progress#NONE}, which is a real answer, not a stub. */
         public Request reporting(Progress progress) {
-            return new Request(url, what, md5, progress == null ? Progress.NONE : progress, cancelled);
+            return new Request(urls, what, digest, progress == null ? Progress.NONE : progress, cancelled,
+                    locations, id);
         }
 
         /**
@@ -172,53 +217,133 @@ public final class Downloads {
          * button. {@code JobContext} says this in as many words: <i>"Work that never polls is not wrong,
          * merely uninterruptible."</i> A 110 MB transfer is not something to leave uninterruptible.</p>
          */
-        public Request cancelledWhen(java.util.function.BooleanSupplier cancelled) {
-            return new Request(url, what, md5, progress,
-                    cancelled == null ? NEVER_CANCELLED : cancelled);
+        public Request cancelledWhen(BooleanSupplier cancelled) {
+            return new Request(urls, what, digest, progress, cancelled == null ? NEVER_CANCELLED : cancelled,
+                    locations, id);
         }
 
         /**
-         * The expected digest.
+         * The expected digest, tagged with its algorithm — {@code sha1:…}, {@code gitblob:…}, or a bare MD5.
          *
-         * <p>Null — the default — is a real state rather than a gap: it is what {@code CacheFiles} means
-         * by "any non-empty file will do", and it is the honest posture wherever upstream publishes no
-         * digest to pin, which is where the MCP mapping data still is.</p>
+         * <p>Null is a real state rather than a gap: it is what {@code CacheFiles} means by "any non-empty
+         * file will do", and it is the honest posture for something nobody can pin, such as the latest JDK
+         * sources. A located transfer already carries the jar's pin.</p>
          */
-        public Request verifying(String md5) {
-            return new Request(url, what, md5, progress, cancelled);
+        public Request verifying(String digest) {
+            return new Request(urls, what, digest, progress, cancelled, locations, id);
         }
 
-        /** Opens it. The caller reads {@link Download#stream()} and closes the {@link Download}. */
+        /** The digest this transfer is checked against, or null — and so what a cached copy must match. */
+        public String digest() {
+            return digest;
+        }
+
+        /** The first URL tried, or null — what a {@link Batch} sizes itself by. */
+        String firstUrl() {
+            return urls.isEmpty() ? null : urls.get(0);
+        }
+
+        /** Opens the first location that answers. The caller reads {@link Download#stream()} and closes it. */
         public Download open() throws IOException {
-            return Download.start(url, what, progress, cancelled);
+            List<String> tried = new ArrayList<>();
+            IOException failure = null;
+            for (List<String> round = firstRound(); !round.isEmpty(); round = nextRound(tried)) {
+                for (String url : round) {
+                    tried.add(url);
+                    if (cancelled.getAsBoolean()) throw new InterruptedIOException("cancelled");
+                    try {
+                        return Download.start(url, what, progress, cancelled);
+                    } catch (InterruptedIOException stopped) {
+                        throw stopped;
+                    } catch (IOException failed) {
+                        failure = failed;
+                    }
+                }
+            }
+            throw failure != null ? failure : new FileNotFoundException("nowhere to download " + what + " from");
         }
 
         /**
          * Fetches the whole thing into {@code target}, verified and installed atomically.
          *
-         * @return whether the file is now valid there; false means the digest did not match and nothing
-         *         was installed, which is a caller's cue to report rather than to retry in a loop
+         * @return whether the file is now valid there; false means every location that answered served
+         *         other bytes than the pin and nothing was installed, which is a caller's cue to report
+         *         rather than to retry in a loop
          */
         public boolean into(Path target) throws IOException {
+            List<String> tried = new ArrayList<>();
+            IOException failure = null;
+            boolean mismatched = false;
+            for (List<String> round = firstRound(); !round.isEmpty(); round = nextRound(tried)) {
+                for (int at = 0; at < round.size(); at++) {
+                    String url = round.get(at);
+                    // AN UNPINNED PARTIAL IS NO BASE FOR ANOTHER HOST: nothing could tell the two halves
+                    // apart. A pinned one is, since a wrong join fails the digest and installs nothing.
+                    if (digest == null && !tried.isEmpty()) Files.deleteIfExists(CacheFiles.partOf(target));
+                    tried.add(url);
+                    try {
+                        if (attempt(url, target, at < round.size() - 1)) return true;
+                        // OTHER BYTES THAN THE PIN: a mirror serving something else. The next may not be.
+                        mismatched = true;
+                    } catch (InterruptedIOException stopped) {
+                        throw stopped;
+                    } catch (IOException failed) {
+                        failure = failed;
+                    }
+                }
+            }
+            if (mismatched) return false;
+            throw failure != null ? failure : new FileNotFoundException("nowhere to download " + what + " from");
+        }
+
+        /** One URL, retried only when it is the last one left. */
+        private boolean attempt(String url, Path target, boolean anotherRemains) throws IOException {
             IOException last = null;
             for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
-                if (cancelled.getAsBoolean()) throw new java.io.InterruptedIOException("cancelled");
+                if (cancelled.getAsBoolean()) throw new InterruptedIOException("cancelled");
                 // WHAT SURVIVED THE LAST ATTEMPT. The `.part` was always kept across a crash so the next
                 // launch could overwrite it; asking how big it is turns that into a resume for free.
                 long have = CacheFiles.partialSize(target);
                 try (Download download = Download.start(url, what, progress, cancelled, have)) {
-                    return CacheFiles.install(target, download.stream(), md5, download.resumed());
-                } catch (java.io.InterruptedIOException stopped) {
+                    return CacheFiles.install(target, download.stream(), digest, download.resumed());
+                } catch (InterruptedIOException stopped) {
                     // ASKED TO STOP is not a failure to retry -- and the .part stays, so resuming later
                     // costs nothing.
                     throw stopped;
                 } catch (IOException failed) {
                     last = failed;
-                    if (attempt == ATTEMPTS || !worthRetrying(failed)) break;
+                    // Another location is likelier to answer than this one is to recover.
+                    if (attempt == ATTEMPTS || !worthRetrying(failed) || anotherRemains) break;
                     sleep(RETRY_BACKOFF_MILLIS * attempt);
                 }
             }
             throw last;
+        }
+
+        /** Where to start: a located transfer first lets a day-old copy of the locations refresh. */
+        private List<String> firstRound() {
+            if (locations == null) return urls;
+            locations.refreshIfStale();
+            return untried(Collections.<String>emptyList());
+        }
+
+        /**
+         * Once every URL has failed: whatever master's copy of the locations adds. Asked even when this
+         * call did not fetch it — another download may just have.
+         */
+        private List<String> nextRound(List<String> tried) {
+            if (locations == null) return Collections.emptyList();
+            locations.refresh();
+            return untried(tried);
+        }
+
+        private List<String> untried(List<String> tried) {
+            DownloadLocations.Location where = locations.find(id);
+            List<String> fresh = new ArrayList<>();
+            for (String url : where == null ? urls : where.urls()) {
+                if (!tried.contains(url)) fresh.add(url);
+            }
+            return fresh;
         }
     }
 
@@ -249,10 +374,9 @@ public final class Downloads {
         private final List<Artifact> artifacts;
         private final String what;
         private final Progress progress;
-        private final java.util.function.BooleanSupplier cancelled;
+        private final BooleanSupplier cancelled;
 
-        private Batch(List<Artifact> artifacts, String what, Progress progress,
-                      java.util.function.BooleanSupplier cancelled) {
+        private Batch(List<Artifact> artifacts, String what, Progress progress, BooleanSupplier cancelled) {
             this.artifacts = artifacts;
             this.what = what;
             this.progress = progress;
@@ -268,9 +392,8 @@ public final class Downloads {
         }
 
         /** @see Request#cancelledWhen */
-        public Batch cancelledWhen(java.util.function.BooleanSupplier cancelled) {
-            return new Batch(artifacts, what, progress,
-                    cancelled == null ? NEVER_CANCELLED : cancelled);
+        public Batch cancelledWhen(BooleanSupplier cancelled) {
+            return new Batch(artifacts, what, progress, cancelled == null ? NEVER_CANCELLED : cancelled);
         }
 
         /**
@@ -311,8 +434,14 @@ public final class Downloads {
             // fifteen files instead of fifteen bars that each start again at zero.
             long total = 0;
             for (Artifact artifact : artifacts) {
-                long length = lengthOf(artifact.url());
-                if (length > 0) total += length;
+                long length = lengthOf(artifact.request().firstUrl());
+                // ONE UNKNOWN AND THE TOTAL IS A GUESS, so a sweep instead -- and a first host that is
+                // down costs one timeout here rather than one per artifact.
+                if (length <= 0) {
+                    total = -1;
+                    break;
+                }
+                total += length;
             }
             progress.begin(what, total > 0 ? total : -1, Progress.Unit.BYTES);
 
@@ -329,9 +458,8 @@ public final class Downloads {
                 progress.detail(artifact.fileName());
                 Path target = directory.resolve(artifact.fileName());
                 try {
-                    if (!CacheFiles.isValid(target, artifact.md5())
-                            && !from(artifact.url()).verifying(artifact.md5())
-                                    .named(what).reporting(Progress.NONE)
+                    if (!CacheFiles.isValid(target, artifact.request().digest())
+                            && !artifact.request().named(what).reporting(Progress.NONE)
                                     .cancelledWhen(cancelled).into(target)) {
                         return new Result(installed, artifacts.size(), artifact.fileName());
                     }
@@ -342,7 +470,7 @@ public final class Downloads {
                 // AGGREGATE, and stepped per FILE rather than per chunk: an inner transfer reporting into
                 // the same Progress would reset the bar to its own size fifteen times.
                 try {
-                    done += java.nio.file.Files.size(target);
+                    done += Files.size(target);
                 } catch (IOException unreadable) {
                     // Installed but unmeasurable is not a failure of the batch; the bar just does not move.
                 }
@@ -402,7 +530,7 @@ public final class Downloads {
     }
 
     /** An open response: what to read, and how much of it there is. */
-    public static final class Body implements java.io.Closeable {
+    public static final class Body implements Closeable {
 
         private final InputStream stream;
         private final long length;
@@ -447,6 +575,7 @@ public final class Downloads {
      * {@link Batch}, which has to total up sizes it is not yet ready to read.</p>
      */
     public static long lengthOf(String url) {
+        if (url == null) return -1L;
         try {
             URLConnection connection = connect(url);
             if (connection instanceof HttpURLConnection http) {
