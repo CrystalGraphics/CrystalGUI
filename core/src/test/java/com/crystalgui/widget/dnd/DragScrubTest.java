@@ -136,6 +136,44 @@ public class DragScrubTest {
         assertThrows(IllegalArgumentException.class, () -> new DragScrub.Spec(false, 5, 1));
     }
 
+    // ── A declared rate ─────────────────────────────────────────────────────
+
+    /**
+     * <b>A field that knows its own scale says so, and magnitude stops mattering.</b>
+     *
+     * <p>The curve is right for an unbounded number and wrong for a bounded one: a percentage at 0 crawls
+     * while the same field at 100 moves ten times as fast, so one gesture means two things at two ends of
+     * one field. ImGui splits the same way, taking {@code v_speed} from the range when it has one.</p>
+     */
+    @Test
+    public void aDeclaredRateIsTheRateAtEveryMagnitude() {
+        DragScrub.Spec perPixel = DragScrub.Spec.FLOAT.withRate(1d);
+
+        assertEquals(20d, DragScrub.value(0, 20f, 0f, NONE, perPixel), EPS);
+        assertEquals(120d, DragScrub.value(100, 20f, 0f, NONE, perPixel), EPS);
+        assertEquals("the same hand movement is worth the same at both ends",
+                DragScrub.value(0, 20f, 0f, NONE, perPixel),
+                DragScrub.value(100, 20f, 0f, NONE, perPixel) - 100d, EPS);
+    }
+
+    /** Shift and Ctrl still apply to it: they are the hand's, not the value's. */
+    @Test
+    public void modifiersStillScaleADeclaredRate() {
+        DragScrub.Spec perPixel = DragScrub.Spec.FLOAT.withRate(1d);
+
+        assertEquals(200d, DragScrub.value(0, 20f, 0f, CgModifiers.SHIFT, perPixel), EPS);
+        assertEquals(2d, DragScrub.value(0, 20f, 0f, CgModifiers.CTRL, perPixel), EPS);
+    }
+
+    /** A range still clamps a declared rate, and a spec with no rate keeps the curve. */
+    @Test
+    public void aDeclaredRateChangesNothingElse() {
+        DragScrub.Spec bounded = DragScrub.Spec.FLOAT.withRate(1d).withRange(0, 10);
+        assertEquals(10d, DragScrub.value(0, 400f, 0f, NONE, bounded), EPS);
+        assertEquals(DragScrub.unitsPerPixel(50, false, NONE),
+                DragScrub.unitsPerPixel(50, DragScrub.Spec.FLOAT, NONE), EPS);
+    }
+
     // ── The anti-compounding property ───────────────────────────────────────
 
     /**

@@ -70,7 +70,7 @@ public final class DragScrub {
      * <p>Mirrors what {@code NumberControl} already knows about itself, so the gesture never grows a
      * second opinion about a field's shape.</p>
      */
-    public record Spec(boolean integral, double min, double max) {
+    public record Spec(boolean integral, double min, double max, double unitsPerPixel) {
 
         /** Unbounded, fractional — the common case. */
         public static final Spec FLOAT = new Spec(false, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY);
@@ -82,8 +82,24 @@ public final class DragScrub {
             if (min > max) throw new IllegalArgumentException("min " + min + " exceeds max " + max);
         }
 
+        /** No declared rate: the magnitude curve decides it. @see DragScrub#unitsPerPixel(double, Spec, int) */
+        public Spec(boolean integral, double min, double max) {
+            this(integral, min, max, Double.NaN);
+        }
+
         public Spec withRange(double newMin, double newMax) {
-            return new Spec(integral, newMin, newMax);
+            return new Spec(integral, newMin, newMax, unitsPerPixel);
+        }
+
+        /**
+         * States what one pixel of hand movement is worth, for a field that knows its own scale.
+         *
+         * <pre>{@code
+         * Spec.FLOAT.withRate(1d);   // a percentage, a coordinate: one unit per pixel
+         * }</pre>
+         */
+        public Spec withRate(double perPixel) {
+            return new Spec(integral, min, max, perPixel);
         }
     }
 
@@ -124,6 +140,28 @@ public final class DragScrub {
     }
 
     /**
+     * The rate {@code spec} asks for: its own if it declares one, the curve above otherwise.
+     *
+     * <p><b>A field that knows its own scale should say so.</b> The curve reads the rate off how big the
+     * number is, which is right for an unbounded quantity and wrong for every bounded one: a percentage
+     * sitting at 0 crawls at 0.03%/px while the same field at 100 moves ten times as fast, so one gesture
+     * means two different things at two ends of one field — which reads as the value sticking rather than
+     * as a rate. ImGui has the same split, deriving {@code v_speed} from the range whenever a bounded
+     * {@code DragFloat} is given one.</p>
+     *
+     * <p>Shift and Ctrl still apply: they are properties of the hand, not of the value.</p>
+     */
+    public static double unitsPerPixel(double anchorValue, Spec spec, int modifiers) {
+        double declared = spec.unitsPerPixel();
+        if (!(declared > 0d) || !Double.isFinite(declared)) {
+            return unitsPerPixel(anchorValue, spec.integral(), modifiers);
+        }
+        if (CgModifiers.hasShift(modifiers)) declared *= COARSE_MULTIPLIER;
+        if (CgModifiers.hasCtrl(modifiers)) declared *= FINE_MULTIPLIER;
+        return declared;
+    }
+
+    /**
      * The value a drag of {@code (dxPixels, dyPixels)} away from {@code anchorValue} produces.
      *
      * <p>Deltas are in <b>physical pixels</b>, like {@link #DEFAULT_THRESHOLD_PX} and for the same reason:
@@ -132,7 +170,7 @@ public final class DragScrub {
      * converting; {@code NumberControl} does it by measuring its own handle.</p>
      */
     public static double value(double anchorValue, float dxPixels, float dyPixels, int modifiers, Spec spec) {
-        double perPixel = unitsPerPixel(anchorValue, spec.integral(), modifiers);
+        double perPixel = unitsPerPixel(anchorValue, spec, modifiers);
         double moved = dominantDelta(dxPixels, dyPixels) * perPixel;
         // No movement means the anchor, exactly — never a rounded version of it. Rounding here instead
         // would snap the value the moment the gesture passed its threshold, and would break the

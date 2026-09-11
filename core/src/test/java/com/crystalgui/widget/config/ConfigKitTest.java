@@ -6,6 +6,7 @@ import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.config.control.ArrayControl;
+import com.crystalgui.widget.config.control.NumberControl;
 import com.crystalgui.core.config.ConfigDescriptor;
 import org.junit.Test;
 
@@ -182,6 +183,18 @@ public class ConfigKitTest extends UiDocumentTestBase {
             row.control().setValueObject(row.control().getValueObject());
             assertEquals(kind + " emitted on a programmatic write", 0, emits[0]);
         }
+    }
+
+    /** <b>A unit shows after the number and is optional when typed</b> — {@code 30} and {@code 30°} are one value. */
+    @Test
+    public void aUnitShowsAfterTheNumberAndIsOptionalWhenTyped() {
+        NumberControl angle = new NumberControl(ConfigDescriptor.number("angle", "Angle").unit("°"), 45d);
+        assertEquals("45°", angle.field().getText());
+
+        angle.field().setText("30°");
+        assertEquals(30d, angle.getValue(), 1e-9);
+        angle.field().setText("12.5");
+        assertEquals(12.5d, angle.getValue(), 1e-9);
     }
 
     /** The panel's one signal carries the id, so a host wires a panel rather than a row at a time. */
