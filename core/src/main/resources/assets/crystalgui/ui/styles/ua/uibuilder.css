@@ -100,52 +100,31 @@ builderpane {
     background-color: var(--builder-surface-bg, #1B1B1F);
 }
 
-/* A PANEL'S TAB STRIP, and it takes its numbers from the same tokens rather than being talked into
- * looking like one. The builder's toolbar does the same job at the same place -- one chrome row above
- * a content area -- so a second vocabulary for it is a second thing to keep in step, and they drift.
+/* THE BUILDER'S ONE CHROME ROW: a ContextToolbar over the builder toolbar, so Free Transform's numbers
+ * take the toolbar's place rather than pushing the canvas down a row. Its height is the bar's own.
  *
- * `--panel-bg` rather than `--tab-strip-bg`: the strip is TRANSPARENT and what you see behind an
- * Inspector's tabs is the panel underneath it. The toolbar sits over the editor pane, whose colour is
- * not that, so naming the strip's own token would reproduce the transparency and not the colour.
- *
- * `padding-left: 5px` is the rail's, and derived the same way: the tab's own 4px padding plus this puts
- * a label where a panel header's title sits. No vertical padding -- the row's height is the token's and
- * `align-items: center` places what is in it, exactly as the rail does. */
-buildertoolbar {
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    /* Between two drawn EDGES rather than two runs of text, now the controls wear outlines.
-     *
-     * The 4px this carried for a long time was never applied at all -- `gap:` reached the cascade and
-     * not the layout, so the row had no gap and nobody could tell, the controls having had no borders
-     * to touch. @see BoxStyle, which is where that was fixed. */
-    gap: 4;
+ * The ground is a panel TAB STRIP's, from the same tokens -- the same job at the same place, and a second
+ * vocabulary for it would drift. `--panel-bg` rather than `--tab-strip-bg`: the strip is TRANSPARENT and
+ * what shows behind an Inspector's tabs is the panel underneath it. */
+builderpane > contexttoolbar {
     padding-left: 4px;
     padding-right: 4px;
-    min-height: var(--panel-header-h, 22px);
     background: var(--panel-bg, #2B2B2B);
+}
+
+/* Every page the row shows spaces its controls alike: between two drawn EDGES, now the controls wear
+ * outlines. */
+builderpane > contexttoolbar > .__context-page__ {
+    gap: 4;
 }
 
 /* NOTHING HERE FOR THE ENTRIES. They are outlined controls because every workbench control is --
  * @see `workbench button, workbench dropdown` in ua/workbench.css -- and a copy of that rule scoped to
  * this toolbar would be a second place to change it and a second place to forget. */
 
-/* ── Free Transform options bar ──────────────────────────────────────────────────────────────────────
+/* ── Free Transform options ──────────────────────────────────────────────────────────────────────────
  *
- * The toolbar's twin, one row lower: same height, same ground, same 4px gaps, because it IS a second
- * toolbar and reads as one strip broken in two if it is not. Shown only while the box is up, which the
- * widget decides -- a bar that was merely empty would still take its 22px out of the canvas. */
-transformoptions {
-    width: 100%;
-    flex-direction: row;
-    align-items: center;
-    gap: 4;
-    padding-left: 4px;
-    padding-right: 4px;
-    min-height: var(--panel-header-h, 22px);
-    background: var(--panel-bg, #2B2B2B);
-}
+ * Free Transform's page in the row above, which gives it its height, ground and gaps. */
 
 .__transform-field__ {
     flex-direction: row;

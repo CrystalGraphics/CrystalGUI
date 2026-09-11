@@ -153,9 +153,6 @@ public final class TransformBox extends UIElement {
     /** The most recent press, KEPT after release: what a typed number is understood to be about. */
     private Grip lastGrip = Grip.NONE;
 
-    @Nullable
-    private TransformOptionsBar options;
-
     /** What the last commit wrote, for Transform Again. @see #transformAgain */
     @Nullable
     private Again again;
@@ -710,16 +707,6 @@ public final class TransformBox extends UIElement {
     /** @see #lastGrip */
     public Grip lastGrip() {
         return lastGrip;
-    }
-
-    /** The bar showing this gesture's numbers, once the editor has built it. */
-    public void showNumbersIn(TransformOptionsBar options) {
-        this.options = options;
-    }
-
-    @Nullable
-    public TransformOptionsBar options() {
-        return options;
     }
 
     /** How many adjustments can still be stepped back. For a test. */
