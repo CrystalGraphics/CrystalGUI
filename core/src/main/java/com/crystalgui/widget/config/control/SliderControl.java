@@ -92,6 +92,12 @@ public class SliderControl extends ValueControl<Double> {
         return number;
     }
 
+    /** While the number beside the slider holds typed text that has not landed. */
+    @Override
+    public boolean isEditing() {
+        return number.isEditing();
+    }
+
     @Override
     protected void writeToWidgets(@Nullable Double value) {
         double d = value == null ? 0d : value;

@@ -126,6 +126,15 @@ public class VectorControl extends ValueControl<double[]> {
         }
     }
 
+    /** While any component holds typed text that has not landed. */
+    @Override
+    public boolean isEditing() {
+        for (NumberControl component : components) {
+            if (component.isEditing()) return true;
+        }
+        return false;
+    }
+
     public List<NumberControl> components() {
         return List.copyOf(components);
     }

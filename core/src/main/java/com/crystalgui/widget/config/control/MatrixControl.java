@@ -103,6 +103,15 @@ public class MatrixControl extends ValueControl<double[]> {
         }
     }
 
+    /** While any cell holds typed text that has not landed. */
+    @Override
+    public boolean isEditing() {
+        for (NumberControl cell : cells) {
+            if (cell.isEditing()) return true;
+        }
+        return false;
+    }
+
     @Override
     public boolean selfLabelling() {
         return true;

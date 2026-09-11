@@ -81,6 +81,12 @@ public class TextControl extends ValueControl<String> {
         return field;
     }
 
+    /** Text typed and not yet landed. */
+    @Override
+    public boolean isEditing() {
+        return field.hasPendingEdit();
+    }
+
     @Override
     public boolean isInvalid() {
         return invalid;
