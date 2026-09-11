@@ -900,7 +900,14 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
   CrystalGraphics' `CgGL` facade. **No LWJGL imports** — the old "V3.x legacy, raw GL11, scheduled for
   deletion" note is obsolete.
 - **`FontFamilyCache`** — `(font-family stack, target px)` → `CgFontFamily`, cached. Reference
-  equality on the result is therefore meaningful and is relied on by `UIText`.
+  equality on the result is therefore meaningful and is relied on by `UIText`. An entry is a resource
+  path (`crystalgui:ui/fonts/x.ttf` — it holds a `:` or `/`, or ends in a font extension), an installed
+  family name, or a generic family (`monospace`, `system-ui`); whatever the stack cannot draw comes from
+  the installed fonts, per script, through CrystalGraphics' `CgSystemFonts` — as in a browser.
+  **The tests run with `-Dcrystalgui.font.systemFonts=false`** (`core/build.gradle.kts`), so no result
+  depends on the machine's fonts; `FontFamilyCache.useSystemFonts` hands a test its own. A Han
+  character takes the language its own text shows (kana → Japanese, Hangul → Korean), else the
+  player's: `HostServices.locale()`, pushed into `FontFamilyCache.useLocale` by `DesktopHost` each frame.
 
 ## Drawables — `render/texture/`
 
@@ -1047,14 +1054,15 @@ family changed" check answers no.
 
 `text-overflow: ellipsis` truncates the **string** and re-shapes, never drops glyphs from the shaped run
 — shaping is not a per-character mapping, so cutting the glyph array splits clusters. The ellipsis is
-`…` when the font stack can draw U+2026 and `...` when it cannot, which is WebKit/Blink's own rule and
-not hypothetical: the bundled `MinecraftRegular.otf` has no U+2026, and without the fallback a
-truncated label draws a blank advance and is indistinguishable from `clip`. `displayedText()` returns
-what will actually be painted — the only observable evidence that truncation fired.
+`…` when the **primary** font can draw U+2026 and `...` when it cannot — Blink's rule
+(`LineTruncator::ComputeEllipsisText` asks `PrimaryFont()` alone). It asked the whole stack until system
+fallback made every stack able to draw one, in a face other than the label's: the bundled
+`MinecraftRegular.otf` has no U+2026, and its labels end in three of its own periods. `displayedText()`
+returns what will actually be painted — the only observable evidence that truncation fired.
 
 It retains a `CgShapedParagraph`, rebuilt only when the text or the resolved `CgFontFamily` instance
 actually changes — never on a resize. Reference equality on the family is correct because
-`FontFamilyCache.resolve` caches by `(paths, targetPx)`.
+`FontFamilyCache.resolve` caches by `(stack, targetPx)`.
 
 ---
 
@@ -1358,8 +1366,9 @@ com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (t
                                TaskbarDesigner, WindowPreview, WindowThumbnail
   .switcher                    WindowSwitcher — Mod+Tab, MRU order, live thumbnails
   .host                        ScreenOverlay, HostServices, DesktopHost, DesktopWindowMount — what a
-                               LOADER talks to. Three questions (where private files go, how big a pixel
-                               is, is there a connection) and it gets a desktop, a workspace that
+                               LOADER talks to. Four questions (where private files go, how big a pixel
+                               is, is there a connection, what language the player reads) and it gets a
+                               desktop, a workspace that
                                follows the wire, and somewhere for a server's windows to land
   .app                         WHAT AN APPLICATION IS, and it names no workbench: ApplicationKinds (the
                                ServiceLoader SPI a layer declares its products through -- nothing
@@ -1680,6 +1689,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 | `textures/gui/gdp_styles.png` | **Unreferenced by any code today.** |
 | `textures/gui/Spritesheet_UI_Flat.png` | Unreferenced by any stylesheet today. |
 | `ui/fonts/Minecraft.otf`, `MinecraftRegular.otf` | Public-domain MC fonts. |
+| `ui/fonts/IBMPlexSans-Regular.ttf`, `JetBrainsMono-Regular.ttf` | The UI face and the code face, SIL OFL 1.1, each with its licence beside it (`IBMPlexSans-OFL.txt`, `OFL.txt`). IBM Plex moved here from CrystalGraphics on 2026-09-11, which now ships no fonts: anything neither face covers comes from the installed fonts (`CgSystemFonts`). |
 | `shaders/gui_quad.shader` | Default material bound by `beginFrame`. **Every quad material here antialiases its own edges when rotated or sheared, with no MSAA** — the `CG_QUAD_EDGE_*` helpers in `env/buffer/quad.glsl`, injected by `#pragma cg_use quad` (padded geometry, exact-area coverage per edge), `cg_texel_aa_sample` from `lib/texel.glsl` for pixel art, and a wider `sdf_coverage` ramp for the SDF materials; see `CrystalGraphics/AGENTS.md` § *Engine Buffers*. Axis-aligned content is untouched, measured pixel-identical. The `edges` page of `cgui-gallery` shows every material rotated and skewed. |
 | `shaders/gui_rect.shader` | SDF rounded rects. |
 | `shaders/gui_layer_blit.shader` | Visual-layer FBO composite. |

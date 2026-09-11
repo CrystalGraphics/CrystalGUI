@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -591,6 +592,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
             @Override public float uiScale() { return 1f; }
             @Override public String desktopId() { return "test"; }
             @Override public ProtocolConnection<Object> connection() { return null; }
+            @Override public Locale locale() { return Locale.getDefault(); }
         });
     }
 

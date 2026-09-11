@@ -12,6 +12,7 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.window.WindowMount;
+import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -71,6 +72,8 @@ public final class DesktopHost implements Disposable {
 
     private DesktopHost(HostServices services) {
         this.services = services;
+        // THE LANGUAGE BEFORE ANY TEXT, so no font family is built in the JVM's and rebuilt a frame later.
+        FontFamilyCache.useLocale(services.locale());
         this.document = new UIDocument();
         // THE SCALE, ONCE. It lives on the box tree's root transform, which is the matrix layout
         // composes, painting reads and hit-testing inverts -- so there is no second place it can be
@@ -150,6 +153,8 @@ public final class DesktopHost implements Disposable {
      * and on some of them it is not even the same call every frame.</p>
      */
     public void frame(float deltaSeconds) {
+        // Re-asked like the connection: a change of the game's language reaches this frame's text.
+        FontFamilyCache.useLocale(services.locale());
         ProtocolConnection<Object> live = services.connection();
         if (live != null) {
             if (workspace == null) {
