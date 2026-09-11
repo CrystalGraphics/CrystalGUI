@@ -1,7 +1,7 @@
 # Runtime downloads
 
-[`locations.json`](locations.json) is where the language mod downloads everything from: Minecraft's name
-mappings, the engine jars a jar does not carry, the JDK sources. **No download address is written anywhere
+[`locations.json`](locations.json) is where CrystalGUI downloads everything from — today Minecraft's name
+mappings, the engine jars a jar does not carry and the JDK sources. **No download address is written anywhere
 else**, and every released jar re-reads the copy on `master` — so a dead link is fixed for players by
 editing this file, with no new release.
 

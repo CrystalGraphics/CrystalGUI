@@ -1,17 +1,16 @@
 package com.crystalgui.language.java.assist;
 
 import com.crystalgui.core.async.Progress;
-import com.crystalgui.language.cache.CacheFiles;
-import com.crystalgui.language.cache.Download;
-import com.crystalgui.language.cache.DownloadLocations;
-import com.crystalgui.language.cache.Downloads;
-import com.crystalgui.language.cache.TarArchive;
+import com.crystalgui.core.cache.CacheFiles;
+import com.crystalgui.core.cache.Download;
+import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgui.core.cache.Downloads;
+import com.crystalgui.core.cache.TarArchive;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashSet;

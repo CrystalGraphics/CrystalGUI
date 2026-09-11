@@ -1,4 +1,4 @@
-package com.crystalgui.language.cache;
+package com.crystalgui.core.cache;
 
 import org.junit.Assume;
 import org.junit.Test;
@@ -25,13 +25,14 @@ import static org.junit.Assert.assertTrue;
 /**
  * <b>Every runtime download is named in {@code download/locations.json}, and nowhere else.</b>
  *
- * <p>A URL written into a shipped class is one no released jar can repair when its host moves. So the
- * sources that fetch things — {@code language/} and every loader's {@code lang} source set — name an id,
- * and the shipped file must answer every id they name.</p>
+ * <p>A URL written into a shipped class is one no released jar can repair when its host moves. So code
+ * anywhere — {@code core/}, {@code language/} and every loader — names an id, and the shipped file must
+ * answer every id it names.</p>
  */
 public class DownloadUrlsLiveInOneFileTest {
 
-    private static final Pattern URL_LITERAL = Pattern.compile("\"https?://");
+    /** An address, not a bare scheme: {@code startsWith("https://")} checks a link and fetches nothing. */
+    private static final Pattern URL_LITERAL = Pattern.compile("\"https?://[^\"\\s]+");
 
     /** {@code located("mcp/stable-12/methods.csv")}, or a prefix: {@code located("forge/mcp-config/" + v)}. */
     private static final Pattern LOCATED = Pattern.compile("located\\(\"([^\"]+)\"\\s*(\\+)?");
@@ -92,11 +93,12 @@ public class DownloadUrlsLiveInOneFileTest {
                 shipped.find("forge/mcp-config/1.20.1").urls());
     }
 
-    /** {@code language/src/main/java}, and every {@code src/lang/java} under {@code runtime/}. */
+    /** Main sources of {@code core/} and {@code language/}, and every loader's {@code src/main} and {@code src/lang}. */
     private static List<Path> sources() throws IOException {
         String root = System.getProperty("cgui.test.repoRoot");
         Assume.assumeNotNull(root);
         List<Path> files = new ArrayList<>();
+        collect(Paths.get(root, "core", "src", "main", "java"), files);
         collect(Paths.get(root, "language", "src", "main", "java"), files);
         Files.walkFileTree(Paths.get(root, "runtime"), new SimpleFileVisitor<Path>() {
             @Override
@@ -107,7 +109,8 @@ public class DownloadUrlsLiveInOneFileTest {
                 if (name.equals("build") || name.equals("run") || name.startsWith(".")) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
-                if (directory.endsWith(Paths.get("src", "lang", "java"))) {
+                if (directory.endsWith(Paths.get("src", "main", "java"))
+                        || directory.endsWith(Paths.get("src", "lang", "java"))) {
                     collect(directory, files);
                     return FileVisitResult.SKIP_SUBTREE;
                 }

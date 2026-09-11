@@ -1,8 +1,8 @@
 package com.crystalgui.language.java.assist;
 
 import com.crystalgui.core.async.Progress;
-import com.crystalgui.language.cache.DownloadLocations;
-import com.crystalgui.language.cache.TarArchive;
+import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgui.core.cache.TarArchive;
 import org.junit.Assume;
 import org.junit.Test;
 

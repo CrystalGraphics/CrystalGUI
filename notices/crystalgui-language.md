@@ -27,7 +27,7 @@ reflection looks up by string.
 **Minecraft's name mappings are not in this jar and are not redistributed.** They are fetched at
 runtime into the user's own game directory — MCP `stable_12` from MinecraftForge's FML repository for
 1.7.10; Mojang's `client.txt` with MinecraftForge's MCPConfig or Fabric's intermediary for 1.20.x — from
-the addresses in `assets/crystalgui/download/locations.json`.
+the addresses `crystalgui-<version>.jar` carries in `assets/crystalgui/download/locations.json`.
 
 `com/crystalgui/language/**`, `com/crystalgui/mc/lang/**` and `com/crystalgui/mc/*/lang/**` are
 CrystalGUI's own and are LGPL-3.0-or-later.

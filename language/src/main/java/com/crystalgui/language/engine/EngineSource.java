@@ -1,9 +1,9 @@
 package com.crystalgui.language.engine;
 
-import com.crystalgui.language.cache.DownloadLocations;
-import com.crystalgui.language.cache.Downloads;
+import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgui.core.cache.Downloads;
 import com.crystalgui.core.async.Progress;
-import com.crystalgui.language.cache.CacheFiles;
+import com.crystalgui.core.cache.CacheFiles;
 
 import java.io.File;
 import java.io.InputStream;

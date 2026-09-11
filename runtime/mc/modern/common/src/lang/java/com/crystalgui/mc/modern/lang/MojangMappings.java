@@ -1,8 +1,8 @@
 package com.crystalgui.mc.modern.lang;
 
-import com.crystalgui.language.cache.Download;
-import com.crystalgui.language.cache.DownloadLocations;
-import com.crystalgui.language.cache.Downloads;
+import com.crystalgui.core.cache.Download;
+import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgui.core.cache.Downloads;
 import com.crystalgui.language.platform.MappingCoordinates;
 
 import com.google.gson.JsonElement;

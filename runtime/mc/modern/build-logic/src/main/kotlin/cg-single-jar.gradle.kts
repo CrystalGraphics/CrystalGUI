@@ -122,7 +122,6 @@ registerSingleJarPipeline(SingleJarSpec(
             // player who never writes a script does not download the engines, so one of these
             // reappearing here is the step silently undone.
             "com/crystalgui/language/", "org/treesitter/", "assets/crystalgui/engines/",
-            "assets/crystalgui/download/",
             // CrystalGraphics ships its own jar. A second copy of any of its packages here is a split
             // package on ModLauncher, and LoaderProbe/CrashVariant are the ones a refactor would drag in.
             "com/crystalgraphics/",
@@ -148,6 +147,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/fabric/CrystalGUIFabric.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
+            // Where every download comes from, beside core's DownloadLocations, which reads it.
+            "assets/crystalgui/download/locations.json",
         ))
         requiredManifest.set(mapOf(
             "FMLCorePluginContainsFMLMod" to "true",
@@ -252,6 +253,8 @@ registerSingleJarPipeline(SingleJarSpec(
             // Unrelocated ASM is a split package against ModLauncher's own, and three of the four
             // loaders die before a mod class loads -- two of them with nothing in any log.
             "org/objectweb/asm/",
+            // The host jar's, beside the code that reads it. A copy here could be an older one.
+            "assets/crystalgui/download/",
         ))
         expectSingle.set(listOf("com/crystalgui/language/"))
         // Counted by simple name, as the host jar's own note explains. NOT `ScriptService`: J9's
@@ -280,8 +283,6 @@ registerSingleJarPipeline(SingleJarSpec(
             "assets/crystalgui/engines/8/index.txt",
             "assets/crystalgui/engines/11/index.txt",
             "assets/crystalgui/engines/17/index.txt",
-            // Where every download comes from; without it the jar can fetch nothing at all.
-            "assets/crystalgui/download/locations.json",
         ))
         requiredManifest.set(mapOf(
             "FMLCorePluginContainsFMLMod" to "true",

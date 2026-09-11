@@ -1,7 +1,7 @@
 package com.crystalgui.language.map;
 
-import com.crystalgui.language.cache.CacheFiles;
-import com.crystalgui.language.cache.Downloads;
+import com.crystalgui.core.cache.CacheFiles;
+import com.crystalgui.core.cache.Downloads;
 import com.crystalgui.language.map.format.MappingFiles;
 import com.crystalgui.language.platform.MappingCoordinates;
 

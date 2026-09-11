@@ -1,7 +1,7 @@
 package com.crystalgui.language.engine;
 
 import com.crystalgui.core.async.Progress;
-import com.crystalgui.language.cache.DownloadLocations;
+import com.crystalgui.core.cache.DownloadLocations;
 
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;

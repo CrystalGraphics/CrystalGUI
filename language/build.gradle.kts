@@ -235,9 +235,6 @@ dependencies {
     // This module had no nullability annotations at all before, which was an accident of nothing needing
     // them rather than a decision.
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
-    // Gson, for download/locations.json: compiled against the oldest version a host runs -- Minecraft
-    // 1.7.10's -- and supplied by the game, as core/build.gradle.kts explains.
-    compileOnly("com.google.code.gson:gson:2.2.4")
     testCompileOnly("com.google.code.findbugs:jsr305:3.0.2")
 
 
@@ -728,10 +725,10 @@ tasks.register("checkEngineBands") {
 
 // ── download/locations.json: where every runtime download comes from ─────────────────────────────────
 //
-// ONE FILE at the repository root, bundled here AND re-read from master by every released jar, so a dead
-// link is repaired for players by editing it; download/README.md is the guide to editing it.
-// DownloadLocations reads it at run time and the tasks below read it with JsonSlurper -- two readings,
-// which DownloadUrlsLiveInOneFileTest holds to the same addresses.
+// ONE FILE at the repository root, bundled by :core beside DownloadLocations and re-read from master by
+// every released jar, so a dead link is repaired for players by editing it; download/README.md is the
+// guide. The tasks live here because the engine bands they check are this module's. They read the file
+// with JsonSlurper, and core's DownloadUrlsLiveInOneFileTest holds that reading to the runtime's.
 
 val downloadLocationsFile: File = rootProject.file("download/locations.json")
 
@@ -753,10 +750,6 @@ val mirrorLicences = linkedMapOf(
 
 fun mirrorLicenceOf(fileName: String): String? =
     mirrorLicences.entries.firstOrNull { fileName.startsWith(it.key) }?.value
-
-tasks.processResources {
-    from(downloadLocationsFile) { into("assets/crystalgui/download") }
-}
 
 /** A JSON object's members by name; anything else has none. */
 fun membersOf(value: Any?): Map<String, Any?> =

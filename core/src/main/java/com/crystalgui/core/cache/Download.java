@@ -1,4 +1,4 @@
-package com.crystalgui.language.cache;
+package com.crystalgui.core.cache;
 
 import com.crystalgui.core.async.Progress;
 
@@ -16,7 +16,7 @@ import java.util.function.BooleanSupplier;
  *
  * <p>Three consumers fetch things — the MCP mapping data, the engine bands, and M13 §25.5's JDK source
  * extract — and each had grown its own copy of the same five steps: open with timeouts and redirects, ask
- * how big it is, announce it, count the bytes going past, and report them. {@link JdkSourceExtract} had a
+ * how big it is, announce it, count the bytes going past, and report them. {@code JdkSourceExtract} had a
  * private {@code Counting} stream of its own; the next consumer would have had a second one.</p>
  *
  * <p>Every one of those steps has a way to get it subtly wrong, and this class is where each is decided

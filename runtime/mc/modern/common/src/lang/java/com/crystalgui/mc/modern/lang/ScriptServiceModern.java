@@ -7,6 +7,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.MappingCoordinates.Source;
@@ -60,7 +61,9 @@ public final class ScriptServiceModern implements ScriptService {
     public static void install() {
         Minecraft mc = Minecraft.getInstance();
         if (mc == null || mc.gameDirectory == null) return;
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptServiceModern(mc.gameDirectory.toPath()));
+        ScriptServiceModern service = new ScriptServiceModern(mc.gameDirectory.toPath());
+        CgPlatform.provide(ScriptServices.SERVICE, service);
+        DownloadLocations.useCacheRoot(service.cacheRoot());
     }
 
     /**
