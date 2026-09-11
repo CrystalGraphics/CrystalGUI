@@ -266,7 +266,8 @@ splitview.__vertical__ > .__divider__ {
 
 /* ── ContextToolbar ─────────────────────────────────────────────────────────────────────────────
  * One row whose height is its own: a page that swaps in -- a tool's options in place of an editor's
- * toolbar -- cannot move what is under the bar, which is the point of it being one row. */
+ * toolbar -- cannot move what is under the bar, which is the point of it being one row. What does
+ * not fit folds from the end behind the » at the row's end, which opens it in a popover. */
 
 contexttoolbar {
     width: 100%;
@@ -276,11 +277,58 @@ contexttoolbar {
     overflow: clip;
 }
 
+/* WIDTH 0 AND GROW, so the page takes what the » leaves it -- which is the room its items fold to. */
 contexttoolbar > .__context-page__ {
-    width: 100%;
+    width: 0;
+    flex-grow: 1;
     height: 100%;
     flex-direction: row;
     align-items: center;
+}
+
+contexttoolbar > .__context-overflow__ {
+    margin-left: 2px;
+}
+
+.__context-overflow-panel__ {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 4px;
+    /* THE BAR'S OWN GROUND, RESTATED HERE. The panel is a popover, so it lives in the top layer and no
+     * descendant selector in the sheet that themes the toolbar can reach it -- it took the popover's
+     * lighter background instead, and the group hairlines, which are the status bar's divider token,
+     * disappeared into it. What folds behind the » is the bar continued, so it looks like the bar. */
+    background-color: var(--panel-bg, #2B2D30);
+}
+
+/* A HAIRLINE BETWEEN A PAGE'S GROUPS, Photoshop's. The spacing is inside its own width rather than in
+ * margins, so the width the bar folds against is exactly the room it takes. The status bar's divider
+ * token, because it is the same mark in the same kind of strip. */
+.__context-separator__ {
+    width: 7px;
+    height: 100%;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+}
+
+.__context-separator-line__ {
+    width: 1px;
+    height: 14px;
+    background-color: var(--statusbar-sep, #3C3F41);
+}
+
+/* In the popover's column it is a rule across it instead. */
+.__context-overflow-panel__ > .__context-separator__ {
+    width: 100%;
+    height: 7px;
+    flex-direction: column;
+}
+
+.__context-overflow-panel__ > .__context-separator__ > .__context-separator-line__ {
+    width: 100%;
+    height: 1px;
 }
 
 /* ── TabView ────────────────────────────────────────────────────────────────────────────────────
