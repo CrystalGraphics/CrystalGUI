@@ -565,18 +565,12 @@ public final class TransformGesture {
     }
 
     /**
-     * Moves the whole box by a pointer delta in the node's own pixels.
+     * Moves the whole box by a delta from the press, in the node's own pixels.
      *
-     * @param constrainToAxis Shift — keep the move on whichever axis the hand committed to
+     * <p>Shift's axis is the caller's to decide — {@code TransformBox} latches it with an
+     * {@code AxisLock}, as the out-of-flow move does — so a constrained move arrives with one delta zeroed.</p>
      */
-    public void moveBy(float dx, float dy, boolean constrainToAxis) {
-        if (constrainToAxis) {
-            // MEASURED FROM THE WHOLE GESTURE, not the last frame: on a slow diagonal the per-frame
-            // delta crosses back and forth over the diagonal and the box flickers between the two axes.
-            // The same rule the out-of-flow move already uses.
-            if (Math.abs(dx) >= Math.abs(dy)) dy = 0f;
-            else dx = 0f;
-        }
+    public void moveBy(float dx, float dy) {
         tx = pressTx + dx;
         ty = pressTy + dy;
     }

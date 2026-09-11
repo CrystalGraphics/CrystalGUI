@@ -30,6 +30,13 @@ import com.crystalgraphics.platform.input.CgModifiers;
 
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.surface.snap.BoxTargets;
+import com.crystalgui.widget.surface.snap.SnapAxis;
+import com.crystalgui.widget.surface.snap.SnapIndicator;
+import com.crystalgui.widget.surface.snap.SnapScene;
+import com.crystalgui.widget.surface.snap.SnapSolver;
+import com.crystalgui.widget.surface.snap.SnapSolver.AxisSnap;
+import com.crystalgui.widget.surface.snap.SnapSuspend;
 import com.crystalgui.widget.text.UIText;
 
 
@@ -120,6 +127,99 @@ public final class ResizeHandles extends UIElement {
     private final UiBuilderDocument document;
 
     private final List<UIElement> handles = new ArrayList<>();
+
+    /**
+     * <b>The edge you grabbed lands on a point</b> — a corner or a centre of anything under the parent.
+     *
+     * <p>A move offers the whole box and lets three bases decide which of its features lands; a resize
+     * has already decided — it is the dragged edge, and the opposite one is held — so the edge snaps
+     * alone, against points only, as tldraw and Excalidraw both resize.</p>
+     *
+     * <p>Which edge, and what a snap does to the size, follows from the opposite one being held:
+     * dragging the right edge moves it to {@code startX + width}, while dragging the left moves it to
+     * {@code startX + startWidth - width}. @see #holdOppositeEdge</p>
+     *
+     * @return the width and height the snap wants, unclamped
+     */
+    private float[] snapEdges(UIElement node, Spot spot, float startX, float startY,
+                              float startWidth, float startHeight,
+                              float width, float height, int modifiers) {
+        SmartGuides guides = ctx.smartGuides();
+        if (SnapSuspend.isSuspended(modifiers)) {
+            guides.clear();
+            return new float[] {width, height};
+        }
+        float scale = Math.max(0.0001f, CanvasRects.scaleOf(node.parentElement(), this));
+        float tolerance = SnapSolver.SCREEN_TOLERANCE;
+        // Rebuilt per update, unlike a move's: resizing an in-flow node reflows its siblings.
+        SnapScene scene = BoxTargets.sceneFor(node, ctx.artboard());
+        // Into the parent's own space, where the scene is: Box.x() less the parent's scroll.
+        Box parentBox = node.parentElement() == null ? null : node.parentElement().box();
+        if (parentBox != null) {
+            startX -= parentBox.scrollLeft();
+            startY -= parentBox.scrollTop();
+        }
+
+        int dirX = spot.xDirection();
+        int dirY = spot.yDirection();
+        float edgeX = dragged(dirX, startX, startWidth, width);
+        float edgeY = dragged(dirY, startY, startHeight, height);
+        AxisSnap x = AxisSnap.none(0f);
+        AxisSnap y = AxisSnap.none(0f);
+        if (dirX != 0) {
+            float top = leading(dirY, startY, startHeight, height);
+            x = SnapSolver.edge(SnapAxis.HORIZONTAL, edgeX, top, top + height, tolerance, scale, scene);
+        }
+        if (dirY != 0) {
+            float left = leading(dirX, startX, startWidth, width);
+            y = SnapSolver.edge(SnapAxis.VERTICAL, edgeY, left, left + width, tolerance, scale, scene);
+        }
+
+        if (CgModifiers.hasShift(modifiers) && spot.isCorner() && (x.taken() || y.taken())) {
+            // RATIO HELD, ONE AXIS LEADS: the nearer snap is taken and the other side follows the ratio,
+            // since landing both would change the shape. tldraw's snapResizeShapes.
+            float nudgeX = x.taken() ? x.value() - edgeX : 0f;
+            float nudgeY = y.taken() ? y.value() - edgeY : 0f;
+            float ratio = Math.max(MIN_SIZE, startHeight) / Math.max(MIN_SIZE, startWidth);
+            if (x.taken() && (!y.taken() || Math.abs(nudgeX) < Math.abs(nudgeY))) {
+                width = extentFor(dirX, x.value(), startX, startWidth);
+                height = width * ratio;
+                y = AxisSnap.none(0f);
+            } else {
+                height = extentFor(dirY, y.value(), startY, startHeight);
+                width = height / ratio;
+                x = AxisSnap.none(0f);
+            }
+        } else {
+            if (x.taken()) width = extentFor(dirX, x.value(), startX, startWidth);
+            if (y.taken()) height = extentFor(dirY, y.value(), startY, startHeight);
+        }
+        // Round two: each line measured from the size the other axis settled at.
+        float top = leading(dirY, startY, startHeight, height);
+        float left = leading(dirX, startX, startWidth, width);
+        x = SnapSolver.remeasureEdge(x, SnapAxis.HORIZONTAL, top, top + height, scene);
+        y = SnapSolver.remeasureEdge(y, SnapAxis.VERTICAL, left, left + width, scene);
+
+        List<SnapIndicator> found = new ArrayList<>(x.indicators());
+        found.addAll(y.indicators());
+        guides.show(node.parentElement(), found);
+        return new float[] {width, height};
+    }
+
+    /** Where the dragged edge on one axis is: a trailing one grows from the start, a leading one is held. */
+    private static float dragged(int direction, float start, float startExtent, float extent) {
+        return direction > 0 ? start + extent : start + startExtent - extent;
+    }
+
+    /** The extent that puts the dragged edge at {@code at}. @see #dragged */
+    private static float extentFor(int direction, float at, float start, float startExtent) {
+        return direction > 0 ? at - start : start + startExtent - at;
+    }
+
+    /** The box's leading edge at this extent: held at the far side when the leading edge is dragged. */
+    private static float leading(int direction, float start, float startExtent, float extent) {
+        return direction < 0 ? start + startExtent - extent : start;
+    }
 
     /** The live readout during a drag. @see #showBadge */
     private final UIElement badge = new UIElement();
@@ -262,6 +362,10 @@ public final class ResizeHandles extends UIElement {
                 // downstream sees the same figure.
                 width = Math.max(MIN_SIZE, width);
                 height = Math.max(MIN_SIZE, height);
+                float[] snapped = snapEdges(node, spot, startX, startY, startWidth, startHeight,
+                        width, height, modifiers);
+                width = Math.max(MIN_SIZE, snapped[0]);
+                height = Math.max(MIN_SIZE, snapped[1]);
                 write(node, spot, width, height);
                 // AND THE EDGE YOU GRABBED FOLLOWS THE POINTER. Writing a size alone anchors the box at
                 // its own origin, so dragging the LEFT handle left grew it to the RIGHT -- the top-left
@@ -276,12 +380,14 @@ public final class ResizeHandles extends UIElement {
             @Override
             public void onDragEnd(float mx, float my) {
                 hideBadge();
+                ctx.smartGuides().clear();
                 commit(node, before);
             }
 
             @Override
             public void onDragCancel() {
                 hideBadge();
+                ctx.smartGuides().clear();
                 InlineStyleCodec.decodeInto(JsonOps.INSTANCE, before, node);
             }
         });
@@ -336,8 +442,14 @@ public final class ResizeHandles extends UIElement {
         boolean rightAnchored = MoveOutOfFlow.anchorsRight(node);
         boolean bottomAnchored = MoveOutOfFlow.anchorsBottom(node);
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
-            if (spot.xDirection() < 0 && !rightAnchored) l.left(Math.round(startX - growX));
-            if (spot.yDirection() < 0 && !bottomAnchored) l.top(Math.round(startY - growY));
+            // THE BORDER BOX's position, turned into what the inset says: less the margin and the
+            // parent's border. @see MoveOutOfFlow#leftInset
+            if (spot.xDirection() < 0 && !rightAnchored) {
+                l.left(Math.round(MoveOutOfFlow.leftInset(node, startX - growX)));
+            }
+            if (spot.yDirection() < 0 && !bottomAnchored) {
+                l.top(Math.round(MoveOutOfFlow.topInset(node, startY - growY)));
+            }
         });
     }
 

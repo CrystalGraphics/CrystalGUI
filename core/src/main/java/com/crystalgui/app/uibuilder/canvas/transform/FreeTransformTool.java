@@ -4,13 +4,11 @@ import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.cursor.Cursor;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
-import com.crystalgui.app.uibuilder.canvas.ResizeHandles.Spot;
 import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Grip;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
@@ -20,6 +18,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.surface.mode.Tool;
+import com.crystalgui.widget.surface.snap.SnapSuspend;
 
 /**
  * Free Transform — Photoshop's Ctrl+T, as a modal tool over one selection.
@@ -44,6 +43,9 @@ import com.crystalgui.widget.surface.mode.Tool;
  *   <li>the crosshair <b>places the pivot</b>, snapping to the nine anchor points unless Alt is held</li>
  *   <li>anywhere else inside the box <b>moves</b> it; Shift keeps the move on one axis</li>
  * </ul>
+ *
+ * <p>A move and a handle snap to what is around the element, as the out-of-flow move and the resize
+ * handles do, and to the element's own layout box; Ctrl suspends it. @see TransformSnap</p>
  */
 public final class FreeTransformTool implements Tool {
 
@@ -131,8 +133,8 @@ public final class FreeTransformTool implements Tool {
                 // The deltas arrive in the SOURCE element's space, and the source is the overlay the box
                 // measures everything else in -- so they need no conversion.
                 int live = modifiersNow();
-                box.dragTo(fromX + dx, fromY + dy, dx, dy,
-                        CgModifiers.hasShift(live), CgModifiers.hasAlt(live));
+                box.dragTo(fromX + dx, fromY + dy, dx, dy, CgModifiers.hasShift(live),
+                        CgModifiers.hasAlt(live), !SnapSuspend.isSuspended(live));
             }
 
             @Override

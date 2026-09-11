@@ -411,11 +411,24 @@ buildertoolbar > button.__active__ {
 }
 
 
-/* Smart guides: the alignments a move snapped to, drawn while the drag runs and gone the moment it ends.
- * Red rather than the accent, because they are not a selection -- they are the reason the box stopped
- * where it did, and every editor draws them in the one colour nothing else uses. */
+/* Smart guides: what a gesture snapped to -- aligned points and matched gaps -- drawn while the drag runs
+ * and gone the moment it ends. Red rather than the accent, because they are not a selection -- they are
+ * the reason the box stopped where it did, and every editor draws them in the one colour nothing else
+ * uses. */
 smartguides {
     width: 100%;
     height: 100%;
     color: var(--builder-guide, #F5555D);
+    /* The outline of whatever a guide's point belongs to: the quiet reference colour the transform box
+     * draws the layout box in, so it names the owner without competing with the guide. */
+    border-color: var(--builder-selected-parent, #55607A);
+}
+
+/* A matched gap's length, beside its bar. Placed by the widget, so nothing here positions it. */
+.__snap-gap-label__ {
+    padding: 1 3 1 3;
+    font-size: 9;
+    border-radius: 3px;
+    color: var(--builder-tag-fg, #FFFFFF);
+    background-color: var(--builder-guide, #F5555D);
 }
