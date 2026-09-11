@@ -240,7 +240,7 @@ against the digest it shipped with.
 | OSGi `org.osgi.service.prefs` and `osgi.annotation` (bands 11 and 17) | Apache-2.0 |
 | Fabric intermediary (`intermediary-*`) | CC0-1.0 |
 
-`mirrorLicences` in `language/build.gradle.kts` is the same table, and `stageDownloadMirror` refuses a
+`mirrorLicences` in the root `build.gradle.kts` is the same table, and `stageDownloadMirror` refuses a
 file it does not cover. The release's `NOTICE.md` names each file, its licence and its id; the source of
 each EPL and MPL jar is on Maven Central at the coordinates in the engine-band table above. MCP's,
 MCPConfig's and Mojang's mapping data, and the JDK sources, are never mirrored.

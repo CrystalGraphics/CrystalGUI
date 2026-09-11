@@ -1759,8 +1759,8 @@ read; the tests run that way.
 |---|---|
 | **A link has died** | Add a working URL to the download, or an address to its repository, and push to master. Every jar built since this file existed picks it up within a day, or on its next failure |
 | **A pin changes** — a band re-pinned, a new Minecraft version | Edit the download. `checkDownloadLocations`, in `check`, fails when the engines are not the resolved bands and prints the `bands` block to paste. Only jars built after the edit carry the new pin |
-| **Before a release** | `./gradlew :language:verifyDownloadLocations` fetches every URL and checks what it serves. Online; a dead extra URL is a warning, a download with no working URL a failure |
-| **The mirror changes** | `./gradlew :language:stageDownloadMirror` collects every download that comes from the `mirror` repository — this repository's `download-mirror` release — verified, and prints the `gh release` commands. Only what `mirrorLicences` in `language/build.gradle.kts` covers may be mirrored — never MCP's, MCPConfig's or Mojang's data. Publishing is by hand |
+| **Before a release** | `./gradlew verifyDownloadLocations` fetches every URL and checks what it serves. Online; a dead extra URL is a warning, a download with no working URL a failure |
+| **The mirror changes** | `./gradlew stageDownloadMirror` collects every download that comes from the `mirror` repository — this repository's `download-mirror` release — verified, and prints the `gh release` commands. Only what `mirrorLicences` in the root `build.gradle.kts` covers may be mirrored — never MCP's, MCPConfig's or Mojang's data. Publishing is by hand |
 
 The machinery is `com.crystalgui.core.cache`, so any module can download; the language stack is only its
 first user. Code reaches a location through `Downloads.located(id)` or
