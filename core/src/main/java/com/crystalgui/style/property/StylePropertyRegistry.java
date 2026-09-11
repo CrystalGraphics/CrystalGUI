@@ -139,10 +139,10 @@ public class StylePropertyRegistry {
      * made naming a font you had not shipped yet a crash at first paint.</p>
      */
     public static final StyleProperty<List<String>> FONT_FAMILY = create(
-            "font-family", List.of("crystalgraphics:IBMPlexSans-Regular.ttf"), FontFamilyValue::new
+            "font-family", List.of("crystalgui:ui/fonts/IBMPlexSans-Regular.ttf"), FontFamilyValue::new
     ).setInheritable(true)
-            // A STACK IS COMMA-SEPARATED, which is what its parser splits on. Unquoted: these are
-            // resource paths rather than family names with spaces in, and quoting is optional there.
+            // A STACK IS COMMA-SEPARATED, which is what its parser splits on. Written unquoted, which
+            // round-trips: the parser unquotes, and neither a resource path nor a family name holds a comma.
             .setWriter(stack -> String.join(", ", stack));
     // TODO: no-op. Parsed and cascaded so stylesheets can declare it without a warning, but nothing
     // consumes it yet — CgTextRenderer/UIText have no drop-shadow support. Defaults false to match

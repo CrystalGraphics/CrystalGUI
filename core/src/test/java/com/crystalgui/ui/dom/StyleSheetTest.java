@@ -231,8 +231,8 @@ public class StyleSheetTest extends UiDocumentTestBase {
         //
         // PROPORTIONAL. The monospace face is applied by ua/editor.css to the editor and to `.__syntax__`
         // rather than being the default for every widget — mono chrome was tried and is not what either
-        // reference does. @see FontStackFallbackTest for the preference-list behaviour itself.
-        assertEquals(java.util.List.of("crystalgraphics:IBMPlexSans-Regular.ttf"),
+        // reference does. @see FontFamilyCacheTest for what an entry may be.
+        assertEquals(java.util.List.of("crystalgui:ui/fonts/IBMPlexSans-Regular.ttf"),
                 StylePropertyRegistry.FONT_FAMILY.initialValue);
     }
 

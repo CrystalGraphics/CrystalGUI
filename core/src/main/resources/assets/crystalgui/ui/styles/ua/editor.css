@@ -64,7 +64,7 @@
 texteditor,
 .__syntax__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
-                 "crystalgraphics:IBMPlexSans-Regular.ttf";
+                 "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
 
     /* AND THE DOCUMENT'S INK, which only `texteditor` used to declare — so a code surface OUTSIDE the
      * editor inherited whatever chrome it was promoted into. Most of a line of code is UNCAPTURED:

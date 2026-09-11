@@ -1,18 +1,19 @@
 package com.crystalgui.desktop.host;
 
 import java.nio.file.Path;
+import java.util.Locale;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 /**
- * <b>The three things a platform knows and the engine cannot</b> - implement it to run CrystalGUI on a
+ * <b>The four things a platform knows and the engine cannot</b> - implement it to run CrystalGUI on a
  * new host.
  *
- * <p>Where private files go, how big a pixel is, and whether there is a server to talk to. Answer those
- * and {@link DesktopHost} gives you a compositor, a workspace that follows the connection, and somewhere
- * for a server's windows to land - none of which you write.</p>
+ * <p>Where private files go, how big a pixel is, whether there is a server to talk to, and what language
+ * the player reads. Answer those and {@link DesktopHost} gives you a compositor, a workspace that follows
+ * the connection, and somewhere for a server's windows to land - none of which you write.</p>
  *
  * <pre>{@code
  * DesktopHost host = DesktopHost.create(new HostServices() {
@@ -20,6 +21,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
  *     public float uiScale()        { return currentGuiScale(); }
  *     public String desktopId()     { return "client"; }
  *     public ProtocolConnection<Object> connection() { return liveConnectionOrNull(); }
+ *     public Locale locale()        { return HostServices.gameLocale(options.languageCode); }
  * });
  * }</pre>
  *
@@ -97,4 +99,27 @@ public interface HostServices {
     /** The connection to a server, or null when there is none. Re-asked per frame; see the class note. */
     @Nullable
     ProtocolConnection<Object> connection();
+
+    /**
+     * The language the player reads — Minecraft's language setting. It settles the one thing about text
+     * no font stack does: whether a Han character is drawn Japanese, Simplified, Traditional or Korean.
+     * Re-asked per frame, so changing the game's language reaches the next one.
+     *
+     * <pre>{@code
+     * public Locale locale() { return HostServices.gameLocale(minecraft.options.languageCode); }  // "ja_jp"
+     * }</pre>
+     */
+    Locale locale();
+
+    /**
+     * A game's language code as a {@link Locale}: Minecraft's {@code "ja_jp"} is {@code ja-JP}. A code
+     * that names no language, like Minecraft's joke {@code "enws"}, answers the JVM's own.
+     */
+    static Locale gameLocale(@Nullable String code) {
+        if (code == null || code.isEmpty()) {
+            return Locale.getDefault();
+        }
+        Locale locale = Locale.forLanguageTag(code.replace('_', '-'));
+        return locale.getLanguage().isEmpty() ? Locale.getDefault() : locale;
+    }
 }

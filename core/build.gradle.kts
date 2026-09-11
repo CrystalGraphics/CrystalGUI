@@ -290,6 +290,9 @@ tasks.withType<Test>().configureEach {
     // regression guard, it is a coin toss that fails on somebody else's machine. What ships instead is
     // the DETERMINISTIC half: the decoration must not go stale. See EditorFrameCostTest.
     systemProperty("cgui.test.bench", project.hasProperty("bench").toString())
+    // Installed fonts differ per machine, so font-family resolves resource paths only here: no family
+    // names, no generic families, no implicit fallback. A test that wants them hands FontFamilyCache its own.
+    systemProperty("crystalgui.font.systemFonts", "false")
 }
 
 tasks.withType<JavaCompile>().configureEach {
