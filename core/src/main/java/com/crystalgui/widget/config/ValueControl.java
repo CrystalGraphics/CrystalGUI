@@ -54,6 +54,28 @@ public abstract class ValueControl<T> extends ConfigControl {
         setValue(defaultValue);
     }
 
+    /**
+     * Shows a value that is changing elsewhere, unless the user is part-way through typing one here.
+     *
+     * <p>For a host that pushes a live value every frame. Dear ImGui's rule, and Unity's: the field
+     * holding an edit keeps it until the edit lands, and every other field goes on following.</p>
+     *
+     * <pre>{@code
+     * // every frame, from an afterLayout hook
+     * angle.setLiveValue(Math.toDegrees(gesture.rotation()));
+     * }</pre>
+     *
+     * <p>{@link #setValue} overwrites regardless, which is what a reset or a load means.</p>
+     */
+    public final void setLiveValue(@Nullable T live) {
+        if (!isEditing()) setValue(live);
+    }
+
+    /** Whether the user holds an edit here that has not landed yet. False for a control nothing is typed into. */
+    public boolean isEditing() {
+        return false;
+    }
+
     @Override
     @Nullable
     public Object getValueObject() {

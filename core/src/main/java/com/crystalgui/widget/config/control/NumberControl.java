@@ -116,6 +116,12 @@ public class NumberControl extends ValueControl<Double> {
         return field;
     }
 
+    /** Text typed and not yet landed — the field publishes on Enter, Tab or a click away. */
+    @Override
+    public boolean isEditing() {
+        return field.hasPendingEdit();
+    }
+
     /**
      * Makes {@code handle} drag this value: press it and slide, right/up to increase.
      *

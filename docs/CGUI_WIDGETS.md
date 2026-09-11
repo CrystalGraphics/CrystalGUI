@@ -455,6 +455,8 @@ public UIElement options() {
   theirs, so its fields keep what they hold.
 - **A page hidden while it holds focus gives focus back** to whatever had it before focus entered the bar.
 - Pages arrive through `claim` and `setBase`. A child appended directly is not a page and is never hidden.
+- A live number on a page follows its source with `ValueControl.setLiveValue`, which leaves a field
+  alone while something is typed into it.
 
 - Tag `contexttoolbar` · pages carry `__context-page__`
 - Scenes: none yet — the UI builder's toolbar row is the consumer

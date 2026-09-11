@@ -357,6 +357,14 @@ public class TextField extends UIElement implements Measurable {
     }
 
     /**
+     * Whether what is in the box differs from what was published: typed and not yet entered, or not yet
+     * valid. A host pushing live values into the field leaves it alone while this holds.
+     */
+    public boolean hasPendingEdit() {
+        return !text.equals(value.get());
+    }
+
+    /**
      * Programmatic, authoritative assignment: shows {@code newText} and publishes it if it validates.
      *
      * <p>Unlike {@link #commit()} this never clamps and never reverts — setting {@code "50"} on a
