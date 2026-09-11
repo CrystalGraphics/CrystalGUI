@@ -22,19 +22,37 @@
 # inside it. `deploySingleJars` appends `.minecraft/mods` itself, which keeps `logs/latest.log` and
 # `crash-reports/` reachable from the same setting when a failure has to be read back.
 #
-# One key per instance, because a target is a version AND a loader, and they fail differently: Forge
-# 1.20.1 runs SRG members, NeoForge 1.20.4 runs official names and needs no mapping at all, Fabric
-# runs intermediary, 1.7.10 is a different engine again.
+# ONE LINE PER INSTANCE, and as many as you like:
 #
-# `deploySingleJars` copies BOTH CrystalGraphics' and CrystalGUI's jars — CrystalGUI does not run without
-# CrystalGraphics beside it — and deletes the previous pair first, so a loader switch cannot leave a
-# jar built for the other one behind. Unset is fine: that instance is skipped and the task says so.
+#     prismInstance.<label> = <instance dir>
+#
+# The label after the dot is what `prodSmoke -PcgTargets=<label>` drives it by, and what the capture
+# files are named. Nothing enumerates the labels, so adding a target is a line here rather than an
+# edit to build.gradle.kts. A target is a version AND a loader and they fail differently -- Forge
+# 1.20.1 runs SRG members, NeoForge 1.20.4 runs official names, Fabric runs intermediary, 1.7.10 is a
+# different engine again -- so give each its own line.
+#
+# The four `prismLauncher<X>Dir` keys this replaced are still read when no `prismInstance.` key is
+# present, so an older copy of this file keeps working.
+#
+# `deploySingleJars` copies BOTH CrystalGraphics' and CrystalGUI's jars -- CrystalGUI does not run
+# without CrystalGraphics beside it -- and deletes the previous pair first, so a loader switch cannot
+# leave a jar built for the other one behind. Unset is fine: that instance is skipped and the task
+# says so.
 
 # The launcher binary itself, which `prodSmoke` drives. Required by that task and nothing else.
 #prismLauncherExe=C:/Users/you/AppData/Local/Programs/PrismLauncher/prismlauncher.exe
 
-#prismLauncher1201ForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Forge
-#prismLauncher1204NeoForgeDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1204 NeoForge
-#prismLauncher1710Dir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1710
+#prismInstance.1710         = C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1710
+#prismInstance.1201forge    = C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Forge
+#prismInstance.1204neoforge = C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1204 NeoForge
+#prismInstance.1201fabric   = C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Fabric
 
-#prismLauncher1201FabricDir=C:/Users/you/AppData/Roaming/PrismLauncher/instances/Crystal 1201 Fabric
+# Which of those get `crystalgraphics-joml-<version>.jar` beside the mod, as a comma-separated list
+# of labels.
+#
+# Minecraft ships JOML from 1.19.3 on. BELOW that the companion is required, because CrystalGraphics'
+# public API names `org.joml` and always will; ABOVE it a second copy is a split package and Forge
+# dies in module resolution before it writes a log line. The label cannot imply this, so it is stated
+# -- anything pre-1.19.3, 1.7.10 and 1.17.1 alike, belongs here.
+#prismInstanceJoml = 1710
