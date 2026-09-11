@@ -453,6 +453,15 @@ public UIElement options() {
   over a tool's options, as Blender's modal header text sits over the tool header.
 - **A page is added on its first claim and kept**, hidden between claims as Inkscape and `GtkStack` keep
   theirs, so its fields keep what they hold.
+- **What does not fit folds from the end** behind a » at the row's end, which opens it in a popover —
+  WinForms' `ToolStrip` overflow and Qt's toolbar extension. Put the least-used items last. A folded item
+  is hidden rather than clipped, so Tab cannot land on it.
+- **`ContextToolbar.separator()`** is a hairline between a page's groups — Photoshop's, and Qt's
+  `addSeparator`. As in a menu, the fold never leaves one at the end of the row and the popover never
+  opens on one.
+- **A field on the row is a stop, not a home.** Enter lands it and Escape drops what was typed, and either
+  hands the keyboard back — Photoshop's options bar, where the next Enter is the tool's. A tool that also
+  wants Enter leaves a focused field alone.
 - **A page hidden while it holds focus gives focus back** to whatever had it before focus entered the bar.
 - Pages arrive through `claim` and `setBase`. A child appended directly is not a page and is never hidden.
 - A live number on a page follows its source with `ValueControl.setLiveValue`, which leaves a field
