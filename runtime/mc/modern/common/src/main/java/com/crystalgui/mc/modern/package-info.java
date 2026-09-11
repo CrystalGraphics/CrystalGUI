@@ -6,9 +6,10 @@
  * compiled once per target, so a new Minecraft version is a row in the target list rather than a
  * directory. A class in here carries no version in its name for the same reason — a class named for a
  * version is a class nobody dares reuse. The sibling tree that <i>is</i> named for a version,
- * {@code mc1710}, is honest about it: it covers exactly one.
+ * {@code runtime/mc/1710}, is honest about it: it covers exactly one.
  *
- * <p>Anything here that needs no Minecraft type belongs one tier down, in {@code mc-lwjgl3}, where it
- * is compiled once and shared with every other target instead of copied per era.
+ * <p>Anything here that needs no Minecraft type belongs one tier down, in CrystalGraphics'
+ * {@code runtime/lwjgl/3}, where it is compiled once and shared with every other target instead of
+ * copied per era.
  */
 package com.crystalgui.mc.modern;

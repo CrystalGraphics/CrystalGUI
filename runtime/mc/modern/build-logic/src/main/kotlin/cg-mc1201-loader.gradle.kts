@@ -93,8 +93,7 @@ dependencies {
     "compileOnly"(project(":core"))
 
     // compileOnly and NOT bundled: the merge adds :runtime:mc:shared once, under a package no variant
-    // relocates, so all four hosts share the one copy. Bundling it per loader would put four copies of
-    // com.crystalgui.mc.shared in the jar for the merge to reject as a duplicate.
+    // relocates. EMPTY today -- `CrashVariant` is CrystalGraphics', reached through mc1201CompileDeps.
     "compileOnly"(project(":runtime:mc:shared"))
 
     // Taffy and JOML: :core has them compileOnly so they reach nobody transitively, and UIElement holds
