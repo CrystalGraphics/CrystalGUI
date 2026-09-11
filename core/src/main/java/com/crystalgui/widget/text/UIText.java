@@ -796,17 +796,13 @@ public final class UIText extends UIElement implements Measurable {
     }
 
     /**
-     * {@code …} when the font stack can draw it, {@code ...} when it cannot.
-     *
-     * <p>WebKit and Blink's own rule, and not hypothetical here: the bundled {@code
-     * MinecraftRegular.otf} has no U+2026, so without the fallback a truncated label draws a blank
-     * advance and is indistinguishable from {@code clip}.</p>
+     * {@code …} when the primary font can draw it, {@code ...} when it cannot — Blink's rule
+     * ({@code LineTruncator::ComputeEllipsisText} asks {@code PrimaryFont()} alone). The bundled
+     * {@code MinecraftRegular.otf} has no U+2026, so its labels end in three of its own periods
+     * rather than a glyph borrowed from another face.
      */
     private static String ellipsisFor(CgFontFamily family) {
-        // resolveSourceForCodePoint AND canDisplayCodePoint: the resolve alone cannot tell "found it"
-        // from "gave up and handed back the primary".
-        var source = family.resolveSourceForCodePoint(ELLIPSIS_CODE_POINT);
-        return source != null && source.canDisplayCodePoint(ELLIPSIS_CODE_POINT)
+        return family.getPrimarySource().canDisplayCodePoint(ELLIPSIS_CODE_POINT)
                 ? ELLIPSIS
                 : ELLIPSIS_FALLBACK;
     }

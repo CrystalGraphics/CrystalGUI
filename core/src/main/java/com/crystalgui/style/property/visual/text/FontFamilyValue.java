@@ -8,12 +8,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Parses a {@code font-family} value: a comma-separated fallback stack of quoted asset paths, e.g.
- * {@code font-family: "crystalgraphics:fonts/A.ttf", "crystalgraphics:fonts/B.ttf";} — real font
- * fallback (primary tried first, each subsequent path tried for codepoints the previous can't
- * display), not just a single font reference. Resolving the list into an actual
- * {@code CgFontFamily} (via {@code CgFontFamily.of(primary, ...fallbacks)}) happens later, in
- * {@code FontFamilyCache} — this class only parses the raw path list.
+ * Parses a {@code font-family} value: a comma-separated preference stack whose entries are resource
+ * paths, installed family names or generic families, quoted or not —
+ * {@code font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf", "Cascadia Code", monospace;}.
+ * {@code FontFamilyCache} turns the list into a {@code CgFontFamily}; this class only splits and unquotes.
  *
  * <p>Uses {@link CssParsingUtil#splitTopLevelCommas} — the same comma-splitting helper
  * {@code sprite()}/{@code asset()} already use in {@code TextureValue} — even though there's no

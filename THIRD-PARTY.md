@@ -29,6 +29,7 @@ this split introduces, and nothing else detects it.
 | Feather icons | `core/src/main/resources/assets/crystalgui/ui/icons/` | MIT | © 2013–2023 Cole Bemis. Verbatim |
 | Minecraft fonts | `core/src/main/resources/assets/crystalgui/ui/fonts/` | Public domain | `Minecraft.otf`, `MinecraftRegular.otf` |
 | JetBrains Mono | `core/src/main/resources/assets/crystalgui/ui/fonts/` | **SIL OFL 1.1** | `JetBrainsMono-Regular.ttf`. The **code** face — the editor and anything carrying `.__syntax__`. See [Fonts](#fonts) |
+| IBM Plex Sans | `core/src/main/resources/assets/crystalgui/ui/fonts/` | **SIL OFL 1.1** | `IBMPlexSans-Regular.ttf`, © 2017 IBM Corp., Reserved Font Name "Plex". The **UI** face. Its notice, `IBMPlexSans-OFL.txt`, ships beside it. See [Fonts](#fonts) |
 | **Taffy** (`taffy-java`) | `taffy/` | **MIT** | © 2026 vfyjxf. A pure-Java port of Rust [Taffy](https://github.com/DioxusLabs/taffy). **VENDORED AND MODIFIED** — the sources of `dev.vfyjxf:taffy:1.1.4`, checked in and forked, because its leaf-measure path is wrong under `flex-wrap: wrap` and the defect is one line inside the flexbox algorithm. [`taffy/MODIFICATIONS.md`](taffy/MODIFICATIONS.md) is the statement of changes MIT requires; `taffy/LICENSE` is the notice. The package stays `dev.vfyjxf.taffy` because `runtime/mc/1710` relocates it when shipping. The pre-fork sources remain at `research_repos/taffy/` as the diff baseline |
 | ~~fastutil~~ | **no longer used** | Apache 2.0 | © 2002–2023 Sebastiano Vigna. Was Taffy's dependency for seven types, shaded and relocated — **19.65 MB of a 31.20 MB jar**, 12,808 of 15,892 entries. Reimplemented in `dev.vfyjxf.taffy.collection` on 2026-09-10 and the dependency dropped; the jar is 8.44 MB. Row kept because the version that used to sit in `gradle.properties` is the thing somebody will try to add back. See `taffy/MODIFICATIONS.md` §2 |
 | LDLib2 | `research_repos/LDLib2/` | — | In-repo checkout, read for pattern prior art. **Not** a dependency and nothing is copied from it |
@@ -287,8 +288,8 @@ Three obligations, and the third is the one that catches people:
 > everything else inherits the proportional default.
 
 **IBM Plex Sans is the UI face**, and also the second entry in the code stack: `font-family` is a
-preference list, so it supplies any glyph JetBrains Mono lacks. It ships from CrystalGraphics under the
-SIL OFL 1.1 as well.
+preference list, so it supplies any glyph JetBrains Mono lacks. It ships here too, under the SIL OFL 1.1,
+with `IBMPlexSans-OFL.txt` beside it. CrystalGraphics carried it until 2026-09-11 and now ships no fonts.
 
 ## Ports, as opposed to assets
 

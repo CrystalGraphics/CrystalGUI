@@ -1265,13 +1265,11 @@ runpanel .__run-input__ {
     flex-shrink: 0;
     height: 20px;
     min-height: 0;
-    /* RESOURCE PATHS, not CSS family names. `font-family` here resolves each entry through CgIO, so a
-     * stack of familiar-looking names -- "JetBrains Mono", monospace -- loads nothing and FontFamilyCache
-     * throws rather than falling back, taking the whole harness down the first time a script asked for
-     * input. The same two entries the editor above uses, so the line typed and the line echoed into the
-     * transcript are the same face; the sans behind covers glyphs the mono lacks. */
+    /* Resource paths rather than family names, so the bundled faces are used on every machine. The same
+     * two entries the editor above uses, so the line typed and the line echoed into the transcript are
+     * the same face; the sans behind covers glyphs the mono lacks. */
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
-                 "crystalgraphics:IBMPlexSans-Regular.ttf";
+                 "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
     font-size: 10px;
     background-color: var(--field-bg, #131416);
     color: var(--field-fg, #DFE1E5);

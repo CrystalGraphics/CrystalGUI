@@ -29,12 +29,13 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 import java.io.File;
+import java.util.Locale;
 
 /**
  * <b>The Minecraft screen CrystalGUI draws into</b> - a {@code GuiScreen} wrapped around a
  * {@link DesktopHost}.
  *
- * <p>Deliberately small. It answers the host's three questions, forwards Minecraft's screen lifecycle
+ * <p>Deliberately small. It answers the host's four questions, forwards Minecraft's screen lifecycle
  * ({@code initGui} to {@code shown}, {@code drawScreen} to {@code frame}, {@code onGuiClosed} to
  * {@code hidden}), and does nothing else. Which applications exist, what the layout is, which commands
  * answer to which keys and where focus starts are all decided above it.</p>
@@ -326,9 +327,10 @@ public final class CgUiScreen extends GuiScreen {
     }
 
     /**
-     * The three things only this platform can answer. @see HostServices
+     * The four things only this platform can answer. @see HostServices
      *
-     * <p>Where private files go, how big a pixel is, and whether there is a server. Everything the
+     * <p>Where private files go, how big a pixel is, whether there is a server, and the language the
+     * player reads. Everything the
      * screen used to decide for itself — the window's title, its key, its icon, its close policy, its
      * first-run geometry, when to ask for the project list — was the same answer on every host and is
      * not asked here.</p>
@@ -373,6 +375,12 @@ public final class CgUiScreen extends GuiScreen {
         @Nullable
         public ProtocolConnection<Object> connection() {
             return CgUiConnections.client();
+        }
+
+        /** The game's language setting, {@code "ja_JP"} on 1.7.10. */
+        @Override
+        public Locale locale() {
+            return HostServices.gameLocale(mc.gameSettings.language);
         }
     }
 
