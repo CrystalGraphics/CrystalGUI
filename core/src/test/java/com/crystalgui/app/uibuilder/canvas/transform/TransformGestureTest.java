@@ -189,32 +189,6 @@ public class TransformGestureTest {
     }
 
     /**
-     * <b>Shift keeps a move on one axis, chosen from the whole gesture.</b>
-     *
-     * <p>From the whole gesture and not the last frame: on a slow diagonal the per-frame delta crosses
-     * back and forth over the diagonal, and the box flickers between the two axes instead of committing
-     * to one.</p>
-     */
-    @Test
-    public void shiftConstrainsAMoveToOneAxis() {
-        TransformGesture gesture = centred();
-        gesture.press(new Grip(Kind.MOVE, null));
-
-        gesture.moveBy(50f, 8f, true);
-        assertEquals(50f, gesture.translateX(), 0.01f);
-        assertEquals("the minor axis has to be dropped, not merely reduced",
-                0f, gesture.translateY(), 0.01f);
-
-        gesture.moveBy(8f, 50f, true);
-        assertEquals(0f, gesture.translateX(), 0.01f);
-        assertEquals(50f, gesture.translateY(), 0.01f);
-
-        gesture.moveBy(8f, 50f, false);
-        assertEquals("without Shift both axes move", 8f, gesture.translateX(), 0.01f);
-        assertEquals(50f, gesture.translateY(), 0.01f);
-    }
-
-    /**
      * <b>The dragged edge follows the pointer and the opposite edge does not move.</b>
      *
      * <p>Photoshop's convention, and Paint.NET's. Asserted on where the two edges LAND rather than on the

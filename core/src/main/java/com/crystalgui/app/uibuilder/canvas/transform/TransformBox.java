@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder.canvas.transform;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.List;
 
 import javax.annotation.Nullable;
 
@@ -37,6 +38,12 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.surface.snap.AxisLock;
+import com.crystalgui.widget.surface.snap.BoxTargets;
+import com.crystalgui.widget.surface.snap.SnapAxis;
+import com.crystalgui.widget.surface.snap.SnapIndicator;
+import com.crystalgui.widget.surface.snap.SnapScene;
+import com.crystalgui.widget.surface.snap.SnapSolver;
 
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -123,6 +130,13 @@ public final class TransformBox extends UIElement {
     /** @see #press */
     @Nullable
     private Matrix4f pressOuter;
+
+    /** What a move or a scale snaps to, gathered at the press. @see #press */
+    @Nullable
+    private SnapScene scene;
+
+    /** Shift's axis for a move, latched as the out-of-flow move latches it. @see AxisLock */
+    private final AxisLock lock = new AxisLock();
 
     /** Where the pointer was last seen, so the cursor can be re-decided without it moving. */
     private float hoverX = Float.NaN;
@@ -432,6 +446,8 @@ public final class TransformBox extends UIElement {
         redone.clear();
         gesture.release();
         pressOuter = null;
+        scene = null;
+        ctx.smartGuides().clear();
         setDisplayed(false);
     }
 
@@ -726,22 +742,56 @@ public final class TransformBox extends UIElement {
         gesture.press(grip);
         Matrix4f frame = frame();
         pressOuter = frame == null ? null : frame.mul(gesture.outer());
+        scene = grip.is(Kind.MOVE) || grip.is(Kind.SCALE) ? sceneAtPress() : null;
+        lock.reset();
+    }
+
+    /**
+     * What a move or a scale snaps to — once per press, since nothing else moves during it.
+     *
+     * <p><b>And the node's own layout box</b>: the outline the transform is read against, which stays put
+     * while the drawing moves. Points only; a gap between a box and its own outline means nothing. It
+     * pulls the first few pixels of a drag back to where the element sits, which Ctrl escapes.</p>
+     */
+    @Nullable
+    private SnapScene sceneAtPress() {
+        Box box = target == null ? null : target.box();
+        if (box == null) return null;
+        Vector2f origin = originInParent(box);
+        return BoxTargets.sceneFor(target, ctx.artboard())
+                .withPoints(new SnapScene.Rect(origin.x, origin.y, box.width(), box.height()));
+    }
+
+    /** The node's layout origin in its parent's own space — {@code Box.x()} less the parent's scroll. */
+    private Vector2f originInParent(Box box) {
+        UIElement parent = target == null ? null : target.parentElement();
+        Box parentBox = parent == null ? null : parent.box();
+        return parentBox == null ? new Vector2f(box.x(), box.y())
+                : new Vector2f(box.x() - parentBox.scrollLeft(), box.y() - parentBox.scrollTop());
     }
 
     /**
      * Continues the drag.
      *
+     * <p>A move and a handle snap to what is around the element and show what they found in the
+     * builder's guides layer. @see TransformSnap</p>
+     *
      * @param viewportX where the pointer is now, in this overlay's space
      * @param dx        how far it has come since the press, in the same space
+     * @param snap      whether a move or a handle snaps — false while Ctrl suspends it
      */
     public void dragTo(float viewportX, float viewportY, float dx, float dy,
-                       boolean aspect, boolean aboutPivot) {
+                       boolean aspect, boolean aboutPivot, boolean snap) {
         if (!active) return;
         pointerAt(viewportX, viewportY);
+        List<SnapIndicator> found = List.of();
         switch (gesture.grip().kind()) {
             case SCALE -> {
                 Vector2f point = toScaleSpace(viewportX, viewportY);
-                if (point != null) gesture.scaleTo(point, aspect, aboutPivot);
+                if (point != null) {
+                    gesture.scaleTo(point, aspect, aboutPivot);
+                    if (snap) found = snapScale(aspect, aboutPivot);
+                }
             }
             case ROTATE -> {
                 Float delta = angleDelta(viewportX, viewportY, dx, dy);
@@ -759,7 +809,12 @@ public final class TransformBox extends UIElement {
             }
             case MOVE -> {
                 Vector2f delta = toNodeDelta(dx, dy);
-                if (delta != null) gesture.moveBy(delta.x, delta.y, aspect);
+                if (delta != null) {
+                    SnapAxis free = lock.update(aspect, delta.x, delta.y);
+                    gesture.moveBy(free == SnapAxis.VERTICAL ? 0f : delta.x,
+                            free == SnapAxis.HORIZONTAL ? 0f : delta.y);
+                    if (snap) found = snapMove();
+                }
             }
             case PIVOT -> {
                 Vector2f point = toNodeSpace(viewportX, viewportY);
@@ -769,8 +824,59 @@ public final class TransformBox extends UIElement {
                 return;
             }
         }
+        showGuides(found);
         preview();
         if (DIAGNOSE) report("drag");
+    }
+
+    /**
+     * Snaps the drawn box after a move by nudging the translate — the outermost op, so the nudge moves
+     * the drawing by exactly itself.
+     *
+     * <p>Shift's pinned axis is never offered, as with an out-of-flow move. @see AxisLock</p>
+     */
+    private List<SnapIndicator> snapMove() {
+        Box box = target == null ? null : target.box();
+        if (box == null || scene == null) return List.of();
+        Vector2f origin = originInParent(box);
+        TransformSnap.Result snapped = TransformSnap.move(gesture, origin.x, origin.y,
+                lock.isPinned(SnapAxis.HORIZONTAL), lock.isPinned(SnapAxis.VERTICAL),
+                SnapSolver.SCREEN_TOLERANCE, scale(), scene);
+        gesture.nudgeTranslate(snapped.dx(), snapped.dy());
+        return snapped.indicators();
+    }
+
+    /**
+     * Snaps the dragged handle after a scale. The POINTER is moved by what the snap wants and the scale
+     * solved again, as tldraw nudges its resize point, so the handle lands on the point exactly and the
+     * opposite edge stays held. Under Shift the nudge runs along the handle's diagonal, so the ratio holds.
+     */
+    private List<SnapIndicator> snapScale(boolean aspect, boolean aboutPivot) {
+        Spot spot = gesture.grip().spot();
+        Box box = target == null ? null : target.box();
+        if (spot == null || box == null || scene == null) return List.of();
+        Vector2f origin = originInParent(box);
+        TransformSnap.Result snapped = TransformSnap.scale(gesture, spot, aspect, aboutPivot, origin.x, origin.y,
+                SnapSolver.SCREEN_TOLERANCE, scale(), scene);
+        if (snapped.dx() != 0f || snapped.dy() != 0f) {
+            Vector2f corner = gesture.corner(spot);
+            Vector2f handle = gesture.apply(corner.x, corner.y);
+            Vector2f wanted = toViewportUntransformed(handle.x + snapped.dx(), handle.y + snapped.dy());
+            Vector2f point = wanted == null ? null : toScaleSpace(wanted.x, wanted.y);
+            if (point != null) gesture.scaleTo(point, aspect, aboutPivot);
+        }
+        // Round two: what the box is exactly on, measured from the scale it settled at.
+        return TransformSnap.settled(gesture, spot, aboutPivot, origin.x, origin.y, scene);
+    }
+
+    /** Hands what this update snapped to to the builder's guides layer, in the parent's space. */
+    private void showGuides(List<SnapIndicator> found) {
+        ctx.smartGuides().show(target == null ? null : target.parentElement(), found);
+    }
+
+    /** Screen pixels per layout pixel in the parent: the zoom and the page scale. @see CanvasRects#scaleOf */
+    private float scale() {
+        return Math.max(0.0001f, CanvasRects.scaleOf(target == null ? null : target.parentElement(), this));
     }
 
     /** What the gesture and the layout each say, so the two can be told apart in a running harness. */
@@ -813,6 +919,8 @@ public final class TransformBox extends UIElement {
         if (!undone.isEmpty() && undone.peek().equals(gesture.snapshot())) undone.pop();
         gesture.release();
         pressOuter = null;
+        scene = null;
+        ctx.smartGuides().clear();
     }
 
     // ---------------------------------------------------------------- painting

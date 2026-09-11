@@ -33,6 +33,9 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
 
     private final Artboard artboard;
 
+    /** @see BuilderContext#smartGuides */
+    private final SmartGuides smartGuides = new SmartGuides();
+
     private final BuilderSelection selection = new BuilderSelection();
 
     /** The editor this plane belongs to, for {@link BuilderEditor#UI_BUILDER}. Set once, straight after
@@ -232,5 +235,10 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     @Override
     public Artboard artboard() {
         return artboard;
+    }
+
+    @Override
+    public SmartGuides smartGuides() {
+        return smartGuides;
     }
 }
