@@ -106,9 +106,10 @@ reflectively into an isolated classloader at runtime, never onto a compile class
 | 11 | Java 11–16 | 3.33.0 | 1.9.1 | 18 jars, ~12 MB |
 | 17 | Java 17+ | 3.46.0 | 1.9.1 | 20 jars, ~16 MB |
 
-The remaining jars in each closure are `org.eclipse.platform:*` (EPL-2.0), pulled in by JDT, plus
-`org.eclipse.jdt:ecj` (EPL-2.0) and — in band 17 only — `net.java.dev.jna:jna` and `jna-platform`
-(dual **Apache-2.0 / LGPL-2.1**; we take Apache-2.0). Every platform artifact is pinned explicitly
+The remaining jars in each closure are `org.eclipse.platform:*` (EPL-2.0), pulled in by JDT, plus —
+in bands 11 and 17 — `org.eclipse.jdt:ecj` (EPL-2.0) and OSGi's `org.osgi.service.prefs` and
+`osgi.annotation` (**Apache-2.0**), and in band 17 only `net.java.dev.jna:jna` and `jna-platform` (dual
+**Apache-2.0 / LGPL-2.1**; we take Apache-2.0). Every platform artifact is pinned explicitly
 rather than resolved through JDT's open version ranges; the reason is in the build file and it is a
 correctness one, not a licensing one.
 
@@ -130,11 +131,12 @@ isolation `EngineClassLoader` exists for, not a coincidence.
 > about 13 MB**, which a client with no engine staged falls back to. This is the sentence the old note
 > asked somebody to come back and change.
 >
-> **Which bands ship is `-PcgBundleBands`** (default `8`; also `8,17`, or `none`), so what this obligation
-> covers varies per build. And it introduces a second position beside the first: a band the jar does *not*
-> carry is **fetched by the user's client from Maven Central**, verified against a digest computed at build
-> time from the artifact Gradle resolved. We do not redistribute those — the same position the MCP mapping
-> data is in, and worth stating rather than assuming.
+> **Which bands ship is `-PcgBundleBands`** on a per-loader build (default `8,11`; also `8,17`, or
+> `none`); the single `crystalgui-language` jar carries all three. A band a jar does *not* carry is
+> **fetched by the user's client** from the addresses in `download/locations.json` — Maven Central first,
+> then this repository's `download-mirror` release — and verified against a digest taken at build time
+> from the artifact Gradle resolved. The mirror *is* redistribution, of the same unmodified jars; see
+> [The download-mirror release](#the-download-mirror-release).
 >
 > **What discharges it today.** `bundleEngineBands` is a `Sync` of *whole, unmodified jars* rather than a
 > shadow or a class merge, so each artifact's own notices travel inside it — verified rather than
@@ -150,17 +152,21 @@ isolation `EngineClassLoader` exists for, not a coincidence.
 
 ## Minecraft name mappings (fetched, never redistributed)
 
-Readable Minecraft names (`getUnlocalizedName` rather than `func_149739_a`) come from the **MCP** name
-data, taken from MinecraftForge's FML repository at
-`https://raw.githubusercontent.com/MinecraftForge/FML/1.7.10/conf/` — `methods.csv`, `fields.csv` and
-`params.csv` for `mcp_stable/12`.
+Readable Minecraft names (`getUnlocalizedName` rather than `func_149739_a`) come from mapping data a
+client fetches, from the addresses in [`download/locations.json`](download/locations.json):
+
+| Minecraft | Data | Publisher |
+|---|---|---|
+| 1.7.10 | MCP `stable_12`: `methods.csv` and `fields.csv` | MinecraftForge's FML repository, at a pinned commit |
+| 1.20.x | Mojang's `client.txt`, joined with MCPConfig's `joined.tsrg` on Forge or intermediary on Fabric | Mojang; MinecraftForge; FabricMC |
 
 **None of it is in this repository and none of it is in any jar we build.** A client fetches what it
-needs on first use into its own config directory (`config/crystalgui/mappings/<mc>/<channel>-<version>`)
+needs on first use into its own game directory (`crystalgui/cache/mappings/<mc>/<channel>-<version>`)
 and reuses it thereafter. That is not a caching optimisation that happens to have a licensing
 side-effect — it is the licensing position, chosen because MCP's terms have historically permitted use
 while restricting redistribution, and it is why `plan/lang-stack.md` §22 row 11 asks for the sourcing
-decision rather than for a bundled file.
+decision rather than for a bundled file. Fabric's intermediary is the one exception: it is CC0, and a
+copy is kept in the [download-mirror release](#the-download-mirror-release).
 
 Three properties follow from it, and all three are enforced in code rather than remembered:
 
@@ -173,11 +179,10 @@ Three properties follow from it, and all three are enforced in code rather than 
   having happened.
 - **The cache is the user's, not ours.** It lives under their game directory; deleting it re-fetches.
 
-> **Open, and honest about it:** no digests are pinned, because upstream publishes no `.md5` beside the
-> CSVs. A corrupted download is currently caught by the parse rather than by a digest. The verification
-> machinery exists and is tested (`MappingCacheTest` covers corrupt-then-repair and reject-on-mismatch);
-> it is the reference data that is missing. Recorded here as well as in `plan/platform-mc1710.md` §26.13a because
-> this file is where somebody checks before a release.
+**Every file is checked against a digest wherever one can be known.** The MCP CSVs are pinned to git's
+own blob hash, and 1.20.1's three files to the SHA-1 their publishers serve. Any other 1.20.x version
+takes `client.txt`'s digest from Mojang's version manifest, and its MCPConfig or intermediary archive is
+checked by parsing.
 
 ## OpenJDK sources (fetched, derived on the user's machine, never redistributed)
 
@@ -203,9 +208,10 @@ travel in any jar we build.
    build time and shipping it would have been redistribution of a modified GPL work, which is exactly what
    this arrangement refuses.
 
-The default source is Eclipse Adoptium's published `sources` artifact for the running feature version.
-`crystalgui.jdk.sources.url` overrides where it is fetched from, and `crystalgui.jdk.sources` points
-straight at a `src.zip` for anyone who would rather supply their own and fetch nothing.
+The source is Eclipse Adoptium's published `sources` artifact for the running feature version, listed as
+`jdk-sources/{java}` in `download/locations.json` — which a pack's own file of locations can extend, see
+[Runtime downloads](AGENTS.md#runtime-downloads-one-file-repairable-after-release). `crystalgui.jdk.sources`
+points straight at a `src.zip` for anyone who would rather supply their own and fetch nothing.
 
 > **Never automatic**, and that is a licence decision as much as a bandwidth one. The engine bands and the
 > mapping data are fetched on a first launch because without them the feature does not work at all; this
@@ -216,6 +222,28 @@ straight at a `src.zip` for anyone who would rather supply their own and fetch n
 > the JDK ships one for zip and not for this) and `JdkSourceExtract`. No OpenJDK code was read to write
 > any of them — the tar format is a published specification and the transform is a scanner over Java's
 > own grammar.
+
+## The download-mirror release
+
+This repository's [`download-mirror`](https://github.com/CrystalGraphics/CrystalGUI/releases/tag/download-mirror)
+release holds unmodified copies of what a client downloads and a licence lets us redistribute, so a
+released jar still finds them if their publisher moves them. It is the `mirror` repository in
+`download/locations.json`, the last address of each download that names it, and every jar checks the copy
+against the digest it shipped with.
+
+| Files | Licence |
+|---|---|
+| Eclipse JDT, ECJ and the Eclipse platform jars (`org.eclipse.*`, `ecj-*`) | EPL-2.0 |
+| Rhino (`rhino-*`) | MPL-2.0 |
+| CFR (`cfr-*`) | MIT — © Lee Benfield |
+| JNA (`jna-*`, band 17 only) | Apache-2.0, of its dual Apache-2.0 / LGPL-2.1 |
+| OSGi `org.osgi.service.prefs` and `osgi.annotation` (bands 11 and 17) | Apache-2.0 |
+| Fabric intermediary (`intermediary-*`) | CC0-1.0 |
+
+`mirrorLicences` in `language/build.gradle.kts` is the same table, and `stageDownloadMirror` refuses a
+file it does not cover. The release's `NOTICE.md` names each file, its licence and its id; the source of
+each EPL and MPL jar is on Maven Central at the coordinates in the engine-band table above. MCP's,
+MCPConfig's and Mojang's mapping data, and the JDK sources, are never mirrored.
 
 ## Chromium — `RateEstimator` (BSD-3-Clause)
 

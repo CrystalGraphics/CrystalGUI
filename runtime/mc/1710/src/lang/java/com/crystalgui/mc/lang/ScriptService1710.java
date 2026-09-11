@@ -6,6 +6,7 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.MappingCoordinates;
+import com.crystalgui.language.platform.MappingCoordinates.Source;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptService;
 
@@ -42,36 +43,18 @@ public final class ScriptService1710 implements ScriptService {
 
     /**
      * MCP, matching {@code runtime/mc/1710/gradle.properties} — {@code channel = stable},
-     * {@code mappingsVersion = 12}, {@code remoteMappings = …/FML/1.7.10/conf/}.
+     * {@code mappingsVersion = 12}.
      *
      * <p>Stated here rather than read from the environment, and that is load-bearing: a version
      * discovered at runtime is a version that can differ between development and production, which is
-     * the one thing this whole phase exists to prevent. The mod and the build name the same artifact.</p>
+     * the one thing this whole phase exists to prevent. Where the two CSVs are fetched from, and what
+     * they must hash to, is {@code download/locations.json}.</p>
      */
-    private static final MappingCoordinates MCP_STABLE_12 = MappingCoordinates
-            .of("1.7.10", "stable", "12",
-                    // PINNED TO A COMMIT, not to the `1.7.10` BRANCH it named before.
-                    //
-                    // A branch is a moving reference. This one has not moved since May 2015 and there is
-                    // no reason to expect it to, which is exactly the kind of reasoning that is true right
-                    // up until it is not -- and if it did move, every client would silently start fetching
-                    // different names for the same pinned `stable/12` coordinate. A commit is immutable by
-                    // construction: git addresses it by the content it reaches.
-                    "https://raw.githubusercontent.com/MinecraftForge/FML/"
-                            + "a099592d3d1418245e3af65eda195da244287188/conf/")
-            // The two files that carry members. `params.csv` is deliberately not among them: its names
-            // are parameter names, which exist in bytecode only as debug metadata and are never resolved
-            // against, so downloading it would cost 40 KB to change nothing a script can observe.
-            //
-            // DIGESTS ARE UPSTREAM'S OWN, and the note here used to say there were none. That was true of
-            // `.md5` files beside the CSVs and false of the repository: GIT ADDRESSES EVERY BLOB BY SHA-1,
-            // GitHub's API reports it, and it is as pinnable as anything we could compute -- with the
-            // advantage of being upstream's number rather than a hash we recorded from one fetch and hoped
-            // was of the right bytes. `CacheFiles` reads the `gitblob:` tag.
-            //
-            // Taken from the contents API at the commit above; `git hash-object <file>` reproduces them.
-            .withDigest("methods.csv", "gitblob:4861d2b6c224122c25ba39ac224f4886b6ddd938")
-            .withDigest("fields.csv", "gitblob:db4063eab8c1dc742791c59d071be22772ae462c");
+    private static final MappingCoordinates MCP_STABLE_12 = MappingCoordinates.of("1.7.10", "stable", "12")
+            // The two files that carry members. `params.csv` is not fetched: parameter names exist in
+            // bytecode only as debug metadata and are never resolved against.
+            .readable("methods.csv", Source.located("mcp/stable-12/methods.csv"), null)
+            .readable("fields.csv", Source.located("mcp/stable-12/fields.csv"), null);
 
     /**
      * {@code World#getBlock} is {@code func_147439_a} in production.
