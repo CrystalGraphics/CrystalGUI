@@ -35,15 +35,15 @@ file. A changed digest, or a new download, reaches only jars built after the edi
 An id holding `{minecraft}` or `{java}` covers every version, and is never pinned.
 
 `mirror` is this repository's `download-mirror` release. It holds only what a licence lets us
-redistribute — `mirrorLicences` in `language/build.gradle.kts` — and never MCP's, MCPConfig's or Mojang's
+redistribute — `mirrorLicences` in the root `build.gradle.kts` — and never MCP's, MCPConfig's or Mojang's
 mappings.
 
 ## Checks
 
 ```
-./gradlew :language:checkDownloadLocations    # well-formed, and the engines are the resolved bands; part of check
-./gradlew :language:verifyDownloadLocations   # every address answers with the right bytes; online
-./gradlew :language:stageDownloadMirror       # the files for the download-mirror release, and the commands to upload them
+./gradlew checkDownloadLocations    # well-formed, and the engines are the resolved bands; part of check
+./gradlew verifyDownloadLocations   # every address answers with the right bytes; online
+./gradlew stageDownloadMirror       # the files for the download-mirror release, and the commands to upload them
 ```
 
 When an engine band is re-pinned, `checkDownloadLocations` fails and prints the `bands` block to paste.
