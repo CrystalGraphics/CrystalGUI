@@ -4,6 +4,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * <b>What to build, not how.</b> A description of one editable value, from which
@@ -93,7 +94,9 @@ public final class ConfigDescriptor {
     private int arity = 3;
     private boolean integral;
     private boolean hdr;
-    private java.util.function.Predicate<String> validator;
+    private String unit;
+    private double scrubRate = Double.NaN;
+    private Predicate<String> validator;
     private ConfigDescriptor element;
     private final List<ConfigDescriptor> children = new ArrayList<>();
 
@@ -197,8 +200,19 @@ public final class ConfigDescriptor {
         return hdr;
     }
 
+    /** What a number is measured in — {@code "%"}, {@code "°"}, {@code "px"} — or null for a bare number. */
     @Nullable
-    public java.util.function.Predicate<String> validator() {
+    public String unit() {
+        return unit;
+    }
+
+    /** Units per pixel of scrub, or {@code NaN} to let the magnitude curve decide. @see #scrubRate(double) */
+    public double scrubRate() {
+        return scrubRate;
+    }
+
+    @Nullable
+    public Predicate<String> validator() {
         return validator;
     }
 
@@ -245,7 +259,34 @@ public final class ConfigDescriptor {
         return this;
     }
 
-    public ConfigDescriptor validator(java.util.function.Predicate<String> value) {
+    /**
+     * Shown after the number in its field, and optional when typed.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("angle", "Angle").unit("°");   // reads 45°, takes 50 or 50° alike
+     * }</pre>
+     */
+    public ConfigDescriptor unit(@Nullable String value) {
+        this.unit = value;
+        return this;
+    }
+
+    /**
+     * What one pixel of a drag-scrub is worth on this number, for a field that knows its own scale.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("px", "Pivot X").unit("%").scrubRate(1d);   // one percent per pixel
+     * }</pre>
+     *
+     * <p>Left unset, the rate follows the value's magnitude — right for an unbounded quantity, and wrong
+     * for a percentage or a coordinate, which crawl near zero. @see com.crystalgui.ui.input.DragScrub</p>
+     */
+    public ConfigDescriptor scrubRate(double unitsPerPixel) {
+        this.scrubRate = unitsPerPixel;
+        return this;
+    }
+
+    public ConfigDescriptor validator(Predicate<String> value) {
         this.validator = value;
         return this;
     }

@@ -78,9 +78,24 @@ public class NumberControl extends ValueControl<Double> {
     @Nullable
     private final ConfigDescriptor.Range range;
 
+    /** Shown after the number, and taken back off when typed. @see ConfigDescriptor#unit */
+    @Nullable
+    private final String unit;
+
+    /** Units per pixel of scrub, or NaN to let the magnitude curve decide. @see ConfigDescriptor#scrubRate */
+    private final double scrubRate;
+
     /** The value the live scrub began on. Every frame is computed from this, never from the running
      * value — {@link DragScrub} documents both bugs that live in the alternative. */
     private double scrubAnchor;
+
+    /** Where the press was, kept apart from {@link #scrubAnchor} because that one MOVES. @see #scrubUpdate */
+    private double scrubStart;
+
+    /** The modifiers {@link #scrubAnchor} was taken under, and the travel it was taken at. @see #scrubUpdate */
+    private int scrubModifiers;
+    private float scrubAnchoredAtX;
+    private float scrubAnchoredAtY;
 
     /** False until the pointer has moved far enough for this press to be a scrub rather than a click. */
     private boolean scrubbing;
@@ -100,6 +115,8 @@ public class NumberControl extends ValueControl<Double> {
         super(NAME, descriptor, defaultValue);
         this.integral = descriptor.integral();
         this.range = descriptor.range();
+        this.unit = descriptor.unit();
+        this.scrubRate = descriptor.scrubRate();
         addClass("__number__");
         append(field);
         writeToWidgets(defaultValue);
@@ -178,6 +195,10 @@ public class NumberControl extends ValueControl<Double> {
 
             scrubbing = false;
             scrubAnchor = currentValue();
+            scrubStart = scrubAnchor;
+            scrubModifiers = modifiersNow();
+            scrubAnchoredAtX = 0f;
+            scrubAnchoredAtY = 0f;
             scrubPixelsPerUnit = measurePixelsPerUnit(handle);
 
             Drag.start(handle, rawX, rawY,
@@ -201,7 +222,9 @@ public class NumberControl extends ValueControl<Double> {
                             // the key, so putting the value back is the whole of the work — and it is
                             // worth having: a scrub is the one gesture where you can be well past what
                             // you wanted before you notice.
-                            if (scrubbing) applyScrubValue(scrubAnchor);
+                            // The PRESS value, not the anchor: a modifier mid-drag moves the anchor, and
+                            // Escape means "as it was", not "as it was when I last pressed Shift".
+                            if (scrubbing) applyScrubValue(scrubStart);
                             endScrub();
                         }
                     });
@@ -219,8 +242,23 @@ public class NumberControl extends ValueControl<Double> {
             // empty run for the host to record nothing into.
             beginInteraction();
         }
-        int modifiers = CgPlatform.input().getCurrentModifiers();
-        applyScrubValue(DragScrub.value(scrubAnchor, dxPixels, dyPixels, modifiers, scrubSpec()));
+        int modifiers = modifiersNow();
+        // A MODIFIER PRESSED MID-DRAG RE-ANCHORS, and does not re-price what is already travelled.
+        //
+        // The value is the anchor plus the WHOLE delta at the current rate, so Shift arriving after two
+        // pixels of travel turned those two pixels into twenty — the number jumped by however far the
+        // hand had already come, which is exactly as far as you had to drag to notice it. Re-anchoring
+        // leaves the value where it is and prices only what comes next; Blender re-bases the same way
+        // when precision starts mid-gesture. The anchor model's two properties survive it: out and back
+        // still returns exactly, and replaying one frame is still idempotent.
+        if (modifiers != scrubModifiers) {
+            scrubAnchor = currentValue();
+            scrubAnchoredAtX = dxPixels;
+            scrubAnchoredAtY = dyPixels;
+            scrubModifiers = modifiers;
+        }
+        applyScrubValue(DragScrub.value(scrubAnchor, dxPixels - scrubAnchoredAtX,
+                dyPixels - scrubAnchoredAtY, modifiers, scrubSpec()));
     }
 
     /**
@@ -251,6 +289,12 @@ public class NumberControl extends ValueControl<Double> {
         window.focus().requestPointerFocus(field);
     }
 
+    /** What is held down now, and nothing when there is no platform to ask — a headless tree still clicks. */
+    private static int modifiersNow() {
+        var input = CgPlatform.input();
+        return input == null ? 0 : input.getCurrentModifiers();
+    }
+
     private double currentValue() {
         Double held = getValue();
         return held == null ? 0d : held;
@@ -258,7 +302,8 @@ public class NumberControl extends ValueControl<Double> {
 
     private DragScrub.Spec scrubSpec() {
         DragScrub.Spec spec = integral ? DragScrub.Spec.INTEGRAL : DragScrub.Spec.FLOAT;
-        return range == null ? spec : spec.withRange(range.min(), range.max());
+        if (range != null) spec = spec.withRange(range.min(), range.max());
+        return Double.isNaN(scrubRate) ? spec : spec.withRate(scrubRate);
     }
 
     /**
@@ -288,7 +333,12 @@ public class NumberControl extends ValueControl<Double> {
         return Math.max(range.min(), Math.min(range.max(), v));
     }
 
+    /** The number, then the descriptor's unit if it names one: {@code 45°}, {@code 100%}. */
     private String format(double v) {
+        return formatNumber(v) + (unit == null ? "" : unit);
+    }
+
+    private String formatNumber(double v) {
         if (integral) return String.valueOf(Math.round(v));
         // Trailing zeros stripped, so 0.5 is "0.5" and 1.0 is "1" — Unity's own presentation, and the
         // difference between a readable node and one that is all decimal points.
@@ -297,9 +347,13 @@ public class NumberControl extends ValueControl<Double> {
         return s.endsWith(".") ? s.substring(0, s.length() - 1) : s;
     }
 
+    /** A number, with or without the unit typed after it. */
     @Nullable
-    private static Double parse(String text) {
+    private Double parse(String text) {
         String trimmed = text.trim();
+        if (unit != null && trimmed.endsWith(unit)) {
+            trimmed = trimmed.substring(0, trimmed.length() - unit.length()).trim();
+        }
         if (trimmed.isEmpty()) return null;
         try {
             return Double.parseDouble(trimmed);

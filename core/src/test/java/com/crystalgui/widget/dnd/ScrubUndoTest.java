@@ -10,6 +10,8 @@ import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.SetNodeFieldEdit;
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.config.control.NumberControl;
@@ -194,6 +196,36 @@ public class ScrubUndoTest extends UiDocumentTestBase {
         press();
         release(1f);
         assertEquals(0, undo.undoDepth());
+    }
+
+    /**
+     * <b>A modifier pressed mid-scrub changes nothing until the hand moves again.</b>
+     *
+     * <p>The value is the anchor plus the WHOLE travel at the current rate, so Shift arriving forty pixels
+     * in re-priced all forty at ten times the rate and the number leapt — by however far you had already
+     * dragged, which is what made it look like a snap to some fixed value rather than a rescaling. The
+     * anchor moves to meet the modifier instead, as Blender re-bases when precision starts mid-gesture.</p>
+     */
+    @Test
+    public void aModifierPressedMidScrubDoesNotJumpTheValue() {
+        NumberControl number = mount();
+        TestPlatformService.install();
+
+        press();
+        moveBy(40f);
+        double travelled = number.getValue();
+        assertNotEquals("the drag has to have moved it at all", 1.0d, travelled, 1e-6d);
+
+        // The same place, and only the modifier is new.
+        TestPlatformService.holdModifiers(CgModifiers.SHIFT);
+        moveBy(40f);
+        assertEquals("a modifier is not a movement", travelled, number.getValue(), 1e-6d);
+
+        moveBy(80f);
+        assertTrue("and the gesture still scrubs after it", number.getValue() > travelled);
+
+        release(80f);
+        TestPlatformService.holdModifiers(0);
     }
 
     // ── The mechanism, in isolation ─────────────────────────────────────────
