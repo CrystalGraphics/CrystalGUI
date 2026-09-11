@@ -6,6 +6,8 @@ import java.io.Closeable;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.util.function.BooleanSupplier;
 
 /**
  * <b>One transfer, reporting itself.</b> Open it, read the stream, close it.
@@ -52,10 +54,12 @@ public final class Download implements Closeable {
      */
     static final int REPORT_EVERY_BYTES = 64 * 1024;
 
+    private final String url;
     private final Downloads.Body body;
     private final InputStream stream;
 
-    private Download(Downloads.Body body, InputStream stream) {
+    private Download(String url, Downloads.Body body, InputStream stream) {
+        this.url = url;
         this.body = body;
         this.stream = stream;
     }
@@ -67,7 +71,7 @@ public final class Download implements Closeable {
      * described form and the one a call site should read as. This is what that resolves to.</p>
      */
     static Download start(String url, String what, Progress progress,
-                          java.util.function.BooleanSupplier cancelled) throws IOException {
+                          BooleanSupplier cancelled) throws IOException {
         return start(url, what, progress, cancelled, 0L);
     }
 
@@ -79,7 +83,7 @@ public final class Download implements Closeable {
      * would otherwise be invisible to the person watching it.</p>
      */
     static Download start(String url, String what, Progress progress,
-                          java.util.function.BooleanSupplier cancelled, long from) throws IOException {
+                          BooleanSupplier cancelled, long from) throws IOException {
         // BEFORE THE CONNECT, and indeterminate because nothing knows the size yet. This ordering is the
         // whole reason the class exists -- see the header.
         progress.begin(what, -1, Progress.Unit.BYTES);
@@ -89,7 +93,12 @@ public final class Download implements Closeable {
             progress.begin(what, body.length(), Progress.Unit.BYTES);
             if (already > 0) progress.advance(already);
         }
-        return new Download(body, new Counting(body.stream(), progress, cancelled, already));
+        return new Download(url, body, new Counting(body.stream(), progress, cancelled, already));
+    }
+
+    /** The URL that answered — which of a located transfer's locations this is. */
+    public String url() {
+        return url;
     }
 
     /** The bytes, counted and reported as they are read. */
@@ -121,11 +130,11 @@ public final class Download implements Closeable {
     private static final class Counting extends FilterInputStream {
 
         private final Progress progress;
-        private final java.util.function.BooleanSupplier cancelled;
+        private final BooleanSupplier cancelled;
         private long read;
         private long reportedAt;
 
-        Counting(InputStream in, Progress progress, java.util.function.BooleanSupplier cancelled,
+        Counting(InputStream in, Progress progress, BooleanSupplier cancelled,
                  long already) {
             super(in);
             this.progress = progress;
@@ -160,7 +169,7 @@ public final class Download implements Closeable {
             // per byte. An InterruptedIOException rather than a bespoke type: the caller already catches
             // IOException to mean "did not arrive", which is exactly what a stopped transfer is.
             if (cancelled.getAsBoolean()) {
-                throw new java.io.InterruptedIOException("download cancelled");
+                throw new InterruptedIOException("download cancelled");
             }
         }
     }

@@ -1,4 +1,3 @@
-import java.security.MessageDigest
 import org.gradle.process.CommandLineArgumentProvider
 import java.io.File
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
@@ -436,85 +435,6 @@ val bundleEngineBands = tasks.register<Sync>("bundleEngineBands") {
         }
     }
 }
-
-/**
- * One manifest per band: name, digest and where to fetch it -- what a host whose band is not bundled
- * reads. A SEPARATE output tree from the bundle's, because that one is a Sync and a Sync deletes
- * whatever is not in its source.
- *
- * The digest is computed from the file Gradle resolved rather than read from Maven's `.sha1`: it pins
- * the exact bytes this build was tested against, needs no network, and verifies offline. MD5 because
- * CacheFiles computes MD5 -- a corruption-and-drift check, never a security boundary.
- */
-fun manifestFor(band: Int, configuration: Configuration) {
-    val directory = layout.buildDirectory
-        .dir("engine-manifests/assets/crystalgui/engines/$band").get().asFile
-    directory.mkdirs()
-    val rows = configuration.resolvedConfiguration.resolvedArtifacts.map { artifact ->
-        val id = artifact.moduleVersion.id
-        val path = id.group.replace('.', '/') + "/" + id.name + "/" + id.version
-        val digest = MessageDigest.getInstance("MD5")
-            .digest(artifact.file.readBytes()).joinToString("") { "%02x".format(it) }
-        artifact.file.name + "|" + digest + "|https://repo1.maven.org/maven2/" + path + "/" + artifact.file.name
-    }.sorted()
-    directory.resolve("manifest.txt").writeText(buildString {
-        appendLine("# Band $band engine jars: name|md5|url. Written by writeEngineManifests.")
-        rows.forEach { appendLine(it) }
-    })
-}
-
-val writeEngineManifests = tasks.register("writeEngineManifests") {
-    group = "build"
-    description = "Writes one name|md5|url manifest per engine band, for bands the jar does not carry."
-    outputs.dir(layout.buildDirectory.dir("engine-manifests"))
-    doLast {
-        manifestFor(8, engineBand8)
-        manifestFor(11, engineBand11)
-        manifestFor(17, engineBand17)
-    }
-}
-
-/**
- * Fails the build if a bundled band's jars and its manifest disagree.
- *
- * They are written by different tasks from the same configuration, so they can drift -- and nothing at
- * runtime would notice, because a bundled band is used as-is and the manifest is read only when a band
- * is MISSING. The mismatch would surface as a download that always fails its digest on somebody else's
- * machine, which is about as far from the cause as a symptom gets.
- */
-val checkEngineManifest = tasks.register("checkEngineManifest") {
-    group = "verification"
-    description = "Fails if any bundled band's jars and its manifest disagree."
-    dependsOn(bundleEngineBands, writeEngineManifests)
-    doLast {
-        for (band in bundledBands) {
-            val bundled = layout.buildDirectory
-                .dir("engine-bundle/assets/crystalgui/engines/$band").get().asFile
-            val manifest = layout.buildDirectory
-                .file("engine-manifests/assets/crystalgui/engines/$band/manifest.txt").get().asFile
-            if (!manifest.isFile) throw GradleException("band $band has no manifest; run writeEngineManifests")
-            val declared = manifest.readLines().filter { it.isNotBlank() && !it.startsWith("#") }
-                .associate { row -> row.split("|").let { it[0] to it[1] } }
-            val present = (bundled.listFiles() ?: emptyArray()).filter { it.name.endsWith(".jar") }
-                .associate { jar ->
-                    jar.name to MessageDigest.getInstance("MD5")
-                        .digest(jar.readBytes()).joinToString("") { "%02x".format(it) }
-                }
-            val missing = present.keys - declared.keys
-            val extra = declared.keys - present.keys
-            val wrong = present.filter { (name, digest) -> declared[name]?.equals(digest) == false }.keys
-            if (missing.isNotEmpty() || extra.isNotEmpty() || wrong.isNotEmpty()) {
-                throw GradleException(
-                    "band $band's manifest does not describe its bundled jars." + "\n"
-                        + "  bundled but not declared: $missing" + "\n"
-                        + "  declared but not bundled: $extra" + "\n"
-                        + "  declared with a stale digest: $wrong")
-            }
-        }
-    }
-}
-
-tasks.named("check") { dependsOn(checkEngineManifest) }
 
 // The shipping jar, with every bundled class at Java 17.
 //

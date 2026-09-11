@@ -31,7 +31,7 @@ fun configureShadowJarBundling(project: Project) {
         afterEvaluate {
             tasks.named("shadowJar").configure {
                 dependsOn(":core:jar", ":runtime:mc:modern:common:jar", ":language:jar", ":taffy:jar")
-                dependsOn("bundleEngineBands", "writeEngineManifests")
+                dependsOn("bundleEngineBands")
 
                 // ShadowJar.configurations = empty list (no runtime classpath shadowing).
                 val configsSetter = (this as Any).javaClass.methods.first { m -> m.name == "setConfigurations" }
@@ -89,9 +89,8 @@ fun configureShadowJarBundling(project: Project) {
                     ?.filter { it.name.endsWith(".jar") }
                     ?.forEach { copy.from(zipTree(it)) }
 
-                // The engine band this jar carries, and a manifest per band for the ones it does not.
+                // The engine band this jar carries. One it does not is fetched: download/locations.json.
                 copy.from(tasks.named("bundleEngineBands"))
-                copy.from(tasks.named("writeEngineManifests"))
             }
         }
         tasks.named("assemble").configure { dependsOn(tasks.named("shadowJar")) }

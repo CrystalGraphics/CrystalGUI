@@ -1,5 +1,9 @@
 package com.crystalgui.language.platform;
 
+import com.crystalgui.language.cache.DownloadLocations;
+import com.crystalgui.language.cache.Downloads;
+
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,6 +35,9 @@ import java.util.Map;
  * corrupted <em>download</em> and a corrupted <em>cache</em> fail the same check, and a mirror serving
  * something unexpected is rejected rather than quietly accepted.</p>
  *
+ * <p>A {@link Source#located} file takes its URLs and its pin from {@code download/locations.json}, which
+ * is where every download address lives.</p>
+ *
  * <p>A file with no pinned digest is still fetched and used — {@link #digestOf} answers null and the
  * caller may only check that it parses. That is a deliberate allowance for bringing a platform up before
  * its digests are known, not a permanent state.</p>
@@ -54,14 +61,14 @@ public final class MappingCoordinates {
     /**
      * Where one file comes from, answered when it is FETCHED rather than when it is declared.
      *
-     * <p>Deferred because some addresses cannot be written down. Mojang's mappings live at a
-     * content-addressed URL discoverable only through its version manifest, so the platform resolves
-     * both the URL and the digest from upstream at fetch time — nothing is pinned to a number nobody
-     * could verify, and the manifest is immutable per Minecraft version.</p>
-     *
      * <pre>{@code
-     * coordinates.readable("client.txt", MojangMappings.clientMappings("1.20.1"), null);
+     * coordinates.readable("methods.csv", Source.located("mcp/stable-12/methods.csv"), null);
+     * coordinates.readable("client.txt", MojangMappings.clientMappings("1.20.4"), null);
      * }</pre>
+     *
+     * <p>Deferred because an address is not a constant. A {@link #located} file's comes from
+     * {@code download/locations.json}, which master's copy can extend after release; Mojang's mappings for
+     * a version nobody pinned live at a content-addressed URL only its version manifest names.</p>
      *
      * <p>Called on the fetching thread, never on the caller of {@code mappings()} — so a resolver may do
      * network work, and a failure arrives as the ordinary "could not fetch" rather than as a stall on
@@ -75,6 +82,59 @@ public final class MappingCoordinates {
         /** The expected digest, tagged with its algorithm, or null when nothing is pinned. */
         default String digest() throws IOException {
             return null;
+        }
+
+        /** The transfer that fetches this file: its URL and digest, unless it knows better. */
+        default Downloads.Request request() throws IOException {
+            return Downloads.from(url()).verifying(digest());
+        }
+
+        /** The digest a cached copy is checked against at launch, known without the network; or null. */
+        default String pinnedDigest() {
+            return null;
+        }
+
+        /**
+         * An artifact {@code download/locations.json} lists: every URL it names, checked against the jar's
+         * pin. What a platform states instead of an address, so a moved host is fixed in that file.
+         *
+         * <pre>{@code
+         * coordinates.readable("methods.csv", Source.located("mcp/stable-12/methods.csv"), null);
+         * }</pre>
+         */
+        static Source located(String id) {
+            return new Source() {
+                @Override
+                public String url() throws IOException {
+                    return where().urls().get(0);
+                }
+
+                @Override
+                public String digest() throws IOException {
+                    return where().digest();
+                }
+
+                @Override
+                public Downloads.Request request() throws IOException {
+                    return Downloads.located(id);
+                }
+
+                @Override
+                public String pinnedDigest() {
+                    return DownloadLocations.get().pinOf(id);
+                }
+
+                private DownloadLocations.Location where() throws IOException {
+                    DownloadLocations.Location where = DownloadLocations.get().find(id);
+                    if (where == null) throw new FileNotFoundException("download/locations.json lists no " + id);
+                    return where;
+                }
+
+                @Override
+                public String toString() {
+                    return id;
+                }
+            };
         }
 
         /** A URL and digest that were known up front. */
@@ -222,7 +282,7 @@ public final class MappingCoordinates {
         return with(fileName, Source.fixed(url, digest), digest, null, Side.READABLE);
     }
 
-    /** The readable half, from an address only upstream can give. @see Source */
+    /** The readable half, from a {@link Source} resolved when the file is fetched. */
     public MappingCoordinates readable(String fileName, Source source, String archiveEntry) {
         return with(fileName, source, null, archiveEntry, Side.READABLE);
     }
@@ -242,7 +302,7 @@ public final class MappingCoordinates {
         return with(fileName, Source.fixed(url, digest), digest, null, Side.RUNTIME);
     }
 
-    /** The runtime half, from an address only upstream can give. @see Source */
+    /** The runtime half, from a {@link Source} resolved when the file is fetched. */
     public MappingCoordinates runtime(String fileName, Source source, String archiveEntry) {
         return with(fileName, source, null, archiveEntry, Side.RUNTIME);
     }
@@ -357,9 +417,12 @@ public final class MappingCoordinates {
         }
     }
 
-    /** The pinned MD5 for one file, or null when none was stated. */
+    /** The pinned digest for one file — stated here, or by its source — or null when there is none. */
     public String digestOf(String fileName) {
-        return digests.get(fileName);
+        String digest = digests.get(fileName);
+        if (digest != null) return digest;
+        Artifact artifact = artifacts.get(fileName);
+        return artifact == null ? null : artifact.source.pinnedDigest();
     }
 
     @Override
