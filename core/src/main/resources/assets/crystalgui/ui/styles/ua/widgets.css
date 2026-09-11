@@ -264,6 +264,25 @@ splitview.__vertical__ > .__divider__ {
     height: 4px;
 }
 
+/* ── ContextToolbar ─────────────────────────────────────────────────────────────────────────────
+ * One row whose height is its own: a page that swaps in -- a tool's options in place of an editor's
+ * toolbar -- cannot move what is under the bar, which is the point of it being one row. */
+
+contexttoolbar {
+    width: 100%;
+    height: var(--panel-header-h, 22px);
+    flex-direction: row;
+    align-items: center;
+    overflow: clip;
+}
+
+contexttoolbar > .__context-page__ {
+    width: 100%;
+    height: 100%;
+    flex-direction: row;
+    align-items: center;
+}
+
 /* ── TabView ────────────────────────────────────────────────────────────────────────────────────
  * The panes container gets its flex-grow from Java (this engine's flex-shrink/min-width defaults
  * mean it would otherwise collapse to content size); everything here is thickness and colour.

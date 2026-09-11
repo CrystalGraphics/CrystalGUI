@@ -1,5 +1,9 @@
 package com.crystalgui.widget.surface.mode;
 
+import javax.annotation.Nullable;
+
+import com.crystalgui.ui.dom.UIElement;
+
 /**
  * One way of working on a surface — Select, Hand, Zoom, Free Transform.
  *
@@ -38,6 +42,25 @@ public interface Tool {
 
     /** Runs when it stops being current, however that happened — including the surface closing. */
     default void deactivated() {
+    }
+
+    /**
+     * What this tool puts in the editor's context toolbar while it is current, or null for nothing — its
+     * page of Photoshop's options bar.
+     *
+     * <pre>{@code
+     * public UIElement options() {
+     *     if (options == null) options = new BrushOptions(ctx);
+     *     return options;
+     * }
+     * }</pre>
+     *
+     * <p>Return the same element every time: the bar keeps a page between uses, so its fields keep what
+     * they hold. Shown only where the host has called {@code ctx.modes().showOptionsIn(bar)}.</p>
+     */
+    @Nullable
+    default UIElement options() {
+        return null;
     }
 
     /**

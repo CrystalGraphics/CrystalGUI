@@ -13,6 +13,7 @@ import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.workbench.chrome.preferences.NavigatorView;
 import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
+import com.crystalgui.widget.layout.ContextToolbar;
 import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 import com.crystalgui.workbench.chrome.status.ProcessesPopover;
@@ -220,6 +221,7 @@ public final class WidgetCensus {
         WidgetContracts.localOnly(Breadcrumbs.class, "Shell chrome, derived from the active file's path.");
         WidgetContracts.localOnly(NavigatorView.class, "Shell chrome -- the settings navigator.");
         WidgetContracts.localOnly(PageStack.class, "Shell chrome -- a page host with a back stack.");
+        WidgetContracts.localOnly(ContextToolbar.class, "Shell chrome -- the row a tool's options take over.");
         WidgetContracts.localOnly(QuickPick.class, "Shell chrome -- the palette's picker.");
         WidgetContracts.localOnly(ProblemsPanel.class, "Shell chrome, built from the DiagnosticSet.");
         WidgetContracts.localOnly(ProcessesPopover.class, "Shell chrome, built from the running-process list.");

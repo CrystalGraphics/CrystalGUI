@@ -2,15 +2,17 @@ package com.crystalgui.widget.surface.mode;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
-import java.util.function.Supplier;
-
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Input;
+import com.crystalgui.widget.layout.ContextToolbar;
 import com.crystalgui.widget.surface.SurfaceContext;
 
 /**
@@ -19,6 +21,7 @@ import com.crystalgui.widget.surface.SurfaceContext;
  * <pre>{@code
  * ctx.modes().use("crystalgui:select");
  * ctx.modes().onDidChangeTool.connect(this::refreshStrip);
+ * ctx.modes().showOptionsIn(contextToolbar);   // each tool's options() comes and goes with it
  * }</pre>
  *
  * <p>A tool is built once, the first time it is picked, and kept — so a tool may hold gesture state
@@ -49,6 +52,13 @@ public final class Modes {
 
     @Nullable
     private UIDocument pushedOn;
+
+    /** Where the current tool's options show. @see #showOptionsIn */
+    @Nullable
+    private ContextToolbar optionsBar;
+
+    @Nullable
+    private Disposable optionsClaim;
 
     /** Fires after the current tool changes, including to none. */
     public final Signal.Action onDidChangeTool = new Signal.Action();
@@ -85,12 +95,13 @@ public final class Modes {
 
     /** Makes the tool registered under {@code id} current. An id nothing registered is a no-op. */
     public void use(@Nullable String id) {
-        if (java.util.Objects.equals(currentId, id)) return;
+        if (Objects.equals(currentId, id)) return;
         if (current != null) current.deactivated();
         previousId = currentId;
         currentId = id;
         current = id == null ? null : build(id);
         if (current != null) current.activated();
+        showCurrentOptions();
         onDidChangeTool.emit();
     }
 
@@ -104,6 +115,39 @@ public final class Modes {
     /** Goes back to what was current before the last {@link #useTemporarily}. */
     public void restore() {
         use(previousId);
+    }
+
+    /**
+     * Shows the current tool's {@link Tool#options()} in {@code bar}, following every change of tool.
+     *
+     * <pre>{@code
+     * ContextToolbar bar = new ContextToolbar(documentToolbar);
+     * surface.modes().showOptionsIn(bar);
+     * }</pre>
+     *
+     * @return stops following, and takes down whatever it put up
+     */
+    public Disposable showOptionsIn(ContextToolbar bar) {
+        Objects.requireNonNull(bar, "bar");
+        optionsBar = bar;
+        showCurrentOptions();
+        return () -> {
+            if (optionsBar != bar) return;
+            releaseOptions();
+            optionsBar = null;
+        };
+    }
+
+    private void showCurrentOptions() {
+        releaseOptions();
+        UIElement page = optionsBar == null || current == null ? null : current.options();
+        if (page != null) optionsClaim = optionsBar.claim(page);
+    }
+
+    private void releaseOptions() {
+        if (optionsClaim == null) return;
+        optionsClaim.dispose();
+        optionsClaim = null;
     }
 
     @Nullable

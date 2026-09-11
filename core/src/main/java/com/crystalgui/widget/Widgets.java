@@ -54,6 +54,7 @@ import com.crystalgui.widget.graph.node.NodeCreationMenu;
 import com.crystalgui.widget.composite.CreateMenu;
 import com.crystalgui.widget.surface.SurfaceEditor;
 import com.crystalgui.widget.surface.insert.InsertMenu;
+import com.crystalgui.widget.layout.ContextToolbar;
 import com.crystalgui.widget.layout.PageStack;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.layout.Tab;
@@ -137,6 +138,8 @@ public final class Widgets implements NodeKinds {
         // PageStack is shell chrome with a back stack -- localOnly, so it registers a kind for the
         // cascade's sake (`pagestack { }` is how a theme reaches it) and nothing decodes into it.
         UIElementRegistry.register(PageStack.NAME, PageStack::new, NodeContract.INERT);
+        // The row a tool's options take over. Chrome, like PageStack, and registered for the same reason.
+        UIElementRegistry.register(ContextToolbar.NAME, ContextToolbar::new, NodeContract.INERT);
 
         // ── 6.3: the collections and the shell's chrome ─────────────────────────────
         //
