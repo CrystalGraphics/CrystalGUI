@@ -92,12 +92,10 @@ dependencies {
     "compileOnly"(project(":core"))
 
     // compileOnly and NOT bundled: the merge adds :runtime:mc:shared once, under a package no variant
-    // relocates. It carries the variant table reader and the bootstrappers (J11.0), so it is on the
-    // RUNTIME classpath too -- a dev run constructs the same bootstrapper production does, and
-    // without this the loader finds the class its descriptor names missing. ModDevGradle ignores
-    // runtimeClasspath, so Forge and NeoForge also name its source sets in their own mods{} blocks.
+    // relocates. EMPTY today -- the variant selector it briefly held is CrystalGraphics' (J11.0),
+    // reached through mc1201CompileDeps like CrashVariant, which adds it both compileOnly and
+    // runtimeOnly.
     "compileOnly"(project(":runtime:mc:shared"))
-    "runtimeOnly"(project(":runtime:mc:shared"))
 
     // Taffy and JOML: :core has them compileOnly so they reach nobody transitively, and UIElement holds
     // a NodeId and a Matrix4f as fields. Needed at RUNTIME too -- a field descriptor resolves at class
@@ -272,27 +270,6 @@ tasks.matching { it.name.startsWith("run") || it.name.startsWith("prepare") }.co
     dependsOn(":core:classes", ":runtime:mc:modern:common:classes", ":language:classes")
 }
 
-// :runtime:mc:shared IS A LIBRARY ON A DEV RUN, NOT A MOD (J11.0).
-//
-// It carries the variant table reader the bootstrapper calls, and nothing in it is annotated -- so it
-// must be on the run's classpath without being scanned as a mod. `additionalRuntimeClasspath` is
-// ModDevGradle's own channel for exactly that: "dependencies of every run, that should not be
-// considered boot classpath modules". Loom has no such configuration and takes it off
-// runtimeClasspath, which the `runtimeOnly` above already covers.
-//
-// Neither mods{} nor runtimeOnly reaches a ModDevGradle run: measured on 2026-09-12, a Forge
-// dedicated server died with ClassNotFoundException for this module's own classes until this existed.
-// Nothing noticed before because the module was EMPTY until J11.0 put the first class in it.
-// afterEvaluate, and not `plugins.withId`: ModDevGradle creates this configuration while the
-// legacyForge/neoForge EXTENSION is configured, not when its plugin is applied -- the same ordering
-// the two loader scripts already document about `crystalgraphics-run.gradle.kts`. A hook at apply
-// time fails with "Configuration with name 'additionalRuntimeClasspath' not found"; Loom never has
-// one, which is what `findByName` answers for.
-afterEvaluate {
-    configurations.findByName("additionalRuntimeClasspath")?.let { runtime ->
-        dependencies.add(runtime.name, project(":runtime:mc:shared"))
-    }
-}
 
 // The engine band, for a DEV run only.
 //

@@ -1,6 +1,6 @@
 package com.crystalgui.mc.fabric;
 
-import com.crystalgui.mc.shared.Bootstrap;
+import com.crystalgraphics.mc.shared.VariantBootstrap;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.ModInitializer;
@@ -24,12 +24,12 @@ public final class FabricBootstrap implements ModInitializer, ClientModInitializ
 
     @Override
     public void onInitialize() {
-        Bootstrap.startCommon(FabricBootstrap.class, MODID, "fabric", minecraftVersion(), null);
+        VariantBootstrap.startCommon(FabricBootstrap.class, MODID, "fabric", minecraftVersion(), null);
     }
 
     @Override
     public void onInitializeClient() {
-        Bootstrap.startClient(FabricBootstrap.class, MODID, "fabric", minecraftVersion(), null);
+        VariantBootstrap.startClient(FabricBootstrap.class, MODID, "fabric", minecraftVersion(), null);
     }
 
     /** First-party, never a guess: the loader's own metadata for the `minecraft` container. */

@@ -1,6 +1,6 @@
 package com.crystalgui.mc.fabric;
 
-import com.crystalgui.mc.shared.VariantEntry;
+import com.crystalgraphics.mc.shared.VariantEntry;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

@@ -1,7 +1,7 @@
 package com.crystalgui.mc.forge;
 
-import com.crystalgui.mc.shared.Bootstrap;
-import com.crystalgui.mc.shared.FmlVersion;
+import com.crystalgraphics.mc.shared.VariantBootstrap;
+import com.crystalgraphics.mc.shared.FmlVersion;
 
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.fml.common.Mod;
@@ -28,9 +28,9 @@ public final class ForgeBootstrap {
     public ForgeBootstrap() {
         String minecraft = FmlVersion.of(FMLLoader.class);
         FMLJavaModLoadingContext context = FMLJavaModLoadingContext.get();
-        Bootstrap.startCommon(ForgeBootstrap.class, MODID, "forge", minecraft, context);
+        VariantBootstrap.startCommon(ForgeBootstrap.class, MODID, "forge", minecraft, context);
         if (FMLEnvironment.dist == Dist.CLIENT) {
-            Bootstrap.startClient(ForgeBootstrap.class, MODID, "forge", minecraft, context);
+            VariantBootstrap.startClient(ForgeBootstrap.class, MODID, "forge", minecraft, context);
         }
     }
 }

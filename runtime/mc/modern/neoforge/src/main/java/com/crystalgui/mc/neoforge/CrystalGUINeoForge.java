@@ -11,7 +11,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
-import com.crystalgui.mc.shared.VariantEntry;
+import com.crystalgraphics.mc.shared.VariantEntry;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
@@ -40,7 +40,7 @@ import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
  *
  * <p><b>No {@code @Mod} here.</b> One jar carries a NeoForge variant per era and the scanner reads
  * every class in it, so two variants bearing the same annotation are two mods of one id. The single
- * annotated class is {@code NeoForgeBootstrap} in {@code runtime/mc/shared}, which reads
+ * annotated class is {@code NeoForgeBootstrap}, beside this one, which reads
  * {@code variants.json} and constructs the row matching the running Minecraft version.</p>
  */
 public final class CrystalGUINeoForge implements VariantEntry {
