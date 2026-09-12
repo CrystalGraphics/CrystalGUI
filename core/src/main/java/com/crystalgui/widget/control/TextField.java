@@ -1279,12 +1279,16 @@ public class TextField extends UIElement implements Measurable {
         // to the same teardown as anything that does.
         String shown = showingPlaceholder && !isFocused() ? "" : showingPlaceholder ? placeholder : text;
         if (!shown.isEmpty()) {
+            // A draw that did not get the glyph tier it asked for is provisional, so come back for it
+            // next frame. @see CgUiPaintContext#textDegradedDrawCount
+            long degradedBefore = ctx.textDegradedDrawCount();
             ctx.text().draw()
                     .at(originX, originY)
                     .text(shown)
                     .color(showingPlaceholder ? dim(styleGen.color()) : styleGen.color())
                     .family(resolveFamily())
                     .submit();
+            if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
         }
 
         // Caret only while focused, never alongside a selection, and only in the visible half of the

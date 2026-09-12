@@ -1,5 +1,7 @@
 package com.crystalgui.render.text;
 
+import com.crystalgraphics.text.cache.CgFontRegistry;
+import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontFamilyGroup;
@@ -98,7 +100,45 @@ public final class FontFamilyCache {
         if (stack == null || stack.isEmpty()) {
             throw new IllegalArgumentException("stack must not be null/empty");
         }
-        return CACHE.computeIfAbsent(key(stack, targetPx), ignored -> build(stack, targetPx, CgFontStyle.REGULAR));
+        return CACHE.computeIfAbsent(key(stack, targetPx), ignored -> {
+            CgFontFamily built = build(stack, targetPx, CgFontStyle.REGULAR);
+            warm(built, targetPx);
+            return built;
+        });
+    }
+
+    /**
+     * Queues printable ASCII for a face the moment it first enters play.
+     *
+     * <p><b>Warming from a cache miss here, rather than from a list of stylesheets, because this is the
+     * one place that knows a face is about to be drawn.</b> {@code CgUiPaintContext.warmGlyphs} reads
+     * faces out of {@code StyleSheet.DEFAULT} alone, so anything a THEME introduces — {@code ore.css}'s
+     * {@code MinecraftRegular.otf}, say — was never warmed at all, and neither was any face that only a
+     * theme or an application sheet names. Switching themes therefore dropped to bitmap fallbacks for
+     * every glyph and stayed there for seconds while msdfgen caught up, in both directions.</p>
+     *
+     * <p>Measured before this, opening one page with large text: 40 distance-field misses on the frame
+     * it appeared, zero distance-field batches, and about 420 frames to converge — during which text
+     * draws from the bitmap tier, which carries no distance field and therefore no
+     * {@code text-stroke}.</p>
+     *
+     * <p>Cheap to call on every miss: a miss is once per {@code (stack, size)} for the life of the
+     * process, and {@code warmAscii} is fire-and-forget. Re-warming a face already warmed at another
+     * size collapses onto the same distance-field entries and is dropped by the executor's dedup —
+     * which is only true since {@code CgGlyphGenerationJob} started keying on the atlas entry a job
+     * writes rather than on which font instance asked for it.</p>
+     */
+    private static void warm(CgFontFamily family, int targetPx) {
+        if (family == null) return;
+        try {
+            CgFontRegistry.get().warmAscii(family.getPrimaryFont(),
+                    CgGraphicsLifecycle.getCurrentFrame(), targetPx);
+        } catch (RuntimeException | LinkageError broken) {
+            // A warm that fails costs latency, never correctness: every glyph it did not reach is
+            // generated on demand exactly as it would have been. @see CgFontRegistry#warmAscii
+            CrystalGuiCore.LOGGER.warn("FontFamilyCache: glyph warm failed for "
+                    + family.getPrimaryFont().getLogicalName(), broken);
+        }
     }
 
     /**

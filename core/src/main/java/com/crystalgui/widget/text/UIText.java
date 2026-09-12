@@ -328,7 +328,15 @@ public final class UIText extends UIElement implements Measurable {
                 || property == StylePropertyRegistry.FONT_WEIGHT
                 || property == StylePropertyRegistry.FONT_STYLE) {
             invalidateShaping();
+            return;
         }
+        // ANYTHING ELSE IS READ AT PAINT TIME, so the picture changed and the box did not. Colour,
+        // the whole text-stroke family, the fill, paint-order, the shadow, the decorations and the
+        // offsets all land here -- and a kept layer would otherwise hold the old paint until some
+        // unrelated event forced a frame. A repaint rather than an allowlist: this reports false from
+        // paintsDynamically, so anything missed is invisible until someone recolours a label inside a
+        // retained subtree, which is how the stroke colours were found not to update at all.
+        repaint();
     }
 
     /** Drops the retained paragraph and asks for a fresh layout. */
@@ -345,11 +353,16 @@ public final class UIText extends UIElement implements Measurable {
 
     /**
      * <b>A label's picture is a function of its text and its style</b>, and every route into either
-     * passes through {@link #invalidateShaping}, which says so.
+     * asks for a repaint — {@link #invalidateShaping} for the four properties that change the shaped
+     * run, {@link #computedChanged} for every other property, which a label reads while painting.
      *
      * <p>Worth stating rather than inheriting the safe default, because a label is in almost every
      * subtree in this UI: left dynamic, it would be the one node that stops any enclosing panel from
      * ever being kept between frames.</p>
+     *
+     * <p>Which makes the repaint in {@code computedChanged} load-bearing rather than defensive. It
+     * used to cover the shaping four alone, and a {@code color} change inside a kept layer then did
+     * nothing at all until an unrelated click forced a frame.</p>
      */
     @Override
     public boolean paintsDynamically() {

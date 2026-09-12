@@ -898,6 +898,34 @@ public final class CgUiPaintContext {
      *         .submit().endBatch();
      * }</pre>
      */
+    /**
+     * How many draws the text renderer has made below the glyph tier they asked for.
+     *
+     * <p><b>A widget that draws text brackets its paint with this and repaints when it moves</b>,
+     * which is the whole of what keeps an outline from going missing:</p>
+     *
+     * <pre>{@code
+     * long before = ctx.textDegradedDrawCount();
+     * ctx.text().draw()....submit();
+     * if (ctx.textDegradedDrawCount() != before) repaint();   // provisional, come back for it
+     * }</pre>
+     *
+     * <p>Glyph generation is budgeted per frame, so a glyph that misses the budget is drawn from the
+     * bitmap tier or not at all while the atlas catches up over the next few frames. A tree that is
+     * done settling repaints on damage alone, so nothing collects that on its own and the degraded
+     * picture stands until something unrelated dirties it — a label that came out unstroked stays
+     * unstroked until the mouse moves. The repaint has to be the DRAWING NODE's: damage becomes a
+     * revision on its own box, and a retained ancestor layer keyed on {@code subtreeRevision} would
+     * otherwise keep blitting the stale texture.</p>
+     *
+     * <p><b>Deliberately not {@code text().degradedDrawCount()}</b>: {@link #text()} switches the
+     * instance path and flushes the quad one, so asking a question through it would cost a draw call
+     * per ask. This reads a field.</p>
+     */
+    public long textDegradedDrawCount() {
+        return textRenderer.getDegradedDrawCount();
+    }
+
     public CgTextRenderer text() {
         // TEXT OWNS A SECOND RENDERER with its own material, so switching to it flushes the quad path
         // and switching back flushes text -- meaning every alternation between a box and a label is two
