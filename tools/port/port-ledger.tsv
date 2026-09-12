@@ -166,7 +166,7 @@ PART	ConflictDialog	conflict-actions	A	1	confirmed	leaf in every rule, scoped by
 PART	ConflictDialog	conflict-message	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ConflictDialog	conflict-who	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ContextToolbar	context-overflow	A	0	proposed	leaf in every rule
-PART	ContextToolbar	context-overflow-panel	B	3	proposed	a rule selects through it (2)
+PART	ContextToolbar	context-overflow-panel	B	9	proposed	a rule selects through it (8)
 PART	ContextToolbar	context-page	A	0	proposed	leaf in every rule
 PART	ContextToolbar	context-separator	B	3	proposed	a rule selects through it (1)
 PART	ContextToolbar	context-separator-line	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
@@ -684,8 +684,8 @@ PART	TransformBox	transform-box	A	0	proposed	leaf in every rule
 PART	TransformOptionsBar	on	C	5	proposed	state adjective
 PART	TransformOptionsBar	transform-anchor	B	2	proposed	a rule selects through it (1)
 PART	TransformOptionsBar	transform-anchor-cell	A	2	proposed	leaf in every rule
-PART	TransformOptionsBar	transform-field	B	3	proposed	a rule selects through it (2)
-PART	TransformOptionsBar	transform-label	A	2	proposed	leaf in every rule
+PART	TransformOptionsBar	transform-field	B	2	proposed	a rule selects through it (1)
+PART	TransformOptionsBar	transform-label	A	1	proposed	leaf in every rule
 PART	TransformOptionsBar	transform-link	A	4	proposed	leaf in every rule
 PART	TransformOptionsBar	transform-options	A	0	proposed	leaf in every rule
 PART	TreeSearch	dimmed	C	1	confirmed	state adjective
