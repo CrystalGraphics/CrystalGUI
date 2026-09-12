@@ -91,16 +91,18 @@ public final class TransformBox extends UIElement {
     private static final float HANDLE_SIZE = 6f;
 
     /**
-     * How close a pointer has to be to a handle to scale by it — <b>the dot's own radius, not more.</b>
+     * How close a pointer has to be to a handle to scale by it — <b>a target, not the dot's own radius.</b>
      *
-     * <p>It was seven, which is a fourteen-pixel circle around a six-pixel dot, and the cost is not that
-     * scaling is easy to hit: it is that rotate cannot begin until the pointer is clear of it. Rotate has
-     * no mark of its own, so every pixel this claims is taken from the only affordance rotate has, and
-     * the band started a good ten pixels out from the corner instead of at the edge of the dot.</p>
+     * <p>The dot marks where the handle IS; it is not how near the hand has to be to take it. Matched to
+     * the dot exactly, a corner was almost impossible to catch — the rotate band took over a pixel or two
+     * outside the mark.</p>
      *
-     * <p>Half the dot plus a pixel of tolerance, so the scale zone is what the eye sees plus a hair.</p>
+     * <p><b>Rotate loses nothing to this.</b> {@link #ROTATE_BAND} is a width measured OUTWARD from here,
+     * so a wider scale zone slides the band out whole rather than eating into it. What it does cost is the
+     * gap between the dot and the band: a press further from the corner than the eye expects still scales,
+     * which is the right way round — scaling is the common gesture and the one with a mark to aim at.</p>
      */
-    private static final float GRAB = HANDLE_SIZE * 0.5f + 1f;
+    private static final float GRAB = 9f;
 
     private static final float PIVOT_SIZE = 9f;
 
