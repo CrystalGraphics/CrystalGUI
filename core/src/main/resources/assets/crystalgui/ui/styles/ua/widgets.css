@@ -296,10 +296,40 @@ contexttoolbar > .__context-overflow__ {
     gap: 4px;
     padding: 4px;
     /* THE BAR'S OWN GROUND, RESTATED HERE. The panel is a popover, so it lives in the top layer and no
-     * descendant selector in the sheet that themes the toolbar can reach it -- it took the popover's
-     * lighter background instead, and the group hairlines, which are the status bar's divider token,
-     * disappeared into it. What folds behind the » is the bar continued, so it looks like the bar. */
-    background-color: var(--panel-bg, #2B2D30);
+     * descendant selector in the sheet that themes the toolbar can reach it -- it took `popover`'s menu
+     * background instead, and the group hairlines, which are the status bar's divider token, disappeared
+     * into it. What folds behind the » is the bar continued, so it looks like the bar.
+     *
+     * `background`, NOT `background-color`: the popover states its ground as a drawable, and a colour
+     * underneath one changes nothing. A class outranks `popover`'s type selector, so order need not. */
+    background: var(--panel-bg, #191A1C);
+}
+
+/* ONE SIZE FOR THE WHOLE ROW, a step under the rest of the chrome -- Photoshop's and Paint.NET's option
+ * bars, which fit a dozen numbers across by being denser than the window around them.
+ *
+ * ON THE TEXT ITSELF, because font-size does not inherit here: `* { font-size: 10 }` in default.css is a
+ * candidate on every element, so a size on the row alone reaches nothing inside it. A button's and a
+ * dropdown's label are parts of their own. The popover is named separately for the reason its background
+ * is: it is in the top layer, and no descendant selector of the row can reach it. */
+contexttoolbar text,
+contexttoolbar textfield,
+contexttoolbar button::part(label),
+contexttoolbar dropdown::part(label),
+.__context-overflow-panel__ text,
+.__context-overflow-panel__ textfield,
+.__context-overflow-panel__ button::part(label),
+.__context-overflow-panel__ dropdown::part(label),
+/* AND THE KIT'S CONTROLS BY THEIR CLASS, which is a specificity fight rather than a second thought.
+ * `ua/config-kit.css` sizes its own with `.__config-control__ text, .__config-control__ textfield`
+ * (11), so the plain pair above (2) loses every number on the row -- and in the popover the pair ties
+ * at 11 and loses on source order, the kit being concatenated after this file. 12 and 21 settle both.
+ * `colorselector` documents the same fight and takes the same way out. */
+contexttoolbar .__config-control__ text,
+contexttoolbar .__config-control__ textfield,
+.__context-overflow-panel__ .__config-control__ text,
+.__context-overflow-panel__ .__config-control__ textfield {
+    font-size: 8;
 }
 
 /* A HAIRLINE BETWEEN A PAGE'S GROUPS, Photoshop's. The spacing is inside its own width rather than in
@@ -319,15 +349,23 @@ contexttoolbar > .__context-overflow__ {
     background-color: var(--statusbar-sep, #3C3F41);
 }
 
-/* In the popover's column it is a rule across it instead. */
+/* In the popover's column it is a rule across it instead.
+ *
+ * STRETCHED, NOT A PERCENTAGE, and that is the whole of why it was invisible: a popover shrink-wraps its
+ * content, so `width: 100%` contributes nothing to the width being decided and then resolves against it
+ * as zero -- a 0x1 hairline, displayed, correctly coloured, and drawing nothing. The panel lays its items
+ * out `flex-start`, so the stretch has to be asked for here, and the widths have to go back to `auto`:
+ * an explicit cross-size beats `align-self`. `menu .__separator__` states no width for the same reason. */
 .__context-overflow-panel__ > .__context-separator__ {
-    width: 100%;
+    width: auto;
+    align-self: stretch;
+    align-items: stretch;
     height: 7px;
     flex-direction: column;
 }
 
 .__context-overflow-panel__ > .__context-separator__ > .__context-separator-line__ {
-    width: 100%;
+    width: auto;
     height: 1px;
 }
 

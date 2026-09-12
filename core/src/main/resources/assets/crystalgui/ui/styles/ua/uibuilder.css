@@ -118,16 +118,9 @@ builderpane > contexttoolbar > .__context-page__ {
     gap: 4;
 }
 
-/* ONE SIZE FOR THE WHOLE ROW, a step under the rest of the chrome -- Photoshop's and Paint.NET's density.
- * On the text itself, because font-size does not inherit here: `* { font-size: 10 }` is a candidate on
- * every element, and a button's label is a part of its own. */
-builderpane > contexttoolbar > .__context-overflow__::part(label),
-buildertoolbar > button::part(label),
-buildertoolbar > dropdown::part(label),
-.__transform-label__,
-.__transform-field__ textfield {
-    font-size: 8;
-}
+/* THE ROW'S DENSE FONT IS THE WIDGET'S, not this consumer's -- `contexttoolbar` in ua/widgets.css, so a
+ * tool's options are as dense on any surface. The builder's own toolbar is this bar's base page, so it
+ * is inside the row and takes the same size. */
 
 /* NOTHING HERE FOR THE ENTRIES. They are outlined controls because every workbench control is --
  * @see `workbench button, workbench dropdown` in ua/workbench.css -- and a copy of that rule scoped to
