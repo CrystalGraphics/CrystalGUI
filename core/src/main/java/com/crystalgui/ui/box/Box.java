@@ -388,7 +388,11 @@ public final class Box {
      * @see UIElement#repaint
      */
     public void requestRepaint() {
-        if (repaintRequested) return;
+        // NO EARLY RETURN ON AN ALREADY-SET FLAG, and the asymmetry is the reason: the flag is set
+        // here and cleared only by the compose walk REACHING THIS BOX, so a box the walk does not
+        // reach keeps it set -- after which every later request returned without asking for a walk
+        // at all, and the node could never be repainted again by any route of its own. Guarding
+        // against that saved one boolean store, since transformsChanged() is exactly that.
         repaintRequested = true;
         // The compose walk is what turns this into a revision, and it does not run unless asked.
         tree.transformsChanged();
