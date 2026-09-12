@@ -36,6 +36,11 @@ val submoduleData = listOf(
             // carrying a copy of one.
             mapOf("module" to "com.crystalgraphics:lwjgl2",
                 "projectPath" to ":runtime:lwjgl:2"),
+            // Tier 1 for LWJGL3, and it was missing: J9 extracted Lwjgl3GLBackend OUT of
+            // runtime/mc/modern/common into its own module, and nothing here followed it, so a dev run
+            // resolved every other CrystalGraphics module and not this one.
+            mapOf("module" to "com.crystalgraphics:lwjgl3",
+                "projectPath" to ":runtime:lwjgl:3"),
             // LoaderProbe and CrashVariant. CrystalGUI's hosts use CrystalGraphics' copies rather than
             // carrying their own; not a loader path, so it survives an embedded build.
             mapOf("module" to "com.crystalgraphics:mc-shared",

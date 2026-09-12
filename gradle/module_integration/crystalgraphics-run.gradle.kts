@@ -29,6 +29,15 @@ dependencies {
     add("additionalRuntimeClasspath", "com.crystalgraphics:core:1.0.0")
     add("additionalRuntimeClasspath", "com.crystalgraphics:platform:1.0.0")
     add("additionalRuntimeClasspath", "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings:1.0.0")
+    // CrashVariant and LoaderProbe, which every CrystalGUI host names from its own entry point.
+    // MISSING UNTIL 2026-09-12: compileOnly through mc1201CompileDeps and on no run at all, so a dev
+    // server died at mod construction with NoClassDefFoundError for a class the shipped jar carries.
+    // The shipped jar was never affected -- the merge adds this module once -- which is why a
+    // dev-run-only hole survived J5's four boots.
+    add("additionalRuntimeClasspath", "com.crystalgraphics:mc-shared:1.0.0")
+    // Tier 1 for LWJGL3, which PlatformServiceModern assembles over. Same J9 move, same hole: it left
+    // runtime/mc/modern/common -- which IS on the run -- for a module that was on no run at all.
+    add("additionalRuntimeClasspath", "com.crystalgraphics:lwjgl3:1.0.0")
 }
 
 /** Classes and resources are separate roots to FML, and a mod needs both -- mods.toml is a resource. */

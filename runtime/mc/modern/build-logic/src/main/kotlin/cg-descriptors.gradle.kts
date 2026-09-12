@@ -56,6 +56,12 @@ val cgDescriptor = ModDescriptor(
             packFormat = 15,
         ),
     ),
+    // WHAT THE LOADER CONSTRUCTS, where that is not the variant itself. Fabric's descriptor names
+    // entry points and Fabric constructs EVERY one it names, so with more than one variant it would
+    // construct them all -- including the one compiled against a Minecraft that is not running. The
+    // bootstrapper reads variants.json and picks. Forge, NeoForge and FML need no entry here: they
+    // find their entry by scanning for @Mod, so moving the annotation is the whole of the change.
+    bootstrappers = mapOf("fabric" to "com.crystalgui.mc.fabric.FabricBootstrap"),
 )
 
 registerDescriptorTasks(cgDescriptor, "cgui")
