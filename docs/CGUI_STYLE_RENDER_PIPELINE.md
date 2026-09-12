@@ -794,7 +794,8 @@ bilinear tap straddling the saturation shoulder averages a clipped texel with a 
 outer edge scallops while the fill stays smooth: **4.5 texels, about 0.056em**, 3.6px on 64px text.
 `CgTextStroke.MAX_FIELD_WIDTH_EM` is that number.
 `text-stroke-width: 1px` on 16px text is 0.0625em, so the smallest text still asks for more than the
-shared atlas can describe — though below about 8px a glyph is a bitmap and takes no stroke at all; the shader clamps to what the field holds, keeping a TEXEL of headroom so the
+shared atlas can describe. A stroke keeps its label on the distance-field tier down to 15px — the
+size below which msdfgen's own rule says the field cannot antialias — and is dropped under that; the shader clamps to what the field holds, keeping a TEXEL of headroom so the
 edge still has a gradient to antialias across — a texel, not a screen pixel, because the shoulder
 belongs to the texel grid and one screen pixel is a third of a texel on a zoomed canvas. Asking for more is safe and simply stops getting wider.
 The minus one is the generator reserving a texel so the field cannot bleed past its cell — and the
