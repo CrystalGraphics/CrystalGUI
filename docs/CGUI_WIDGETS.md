@@ -321,8 +321,9 @@ text { text-stroke: 2px #FFF; text-fill-color: transparent; }   /* hollow */
 ```
 
 Three limits worth knowing before reaching for it: the stored distance field caps the width at about
-**0.056em** — 3.6px at text size 64 — (wider clamps rather than erroring), glyphs below roughly 8px rasterise as bitmaps and
-take no stroke at all, and an `inset` or `center` stroke closes a letterform's joints once it exceeds
+**0.056em** — 3.6px at text size 64 — (wider clamps rather than erroring), a stroke pulls its label onto the distance-field tier and keeps it
+there down to text the field can still antialias (15px at the shipping pairing), below which the
+outline is dropped rather than drawn on a fill the field cannot resolve, and an `inset` or `center` stroke closes a letterform's joints once it exceeds
 their thickness — which is geometry, not a defect. Full account in
 `docs/CGUI_STYLE_RENDER_PIPELINE.md` §8d.
 
