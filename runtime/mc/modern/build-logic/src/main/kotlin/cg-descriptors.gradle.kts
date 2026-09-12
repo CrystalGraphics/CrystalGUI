@@ -115,6 +115,9 @@ val cgLangDescriptor = ModDescriptor(
             packFormat = 15,
         ),
     ),
+    // Its own mod, its own table: the language stack selects a variant exactly as the host does and
+    // shares nothing but the selector. Fabric alone needs a name here -- see the host's note above.
+    bootstrappers = mapOf("fabric" to "com.crystalgui.mc.fabric.lang.LanguageFabricBootstrap"),
 )
 
 registerDescriptorTasks(cgLangDescriptor, "cgui-lang", name = "language", checkShipped = false)

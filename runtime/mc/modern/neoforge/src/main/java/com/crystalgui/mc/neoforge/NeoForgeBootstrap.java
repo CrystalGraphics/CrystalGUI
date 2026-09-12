@@ -1,7 +1,7 @@
 package com.crystalgui.mc.neoforge;
 
-import com.crystalgui.mc.shared.Bootstrap;
-import com.crystalgui.mc.shared.FmlVersion;
+import com.crystalgraphics.mc.shared.VariantBootstrap;
+import com.crystalgraphics.mc.shared.FmlVersion;
 
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -27,9 +27,9 @@ public final class NeoForgeBootstrap {
 
     public NeoForgeBootstrap(IEventBus modBus) {
         String minecraft = FmlVersion.of(FMLLoader.class);
-        Bootstrap.startCommon(NeoForgeBootstrap.class, MODID, "neoforge", minecraft, modBus);
+        VariantBootstrap.startCommon(NeoForgeBootstrap.class, MODID, "neoforge", minecraft, modBus);
         if (FMLEnvironment.dist.isClient()) {
-            Bootstrap.startClient(NeoForgeBootstrap.class, MODID, "neoforge", minecraft, modBus);
+            VariantBootstrap.startClient(NeoForgeBootstrap.class, MODID, "neoforge", minecraft, modBus);
         }
     }
 }

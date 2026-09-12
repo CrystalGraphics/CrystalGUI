@@ -3,7 +3,7 @@ package com.crystalgui.mc.forge;
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
-import com.crystalgui.mc.shared.VariantEntry;
+import com.crystalgraphics.mc.shared.VariantEntry;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -45,7 +45,7 @@ import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
  * <p><b>No {@code @Mod} and no {@code @EventBusSubscriber} here.</b> One jar carries a Forge variant
  * per era, and Forge's scanner reads every class in it — two variants bearing the same annotation
  * are two mods of one id, which it refuses to load rather than choosing between. The single
- * annotated class is {@code ForgeBootstrap} in {@code runtime/mc/shared}; it reads
+ * annotated class is {@code ForgeBootstrap}, beside this one; it reads
  * {@code variants.json}, picks the row for the running Minecraft version, and constructs this.
  * Subscriptions that were annotations are {@link Events#register} calls now.</p>
  */
