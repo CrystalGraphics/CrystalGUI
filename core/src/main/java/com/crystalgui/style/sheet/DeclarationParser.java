@@ -6,6 +6,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.BoxEdgeShorthands;
 import com.crystalgui.style.property.visual.OutlineOffsetShorthand;
 import com.crystalgui.style.property.visual.OutlineShorthand;
+import com.crystalgui.style.property.visual.text.TextStrokeShorthand;
 import com.crystalgui.style.property.visual.border.BorderRadiusShorthand;
 import com.crystalgui.style.property.visual.transform.TransformOriginShorthand;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
@@ -117,9 +118,23 @@ public final class DeclarationParser {
                 continue;
             }
 
+            // <width> and/or <color> over text-stroke-width/-color. Matched exactly, since the name
+            // is a prefix of both longhands.
+            if (TextStrokeShorthand.isTextStroke(name)) {
+                TextStrokeShorthand.expand(declarations, rawValue, important);
+                continue;
+            }
+
             StyleProperty<?> property = StylePropertyRegistry.byName(name);
             if (property == null) {
                 CrystalGuiCore.LOGGER.warn("Unknown style property '{}' — skipping declaration", name);
+                continue;
+            }
+            // A property a shorthand owns stays resolvable by name — it still cascades, inherits and
+            // serialises under it — but a sheet may not write it, so there is one spelling to learn.
+            if (property.getAuthoredThrough() != null) {
+                CrystalGuiCore.LOGGER.warn("'{}' is not written directly — use the '{}' shorthand",
+                        name, property.getAuthoredThrough());
                 continue;
             }
             var value = property.valueParser.parse(rawValue);

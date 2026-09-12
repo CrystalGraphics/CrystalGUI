@@ -3,6 +3,8 @@ package com.crystalgui.style.transition;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.BoxEdgeShorthands;
+import com.crystalgui.style.property.visual.OutlineShorthand;
+import com.crystalgui.style.property.visual.text.TextStrokeShorthand;
 import com.crystalgui.style.Styleable;
 
 import java.util.HashMap;
@@ -92,6 +94,10 @@ public final class TransitionEngine {
             if (com.crystalgui.style.property.visual.border.BorderRadiusShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
             if (com.crystalgui.style.property.visual.OutlineOffsetShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
             if (com.crystalgui.style.property.visual.transform.TransformOriginShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
+            if (TextStrokeShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
+            // OutlineShorthand has had this method since it was written and was never consulted
+            // here, so `transition: outline` animated nothing.
+            if (OutlineShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
             if (spec.propertyNameOrAll().equals(TransitionSpec.ALL)) fallbackAll = spec;
         }
         return fallbackAll;

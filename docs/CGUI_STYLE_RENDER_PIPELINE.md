@@ -738,6 +738,95 @@ went unnoticed.
 
 ---
 
+## 8d. Text outlines — `text-stroke` and friends
+
+Four authorable properties, all inheritable:
+
+```css
+text-stroke: 2px #0B5D8F;      /* width and/or colour, order-independent */
+text-stroke: 0.04em;           /* width only -- the colour falls back to the text's `color` */
+text-stroke: 4%;               /* the SAME width: a percentage is of the font size, so 4% == 0.04em */
+text-stroke: #0B5D8F;          /* colour only -- the width is left alone */
+text-stroke: none;             /* width 0; the colour is untouched */
+text-fill-color: transparent;  /* the glyph's interior, independent of `color` */
+stroke-align: outset | center | inset;   /* initial: outset */
+paint-order: normal | stroke;  /* initial: normal -- the FILL paints over the stroke */
+```
+
+`text-stroke` is the web's `-webkit-text-stroke` without the prefix, and like it covers only width
+and colour — `stroke-align` and `paint-order` are separate declarations.
+
+**`px` is absolute; `em` and `%` are the same font-relative unit.** A width resolves as
+`resolve(fontSize) / fontSize`, so `2px` becomes `2/fontSize` em — a hairline on a 72px heading and
+heavy on a 10px label — while `4%` and `0.04em` both become 0.04em and keep their weight at every
+size. That equivalence is why `em` can be supported at all: `FontRelativeLengthValue` folds it into a
+percentage, since there is no font size at parse time and the consumer supplies one as the resolve
+axis. The shared `LengthPercent.parse` must never learn `em` — it also backs `border-radius`,
+`transform-origin` and the outline offsets, whose percentages are fractions of the BOX, where `1em`
+would have to mean a whole box width.
+
+**`text-stroke-width` and `text-stroke-color` exist but are NOT writable by those names.** They are
+registered, so they cascade, inherit, interpolate and serialise under their real names — and
+`StylePropertyRegistry.byName` resolves them, which `InlineStyleCodec` requires, since it throws on a
+name it cannot resolve. What refuses them is `DeclarationParser`, via
+`StyleProperty.getAuthoredThrough()`, so a sheet has one spelling to learn.
+**Why keep two properties at all:** a declaration that states only a colour must leave the width
+alone, so `text-stroke: #FF0000` in a `:hover` rule does not zero the outline. One combined value
+cannot express a partial override — which is exactly why CSS shorthands are shorthands.
+
+The shorthand is intercepted before the registry lookup and matched with `equals`, since its name is
+a prefix of both longhands. Its tokenizer respects parentheses, so `rgb(11, 93, 143)` survives as one
+token — `outline`'s splits on whitespace and cannot. `transition: text-stroke` reaches both halves
+through `TextStrokeShorthand.transitionNameMatches`.
+
+**The route to the backend is one private method.** `UIText.strokeFor` reads the `ComputedStyle`,
+resolves the width against the font size, maps the two keywords, and hands `CgTextStroke` to
+`CgTextRenderer.Draw.stroke(...)`. Everything below that is CrystalGraphics': the stroke rides on the
+GLYPH QUADS — `CG_QUAD_CUSTOM0` the colour, `CG_QUAD_CUSTOM1` the width, alignment and paint order —
+so changing it costs no flush, and outlined text batches with plain text in one draw call.
+
+### Four things that are easy to get wrong
+
+**The stored distance field caps the width, and it clamps rather than complaining.** The field carries
+`(pxRange - 1) / 2` texels of real distance either side of the outline — at the shipping `pxRange 12`
+and an 80px atlas, 5.5 texels — and the usable reach is a texel short of that again, because a
+bilinear tap straddling the saturation shoulder averages a clipped texel with a live one and the
+outer edge scallops while the fill stays smooth: **4.5 texels, about 0.056em**, 3.6px on 64px text.
+`CgTextStroke.MAX_FIELD_WIDTH_EM` is that number.
+`text-stroke-width: 1px` on 16px text is 0.0625em, so the smallest text still asks for more than the
+shared atlas can describe — though below about 8px a glyph is a bitmap and takes no stroke at all; the shader clamps to what the field holds, keeping a TEXEL of headroom so the
+edge still has a gradient to antialias across — a texel, not a screen pixel, because the shoulder
+belongs to the texel grid and one screen pixel is a third of a texel on a zoomed canvas. Asking for more is safe and simply stops getting wider.
+The minus one is the generator reserving a texel so the field cannot bleed past its cell — and the
+shader must be told that reduced number, not the nominal `pxRange`, or every glyph edge comes out
+crisper than intended (it was, by 20%, until it was measured).
+
+**A transparent colour is not an absent one, and by value they are identical.** `text-stroke-color`
+and `text-fill-color` both have `0` as their initial, and `#00000000` parses to exactly `0`. So
+"did the author write this?" cannot be answered by comparing against the initial — `UIText` asks
+`ComputedStyle.isSet`, which reads the candidate maps. Get this wrong and a deliberately transparent
+outline silently becomes an inherited-colour one. Pinned by `TextStrokeStyleTest`.
+
+**An inward stroke closes the letterform where the letterform is thin, and that is geometry.** Fill
+survives only where the ink is thicker than twice the inward reach (`inset` spends the whole width
+inward, `center` half), and a type designer *thins the joints* so a merge does not read as a blot — so
+a `g`'s link and an `h`'s shoulder close first. Confirmed against the raw outline, not just the field:
+see `docs/CGUI_INVARIANTS.md` § *Rendering, GL and shaders*. `outset` never touches the letterform,
+which is why it is the initial.
+
+**Bitmap-tier glyphs take no stroke at all.** Below roughly 8px a glyph rasterises as coverage rather
+than a distance field, and there is no distance to threshold. The declaration is inert rather than an
+error, which is the right degradation for a size at which an outline would be illegible anyway.
+
+### The composite is a union, not source-over
+
+For an `outset` stroke the ring and the fill are **disjoint regions of one shape**, not two layers.
+Compositing them source-over gives `a + b(1-a)` where disjoint areas owe `a + b` — 0.75 against 1.0 at
+the shared edge, a quarter-coverage hairline tracing every outline and visible even when stroke and
+fill are the same colour. `text.shader` takes the silhouette's coverage as the union and divides it
+between the two by how much of it each occupies; paint order decides which is measured first only
+where they genuinely overlap, which is `center` and `inset` and never `outset`.
+
 ## 9. Known Gaps vs. the Web
 
 - **No `@import` or media queries.** External stylesheets *are* supported now —

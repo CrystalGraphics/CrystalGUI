@@ -15,10 +15,13 @@ import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.style.property.visual.text.PaintOrder;
+import com.crystalgui.style.property.visual.text.StrokeAlign;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
+import com.crystalgui.style.property.visual.text.FontRelativeLengthValue;
 import com.crystalgui.style.property.visual.text.FontStyle;
 import com.crystalgui.style.property.visual.text.FontWeight;
 import com.crystalgui.style.property.visual.text.FontWeightValue;
@@ -26,6 +29,7 @@ import com.crystalgui.style.property.visual.text.TextAlign;
 import com.crystalgui.style.property.visual.text.TextDecorationLine;
 import com.crystalgui.style.property.visual.text.TextDecorationLineValue;
 import com.crystalgui.style.property.visual.text.TextOverflow;
+import com.crystalgui.style.property.visual.text.TextStrokeShorthand;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.style.property.visual.text.LineHeightProperty;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
@@ -301,6 +305,70 @@ public class StylePropertyRegistry {
     /** CSS {@code white-space}, wrapping half only. Inherited, initial {@code normal}. @see WhiteSpace */
     public static final StyleProperty<WhiteSpace> WHITE_SPACE =
             create("white-space", WhiteSpace.class, WhiteSpace.NORMAL).setInheritable(true);
+    /**
+     * How wide a {@code text-stroke} is. Inherited, initially zero, which makes the whole feature
+     * inert until a sheet asks for it.
+     *
+     * <p><b>Resolved against the font size, not against a box.</b> Every other
+     * {@link LengthPercent} here resolves against an axis of the element, because that is what a
+     * radius or an offset means. A stroke is a property of the LETTERFORM: the same declaration has
+     * to give the same-looking outline on a 10px label and a 48px heading, and a box-relative width
+     * would give one of them a hairline and the other a blob. So {@code 10%} is a tenth of the font
+     * size, and {@code 0.04em} is the same declaration by another spelling — this property takes
+     * {@code em} through {@code FontRelativeLengthValue}, which the shared {@link LengthPercent}
+     * parser must not, since its percentages are fractions of a BOX everywhere else.</p>
+     *
+     * <p>The backend takes em and converts per draw, since only it knows the effective raster size
+     * — see {@code CgTextStroke#widthEm}.</p>
+     */
+    public static final StyleProperty<LengthPercent> TEXT_STROKE_WIDTH =
+            create(new LengthPercentProperty("text-stroke-width", LengthPercent.ZERO,
+                    FontRelativeLengthValue::new))
+                    .setInheritable(true).setAuthoredThrough(TextStrokeShorthand.NAME);
+    /**
+     * The stroke's colour. Inherited, initially {@code 0} — fully transparent, which stands for
+     * {@code currentcolor} and is resolved against {@code color} by whoever draws.
+     *
+     * <p>Transparent rather than black because a stroke with no colour and a stroke with no width
+     * must both draw nothing, and an initial of black would make {@code text-stroke-width: 1px}
+     * alone silently outline every label in the application the first time anyone set it.</p>
+     *
+     * <p><b>The initial is not a sentinel, and must not be read as one.</b> A reader asks
+     * {@code ComputedStyle.isSet} whether anything authored this, because {@code #00000000} is the
+     * same integer as the initial — transparent black IS zero. @see UIText#strokeFor</p>
+     *
+     * <p><b>Not writable by this name.</b> A sheet says {@code text-stroke}; this half exists so a
+     * declaration that states only a colour leaves the width alone. @see TextStrokeShorthand</p>
+     */
+    public static final StyleProperty<Integer> TEXT_STROKE_COLOR =
+            create(new ColorProperty("text-stroke-color", 0))
+                    .setInheritable(true).setAuthoredThrough(TextStrokeShorthand.NAME);
+    /**
+     * Overrides {@code color} for the glyph fill alone, leaving {@code color} to drive everything
+     * else that inherits it. {@code -webkit-text-fill-color}'s job, unprefixed.
+     *
+     * <p>Initially transparent, and <b>the value cannot tell you whether anyone set it</b>: hollow
+     * text is {@code text-fill-color: #00000000}, which is the same integer. So the reader asks
+     * {@code ComputedStyle.isSet} instead, exactly as {@code BoxPainter} does for
+     * {@code background-color}. Reading the value here made hollow text unreachable and looked, from
+     * the outside, like the property doing nothing at all.</p>
+     */
+    public static final StyleProperty<Integer> TEXT_FILL_COLOR =
+            create(new ColorProperty("text-fill-color", 0)).setInheritable(true);
+    /**
+     * CSS {@code paint-order}, the single-keyword forms. Inherited. @see PaintOrder
+     *
+     * <p><b>Initially {@code normal}, as CSS has it.</b> Defaulting to {@code stroke} was tried, to
+     * hide the median's junction errors under the fill -- and it DELETES {@code stroke-align: inset},
+     * whose ring lies entirely inside the glyph and is therefore covered in full rather than in part.
+     * A default that silently disables another property is not worth the artifact it hides; the
+     * artifact is in the generated field itself, and no paint order hides it honestly.</p>
+     */
+    public static final StyleProperty<PaintOrder> PAINT_ORDER =
+            create("paint-order", PaintOrder.class, PaintOrder.NORMAL).setInheritable(true);
+    /** Which side of the outline a stroke's width is spent on. Inherited. @see StrokeAlign */
+    public static final StyleProperty<StrokeAlign> STROKE_ALIGN =
+            create("stroke-align", StrokeAlign.class, StrokeAlign.OUTSET).setInheritable(true);
     /** CSS {@code text-overflow} (CSS UI 4). <b>Not</b> inherited, per spec -- truncation belongs to the
      * box that clips, not to the text flowing through it. @see TextOverflow */
     public static final StyleProperty<TextOverflow> TEXT_OVERFLOW =

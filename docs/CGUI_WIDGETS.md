@@ -310,6 +310,26 @@ nudge, applied *after* the wrap width is read so it can never affect geometry; p
 per-axis against this element's own box). Wraps at the font's own metrics and does **not** honour
 `line-height` yet.
 
+**It also draws text outlines** — `text-stroke`, `text-fill-color`, `stroke-align` and
+`paint-order`. `text-stroke` is the only spelling for the width and colour; the two longhands behind
+it are not writable by name (see `CGUI_STYLE_RENDER_PIPELINE.md` §8d for why they still exist):
+
+```css
+text { text-stroke: 2px #0B5D8F; }                        /* outline outside the letterform */
+text { text-stroke: 1px #0B5D8F; stroke-align: inset; }   /* an inline, inside it */
+text { text-stroke: 2px #FFF; text-fill-color: transparent; }   /* hollow */
+```
+
+Three limits worth knowing before reaching for it: the stored distance field caps the width at about
+**0.056em** — 3.6px at text size 64 — (wider clamps rather than erroring), glyphs below roughly 8px rasterise as bitmaps and
+take no stroke at all, and an `inset` or `center` stroke closes a letterform's joints once it exceeds
+their thickness — which is geometry, not a defect. Full account in
+`docs/CGUI_STYLE_RENDER_PIPELINE.md` §8d.
+
+**The trap:** declaring `font-size` on a WRAPPER does not reach a widget's label, because
+`default.css` opens with `* { font-size: 10 }` and that is a candidate on every element — put the
+size on the element that draws, or on the `::part()`.
+
 - Tag `text` · no shadow parts
 - Scenes: `cgui-text` (wrapping, font fallback, live binding), `cgui-gallery`
 

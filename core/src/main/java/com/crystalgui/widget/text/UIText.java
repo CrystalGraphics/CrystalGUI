@@ -7,12 +7,21 @@ import com.crystalgraphics.api.text.CgShapedParagraph;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgStyleSpan;
 import com.crystalgraphics.api.text.CgStyledText;
+import com.crystalgraphics.api.text.CgStrokeAlign;
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgraphics.api.text.CgTextStroke;
 import com.crystalgraphics.api.text.CgTextDecoration;
+import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.style.property.visual.text.PaintOrder;
+import com.crystalgui.style.property.visual.text.StrokeAlign;
 import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.text.FontFamilyCache;
+import com.crystalgui.style.ComputedStyle;
+import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.HighlightStyle;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -42,6 +51,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 /**
@@ -659,8 +669,15 @@ public final class UIText extends UIElement implements Measurable {
         paintHighlightBands(ctx, layout, contentX, contentY);
         if (layout.lines().isEmpty() || text.get().isEmpty()) return;
 
+        // WHAT THE GLYPHS ACTUALLY GOT decides whether this paint was final -- see
+        // CgUiPaintContext#textDegradedDrawCount. Bracketing from here covers the shadow pass too.
+        long degradedBefore = ctx.textDegradedDrawCount();
+
         int color = general.color();
         if (general.textShadow()) {
+            // NO STROKE ON THE SHADOW PASS. The drop shadow is a second copy of the same glyphs one
+            // pixel down, and outlining it would draw the outline twice, offset -- which reads as a
+            // smear rather than as a shadow.
             ctx.text().draw()
                     .layout(shadowLayoutFor(layout, family, contentWidth, wraps))
                     .family(family)
@@ -669,12 +686,97 @@ public final class UIText extends UIElement implements Measurable {
                     .pose(ctx.getPoseStack())
                     .submit();
         }
-        ctx.text().draw().layout(layout).family(family)
+        // `text-fill-color` overrides the glyph fill ALONE: `color` still drives the caret, the
+        // selection and anything inheriting from here, which is the whole reason the two are
+        // separate properties rather than one.
+        //
+        // ASKED WHETHER IT WAS SET, never what its value is. Unset has to mean "use `color`" and
+        // `#00000000` has to mean "draw no fill at all", and as an int those are the SAME NUMBER --
+        // transparent black is zero. Testing the value made hollow text impossible and looked like the
+        // property being ignored. The same question BoxPainter asks of `background-color`, and for the
+        // same reason it records: whether something was authored cannot be read off the value.
+        ComputedStyle computed = computedStyle();
+        int fill = computed.isSet(StylePropertyRegistry.TEXT_FILL_COLOR)
+                ? general.textFillColor() : color;
+        CgTextRenderer.Draw draw = ctx.text().draw().layout(layout).family(family)
                 .at(contentX, contentY)
-                .color(color)
-                .pose(ctx.getPoseStack())
-                .submit();
+                .color(fill)
+                .pose(ctx.getPoseStack());
+        applyStroke(draw, general, computed, color);
+        draw.submit();
+
+        if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
     }
+
+    /**
+     * Puts the cascade's stroke properties on the draw, or leaves it unstroked when nothing asked
+     * for one — which is the draw's own default, so every return here is simply a return.
+     *
+     * <p><b>Width converts to em here</b>, because this is the last place that knows the font size:
+     * {@code text-stroke-width} resolves against it (see the property's own note), and the backend
+     * wants em so the same stroke survives being rasterised at whatever size the pose resolves to.
+     * A percentage and a length therefore both land on the same quantity — {@code 10%} and
+     * {@code 0.1em} would mean the same thing, if {@code LengthPercent} parsed the second.</p>
+     */
+    private void applyStroke(CgTextRenderer.Draw draw, GeneralGroup general, ComputedStyle computed,
+                             int inheritedColor) {
+        LengthPercent width = general.textStrokeWidth();
+        if (width == null) return;
+        float fontSize = general.fontSize();
+        if (fontSize <= 0f) return;
+        float widthEm = width.resolve(fontSize) / fontSize;
+        if (widthEm <= 0f) return;
+
+        // CAPPED HERE, not only in the shader. The field carries distance for a fraction of the em, so
+        // an outline wider than CgTextStroke#MAX_FIELD_WIDTH_EM cannot be drawn at any size -- the
+        // shader has always clamped per fragment, which meant the value this class handed down was one
+        // the renderer would never draw, and a caller reading it back got a number that was never true.
+        //
+        // Reported once per (width, size), because the difference is invisible: a 2px outline on 12px
+        // text silently drew 0.67px, and nothing anywhere said which of the two numbers was real.
+        if (widthEm > CgTextStroke.MAX_FIELD_WIDTH_EM) {
+            warnStrokeClamped(widthEm, fontSize);
+            widthEm = CgTextStroke.MAX_FIELD_WIDTH_EM;
+        }
+
+        // Unset means `currentcolor`, so a width on its own outlines in the text's own colour. Asked
+        // the same way the fill is, and for the same reason -- see above.
+        int strokeColor = computed.isSet(StylePropertyRegistry.TEXT_STROKE_COLOR)
+                ? general.textStrokeColor() : inheritedColor;
+        if ((strokeColor >>> 24) == 0) return;
+
+        StrokeAlign align = general.strokeAlign();
+        draw.stroke(widthEm, strokeColor)
+                .strokeAlign(align == StrokeAlign.CENTER ? CgStrokeAlign.CENTER
+                        : align == StrokeAlign.INSET ? CgStrokeAlign.INSET : CgStrokeAlign.OUTSET)
+                // `paint-order: stroke` is the one that reorders; `fill` and `normal` are the same
+                // thing, which is why the enum carries all three rather than a boolean.
+                .strokeOverFill(general.paintOrder() != PaintOrder.STROKE);
+    }
+
+    /**
+     * Says, once per distinct (width, size), that a declared outline is wider than the distance field
+     * can describe and what it was drawn at instead.
+     *
+     * <p>Bounded: a paint method runs every frame, and a warning per frame is a log nobody reads. The
+     * set stops growing at {@link #MAX_REPORTED_CLAMPS} distinct pairs, which is far more than a sheet
+     * has and far less than a leak.</p>
+     */
+    private static void warnStrokeClamped(float widthEm, float fontSize) {
+        // The size check FIRST: this runs inside a paint method, so once the table is full every
+        // later frame would otherwise build a key string per label per frame to throw it away.
+        if (REPORTED_CLAMPS.size() >= MAX_REPORTED_CLAMPS) return;
+        if (!REPORTED_CLAMPS.add(Math.round(widthEm * 1000f) + "@" + Math.round(fontSize))) return;
+        CrystalGuiCore.LOGGER.warn(String.format(
+                "[cgui] text-stroke %.2fpx on %.0fpx text is %.4fem, wider than the %.4fem the glyph "
+                        + "atlas can describe; drawing %.2fpx. A stroke is bounded by the stored "
+                        + "distance field, so the widest outline is a fraction of the em at every size.",
+                widthEm * fontSize, fontSize, widthEm, CgTextStroke.MAX_FIELD_WIDTH_EM,
+                CgTextStroke.MAX_FIELD_WIDTH_EM * fontSize));
+    }
+
+    private static final int MAX_REPORTED_CLAMPS = 32;
+    private static final Set<String> REPORTED_CLAMPS = ConcurrentHashMap.newKeySet();
 
     /**
      * The band behind a highlighted range.

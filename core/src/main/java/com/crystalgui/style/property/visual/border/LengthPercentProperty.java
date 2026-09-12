@@ -5,7 +5,17 @@ import com.crystalgui.style.property.StyleProperty;
 public class LengthPercentProperty extends StyleProperty<LengthPercent> {
 
     public LengthPercentProperty(String name, LengthPercent initialValue) {
-        super(name, LengthPercent.class, initialValue, LengthPercentValue::new);
+        this(name, initialValue, LengthPercentValue::new);
+    }
+
+    /**
+     * With a parser of its own, for a property that accepts a unit the shared one must not — see
+     * {@code FontRelativeLengthValue}, which adds {@code em} where a percentage already resolves
+     * against the font size.
+     */
+    public LengthPercentProperty(String name, LengthPercent initialValue,
+                                 ValueParser<LengthPercent> valueParser) {
+        super(name, LengthPercent.class, initialValue, valueParser);
         setAllowTransition(true);
         setInterpolator(this::interpolate);
     }
