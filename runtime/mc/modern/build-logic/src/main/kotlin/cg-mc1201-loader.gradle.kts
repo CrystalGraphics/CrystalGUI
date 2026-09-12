@@ -92,8 +92,12 @@ dependencies {
     "compileOnly"(project(":core"))
 
     // compileOnly and NOT bundled: the merge adds :runtime:mc:shared once, under a package no variant
-    // relocates. EMPTY today -- `CrashVariant` is CrystalGraphics', reached through mc1201CompileDeps.
+    // relocates. It carries the variant table reader and the bootstrappers (J11.0), so it is on the
+    // RUNTIME classpath too -- a dev run constructs the same bootstrapper production does, and
+    // without this the loader finds the class its descriptor names missing. ModDevGradle ignores
+    // runtimeClasspath, so Forge and NeoForge also name its source sets in their own mods{} blocks.
     "compileOnly"(project(":runtime:mc:shared"))
+    "runtimeOnly"(project(":runtime:mc:shared"))
 
     // Taffy and JOML: :core has them compileOnly so they reach nobody transitively, and UIElement holds
     // a NodeId and a Matrix4f as fields. Needed at RUNTIME too -- a field descriptor resolves at class
@@ -185,6 +189,16 @@ tasks.named<ProcessResources>("processLangResources") {
     from(descriptors)
 }
 
+// A DEV RUN HAS TO SEE THE VARIANT TABLE (J11.0), because the bootstrapper its descriptor names reads
+// one -- so without this every dev client dies in the entry point rather than at prodSmoke time. Only
+// the table: the per-loader descriptors under this module's own resources are what a dev run uses,
+// and the merged ones are the shipped jar's.
+tasks.named<ProcessResources>("processResources") {
+    val descriptors = rootProject.tasks.named("generateMergedDescriptors")
+    dependsOn(descriptors)
+    from(descriptors) { include("META-INF/*/variants.json") }
+}
+
 /**
  * The language merge's input from this loader: its own `lang` classes plus :runtime:mc:modern:common's, relocated.
  *
@@ -256,6 +270,28 @@ tasks.named("check") { dependsOn(checkDescriptorsNameNoCommon) }
 // which reads as a packaging or classloader fault rather than as a missing build step.
 tasks.matching { it.name.startsWith("run") || it.name.startsWith("prepare") }.configureEach {
     dependsOn(":core:classes", ":runtime:mc:modern:common:classes", ":language:classes")
+}
+
+// :runtime:mc:shared IS A LIBRARY ON A DEV RUN, NOT A MOD (J11.0).
+//
+// It carries the variant table reader the bootstrapper calls, and nothing in it is annotated -- so it
+// must be on the run's classpath without being scanned as a mod. `additionalRuntimeClasspath` is
+// ModDevGradle's own channel for exactly that: "dependencies of every run, that should not be
+// considered boot classpath modules". Loom has no such configuration and takes it off
+// runtimeClasspath, which the `runtimeOnly` above already covers.
+//
+// Neither mods{} nor runtimeOnly reaches a ModDevGradle run: measured on 2026-09-12, a Forge
+// dedicated server died with ClassNotFoundException for this module's own classes until this existed.
+// Nothing noticed before because the module was EMPTY until J11.0 put the first class in it.
+// afterEvaluate, and not `plugins.withId`: ModDevGradle creates this configuration while the
+// legacyForge/neoForge EXTENSION is configured, not when its plugin is applied -- the same ordering
+// the two loader scripts already document about `crystalgraphics-run.gradle.kts`. A hook at apply
+// time fails with "Configuration with name 'additionalRuntimeClasspath' not found"; Loom never has
+// one, which is what `findByName` answers for.
+afterEvaluate {
+    configurations.findByName("additionalRuntimeClasspath")?.let { runtime ->
+        dependencies.add(runtime.name, project(":runtime:mc:shared"))
+    }
 }
 
 // The engine band, for a DEV run only.
