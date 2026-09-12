@@ -14,7 +14,6 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UISlot;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.PropagationPhase;
@@ -223,12 +222,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     /** Beats the CSS answer while a gesture owns the pointer. @see #setCursorOverride */
     private @Nullable Cursor cursorOverride;
 
-    /** Where that override reaches, or null for the whole window. @see #setCursorOverride */
-    private @Nullable UIElement cursorOverrideScope;
-
     private Cursor lastCursor = Cursor.DEFAULT;
 
-    /** Art drawn AT the pointer, over the tree. @see #setCursorDecoration */
+    /** Art a live gesture put at the pointer, which outranks what the tree answers. @see #pointerArt */
     private @Nullable CursorDecoration decoration;
 
     /**
@@ -304,24 +300,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * gesture that forgets to clear it leaves the whole window pointing the wrong way.</p>
      */
     public Input setCursorOverride(@Nullable Cursor cursor) {
-        return setCursorOverride(cursor, null);
-    }
-
-    /**
-     * The same, reaching only while the pointer is inside {@code within}.
-     *
-     * <pre>{@code
-     * input.setCursorOverride(Cursor.MOVE, canvas);   // a canvas says what its own gestures look like
-     * }</pre>
-     *
-     * <p>For an override a widget re-asserts every frame rather than one a gesture opens and closes. Such
-     * a widget hears nothing when the pointer leaves for another panel — there is no gesture to end — so
-     * an unscoped override follows it out and holds the whole window in a cursor the canvas meant. A drag
-     * is unaffected: pointer capture resolves the hover to the capturing element, which is inside.</p>
-     */
-    public Input setCursorOverride(@Nullable Cursor cursor, @Nullable UIElement within) {
         this.cursorOverride = cursor;
-        this.cursorOverrideScope = cursor == null ? null : within;
         return this;
     }
 
@@ -374,19 +353,28 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * cursor because the node under it changed.</p>
      */
     private void presentCursor(@Nullable UIElement hovered) {
-        Cursor resolved = overrideReaches(hovered) ? cursorOverride : resolveCursor(hovered);
+        Cursor resolved = cursorOverride != null ? cursorOverride : askedCursor(hovered);
         if (resolved == lastCursor) return;
         lastCursor = resolved;
         // Inert until CrystalGraphics has a cursor adapter, which is correct for a headless tree.
         CursorService.setCursor(resolved);
     }
 
-    /** Whether an override is set and the pointer is where it was scoped to. @see #setCursorOverride */
-    private boolean overrideReaches(@Nullable UIElement hovered) {
-        if (cursorOverride == null) return false;
-        if (cursorOverrideScope == null) return true;
-        return hovered != null
-                && UINode.isShadowIncludingInclusiveAncestor(cursorOverrideScope, hovered);
+    /**
+     * What the tree says the cursor is here: the nearest {@link CursorSource} that answers, else the
+     * cascade's.
+     *
+     * <p>The walk is what makes a gesture's cursor impossible to leave behind. A canvas answers for points
+     * inside itself and is simply not asked about a pointer that has moved on, where a canvas PUSHING a
+     * cursor is never told it should stop.</p>
+     */
+    private Cursor askedCursor(@Nullable UIElement hovered) {
+        for (UIElement at = hovered; at != null; at = at.composedParent()) {
+            if (!(at instanceof CursorSource source)) continue;
+            Cursor asked = source.cursorAt(position.x, position.y);
+            if (asked != null) return asked;
+        }
+        return resolveCursor(hovered);
     }
 
     /**
@@ -445,20 +433,42 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     }
 
     /**
-     * Draws whatever a gesture put under the pointer.
+     * The art set by {@link #setCursorDecoration}, ignoring what the tree would answer.
      *
-     * <p>Called by {@code UIDocument.paint} AFTER the tree, which is what puts it above everything,
-     * outside every scissor and outside layer retention — a decoration follows the pointer, and no box
-     * moved to say so.</p>
+     * <p>For the gesture case alone. What is actually drawn is {@link #pointerArt}.</p>
      */
-    /** What is being drawn at the pointer, or null. The read half of {@link #setCursorDecoration}. */
     @Nullable
     public CursorDecoration cursorDecoration() {
         return decoration;
     }
 
+    /**
+     * The art drawn at the pointer right now: what a live gesture set, else the nearest
+     * {@link CursorSource} that answers for this point.
+     *
+     * <p>The same walk {@link #askedCursor} makes, for the same reason — art a canvas answers for is art
+     * it is never asked about once the pointer has left it.</p>
+     */
+    @Nullable
+    public CursorDecoration pointerArt() {
+        if (decoration != null) return decoration;
+        for (UIElement at = hoverTarget(); at != null; at = at.composedParent()) {
+            if (!(at instanceof CursorSource source)) continue;
+            CursorDecoration asked = source.artAt(position.x, position.y);
+            if (asked != null) return asked;
+        }
+        return null;
+    }
+
+    /**
+     * Draws whatever is at the pointer — a gesture's art, or what the tree answers for this point.
+     *
+     * <p>Called by {@code UIDocument.paint} AFTER the tree, which is what puts it above everything,
+     * outside every scissor and outside layer retention — art follows the pointer, and no box moved to
+     * say so.</p>
+     */
     public void paintCursorDecoration(CgUiPaintContext ctx) {
-        CursorDecoration held = decoration;
+        CursorDecoration held = pointerArt();
         if (held != null) held.paint(ctx, position.x, position.y);
     }
 

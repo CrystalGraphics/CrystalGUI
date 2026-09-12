@@ -188,47 +188,7 @@ public final class TransformBox extends UIElement {
                         .widthPercent(100f).heightPercent(100f));
     }
 
-    /**
-     * Re-decides the cursor every frame while the box is up.
-     *
-     * <p>Not on pointer movement alone: <b>Ctrl turns a scale handle into a skew handle</b>, and a
-     * modifier arriving while the hand is still is exactly when nothing moves. Pressing Ctrl over an edge
-     * left the resize cursor showing until the pointer was nudged, which is the one moment the cursor is
-     * meant to be answering a question.</p>
-     *
-     * <p>Owned by this node, so it stops when the node leaves the tree.</p>
-     */
-    @Override
-    protected void connected() {
-        super.connected();
-        document().animation().afterLayout(this, delta -> {
-            refreshCursor();
-            // TRUE KEEPS IT RUNNING. The hook lives as long as the node, which is the whole life of the
-            // canvas -- the box being down is a state it reads, not a reason to unregister.
-            return true;
-        });
-    }
-
-    /**
-     * The decoration outlives the hook that clears it, so it is cleared here too.
-     *
-     * <p>{@link #refreshCursor} runs from a node-owned {@code afterLayout} hook and takes the art down
-     * on the first frame the band is not live. A node REMOVED while rotating never gets that frame, and
-     * the arrow would stay on screen with nothing left to clear it.</p>
-     */
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        clearRotationArt();
-    }
-
-    private void clearRotationArt() {
-        if (rotationArtHandle == null) return;
-        rotationArtHandle.dispose();
-        rotationArtHandle = null;
-    }
-
-    /** Notes where the pointer is; the cursor itself is decided per frame. @see #connected */
+    /** Notes where the pointer is. The cursor is ASKED for, per frame. @see #cursorAt */
     public void hoverAt(float viewportX, float viewportY) {
         pointerAt(viewportX, viewportY);
     }
@@ -254,9 +214,6 @@ public final class TransformBox extends UIElement {
     /** Whether a gesture is in progress, in which case the cursor is the one that was pressed. */
     public void setDragging(boolean dragging) {
         this.dragging = dragging;
-        // THE HAND CLOSES. refreshCursor leaves the pressed cursor alone for the rest of the gesture, so
-        // the one moment it can change is this one.
-        if (dragging && gesture.grip().kind() == Kind.ROTATE) ctx.cursors().set(Cursor.GRABBING);
     }
 
     /** Pivot toward pointer, in this overlay's space. Declared FIRST: an initialiser below that reads
@@ -264,31 +221,52 @@ public final class TransformBox extends UIElement {
     private float artAngle;
 
     /**
-     * ONE instance, set and cleared per frame — a lambda built in {@link #refreshCursor} would allocate
-     * on a hook that runs every frame. It reads {@link #artAngle}, so the shape follows without the
-     * decoration itself being rebuilt.
+     * ONE instance, answered rather than rebuilt — {@link #artAt} is asked every frame, and a lambda
+     * built there would allocate on each one. It reads {@link #artAngle}, so the shape follows without
+     * the decoration itself changing.
      */
     private final CursorDecoration rotationArt = (paint, x, y) -> RotationCursor.paint(paint, x, y, artAngle);
 
-    /** Held rather than re-set per frame, and it is what {@link #disconnected} clears through: by then
-     * {@code document()} is already null, so a node that goes mid-gesture has no way back to the
-     * service. The handle closes over it. */
+    /**
+     * What the pointer looks like at this point of the overlay, or null while the box is down.
+     *
+     * <p>ASKED, not pushed: the engine walks out from whatever the pointer is over, so this is consulted
+     * only while the pointer is genuinely on the canvas — which is what makes a transform cursor
+     * impossible to leave behind on another panel. @see CursorSource</p>
+     *
+     * <p>Ctrl turns a scale handle into a skew handle, and being asked per frame answers that the moment
+     * the modifier lands rather than on the next movement.</p>
+     */
     @Nullable
-    private Disposable rotationArtHandle;
-
-    private void refreshCursor() {
-        Grip live = liveGrip();
-        boolean rotating = active && live != null && live.kind() == Kind.ROTATE;
-        if (rotating) {
-            if (rotationArtHandle == null) {
-                rotationArtHandle = document().input().setCursorDecoration(rotationArt);
-            }
-        } else {
-            clearRotationArt();
+    public Cursor cursorAt(float viewportX, float viewportY) {
+        if (!active) return null;
+        // THE HAND CLOSES for the whole rotation: a press decides the gesture, and the cursor is the
+        // pressed one until it ends.
+        if (dragging) {
+            return gesture.grip().kind() == Kind.ROTATE ? Cursor.GRABBING : cursorFor(gesture.grip());
         }
+        return cursorFor(gripAt(viewportX, viewportY));
+    }
 
-        if (!active || dragging || Float.isNaN(hoverX)) return;
-        ctx.cursors().set(cursorFor(live));
+    /**
+     * The rotation arrow, drawn when a press here would rotate — a native cursor cannot turn.
+     *
+     * <p>The angle is taken from the point being ASKED about, so it follows the hand through a drag as
+     * well as a hover: the pointer arrives here either way, where a remembered hover position stopped
+     * moving the moment {@code Drag} took the pointer.</p>
+     */
+    @Nullable
+    public CursorDecoration artAt(float viewportX, float viewportY) {
+        if (!active) return null;
+        Grip live = dragging ? gesture.grip() : gripAt(viewportX, viewportY);
+        if (live.kind() != Kind.ROTATE) return null;
+        pointerAt(viewportX, viewportY);
+        return rotationArt;
+    }
+
+    /** What a press at this point would do, with Ctrl read live. @see #grip */
+    private Grip gripAt(float viewportX, float viewportY) {
+        return grip(viewportX, viewportY, CgModifiers.hasCtrl(modifiersNow()));
     }
 
     /**
@@ -300,13 +278,6 @@ public final class TransformBox extends UIElement {
      */
     public float rotationArtAngle() {
         return artAngle;
-    }
-
-    /** What the pointer is over, or what it pressed while a gesture owns it. */
-    @Nullable
-    private Grip liveGrip() {
-        if (Float.isNaN(hoverX)) return null;
-        return dragging ? gesture.grip() : grip(hoverX, hoverY, CgModifiers.hasCtrl(modifiersNow()));
     }
 
     private static int modifiersNow() {

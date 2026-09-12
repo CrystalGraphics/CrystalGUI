@@ -7,49 +7,45 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.cursor.Cursor;
 
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UIElement;
 
 /**
- * What the pointer looks like while a gesture owns it.
+ * What the pointer looks like while a gesture OWNS it.
  *
  * <pre>{@code
  * ctx.cursors().set(Cursor.GRABBING);   // a drag begins
  * ctx.cursors().clear();                  // and ends
  * }</pre>
  *
- * <p>An override, deliberately: a marquee is over no element, and a resize drag has to keep its arrow
- * after the pointer has left the handle — neither is something the {@code cursor} property can say. Every
- * other cursor in the engine is the cascade's.</p>
+ * <p>For a gesture with a definite beginning and end, and nothing else: a marquee is over no element, and
+ * a drag must keep its cursor after the pointer has left the thing it started on — neither is something
+ * the {@code cursor} property can say.</p>
  *
- * <p><b>It reaches only this surface.</b> The pointer leaves for another panel without telling whoever set
- * it — a tool that re-decides its cursor every frame has no leave to react to — so the override is scoped
- * and simply stops applying out there. A drag still keeps its cursor anywhere, because pointer capture
- * resolves the hover to the capturing element.</p>
+ * <p><b>Chrome a surface re-decides every frame does NOT belong here.</b> Such a surface is never told the
+ * pointer has left it — it simply stops being asked — so a cursor pushed from one is a cursor nothing
+ * takes down, and it holds the whole window. That case is
+ * {@link com.crystalgui.ui.service.CursorSource}, which the engine ASKS while the pointer is over the
+ * element: a canvas answers for its own area and cannot answer for anywhere else.</p>
  *
- * <p>A gesture that forgets to {@link #clear} still leaves this surface pointing the wrong way, so set it
- * in the same place you clear it.</p>
+ * <p>A gesture that forgets to {@link #clear} leaves the window pointing the wrong way, so set it in the
+ * same place you clear it.</p>
  */
 public final class Cursors {
 
     private final Supplier<UIDocument> window;
 
-    /** The surface this speaks for: where an override applies. */
-    private final Supplier<UIElement> within;
-
     @Nullable
     private Cursor current;
 
-    public Cursors(Supplier<UIDocument> window, Supplier<UIElement> within) {
+    public Cursors(Supplier<UIDocument> window) {
         this.window = window;
-        this.within = within;
     }
 
-    /** Forces {@code cursor} while the pointer is over this surface, until it is cleared. Null is {@link #clear}. */
+    /** Forces {@code cursor} until it is cleared. Null is {@link #clear}. */
     public void set(@Nullable Cursor cursor) {
         if (current == cursor) return;
         current = cursor;
         UIDocument document = window.get();
-        if (document != null) document.input().setCursorOverride(cursor, within.get());
+        if (document != null) document.input().setCursorOverride(cursor);
     }
 
     /** Gives the pointer back to the cascade. */

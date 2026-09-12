@@ -175,35 +175,73 @@ public class FreeTransformTest extends UiDocumentTestBase {
      * <b>The rotate band draws its arrow, and the arrow goes when the node does.</b>
      *
      * <p>A native cursor cannot turn, so the rotate arrow is drawn and the cursor under it is a plain
-     * hand — Paint.NET's split. What that buys in smoothness it owes in lifetime: the art is cleared by
-     * a per-frame hook the node owns, and a node removed mid-gesture never gets the frame that would
-     * clear it, so the arrow would stay on screen with nothing left to take it down.</p>
+     * hand — Paint.NET's split. It is ASKED for rather than armed: the engine walks out from whatever the
+     * pointer is over, so a node that leaves the tree stops being asked and its art goes with it, where a
+     * gesture that armed art and then vanished left the arrow on screen with nothing to take it down.</p>
      */
     @Test
     public void theRotateBandDrawsItsArrowAndTakesItAwayAgain() {
         enterFreeTransform();
-        document.update(W, H);
+        frame();
 
-        Vector2f corner = box().handleAt(Spot.TOP_RIGHT);
+        Vector2f corner = box().handleAt(Spot.BOTTOM_RIGHT);
         assertNotNull(corner);
         float bandX = corner.x + 8f;
-        float bandY = corner.y - 8f;
+        float bandY = corner.y + 8f;
         assertEquals("the fixture must actually be over the rotate band",
                 Kind.ROTATE, box().grip(bandX, bandY, false).kind());
         assertEquals("the band takes a hand; the arrow is drawn, not presented",
                 Cursor.GRAB, TransformBox.cursorFor(box().grip(bandX, bandY, false)));
 
-        box().hoverAt(bandX, bandY);
-        document.frame(0.016f, W, H);
+        int[] band = worldOf(new Vector2f(bandX, bandY));
+        move(band[0], band[1]);
+        frame();
 
         assertNotNull("nothing was drawn at the pointer over the rotate band",
-                document.input().cursorDecoration());
+                document.input().pointerArt());
 
         document.remove(host);
-        document.frame(0.016f, W, H);
+        frame();
 
-        assertNull("the node went and left its arrow behind",
-                document.input().cursorDecoration());
+        assertNull("the node went and left its arrow behind", document.input().pointerArt());
+    }
+
+    /**
+     * <b>And the arrow stops at the canvas's edge.</b>
+     *
+     * <p>The rotate mark is drawn art rather than a presented cursor, so the scope that keeps the move
+     * cursor on the canvas did not reach it: the tool re-arms the art every frame from where the pointer
+     * last was on the canvas, and a pointer that has left for another panel reports nowhere at all — so
+     * the arrow followed the hand across the window. Withheld out there, as the cursor is.</p>
+     */
+    @Test
+    public void theRotateArrowStopsAtTheSurfacesEdge() {
+        UIElement elsewhere = new UIElement().layout(l -> l.width(200).height(200));
+        document.append(elsewhere);
+        enterFreeTransform();
+        frame();
+
+        // THE BOTTOM-RIGHT BAND, because a rotate band only means anything over the CANVAS: outside the
+        // top-right corner is the toolbar row, where the surface never sees the pointer at all and the
+        // tool arms nothing -- which is a fixture that proves neither half of this.
+        Vector2f corner = box().handleAt(Spot.BOTTOM_RIGHT);
+        assertNotNull(corner);
+        int[] band = worldOf(new Vector2f(corner.x + 8f, corner.y + 8f));
+        move(band[0], band[1]);
+        frame();
+        assertEquals("the fixture must actually be over the rotate band", Kind.ROTATE,
+                box().grip(corner.x + 8f, corner.y + 8f, false).kind());
+        assertNotNull("the band draws its arrow", document.input().pointerArt());
+
+        int[] outside = centreOf(elsewhere);
+        move(outside[0], outside[1]);
+        frame();
+        assertNull("the arrow followed the pointer off the canvas",
+                document.input().pointerArt());
+
+        move(band[0], band[1]);
+        frame();
+        assertNotNull("and it is back on return", document.input().pointerArt());
     }
 
     /**

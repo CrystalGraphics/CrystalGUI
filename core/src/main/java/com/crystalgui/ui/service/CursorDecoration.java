@@ -12,12 +12,24 @@ import com.crystalgui.render.CgUiPaintContext;
  * smooth at every angle and every zoom, because it goes through {@code ctx.curve()} like the rest of
  * the design-time chrome.</p>
  *
- * <pre>{@code
- * // While a gesture is live -- set per frame, cleared with null.
- * input.setCursorDecoration((ctx, x, y) -> RotationCursor.paint(ctx, x, y, angle));
+ * <p><b>Answer for the point; do not put art in a slot.</b> A widget implements {@link CursorSource} and
+ * the engine asks it while the pointer is over it, which is what stops art surviving onto another panel:</p>
  *
- * // Or set once and released by a handle, the way everything else here is scoped.
+ * <pre>{@code
+ * final class RotateKnob extends UIElement implements CursorSource {
+ *     public CursorDecoration artAt(float x, float y) {
+ *         if (!overTheRim(x, y)) return null;   // null hands the question to whoever is outward
+ *         return (ctx, px, py) -> RotationCursor.paint(ctx, px, py, angleAt(x, y));
+ *     }
+ * }
+ * }</pre>
+ *
+ * <p>A live gesture may push instead, for art that belongs to the drag rather than to a place — it holds
+ * until the handle is disposed, wherever the pointer goes:</p>
+ *
+ * <pre>{@code
  * Disposable art = input.setCursorDecoration(myDecoration);
+ * art.dispose();   // the gesture ended
  * }</pre>
  *
  * <h3>It AUGMENTS the cursor; it never replaces it</h3>
