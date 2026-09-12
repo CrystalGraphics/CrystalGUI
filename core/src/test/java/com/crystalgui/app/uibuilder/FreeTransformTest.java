@@ -186,8 +186,8 @@ public class FreeTransformTest extends UiDocumentTestBase {
 
         Vector2f corner = box().handleAt(Spot.BOTTOM_RIGHT);
         assertNotNull(corner);
-        float bandX = corner.x + 8f;
-        float bandY = corner.y + 8f;
+        float bandX = corner.x + 14f;
+        float bandY = corner.y + 14f;
         assertEquals("the fixture must actually be over the rotate band",
                 Kind.ROTATE, box().grip(bandX, bandY, false).kind());
         assertEquals("the band takes a hand; the arrow is drawn, not presented",
@@ -226,11 +226,11 @@ public class FreeTransformTest extends UiDocumentTestBase {
         // tool arms nothing -- which is a fixture that proves neither half of this.
         Vector2f corner = box().handleAt(Spot.BOTTOM_RIGHT);
         assertNotNull(corner);
-        int[] band = worldOf(new Vector2f(corner.x + 8f, corner.y + 8f));
+        int[] band = worldOf(new Vector2f(corner.x + 14f, corner.y + 14f));
         move(band[0], band[1]);
         frame();
         assertEquals("the fixture must actually be over the rotate band", Kind.ROTATE,
-                box().grip(corner.x + 8f, corner.y + 8f, false).kind());
+                box().grip(corner.x + 14f, corner.y + 14f, false).kind());
         assertNotNull("the band draws its arrow", document.input().pointerArt());
 
         int[] outside = centreOf(elsewhere);
@@ -260,7 +260,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
 
         Vector2f corner = box().handleAt(Spot.TOP_RIGHT);
         assertNotNull(corner);
-        box().hoverAt(corner.x + 8f, corner.y - 8f);
+        box().hoverAt(corner.x + 14f, corner.y - 14f);
         float atGrab = box().rotationArtAngle();
 
         box().press(new Grip(Kind.ROTATE, Spot.TOP_RIGHT));
@@ -617,12 +617,13 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertEquals("on the handle itself", Kind.SCALE,
                 box().grip(corner.x, corner.y, false).kind());
         assertEquals("just outside the corner", Kind.ROTATE,
-                box().grip(corner.x + 12f, corner.y + 12f, false).kind());
-        // THE BOUNDARY, which is the whole complaint: a grab radius wider than the dot does not make
-        // scaling easier to hit, it pushes rotate out of reach. Six pixels clear of a six-pixel dot has
-        // to be rotate already.
-        assertEquals("rotate has to begin at the edge of the dot, not well clear of it",
-                Kind.ROTATE, box().grip(corner.x + 4.5f, corner.y + 4.5f, false).kind());
+                box().grip(corner.x + 14f, corner.y + 14f, false).kind());
+        // THE BOUNDARY. The dot says where the handle is, not how near the hand has to be: matched to the
+        // dot, the scale zone ran out a pixel or two outside the mark and rotate had the corner almost
+        // immediately. A few pixels clear of the dot is still a scale, and the band starts beyond it --
+        // which costs rotate nothing, since its width is measured outward from this edge.
+        assertEquals("a few pixels clear of the dot still scales",
+                Kind.SCALE, box().grip(corner.x + 5.5f, corner.y + 5.5f, false).kind());
         assertEquals("a press well inside the box moves it, however near a corner it is",
                 Kind.MOVE, box().grip(corner.x - 14f, corner.y - 14f, false).kind());
         assertEquals("the pivot's own mark", Kind.PIVOT, box().grip(centre.x, centre.y, false).kind());
