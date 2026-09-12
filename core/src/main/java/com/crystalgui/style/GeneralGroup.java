@@ -1,5 +1,7 @@
 package com.crystalgui.style;
 
+import com.crystalgui.style.property.visual.text.StrokeAlign;
+import com.crystalgui.style.property.visual.text.PaintOrder;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiBackdropFilter;
@@ -157,6 +159,59 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public int color() {
         return getValueSave(StylePropertyRegistry.COLOR);
+    }
+
+    // ── Text stroke ─────────────────────────────────────────────────────────────────────────
+    // Every one of these inherits, so a sheet sets them on a container and the labels inside take
+    // them. Do NOT put any of them on a `*` rule: `font-size` already demonstrates what that does,
+    // by planting a candidate on every element and defeating the inheritance it looks like it is
+    // helping. @see AGENTS.md's invariant table.
+
+    public LengthPercent textStrokeWidth() {
+        return getValueSave(StylePropertyRegistry.TEXT_STROKE_WIDTH);
+    }
+
+    public GeneralGroup textStrokeWidth(LengthPercent width) {
+        set(StylePropertyRegistry.TEXT_STROKE_WIDTH, width);
+        return this;
+    }
+
+    /** {@code 0} means {@code currentcolor}; resolve it against {@link #color()}. */
+    public int textStrokeColor() {
+        return getValueSave(StylePropertyRegistry.TEXT_STROKE_COLOR);
+    }
+
+    public GeneralGroup textStrokeColor(int argb) {
+        set(StylePropertyRegistry.TEXT_STROKE_COLOR, argb);
+        return this;
+    }
+
+    /** {@code 0} means unset; the glyph fill then takes {@link #color()}. */
+    public int textFillColor() {
+        return getValueSave(StylePropertyRegistry.TEXT_FILL_COLOR);
+    }
+
+    public GeneralGroup textFillColor(int argb) {
+        set(StylePropertyRegistry.TEXT_FILL_COLOR, argb);
+        return this;
+    }
+
+    public PaintOrder paintOrder() {
+        return getValueSave(StylePropertyRegistry.PAINT_ORDER);
+    }
+
+    public GeneralGroup paintOrder(PaintOrder order) {
+        set(StylePropertyRegistry.PAINT_ORDER, order);
+        return this;
+    }
+
+    public StrokeAlign strokeAlign() {
+        return getValueSave(StylePropertyRegistry.STROKE_ALIGN);
+    }
+
+    public GeneralGroup strokeAlign(StrokeAlign align) {
+        set(StylePropertyRegistry.STROKE_ALIGN, align);
+        return this;
     }
 
     public GeneralGroup color(int color) {

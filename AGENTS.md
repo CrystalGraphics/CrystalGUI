@@ -463,10 +463,14 @@ entry is visible rather than merely absent: `backdrop-filter`, `background`, `ba
 `font-style`, `font-weight`, `line-height`, `mask`, `mask-size`,
 `mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-size`,
-`overlay-origin`, `overlay-position`, `resize`, `scroll-behavior`, `scroll-duration`,
-`selection-color`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
-`text-overflow`, `text-shadow`, `tooltip-delay`, `transform`, `transform-origin-x`, `transform-origin-y`,
+`overlay-origin`, `overlay-position`, `paint-order`, `resize`, `scroll-behavior`, `scroll-duration`,
+`selection-color`, `stroke-align`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-fill-color`, `text-offset-x`, `text-offset-y`,
+`text-overflow`, `text-shadow`, `text-stroke-color`, `text-stroke-width`, `tooltip-delay`, `transform`, `transform-origin-x`, `transform-origin-y`,
 `transition`, `white-space`, `z-index` — plus the whole layout set from `LayoutProperties`.
+
+> **Shorthands are NOT in that list and never will be**, because they are not registered: `DeclarationParser` intercepts each one by name before the registry lookup and emits real longhands, so `StylePropertyRegistry.byName` answers null for them. Today they are `margin`/`padding`/`border-width` (`BoxEdgeShorthands`), `border-radius`, `outline-offset`, `transform-origin`, `outline` (polymorphic — a drawable slot OR width+colour) and `text-stroke` (width+colour). Each must be matched with `equals` rather than a prefix test, since every one of those names is a prefix of its own longhands, and each needs a `transitionNameMatches` entry in `TransitionEngine` or `transition: <shorthand>` animates nothing — `outline` had that method for months and was never wired in.
+>
+> **One pair goes the other way: `text-stroke-width` and `text-stroke-color` ARE in the list above, and a sheet still may not write them.** `DeclarationParser` refuses any property whose `StyleProperty.getAuthoredThrough()` is set, so `text-stroke` is the only spelling — while `byName` keeps resolving both, which `InlineStyleCodec` requires, since it throws on a name it cannot resolve and would otherwise fail on every serialised tree carrying an outline. They remain two properties because a declaration stating only a colour has to leave the width alone, and a single combined value cannot express a partial override.
 
 > **Renaming one is a DATA migration, not a rename.** `InlineStyleCodec` refuses a document naming a
 > property it does not know — `CodecException: Unknown style property 'gap-all'` — rather than skipping

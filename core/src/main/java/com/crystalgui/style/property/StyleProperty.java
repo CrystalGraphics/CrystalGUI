@@ -36,6 +36,18 @@ public class StyleProperty<VALUE> {
      * inherit and should leave this false. */
     @Setter @Getter
     private boolean inheritable = false;
+    /**
+     * The shorthand an author writes instead of this property's own name, or null when the name is
+     * writable directly in a stylesheet.
+     *
+     * <p>The property still cascades, inherits, interpolates and serialises under its real name —
+     * only {@code DeclarationParser} refuses it, so a sheet has one spelling while the engine keeps
+     * the two independent values a partial override needs. {@code text-stroke: red} in a hover rule
+     * has to be able to leave the width alone, which a single combined value cannot express.</p>
+     */
+    @Setter @Getter
+    @Nullable
+    private String authoredThrough;
 
     public StyleProperty(String name, Class<VALUE> type, VALUE initialValue, ValueParser<VALUE> valueParser) {
         this.id = ID_COUNTER.getAndIncrement();
