@@ -12,7 +12,9 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.app.uibuilder.canvas.TreeSelectTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Grip;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.ui.service.CursorDecoration;
 import com.crystalgui.widget.surface.SurfaceContext;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -102,6 +104,27 @@ public final class FreeTransformTool implements Tool {
     @Override
     public UndoStack history() {
         return box.history();
+    }
+
+    /**
+     * The box's, which knows what a press at this point would do.
+     *
+     * <p>Converted into the overlay's space first, exactly as {@link #pointerDown} does — a tool is given
+     * raw pointer pixels and the box measures everything in the surface's own. @see TransformBox#cursorAt</p>
+     */
+    @Override
+    @Nullable
+    public Cursor cursorAt(float rawX, float rawY) {
+        Vector2f at = ctx.surface().toViewportPoint(rawX, rawY);
+        return box.cursorAt(at.x, at.y);
+    }
+
+    /** The rotation arrow, for the band outside a corner. @see TransformBox#artAt */
+    @Override
+    @Nullable
+    public CursorDecoration artAt(float rawX, float rawY) {
+        Vector2f at = ctx.surface().toViewportPoint(rawX, rawY);
+        return box.artAt(at.x, at.y);
     }
 
     /**

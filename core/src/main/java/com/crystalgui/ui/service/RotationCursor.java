@@ -11,8 +11,11 @@ import com.crystalgui.render.CgUiPaintContext;
  * colour wheel — through {@link CursorDecoration}:</p>
  *
  * <pre>{@code
- * input.setCursorDecoration((ctx, x, y) ->
- *         RotationCursor.paint(ctx, x, y, (float) Math.atan2(y - pivotY, x - pivotX)));
+ * // From a CursorSource, which is asked while the pointer is over it:
+ * public CursorDecoration artAt(float x, float y) {
+ *     float radians = (float) Math.atan2(y - pivotY, x - pivotX);
+ *     return (ctx, px, py) -> RotationCursor.paint(ctx, px, py, radians);
+ * }
  * }</pre>
  *
  * <p><b>{@code radians} is the RADIAL direction — pivot to pointer — not the tangent.</b> The arrow is

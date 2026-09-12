@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.undo.UndoCommands;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
@@ -23,6 +24,8 @@ import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
+import com.crystalgui.ui.service.CursorDecoration;
+import com.crystalgui.ui.service.CursorSource;
 
 import org.joml.Vector2f;
 import com.crystalgui.widget.canvas.CanvasView;
@@ -69,7 +72,7 @@ import com.crystalgui.widget.surface.select.SurfaceSelection;
  * implements: an engine that can be named can be reached into.</p>
  */
 public class SurfaceEditor extends CanvasView
-        implements SurfaceContext, DataProvider, UndoScope, Disposable {
+        implements SurfaceContext, DataProvider, UndoScope, Disposable, CursorSource {
 
     /**
      * This widget's kind.
@@ -227,7 +230,7 @@ public class SurfaceEditor extends CanvasView
         });
         this.geometry = new Geometry(surface);
         this.overlays = new OverlayLayer(this);
-        this.cursors = new Cursors(this::document, () -> this);
+        this.cursors = new Cursors(this::document);
         this.modes = new Modes(this, () -> this);
         // A SURFACE MUST BE ABLE TO HOLD FOCUS, or none of its keys work: requestFocus refuses anything
         // whose policy is NONE, so every command that resolves a surface from the focused element
@@ -349,6 +352,32 @@ public class SurfaceEditor extends CanvasView
     @Override
     public Cursors cursors() {
         return cursors;
+    }
+
+    /**
+     * What the pointer looks like over this surface — the current tool's answer, else the cascade's.
+     *
+     * <p>The engine asks this while the pointer is over the surface and stops asking the moment it is
+     * not, so a tool's chrome cannot outlive the pointer's visit: the leak that a pushed cursor has to
+     * be guarded against does not exist here. A drag keeps its cursor for free, because capture makes
+     * the surface's own element the thing the pointer is over.</p>
+     *
+     * <p>Raw pointer pixels, the space {@link com.crystalgui.widget.surface.mode.Tool#pointerMoved}
+     * already speaks — a tool converts for itself.</p>
+     */
+    @Override
+    @Nullable
+    public Cursor cursorAt(float rawX, float rawY) {
+        Tool tool = modes.current();
+        return tool == null ? null : tool.cursorAt(rawX, rawY);
+    }
+
+    /** The current tool's art at the pointer. @see #cursorAt */
+    @Override
+    @Nullable
+    public CursorDecoration artAt(float rawX, float rawY) {
+        Tool tool = modes.current();
+        return tool == null ? null : tool.artAt(rawX, rawY);
     }
 
     @Override

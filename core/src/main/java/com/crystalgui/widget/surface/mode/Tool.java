@@ -2,8 +2,11 @@ package com.crystalgui.widget.surface.mode;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.CursorDecoration;
+import com.crystalgui.ui.service.CursorSource;
 
 /**
  * One way of working on a surface — Select, Hand, Zoom, Free Transform.
@@ -80,6 +83,32 @@ public interface Tool {
      */
     @Nullable
     default UndoStack history() {
+        return null;
+    }
+
+    /**
+     * What the pointer looks like over this tool's surface, or null to leave the answer to the cascade.
+     *
+     * <p>Raw pointer pixels, the same space {@link #pointerMoved} is given, so a tool converts once and
+     * in one way.</p>
+     *
+     * <pre>{@code
+     * public Cursor cursorAt(float x, float y) {
+     *     return box.isActive() ? TransformBox.cursorFor(box.grip(x, y, false)) : null;
+     * }
+     * }</pre>
+     *
+     * <p>Asked every frame while the pointer is over the surface, and never asked once it has left — so a
+     * tool that answers here cannot leave its cursor behind on another panel. @see CursorSource</p>
+     */
+    @Nullable
+    default Cursor cursorAt(float x, float y) {
+        return null;
+    }
+
+    /** Art to draw AT the pointer over the surface, in the same space. @see #cursorAt */
+    @Nullable
+    default CursorDecoration artAt(float x, float y) {
         return null;
     }
 
