@@ -492,6 +492,23 @@ public class DocumentModelTest {
         assertEquals(1, other.version());
     }
 
+    /** An undo and a redo are changes too: announced, and the version moves, as for the edit itself. */
+    @Test
+    public void undoAndRedoAnnounceTheirChange() {
+        CountingModel model = new CountingModel();
+        int[] heard = {0};
+        model.onChanged().connect(() -> heard[0]++);
+
+        model.changeThroughAnEdit();
+        int afterEdit = model.version();
+        assertTrue(model.history().undo());
+        assertEquals(2, heard[0]);
+        assertTrue("the version did not move for the undo", model.version() > afterEdit);
+
+        assertTrue(model.history().redo());
+        assertEquals(3, heard[0]);
+    }
+
     /** A model that counts what it was asked to do. */
     private static final class CountingModel extends AbstractDocumentModel {
         int encodes;
