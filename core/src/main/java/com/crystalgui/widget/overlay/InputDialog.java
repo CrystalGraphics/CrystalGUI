@@ -135,6 +135,75 @@ public final class InputDialog {
         window.focus().requestFocus(cancel);
     }
 
+    /** The line under a question that says why it is being asked. @see #askYesNo */
+    public static final String DETAIL_CLASS = "__dialog-detail__";
+
+    /**
+     * Asks a question neither answer to which destroys anything — Windows' "Do you want to rename "a.md" to
+     * "a (2).md"?" — with Yes focused, so Enter takes the offer.
+     *
+     * <pre>{@code
+     * InputDialog.askYesNo(field, "Rename File", "Do you want to rename \"a.md\" to \"a (2).md\"?",
+     *         "There is already a file with the same name in this location.",
+     *         () -> rename("a (2).md"), () -> leaveItAlone());
+     * }</pre>
+     *
+     * <ul>
+     *   <li>Exactly one of the two runs. Escape, the close button and No all answer No.</li>
+     *   <li>Focus goes back to whatever held it when the dialog opened, before either runs.</li>
+     *   <li>With {@code from} out of any document, nothing opens and No runs at once.</li>
+     * </ul>
+     *
+     * @param detail a second line under the question, or null
+     */
+    public static void askYesNo(@Nullable UIElement from, String title, String question, @Nullable String detail,
+                                Runnable onYes, Runnable onNo) {
+        UIDocument window = from == null ? null : from.document();
+        if (window == null) {
+            onNo.run();
+            return;
+        }
+        Dialog dialog = new Dialog(title);
+        UIText caption = new UIText(question);
+        caption.addClass(CAPTION_CLASS);
+        dialog.getContent().append(caption);
+        if (detail != null) {
+            UIText why = new UIText(detail);
+            why.addClass(DETAIL_CLASS);
+            dialog.getContent().append(why);
+        }
+        UIElement actions = new UIElement();
+        actions.addClass(ACTIONS_CLASS);
+        dialog.getContent().append(actions);
+        Button yes = new Button("Yes");
+        actions.append(yes);
+        Button no = new Button("No");
+        actions.append(no);
+
+        boolean[] answered = {false};
+        yes.onPressed.connect(() -> {
+            answered[0] = true;
+            dialog.close();
+            onYes.run();
+        });
+        no.onPressed.connect(() -> {
+            answered[0] = true;
+            dialog.close();
+            onNo.run();
+        });
+        // HOWEVER ELSE IT CLOSED is a No: Escape and the close button leave nothing done.
+        dialog.onClosed.connect(() -> {
+            if (answered[0]) return;
+            answered[0] = true;
+            onNo.run();
+        });
+
+        window.addOverlay(dialog, from);
+        dialog.removeWhenClosed();
+        dialog.showModal();
+        window.focus().requestFocus(yes);
+    }
+
     /** The shared shell: one caption, promoted and light-dismissable. */
     private static Popover prompt(UIDocument window, @Nullable UIElement from, String title) {
         Popover popup = new Popover();
