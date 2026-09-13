@@ -792,6 +792,9 @@ so changing it costs no flush, and outlined text batches with plain text in one 
 and an 80px atlas, 5.5 texels — and the usable reach is a texel short of that again, because a
 bilinear tap straddling the saturation shoulder averages a clipped texel with a live one and the
 outer edge scallops while the fill stays smooth: **4.5 texels, about 0.056em**, 3.6px on 64px text.
+Godot allows 0.083em for the same technique; the range does not go higher here because the shared
+atlas is eight bits and carries dense CJK, which a coarser quantisation merges. Latin alone measures
+clean to 0.131em — a range per font is what that is worth.
 `CgTextStroke.MAX_FIELD_WIDTH_EM` is that number.
 `text-stroke-width: 1px` on 16px text is 0.0625em, so the smallest text still asks for more than the
 shared atlas can describe. A stroke keeps its label on the distance-field tier down to 15px — the

@@ -321,7 +321,8 @@ text { text-stroke: 2px #FFF; text-fill-color: transparent; }   /* hollow */
 ```
 
 Three limits worth knowing before reaching for it: the stored distance field caps the width at about
-**0.056em** — 3.6px at text size 64 — (wider clamps rather than erroring), a stroke pulls its label onto the distance-field tier and keeps it
+**0.056em** — 3.6px at text size 64, bounded by what eight bits hold in an atlas shared with dense
+CJK — (wider clamps rather than erroring), a stroke pulls its label onto the distance-field tier and keeps it
 there down to text the field can still antialias (15px at the shipping pairing), below which the
 outline is dropped rather than drawn on a fill the field cannot resolve, and an `inset` or `center` stroke closes a letterform's joints once it exceeds
 their thickness — which is geometry, not a defect. Full account in
