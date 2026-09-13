@@ -1528,6 +1528,17 @@ workbench splitview.__vertical__ > .__divider__ {
     margin-right: 6px;
 }
 
+/* NO ICON means no icon box: the label alone, flush beside the pointer. A tinted square with nothing in it
+ * reads as an icon that failed to load -- "3 items", or a node kind that has no icon yet. */
+.__drag-ghost__.__iconless__ {
+    width: 0px;
+    background-color: transparent;
+}
+.__drag-ghost__.__iconless__ .__label__,
+.__drag-ghost__.__iconless__::part(label) {
+    margin-left: 0px;
+}
+
 /* NO DESTINATION means no label at all, not an empty capsule -- the middle of the window, where a drop
  * is refused. An empty box would read as a name that failed to load. */
 .__drag-ghost__.__unlabelled__ .__label__,

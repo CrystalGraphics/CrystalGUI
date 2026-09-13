@@ -98,6 +98,9 @@ public class DragGhost extends UIElement {
     /** On the ghost while it is carrying an icon but no label. @see #text */
     public static final String UNLABELLED_CLASS = "__unlabelled__";
 
+    /** On the ghost while it carries no icon: the label alone, with no empty box beside it. */
+    public static final String ICONLESS_CLASS = "__iconless__";
+
     private final ShadowRoot shadow;
     private final UIElement icon = new UIElement();
     private final UIText label = new UIText("");
@@ -289,6 +292,9 @@ public class DragGhost extends UIElement {
         boolean shown = applied != CgUiDrawable.EMPTY;
         StyleGroup.inlinePipeline(icon.getStyle().getLayoutGroup(),
                 l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        // THE BOX IS THE ICON'S, so it goes with the icon: a tinted square holding nothing reads as a glyph
+        // that failed to load. @see ICONLESS_CLASS
+        if (hasClass(ICONLESS_CLASS) == shown) toggleClass(ICONLESS_CLASS, !shown);
     }
 
 }
