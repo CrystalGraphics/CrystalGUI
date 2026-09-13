@@ -49,6 +49,16 @@ public interface BuilderContext extends SurfaceContext {
     SmartGuides smartGuides();
 
     /**
+     * Where a gesture shows where a drop would land — and the space it resolves the drop in.
+     *
+     * <pre>{@code
+     * ctx.dropIndicator().show(new DropResolver(root, ctx.dropIndicator()).resolve(sources, rawX, rawY));
+     * ctx.dropIndicator().clear();   // when the gesture ends
+     * }</pre>
+     */
+    DropIndicator dropIndicator();
+
+    /**
      * What is selected, as the hierarchy and the inspector see it.
      *
      * <p>Not {@link #selection()}, which is the ENGINE's set of items a gesture moves. The two are kept

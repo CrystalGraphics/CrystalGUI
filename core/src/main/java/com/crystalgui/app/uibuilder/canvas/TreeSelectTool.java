@@ -8,16 +8,16 @@ import com.crystalgui.widget.surface.mode.SelectTool;
 import com.crystalgui.widget.surface.mode.Tool;
 
 /**
- * The builder's Select: the engine's, plus a drag that positions an out-of-flow node.
+ * The builder's Select: the engine's, plus the two drags a tree has — a positioned node is moved, and an
+ * in-flow node is reordered or reparented.
  *
  * <p>Composition rather than a fork. Everything a selection gesture means — the press rule, the marquee,
- * Shift to toggle — is the engine's and identical here; what a tree adds is that a press on a
- * <b>positioned</b> node is a move, and a press on anything else is not.</p>
+ * Shift to toggle — is the engine's and identical here; what a tree adds is what a drag on a node does.</p>
  *
  * <p>The engine's own move gesture is refused outright by {@link TreePolicy#movesItems()}, because it
- * writes plane coordinates and a node inside a laid-out tree has none. This writes the inset the node is
- * anchored by instead. A press on an <em>in-flow</em> node is left to fall through to selection: dragging
- * one means reorder or reparent, which is L4.6's gesture and not this one.</p>
+ * writes plane coordinates and a node inside a laid-out tree has none. {@link MoveOutOfFlow} writes the
+ * inset a positioned node is anchored by instead, and {@link ReorderInFlow} moves an in-flow node through
+ * the tree.</p>
  */
 public final class TreeSelectTool implements Tool {
 
@@ -46,10 +46,12 @@ public final class TreeSelectTool implements Tool {
         // AFTER the selection, so the drag moves what the press just picked -- and only then, because
         // "press an already-selected node and drag them all" is the engine's rule and it has to have run.
         UIElement item = ctx.picking().itemAt(rawX, rawY);
-        if (!MoveOutOfFlow.isMovable(item)) return consumed;
-        MoveOutOfFlow move = moveGesture();
-        if (move == null) return consumed;
-        return move.begin(item, rawX, rawY) || consumed;
+        if (MoveOutOfFlow.isMovable(item)) {
+            MoveOutOfFlow move = moveGesture();
+            return move != null && move.begin(item, rawX, rawY) || consumed;
+        }
+        ReorderInFlow reorder = reorderGesture();
+        return reorder != null && reorder.begin(item, rawX, rawY) || consumed;
     }
 
     @Override
@@ -79,5 +81,9 @@ public final class TreeSelectTool implements Tool {
 
     private MoveOutOfFlow moveGesture() {
         return ctx instanceof BuilderSurface surface ? surface.moveGesture() : null;
+    }
+
+    private ReorderInFlow reorderGesture() {
+        return ctx instanceof BuilderSurface surface ? surface.reorderGesture() : null;
     }
 }

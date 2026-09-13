@@ -245,6 +245,26 @@ file it does not cover. The release's `NOTICE.md` names each file, its licence a
 each EPL and MPL jar is on Maven Central at the coordinates in the engine-band table above. MCP's,
 MCPConfig's and Mojang's mapping data, and the JDK sources, are never mirrored.
 
+## GrapesJS — the drag sorter (BSD-3-Clause)
+
+Five classes are a port of GrapesJS's component sorter — `packages/core/src/utils/sorter/` and
+`src/utils/AutoScroller.ts` on its `dev` branch — © 2017–current Artur Arseniev, licensed BSD-3-Clause, whose
+binary-distribution clause is why its full text is in [`notices/crystalgui.md`](notices/crystalgui.md):
+
+| Ours | Theirs |
+|---|---|
+| `widget/dnd/SortPlacement` | `SorterUtils.findPosition`, `Dimension.determinePlacement` and `getDropArea` with `CanvasComponentNode`'s ratio and band |
+| `app/uibuilder/canvas/DropResolver` | `DropLocationDeterminer.getValidParent` / `handleParentTraversal` / `getDropPosition` |
+| `app/uibuilder/document/TreeDropRules` | `dom_components.canMove` |
+| `app/uibuilder/document/TreeMoves` | `ComponentSorter.handleNodeAddition` / `moveNode` |
+| `widget/surface/EdgePan` | `utils/AutoScroller`, on both axes |
+
+**Modified**: a limit is unset as `NaN` rather than as a falsy zero, which upstream ignores at coordinate 0;
+rects are layout boxes in one overlay space rather than DOM offsets; the auto-scroll is scaled by the frame
+delta and capped. A web page builder whose one job is dragging a live tree about a canvas, flex-aware, is the
+most-solved form of the problem there is — `plan/crystalgui/shell-ui-builder/reorder-drag.md` says what was
+taken and what was deliberately not.
+
 ## Chromium — `RateEstimator` (BSD-3-Clause)
 
 `core/src/main/java/com/crystalgui/core/async/RateEstimator.java` is a port of Chromium's download rate

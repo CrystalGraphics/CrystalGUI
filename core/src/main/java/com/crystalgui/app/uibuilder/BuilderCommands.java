@@ -2,11 +2,14 @@ package com.crystalgui.app.uibuilder;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.attributes.StyleAttributes;
+import com.crystalgui.app.uibuilder.canvas.ReorderInFlow;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
+import com.crystalgui.app.uibuilder.document.TreeMoves;
 import com.crystalgui.app.uibuilder.live.PickMode;
 import com.crystalgui.core.attribute.AttributeClipboard;
 import com.crystalgui.core.attribute.AttributeSet;
@@ -15,7 +18,9 @@ import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.dnd.SortPlacement;
 import com.crystalgui.widget.overlay.PasteAttributesDialog;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.crystalgui.ui.dom.UIElement;
@@ -119,6 +124,21 @@ public final class BuilderCommands {
      */
     public static final String SELECT_NEXT_SIBLING = "uibuilder.selectNextSibling";
 
+    /**
+     * Before the previous in-flow sibling — VS Code's Move Line Up, for a node. {@link #MOVE_DOWN} goes after
+     * the next. A selection moves together and stops at the end of its container.
+     */
+    public static final String MOVE_UP = "uibuilder.moveUp";
+
+    /** @see #MOVE_UP */
+    public static final String MOVE_DOWN = "uibuilder.moveDown";
+
+    /** A copy of the selection before it — VS Code's Copy Line Up. The copy is selected. */
+    public static final String DUPLICATE_UP = "uibuilder.duplicateUp";
+
+    /** A copy of the selection after it. @see #DUPLICATE_UP */
+    public static final String DUPLICATE_DOWN = "uibuilder.duplicateDown";
+
     /** Registers them, and hands back the way to withdraw them. */
     public static Disposable register() {
         CommandRegistry.global().contribute(BuilderCommands.class, BuilderCommands::declare);
@@ -178,6 +198,20 @@ public final class BuilderCommands {
                 .run(context -> selectSibling(context, 1))
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
 
+        // BOUND ON THE SURFACE, like the arrows: Alt+Up is a text editor's Move Line everywhere else.
+        registry.register(Command.of(MOVE_UP, "Move Up")
+                .run(context -> shift(context, false, false))
+                .enabledWhen(BuilderCommands::canShift));
+        registry.register(Command.of(MOVE_DOWN, "Move Down")
+                .run(context -> shift(context, true, false))
+                .enabledWhen(BuilderCommands::canShift));
+        registry.register(Command.of(DUPLICATE_UP, "Duplicate Up")
+                .run(context -> shift(context, false, true))
+                .enabledWhen(BuilderCommands::canShift));
+        registry.register(Command.of(DUPLICATE_DOWN, "Duplicate Down")
+                .run(context -> shift(context, true, true))
+                .enabledWhen(BuilderCommands::canShift));
+
         // ONE NODE, AND A LAID-OUT ONE. The tool cannot refuse a bad selection from inside `activated`
         // without re-entering the mode stack mid-change, so the gate is here where it costs nothing.
         registry.register(Command.of(FREE_TRANSFORM, "Free Transform")
@@ -226,6 +260,64 @@ public final class BuilderCommands {
         }
         PasteAttributesDialog.open(builder.surface(), copied, StyleAttributes.describe(node),
                 chosen -> target.applyAsEdit(builder.document(), chosen));
+    }
+
+    /**
+     * Moves or copies the selection one place along its container, as one undo step.
+     *
+     * <p>In CHILD order, which is the order the hierarchy lists; a reversed flow draws it backwards and the
+     * key still means the same place in the list. One container at a time: a selection spanning two has no
+     * single "previous".</p>
+     */
+    private static void shift(CommandContext context, boolean later, boolean copy) {
+        BuilderEditor builder = builderOf(context);
+        List<UIElement> nodes = shiftable(builder);
+        if (nodes.isEmpty()) return;
+        UIElement parent = nodes.get(0).parentElement();
+        List<UIElement> children = parent.children();
+        int first = children.indexOf(nodes.get(0));
+        int last = children.indexOf(nodes.get(nodes.size() - 1));
+        List<BuilderEdit> edits;
+        if (copy) {
+            edits = TreeMoves.duplicate(builder.document(), parent, later ? last + 1 : first, nodes);
+        } else {
+            int neighbour = neighbourInFlow(children, later ? last : first, later ? 1 : -1, nodes);
+            if (neighbour < 0) return;
+            edits = TreeMoves.move(parent, later ? neighbour + 1 : neighbour, nodes);
+        }
+        if (edits.isEmpty()) return;
+        builder.document().applyAll(copy ? "duplicate" : "move", edits);
+        if (copy) {
+            List<UIElement> copies = new ArrayList<>(edits.size());
+            for (BuilderEdit edit : edits) copies.add(edit.node());
+            builder.selection().replaceWith(copies);
+        }
+    }
+
+    /** The selection's outermost reorderable nodes, when they share one container; else empty. */
+    private static List<UIElement> shiftable(@Nullable BuilderEditor builder) {
+        if (builder == null || !builder.surface().isDesignMode()) return List.of();
+        UIElement root = builder.document().root();
+        List<UIElement> nodes = new ArrayList<>();
+        for (UIElement node : TreeMoves.outermost(builder.selection().nodes())) {
+            if (!ReorderInFlow.isReorderable(root, node)) return List.of();
+            if (!nodes.isEmpty() && node.parentElement() != nodes.get(0).parentElement()) return List.of();
+            nodes.add(node);
+        }
+        return nodes;
+    }
+
+    private static boolean canShift(CommandContext context) {
+        return hasBuilder(context) && !shiftable(builderOf(context)).isEmpty();
+    }
+
+    /** The nearest in-flow child past {@code from} in {@code step}'s direction that is not one of {@code moving}, or -1. */
+    private static int neighbourInFlow(List<UIElement> children, int from, int step, List<UIElement> moving) {
+        for (int i = from + step; i >= 0 && i < children.size(); i += step) {
+            UIElement child = children.get(i);
+            if (!moving.contains(child) && SortPlacement.inFlow(child)) return i;
+        }
+        return -1;
     }
 
     /** @see #FREE_TRANSFORM */

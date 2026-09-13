@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas;
 
+import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -15,6 +16,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.widget.layout.ContextToolbar;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.surface.mode.ToolKind;
+import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentEditor;
@@ -73,6 +75,9 @@ public final class BuilderEditor implements DocumentEditor {
     private final TransformOptionsBar options;
     private final ContextToolbar contextBar;
     private final MoveOutOfFlow moveGesture;
+
+    /** @see ReorderInFlow */
+    private final ReorderInFlow reorderGesture;
     private final TextEditGesture textEditing;
     private final BuilderPane pane;
 
@@ -101,6 +106,7 @@ public final class BuilderEditor implements DocumentEditor {
         });
         // UNDER THE HANDLES, so a guide through a corner never covers the dot on it.
         surface.surface().addOverlay(surface.smartGuides());
+        surface.surface().addOverlay(surface.dropIndicator());
         this.handles = new ResizeHandles(surface, document);
         // DIRECTLY, not through OverlayLayer: that path sets `hit-test: false` on whatever it mounts,
         // which is right for something that only draws and fatal for eight handles that have to take a
@@ -109,6 +115,9 @@ public final class BuilderEditor implements DocumentEditor {
         this.moveGesture = new MoveOutOfFlow(surface, document);
         surface.surface().addOverlay(moveGesture);
         surface.movesWith(moveGesture);
+        this.reorderGesture = new ReorderInFlow(surface, document);
+        surface.surface().addOverlay(reorderGesture);
+        surface.reordersWith(reorderGesture);
         this.textEditing = new TextEditGesture(document);
         surface.surface().addOverlay(textEditing);
         // FREE TRANSFORM (L4.5a). Mounted directly like the handles rather than as an overlay kind: it
@@ -161,17 +170,33 @@ public final class BuilderEditor implements DocumentEditor {
         document.history().onDidStep.connect(this::selectWhatStepped);
     }
 
-    /** @see #BuilderEditor the note on the history's step signal */
+    /**
+     * Selects what an undo or redo changed. A gesture that changed several nodes is one step holding several
+     * edits — a drop, a duplicate — and selects every node they name that is still in the tree.
+     *
+     * @see #BuilderEditor the note on the history's step signal
+     */
     private void selectWhatStepped(Edit edit) {
-        UIElement node = edit instanceof BuilderEdit builderEdit ? builderEdit.node() : null;
-        // A REMOVED NODE IS NOT SELECTABLE, and an undone Insert is exactly that. `contains` is the
-        // document's own light-tree question, so this asks whether the node is still in the tree at all
-        // rather than trusting the edit to have left it there.
-        if (node == null || !document.root().contains(node) && node != document.root()) {
-            surface.builderSelection().selectOnly(null);
+        List<UIElement> stepped = new ArrayList<>();
+        collectNodes(edit, stepped);
+        surface.builderSelection().replaceWith(stepped);
+    }
+
+    /**
+     * The nodes {@code edit} names, in order, that are still in the document.
+     *
+     * <p>A REMOVED NODE IS NOT SELECTABLE, and an undone Insert is exactly that. `contains` is the document's
+     * own light-tree question, so this asks whether the node is still in the tree at all rather than trusting
+     * the edit to have left it there.</p>
+     */
+    private void collectNodes(Edit edit, List<UIElement> into) {
+        if (edit instanceof CompositeEdit composite) {
+            for (Edit each : composite.edits()) collectNodes(each, into);
             return;
         }
-        surface.builderSelection().selectOnly(node);
+        UIElement node = edit instanceof BuilderEdit builderEdit ? builderEdit.node() : null;
+        if (node == null || into.contains(node)) return;
+        if (document.root().contains(node) || node == document.root()) into.add(node);
     }
 
     public UiBuilderDocument document() {
@@ -195,6 +220,11 @@ public final class BuilderEditor implements DocumentEditor {
     /** Dragging an out-of-flow node, with snapping and its guides. */
     public MoveOutOfFlow moveGesture() {
         return moveGesture;
+    }
+
+    /** Dragging an in-flow node to another place in the tree. */
+    public ReorderInFlow reorderGesture() {
+        return reorderGesture;
     }
 
     /** In-place text editing — the field that opens over a {@code text} node. */
