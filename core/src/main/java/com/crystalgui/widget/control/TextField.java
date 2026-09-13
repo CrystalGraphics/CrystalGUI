@@ -9,6 +9,8 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgui.render.text.FontFamilyCache;
+import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgui.render.text.TextStrokeStyle;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.text.Rope;
@@ -1282,12 +1284,19 @@ public class TextField extends UIElement implements Measurable {
             // A draw that did not get the glyph tier it asked for is provisional, so come back for it
             // next frame. @see CgUiPaintContext#textDegradedDrawCount
             long degradedBefore = ctx.textDegradedDrawCount();
-            ctx.text().draw()
+            CgFontFamily family = resolveFamily();
+            int shownColor = showingPlaceholder ? dim(styleGen.color()) : styleGen.color();
+            CgTextRenderer.Draw draw = ctx.text().draw()
                     .at(originX, originY)
                     .text(shown)
-                    .color(showingPlaceholder ? dim(styleGen.color()) : styleGen.color())
-                    .family(resolveFamily())
-                    .submit();
+                    .color(shownColor)
+                    .family(family);
+            // text-stroke is INHERITABLE, so a declaration anywhere above reaches this field's glyphs
+            // exactly as it reaches a label's -- a widget that draws its own text and skips this leaves
+            // the property computing correctly and doing nothing. currentcolor follows what is ACTUALLY
+            // drawn, so a placeholder outlines in the dimmed colour rather than the full one.
+            TextStrokeStyle.applyTo(draw, family, styleGen, computedStyle(), shownColor);
+            draw.submit();
             if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
         }
 
