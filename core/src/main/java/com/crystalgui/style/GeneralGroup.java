@@ -18,6 +18,7 @@ import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.style.property.visual.shadow.ShadowList;
 import com.crystalgui.style.transition.TransitionSpec;
 import com.crystalgui.style.property.visual.transform.Transform;
 
@@ -380,13 +381,12 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    /** CSS `text-shadow`, as a boolean drop shadow. Inherited. Registered long before anything drew
-     * it; UIText.paintOverlay finally consumes it. */
-    public boolean textShadow() {
+    /** CSS {@code text-shadow}, a shadow list. Inherited. @see ShadowList */
+    public ShadowList textShadow() {
         return getValueSave(StylePropertyRegistry.TEXT_SHADOW);
     }
 
-    public GeneralGroup textShadow(boolean textShadow) {
+    public GeneralGroup textShadow(ShadowList textShadow) {
         set(StylePropertyRegistry.TEXT_SHADOW, textShadow);
         return this;
     }

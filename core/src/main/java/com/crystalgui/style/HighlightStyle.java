@@ -1,5 +1,6 @@
 package com.crystalgui.style;
 
+import com.crystalgui.style.property.visual.shadow.ShadowList;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.text.FontStyle;
@@ -99,14 +100,19 @@ public final class HighlightStyle {
             BorderRadiusProperties.BOTTOM_LEFT_X,
             BorderRadiusProperties.BOTTOM_LEFT_Y,
             LayoutProperties.PADDING_LEFT,
-            LayoutProperties.PADDING_RIGHT);
+            LayoutProperties.PADDING_RIGHT,
+            // Per-glyph shadows made it free: a highlight's shadows are shadow instances scoped to the glyphs
+            // of its range, in the same draw, appended after the element's own as Blink's PrepareTextShadow
+            // merges a selection's list.
+            StylePropertyRegistry.TEXT_SHADOW);
 
     /**
      * Allowed by CSS on a highlight pseudo-element, <b>not yet paintable here</b> — a different failure
      * from a property CSS forbids, so it gets a different message.
      *
-     * <p>{@code text-shadow} on a highlight is a second draw of just that range, which is not expressible
-     * as a {@code CgStyleSpan} — that carries colour and decorations and nothing positional.</p>
+     * <p><b>Empty today.</b> {@code text-shadow} was the last entry: a highlight's shadows are now shadow
+     * instances scoped to the glyphs of its range. The set stays, since the next property CSS allows and
+     * this engine cannot yet draw belongs here rather than in {@link #ALLOWED}.</p>
      *
      * <p><b>{@code background-color} used to be here and no longer is.</b> The band it needs turned out to
      * be free: shaping already breaks a run at every span boundary, so a highlighted range <em>is</em> one
@@ -115,8 +121,7 @@ public final class HighlightStyle {
      * measurement and no second shaping pass — the geometry this file said the layer did not have was
      * sitting in the layout the whole time.</p>
      */
-    public static final Set<StyleProperty<?>> NOT_YET_PAINTABLE = Set.of(
-            StylePropertyRegistry.TEXT_SHADOW);
+    public static final Set<StyleProperty<?>> NOT_YET_PAINTABLE = Set.of();
 
     /** No rule matched — every getter falls through to its inherited/absent answer. */
     public static final HighlightStyle EMPTY = new HighlightStyle(Collections.emptyMap());
@@ -157,6 +162,11 @@ public final class HighlightStyle {
 
     public int color(int inherited) {
         return get(StylePropertyRegistry.COLOR, inherited);
+    }
+
+    /** This range's own {@code text-shadow}, cast from its glyphs beneath the element's; none by default. */
+    public ShadowList textShadow() {
+        return get(StylePropertyRegistry.TEXT_SHADOW, ShadowList.NONE);
     }
 
     public Set<TextDecorationLine> decorations() {

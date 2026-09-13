@@ -22,6 +22,9 @@ import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
 import com.crystalgui.style.property.visual.text.FontRelativeLengthValue;
+import com.crystalgui.style.property.visual.shadow.ShadowGrammar;
+import com.crystalgui.style.property.visual.shadow.ShadowList;
+import com.crystalgui.style.property.visual.shadow.ShadowListProperty;
 import com.crystalgui.style.property.visual.text.FontStyle;
 import com.crystalgui.style.property.visual.text.FontWeight;
 import com.crystalgui.style.property.visual.text.FontWeightValue;
@@ -148,11 +151,21 @@ public class StylePropertyRegistry {
             // A STACK IS COMMA-SEPARATED, which is what its parser splits on. Written unquoted, which
             // round-trips: the parser unquotes, and neither a resource path nor a family name holds a comma.
             .setWriter(stack -> String.join(", ", stack));
-    // TODO: no-op. Parsed and cascaded so stylesheets can declare it without a warning, but nothing
-    // consumes it yet — CgTextRenderer/UIText have no drop-shadow support. Defaults false to match
-    // what actually renders today (no shadow is ever drawn). Inheritable, like the other text
-    // properties above.
-    public static final StyleProperty<Boolean> TEXT_SHADOW = create("text-shadow", false).setInheritable(true);
+    /**
+     * CSS {@code text-shadow}: a shadow list, first shadow on top. Inherited, initially {@code none}.
+     *
+     * <pre>
+     *   text-shadow: 1px 1px 2px black;
+     *   text-shadow: 0 0 8px #4cf, 0 0 2px white;     a glow is a shadow with no offset
+     *   text-shadow: 0 0 4px 1px currentcolor inset;  Level 4: spread and inset
+     * </pre>
+     *
+     * <p>CSS Text Decoration 4's grammar, which adds a non-negative spread and {@code inset} to Level 3's.
+     * Painted by the text renderer as Chrome paints it: each glyph's own shadow, blurred per glyph with
+     * sigma half the radius. @see ShadowList @see com.crystalgui.render.text.TextShadowStyle</p>
+     */
+    public static final StyleProperty<ShadowList> TEXT_SHADOW =
+            create(new ShadowListProperty("text-shadow", ShadowGrammar.TEXT_LEVEL_4)).setInheritable(true);
     // `normal | <number>`, matching CSS — the font's own line box, or a unitless multiple of
     // font-size. Inheritable alongside the other text properties, so a theme sets it once on a root.
     //

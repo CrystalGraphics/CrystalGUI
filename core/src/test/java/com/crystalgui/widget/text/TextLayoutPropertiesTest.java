@@ -1,6 +1,8 @@
 package com.crystalgui.widget.text;
 
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.style.property.visual.shadow.ShadowGrammar;
+import com.crystalgui.style.property.visual.shadow.ShadowList;
 import com.crystalgui.style.property.visual.text.TextAlign;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
@@ -215,23 +217,23 @@ public class TextLayoutPropertiesTest extends UiDocumentTestBase {
 
     // ── text-shadow ─────────────────────────────────────────────────────────
 
-    /** Registered long before anything drew it — `AGENTS.md` called it out as a no-op. Now consumed. */
     @Test
     public void textShadowIsReadableAndInherits() {
+        ShadowList glow = ShadowList.parse("0 0 8px red", ShadowGrammar.TEXT_LEVEL_4);
         root = new UIElement().layout(l -> l.width(400).height(400));
-        root.generalStyle(g -> g.textShadow(true));
+        root.generalStyle(g -> g.textShadow(glow));
         UIText child = new UIText("x");
         root.append(child);
         document.append(root);
         settle();
 
-        assertTrue("text-shadow inherits alongside the other text properties",
-                child.getStyle().getGeneralGroup().textShadow());
+        assertEquals("text-shadow inherits alongside the other text properties",
+                glow, child.getStyle().getGeneralGroup().textShadow());
     }
 
     @Test
-    public void textShadowDefaultsOffSoNothingChangesForExistingTrees() {
+    public void textShadowDefaultsToNoneSoNothingChangesForExistingTrees() {
         UIText text = build(t -> { });
-        assertFalse(text.getStyle().getGeneralGroup().textShadow());
+        assertEquals(ShadowList.NONE, text.getStyle().getGeneralGroup().textShadow());
     }
 }

@@ -85,6 +85,20 @@ public final class TextStrokeStyle {
     }
 
     /**
+     * How far the stroke reaches outside the glyph outline, in local pixels: all of an outset stroke,
+     * half of a centred one, none of an inset one. For a widget's {@code inkOverflow}, and for the reach
+     * of a shadow, which includes the stroke.
+     */
+    public static float outwardPx(GeneralGroup general) {
+        LengthPercent width = general.textStrokeWidth();
+        float fontSize = general.fontSize();
+        if (width == null || fontSize <= 0f) return 0f;
+        float px = Math.max(0f, width.resolve(fontSize));
+        StrokeAlign align = general.strokeAlign();
+        return align == StrokeAlign.INSET ? 0f : align == StrokeAlign.CENTER ? px * 0.5f : px;
+    }
+
+    /**
      * Says, once per distinct (width, size, ceiling), that a declared outline is wider than the
      * distance field can describe and what it was drawn at instead.
      *

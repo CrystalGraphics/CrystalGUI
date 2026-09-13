@@ -10,6 +10,7 @@ import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgui.render.text.TextShadowStyle;
 import com.crystalgui.render.text.TextStrokeStyle;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -33,6 +34,7 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.box.InkOverflow;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Measurable;
@@ -1240,6 +1242,13 @@ public class TextField extends UIElement implements Measurable {
 
     // ── Painting ────────────────────────────────────────────────────────────
 
+    /** The stroke's reach and every outer {@code text-shadow}. @see TextShadowStyle#inkOverflow */
+    @Override
+    public InkOverflow inkOverflow() {
+        var styleGen = getStyle().getGeneralGroup();
+        return TextShadowStyle.inkOverflow(styleGen.textShadow(), TextStrokeStyle.outwardPx(styleGen));
+    }
+
     @Override
     public void paintDecoration(CgUiPaintContext ctx, Box box) {
         super.paintDecoration(ctx, box);
@@ -1335,6 +1344,8 @@ public class TextField extends UIElement implements Measurable {
             // the property computing correctly and doing nothing. currentcolor follows what is ACTUALLY
             // drawn, so a placeholder outlines in the dimmed colour rather than the full one.
             TextStrokeStyle.applyTo(draw, family, styleGen, computedStyle(), shownColor);
+            // text-shadow inherits the same way, and its currentcolor is the colour actually drawn.
+            TextShadowStyle.applyTo(draw, styleGen, shownColor);
             draw.submit();
             if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
         }
