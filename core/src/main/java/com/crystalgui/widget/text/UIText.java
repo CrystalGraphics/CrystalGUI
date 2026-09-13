@@ -7,22 +7,17 @@ import com.crystalgraphics.api.text.CgShapedParagraph;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgStyleSpan;
 import com.crystalgraphics.api.text.CgStyledText;
-import com.crystalgraphics.api.text.CgStrokeAlign;
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.api.text.CgTextDecoration;
-import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.style.property.visual.text.PaintOrder;
-import com.crystalgui.style.property.visual.text.StrokeAlign;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.text.TextShadowStyle;
 import com.crystalgui.render.text.TextStrokeStyle;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.ComputedStyle;
-import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.HighlightStyle;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -30,6 +25,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.text.TextDecorationLine;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.box.InkOverflow;
 import com.crystalgui.ui.box.Measurable;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
@@ -44,6 +40,7 @@ import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumSet;
@@ -52,7 +49,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 /**
@@ -169,10 +165,6 @@ public final class UIText extends UIElement implements Measurable {
      */
     @Nullable
     private HighlightStyle[] highlightPerChar;
-
-    /** The shadow pass's twin, built only when a highlight sets a colour. @see #shadowLayoutFor */
-    @Nullable
-    private CgShapedParagraph shadowParagraph;
 
     // ── The ellipsis memo ────────────────────────────────────────────────────
     //
@@ -353,7 +345,6 @@ public final class UIText extends UIElement implements Measurable {
     /** Drops the retained paragraph and asks for a fresh layout. */
     private void invalidateShaping() {
         paragraph = null;
-        shadowParagraph = null;
         truncated = null;
         markTreeDirty();
         // AND SAY SO, because a relayout is not evidence of a repaint: "abc" becoming "abd" measures
@@ -422,27 +413,20 @@ public final class UIText extends UIElement implements Measurable {
                 || !decorations.equals(shapedDecorations)
                 || bold != shapedBold
                 || italic != shapedItalic) {
-            paragraph = shape(currentText, family, styles, false);
+            paragraph = shape(currentText, family, styles);
             shapedText = currentText;
             shapedFamily = family;
             shapedHighlights = styles;
             shapedDecorations = decorations;
             shapedBold = bold;
             shapedItalic = italic;
-            shadowParagraph = null;
         }
         return paragraph;
     }
 
-    /**
-     * The one place plain and highlighted shaping diverge.
-     *
-     * @param limit  characters the ranges may cover — the truncation path paints a prefix
-     * @param shadow darken every highlight colour, for the {@code text-shadow} pass
-     */
-    private CgShapedParagraph shape(String content, CgFontFamily family,
-                                    Map<String, HighlightStyle> styles, boolean shadow) {
-        List<CgStyleSpan> spans = toCgSpans(styles, content.length(), shadow);
+    /** The one place plain and highlighted shaping diverge. */
+    private CgShapedParagraph shape(String content, CgFontFamily family, Map<String, HighlightStyle> styles) {
+        List<CgStyleSpan> spans = toCgSpans(styles, content.length());
         if (spans.isEmpty()) return CgTextLayout.of(content, family).shape();
         return CgTextLayout.of(new CgStyledText(content, spans), resolveGroup()).shape();
     }
@@ -485,7 +469,7 @@ public final class UIText extends UIElement implements Measurable {
      * within one name is the registry's own rule. The web layers them by priority instead, and this
      * is the simpler rule that a single shaped run per character can actually express.</p>
      */
-    private List<CgStyleSpan> toCgSpans(Map<String, HighlightStyle> styles, int limit, boolean shadow) {
+    private List<CgStyleSpan> toCgSpans(Map<String, HighlightStyle> styles, int limit) {
         Set<CgTextDecoration> base = toCgDecorations(ownDecorations());
         var general = getStyle().getGeneralGroup();
         boolean bold = general.fontWeight().isBold();
@@ -503,7 +487,7 @@ public final class UIText extends UIElement implements Measurable {
         // shapes as ONE run starting at 0, so a single stale entry at index 0 paints the whole string.
         // Pooled rows made that routine: every explorer row that had ever shown a match went on banding
         // whatever filename landed on it next, full width, while the count still said "1 of 1".
-        if (!shadow) this.highlightPerChar = null;
+        this.highlightPerChar = null;
 
         if (styles.isEmpty() && !baseSpanNeeded) return Collections.emptyList();
         if (styles.isEmpty()) {
@@ -515,7 +499,7 @@ public final class UIText extends UIElement implements Measurable {
         // Winner per character, then run-length encoded -- the only way to get disjoint spans out of
         // ranges that may overlap across names.
         HighlightStyle[] perChar = new HighlightStyle[limit];
-        if (!shadow) this.highlightPerChar = perChar;
+        this.highlightPerChar = perChar;
         for (Map.Entry<String, HighlightStyle> entry : styles.entrySet()) {
             for (TextRange range : highlights.get(entry.getKey())) {
                 TextRange clipped = range.clippedTo(limit);
@@ -536,7 +520,7 @@ public final class UIText extends UIElement implements Measurable {
                     out.add(new CgStyleSpan(uncoveredFrom, runStart, bold, italic, base, 0, null, 0f,
                             ownDecorationColor()));
                 }
-                out.add(toCgSpan(previous, runStart, i, shadow, bold, italic));
+                out.add(toCgSpan(previous, runStart, i, bold, italic));
                 uncoveredFrom = i;
             }
             runStart = here == null ? -1 : i;
@@ -548,11 +532,9 @@ public final class UIText extends UIElement implements Measurable {
         return out;
     }
 
-    private CgStyleSpan toCgSpan(HighlightStyle style, int start, int end, boolean shadow,
-                                 boolean bold, boolean italic) {
+    private CgStyleSpan toCgSpan(HighlightStyle style, int start, int end, boolean bold, boolean italic) {
         int inherited = getStyle().getGeneralGroup().color();
         int color = style.color(inherited);
-        if (shadow) color = shadowColorFor(color);
         return new CgStyleSpan(start, end,
                 style.isBold(bold), style.isItalic(italic),
                 toCgDecorations(style.decorations()),
@@ -603,7 +585,7 @@ public final class UIText extends UIElement implements Measurable {
 
     /** How many style spans the last shaping used — zero meaning the plain, unspanned path. */
     public int styleSpanCount() {
-        return toCgSpans(resolveHighlightStyles(), text.get().length(), false).size();
+        return toCgSpans(resolveHighlightStyles(), text.get().length()).size();
     }
 
     // ── Hit testing ──────────────────────────────────────────────────────────
@@ -671,22 +653,10 @@ public final class UIText extends UIElement implements Measurable {
         if (layout.lines().isEmpty() || text.get().isEmpty()) return;
 
         // WHAT THE GLYPHS ACTUALLY GOT decides whether this paint was final -- see
-        // CgUiPaintContext#textDegradedDrawCount. Bracketing from here covers the shadow pass too.
+        // CgUiPaintContext#textDegradedDrawCount. A shadow cell a worker has not built yet counts too.
         long degradedBefore = ctx.textDegradedDrawCount();
 
         int color = general.color();
-        if (general.textShadow()) {
-            // NO STROKE ON THE SHADOW PASS. The drop shadow is a second copy of the same glyphs one
-            // pixel down, and outlining it would draw the outline twice, offset -- which reads as a
-            // smear rather than as a shadow.
-            ctx.text().draw()
-                    .layout(shadowLayoutFor(layout, family, contentWidth, wraps))
-                    .family(family)
-                    .at(contentX + 1f, contentY + 1f)
-                    .color(shadowColorFor(color))
-                    .pose(ctx.getPoseStack())
-                    .submit();
-        }
         // `text-fill-color` overrides the glyph fill ALONE: `color` still drives the caret, the
         // selection and anything inheriting from here, which is the whole reason the two are
         // separate properties rather than one.
@@ -704,9 +674,71 @@ public final class UIText extends UIElement implements Measurable {
                 .color(fill)
                 .pose(ctx.getPoseStack());
         TextStrokeStyle.applyTo(draw, family, general, computed, color);
+        // The shadows ride the same draw, keyed ahead of the text: one call when they share its atlas.
+        TextShadowStyle.applyTo(draw, general, color);
+        appendHighlightShadows(draw, layout, color);
         draw.submit();
 
         if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
+    }
+
+    /**
+     * The stroke's reach and every outer {@code text-shadow}, the element's and its highlights', so a layer
+     * holding this label is not cut off at its box. @see TextShadowStyle#inkOverflow
+     */
+    @Override
+    public InkOverflow inkOverflow() {
+        var general = getStyle().getGeneralGroup();
+        float stroke = TextStrokeStyle.outwardPx(general);
+        InkOverflow ink = TextShadowStyle.inkOverflow(general.textShadow(), stroke);
+        for (HighlightStyle style : shapedHighlights.values()) {
+            InkOverflow highlight = TextShadowStyle.inkOverflow(style.textShadow(), stroke);
+            ink = new InkOverflow(Math.max(ink.left(), highlight.left()), Math.max(ink.top(), highlight.top()),
+                    Math.max(ink.right(), highlight.right()), Math.max(ink.bottom(), highlight.bottom()));
+        }
+        return ink;
+    }
+
+    /**
+     * Each {@code ::highlight} that sets {@code text-shadow} casts it from its own glyphs alone.
+     *
+     * <p>A glyph's highlight is its run's, read as {@link #paintHighlightBands} reads it: shaping breaks a
+     * run at every span boundary, so one run never spans two highlights. Glyphs are counted in the order
+     * {@code CgBakedGlyphs} lays them, line by line and run by run.</p>
+     */
+    private void appendHighlightShadows(CgTextRenderer.Draw draw, CgTextLayout layout, int inheritedColor) {
+        HighlightStyle[] perChar = highlightPerChar;
+        if (perChar == null) return;
+        List<HighlightStyle> scoped = null;
+        int[] scopes = null;
+        int glyph = 0;
+        for (List<CgShapedRun> line : layout.lines()) {
+            for (CgShapedRun run : line) {
+                int count = run.glyphIds() == null ? 0 : run.glyphIds().length;
+                int at = run.sourceStart();
+                HighlightStyle style = at >= 0 && at < perChar.length ? perChar[at] : null;
+                if (style != null && !style.textShadow().isEmpty()) {
+                    if (scoped == null) {
+                        scoped = new ArrayList<>();
+                        scopes = new int[layout.baked().glyphCount()];
+                        Arrays.fill(scopes, -1);
+                    }
+                    int scope = scoped.indexOf(style);
+                    if (scope < 0) {
+                        scope = scoped.size();
+                        scoped.add(style);
+                    }
+                    Arrays.fill(scopes, glyph, Math.min(scopes.length, glyph + count), scope);
+                }
+                glyph += count;
+            }
+        }
+        if (scoped == null) return;
+        draw.shadowScopes(scopes);
+        for (int i = 0; i < scoped.size(); i++) {
+            HighlightStyle style = scoped.get(i);
+            TextShadowStyle.appendScoped(draw, style.textShadow(), i, style.color(inheritedColor));
+        }
     }
 
     /**
@@ -797,7 +829,7 @@ public final class UIText extends UIElement implements Measurable {
         // painted width can differ by a fraction of a pixel per span. Making the probe span-aware means
         // shaping styled text on every step of the search -- the exact cost the memo exists to avoid --
         // for an error smaller than the ellipsis glyph.
-        return shape(display, family, shapedHighlights, false).layout(0f, 0f);
+        return shape(display, family, shapedHighlights).layout(0f, 0f);
     }
 
     /**
@@ -868,32 +900,6 @@ public final class UIText extends UIElement implements Measurable {
         return family.getPrimarySource().canDisplayCodePoint(ELLIPSIS_CODE_POINT)
                 ? ELLIPSIS
                 : ELLIPSIS_FALLBACK;
-    }
-
-    // ── Text shadow ──────────────────────────────────────────────────────────
-
-    /**
-     * The layout for the shadow pass, which is the ordinary one unless a highlight sets a colour.
-     *
-     * <p>A shadow is drawn by re-submitting the same layout one pixel down in a darker colour, and a
-     * per-span colour survives that: a highlighted word would keep its bright colour in the shadow and
-     * read as a second, offset copy of itself. Only then is a darkened twin worth shaping.</p>
-     */
-    private CgTextLayout shadowLayoutFor(CgTextLayout ordinary, CgFontFamily family,
-                                         float contentWidth, boolean wraps) {
-        if (shapedHighlights.isEmpty()) return ordinary;
-        if (shadowParagraph == null) {
-            shadowParagraph = shape(text.get(), family, shapedHighlights, true);
-        }
-        return shadowParagraph.layout(wraps ? contentWidth : 0f, 0f);
-    }
-
-    private static int shadowColorFor(int color) {
-        int a = color >>> 24;
-        int r = (color >> 16) & 0xFF;
-        int g = (color >> 8) & 0xFF;
-        int b = color & 0xFF;
-        return (a << 24) | ((r / 4) << 16) | ((g / 4) << 8) | (b / 4);
     }
 
     @Override

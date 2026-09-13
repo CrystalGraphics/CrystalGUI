@@ -183,7 +183,7 @@ scroller::part(tail):hover {
 button, dropdown {
     background: asset("crystalgui:ore", "button");
     color: #222222;
-    text-shadow: false;
+    text-shadow: none;
     min-height: 14px;
     padding-left: 2px;
     padding-top: 2px;
@@ -226,7 +226,7 @@ checkbox {
     gap: 2px;
     align-items: center;
     color: #222222;
-    text-shadow: false;
+    text-shadow: none;
 }
 checkbox .__mark__,
 checkbox::part(mark) {
@@ -533,7 +533,7 @@ tab {
     /* ore.lss writes `tab:host:not(tab:selected) label { text-color: #222 }`. We have no `:not()`,
      * so the same result comes from darkening every tab here and lightening the selected one below. */
     color: #222222;
-    text-shadow: false;
+    text-shadow: none;
 }
 tab:hover {
     background: asset("crystalgui:ore", "tab-off-hover");

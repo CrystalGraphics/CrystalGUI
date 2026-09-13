@@ -899,8 +899,12 @@ where they genuinely overlap, which is `center` and `inset` and never `outset`.
   `text-offset-x`/`-y` (also inheritable — Ore sets `text-offset-y` once on `*` and relies on it
   reaching every widget's internal label, which no author selector can name); `TextField` consumes all
   six, with `line-height` driving its selection rect and vertical centring — its caret is sized from
-  font metrics instead, see §8c. Still missing: `text-align`; `text-shadow` parses/cascades but is a
-  registered **no-op** (nothing renders a shadow yet — see its `TODO` in `StylePropertyRegistry`); and
+  font metrics instead, see §8c. `text-shadow` is CSS Text Decoration 4's list — offset, blur,
+  a non-negative spread, `inset`, `currentcolor` — painted by both text widgets through
+  `TextShadowStyle`, per glyph and in the text's own draw: outer shadows under the text last-first,
+  insets over it. A small reach reads the glyph's distance field; a blur or spread past the field's
+  range reads a worker-built cell from the bitmap atlas (Skia's mask blur), and a decoration's shadow
+  is an analytic rect blur. A `::highlight` may carry its own. Still missing: `text-align`; and
   `UIText` measures at the font's own metrics rather than honouring `line-height` — though with
   `normal` as the default the two now agree unless a sheet says otherwise.
   Note `font-size` takes a bare number: `10`, not `10px` — its parser is `Float.parseFloat` and

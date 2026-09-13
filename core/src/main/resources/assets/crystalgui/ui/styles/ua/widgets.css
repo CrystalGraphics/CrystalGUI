@@ -24,7 +24,7 @@ button, dropdown {
     align-items: center;
     background: var(--button-bg, #9A9A9A);
     color: var(--button-fg, #222222);
-    text-shadow: false;
+    text-shadow: none;
     /* THEMEABLE now, where it was a flat 2px: "Islands" is this token plus a palette, and a flat
      * theme is the same structure with it zeroed. IntelliJ's own themes set Button.arc for exactly
      * this reason. The fallback keeps the unthemed look identical. */
@@ -113,7 +113,7 @@ checkbox {
     padding: 1px;
     gap: 2px;
     align-items: center;
-    text-shadow: false;
+    text-shadow: none;
 }
 checkbox .__mark__,
 checkbox::part(mark) {
@@ -533,7 +533,7 @@ tab,
      * size a tab IS a button (it is literally a Button subclass) and two radii on the same row is
      * the kind of half-millimetre difference that reads as sloppiness without being nameable. */
     border-radius: var(--radius-control, 0px);
-    text-shadow: false;
+    text-shadow: none;
 
     /* A TRANSPARENT BORDER AT REST, coloured only when selected (see `tab:checked`). It has to exist
      * in BOTH states or the tab grows by 2px the moment it becomes current and every tab beside it

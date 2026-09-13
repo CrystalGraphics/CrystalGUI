@@ -813,7 +813,7 @@ texteditor .__zoom-reset__ {
     padding: 0px;
     min-height: 0px;
     border-radius: 0px;
-    text-shadow: false;
+    text-shadow: none;
     outline: none;
 }
 texteditor .__zoom-reset__:hover {

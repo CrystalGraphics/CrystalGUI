@@ -1,5 +1,9 @@
 package com.crystalgui.style.node;
 
+import com.crystalgui.style.HighlightStyle;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.shadow.ShadowGrammar;
+import com.crystalgui.style.property.visual.shadow.ShadowList;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
@@ -256,12 +260,23 @@ public class HighlightTest extends UiDocumentTestBase {
         assertEquals(0, document.styleEngine().highlightStyle(text, "hit").backgroundColor());
     }
 
-    /** {@code text-shadow} is still a second draw of a range, which a span cannot express. */
+    /**
+     * {@code text-shadow} on a highlight is painted: its shadows are instances scoped to the range's glyphs
+     * in the label's own draw. It used to be refused as "a second draw of a range".
+     */
     @Test
-    public void textShadowOnAHighlightIsStillRefused() {
-        assertTrue("text-shadow remains unpaintable — see HighlightStyle",
-                com.crystalgui.style.HighlightStyle.NOT_YET_PAINTABLE
-                        .contains(com.crystalgui.style.property.StylePropertyRegistry.TEXT_SHADOW));
+    public void textShadowOnAHighlightResolves() {
+        assertTrue("text-shadow must be in ALLOWED now",
+                HighlightStyle.ALLOWED.contains(StylePropertyRegistry.TEXT_SHADOW));
+        assertFalse("and no longer listed as unpaintable",
+                HighlightStyle.NOT_YET_PAINTABLE.contains(StylePropertyRegistry.TEXT_SHADOW));
+
+        UIText text = build(SENTENCE, "text::highlight(glow) { text-shadow: 0 0 6px gold; }");
+        text.highlights().set("glow", List.of(TextRange.of(4, 9)));
+        settle();
+        settle();
+        HighlightStyle style = document.styleEngine().highlightStyle(text, "glow");
+        assertEquals(ShadowList.parse("0 0 6px gold", ShadowGrammar.TEXT_LEVEL_4), style.textShadow());
     }
 
     /** CSS spells strikethrough `line-through`, and multiple keywords are legal in one declaration. */
