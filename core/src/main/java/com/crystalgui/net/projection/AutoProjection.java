@@ -111,7 +111,7 @@ public final class AutoProjection {
      * inheritance levels hold panel widgets.
      *
      * <p>Needed because {@code UIElement} has widget-typed fields of its own — {@code parent} and
-     * {@code popoverInvoker} — so a walk that runs to {@code Object} inspects the element's own
+     * {@code opener} — so a walk that runs to {@code Object} inspects the element's own
      * plumbing and reports it as unwired UI. {@code UiType.collect} stops at {@code Networked} levels
      * for exactly this reason, and a caller that knows about panels passes the same rule; this package
      * cannot name {@code Networked} without inverting the dependency.</p>
@@ -189,7 +189,7 @@ public final class AutoProjection {
      * A panel's own widget fields, up the levels the caller says are panel levels.
      *
      * <p><b>Never {@code UIElement} itself or above.</b> That class has widget-typed fields of its own —
-     * {@code parent} and {@code popoverInvoker} — so a walk that does not stop reports an element's
+     * {@code parent} and {@code opener} — so a walk that does not stop reports an element's
      * internal plumbing as unwired UI. Found by running this against a real panel and reading the
      * report, which is the thing the report is for.</p>
      */

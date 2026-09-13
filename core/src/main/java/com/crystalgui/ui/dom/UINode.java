@@ -56,6 +56,10 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     @Nullable
     UINode parent;
 
+    /** What opened this node, which the walks outward step to instead of {@link #parent}. @see UIElement#opener */
+    @Nullable
+    UIElement opener;
+
     /** Added by the side LOOKING at this tree rather than the side that owns it. @see #markLocal() */
     boolean local;
 
@@ -167,11 +171,16 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      * widget's own parts are not subjects — a press on a button's label resolves to the button, not
      * to the label, which is what makes {@code DataContext} answer the same thing however deep the
      * gesture landed.</p>
+     *
+     * <p><b>Except while something opened this node</b> ({@link UIElement#opener}), when it is the opener:
+     * a popup is attached wherever it could be, which passes over every element that refuses children, so
+     * a field lent to a toolbar's overflow sat outside the editor it edits and Mod+Z in it reached nothing.
+     * IntelliJ's popup takes its data context from the component that showed it for the same reason.</p>
      */
     @Override
     @Nullable
     public KeymapScope commandParent() {
-        return parent;
+        return opener != null ? opener : parent;
     }
 
     /**
@@ -225,11 +234,11 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
         return settings;
     }
 
-    /** The enclosing scope is the LIGHT parent — the same chain {@link #commandParent()} walks. */
+    /** The enclosing scope is the same step {@link #commandParent()} takes, opener included. */
     @Override
     @Nullable
     public SettingsScope settingsParent() {
-        return parent;
+        return opener != null ? opener : parent;
     }
 
     // ── Light tree ──────────────────────────────────────────────────────────────

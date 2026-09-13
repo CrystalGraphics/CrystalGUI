@@ -236,7 +236,7 @@ public final class Dismiss {
             if (autoPopovers.contains(node)) return node;
             for (int i = autoPopovers.size() - 1; i >= 0; i--) {
                 UIElement popover = autoPopovers.get(i);
-                if (popover.popoverInvoker() == node) return popover;
+                if (popover.opener() == node) return popover;
             }
         }
         return null;

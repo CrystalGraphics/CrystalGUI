@@ -62,6 +62,23 @@ public class DataContextTest {
     }
 
     /**
+     * <b>What something opened answers to its opener</b>, wherever it was attached — a popup's content
+     * reaches the editor that opened it, and only for as long as the opener is set.
+     */
+    @Test
+    public void anOpenedElementAnswersToItsOpener() {
+        UIElement invoker = chain(new Answering("editor"), new UIElement());
+        UIElement popup = new UIElement();
+        UIElement field = chain(new Answering("elsewhere"), popup, new UIElement());
+
+        popup.setOpener(invoker);
+        assertEquals("editor", DataContext.from(field).get(SUBJECT));
+
+        popup.setOpener(null);
+        assertEquals("closed, it is back where it is attached", "elsewhere", DataContext.from(field).get(SUBJECT));
+    }
+
+    /**
      * <b>Innermost wins.</b> The same rule the keymap uses to resolve a binding and {@code UndoScope}
      * uses to find a stack — deliberately, so a keystroke, an undo and a command agree about what they
      * are addressing.
