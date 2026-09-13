@@ -1,7 +1,5 @@
 package com.crystalgui.workbench.explorer;
 
-import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -10,12 +8,10 @@ import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.client.Workspace;
-import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.data.UiDataKeys;
-import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
@@ -23,8 +19,11 @@ import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.widget.collection.list.RowEditing;
+import com.crystalgui.widget.collection.tree.TreeClipboard;
+import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.collection.tree.TreeSearch;
 import com.crystalgui.widget.collection.tree.TreeView;
+import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.decoration.FileDecorations;
 import com.crystalgui.ui.input.FocusPolicy;
 
@@ -71,8 +70,9 @@ import java.util.function.Supplier;
  *       <td>The view: the tree widget, selection, reveal, the public surface</td></tr>
  *   <tr><td>{@link FilesRenderer}</td><td>{@code FilesRenderer} in {@code explorerViewer.ts}</td>
  *       <td>Building and filling a row, and every recycling rule</td></tr>
- *   <tr><td>{@link ExplorerDragAndDrop}</td><td>{@code FileDragAndDrop}, same file</td>
- *       <td>The drag source, the drop target, the ghost</td></tr>
+ *   <tr><td>{@link TreeEditing}, the engine's, over {@link ExplorerEditModel}</td>
+ *       <td>{@code FileDragAndDrop}, same file, and the explorer's file commands</td>
+ *       <td>Drag, cut, copy, paste, rename and delete over the selection; the model performs them on files</td></tr>
  *   <tr><td>{@link ExplorerFind}</td><td>{@code ExplorerFindProvider}, same file</td>
  *       <td>The find bar, its two modes, the per-row marking</td></tr>
  *   <tr><td>{@link RowEditing}, the engine's</td><td>{@code IExplorerService.setEditable} + {@code renderInputBox}</td>
@@ -97,36 +97,10 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
     public static final Name NAME = Name.of("projectfiletree");
 
 
-    /**
-     * The explorer's bare keys, on the tree — which is the whole reason they are scoped here.
-     *
-     * <p>{@code Delete} and {@code F2} must be live only while focus is inside the panel. Declaring them
-     * on the commands would make them application-wide, and a bare key at that scope fires while typing
-     * into any editor sharing the window. The explorer's <em>chords</em> ({@code Mod+N}, {@code F5},
-     * {@code Mod+P}, {@code Alt+Shift+S}) are the opposite case and are declared on the commands.</p>
-     *
-     * <p>On the tree rather than on {@code Workbench}: the dock — and therefore every open editor — is
-     * inside the workbench too, so binding there would recreate exactly the problem this avoids.</p>
-     */
-    /**
-     * <p>{@code bindKeys()} was an engine hook on the old element and there is none here — a node
-     * declares its keymap by ANSWERING for one, so the binding happens once and
-     * {@code keymapOrNull()} hands it to the resolver. {@code GraphView} is the reference spelling,
-     * and the commit that lost this on the old engine lost it silently: every explorer command
-     * existed, was enabled, showed in the palette, and answered no key at all.</p>
-     */
-    private final Keymap keymap = defaultKeymap();
-
-    private static Keymap defaultKeymap() {
-        Keymap keymap = new Keymap();
-        ExplorerCommands.bindDefaults(keymap);
-        return keymap;
-    }
-
-    @Override
-    public Keymap keymapOrNull() {
-        return keymap;
-    }
+    // THE BARE KEYS -- Delete, F2, Mod+X/C/V -- are TreeEditing's, bound on the tree's own keymap so they
+    // are live only while focus is in it: declared on the commands they would fire while typing into any
+    // editor sharing the window. The explorer's chords (Mod+N, F5, Mod+P, Alt+Shift+S) are the opposite
+    // case and are declared on the commands.
 
     /** UNIQUE, never the shared "__content__". CanvasView uses that name for its transformed world
      * plane, so any descendant rule naming it also styles every graph plane below -- and a flex rule on
@@ -258,9 +232,6 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         decorations.onChanged.connect(() -> pendingRefresh = true);
     
         this.tree = new TreeView<>(source);
-        // DEFERRED, like every other refresh here: an edit begins from a key press or a menu row, and a
-        // rebuild now would replace the element that dispatch is still walking.
-        this.editing = new RowEditing<>(tree, this::itemForRow, this::requestRefresh);
         tree.addClass(TREE_CLASS);
         tree.setRenderer(new FilesRenderer(this));
         // THE DOUBLE-CLICK IS THE LIST'S, not a listener on each row template: ListView raises activation
@@ -269,14 +240,6 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
             TreeRow<CgPath> row = tree.rowAt(index);
             if (row != null) activate(row.item());
         });
-        // THE EXPLORER'S OWN CUT/COPY/PASTE, reclaimed from the list.
-        //
-        // ListView implements ClipboardActions so that every list gets Copy, and UiDataKeys.CLIPBOARD
-        // resolves by walking OUTWARD from focus and taking the first match -- so with focus on a row the
-        // tree is found before this panel is. Without this line the explorer's file operations would have
-        // been silently replaced by a row-text copier: the menu still opens, every item still enables, and
-        // Cut does nothing recognisable. See ListView.setClipboardActions.
-        tree.setClipboardActions(clipboardActions);
         // MULTIPLE, which ListView already implements in full -- Ctrl to toggle, Shift for a range. This
         // is configuration rather than code, and it is what every file command that acts on "the
         // selection" rather than "the selected path" needs.
@@ -314,9 +277,11 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         content.addClass(CONTENT_CLASS);
         append(content);
         content.append(tree);
-        dnd.parkGhostIn(this);
+        // DEFERRED REBUILD, like every other refresh here: an edit begins from a key press or a menu row,
+        // and a rebuild now would replace the element that dispatch is still walking. The kit also takes
+        // the list's Cut/Copy/Paste, which would otherwise be a row-text copier. @see ListView#setClipboardActions
+        this.editing = new TreeEditing<>(tree, this, this::itemForRow, this::requestRefresh, CLIPBOARD);
         find.build();
-        dnd.installDropTarget();
     }
 
     public TreeView<CgPath> treeView() {
@@ -478,7 +443,7 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         if (target == null) return;
 
         // Walk down from the project root, expanding and requesting as far as the listings allow.
-        List<CgPath> chain = new java.util.ArrayList<>();
+        List<CgPath> chain = new ArrayList<>();
         for (CgPath at = target.parent(); at != null && !at.isProjectRoot(); at = at.parent()) {
             chain.add(0, at);
         }
@@ -519,25 +484,6 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
     }
 
     /**
-     * A drag finished over a folder: these paths, into that one, copying or moving.
-     *
-     * <p>Reported rather than performed, exactly as {@link #onFileChosen} is. The tree does not own the
-     * file service — {@link Workbench} does — and a tree that reached for one could serve a single host.</p>
-     */
-    public final Signal.Pair<List<CgPath>, DropRequest> onFilesDropped = new Signal.Pair<>();
-
-    /** Where a drop landed and what it meant. */
-    public record DropRequest(CgPath destination, boolean copy) {
-    }
-
-    /** What is being dragged. A record so a foreign payload cannot be mistaken for ours. */
-    /** On the row the pointer is over during a drag. Named here because a stylesheet targets the
-     * widget, not the part that writes it. @see ExplorerDragAndDrop */
-    public static final String DROP_TARGET_CLASS = "__drop-target__";
-
-    private final ExplorerDragAndDrop dnd = new ExplorerDragAndDrop(this);
-
-    /**
      * Narrows the tree to what matches, and reports what is being typed.
      *
      * <p>Kept on the widget rather than only on the source so a host can show it — a filter with nothing
@@ -559,21 +505,6 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         return source.filter();
     }
 
-    /**
-     * Everything selected, in the order it appears in the tree.
-     *
-     * <p>{@link #selectedPath()} is the first of these, and remains the right question for the commands
-     * that act on exactly one thing — Rename cannot mean anything for four files at once.</p>
-     */
-    public List<CgPath> selectedPaths() {
-        List<CgPath> found = new ArrayList<>();
-        List<TreeRow<CgPath>> rows = tree.visibleRows();
-        for (int index : tree.getSelectedIndices()) {
-            if (index >= 0 && index < rows.size()) found.add(rows.get(index).item());
-        }
-        return found;
-    }
-
     /** Whether a path is a folder, as far as the listings this tree has seen are concerned. */
     public boolean isDirectory(CgPath path) {
         return source.isDirectory(path);
@@ -586,27 +517,10 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
      * and the widget has no business naming commands it does not own.</p>
      */
     public ProjectFileTree setContextMenu(CommandRegistry registry, Supplier<ContextMenu> menu) {
-        // DECLINE THE DEFAULT. Every list gets a right-click Copy menu; this one has its own, and two
-        // menus attached to one element are two listeners that both open.
-        tree.suppressDefaultContextMenu();
-        ContextMenu.attach(tree, registry, element -> {
-            // SELECT THE ROW FIRST. Every command resolves its target through selectedPath(), so a
-            // right-click on an unselected row would otherwise act on whatever was selected before it --
-            // which is the single most dangerous thing a file context menu can get wrong.
-            int index = tree.indexOfRowElement(rowElementFor(element));
-            if (index >= 0) tree.select(index);
-            return menu.get();
-        });
+        // THE CLICKED ROW IS THE SUBJECT: every command resolves its target through the selection, so a
+        // right-click outside it has to become it -- and one inside a multi-selection has to keep it.
+        editing.attachContextMenu(registry, menu);
         return this;
-    }
-
-    /** Walks up from whatever was hit to the row element the tree knows about. */
-    @Nullable
-    UIElement rowElementFor(@Nullable UIElement hit) {
-        for (UIElement element = hit; element != null; element = element.parentElement()) {
-            if (element.hasClass(ROW_CLASS)) return element;
-        }
-        return null;
     }
 
     /**
@@ -766,10 +680,10 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         return content;
     }
 
-    // -- Inline editing ---------------------------------------------------------------------------
+    // -- Editing --------------------------------------------------------------------------------------
     //
-    // The state machine and the row wiring are the engine's RowEditing. What stays here is what a FILE
-    // adds to it: the stem, the sibling rule, and the placeholder a new entry is named in.
+    // Drag, clipboard, rename and delete are the engine's TreeEditing, performed by ExplorerEditModel.
+    // What stays here is what a FILE adds: the sibling rule, and the placeholder a new entry is named in.
 
     /** On the row's inline input, hidden unless that row is being edited. */
     public static final String EDITOR_CLASS = "__row-editor__";
@@ -777,24 +691,22 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
     /** On the row while it is being edited, so a theme can quiet the rest of it. */
     public static final String EDITING_CLASS = RowEditing.EDITING_CLASS;
 
-    private final RowEditing<CgPath> editing;
+    private final TreeEditing<CgPath> editing;
+
+    /** One for every Project panel, so a cut in one pastes in another. */
+    private static final TreeClipboard<CgPath> CLIPBOARD = new TreeClipboard<>();
 
     /**
-     * Renames {@code path} in place -- F2.
+     * Gives the kit what performs its verbs on files. Until then drag, clipboard, rename and delete are
+     * disabled.
      *
-     * <p>An input <b>in the row</b>, not a dialog over it: a dialog hides the folder you are naming inside,
-     * puts the answer somewhere other than the question, and cannot show the icon change as you type.</p>
+     * <pre>{@code
+     * tree.editWith(workbench);   // ProjectExtension, at activation
+     * }</pre>
      */
-    public void beginRename(CgPath path, Consumer<String> onCommit) {
-        if (path == null || path.isProjectRoot()) return;
-        String name = path.name();
-        RowEditing.Edit<CgPath> edit = RowEditing.Edit.of(path, name, onCommit)
-                .accepting(ProjectFileTree::isWellFormedName)
-                .conflicting("file", typed -> freeNameFor(path, typed));
-        // THE STEM IS SELECTED, NOT THE WHOLE NAME, which is what F2 does everywhere: the extension is
-        // almost never what you are changing, and selecting it means the first keystroke destroys it.
-        int dot = name.lastIndexOf('.');
-        editing.begin(dot > 0 ? edit.selecting(0, dot) : edit);
+    public ProjectFileTree editWith(WorkbenchContext workbench) {
+        editing.setModel(new ExplorerEditModel(workbench, this));
+        return this;
     }
 
     /**
@@ -803,30 +715,31 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
      */
     public void beginNew(CgPath parent, boolean directory, Consumer<String> onCommit) {
         if (parent == null) return;
+        RowEditing<CgPath> rows = editing.rows();
         // ENDED FIRST: an open edit's own ending withdraws the placeholder, which would take the new one.
-        editing.cancel();
+        rows.cancel();
         // EXPANDED, or the placeholder is a child of a folded folder and nothing appears at all.
         if (!tree.isExpanded(parent)) tree.setExpanded(parent, true);
         CgPath placeholder = source.beginPendingNew(parent, directory);
-        editing.begin(RowEditing.Edit.of(placeholder, "", onCommit)
+        rows.begin(RowEditing.Edit.of(placeholder, "", onCommit)
                 .accepting(ProjectFileTree::isWellFormedName)
                 .conflicting(directory ? "folder" : "file", typed -> freeNameFor(placeholder, typed))
                 .onEnd(source::endPendingNew));
     }
 
     public boolean isEditing() {
-        return editing.isEditing();
+        return editing.rows().isEditing();
     }
 
     /** The row being edited, or null. */
     @Nullable
     public CgPath editingPath() {
-        return editing.item();
+        return editing.rows().item();
     }
 
     /** Drops the edit, and any placeholder with it. */
     public void cancelEdit() {
-        editing.cancel();
+        editing.rows().cancel();
     }
 
     /** Not empty, not {@code .} or {@code ..}, and no path separator, which would create the entry in another directory. */
@@ -888,7 +801,8 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         return rowItems;
     }
 
-    RowEditing<CgPath> editing() {
+    /** Drag, clipboard, rename and delete over this tree's selection. */
+    public TreeEditing<CgPath> editing() {
         return editing;
     }
 
@@ -896,74 +810,18 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         return find;
     }
 
-    ExplorerDragAndDrop dnd() {
-        return dnd;
-    }
-
     /**
-     * What Cut/Copy/Paste mean in a file tree — <b>files</b>, not text.
+     * Answers the panel and its clipboard, and routes {@link UiDataKeys#UNDO_STACK} through the same walk
+     * everything else uses.
      *
-     * <p>The whole reason {@code ClipboardActions} exists: this and the editor's are both correct and
-     * neither can be the other, so the menu asks the position rather than naming one of them.</p>
-     *
-     * <p><b>Reported rather than performed.</b> The tree does not own the file service — {@link Workbench}
-     * does — so these run the registered explorer commands, which is also what keeps one undo step per
-     * gesture and one place where a conflict is resolved.</p>
-     */
-    private final ClipboardActions clipboardActions = new ClipboardActions() {
-        @Override
-        public boolean canCut() {
-            return isEnabled(ExplorerCommands.CUT);
-        }
-
-        @Override
-        public void cut() {
-            run(ExplorerCommands.CUT);
-        }
-
-        @Override
-        public boolean canCopy() {
-            return isEnabled(ExplorerCommands.COPY);
-        }
-
-        @Override
-        public void copy() {
-            run(ExplorerCommands.COPY);
-        }
-
-        @Override
-        public boolean canPaste() {
-            return isEnabled(ExplorerCommands.PASTE);
-        }
-
-        @Override
-        public void paste() {
-            run(ExplorerCommands.PASTE);
-        }
-
-        private boolean isEnabled(String id) {
-            Command command = CommandRegistry.global().get(id);
-            return command != null && command.isEnabled(CommandContext.of(ProjectFileTree.this));
-        }
-
-        private void run(String id) {
-            CommandRegistry.global().run(id, CommandContext.of(ProjectFileTree.this));
-        }
-    };
-
-    /**
-     * Routes {@link UiDataKeys#UNDO_STACK} through the same walk everything else uses.
-     *
-     * <p>Without this the key would answer null for this widget while {@code UndoScope.nearest} found a
-     * stack — two mechanisms disagreeing about the same question, which is the thing {@code DataContext}
-     * exists to stop.</p>
+     * <p>Not {@link TreeEditing#KEY}: this is also a document-level provider, and a Delete invoked from the
+     * palette in an editor must not reach the files selected here. The tree answers it from inside.</p>
      */
     @Override
     public Object getData(DataKey<?> key) {
         if (key == PROJECT_TREE) return this;
-        if (key == UiDataKeys.CLIPBOARD) return clipboardActions;
-        Object undo = undoScopeData(key);
-        return undo;
+        if (key == UiDataKeys.CLIPBOARD) return editing.clipboardActions();
+        return undoScopeData(key);
     }
 
 }

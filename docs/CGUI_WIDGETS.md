@@ -946,6 +946,71 @@ text, and its colour field binds `stored.map(ShaderColorFieldWidget::parseVec4, 
 
 ---
 
+## 12e. Editing a tree — `TreeEditing` over `TreeEditModel`
+
+`com.crystalgui.widget.collection.tree` · consumers: the Project panel (`ExplorerEditModel`) and the
+Hierarchy panel (`HierarchyEditModel`)
+
+What a file manager does to files, for any `TreeView`: drag rows to move them (a modifier copies), cut,
+copy, paste, duplicate, F2 rename and delete, over the whole selection, from keys, the Edit menu and a
+right-click. The kit decides **what** a gesture means — which items, which parent and index, move or copy,
+which name. The model **performs** it.
+
+```java
+private static final TreeClipboard<Node> CLIPBOARD = new TreeClipboard<>();   // one per KIND of tree
+
+editing = new TreeEditing<>(tree, this, this::itemForRow, tree::refresh, CLIPBOARD);
+editing.setModel(new NodeModel());
+editing.attachContextMenu(CommandRegistry.global(), () -> ContextMenu.of(NODE_MENU));
+TreeEditing.contributeMenu(CommandRegistry.global(), NODE_MENU);   // once, by the feature; dispose it with the feature
+
+// the renderer
+public UIElement createTemplate() { ... editing.installRow(row, field); ... }
+public void bind(Node node, TreeRow<Node> row, int i, UIElement template) {
+    editing.bindRow(template, label, field, node);
+}
+```
+
+```java
+final class NodeModel implements TreeEditModel<Node> {
+    public boolean isOrdered()                   { return true; }   // a document's order: before / into / after
+    public Node parentOf(Node node)              { return node.parent(); }
+    public int indexOf(Node node)                { return node.parent().children().indexOf(node); }
+    public boolean isContainer(Node node)        { return node.takesChildren(); }
+    public boolean canEdit(Node node)            { return node.parent() != null; }
+    public String nameOf(Node node)              { return node.name(); }
+    public void move(List<Node> nodes, Target<Node> to) { document.applyAll("move", moves(nodes, to)); }
+    public void copy(List<Node> nodes, Target<Node> to) { document.applyAll("copy", copies(nodes, to)); }
+    public void delete(List<Node> nodes)         { document.applyAll("delete", removals(nodes)); }
+    public void rename(Node node, String name)   { document.apply(new Rename(node, name)); }
+}
+```
+
+| | Ordered (`isOrdered() == true`) | Unordered — a sorted listing |
+|---|---|---|
+| A drop on a row | top quarter before it, bottom quarter after, middle into it when it is a container; a leaf has only halves; after an open container is its first child — VS Code's `listView.ts` | into it when it is a container, else into its parent |
+| Paste | after the last selected item, in its parent | into a selected container, else beside the selected leaf |
+| Duplicate | offered, just after the last selected item | not offered |
+| Row mark | `__drop-before__`, `__drop-target__`, `__drop-after__` | `__drop-target__` |
+
+- **Every verb acts on the selection**, outermost items only, in tree order. A row inside another selected
+  row travels with it.
+- **Cut is performed at paste.** Until then the held rows carry `__cut__` (dimmed by the UA sheet) and
+  nothing moves. A copy stays for the next paste; a cut is spent by one.
+- **Keys are on the tree's own keymap** — Mod+X/C/V, Mod+D, F2, Delete — so they never fire while typing
+  elsewhere. The Edit menu reaches Cut/Copy/Paste through `ClipboardActions`, which the kit installs on the
+  list.
+- **A right-click inside the selection keeps it**; outside, the clicked row becomes the selection.
+- **`canEdit` gates** cut, delete, rename and dragging; **`canDrop` gates** where a paste or drop may land
+  (by default a container, and not the item itself or anything under it). Both are asked before a verb.
+- `copyModifier` is Ctrl by default; a design tool's model answers Alt, where Ctrl is the row toggle.
+- `labelOf` is what a ghost and the clipboard text say, when a name can be empty — a node with no id.
+- The commands resolve `TreeEditing.KEY`, which the list answers for rows inside it (`ListView.putData`).
+  A host that is also a document-level data provider must not answer it, or a palette Delete elsewhere
+  reaches this tree.
+
+---
+
 ## 13. Harness scenes
 
 ```bash

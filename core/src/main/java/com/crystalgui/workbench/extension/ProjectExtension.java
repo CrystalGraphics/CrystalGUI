@@ -2,7 +2,6 @@ package com.crystalgui.workbench.extension;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 import javax.annotation.Nullable;
@@ -10,14 +9,12 @@ import javax.annotation.Nullable;
 import com.google.gson.JsonElement;
 
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.notify.Notification;
-import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.FileOperations;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.WorkbenchSettings;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
@@ -70,6 +67,9 @@ public final class ProjectExtension implements WorkbenchExtension {
         // At construction, not on the first frame with a window: the registry is global, so there is
         // nothing left to wait for.
         tree.setContextMenu(CommandRegistry.global(), ExplorerCommands::menu);
+        // Drag, Cut, Copy, Paste, Rename and Delete over the selection, performed through the file service.
+        tree.editWith(workbench);
+        Disposable editRows = TreeEditing.contributeMenu(CommandRegistry.global(), MenuId.EXPLORER_CONTEXT);
         // The explorer IS the workspace's undo scope. UndoScope.nearest walks outward from focus, so
         // Ctrl+Z in the tree reaches file operations and Ctrl+Z in an editor still reaches its own text.
         tree.setUndoStack(workbench.workspace().files().undoStack());
@@ -87,6 +87,7 @@ public final class ProjectExtension implements WorkbenchExtension {
         return () -> {
             live.close();
             slice.dispose();
+            editRows.dispose();
             panel.dispose();
         };
     }
@@ -110,7 +111,6 @@ public final class ProjectExtension implements WorkbenchExtension {
 
         void bind() {
             lifetime.add(tree.onFileChosen.connect(workbench::openFile));
-            lifetime.add(tree.onFilesDropped.connect(this::dropFiles));
             // THE LISTING ANNOUNCES AND THE VIEW REDRAWS. The watcher used to call refresh() on this
             // widget directly, which is a model reaching for a view and is what kept the explorer inside
             // the engine. @see WorkspaceTreeSource#onDidInvalidate
@@ -138,44 +138,6 @@ public final class ProjectExtension implements WorkbenchExtension {
             if (active == null || active.equals(revealed)) return;
             revealed = active;
             tree.reveal(active);
-        }
-
-        /**
-         * A drag-and-drop from the tree — move by default, copy with the modifier.
-         *
-         * <p>Each item is issued independently, for the reason paste is: several files dropped into a
-         * folder are several operations that can succeed or fail separately, and stopping on the first
-         * refusal leaves the user guessing which ones landed.</p>
-         */
-        private void dropFiles(List<CgPath> sources, ProjectFileTree.DropRequest request) {
-            // ONE UNDO STEP FOR THE WHOLE DROP, and it settles when its members do.
-            workbench.workspace().files().batch(request.copy() ? "copy files" : "move files", batch -> {
-                for (CgPath source : sources) {
-                    // A folder dropped into itself or its own descendant would move a directory under
-                    // itself, which the filesystem refuses with a message about paths rather than about
-                    // the gesture.
-                    if (source.equals(request.destination()) || source.contains(request.destination())) {
-                        Notifications.show(Notification.error("Cannot move")
-                                .withDetail(source.name() + " into itself"));
-                        continue;
-                    }
-                    CgPath target = request.destination().resolve(source.name());
-                    if (target.equals(source)) continue;   // dropped back where it already is
-                    if (request.copy()) {
-                        batch.copy(Resource.of(source), Resource.of(target));
-                    } else {
-                        batch.rename(Resource.of(source), Resource.of(target), false);
-                    }
-                }
-            }).then(result -> {
-                if (result.isCompletelySuccessful()) return;
-                // NAMED, which is the whole point of reporting per item: the eleven that moved stay moved
-                // and the one that did not is said out loud.
-                for (FileOperations.Failure failure : result.failures()) {
-                    Notifications.show(Notification.error("Could not " + result.label())
-                            .withDetail(failure.resource().name() + " -- " + failure.error().detail()));
-                }
-            });
         }
 
         void close() {

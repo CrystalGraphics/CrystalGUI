@@ -169,7 +169,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      * file". Selection is where you are; activation is what you decided.</p>
      *
      * <p><b>The double-click is raised here rather than by each renderer.</b> It used to be a template
-     * listener every consumer wrote for itself, which is one line to forget: the Design panel connected
+     * listener every consumer wrote for itself, which is one line to forget: the Hierarchy panel connected
      * this signal and nothing ever emitted it, so its rows folded from Enter and not from a double-click,
      * and it read as the tree being a picture rather than a control.</p>
      */
@@ -1085,7 +1085,23 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     @Override
     public Object getData(DataKey<?> key) {
         if (key == UiDataKeys.CLIPBOARD) return clipboardDelegate != null ? clipboardDelegate : this;
-        return null;
+        return data.get(key);
+    }
+
+    private final Map<DataKey<?>, Object> data = new HashMap<>(2);
+
+    /**
+     * Answers {@code key} with {@code value} for anything resolved from inside this list — a kit a host
+     * installs on its list, found by the commands that act on it.
+     *
+     * <pre>{@code
+     * tree.putData(TreeEditing.KEY, editing);   // TreeEditing does this
+     * }</pre>
+     */
+    public <V> ListView<T> putData(DataKey<V> key, @Nullable V value) {
+        if (value == null) data.remove(key);
+        else data.put(key, value);
+        return this;
     }
 
     @Override

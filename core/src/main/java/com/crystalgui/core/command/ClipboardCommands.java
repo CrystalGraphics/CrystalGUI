@@ -10,7 +10,7 @@ import java.util.function.Predicate;
 /**
  * {@code Edit ▸ Cut/Copy/Paste} — one row each, acting on whatever you are in.
  *
- * <h3>Why these exist beside {@code editor.cut} and {@code explorer.cut}</h3>
+ * <h3>Why these exist beside {@code editor.cut} and {@code tree.cut}</h3>
  *
  * <p>They are not replacements. Each widget keeps its own command, its own binding on its own element
  * keymap, and its own place in the palette — that is what makes {@code Mod+X} mean the right thing

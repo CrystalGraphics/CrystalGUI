@@ -17,6 +17,7 @@ import static org.junit.Assert.assertNotNull;
 import com.crystalgui.workbench.app.WorkbenchApplicationCommands;
 import com.crystalgui.workbench.chrome.menu.ChromeCommands;
 import com.crystalgui.workbench.explorer.ExplorerCommands;
+import com.crystalgui.widget.collection.tree.TreeEditCommands;
 
 /**
  * <b>Every shipped {@code bindDefaults} actually parses.</b>
@@ -75,10 +76,10 @@ public class ShippedKeymapDefaultsTest extends UiDocumentTestBase {
         assertNotNull(CommandRegistry.global().declaredBindings());
     }
 
-    /** The explorer's bare keys stay element-scoped, so they still parse through a keymap. */
+    /** An edited tree's bare keys stay element-scoped, so they still parse through a keymap. */
     @Test
-    public void explorerDefaultsParse() {
-        ExplorerCommands.bindDefaults(freshKeymap());
+    public void treeEditingDefaultsParse() {
+        TreeEditCommands.bindKeys(freshKeymap());
     }
 
     // ── The two names that have caught us out ───────────────────────────────────────────────────

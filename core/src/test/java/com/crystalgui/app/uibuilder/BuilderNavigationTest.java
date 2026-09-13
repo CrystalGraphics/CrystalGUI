@@ -2,7 +2,6 @@ package com.crystalgui.app.uibuilder;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -246,7 +245,7 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>The Design panel holds a set, both ways.</b>
+     * <b>The Hierarchy panel holds a set, both ways.</b>
      *
      * <p>Nothing had to move upstream for this: {@code ListView} implements MULTIPLE in full — Ctrl to
      * toggle, Shift for a range — which is why the project tree gets it from one line. This panel simply

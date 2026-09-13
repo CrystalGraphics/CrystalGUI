@@ -301,11 +301,11 @@ public class BuilderEditingTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>F2 in the Design panel renames the id in the row</b> — one undo step, and never to an id another
+     * <b>F2 in the Hierarchy panel renames the id in the row</b> — one undo step, and never to an id another
      * node already has.
      */
     @Test
-    public void f2InTheDesignPanelRenamesTheIdInTheRow() {
+    public void f2InTheHierarchyRenamesTheIdInTheRow() {
         HierarchyPanel hierarchy = new HierarchyPanel(editor.surface());
         document.append(hierarchy);
         document.update(W, H);

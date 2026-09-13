@@ -955,9 +955,24 @@
  *
  * An OUTLINE rather than a fill, so it reads on top of the selection band instead of replacing it --
  * you can still see what you had selected while you carry it somewhere. The engine's outline is
- * inset by 1px on `*`, so it survives the panel's own clipping at the edges. */
-projectfiletree .__project-row__.__drop-target__ {
+ * inset by 1px on `*`, so it survives the panel's own clipping at the edges.
+ *
+ * Any tree edited through TreeEditing: into a row is outlined, before and after it a line along that
+ * edge -- VS Code's drop-target-before/after. The line is an outline DRAWABLE, so it is layout-free and
+ * paints over the row's children; a gradient's hard stop is what keeps it to one edge. */
+treeview .__drop-target__ {
     outline: 1px var(--tree-drop-border, #4A90D9);
+}
+treeview .__drop-before__ {
+    outline: linear-gradient(to bottom, var(--tree-drop-border, #4A90D9) 0%, var(--tree-drop-border, #4A90D9) 9%, transparent 9%);
+}
+treeview .__drop-after__ {
+    outline: linear-gradient(to top, var(--tree-drop-border, #4A90D9) 0%, var(--tree-drop-border, #4A90D9) 9%, transparent 9%);
+}
+
+/* A ROW A CUT IS HOLDING, dimmed until the paste moves it -- VS Code's explorer `cut` decoration. */
+treeview .__cut__ {
+    opacity: 0.5;
 }
 
 /* THE DRAG GHOST. A loose copy of the capsule that follows the cursor -- sized to its own content

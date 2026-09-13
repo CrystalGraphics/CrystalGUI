@@ -11,7 +11,7 @@ import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.WorkbenchContext;
 
 /**
- * The <b>Design</b> tool window: the hierarchy of whatever {@code .cgui} is in front.
+ * The <b>Hierarchy</b> tool window: the tree of whatever {@code .cgui} is in front.
  *
  * <p>One panel for the whole workbench, re-pointed as the active tab changes — the same shape the
  * Inspector takes, and for the same reason. A panel per open document would mean the dock cached one
@@ -21,11 +21,11 @@ import com.crystalgui.workbench.WorkbenchContext;
  * and goes moves everything beside it, and "the panel I docked has gone" is indistinguishable from a
  * bug.</p>
  */
-public final class DesignToolWindow extends UIElement {
+public final class HierarchyToolWindow extends UIElement {
 
-    public static final Name NAME = Name.of("designtoolwindow");
+    public static final Name NAME = Name.of("hierarchytoolwindow");
 
-    public static final String PANEL_CLASS = "__design-panel__";
+    public static final String PANEL_CLASS = "__hierarchy-window__";
 
     private final WorkbenchContext workbench;
 
@@ -35,7 +35,7 @@ public final class DesignToolWindow extends UIElement {
     @Nullable
     private BuilderContext shown;
 
-    public DesignToolWindow(WorkbenchContext workbench) {
+    public HierarchyToolWindow(WorkbenchContext workbench) {
         super(NAME);
         this.workbench = workbench;
         addClass(PANEL_CLASS);

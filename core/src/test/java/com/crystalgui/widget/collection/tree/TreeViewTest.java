@@ -472,7 +472,7 @@ public class TreeViewTest extends UiDocumentTestBase {
      * <b>A double-click on a branch folds it, and the tree owns that.</b>
      *
      * <p>Five consumers wrote this for themselves and no two spelled it the same way — two of them from
-     * inside the press, which re-flattens under the element being dispatched through. The Design panel
+     * inside the press, which re-flattens under the element being dispatched through. The Hierarchy panel
      * connected the signal to a fold and nothing ever raised it, which is what made a tree behave like a
      * picture of one.</p>
      */

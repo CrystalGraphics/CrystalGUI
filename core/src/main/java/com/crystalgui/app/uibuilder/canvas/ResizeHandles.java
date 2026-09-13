@@ -521,7 +521,7 @@ public final class ResizeHandles extends UIElement {
      *
      * <p>Hugging an empty box is arithmetically right and unusable: the answer is zero, and a zero box
      * puts all eight handles on the same point, so the gesture cannot be reversed by the gesture. The
-     * node is still reachable from the Design panel and the size is still typable in the Inspector, but a
+     * node is still reachable from the Hierarchy panel and the size is still typable in the Inspector, but a
      * direct-manipulation affordance that destroys its own target is a trap whichever way out exists.</p>
      *
      * <p>Content is an IN-FLOW child or a node that measures itself — {@code UIText}, {@code Button} and

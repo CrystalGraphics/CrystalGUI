@@ -16,7 +16,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
 /**
- * <b>The Design panel keeps working after it leaves the tree and comes back.</b>
+ * <b>The Hierarchy panel keeps working after it leaves the tree and comes back.</b>
  *
  * <p>It subscribed to all three of its signals in the CONSTRUCTOR while {@code disconnected} drops every
  * connection it holds — which it must, since one outliving its node is what the engine's ownership rule
@@ -28,7 +28,7 @@ import com.crystalgui.ui.dom.UIElementRegistry;
  * <p>The dock takes a tool window out for ordinary reasons — hiding it, rebuilding a layout, replacing
  * the panel behind a tab — which is why it read as random.</p>
  */
-public class DesignPanelSurvivesADetachTest extends UiDocumentTestBase {
+public class HierarchyPanelSurvivesADetachTest extends UiDocumentTestBase {
 
     @Test
     public void aRowStillSelectsAfterADetach() {

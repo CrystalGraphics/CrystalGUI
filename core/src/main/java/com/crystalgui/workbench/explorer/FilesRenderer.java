@@ -21,7 +21,6 @@ import com.crystalgui.ui.service.Input;
 import javax.annotation.Nullable;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -128,7 +127,8 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // replacing one, so a row that was bound twice would show two tooltips.
         tips.put(row, Tooltip.attach(row, ""));
         slots.put(row, new ProjectFileTree.RowParts(twisty, icon, label, badge, editor));
-        tree.editing().installEditor(row, editor);
+        // The rename field, and the drag: the selection when the pressed row is in it, else this row.
+        tree.editing().installRow(row, editor);
         // A FOLDER TOGGLES ON ONE CLICK; A FILE OPENS ON TWO. Not one rule for both, and the
         // difference is not a compromise -- the two rows mean different things.
         //
@@ -160,7 +160,6 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
             tree.treeView().requestToggleAt(tree.treeView().indexOfRowElement(row));
         }, false, false);
 
-        tree.dnd().installRowDrag(row);
         // NO DOUBLE-CLICK LISTENER HERE. ListView raises onRowActivated from one, TreeView folds a branch
         // on it, and ProjectFileTree opens a file on it.
         //
@@ -181,7 +180,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // ONE QUESTION, asked of the source: a project's name, a plain name, or the whole chain a
         // compacted row stands for. The view cannot work the last one out -- by the time a row exists
         // the swallowed directories are not in the tree at all.
-        tree.editing().apply(template, parts.label(), parts.editor(), item);
+        tree.editing().bindRow(template, parts.label(), parts.editor(), item);
         tree.find().applyMarks(template, parts, item, row.expandable());
         String name = tree.source().rowLabel(item);
         // No manual indent and no "+ "/"- " prefix any more: TreeView already writes padding-left from

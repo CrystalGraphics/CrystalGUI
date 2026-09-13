@@ -203,12 +203,12 @@ panel is the right size, and it reads as "the panel is empty". Assert on the box
 counting `visibleRows()` reports green against a blank panel.
 
 **What is still a design decision.** One panel for the workbench, re-pointed as the tab changes, or one
-per document — the Design panel takes the first, and empties rather than disappearing when the tab in
+per document — the Hierarchy panel takes the first, and empties rather than disappearing when the tab in
 front is not its kind. A tool window that comes and goes moves everything beside it, and "the panel I
 docked has gone" is indistinguishable from a bug.
 
-`DesignToolWindow` + `HierarchyPanel` (`app/uibuilder/panel/`) is the worked example, and
-`DesignPanelFollowsTheOpenDocumentTest` drives it through a real `Workbench` over a transport — which
+`HierarchyToolWindow` + `HierarchyPanel` (`app/uibuilder/panel/`) is the worked example, and
+`HierarchyPanelFollowsTheOpenDocumentTest` drives it through a real `Workbench` over a transport — which
 is how to test one. A directly-constructed panel passes while the running one is empty: what a panel
 can *build* is never the question; what it is *told*, and whether that is still current, is.
 
