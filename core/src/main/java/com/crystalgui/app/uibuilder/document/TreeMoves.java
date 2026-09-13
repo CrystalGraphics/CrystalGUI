@@ -4,13 +4,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.crystalgui.text.DerivedNames;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -75,8 +73,7 @@ public final class TreeMoves {
      */
     public static List<BuilderEdit> duplicate(UiBuilderDocument document, UIElement target, int index,
                                               Collection<UIElement> nodes) {
-        Set<String> taken = new HashSet<>();
-        collectIds(document.root(), taken);
+        Set<String> taken = NodeIds.taken(document.root());
         List<BuilderEdit> edits = new ArrayList<>();
         int at = Math.max(0, Math.min(index, target.children().size()));
         for (UIElement node : outermost(nodes)) {
@@ -129,14 +126,9 @@ public final class TreeMoves {
         return new ArrayList<>(parent.children());
     }
 
-    private static void collectIds(UIElement node, Set<String> taken) {
-        if (!node.id().isEmpty()) taken.add(node.id());
-        for (UIElement child : node.children()) collectIds(child, taken);
-    }
-
     private static void freeIds(UIElement node, Set<String> taken) {
         if (!node.id().isEmpty()) {
-            String free = DerivedNames.derive(node.id(), taken, Set.of());
+            String free = NodeIds.free(node.id(), taken);
             taken.add(free);
             if (!free.equals(node.id())) node.setId(free);
         }

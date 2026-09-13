@@ -8,15 +8,25 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
+import com.crystalgui.app.uibuilder.document.NodeIds;
 import com.crystalgui.core.collection.tree.TreeDataSource;
+import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.undo.UndoScope;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.widget.collection.list.RowEditing;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeView;
+import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -41,7 +51,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * <p>Selection is the builder's, so clicking a row and clicking the canvas are the same act: both write
  * {@link BuilderSelection}, and the plane keeps the engine's own item set in step.</p>
  */
-public final class HierarchyPanel extends UIElement {
+public final class HierarchyPanel extends UIElement implements DataProvider, UndoScope {
 
     public static final Name NAME = Name.of("hierarchypanel");
 
@@ -61,9 +71,24 @@ public final class HierarchyPanel extends UIElement {
     /** The row's name. */
     public static final String LABEL_CLASS = "__label__";
 
+    /** The field a row's id is renamed in. @see #RENAME */
+    public static final String RENAME_CLASS = "__rename__";
+
+    /**
+     * Renames the selected node's id in its row — F2, bound on the panel, so on the canvas F2 still edits
+     * text.
+     */
+    public static final String RENAME = "uibuilder.renameNode";
+
+    /** This panel, for a command that acts on one. */
+    public static final DataKey<HierarchyPanel> HIERARCHY = DataKey.create("uibuilder.hierarchy", HierarchyPanel.class);
+
     private final BuilderContext builder;
 
     private final TreeView<UIElement> tree;
+
+    /** @see #renameSelected */
+    private final RowEditing<UIElement> rename;
 
     /** @see #CONTENT_CLASS */
     private final UIElement content = new UIElement();
@@ -93,6 +118,7 @@ public final class HierarchyPanel extends UIElement {
                 return !item.children().isEmpty();
             }
         });
+        this.rename = new RowEditing<>(tree, this::itemForRow, () -> withoutWritingBack(tree::refresh));
         tree.setRenderer(new RowRenderer());
         // THE ROOT AND ITS CHILDREN. A tree that opens fully collapsed shows one row and reads as a
         // panel that failed to load; opening everything buries the shape in a document of any size. One
@@ -152,6 +178,85 @@ public final class HierarchyPanel extends UIElement {
     /** The tree, for a test and for whoever wants to expand a branch. */
     public TreeView<UIElement> tree() {
         return tree;
+    }
+
+    /**
+     * Opens a rename of the selected node's id in its row, when exactly one node is selected — the project
+     * tree's F2, through the same {@link RowEditing}. An empty id clears it; one another node holds is offered
+     * {@link NodeIds#free} instead.
+     */
+    public void renameSelected() {
+        List<UIElement> nodes = builder.builderSelection().nodes();
+        if (nodes.size() != 1) return;
+        UIElement node = nodes.get(0);
+        expandTo(nodes);
+        rename.begin(RowEditing.Edit.of(node, node.id(),
+                        id -> builder.getDocument().apply(new BuilderEdit.SetId(node, node.id(), id)))
+                .accepting(NodeIds::isSpellable)
+                .conflicting("element", id -> freeIdFor(node, id)));
+    }
+
+    /** The node whose id is being renamed, or null. */
+    @Nullable
+    public UIElement renaming() {
+        return rename.item();
+    }
+
+    /**
+     * Null when no other node holds {@code id}, else the free id to offer instead. A shared id styles both
+     * nodes through one rule and makes {@code #id} find either.
+     */
+    @Nullable
+    private String freeIdFor(UIElement node, String id) {
+        if (id.isEmpty()) return null;
+        Set<String> taken = NodeIds.taken(builder.getDocument().root());
+        taken.remove(node.id());
+        String free = NodeIds.free(id, taken);
+        return free.equals(id) ? null : free;
+    }
+
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        registry.register(Command.of(RENAME, "Rename")
+                .run(context -> {
+                    HierarchyPanel panel = context.data().get(HIERARCHY);
+                    if (panel != null) panel.renameSelected();
+                })
+                .enabledWhen(context -> {
+                    HierarchyPanel panel = context.data().get(HIERARCHY);
+                    return panel != null && panel.renaming() == null
+                            && panel.builder.builderSelection().nodes().size() == 1;
+                }));
+    }
+
+    @Override
+    protected void bindKeys() {
+        keymap().bind("F2", RENAME);
+    }
+
+    /**
+     * The document's history: this panel is a view of the same document the canvas is, so Ctrl+Z here undoes
+     * a rename or a drop as it does there.
+     */
+    @Override
+    public UndoStack undoStack() {
+        return builder.getDocument().history();
+    }
+
+    @Override
+    public Object getData(DataKey<?> key) {
+        if (key == HIERARCHY) return this;
+        // THE HISTORY TOO. The walk stops at the first provider, and one answering only its own key hid the
+        // document's history from every command asked from the panel.
+        return undoScopeData(key);
+    }
+
+    /** The node a row element stands for now, or null. */
+    @Nullable
+    private UIElement itemForRow(UIElement row) {
+        int index = tree.indexOfRowElement(row);
+        TreeRow<UIElement> at = index < 0 ? null : tree.rowAt(index);
+        return at == null ? null : at.item();
     }
 
     private void expandTo(List<UIElement> nodes) {
@@ -287,14 +392,23 @@ public final class HierarchyPanel extends UIElement {
             UIText label = new UIText();
             label.addClass(LABEL_CLASS);
             row.append(label);
+            TextField field = new TextField();
+            field.addClass(RENAME_CLASS);
+            rename.installEditor(row, field);
+            row.append(field);
             return row;
         }
 
         @Override
         public void bind(UIElement node, TreeRow<UIElement> row, int index, UIElement template) {
+            UIText label = null;
+            TextField field = null;
             for (UIElement child : template.children()) {
-                if (child instanceof UIText label) label.setText(describe(node));
+                if (child instanceof UIText text) label = text;
+                else if (child instanceof TextField editor) field = editor;
             }
+            if (label != null) label.setText(describe(node));
+            if (label != null && field != null) rename.apply(template, label, field, node);
             boolean selected = builder.builderSelection().contains(node);
             if (selected != template.hasClass(SELECTED_CLASS)) {
                 if (selected) template.addClass(SELECTED_CLASS);

@@ -11,7 +11,12 @@ import java.nio.charset.StandardCharsets;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.CanvasRects;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.config.control.BooleanControl;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
@@ -106,6 +111,22 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         assertFalse(editor.document().history().canUndo());
     }
 
+    /**
+     * <b>Escape closes the field</b>, typed into or not, and writes nothing. The field's own Escape only
+     * reverts what was typed, so the gesture never closed.
+     */
+    @Test
+    public void escapeClosesTheField() {
+        editor.selection().selectOnly(title);
+        assertTrue(editor.editSelectedText());
+        editor.textEditing().field().setText("discarded");
+
+        assertTrue(keyPress(CgKeyCodes.KEY_ESCAPE));
+        assertFalse("Escape left the field open", editor.textEditing().isEditing());
+        assertEquals("bao", title.getText());
+        assertFalse(editor.document().history().canUndo());
+    }
+
     /** Escape closes the field and leaves the node alone. */
     @Test
     public void cancellingLeavesTheTextAlone() {
@@ -119,7 +140,52 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         assertFalse(editor.document().history().canUndo());
     }
 
-    /** Only a text node can be edited in place; anything else refuses rather than opening an empty field. */
+    /** <b>A button's label is text too</b>, edited in place through its contract and undone in one step. */
+    @Test
+    public void aButtonsLabelIsEditedInPlace() {
+        Button save = new Button("Save");
+        editor.document().root().append(save);
+        document.update(W, H);
+
+        editor.selection().selectOnly(save);
+        assertTrue(editor.editSelectedText());
+        assertEquals("Save", editor.textEditing().field().getText());
+        editor.textEditing().field().setText("Store");
+        editor.textEditing().commit();
+        assertEquals("Store", save.getText());
+
+        editor.document().history().undo();
+        assertEquals("Save", save.getText());
+    }
+
+    /**
+     * <b>The field lies on the node at any zoom</b> — same drawn box, so the text being typed is the size and
+     * place of the text it replaces. Sized from the drawn rect with the unscaled font, it was right only at
+     * 100%.
+     */
+    @Test
+    public void theFieldLiesOnTheNodeAtAnyZoom() {
+        editor.surface().surface().setZoom(0.5f);
+        document.update(W, H);
+        frame();
+        editor.selection().selectOnly(title);
+        assertTrue(editor.editSelectedText());
+        frame();
+        frame();
+
+        float[] node = CanvasRects.of(title, editor.textEditing());
+        float[] field = CanvasRects.of(editor.textEditing().field(), editor.textEditing());
+        assertNotNull(node);
+        assertNotNull(field);
+        for (int i = 0; i < 2; i++) {
+            assertEquals("the field is not where the node is", node[i], field[i], 0.5f);
+        }
+        assertEquals("the field is not the node's height at half zoom", node[3], field[3], 0.5f);
+        assertEquals("the field's text is not drawn at the node's scale",
+                node[3] / title.box().height(), field[3] / editor.textEditing().field().box().height(), 0.01f);
+    }
+
+    /** A node with no text of its own refuses rather than opening an empty field. */
     @Test
     public void aNonTextNodeCannotBeEditedInPlace() {
         editor.selection().selectOnly(editor.document().root());
@@ -187,6 +253,96 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         UIElement leafRow = templateFor(hierarchy, title);
         assertTrue("and a row without them must say it cannot",
                 leafRow != null && leafRow.hasClass(TreeView.LEAF_CLASS));
+    }
+
+    /**
+     * <b>A taken id is marked as it is typed, and committing it asks</b> — Windows' "rename to save (2)?": No
+     * goes back to the edit, Yes takes the free id offered.
+     */
+    @Test
+    public void aTakenIdIsMarkedAndCommittingItOffersAFreeOne() {
+        HierarchyPanel hierarchy = new HierarchyPanel(editor.surface());
+        document.append(hierarchy);
+        document.update(W, H);
+        frame();
+        editor.selection().selectOnly(title);
+        document.focus().requestFocus(hierarchy.tree());
+        assertTrue(keyPress(CgKeyCodes.KEY_F2));
+        frame();
+        TextField field = (TextField) document.focus().focused();
+
+        field.setText("root");
+        assertTrue("the root's id was not marked as taken", field.isConflicting());
+        frame();
+        var computed = field.getStyle().computed();
+        assertEquals("the focus ring still covers the conflict's edge in another colour",
+                computed.get(StylePropertyRegistry.BORDER_COLOR), computed.get(StylePropertyRegistry.OUTLINE_COLOR));
+        field.onSubmit.emit(field.getText());
+        assertEquals("title", title.id());
+        buttonLabelled("No").onPressed.emit();
+        assertSame("No left the edit open", null, hierarchy.renaming());
+        assertEquals("No renamed anyway", "title", title.id());
+
+        assertTrue(keyPress(CgKeyCodes.KEY_F2));
+        frame();
+        field = (TextField) document.focus().focused();
+        field.setText("root");
+        field.onSubmit.emit(field.getText());
+        buttonLabelled("Yes").onPressed.emit();
+        assertEquals("root2", title.id());
+        assertSame(null, hierarchy.renaming());
+    }
+
+    private Button buttonLabelled(String label) {
+        for (UIElement node : document.composedSubtree()) {
+            if (node instanceof Button button && label.equals(button.getText())) return button;
+        }
+        throw new AssertionError("no button labelled " + label);
+    }
+
+    /**
+     * <b>F2 in the Design panel renames the id in the row</b> — one undo step, and never to an id another
+     * node already has.
+     */
+    @Test
+    public void f2InTheDesignPanelRenamesTheIdInTheRow() {
+        HierarchyPanel hierarchy = new HierarchyPanel(editor.surface());
+        document.append(hierarchy);
+        document.update(W, H);
+        frame();
+        editor.selection().selectOnly(title);
+        document.focus().requestFocus(hierarchy.tree());
+
+        assertTrue("F2 did nothing in the panel", keyPress(CgKeyCodes.KEY_F2));
+        frame();
+        assertSame(title, hierarchy.renaming());
+        assertFalse("the panel's F2 opened the canvas field instead", editor.textEditing().isEditing());
+        TextField field = (TextField) document.focus().focused();
+        assertEquals("title", field.getText());
+
+        field.setText("head ing");
+        field.onSubmit.emit(field.getText());
+        assertEquals("an id no selector can spell was taken anyway", "title", title.id());
+        assertFalse(editor.document().history().canUndo());
+
+        assertTrue(keyPress(CgKeyCodes.KEY_F2));
+        frame();
+        field = (TextField) document.focus().focused();
+        field.setText("heading");
+        field.onSubmit.emit(field.getText());
+        assertEquals("heading", title.id());
+        assertSame("focus goes back to the tree", hierarchy.tree(), document.focus().focused());
+
+        assertTrue("Ctrl+Z from the panel was not handled", chord(CgKeyCodes.KEY_Z, CgModifiers.CTRL));
+        releaseModifiers();
+        assertEquals("Ctrl+Z from the panel did not undo the rename", "title", title.id());
+
+        assertTrue(keyPress(CgKeyCodes.KEY_F2));
+        frame();
+        ((TextField) document.focus().focused()).setText("dropped");
+        assertTrue(keyPress(CgKeyCodes.KEY_ESCAPE));
+        assertSame("Escape left the rename open", null, hierarchy.renaming());
+        assertEquals("title", title.id());
     }
 
     /**
