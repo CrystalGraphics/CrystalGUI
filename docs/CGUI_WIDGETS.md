@@ -1034,6 +1034,9 @@ final class NodeModel implements TreeEditModel<Node> {
   (Mod+Shift+=), Collapse All (Mod+-). The Edit menu reaches Cut/Copy/Paste through `ClipboardActions`, which the kit installs on the
   list.
 - **A right-click inside the selection keeps it**; outside, the clicked row becomes the selection.
+- **A drag rests to open and pushes to scroll**, as VS Code's lists do: 500 ms on a closed branch it would land
+  in opens it, and a pointer held within 24 px of the top or bottom scrolls the tree, faster the deeper it goes.
+  Both run while the pointer is still, since a `Drag` sends `Over` only when it moves.
 - **`canEdit` gates** cut, delete, rename and dragging; **`canDrop` gates** where a paste or drop may land
   (by default a container, and not the item itself or anything under it). Both are asked before a verb.
 - `copyModifier` is Ctrl by default; a design tool's model answers Alt, where Ctrl is the row toggle.
