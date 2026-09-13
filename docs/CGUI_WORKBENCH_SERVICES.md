@@ -603,7 +603,7 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 | `onDidRegister` | `DockPanelRegistry` | the activity bar's descriptor walk |
 | `onDidLoadListing` | `WorkspaceTreeSource` | `WorkbenchSession.tick`'s per-frame restore retry |
 | `onDidChangeState` | `WorkspaceDocuments` | a per-frame poll of every open document's dirtiness |
-| `onChanged()` | `DocumentModel` (SPI) | — the source the above is built from |
+| `onChanged()` | `DocumentModel` (SPI) | — the source the above is built from. Fires for an undo and a redo as well as for an edit: `AbstractDocumentModel` hears its own history's `onDidStep`, since a reversal never passes through `apply` |
 | `onDidChangeFocus` | `Input` | the Inspector's application-supplied subject — see below |
 
 **`onDidChangeFocus` is the one that unlocked the Inspector.** `FocusEvent.Focus`/`Blur` are dispatched

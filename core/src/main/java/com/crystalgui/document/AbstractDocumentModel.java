@@ -25,6 +25,13 @@ public abstract class AbstractDocumentModel implements DocumentModel {
     private final Signal.Action onChanged = new Signal.Action();
     private int version;
 
+    /** Undo and redo move the version and announce, as {@link #apply} does. */
+    protected AbstractDocumentModel() {
+        // A reversal runs through the history and never through `apply`, so without this a view reading the
+        // content showed the edit until something else rebuilt it.
+        history.onDidStep.connect(edit -> changed());
+    }
+
     @Override
     public final int version() {
         return version;
