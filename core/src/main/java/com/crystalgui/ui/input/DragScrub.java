@@ -19,31 +19,33 @@ import com.crystalgraphics.platform.input.CgModifiers;
  * of it needed a window, a font stack and an input handler — the same argument that moved
  * {@code MoveOperations} and friends out of {@code TextEditor}, and it paid off there within minutes.</p>
  *
+ * <h3>A pixel is worth a share of the field's range</h3>
+ * <p>ImGui's default: a field with a range moves a hundredth of it per pixel, and one without moves one
+ * unit per pixel. So 0..1 moves 0.01, 0..100 moves 1, and an unbounded coordinate moves 1 — the same
+ * hand movement crosses the same share of every bounded field. Shift is ten times that, Ctrl a tenth.</p>
+ *
+ * <pre>{@code
+ * DragScrub.unitsPerPixel(Spec.FLOAT.withRange(0, 1), 0);     // 0.01
+ * DragScrub.unitsPerPixel(Spec.FLOAT, CgModifiers.SHIFT);      // 10
+ * DragScrub.unitsPerPixel(Spec.FLOAT.withRate(0.25), 0);      // 0.25, declared
+ * }</pre>
+ *
  * <h3>Everything is measured from the ANCHOR, never from the live value</h3>
- * <p>Both the starting point <em>and</em> the sensitivity come from the value the drag began on. Two
- * separate bugs live in the alternative:</p>
- * <ul>
- *   <li>Accumulating onto the live value <b>compounds</b> — {@code UIResizer} documents the same trap in
- *       its own {@code startWidth} fields, where reading the live box each frame made the element race
- *       away from the cursor. Worse here, because the live value is <em>clamped</em>: at a range limit it
- *       absorbs the overshoot, so coming back off the limit lags by however far you pushed past it.</li>
- *   <li>Recomputing sensitivity from the live value makes the rate <b>accelerate as you drag</b>, which
- *       is not merely unpleasant — it is not reversible. Drag right 100px then left 100px and you do not
- *       land back where you started.</li>
- * </ul>
+ * <p>The value is the one the drag began on plus the whole travel. Accumulating onto the live value
+ * <b>compounds</b> — {@code UIResizer} documents the same trap in its own {@code startWidth} fields — and
+ * worse here, because the live value is <em>clamped</em>: at a range limit it absorbs the overshoot, so
+ * coming back off the limit lags by however far you pushed past it.</p>
  * <p>Because the result depends only on (anchor, delta), it is safe for a caller to recompute it every
  * frame from an unchanged delta — which {@code UIDragController} will do, since it ticks its listener
  * unconditionally rather than only on movement.</p>
  */
 public final class DragScrub {
 
-    /**
-     * Units per pixel for a value of magnitude ≤ 1, before modifiers.
-     *
-     * <p>A feel constant, not a derived one. {@code 0.03} is ImGui's own default drag speed and lands a
-     * unit of change at roughly a third of a screen width, which reads as deliberate rather than twitchy.</p>
-     */
-    public static final double PRECISION = 0.03;
+    /** The share of a field's range one pixel is worth, before modifiers — ImGui's {@code DragSpeedDefaultRatio}. */
+    public static final double RANGE_FRACTION = 0.01;
+
+    /** Units per pixel for a field with no range, before modifiers — ImGui's default {@code v_speed}. */
+    public static final double UNBOUNDED_RATE = 1.0;
 
     /** Shift: bigger steps. */
     public static final double COARSE_MULTIPLIER = 10.0;
@@ -82,7 +84,7 @@ public final class DragScrub {
             if (min > max) throw new IllegalArgumentException("min " + min + " exceeds max " + max);
         }
 
-        /** No declared rate: the magnitude curve decides it. @see DragScrub#unitsPerPixel(double, Spec, int) */
+        /** No declared rate: the range decides it. @see DragScrub#unitsPerPixel(Spec, int) */
         public Spec(boolean integral, double min, double max) {
             this(integral, min, max, Double.NaN);
         }
@@ -95,7 +97,7 @@ public final class DragScrub {
          * States what one pixel of hand movement is worth, for a field that knows its own scale.
          *
          * <pre>{@code
-         * Spec.FLOAT.withRate(1d);   // a percentage, a coordinate: one unit per pixel
+         * Spec.FLOAT.withRate(0.1d);   // a fine unbounded quantity: a tenth per pixel
          * }</pre>
          */
         public Spec withRate(double perPixel) {
@@ -118,47 +120,24 @@ public final class DragScrub {
     }
 
     /**
-     * How much one pixel of movement is worth, given the value the drag started on.
+     * How much one pixel of movement is worth on a field shaped like {@code spec}.
      *
-     * <p><b>Scaled by magnitude, because a fixed rate cannot serve both ends of a range.</b> At
-     * {@code 0.03} units/px a field sitting at {@code 5000} needs half a metre of desk to become
-     * {@code 6000}; at a rate coarse enough to fix that, a field sitting at {@code 0.5} jumps its entire
-     * useful range in three pixels. Square root is the curve Unity and ImGui both settle on — it grows
-     * slowly enough that the value stays controllable at large magnitudes without the rate exploding.</p>
+     * <p>The field's declared rate if it has one; otherwise a hundredth of its range, or one unit per pixel
+     * when it has none. <b>Never read off the value</b>: a rate that followed how big the number is made
+     * one gesture mean two things at two ends of one field — a percentage at 0 crawled at 0.03%/px and the
+     * same field at 100 moved ten times as fast, which reads as the value sticking rather than as a rate.</p>
      *
-     * <p>Floored at 1 so that values below 1 do not scrub <em>slower</em> than values at 1: without the
-     * floor, a field at {@code 0.01} would move at a tenth of the base rate and read as broken.</p>
-     *
-     * <p>Integral fields step in whole units per pixel instead, before modifiers — a rate that produces
-     * {@code 0.4} for an integer field is a rate that appears to do nothing for the first three pixels.</p>
+     * <p>Shift and Ctrl apply on top: they are properties of the hand, not of the value.</p>
      */
-    public static double unitsPerPixel(double anchorValue, boolean integral, int modifiers) {
-        double base = integral ? 1.0 : Math.max(1.0, Math.sqrt(Math.abs(anchorValue))) * PRECISION;
-        if (CgModifiers.hasShift(modifiers)) base *= COARSE_MULTIPLIER;
-        if (CgModifiers.hasCtrl(modifiers)) base *= FINE_MULTIPLIER;
-        return base;
-    }
-
-    /**
-     * The rate {@code spec} asks for: its own if it declares one, the curve above otherwise.
-     *
-     * <p><b>A field that knows its own scale should say so.</b> The curve reads the rate off how big the
-     * number is, which is right for an unbounded quantity and wrong for every bounded one: a percentage
-     * sitting at 0 crawls at 0.03%/px while the same field at 100 moves ten times as fast, so one gesture
-     * means two different things at two ends of one field — which reads as the value sticking rather than
-     * as a rate. ImGui has the same split, deriving {@code v_speed} from the range whenever a bounded
-     * {@code DragFloat} is given one.</p>
-     *
-     * <p>Shift and Ctrl still apply: they are properties of the hand, not of the value.</p>
-     */
-    public static double unitsPerPixel(double anchorValue, Spec spec, int modifiers) {
-        double declared = spec.unitsPerPixel();
-        if (!(declared > 0d) || !Double.isFinite(declared)) {
-            return unitsPerPixel(anchorValue, spec.integral(), modifiers);
+    public static double unitsPerPixel(Spec spec, int modifiers) {
+        double rate = spec.unitsPerPixel();
+        if (!(rate > 0d) || !Double.isFinite(rate)) {
+            double span = spec.max() - spec.min();
+            rate = span > 0d && Double.isFinite(span) ? span * RANGE_FRACTION : UNBOUNDED_RATE;
         }
-        if (CgModifiers.hasShift(modifiers)) declared *= COARSE_MULTIPLIER;
-        if (CgModifiers.hasCtrl(modifiers)) declared *= FINE_MULTIPLIER;
-        return declared;
+        if (CgModifiers.hasShift(modifiers)) rate *= COARSE_MULTIPLIER;
+        if (CgModifiers.hasCtrl(modifiers)) rate *= FINE_MULTIPLIER;
+        return rate;
     }
 
     /**
@@ -170,7 +149,7 @@ public final class DragScrub {
      * converting; {@code NumberControl} does it by measuring its own handle.</p>
      */
     public static double value(double anchorValue, float dxPixels, float dyPixels, int modifiers, Spec spec) {
-        double perPixel = unitsPerPixel(anchorValue, spec, modifiers);
+        double perPixel = unitsPerPixel(spec, modifiers);
         double moved = dominantDelta(dxPixels, dyPixels) * perPixel;
         // No movement means the anchor, exactly — never a rounded version of it. Rounding here instead
         // would snap the value the moment the gesture passed its threshold, and would break the
