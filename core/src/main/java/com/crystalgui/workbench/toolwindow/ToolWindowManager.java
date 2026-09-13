@@ -267,9 +267,12 @@ public final class ToolWindowManager {
      * the keyboard on every launch. The active editor came back cold, so the status readouts and every
      * panel that follows the editor were about the wrong thing until a tab was clicked.</p>
      *
-     * @return true, always — it is open after this
+     * @return false when {@code typeId} is not a registered tool window, or cannot be shown yet
      */
     public boolean showPanel(String typeId, boolean focus) {
+        // NOTHING REGISTERED, NOTHING SHOWN: a record naming a kind no extension contributes -- renamed,
+        // or its extension off -- built a container titled with the raw id and holding nothing.
+        if (registry.descriptor(typeId) == null) return false;
         ToolWindowType type = typeOf(typeId);
         if (type.isWindowed()) return showInFrame(typeId, type, focus);
         DockRegion region = regionOf(typeId);
@@ -533,6 +536,10 @@ public final class ToolWindowManager {
     public void applyVisibility() {
         releaseUnrecordedOccupants();
         for (ToolWindowState state : toolWindows.ordered()) {
+            // A KIND NOBODY REGISTERS IS LEFT IN THE RECORD AND OFF THE SCREEN -- IntelliJ keeps a
+            // DesktopLayout entry for an unloaded plugin's tool window the same way. Its extension may be
+            // switched back on, and Workbench.registerToolWindow then puts it where the record says.
+            if (registry.descriptor(state.typeId()) == null) continue;
             // BOTH DIRECTIONS. Showing alone is not a restore: the workbench opens Project and Problems in
             // its constructor and the application opens the Inspector, all BEFORE a session is read -- so
             // a region the record says is hidden is simply never told, and comes back open every launch.
@@ -552,7 +559,8 @@ public final class ToolWindowManager {
     @Nullable
     private ViewContainer buildContainer(String typeId) {
         DockPanelDescriptor descriptor = registry.descriptor(typeId);
-        String title = descriptor != null ? descriptor.title() : typeId;
+        if (descriptor == null) return null;
+        String title = descriptor.title();
         ViewContainer container = new ViewContainer(typeId, title);
         container.setViews(viewContainers.viewsOf(typeId, title,
                 () -> registry.create(new DockPanelRef(typeId))));

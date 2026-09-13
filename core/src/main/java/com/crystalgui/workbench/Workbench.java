@@ -75,6 +75,7 @@ import com.crystalgui.workbench.stripe.StripeRail;
 import com.crystalgui.workbench.stripe.StripeView;
 import com.crystalgui.workbench.toolwindow.ToolWindowLayout;
 import com.crystalgui.workbench.toolwindow.ToolWindowManager;
+import com.crystalgui.workbench.toolwindow.ToolWindowState;
 import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -1296,8 +1297,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
                 text -> toolWindowManager.viewContainers().setBadge(kind.id(), text));
 
         // A DEFAULT, never a rule: a placement restored from a session outranks it, which is what makes
-        // dragging a panel to the other rail stick.
-        if (kind.isOpenByDefault()) toolWindowManager.showPanel(kind.id());
+        // dragging a panel to the other rail stick -- and a kind registered after the restore opens as the
+        // record says, not focused, since putting back what was open is not asking for it.
+        ToolWindowState restored = toolWindowManager.toolWindows().get(kind.id());
+        if (restored != null ? restored.visible() : kind.isOpenByDefault()) {
+            toolWindowManager.showPanel(kind.id(), restored == null);
+        }
 
         Disposable handle = new Disposable() {
             private boolean withdrawn;

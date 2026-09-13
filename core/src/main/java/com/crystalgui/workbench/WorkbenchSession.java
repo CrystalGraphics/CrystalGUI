@@ -562,6 +562,10 @@ public final class WorkbenchSession {
         for (ToolWindowState state : new ArrayList<>(workbench.toolWindows().all())) {
             DockRegion region = state.region();
             if (region == DockRegion.EDITOR) continue;
+            // WRITTEN AS RESTORED when no extension registers the kind: it is off the screen because nothing
+            // can build it, not because it was closed, and it comes back open when its extension does.
+            // @see ToolWindowManager#applyVisibility
+            if (workbench.panels().descriptor(state.typeId()) == null) continue;
             // ASKED OF THE MANAGER, never derived here. "Is this on screen" already has one correct
             // answer and this used to be a second, worse one: `host.showing(state.side())` can only see
             // a DOCKED panel, so a tool window that was FLOATING or WINDOWED -- living in a frame rather
