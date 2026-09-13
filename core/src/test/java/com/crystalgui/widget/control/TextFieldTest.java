@@ -11,6 +11,9 @@ import com.crystalgui.core.property.Property;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static org.junit.Assert.*;
 
 /**
@@ -174,6 +177,15 @@ public class TextFieldTest extends UiDocumentTestBase {
     }
 
     // ── Editing ─────────────────────────────────────────────────────────────
+
+    @Test
+    public void typingAnnouncesTheTextWithoutPublishingIt() {
+        List<String> heard = new ArrayList<>();
+        field.onTextChanged.connect(heard::add);
+        type("ab");
+        assertEquals(List.of("a", "ab"), heard);
+        assertEquals("a keystroke published the value", "", field.getValue());
+    }
 
     @Test
     public void typingInsertsAtTheCaret() {

@@ -178,6 +178,7 @@ theme {
     --editorfind-border: var(--surface-base);
 
     --field-bg: var(--surface-recessed);
+    --field-conflict-border: var(--error);
     --field-disabled-bg: var(--surface-base);
     --field-disabled-fg: var(--fg-disabled);
     --field-fg: var(--fg);

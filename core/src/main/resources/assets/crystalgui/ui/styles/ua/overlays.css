@@ -41,6 +41,15 @@ textfield:invalid {
     background: var(--field-invalid-bg, #4A2A2A);
     color: var(--field-invalid-fg, #FF9A9A);
 }
+/* .__conflict__ is TextField.setConflicting: the text names something that already exists. A red edge rather
+ * than :invalid's fill, because the text is well-formed and its owner may still offer a free name for it.
+ * THE FOCUS RING TOO: a field being typed into is focused, and :focus-visible's 1px ring is drawn inside the
+ * border box, over the border -- so a red border alone stayed blue until focus left. */
+textfield.__conflict__ {
+    border-width: 1px;
+    border-color: var(--field-conflict-border, #F14C4C);
+    outline-color: var(--field-conflict-border, #F14C4C);
+}
 textfield:disabled {
     background: var(--field-disabled-bg, #232323);
     color: var(--field-disabled-fg, #6E6E6E);

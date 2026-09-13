@@ -190,6 +190,25 @@ public class TextField extends UIElement implements Measurable {
     /** Enter was pressed. Fires after the commit, carrying the committed value. */
     public final Signal.Value<String> onSubmit = new Signal.Value<>();
 
+    /**
+     * The box's text changed — every keystroke, paste and {@code setText}, carrying {@link #getText()}.
+     *
+     * <p>Whatever the {@link UpdateMode}, and never a commit: {@link #value} still moves only when the mode
+     * says. For checking what is being typed without publishing it.</p>
+     *
+     * <pre>{@code
+     * field.onTextChanged.connect(text -> field.setConflicting(siblingHas(text)));
+     * }</pre>
+     */
+    public final Signal.Value<String> onTextChanged = new Signal.Value<>();
+
+    /**
+     * On the field while its text names something that already exists — a rename onto a sibling's name. Not
+     * {@code :invalid}: the text is well-formed and still commits, which is what lets the owner offer a free
+     * name instead. @see #setConflicting
+     */
+    public static final String CONFLICT_CLASS = "__conflict__";
+
     /** Exactly what's in the box, valid or not. */
     private String text = "";
     private String placeholder = "";
@@ -559,6 +578,25 @@ public class TextField extends UIElement implements Measurable {
     public TextField setCharPattern(String regex) {
         this.userCharPattern = regex == null ? null : Pattern.compile(regex);
         return this;
+    }
+
+    /**
+     * Marks the text as naming something that already exists — drawn by {@link #CONFLICT_CLASS}.
+     *
+     * <pre>{@code
+     * field.onTextChanged.connect(text -> field.setConflicting(siblingHas(text)));
+     * }</pre>
+     */
+    public TextField setConflicting(boolean conflicting) {
+        if (conflicting != hasClass(CONFLICT_CLASS)) {
+            if (conflicting) addClass(CONFLICT_CLASS);
+            else removeClass(CONFLICT_CLASS);
+        }
+        return this;
+    }
+
+    public boolean isConflicting() {
+        return hasClass(CONFLICT_CLASS);
     }
 
     /** Marks the whole value invalid without preventing editing. */
@@ -937,6 +975,7 @@ public class TextField extends UIElement implements Measurable {
         onStyleChanged();
         invalidateStyleMatch();     // :blank / :invalid may have flipped
         notifyStateChanged();
+        onTextChanged.emit(next);
     }
 
     private int currentModifiers() {

@@ -22,6 +22,7 @@ import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.widget.collection.list.RowEditing;
 import com.crystalgui.widget.collection.tree.TreeSearch;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.workbench.decoration.FileDecorations;
@@ -32,6 +33,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -73,8 +75,8 @@ import java.util.function.Supplier;
  *       <td>The drag source, the drop target, the ghost</td></tr>
  *   <tr><td>{@link ExplorerFind}</td><td>{@code ExplorerFindProvider}, same file</td>
  *       <td>The find bar, its two modes, the per-row marking</td></tr>
- *   <tr><td>{@link ExplorerEditing}</td><td>{@code IExplorerService.setEditable} + {@code renderInputBox}</td>
- *       <td>The inline edit state machine and its row wiring</td></tr>
+ *   <tr><td>{@link RowEditing}, the engine's</td><td>{@code IExplorerService.setEditable} + {@code renderInputBox}</td>
+ *       <td>The inline edit state machine and its row wiring, shared with every list that renames in a row</td></tr>
  *   <tr><td>{@link WorkspaceTreeSource}</td><td>{@code common/explorerModel.ts}</td>
  *       <td>The model: listings, sorting, compaction, what matches</td></tr>
  * </table>
@@ -256,6 +258,9 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         decorations.onChanged.connect(() -> pendingRefresh = true);
     
         this.tree = new TreeView<>(source);
+        // DEFERRED, like every other refresh here: an edit begins from a key press or a menu row, and a
+        // rebuild now would replace the element that dispatch is still walking.
+        this.editing = new RowEditing<>(tree, this::itemForRow, this::requestRefresh);
         tree.addClass(TREE_CLASS);
         tree.setRenderer(new FilesRenderer(this));
         // THE DOUBLE-CLICK IS THE LIST'S, not a listener on each row template: ListView raises activation
@@ -648,7 +653,7 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
      * live at the call site where nothing explains them.</p>
      */
     /** Package-private, so the parts beside this class can write into a row without reaching for
-     * children by index. @see ExplorerEditing */
+     * children by index. @see RowEditing */
     public record RowParts(UIElement twisty, SymbolIcon icon, UIText label, UIText badge,
                            TextField editor) {
     }
@@ -763,27 +768,50 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
 
     // -- Inline editing ---------------------------------------------------------------------------
     //
-    // The state machine and the row wiring live in ExplorerEditing, beside this class. What stays here is
-    // the public surface, because callers name the WIDGET -- ExplorerCommands asks the panel to rename,
-    // not the panel's editing part.
+    // The state machine and the row wiring are the engine's RowEditing. What stays here is what a FILE
+    // adds to it: the stem, the sibling rule, and the placeholder a new entry is named in.
 
     /** On the row's inline input, hidden unless that row is being edited. */
     public static final String EDITOR_CLASS = "__row-editor__";
 
     /** On the row while it is being edited, so a theme can quiet the rest of it. */
-    public static final String EDITING_CLASS = "__editing__";
+    public static final String EDITING_CLASS = RowEditing.EDITING_CLASS;
 
-    private final ExplorerEditing editing = new ExplorerEditing(this);
+    private final RowEditing<CgPath> editing;
 
-    /** Renames {@code path} in place. @see ExplorerEditing */
-    public void beginRename(CgPath path, java.util.function.Consumer<String> onCommit) {
-        editing.beginRename(path, onCommit);
+    /**
+     * Renames {@code path} in place -- F2.
+     *
+     * <p>An input <b>in the row</b>, not a dialog over it: a dialog hides the folder you are naming inside,
+     * puts the answer somewhere other than the question, and cannot show the icon change as you type.</p>
+     */
+    public void beginRename(CgPath path, Consumer<String> onCommit) {
+        if (path == null || path.isProjectRoot()) return;
+        String name = path.name();
+        RowEditing.Edit<CgPath> edit = RowEditing.Edit.of(path, name, onCommit)
+                .accepting(ProjectFileTree::isWellFormedName)
+                .conflicting("file", typed -> freeNameFor(path, typed));
+        // THE STEM IS SELECTED, NOT THE WHOLE NAME, which is what F2 does everywhere: the extension is
+        // almost never what you are changing, and selecting it means the first keystroke destroys it.
+        int dot = name.lastIndexOf('.');
+        editing.begin(dot > 0 ? edit.selecting(0, dot) : edit);
     }
 
-    /** Adds a placeholder row under {@code parent} and edits it. @see ExplorerEditing */
-    public void beginNew(CgPath parent, boolean directory,
-                         java.util.function.Consumer<String> onCommit) {
-        editing.beginNew(parent, directory, onCommit);
+    /**
+     * Adds a placeholder row under {@code parent} and edits it -- VS Code's {@code NewExplorerItem}: the row
+     * exists before the file does, so you see where it will land before committing to a name.
+     */
+    public void beginNew(CgPath parent, boolean directory, Consumer<String> onCommit) {
+        if (parent == null) return;
+        // ENDED FIRST: an open edit's own ending withdraws the placeholder, which would take the new one.
+        editing.cancel();
+        // EXPANDED, or the placeholder is a child of a folded folder and nothing appears at all.
+        if (!tree.isExpanded(parent)) tree.setExpanded(parent, true);
+        CgPath placeholder = source.beginPendingNew(parent, directory);
+        editing.begin(RowEditing.Edit.of(placeholder, "", onCommit)
+                .accepting(ProjectFileTree::isWellFormedName)
+                .conflicting(directory ? "folder" : "file", typed -> freeNameFor(placeholder, typed))
+                .onEnd(source::endPendingNew));
     }
 
     public boolean isEditing() {
@@ -793,12 +821,45 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
     /** The row being edited, or null. */
     @Nullable
     public CgPath editingPath() {
-        return editing.editingPath();
+        return editing.item();
     }
 
     /** Drops the edit, and any placeholder with it. */
     public void cancelEdit() {
-        editing.cancelEdit();
+        editing.cancel();
+    }
+
+    /** Not empty, not {@code .} or {@code ..}, and no path separator, which would create the entry in another directory. */
+    static boolean isWellFormedName(String name) {
+        if (name.isEmpty() || ".".equals(name) || "..".equals(name)) return false;
+        return name.indexOf('/') < 0 && name.indexOf('\\') < 0;
+    }
+
+    /**
+     * Null when no sibling of {@code path} is called {@code name}, else Windows' free name for it --
+     * {@code plan.md} becomes {@code plan (2).md}.
+     *
+     * <p>Against what has been <b>listed</b>, which catches the case that matters: a name you can see on screen.</p>
+     */
+    @Nullable
+    String freeNameFor(CgPath path, String name) {
+        if (!siblingHas(path, name)) return null;
+        int dot = name.lastIndexOf('.');
+        String stem = dot > 0 ? name.substring(0, dot) : name;
+        String extension = dot > 0 ? name.substring(dot) : "";
+        for (int n = 2; ; n++) {
+            String candidate = stem + " (" + n + ")" + extension;
+            if (!siblingHas(path, candidate)) return candidate;
+        }
+    }
+
+    private boolean siblingHas(CgPath path, String name) {
+        CgPath parent = path.parent();
+        if (parent == null) return false;
+        for (CgPath sibling : source.listedChildren(parent)) {
+            if (!sibling.equals(path) && sibling.name().equalsIgnoreCase(name)) return true;
+        }
+        return false;
     }
 
     /** What a part needs to reach back for: the item a realised row is showing. */
@@ -827,7 +888,7 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
         return rowItems;
     }
 
-    ExplorerEditing editing() {
+    RowEditing<CgPath> editing() {
         return editing;
     }
 

@@ -119,6 +119,11 @@ projectfiletree .__row-editor__ {
     border-radius: 2px;
 }
 
+/* TextField's conflict edge, restated here only because the rule above outranks `textfield.__conflict__`. */
+projectfiletree .__row-editor__.__conflict__ {
+    border-color: var(--field-conflict-border, #F14C4C);
+}
+
 /* The row being edited stops advertising anything else: a badge or a decoration colour beside a live
  * input reads as validation feedback about the name, which it is not. */
 projectfiletree .__project-row__.__editing__ .__badge__ {

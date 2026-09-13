@@ -277,6 +277,7 @@ editor scheme's.
 | `--fg-on-accent` | `#FFFFFF` | crystal-dark.css |
 | `--fg-secondary` | `#9DA0A8` | crystal-dark.css |
 | `--field-bg` | `var(--surface-recessed)` | base.css |
+| `--field-conflict-border` | `var(--error)` | base.css |
 | `--field-disabled-bg` | `var(--surface-base)` | base.css |
 | `--field-disabled-fg` | `var(--fg-disabled)` | base.css |
 | `--field-fg` | `var(--fg)` | base.css |

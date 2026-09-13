@@ -181,7 +181,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // ONE QUESTION, asked of the source: a project's name, a plain name, or the whole chain a
         // compacted row stands for. The view cannot work the last one out -- by the time a row exists
         // the swallowed directories are not in the tree at all.
-        tree.editing().applyEditing(template, parts, item);
+        tree.editing().apply(template, parts.label(), parts.editor(), item);
         tree.find().applyMarks(template, parts, item, row.expandable());
         String name = tree.source().rowLabel(item);
         // No manual indent and no "+ "/"- " prefix any more: TreeView already writes padding-left from
