@@ -12,8 +12,8 @@ import static org.junit.Assert.*;
  *
  * <h3>Why this is worth a test file of its own</h3>
  * <p>Every property here is invisible when wrong. A sign error looks like a working scrub that goes the
- * wrong way; a sensitivity curve that does not scale looks like a working scrub that is unusable at one
- * end of the range; a rate that compounds looks like a working scrub until you drag back. None of them
+ * wrong way; a rate read off the value looks like a working scrub that sticks at one end of the
+ * range; a rate that compounds looks like a working scrub until you drag back. None of them
  * throw, and none of them are visible in a layout dump — which is exactly the reason the gesture is a
  * pure function rather than a handful of statements inside a mouse listener.</p>
  */
@@ -49,49 +49,48 @@ public class DragScrubTest {
     // ── Sensitivity ─────────────────────────────────────────────────────────
 
     /**
-     * <b>The property a fixed rate cannot have.</b> One rate cannot serve a field at 0.5 and a field at
-     * 5000: pick one and the other is either untouchable or uncontrollable.
+     * <b>A pixel is a hundredth of the range</b> — ImGui's default, so the same hand movement crosses the
+     * same share of every bounded field: 0..1 moves 0.01, 0..100 moves 1, and -1..1 moves 0.02.
      */
     @Test
-    public void largerValuesScrubFaster() {
-        double atHalf = DragScrub.unitsPerPixel(0.5, false, NONE);
-        double atFiveThousand = DragScrub.unitsPerPixel(5000, false, NONE);
-        assertTrue("a large value must move faster per pixel", atFiveThousand > atHalf * 10);
+    public void aRangedFieldMovesAHundredthOfItsRangePerPixel() {
+        assertEquals(0.01d, DragScrub.unitsPerPixel(DragScrub.Spec.FLOAT.withRange(0, 1), NONE), EPS);
+        assertEquals(1d, DragScrub.unitsPerPixel(DragScrub.Spec.FLOAT.withRange(0, 100), NONE), EPS);
+        assertEquals(0.02d, DragScrub.unitsPerPixel(DragScrub.Spec.FLOAT.withRange(-1, 1), NONE), EPS);
     }
 
-    /** Symmetric: a value at −5000 is as far from zero as one at +5000 and must scrub identically. */
+    /** With no range there is nothing to take a share of, so a pixel is one unit. */
     @Test
-    public void sensitivityFollowsMagnitudeNotSign() {
-        assertEquals(DragScrub.unitsPerPixel(5000, false, NONE),
-                DragScrub.unitsPerPixel(-5000, false, NONE), EPS);
+    public void anUnboundedFieldMovesOneUnitPerPixel() {
+        assertEquals(1d, DragScrub.unitsPerPixel(DragScrub.Spec.FLOAT, NONE), EPS);
+        assertEquals(1d, DragScrub.unitsPerPixel(DragScrub.Spec.INTEGRAL, NONE), EPS);
     }
 
     /**
-     * Floored at 1, so sub-unit values do not scrub <em>slower</em> than a value of 1 — without the
-     * floor a field sitting at 0.01 moves at a tenth of the base rate and reads as broken.
+     * <b>The rate is never read off the value.</b> A rate that followed how big the number was made one
+     * gesture mean two things at two ends of one field — a percentage at 0 crawled while the same field at
+     * 100 moved ten times as fast — which reads as the value sticking.
      */
     @Test
-    public void tinyValuesDoNotScrubSlowerThanOne() {
-        assertEquals(DragScrub.unitsPerPixel(1, false, NONE),
-                DragScrub.unitsPerPixel(0.0001, false, NONE), EPS);
-        assertEquals(DragScrub.unitsPerPixel(1, false, NONE),
-                DragScrub.unitsPerPixel(0, false, NONE), EPS);
+    public void theSameMovementIsWorthTheSameAtEveryValue() {
+        DragScrub.Spec percent = DragScrub.Spec.FLOAT.withRange(0, 100);
+        assertEquals(DragScrub.value(0, 20f, 0f, NONE, percent),
+                DragScrub.value(50, 20f, 0f, NONE, percent) - 50d, EPS);
     }
 
     @Test
     public void shiftIsCoarseAndCtrlIsFine() {
-        double plain = DragScrub.unitsPerPixel(1, false, NONE);
-        assertEquals(plain * DragScrub.COARSE_MULTIPLIER,
-                DragScrub.unitsPerPixel(1, false, CgModifiers.SHIFT), EPS);
-        assertEquals(plain * DragScrub.FINE_MULTIPLIER,
-                DragScrub.unitsPerPixel(1, false, CgModifiers.CTRL), EPS);
+        DragScrub.Spec spec = DragScrub.Spec.FLOAT.withRange(0, 1);
+        double plain = DragScrub.unitsPerPixel(spec, NONE);
+        assertEquals(plain * DragScrub.COARSE_MULTIPLIER, DragScrub.unitsPerPixel(spec, CgModifiers.SHIFT), EPS);
+        assertEquals(plain * DragScrub.FINE_MULTIPLIER, DragScrub.unitsPerPixel(spec, CgModifiers.CTRL), EPS);
     }
 
     /** Alt is the pan/menu modifier elsewhere in the engine and must not quietly mean something here. */
     @Test
     public void altDoesNothing() {
-        assertEquals(DragScrub.unitsPerPixel(1, false, NONE),
-                DragScrub.unitsPerPixel(1, false, CgModifiers.ALT), EPS);
+        assertEquals(DragScrub.unitsPerPixel(DragScrub.Spec.FLOAT, NONE),
+                DragScrub.unitsPerPixel(DragScrub.Spec.FLOAT, CgModifiers.ALT), EPS);
     }
 
     // ── Integral fields ─────────────────────────────────────────────────────
@@ -138,22 +137,12 @@ public class DragScrubTest {
 
     // ── A declared rate ─────────────────────────────────────────────────────
 
-    /**
-     * <b>A field that knows its own scale says so, and magnitude stops mattering.</b>
-     *
-     * <p>The curve is right for an unbounded number and wrong for a bounded one: a percentage at 0 crawls
-     * while the same field at 100 moves ten times as fast, so one gesture means two things at two ends of
-     * one field. ImGui splits the same way, taking {@code v_speed} from the range when it has one.</p>
-     */
+    /** <b>A field that states its own rate keeps it</b>, whatever its range says. */
     @Test
-    public void aDeclaredRateIsTheRateAtEveryMagnitude() {
-        DragScrub.Spec perPixel = DragScrub.Spec.FLOAT.withRate(1d);
-
-        assertEquals(20d, DragScrub.value(0, 20f, 0f, NONE, perPixel), EPS);
-        assertEquals(120d, DragScrub.value(100, 20f, 0f, NONE, perPixel), EPS);
-        assertEquals("the same hand movement is worth the same at both ends",
-                DragScrub.value(0, 20f, 0f, NONE, perPixel),
-                DragScrub.value(100, 20f, 0f, NONE, perPixel) - 100d, EPS);
+    public void aDeclaredRateWinsOverTheRange() {
+        DragScrub.Spec declared = DragScrub.Spec.FLOAT.withRange(0, 1000).withRate(0.5d);
+        assertEquals(0.5d, DragScrub.unitsPerPixel(declared, NONE), EPS);
+        assertEquals(10d, DragScrub.value(0, 20f, 0f, NONE, declared), EPS);
     }
 
     /** Shift and Ctrl still apply to it: they are the hand's, not the value's. */
@@ -165,13 +154,11 @@ public class DragScrubTest {
         assertEquals(2d, DragScrub.value(0, 20f, 0f, CgModifiers.CTRL, perPixel), EPS);
     }
 
-    /** A range still clamps a declared rate, and a spec with no rate keeps the curve. */
+    /** A range still clamps a declared rate. */
     @Test
-    public void aDeclaredRateChangesNothingElse() {
+    public void aRangeStillClampsADeclaredRate() {
         DragScrub.Spec bounded = DragScrub.Spec.FLOAT.withRate(1d).withRange(0, 10);
         assertEquals(10d, DragScrub.value(0, 400f, 0f, NONE, bounded), EPS);
-        assertEquals(DragScrub.unitsPerPixel(50, false, NONE),
-                DragScrub.unitsPerPixel(50, DragScrub.Spec.FLOAT, NONE), EPS);
     }
 
     // ── The anti-compounding property ───────────────────────────────────────
@@ -179,10 +166,10 @@ public class DragScrubTest {
     /**
      * <b>Drag out and come back, and you land exactly where you started.</b>
      *
-     * <p>This is the whole reason both the starting point and the rate are read from the anchor. Compute
-     * either from the running value and the gesture stops being reversible — the rate accelerates as the
-     * value grows, so the return trip is worth more per pixel than the outbound one was. It still looks
-     * like a working scrub, and the drift is invisible until someone tries to put a value back.</p>
+     * <p>The reason the value is the anchor plus the whole travel rather than the running value plus the
+     * latest step: a clamped running value absorbs overshoot at a limit, so the return trip lags by however
+     * far the hand pushed past it. It still looks like a working scrub, and the drift is invisible until
+     * someone tries to put a value back.</p>
      */
     @Test
     public void draggingOutAndBackReturnsToTheAnchorExactly() {
@@ -212,9 +199,10 @@ public class DragScrubTest {
      * the end by the ones that were not.</p>
      */
     @Test
-    public void anOrdinaryScrubStopsAtTwoDecimals() {
-        for (float dx : new float[] { 3f, 17f, 41f, 96f, 137f }) {
-            double v = DragScrub.value(10, dx, 0f, NONE, DragScrub.Spec.FLOAT);
+    public void aUnitRangeScrubStopsAtTwoDecimals() {
+        DragScrub.Spec unit = DragScrub.Spec.FLOAT.withRange(0, 1);
+        for (float dx : new float[] { 3f, 17f, 41f }) {
+            double v = DragScrub.value(0.1, dx, 0f, NONE, unit);
             assertTrue("expected <= 2 decimals, got " + v, decimalsOf(v) <= 2);
         }
     }
@@ -222,15 +210,12 @@ public class DragScrubTest {
     /** Rendered as the short form too, which is what reaches the document via {@code String.valueOf}. */
     @Test
     public void theResultDoesNotCarryABinaryTail() {
-        assertEquals("15.69", String.valueOf(DragScrub.value(10, 60f, 0f, NONE, DragScrub.Spec.FLOAT)));
+        assertEquals("0.7", String.valueOf(DragScrub.value(0.1, 60f, 0f, NONE, DragScrub.Spec.FLOAT.withRange(0, 1))));
     }
 
-    /**
-     * The cut follows the rate, so it holds at every magnitude — a five-digit value does not acquire a
-     * meaningless fraction just because a fixed two places were demanded of it.
-     */
+    /** The cut follows the rate: a pixel worth a whole unit produces whole units. */
     @Test
-    public void aLargeValueScrubsInWholeUnits() {
+    public void anUnboundedScrubMovesInWholeUnits() {
         double v = DragScrub.value(10_000, 37f, 0f, NONE, DragScrub.Spec.FLOAT);
         assertEquals(0, decimalsOf(v));
     }
@@ -238,9 +223,10 @@ public class DragScrubTest {
     /** ...and Ctrl stays genuinely fine: a tenth of the rate buys a place the user asked for. */
     @Test
     public void ctrlBuysOneMoreDecimalPlace() {
-        assertEquals(2, DragScrub.decimalsFor(DragScrub.unitsPerPixel(1, false, NONE)));
-        assertEquals(3, DragScrub.decimalsFor(DragScrub.unitsPerPixel(1, false, CgModifiers.CTRL)));
-        assertEquals(1, DragScrub.decimalsFor(DragScrub.unitsPerPixel(1, false, CgModifiers.SHIFT)));
+        DragScrub.Spec unit = DragScrub.Spec.FLOAT.withRange(0, 1);
+        assertEquals(2, DragScrub.decimalsFor(DragScrub.unitsPerPixel(unit, NONE)));
+        assertEquals(3, DragScrub.decimalsFor(DragScrub.unitsPerPixel(unit, CgModifiers.CTRL)));
+        assertEquals(1, DragScrub.decimalsFor(DragScrub.unitsPerPixel(unit, CgModifiers.SHIFT)));
     }
 
     /**
