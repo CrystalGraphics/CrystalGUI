@@ -661,6 +661,23 @@ final class CgUiBackdrop {
     }
 
     /**
+     * Skia's linear-sampled kernel ({@link LinearBlurKernel}): half the fetches of the per-texel kernel for
+     * the same Gaussian. {@code -Dcrystalgui.glass.linearKernel=false} draws the per-texel kernel instead,
+     * for comparing the two.
+     */
+    static final boolean LINEAR_KERNEL =
+            !"false".equalsIgnoreCase(System.getProperty("crystalgui.glass.linearKernel"));
+
+    private static final String[] KERNEL_NAMES = new String[LinearBlurKernel.MAX_PAIRS];
+
+    static {
+        for (int i = 0; i < KERNEL_NAMES.length; i++) KERNEL_NAMES[i] = "_Kernel" + i;
+    }
+
+    /** The kernel pairs of the current pass, reused so a pass allocates nothing. */
+    private final float[] kernelScratch = new float[4 * LinearBlurKernel.MAX_PAIRS];
+
+    /**
      * One axis of the separable Gaussian, {@code source} to {@code target}, taps one source texel apart.
      *
      * <p>{@code dirU}/{@code dirV} pick the axis (one of them is 1, the other 0); the step is that many
@@ -683,6 +700,14 @@ final class CgUiBackdrop {
             b.vec2("_Step", dirU / Math.max(1, source.getWidth()), dirV / Math.max(1, source.getHeight()));
             b.set1f("_Sigma", Math.max(0.25f, sigma));
             b.set1f("_Radius", taps);
+            if (LINEAR_KERNEL) {
+                float[] k = kernelScratch;
+                int pairs = LinearBlurKernel.compute(Math.max(0.25f, sigma), taps, k);
+                b.set1f("_Pairs", pairs);
+                for (int p = 0; p < LinearBlurKernel.MAX_PAIRS; p++) {
+                    b.vec4(KERNEL_NAMES[p], k[4 * p], k[4 * p + 1], k[4 * p + 2], k[4 * p + 3]);
+                }
+            }
             // The CAPTURED SUB-RECT, half a texel in. A tap landing outside it reads whatever the
             // sampler's clamp gives back, and outside the sub-rect that is the target's clear -
             // transparent black. Which is precisely how darkness gets dragged into a panel that had

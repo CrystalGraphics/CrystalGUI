@@ -377,6 +377,7 @@ public final class CgUiPaintContext {
         // itself and reintroduce exactly the sharing this material exists to avoid.
         this.maskMaterial = CgMaterial.newInstance("crystalgui:shaders/gui_quad.shader");
         this.blurMaterial = CgMaterial.load("crystalgui:shaders/gui_blur.shader");
+        this.blurMaterial.toggleKeyword("LINEAR_KERNEL", CgUiBackdrop.LINEAR_KERNEL);
         this.downsampleMaterial = CgMaterial.load("crystalgui:shaders/gui_downsample.shader");
         // AFTER the materials: it holds them, and a field initialiser would run before they exist.
         this.backdrop = new CgUiBackdrop(this);
