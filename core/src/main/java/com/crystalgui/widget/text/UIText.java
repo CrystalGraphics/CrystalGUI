@@ -9,12 +9,12 @@ import com.crystalgraphics.api.text.CgStyleSpan;
 import com.crystalgraphics.api.text.CgStyledText;
 import com.crystalgraphics.api.text.CgStrokeAlign;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgraphics.api.text.CgTextStroke;
 import com.crystalgraphics.api.text.CgTextDecoration;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.text.PaintOrder;
 import com.crystalgui.style.property.visual.text.StrokeAlign;
 import com.crystalgraphics.api.text.CgTextLayout;
+import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
@@ -702,10 +702,27 @@ public final class UIText extends UIElement implements Measurable {
                 .at(contentX, contentY)
                 .color(fill)
                 .pose(ctx.getPoseStack());
-        applyStroke(draw, general, computed, color);
+        applyStroke(draw, family, general, computed, color);
         draw.submit();
 
         if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
+    }
+
+    /**
+     * The widest {@code text-stroke} this label can actually draw, in em.
+     *
+     * <p>A wider declaration is clamped to this rather than refused, so read it to show a real cap
+     * instead of letting an author drag a slider past the point where nothing changes:</p>
+     *
+     * <pre>{@code
+     * float capPx = label.maxStrokeWidthEm() * fontSize;   // what the slider's max should be
+     * }</pre>
+     *
+     * <p>It depends on the FACE: a face carrying a dense script is banded narrower, so two labels in
+     * one window can answer differently. Ask the label, never a constant.</p>
+     */
+    public float maxStrokeWidthEm() {
+        return CgFontRegistry.get().maxStrokeWidthEm(resolveFamily());
     }
 
     /**
@@ -718,7 +735,8 @@ public final class UIText extends UIElement implements Measurable {
      * A percentage and a length therefore both land on the same quantity — {@code 10%} and
      * {@code 0.1em} would mean the same thing, if {@code LengthPercent} parsed the second.</p>
      */
-    private void applyStroke(CgTextRenderer.Draw draw, GeneralGroup general, ComputedStyle computed,
+    private void applyStroke(CgTextRenderer.Draw draw, CgFontFamily family,
+                             GeneralGroup general, ComputedStyle computed,
                              int inheritedColor) {
         LengthPercent width = general.textStrokeWidth();
         if (width == null) return;
@@ -728,15 +746,19 @@ public final class UIText extends UIElement implements Measurable {
         if (widthEm <= 0f) return;
 
         // CAPPED HERE, not only in the shader. The field carries distance for a fraction of the em, so
-        // an outline wider than CgTextStroke#MAX_FIELD_WIDTH_EM cannot be drawn at any size -- the
-        // shader has always clamped per fragment, which meant the value this class handed down was one
-        // the renderer would never draw, and a caller reading it back got a number that was never true.
+        // an outline wider than the band's ceiling cannot be drawn at any size -- the shader has always
+        // clamped per fragment, which meant the value this class handed down was one the renderer would
+        // never draw, and a caller reading it back got a number that was never true.
         //
-        // Reported once per (width, size), because the difference is invisible: a 2px outline on 12px
-        // text silently drew 0.67px, and nothing anywhere said which of the two numbers was real.
-        if (widthEm > CgTextStroke.MAX_FIELD_WIDTH_EM) {
-            warnStrokeClamped(widthEm, fontSize);
-            widthEm = CgTextStroke.MAX_FIELD_WIDTH_EM;
+        // Asked of the FAMILY, not read off CgTextStroke#MAX_FIELD_WIDTH_EM: that constant is the
+        // narrow band every face can hold, and a face with no dense script in it is banded 2.3x wider.
+        //
+        // Reported once per (width, size, ceiling), because the difference is invisible: a 2px outline
+        // on 12px text silently drew 0.67px, and nothing anywhere said which number was real.
+        float ceilingEm = CgFontRegistry.get().maxStrokeWidthEm(family);
+        if (widthEm > ceilingEm) {
+            warnStrokeClamped(widthEm, fontSize, ceilingEm);
+            widthEm = ceilingEm;
         }
 
         // Unset means `currentcolor`, so a width on its own outlines in the text's own colour. Asked
@@ -762,17 +784,17 @@ public final class UIText extends UIElement implements Measurable {
      * set stops growing at {@link #MAX_REPORTED_CLAMPS} distinct pairs, which is far more than a sheet
      * has and far less than a leak.</p>
      */
-    private static void warnStrokeClamped(float widthEm, float fontSize) {
+    private static void warnStrokeClamped(float widthEm, float fontSize, float ceilingEm) {
         // The size check FIRST: this runs inside a paint method, so once the table is full every
         // later frame would otherwise build a key string per label per frame to throw it away.
         if (REPORTED_CLAMPS.size() >= MAX_REPORTED_CLAMPS) return;
-        if (!REPORTED_CLAMPS.add(Math.round(widthEm * 1000f) + "@" + Math.round(fontSize))) return;
+        if (!REPORTED_CLAMPS.add(Math.round(widthEm * 1000f) + "@" + Math.round(fontSize)
+                + "/" + Math.round(ceilingEm * 1000f))) return;
         CrystalGuiCore.LOGGER.warn(String.format(
                 "[cgui] text-stroke %.2fpx on %.0fpx text is %.4fem, wider than the %.4fem the glyph "
                         + "atlas can describe; drawing %.2fpx. A stroke is bounded by the stored "
                         + "distance field, so the widest outline is a fraction of the em at every size.",
-                widthEm * fontSize, fontSize, widthEm, CgTextStroke.MAX_FIELD_WIDTH_EM,
-                CgTextStroke.MAX_FIELD_WIDTH_EM * fontSize));
+                widthEm * fontSize, fontSize, widthEm, ceilingEm, ceilingEm * fontSize));
     }
 
     private static final int MAX_REPORTED_CLAMPS = 32;

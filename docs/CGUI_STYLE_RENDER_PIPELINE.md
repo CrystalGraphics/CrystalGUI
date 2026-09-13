@@ -788,17 +788,30 @@ so changing it costs no flush, and outlined text batches with plain text in one 
 ### Four things that are easy to get wrong
 
 **The stored distance field caps the width, and it clamps rather than complaining.** The field carries
-`(pxRange - 1) / 2` texels of real distance either side of the outline — at the shipping `pxRange 12`
-and an 80px atlas, 5.5 texels — and the usable reach is a texel short of that again, because a
-bilinear tap straddling the saturation shoulder averages a clipped texel with a live one and the
-outer edge scallops while the fill stays smooth: **4.5 texels, about 0.056em**, 3.6px on 64px text.
-Godot allows 0.083em for the same technique; the range does not go higher here because the shared
-atlas is eight bits and carries dense CJK, which a coarser quantisation merges. Latin alone measures
-clean to 0.131em — a range per font is what that is worth.
-`CgTextStroke.MAX_FIELD_WIDTH_EM` is that number.
-`text-stroke-width: 1px` on 16px text is 0.0625em, so the smallest text still asks for more than the
-shared atlas can describe. A stroke keeps its label on the distance-field tier down to 15px — the
-size below which msdfgen's own rule says the field cannot antialias — and is dropped under that; the shader clamps to what the field holds, keeping a TEXEL of headroom so the
+`(pxRange - 1) / 2` texels of real distance either side of the outline, and the usable reach is a
+texel short of that again, because a bilinear tap straddling the saturation shoulder averages a
+clipped texel with a live one and the outer edge scallops while the fill stays smooth.
+
+**The range is per FACE, so the cap is too.** A face carrying a dense script keeps `pxRange 12` — eight
+bits hold `storedRange / 255` per level, and past 12 that merges strokes a kanji keeps apart. Every
+other face is banded at `pxRange 24`. Both share the 80px atlas scale, so one atlas holds both and
+the range travels per PLACEMENT rather than as a material property; a narrow-banded and a wide-banded
+glyph still batch in one draw.
+
+| band | who gets it | ceiling | at text size 64 | field tier down to |
+|---|---|---|---|---|
+| `pxRange 12` | a face with a dense script in it | **0.056em** | 3.6px | 15px |
+| `pxRange 24` | everything else | **0.131em** | 8.4px | 7px |
+
+The wide band is past the 0.083em Godot allows for the same technique. Widening the range costs no
+shape because the atlas SCALE does not move — the glyph is rasterised at the resolution it always
+was and only the padding grows, which is why a lower scale was measured and rejected: 48px reached a
+similar ceiling for less memory and lost shape on Arabic at every range.
+
+Ask `CgFontRegistry.maxStrokeWidthEm(family)`, or `UIText.maxStrokeWidthEm()`, for the real number.
+`CgTextStroke.MAX_FIELD_WIDTH_EM` is the NARROW band — the reach every face has, and less than half
+of what most have. A stroke keeps its label on the distance-field tier down to the size below which
+msdfgen's own rule says the field cannot antialias, and is dropped under that; the shader clamps to what the field holds, keeping a TEXEL of headroom so the
 edge still has a gradient to antialias across — a texel, not a screen pixel, because the shoulder
 belongs to the texel grid and one screen pixel is a third of a texel on a zoomed canvas. Asking for more is safe and simply stops getting wider.
 The minus one is the generator reserving a texel so the field cannot bleed past its cell — and the
