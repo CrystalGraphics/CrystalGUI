@@ -41,7 +41,8 @@ public class DragGhostShowsTest extends UiDocumentTestBase {
 
         assertNull("a ghost takes a box before any drag has started", ghost.box());
 
-        ghost.follow(document, null, "carrying");
+        // WITH AN ICON, as a rail button's ghost has: the box is the icon's, and an icon-less ghost is its label alone.
+        ghost.follow(document, "crystalgui:folder", "carrying");
         Drag drag = Drag.start(source, 10f, 10f, CgMouseCodes.LEFT_BUTTON, "payload",
                 Drag.DEFAULT_THRESHOLD_PX, new Drag.Listener() {
                     @Override
