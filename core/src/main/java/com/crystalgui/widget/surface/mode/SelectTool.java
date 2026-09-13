@@ -8,7 +8,6 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 
 import javax.annotation.Nullable;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.surface.SurfaceContext;
 import com.crystalgui.widget.surface.SurfacePolicy;
@@ -85,11 +84,8 @@ public final class SelectTool implements Tool {
     /**
      * <b>A click that turned out not to be a drag collapses the selection to what it hit.</b>
      *
-     * <p>{@code isActivated}, not {@code isDragging}. A drag is ARMED on mouse-down, so {@code isDragging}
-     * is true for every ordinary click and testing it would suppress the collapse always — which is the
-     * bug this fixes, from the other end. {@code isActivated} only becomes true once the pointer has
-     * passed the threshold, which is exactly "this turned out to be a drag". {@code ListView} carries the
-     * same note, having had the same defect.</p>
+     * <p>A drop is not that click: the set just dropped stays selected. {@code ListView} makes the same
+     * call for its rows.</p>
      */
     @Override
     public boolean pointerUp(float rawX, float rawY, int button, int modifiers) {
@@ -97,17 +93,15 @@ public final class SelectTool implements Tool {
         pendingSelectOnRelease = null;
         if (button != CgMouseCodes.LEFT_BUTTON || pending == null) return false;
         if (ctx.picking().itemAt(rawX, rawY) != pending) return false;
-        if (dragActivated()) return false;
+        if (releaseEndedDrag()) return false;
         ctx.selection().selectOnly(pending);
         return true;
     }
 
-    /** Whether a real drag ran — a live one is an InputMode on this engine, not a controller to ask. */
-    private boolean dragActivated() {
+    private boolean releaseEndedDrag() {
         UIElement element = ctx.surface().element();
         UIDocument window = element == null ? null : element.document();
-        Drag drag = window == null ? null : window.input().mode(Drag.class);
-        return drag != null && drag.isActivated();
+        return window != null && window.input().releaseEndedDrag();
     }
 
     @Override

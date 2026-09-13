@@ -16,6 +16,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -234,6 +235,32 @@ public class ModeStackTest {
 
         release(document, 40, 20, 2);
         assertEquals(List.of("end"), log);
+    }
+
+    /**
+     * <b>Whoever handles a drag's release can tell it was a drop</b> — though the drag has left the stack by
+     * the time the release reaches them — and a press that never travelled is still a click.
+     */
+    @Test
+    public void theReleaseThatEndsADragSaysSo() {
+        UIDocument document = new UIDocument();
+        UIElement source = at("source", 0, 0, 100, 100);
+        document.append(source);
+        frame(document);
+        List<Boolean> heard = new ArrayList<>();
+        ServiceFixtures.on(source, MouseEvent.Up.class,
+                (n, e) -> heard.add(document.input().releaseEndedDrag()));
+
+        press(document, 20, 20);
+        Drag.start(source, 20, 20, 0, null, 4f, (x, y, sx, sy, dx, dy) -> { });
+        ServiceFixtures.move(document, 60, 20);
+        release(document, 60, 20);
+        assertEquals("the drop read as a click", List.of(true), heard);
+
+        press(document, 20, 20);
+        Drag.start(source, 20, 20, 0, null, 4f, (x, y, sx, sy, dx, dy) -> { });
+        release(document, 21, 20);
+        assertEquals("a press that never travelled read as a drop", List.of(true, false), heard);
     }
 
     // ── ...and the service names none of them ────────────────────────────────

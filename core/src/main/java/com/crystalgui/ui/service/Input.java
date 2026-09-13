@@ -116,6 +116,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
     private float pendingGhostX, pendingGhostY;
 
+    /** @see #releaseEndedDrag */
+    private boolean releaseEndedDrag;
+
     /** Offers a ghost at an explicit cursor offset, in the ghost's own space. */
     public void offerGhost(@Nullable UIElement ghost, float offsetX, float offsetY) {
         pendingGhost = ghost;
@@ -480,6 +483,33 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     }
 
     /**
+     * Whether the button release being dispatched ended a drag that travelled — a drop, not a click.
+     *
+     * <pre>{@code
+     * public boolean pointerUp(float x, float y, int button, int modifiers) {
+     *     if (window.input().releaseEndedDrag()) return false;   // the press was a drag's
+     *     selection.selectOnly(pending);
+     *     return true;
+     * }
+     * }</pre>
+     *
+     * <ul>
+     *   <li>Ask this, never whether a drag is running: a drag ends on its own release, before that release
+     *       reaches a tool or an element, so {@code mode(Drag.class)} is null for every reader of it.</li>
+     *   <li>A press that never passed the drag's threshold is a click, and answers false.</li>
+     *   <li>Holds until the next pointer event.</li>
+     * </ul>
+     */
+    public boolean releaseEndedDrag() {
+        return releaseEndedDrag;
+    }
+
+    /** Marks the release being dispatched as the end of a drag that travelled. Called by the drag. */
+    public void markReleaseEndedDrag() {
+        releaseEndedDrag = true;
+    }
+
+    /**
      * Says this frame's hit is no longer trustworthy — what {@link #beginFrame} does every frame, and
      * what anything that changes hit-testing WITHIN a frame (a modal opening) must do for itself.
      */
@@ -655,6 +685,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
     @Override
     public boolean consumeMouseEvent(Mouse.Event event) {
+        releaseEndedDrag = false;
         if (event.x() != position.x || event.y() != position.y) hoverValid = false;
         position.set(event.x(), event.y());
         scrollDelta += event.wheelDelta();
