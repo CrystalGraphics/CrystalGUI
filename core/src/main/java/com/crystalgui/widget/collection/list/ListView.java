@@ -21,7 +21,6 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Input;
-import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.scroll.ScrollerView;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -872,19 +871,10 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         if (pending != index) return;
         // NOT after a drag. The press was the start of moving this selection somewhere, and collapsing it
         // now would land the drop and then throw away the very set that was dropped -- which reads as the
-        // selection changing on its own once the mouse comes up.
-        //
-        // isActivated, NOT isDragging. A drag is ARMED on mouse-down -- ProjectFileTree calls startDrag
-        // straight out of its press handler -- so isDragging is true for every ordinary click, and using it
-        // suppressed the collapse always: a plain click on one of five selected files left all five
-        // selected, which is the same "randomly multi-selects" complaint from the other end. isActivated
-        // only becomes true once the pointer has passed the threshold, which is exactly "this turned out to
-        // be a drag".
+        // selection changing on its own once the mouse comes up. A press that never passed the threshold
+        // is still a click, so a plain click on one of five selected files collapses to it.
         var window = document();
-        // A LIVE DRAG is an InputMode on this engine, not a controller to ask -- pushed while one
-        // is running and gone the moment it ends, so "is a drag active" is "is one on the stack".
-        Drag drag = window == null ? null : window.input().mode(Drag.class);
-        if (drag != null && drag.isActivated()) return;
+        if (window != null && window.input().releaseEndedDrag()) return;
         select(index);
     }
 

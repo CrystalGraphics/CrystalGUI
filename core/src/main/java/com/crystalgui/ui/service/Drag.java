@@ -346,6 +346,7 @@ public final class Drag implements InputMode {
     @Override
     public boolean pointerButton(int pressedButton, boolean pressed, float x, float y) {
         if (pressed || pressedButton != button) return false;
+        if (activated) input.markReleaseEndedDrag();
         end(x, y);
         // NOT consumed: the release must still reach whatever it landed on, which is what lets a
         // click complete when a drag never passed its threshold.

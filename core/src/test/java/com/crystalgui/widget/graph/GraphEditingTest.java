@@ -1,5 +1,7 @@
 package com.crystalgui.widget.graph;
 
+import java.util.List;
+
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -200,7 +202,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
     public void undoingADeleteDoesNotRestoreTheSelection() {
         GraphNode a = node("A", 20f, 20f);
         GraphNode b = node("B", 20f, 220f);
-        graph.getSelection().replaceWith(java.util.List.of(a, b));
+        graph.getSelection().replaceWith(List.of(a, b));
         frame();
 
         graph.deleteSelection();
@@ -247,7 +249,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
     public void pressingAnAlreadySelectedNodeKeepsTheSelection() {
         GraphNode a = node("A", 20f, 20f);
         GraphNode b = node("B", 20f, 220f);
-        graph.getSelection().replaceWith(java.util.List.of(a, b));
+        graph.getSelection().replaceWith(List.of(a, b));
         frame();
 
         press(physicalCenterOf(a.titleBar()));
@@ -256,6 +258,31 @@ public class GraphEditingTest extends UiDocumentTestBase {
         assertEquals("both must still be selected", 2, graph.selectedNodes().size());
         release(physicalCenterOf(a.titleBar()));
         frame();
+    }
+
+    /**
+     * <b>And dragging them keeps it.</b> The release lands on the node that was grabbed, which moved with
+     * the pointer — so a release that asked "was that a drag" after the drag had already ended collapsed
+     * the set to that one node.
+     */
+    @Test
+    public void draggingSeveralSelectedNodesKeepsTheSelection() {
+        GraphNode a = node("A", 20f, 20f);
+        GraphNode b = node("B", 20f, 220f);
+        graph.getSelection().replaceWith(List.of(a, b));
+        frame();
+
+        Vector2f from = physicalCenterOf(a.titleBar());
+        press(from);
+        frame();
+        moveTo(new Vector2f(from.x() + 20f, from.y()));
+        frame();
+        moveTo(new Vector2f(from.x() + 40f, from.y()));
+        frame();
+        release(physicalCenterOf(a.titleBar()));
+        frame();
+
+        assertEquals("the drag collapsed the selection", 2, graph.selectedNodes().size());
     }
 
     @Test
@@ -339,7 +366,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
     public void draggingASelectedNodeMovesEveryOneOfThemAsOneStep() {
         GraphNode a = node("A", 20f, 20f);
         GraphNode b = node("B", 20f, 220f);
-        graph.getSelection().replaceWith(java.util.List.of(a, b));
+        graph.getSelection().replaceWith(List.of(a, b));
         frame();
 
         Vector2f grab = physicalCenterOf(a.titleBar());
@@ -433,7 +460,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
         GraphNode a = node("A", 20f, 20f);
         GraphNode b = node("B", 220f, 20f);
         GraphNode c = node("C", 20f, 220f);
-        graph.getSelection().replaceWith(java.util.List.of(a, b, c));
+        graph.getSelection().replaceWith(List.of(a, b, c));
         frame();
 
         graph.deleteSelection();
