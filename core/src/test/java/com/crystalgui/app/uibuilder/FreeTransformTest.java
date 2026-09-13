@@ -42,6 +42,8 @@ import com.crystalgui.widget.surface.SurfacePolicy;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.layout.ContextToolbar;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.widget.config.Configurator;
 import com.crystalgui.widget.config.control.NumberControl;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -758,6 +760,32 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertTrue(chord(CgKeyCodes.KEY_Y, CgModifiers.CTRL));
         releaseModifiers();
         assertEquals("Mod+Y from the canvas steps it forward again", scrubbed, box().gesture().rotation(), 1e-4f);
+    }
+
+    /**
+     * <b>Mod+Z reaches the box's history from a field folded behind the »</b> — the popover sits in the top
+     * layer, away from the surface, and a command from inside it still belongs to the bar that opened it.
+     */
+    @Test
+    public void modZStepsBackFromAFieldInTheOverflow() {
+        withDefaultStyles();
+        enterFreeTransform();
+        for (int i = 0; i < 3; i++) document.frame(0f, W, H);
+        ContextToolbar row = editor.contextToolbar();
+        assertTrue("the fixture has to be narrow enough to fold", row.isOverflowing());
+        row.toggleOverflow();
+        document.frame(0f, W, H);
+
+        NumberControl lean = editor.options().fieldFor(Kind.SKEW);
+        assertTrue("skew should be folded into the popover",
+                UINode.isShadowIncludingInclusiveAncestor(row.overflowPanel(), lean));
+        document.focus().requestFocus(lean.field());
+        lean.field().setText("20");
+        assertNotEquals(0f, box().gesture().skewXRadians(), 1e-6f);
+
+        assertTrue("Mod+Z was not handled", chord(CgKeyCodes.KEY_Z, CgModifiers.CTRL));
+        releaseModifiers();
+        assertEquals("Mod+Z from the popover stepped the box back", 0f, box().gesture().skewXRadians(), 1e-4f);
     }
 
     /**

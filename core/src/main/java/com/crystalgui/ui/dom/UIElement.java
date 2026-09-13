@@ -1051,24 +1051,31 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     }
 
     /**
-     * What opened this popover, if anything — read by light dismiss.
+     * The element that opened this one, while it is open — the web's {@code window.opener}, GTK's
+     * transient-for.
      *
-     * <p>On the node rather than on a widget class because light dismiss has to consult it for ANY
-     * promoted node, and it is the one piece of popover-ness that genuinely must be node-level: the
-     * invoker counts as part of its popover, or a dropdown button dies on its own press.</p>
+     * <p>Whatever this element holds then answers to the opener rather than to wherever it is attached:
+     * both walks outward — commands, keys, data, undo, and settings — step to it (see
+     * {@link UINode#commandParent}), and light dismiss counts the opener as part of what it opened.</p>
+     *
+     * <pre>{@code
+     * popup.setOpener(button);   // on show: Mod+Z inside the popup reaches the button's editor
+     * popup.setOpener(null);     // on hide: back to where it is attached
+     * }</pre>
+     *
+     * <p>{@code Popover} does both for itself. Clear it when the relationship ends, or the element keeps
+     * answering to something it no longer belongs to.</p>
      */
     @Nullable
-    public final UIElement popoverInvoker() {
-        return popoverInvoker;
+    public final UIElement opener() {
+        return opener;
     }
 
-    public final UIElement setPopoverInvoker(@Nullable UIElement invoker) {
-        this.popoverInvoker = invoker;
+    /** @see #opener() */
+    public final UIElement setOpener(@Nullable UIElement opener) {
+        this.opener = opener;
         return this;
     }
-
-    @Nullable
-    private UIElement popoverInvoker;
 
     // ── Scroll: per NODE, not per box ────────────────────────────────────────
 

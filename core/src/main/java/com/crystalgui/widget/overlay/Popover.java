@@ -249,7 +249,7 @@ public class Popover extends UIElement {
         attachIfNeeded(anchor);
         this.anchoredToPoint = false;
         this.freelyPositioned = false;
-        setPopoverInvoker(invoker != null ? invoker : anchor);
+        setOpener(invoker != null ? invoker : anchor);
         return open();
     }
 
@@ -271,7 +271,7 @@ public class Popover extends UIElement {
         this.anchoredToPoint = true;
         this.anchor = null;
         this.freelyPositioned = false;
-        setPopoverInvoker(invoker);
+        setOpener(invoker);
         return open();
     }
 
@@ -337,7 +337,7 @@ public class Popover extends UIElement {
 
         // Anything unrelated that is already open goes first. Nesting survives because a popover opened
         // from inside another has that one as its popover ancestor.
-        if (mode == Mode.AUTO) window.dismiss().lightDismiss(popoverInvoker() != null ? popoverInvoker() : this);
+        if (mode == Mode.AUTO) window.dismiss().lightDismiss(opener() != null ? opener() : this);
 
         open = true;
         // A RE-SHOW STARTS UNPLACED TOO: hide() may have left the popup detached and its box with it,
@@ -411,7 +411,7 @@ public class Popover extends UIElement {
         open = false;
         applyOpenState();
         document().demote(this);
-        setPopoverInvoker(null);
+        setOpener(null);
 
         UIDocument window = document();
         if (window != null) {
@@ -454,7 +454,7 @@ public class Popover extends UIElement {
      */
     @Nullable
     public Popover parentPopover() {
-        for (UIElement el = popoverInvoker(); el != null; el = el.parentElement()) {
+        for (UIElement el = opener(); el != null; el = el.parentElement()) {
             if (el instanceof Popover popover && popover != this && popover.isOpen()) return popover;
         }
         return null;
