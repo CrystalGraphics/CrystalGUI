@@ -245,22 +245,28 @@ public final class CommandRegistry {
      * inside a widget go away: an application-wide default is now a property of the command, and needs
      * nobody to install it on anything.</p>
      *
-     * <p>Rebuilt when the registration set changes, which is at startup and then never.</p>
+     * <p>Rebuilt when this registry's registrations change, or the global registry's — a workbench
+     * extension registers its commands when it activates, long after the first keystroke.</p>
      */
     public synchronized Keymap declaredBindings() {
-        if (declared == null || declaredVersion != version) {
+        // ALL() MERGES THE GLOBAL REGISTRY, so a registration there is a change here too. Keyed on this
+        // registry's version alone, a document that had resolved one key never saw a later extension's F2.
+        int globalVersion = this == GLOBAL ? 0 : GLOBAL.version;
+        if (declared == null || declaredVersion != version || declaredGlobalVersion != globalVersion) {
             Keymap built = new Keymap();
             for (Command command : all()) {
                 for (String spec : command.bindings()) built.bind(spec, command.getId());
             }
             declared = built;
             declaredVersion = version;
+            declaredGlobalVersion = globalVersion;
         }
         return declared;
     }
 
     private Keymap declared;
     private int declaredVersion = -1;
+    private int declaredGlobalVersion = -1;
     private int version;
 
     /**

@@ -127,6 +127,21 @@ public class AutomaticCommandRegistrationTest {
         assertNotNull(CommandRegistry.global().get("other.doThing"));
     }
 
+    /**
+     * <b>A document's declared keys include a command registered globally after it first resolved one.</b>
+     * A workbench extension registers when it activates, so the UI builder's F2 was dead in any document that
+     * had already seen a keystroke.
+     */
+    @Test
+    public void declaredBindingsSeeALaterGlobalRegistration() {
+        CommandRegistry local = new CommandRegistry();
+        assertNull(local.declaredBindings().chordFor("late.doThing"));
+
+        CommandRegistry.global().register(Command.of("late.doThing", "Do Thing Late").binding("F2").run(context -> {
+        }));
+        assertNotNull(local.declaredBindings().chordFor("late.doThing"));
+    }
+
     // ── contribute() itself ──────────────────────────────────────────────────────────────────────
 
     @Test
