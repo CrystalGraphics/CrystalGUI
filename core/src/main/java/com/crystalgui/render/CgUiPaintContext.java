@@ -482,12 +482,11 @@ public final class CgUiPaintContext {
             int next = 0;
             for (int cssPx : cssSizes) effective[next++] = Math.round(cssPx * uiScale);
 
-            long frame = CgGraphicsLifecycle.getCurrentFrame();
             int anySize = cssSizes.iterator().next();
             for (List<String> stack : families) {
                 CgFontFamily family = FontFamilyCache.resolve(stack, anySize);
                 if (family == null) continue;
-                CgFontRegistry.get().warmAscii(family.getPrimaryFont(), frame, effective);
+                CgFontRegistry.get().warmAscii(family.getPrimaryFont(), effective);
             }
         } catch (RuntimeException | LinkageError broken) {
             CrystalGuiCore.LOGGER.warn("CgUiPaintContext: glyph warm failed; glyphs rasterise on demand",

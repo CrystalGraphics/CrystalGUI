@@ -1,7 +1,6 @@
 package com.crystalgui.render.text;
 
 import com.crystalgraphics.text.cache.CgFontRegistry;
-import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontFamilyGroup;
@@ -131,8 +130,7 @@ public final class FontFamilyCache {
     private static void warm(CgFontFamily family, int targetPx) {
         if (family == null) return;
         try {
-            CgFontRegistry.get().warmAscii(family.getPrimaryFont(),
-                    CgGraphicsLifecycle.getCurrentFrame(), targetPx);
+            CgFontRegistry.get().warmAscii(family.getPrimaryFont(), targetPx);
         } catch (RuntimeException | LinkageError broken) {
             // A warm that fails costs latency, never correctness: every glyph it did not reach is
             // generated on demand exactly as it would have been. @see CgFontRegistry#warmAscii
