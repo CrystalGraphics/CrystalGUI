@@ -141,14 +141,11 @@ public final class HierarchyPanel extends UIElement {
         // the double-click that will open a template.
         whileConnected(() -> tree.onSelectionChanged.connect(this::chooseRows));
         whileConnected(() -> builder.builderSelection().onChanged.connect(this::followSelection));
-        whileConnected(() -> builder.getDocument().onChanged().connect(this::refresh));
+        whileConnected(() -> builder.getDocument().onChanged().connect(this::followSelection));
         // WHAT IT MISSED WHILE IT WAS OUT: the document may have been edited and the canvas selection
         // moved, with nothing listening, so a panel that comes back showing the tree it left with is
         // showing a stale one.
-        onConnected(() -> {
-            refresh();
-            followSelection();
-        });
+        onConnected(this::followSelection);
 
     }
 
@@ -157,9 +154,12 @@ public final class HierarchyPanel extends UIElement {
         return tree;
     }
 
-    /** Rebuilds the rows from the document, keeping what was expanded. */
-    public void refresh() {
-        withoutWritingBack(tree::refresh);
+    private void expandTo(List<UIElement> nodes) {
+        for (UIElement node : nodes) {
+            for (UIElement at = node.parentElement(); at != null; at = at.parentElement()) {
+                tree.setExpanded(at, true);
+            }
+        }
     }
 
     /**
@@ -215,38 +215,24 @@ public final class HierarchyPanel extends UIElement {
     }
 
     /**
-     * Scrolls the selected row into view, so a canvas click finds it in a long tree.
+     * Rebuilds the rows and reveals the selection — unfolding what hides it and scrolling to it — when the
+     * canvas selection or the document changes.
      *
-     * <p>Only when the selection came from somewhere else — following our own click would fight the
-     * pointer, which is the thing every two-way selection gets wrong first.</p>
+     * <p>A document change reveals too: a move can take a selected node into a folded branch without the
+     * selection changing at all. Never for the panel's own click, which following would fight the
+     * pointer — the thing every two-way selection gets wrong first.</p>
      */
     private void followSelection() {
         if (syncing) return;
         List<UIElement> nodes = builder.builderSelection().nodes();
         withoutWritingBack(() -> {
-            // A CLEARED CANVAS CLEARS THE PANEL. Returning early on an empty selection left the tree
-            // highlighting a node nothing was selecting any more -- two answers to one question.
-            if (nodes.isEmpty()) {
-                tree.clearSelection();
-                return;
-            }
-            for (UIElement node : nodes) {
-                for (UIElement at = node.parentElement(); at != null; at = at.parentElement()) {
-                    tree.setExpanded(at, true);
-                }
-            }
+            expandTo(nodes);
             tree.refresh();
+            // A CLEARED CANVAS CLEARS THE PANEL, which selectRowsFor does when no row answers.
             selectRowsFor(nodes);
         });
     }
 
-    /**
-     * Puts the list's own highlight on the row for {@code node}.
-     *
-     * <p>Without it the highlight is whatever survived the rebuild, so selecting on the canvas left the
-     * hierarchy pointing at the previous node — one of the two halves of "the row says one thing and the
-     * inspector another".</p>
-     */
     /**
      * Puts the tree's highlight on every node the canvas holds.
      *

@@ -109,6 +109,23 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
         super.apply(edit);
     }
 
+    /**
+     * A detached copy of {@code node} and everything under it, carrying their design values — what a
+     * duplicate inserts.
+     *
+     * <pre>{@code
+     * UIElement copy = document.copyOf(button);
+     * document.apply(new BuilderEdit.Insert(button.parentElement(), copy, index));
+     * }</pre>
+     *
+     * <p>Through the same codec the file is written with, so the copy is exactly what saving and reopening
+     * the original would produce. Ids are copied as they are; a caller inserting beside the original frees
+     * them first.</p>
+     */
+    public UIElement copyOf(UIElement node) {
+        return MIRROR.decode(MIRROR.describe(node, extras), extras);
+    }
+
     /** Several changes as one undo step — a gesture, a paste, a wrap. */
     public void applyAll(String label, List<? extends BuilderEdit> edits) {
         if (edits.isEmpty()) return;

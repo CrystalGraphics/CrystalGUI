@@ -67,6 +67,12 @@ selectionoutline {
     border-color: var(--builder-selected-parent, #55607A);
 }
 
+/* Where a dragged node would land: the container outlined and the line between two children, in the
+ * selection's accent -- the thing being placed is the selection. */
+dropindicator {
+    color: var(--builder-selected, #3574F0);
+}
+
 /* The tag naming what a click would select: kind, #id, size. Positioned by the widget through a
  * compositor override, so nothing here places it -- only what it looks like. */
 hoverhighlight::part(tag) {

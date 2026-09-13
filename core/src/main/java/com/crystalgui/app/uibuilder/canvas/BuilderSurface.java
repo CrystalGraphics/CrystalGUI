@@ -36,6 +36,9 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     /** @see BuilderContext#smartGuides */
     private final SmartGuides smartGuides = new SmartGuides();
 
+    /** @see BuilderContext#dropIndicator */
+    private final DropIndicator dropIndicator = new DropIndicator();
+
     private final BuilderSelection selection = new BuilderSelection();
 
     /** The editor this plane belongs to, for {@link BuilderEditor#UI_BUILDER}. Set once, straight after
@@ -111,6 +114,20 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
 
     @Nullable
     private MoveOutOfFlow moveGesture;
+
+    /** The gesture a press on an in-flow node hands off to. @see #movesWith */
+    void reordersWith(ReorderInFlow gesture) {
+        this.reorderGesture = gesture;
+    }
+
+    /** @see #reordersWith */
+    @Nullable
+    public ReorderInFlow reorderGesture() {
+        return reorderGesture;
+    }
+
+    @Nullable
+    private ReorderInFlow reorderGesture;
 
     @Override
     public boolean isDesignMode() {
@@ -215,6 +232,11 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
             // Photoshop's, and what a designer's hands already know. Here rather than on the command so
             // it cannot reach a text field somewhere else in the application.
             builderKeymap.bind("Mod+T", BuilderCommands.FREE_TRANSFORM);
+            // VS Code's Move Line and Copy Line, for a node: the bare arrows already walk the tree.
+            builderKeymap.bind("Alt+Up", BuilderCommands.MOVE_UP);
+            builderKeymap.bind("Alt+Down", BuilderCommands.MOVE_DOWN);
+            builderKeymap.bind("Shift+Alt+Up", BuilderCommands.DUPLICATE_UP);
+            builderKeymap.bind("Shift+Alt+Down", BuilderCommands.DUPLICATE_DOWN);
             builderKeymap.bind("Mod+Shift+T", BuilderCommands.TRANSFORM_AGAIN);
             // Alt alone, leaving Ctrl+C and Ctrl+V free for the plain copy/paste that will eventually
             // take whole elements.
@@ -240,5 +262,10 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     @Override
     public SmartGuides smartGuides() {
         return smartGuides;
+    }
+
+    @Override
+    public DropIndicator dropIndicator() {
+        return dropIndicator;
     }
 }
