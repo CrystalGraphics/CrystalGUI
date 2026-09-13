@@ -247,11 +247,11 @@ textedit > textfield {
 }
 
 
-/* ── The Design panel ────────────────────────────────────────────────────────────────────────────────
+/* ── The Hierarchy panel ─────────────────────────────────────────────────────────────────────────────
  *
- * The hierarchy of whatever .cgui is in front. Empty rather than absent when the tab is not a builder --
+ * The tree of whatever .cgui is in front. Empty rather than absent when the tab is not a builder --
  * a tool window that comes and goes moves everything beside it. */
-designtoolwindow, hierarchypanel {
+hierarchytoolwindow, hierarchypanel {
     width: 100%;
     height: 100%;
     flex-direction: column;

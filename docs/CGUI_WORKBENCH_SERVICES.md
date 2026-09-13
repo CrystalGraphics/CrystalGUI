@@ -595,7 +595,7 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 
 | Signal | Owner | Replaced |
 |---|---|---|
-| `onDidChangeActive` | `EditorService` | the Design panel's per-frame poll, and the Inspector's three-source workaround |
+| `onDidChangeActive` | `EditorService` | the Hierarchy panel's per-frame poll, and the Inspector's three-source workaround |
 | `onDidChangeActivePanel` | `DockArea` | three per-frame polls at once |
 | `onDidClosePanel` | `DockArea` | nothing — the fact nobody could state |
 | `onDidOpenDocument` / `onDidCloseDocument` | `Workbench` | `onDocumentLoaded`, and its missing half |
@@ -1712,22 +1712,34 @@ innermost answer wins, so the widget you are in is the widget that decides.
 
 | Rule | Why |
 |---|---|
-| The specific commands stay | `editor.cut`, `explorer.cut`, `graph.cut` keep their own element-scoped bindings and their palette rows. What changes is that the **menu** stops naming one of them |
+| The specific commands stay | `editor.cut`, `tree.cut`, `graph.cut` keep their own element-scoped bindings and their palette rows. What changes is that the **menu** stops naming one of them |
 | `canPaste()` is not "is the clipboard non-empty" | A file tree cannot paste text and an editor cannot paste files. Only the provider knows which clipboard it means |
 | No defaults on the interface | Six abstract methods. A provider silently inheriting "cannot paste" is indistinguishable from one that considered paste and refused |
 | Enablement is re-asked at activation | The menu may have been open while the selection changed — the same rule `MenuBuilder` follows for every row |
 
 ## The Project explorer
 
-### Inline editing
+### Editing files in the tree
 
 ```java
-tree.beginRename(path, name -> files().move(path, path.parent().resolve(name), false));
+tree.editWith(workbench);                 // drag, cut, copy, paste, F2 rename, delete over the selection
+tree.editing().rename(path);              // F2 on one path
 tree.beginNew(parentFolder, /* directory */ false, name -> files().create(…));
 ```
 
-An input **in the row** — VS Code's `FilesRenderer.renderInputBox`. `InputDialog` survives only as the
-fallback for a host with no tree on screen (New File from the palette with the explorer closed).
+The verbs are the engine's `TreeEditing` (`widget.collection.tree`), and `ExplorerEditModel` performs
+them through the file service — one batch, one undo step, a failure named per file. The Hierarchy panel
+is the kit's other consumer; see `CGUI_WIDGETS.md`.
+
+| Rule | Why |
+|---|---|
+| A copy never overwrites; a move onto a namesake is refused | A taken name gets `FileOperations.incrementalName`. A clobbered file has no undo underneath |
+| A drop on a file lands in its folder | The tree is sorted by the listing, so it is unordered: into a folder, and a file means its folder |
+| Delete asks, per `explorer.confirmDelete`, and closes the deleted files' tabs | A save from a leftover tab recreates the file. Unsaved work keeps its tab |
+| Cut is performed at paste, and the cut rows are dimmed | Nothing leaves the tree until it lands |
+
+Renaming is an input **in the row** — VS Code's `FilesRenderer.renderInputBox`. `InputDialog` survives only
+as the fallback for a host with no tree on screen (New File from the palette with the explorer closed).
 
 | Rule | Why |
 |---|---|

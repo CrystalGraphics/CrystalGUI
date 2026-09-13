@@ -53,9 +53,7 @@ import com.crystalgui.workbench.decoration.FileDecoration;
 import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
-import com.crystalgui.workbench.chrome.notification.NotificationsView;
 import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -66,7 +64,6 @@ import com.crystalgui.workbench.dock.drag.DockPlacement;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionDropOverlay;
-import com.crystalgui.workbench.region.RegionSide;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import com.crystalgui.widget.texteditor.TextEditor;
@@ -78,7 +75,6 @@ import com.crystalgui.workbench.stripe.StripeRail;
 import com.crystalgui.workbench.stripe.StripeView;
 import com.crystalgui.workbench.toolwindow.ToolWindowLayout;
 import com.crystalgui.workbench.toolwindow.ToolWindowManager;
-import com.crystalgui.workbench.view.ViewContainerRegistry;
 import java.util.ArrayList;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -96,7 +92,6 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.notify.StatusBar;
-import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.text.diagnostic.Markers;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.workbench.chrome.menu.MainMenuCommands;
@@ -1679,7 +1674,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>It was set in exactly one place — when a document is <b>opened</b> — so clicking a tab, which is
      * a selection rather than an open, never moved it. Everything derived from the dock stayed right and
      * everything asking the editor service kept naming the last file opened: the Inspector seeded from a
-     * document that was no longer in front, and the Design panel emptied on a tab switch and never came
+     * document that was no longer in front, and the Hierarchy panel emptied on a tab switch and never came
      * back, because the tab it was told about was still the other one.</p>
      *
      * <p>Left alone when the front panel is not a document. A tool window taking focus does not mean

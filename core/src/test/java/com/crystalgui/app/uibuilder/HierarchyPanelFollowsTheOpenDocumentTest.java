@@ -15,7 +15,7 @@ import org.junit.Test;
 
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
-import com.crystalgui.app.uibuilder.panel.DesignToolWindow;
+import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.fs.CgPath;
@@ -42,13 +42,13 @@ import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.dock.panel.DockInput;
 
 /**
- * <b>The Design panel shows the hierarchy of the {@code .cgui} in front.</b>
+ * <b>The Hierarchy panel shows the tree of the {@code .cgui} in front.</b>
  *
  * <p>Written against the real path rather than by constructing a {@code HierarchyPanel} — which is why
  * three attempts at this missed, each fixing something true and none of it the cause. What a panel can
  * build was never the question; what it is told, and whether what it is told is current, was.</p>
  */
-public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
+public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
 
     private static final String PROJECT = "scratch";
     private static final CgPath FILE = CgPath.parse(PROJECT + ":page.cgui");
@@ -114,14 +114,14 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
     }
 
     /** The panel the extension registered, found the way the dock holds it. */
-    private DesignToolWindow panel() {
+    private HierarchyToolWindow panel() {
         return find(workbench);
     }
 
-    private static DesignToolWindow find(UIElement from) {
-        if (from instanceof DesignToolWindow found) return found;
+    private static HierarchyToolWindow find(UIElement from) {
+        if (from instanceof HierarchyToolWindow found) return found;
         for (UIElement child : from.children()) {
-            DesignToolWindow found = find(child);
+            HierarchyToolWindow found = find(child);
             if (found != null) return found;
         }
         return null;
@@ -129,20 +129,20 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
 
     /** <b>The report.</b> Open a {@code .cgui} and the panel describes it. */
     @Test
-    public void openingACguiFillsTheDesignPanel() {
+    public void openingACguiFillsTheHierarchyPanel() {
         workbench.open(DockInput.of(workbench.refFor(FILE)));
         for (int i = 0; i < 16; i++) frameAndPump();
 
-        DesignToolWindow design = panel();
-        assertNotNull("the Design tool window was never built", design);
-        assertNotNull("the panel is empty with a .cgui in front", design.hierarchy());
+        HierarchyToolWindow window = panel();
+        assertNotNull("the Hierarchy tool window was never built", window);
+        assertNotNull("the panel is empty with a .cgui in front", window.hierarchy());
         assertTrue("and it has the document's own nodes in it",
-                design.hierarchy().tree().visibleRows().size() >= 2);
+                window.hierarchy().tree().visibleRows().size() >= 2);
 
         // AND SOMEWHERE TO DRAW THEM. Rows in the model with a zero-height tree is exactly what "the
         // panel is empty" looked like, and asserting only on visibleRows() could not tell the two apart:
         // the fill idiom was missing, so the tree laid out at nothing inside a panel of the right size.
-        Box treeBox = design.hierarchy().tree().box();
+        Box treeBox = window.hierarchy().tree().box();
         assertNotNull("the tree was never laid out", treeBox);
         assertTrue("the tree has no height, so its rows cannot be seen: " + treeBox.height(),
                 treeBox.height() > 1f);
@@ -177,7 +177,7 @@ public class DesignPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase {
      * <b>Clicking the canvas keeps working, with the hierarchy live beside it.</b>
      *
      * <p>Reported as "click an element and the handles vanish and it stays broken until I restart" —
-     * which only happens with the Design panel up, so the two selections are being kept in step by
+     * which only happens with the Hierarchy panel up, so the two selections are being kept in step by
      * something the isolated fixtures do not have.</p>
      */
     @Test

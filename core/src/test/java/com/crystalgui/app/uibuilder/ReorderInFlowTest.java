@@ -304,14 +304,14 @@ public class ReorderInFlowTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>The Design panel shows what a drop did, and what undoing it did</b>, with nothing clicked.
+     * <b>The Hierarchy panel shows what a drop did, and what undoing it did</b>, with nothing clicked.
      *
      * <p>The node was selected before the drag and still is after, so the selection never changes — the panel
      * has to reveal it because the DOCUMENT changed. Undo is the same: it changes the tree and, until the
      * model announced it, nothing on the panel moved until a click did.</p>
      */
     @Test
-    public void theDesignPanelRevealsADropAndFollowsItsUndo() {
+    public void theHierarchyRevealsADropAndFollowsItsUndo() {
         HierarchyPanel hierarchy = new HierarchyPanel(editor.surface());
         document.append(hierarchy);
         document.update(W, H);

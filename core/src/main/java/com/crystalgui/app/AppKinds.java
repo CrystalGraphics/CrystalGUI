@@ -13,7 +13,7 @@ import com.crystalgui.app.uibuilder.canvas.SmartGuides;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles;
 import com.crystalgui.app.uibuilder.canvas.SelectionOutline;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
-import com.crystalgui.app.uibuilder.panel.DesignToolWindow;
+import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
@@ -60,7 +60,7 @@ public final class AppKinds implements NodeKinds {
         UIElementRegistry.registerTag(SmartGuides.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(DropIndicator.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ReorderInFlow.NAME, NodeContract.INERT);
-        UIElementRegistry.registerTag(DesignToolWindow.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(HierarchyToolWindow.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(HierarchyPanel.NAME, NodeContract.INERT);
     }
 }

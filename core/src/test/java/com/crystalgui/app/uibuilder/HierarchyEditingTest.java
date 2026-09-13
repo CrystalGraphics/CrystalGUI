@@ -1,0 +1,153 @@
+package com.crystalgui.app.uibuilder;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
+import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.widget.collection.tree.TreeEditModel;
+import com.crystalgui.widget.collection.tree.TreeEditing;
+
+/**
+ * <b>L4.7 — the Hierarchy edits the document like a file tree</b>: a drop, a paste, a duplicate and a
+ * delete are each one undo step, and what lands is what is selected.
+ */
+public class HierarchyEditingTest extends UiDocumentTestBase {
+
+    private static final String SOURCE = "{\n"
+            + "  \"cgui\": 1,\n"
+            + "  \"root\": { \"kind\": \"element\", \"id\": \"root\",\n"
+            + "    \"children\": [\n"
+            + "      { \"kind\": \"text\", \"id\": \"title\", \"state\": { \"text\": \"bao\" } },\n"
+            + "      { \"kind\": \"element\", \"id\": \"group\" },\n"
+            + "      { \"kind\": \"text\", \"id\": \"note\", \"state\": { \"text\": \"mao\" } }\n"
+            + "    ] }\n"
+            + "}\n";
+
+    private BuilderEditor editor;
+    private UIElement root, title, group, note;
+    private HierarchyPanel hierarchy;
+    private TreeEditing<UIElement> editing;
+    private TreeEditModel<UIElement> model;
+
+    @Before
+    public void openTheDocument() {
+        UIElementRegistry.bootstrap();
+        editor = new BuilderEditor(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
+        UIElement host = new UIElement().layout(l -> l.width(800).height(500));
+        host.append(editor.view());
+        document.append(host);
+        document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
+        root = editor.document().root();
+        title = root.children().get(0);
+        group = root.children().get(1);
+        note = root.children().get(2);
+
+        hierarchy = new HierarchyPanel(editor.surface());
+        document.append(hierarchy);
+        settle();
+        editing = hierarchy.editing();
+        model = editing.model();
+    }
+
+    private void settle() {
+        document.update(W, H);
+        frame();
+    }
+
+    private UndoStack history() {
+        return editor.document().history();
+    }
+
+    @Test
+    public void aDropIntoAContainerIsOneUndoStepAndSelectsWhatLanded() {
+        assertTrue(model.canDrop(List.of(title), group));
+        model.move(List.of(title), new TreeEditModel.Target<>(group, -1));
+        assertSame(group, title.parentElement());
+        assertSame("the dropped node is not the selection", title, editor.selection().node());
+
+        history().undo();
+        assertSame(root, title.parentElement());
+        assertEquals(0, root.indexOf(title));
+        assertFalse("a drop was more than one undo step", history().canUndo());
+    }
+
+    @Test
+    public void aDropBeforeAndAfterReordersAmongSiblings() {
+        model.move(List.of(note), new TreeEditModel.Target<>(root, 0));
+        assertEquals(List.of(note, title, group), root.children());
+        model.move(List.of(note), new TreeEditModel.Target<>(root, 3));
+        assertEquals(List.of(title, group, note), root.children());
+    }
+
+    @Test
+    public void aTextLeafAndTheNodesOwnSubtreeRefuseADrop() {
+        assertFalse("a text node draws its own content and takes no children", model.canDrop(List.of(note), title));
+        assertFalse(model.canDrop(List.of(root), group));
+        assertFalse("the root is not picked up", model.canEdit(root));
+    }
+
+    @Test
+    public void cutAndPasteMovesTheSelectionAfterTheSelectedNode() {
+        editor.selection().selectOnly(title);
+        settle();
+        editing.cut();
+        editor.selection().selectOnly(note);
+        settle();
+        editing.paste();
+        assertEquals(List.of(group, note, title), root.children());
+        history().undo();
+        assertEquals(List.of(title, group, note), root.children());
+    }
+
+    @Test
+    public void duplicateCopiesBesideWithAFreeIdAndSelectsTheCopy() {
+        editor.selection().selectOnly(title);
+        settle();
+        assertTrue(editing.canDuplicate());
+        editing.duplicate();
+        assertEquals(4, root.children().size());
+        UIElement copy = root.children().get(1);
+        assertEquals("title2", copy.id());
+        assertSame(copy, editor.selection().node());
+    }
+
+    @Test
+    public void deletingASelectionRemovesItAllAndOneUndoPutsItBack() {
+        editor.selection().replaceWith(List.of(title, note));
+        settle();
+        assertTrue(editing.canDelete());
+        editing.delete();
+        assertEquals(List.of(group), root.children());
+        assertNull(editor.selection().node());
+
+        history().undo();
+        assertEquals(List.of(title, group, note), root.children());
+    }
+
+    @Test
+    public void aNodeFromAnotherDocumentIsCopiedNotMoved() {
+        UIElement foreign = new UIElement().setId("title");
+        UIElement elsewhere = new UIElement();
+        elsewhere.append(foreign);
+        model.move(List.of(foreign), new TreeEditModel.Target<>(group, -1));
+        assertSame("the other document lost its node", elsewhere, foreign.parentElement());
+        assertEquals(1, group.children().size());
+        assertEquals("a copy kept an id this document already has", "title2", group.children().get(0).id());
+    }
+}

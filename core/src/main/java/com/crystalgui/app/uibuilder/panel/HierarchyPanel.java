@@ -8,11 +8,9 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
-import com.crystalgui.app.uibuilder.document.BuilderEdit;
-import com.crystalgui.app.uibuilder.document.NodeIds;
 import com.crystalgui.core.collection.tree.TreeDataSource;
-import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.undo.UndoScope;
@@ -23,24 +21,32 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.widget.collection.list.RowEditing;
+import com.crystalgui.widget.collection.tree.TreeClipboard;
+import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
+import com.crystalgui.widget.collection.tree.TreeSearch;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.text.UIText;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
 
 /**
- * The document as a tree, selecting with the canvas.
+ * The document as a tree, selecting with the canvas, and edited like a file tree.
  *
  * <pre>{@code
  * HierarchyPanel hierarchy = new HierarchyPanel(builder);
+ * TreeEditing.contributeMenu(CommandRegistry.global(), HierarchyPanel.CONTEXT_MENU);   // once, by the feature
  * }</pre>
  *
  * <p>Rows show the node's {@code id} where it has one and its kind where it does not, which is the way
  * round a designer reads them: a named node is named for a reason and an unnamed one is only ever "the
  * button".</p>
+ *
+ * <p>Drag a row before, into or after another (Alt copies), and cut, copy, paste, duplicate, delete and F2
+ * rename the id over the selection — {@link TreeEditing} over {@link HierarchyEditModel}, the kit the
+ * Project panel uses. Ctrl+F finds a row by what it shows.</p>
  *
  * <h3>The LIGHT tree, not the composed one</h3>
  *
@@ -71,24 +77,23 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
     /** The row's name. */
     public static final String LABEL_CLASS = "__label__";
 
-    /** The field a row's id is renamed in. @see #RENAME */
+    /** The field a row's id is renamed in. */
     public static final String RENAME_CLASS = "__rename__";
 
-    /**
-     * Renames the selected node's id in its row — F2, bound on the panel, so on the canvas F2 still edits
-     * text.
-     */
-    public static final String RENAME = "uibuilder.renameNode";
+    /** The right-click menu on a row. The feature contributes the kit's rows to it. */
+    public static final MenuId CONTEXT_MENU = MenuId.of("uibuilder/hierarchy/context");
 
     /** This panel, for a command that acts on one. */
     public static final DataKey<HierarchyPanel> HIERARCHY = DataKey.create("uibuilder.hierarchy", HierarchyPanel.class);
+
+    /** One for every hierarchy, so a node cut in one document pastes — as a copy — into another. */
+    private static final TreeClipboard<UIElement> CLIPBOARD = new TreeClipboard<>();
 
     private final BuilderContext builder;
 
     private final TreeView<UIElement> tree;
 
-    /** @see #renameSelected */
-    private final RowEditing<UIElement> rename;
+    private final TreeEditing<UIElement> editing;
 
     /** @see #CONTENT_CLASS */
     private final UIElement content = new UIElement();
@@ -118,8 +123,6 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
                 return !item.children().isEmpty();
             }
         });
-        this.rename = new RowEditing<>(tree, this::itemForRow, () -> withoutWritingBack(tree::refresh));
-        tree.setRenderer(new RowRenderer());
         // THE ROOT AND ITS CHILDREN. A tree that opens fully collapsed shows one row and reads as a
         // panel that failed to load; opening everything buries the shape in a document of any size. One
         // level is what both references settle on.
@@ -137,27 +140,28 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         StyleGroup.defaultPipeline(content.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).flexBasis(0f).flexGrow(1f)
                         .flexDirection(FlexDirection.COLUMN));
-        // THE WRAPPER GOES IN WHILE EMPTY; the tree is an ordinary child of it afterwards.
-        //
-        // append(tree) is the obvious line and it is wrong, because markAsInternal() RECURSES. A
-        // TreeView is a ListView: it builds its own viewport and recycles rows through
-        // addInternalChild/removeInternalChild, and those removals SILENTLY REFUSE an internal child.
-        // Stamping the whole subtree turns every removal into a no-op, so the realised window only ever
-        // grows and layout takes longer every frame until the window stops responding -- which is what
-        // "clicking a row breaks it until I restart" is. ProjectFileTree, QuickPick, ProblemsPanel and
-        // ShaderGraphEditor all carry this wrapper; it is the pattern, not a workaround.
         // MULTIPLE, which ListView already implements in full -- Ctrl to toggle, Shift for a range.
-        // This is configuration rather than code: the project tree gets the same behaviour from the same
-        // line, and chooseRows below has always taken a SET of indices. The panel simply never opted in,
-        // so the canvas could hold a set and the tree could only ever show one of it.
         tree.setSelectionMode(SelectionMode.MULTIPLE);
         // NAMES ARE SCROLLED TO, NOT TRUNCATED. A node's id is the only thing this panel says about it,
         // so `#compos...` three rows running identifies nothing -- and unlike a file name there is no
         // extension at the end carrying the useful half. The project tree and the Problems tree make the
         // same call; the sheet's `.__h-scroll__` rule is the other half and cannot be set separately.
         tree.setHorizontalScrolling(true);
+        // THE WRAPPER GOES IN WHILE EMPTY; the tree is an ordinary child of it afterwards. markAsInternal()
+        // recurses, and a ListView's row recycling silently refuses to remove an internal child -- the
+        // realised window then only grows. ProjectFileTree, QuickPick and ProblemsPanel carry it too.
         append(content);
         content.append(tree);
+
+        this.editing = new TreeEditing<>(tree, this, this::itemForRow, () -> withoutWritingBack(tree::refresh),
+                CLIPBOARD);
+        editing.setModel(new HierarchyEditModel(builder));
+        editing.attachContextMenu(CommandRegistry.global(), () -> ContextMenu.of(CONTEXT_MENU));
+        tree.setRenderer(new RowRenderer());
+        // AFTER the renderer, which it wraps to mark the matched letters in each row's label.
+        TreeSearch<UIElement> search = TreeSearch.installOn(tree, content, TreeSearch.byText(HierarchyPanel::describe),
+                node -> builder.builderSelection().replaceWith(List.of(node)));
+        search.input().setPlaceholder("Find element");
 
         // DECLARED HERE AND HELD BY THE ENGINE. Each is remade on every attach and dropped on every
         // detach, which a dock does for ordinary reasons -- hiding the panel, rebuilding a layout,
@@ -172,7 +176,6 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         // moved, with nothing listening, so a panel that comes back showing the tree it left with is
         // showing a stale one.
         onConnected(this::followSelection);
-
     }
 
     /** The tree, for a test and for whoever wants to expand a branch. */
@@ -180,58 +183,15 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         return tree;
     }
 
-    /**
-     * Opens a rename of the selected node's id in its row, when exactly one node is selected — the project
-     * tree's F2, through the same {@link RowEditing}. An empty id clears it; one another node holds is offered
-     * {@link NodeIds#free} instead.
-     */
-    public void renameSelected() {
-        List<UIElement> nodes = builder.builderSelection().nodes();
-        if (nodes.size() != 1) return;
-        UIElement node = nodes.get(0);
-        expandTo(nodes);
-        rename.begin(RowEditing.Edit.of(node, node.id(),
-                        id -> builder.getDocument().apply(new BuilderEdit.SetId(node, node.id(), id)))
-                .accepting(NodeIds::isSpellable)
-                .conflicting("element", id -> freeIdFor(node, id)));
+    /** Drag, clipboard, duplicate, delete and rename over this tree's selection. */
+    public TreeEditing<UIElement> editing() {
+        return editing;
     }
 
     /** The node whose id is being renamed, or null. */
     @Nullable
     public UIElement renaming() {
-        return rename.item();
-    }
-
-    /**
-     * Null when no other node holds {@code id}, else the free id to offer instead. A shared id styles both
-     * nodes through one rule and makes {@code #id} find either.
-     */
-    @Nullable
-    private String freeIdFor(UIElement node, String id) {
-        if (id.isEmpty()) return null;
-        Set<String> taken = NodeIds.taken(builder.getDocument().root());
-        taken.remove(node.id());
-        String free = NodeIds.free(id, taken);
-        return free.equals(id) ? null : free;
-    }
-
-    @Override
-    protected void registerCommands(CommandRegistry registry) {
-        registry.register(Command.of(RENAME, "Rename")
-                .run(context -> {
-                    HierarchyPanel panel = context.data().get(HIERARCHY);
-                    if (panel != null) panel.renameSelected();
-                })
-                .enabledWhen(context -> {
-                    HierarchyPanel panel = context.data().get(HIERARCHY);
-                    return panel != null && panel.renaming() == null
-                            && panel.builder.builderSelection().nodes().size() == 1;
-                }));
-    }
-
-    @Override
-    protected void bindKeys() {
-        keymap().bind("F2", RENAME);
+        return editing.rows().item();
     }
 
     /**
@@ -368,7 +328,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
     private final class RowRenderer implements TreeRenderer<UIElement> {
 
         /**
-         * A twisty and a label.
+         * A twisty, a label and the rename field.
          *
          * <p>The twisty keeps its box on a leaf and simply draws nothing, so a label at a given depth
          * starts at the same x whether or not its row can be opened — which is what makes a column of
@@ -394,7 +354,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
             row.append(label);
             TextField field = new TextField();
             field.addClass(RENAME_CLASS);
-            rename.installEditor(row, field);
+            editing.installRow(row, field);
             row.append(field);
             return row;
         }
@@ -408,7 +368,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
                 else if (child instanceof TextField editor) field = editor;
             }
             if (label != null) label.setText(describe(node));
-            if (label != null && field != null) rename.apply(template, label, field, node);
+            if (label != null && field != null) editing.bindRow(template, label, field, node);
             boolean selected = builder.builderSelection().contains(node);
             if (selected != template.hasClass(SELECTED_CLASS)) {
                 if (selected) template.addClass(SELECTED_CLASS);
@@ -418,7 +378,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
     }
 
     /** {@code #title} where the node is named, {@code text} where it is not. */
-    private static String describe(@Nullable UIElement node) {
+    static String describe(@Nullable UIElement node) {
         if (node == null) return "";
         String id = node.getId();
         return id == null || id.isEmpty() ? node.tagName() : "#" + id;
