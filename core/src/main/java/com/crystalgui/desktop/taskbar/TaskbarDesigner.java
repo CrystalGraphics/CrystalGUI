@@ -2,6 +2,8 @@ package com.crystalgui.desktop.taskbar;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.core.property.Property;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -16,15 +18,14 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.config.ConfigControl;
+import com.crystalgui.widget.config.ConfiguratorPanel;
+import com.crystalgui.widget.config.PanelForm;
+import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.scroll.ScrollerView;
-import com.crystalgui.widget.composite.ColorSelector;
-import com.crystalgui.widget.control.Slider;
-import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.TaffyDimension;
 import org.jetbrains.annotations.Nullable;
 
@@ -32,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.function.Consumer;
+import java.util.function.DoubleSupplier;
 
 /**
  * A live tuner for the taskbar: its geometry, its position, and every parameter of its backdrop.
@@ -102,8 +104,10 @@ public final class TaskbarDesigner {
      */
     private @Nullable TaffyDimension autoMinWidth;
 
-    private final List<Runnable> resets = new ArrayList<>();
-    private @Nullable UIText readout;
+    /** The tuned state as CSS, re-stated whenever anything here moves. @see #refreshReadout */
+    private final Property<String> readout = Property.of("");
+
+    private final ConfiguratorPanel body = new ConfiguratorPanel();
 
     private TaskbarDesigner(Taskbar taskbar, Desktop desktop) {
         this.taskbar = taskbar;
@@ -162,140 +166,98 @@ public final class TaskbarDesigner {
         UIElement content = new UIElement();
         content.addClass("__designer__");
 
-        // A ScrollerView, FOR THE BARS. This was a plain element on the argument that scrolling is an
-        // ordinary element capability driven by `overflow`, and that a tuning panel does not need
-        // visible bars. Both halves are true and the conclusion was wrong: the wheel worked the whole
-        // time, and what was missing was any indication that there was more panel below the fold.
-        //
-        // A scrollable region with no bar does not read as scrollable -- it reads as ENDING where it is
-        // cut off, so every control past the frame's height was undiscoverable rather than merely out
-        // of view. This window is the case that exposes it, because it opens clamped to the work area
-        // (see open()), so on any short desktop it is scrolled from the moment it appears and there has
-        // never been a first frame that showed the whole panel.
-        //
-        // ScrollerView is a drop-in here: it IS the viewport, children are direct children, and the
-        // `overflow: auto` already on `.__designer-body__` is what decides that a bar appears only on
-        // an axis that actually overflows.
-        ScrollerView body = new ScrollerView();
+        // A ConfiguratorPanel, which is a ScrollerView -- FOR THE BARS. This window opens clamped to the
+        // work area, so on a short desktop it is scrolled from the moment it appears, and a scrollable
+        // region with no bar reads as ENDING where it is cut off.
         body.addClass("__designer-body__");
+        PanelForm form = body.form();
 
-        body.append(heading("Shape"));
-        body.append(toggle("Width follows content", widthAuto, on -> {
-            widthAuto = on;
-            applyGeometry();
-        }));
-        body.append(slider("Width", 80f, 1600f, islandWidth, "%.0f", v -> {
+        form.header("Shape");
+        form.prop(ConfigDescriptor.bool("widthAuto", "Width follows content"), Property.derived(
+                () -> widthAuto, on -> {
+                    widthAuto = on;
+                    applyGeometry();
+                }));
+        slider(form, "Width", 80f, 1600f, 0, () -> islandWidth, v -> {
             islandWidth = v;
             widthAuto = false;
             applyGeometry();
-        }));
-        body.append(slider("Height", 12f, 96f, islandHeight, "%.0f", v -> {
+        });
+        slider(form, "Height", 12f, 96f, 0, () -> islandHeight, v -> {
             islandHeight = v;
             applyGeometry();
-        }));
-        body.append(slider("Corner radius", 0f, 48f, radius, "%.0f", v -> {
+        });
+        slider(form, "Corner radius", 0f, 48f, 0, () -> radius, v -> {
             radius = v;
             applyGeometry();
-        }));
-        body.append(slider("Padding", 0f, 32f, padding, "%.0f", v -> {
+        });
+        slider(form, "Padding", 0f, 32f, 0, () -> padding, v -> {
             padding = v;
             applyGeometry();
-        }));
-        body.append(slider("Gap", 0f, 32f, gap, "%.0f", v -> {
+        });
+        slider(form, "Gap", 0f, 32f, 0, () -> gap, v -> {
             gap = v;
             applyGeometry();
-        }));
+        });
 
-        body.append(heading("Position"));
-        body.append(note("Right-drag the island itself, or nudge it here."));
-        body.append(slider("Offset X", -1200f, 1200f, offsetX, "%.0f", v -> {
+        form.header("Position");
+        form.note("Right-drag the island itself, or nudge it here.");
+        slider(form, "Offset X", -1200f, 1200f, 0, () -> offsetX, v -> {
             offsetX = v;
             applyOffset();
-        }));
-        body.append(slider("Offset Y", -900f, 900f, offsetY, "%.0f", v -> {
+        });
+        slider(form, "Offset Y", -900f, 900f, 0, () -> offsetY, v -> {
             offsetY = v;
             applyOffset();
-        }));
+        });
 
-        body.append(heading("Backdrop"));
-        body.append(slider("Blur", 0f, 40f, glass.getBlurRadius(), "%.0f", v -> {
-            glass.setBlurRadius(v);
-            refreshReadout();
-        }));
-        body.append(slider("Bezel", 0f, 40f, glass.getBezel(), "%.0f", v -> {
-            glass.setBezel(v);
-            refreshReadout();
-        }));
-        body.append(slider("Index of refraction", 1f, 2.5f, glass.getIor(), "%.2f", v -> {
-            glass.setIor(v);
-            refreshReadout();
-        }));
-        body.append(slider("Specular", 0f, 1.5f, glass.getSpecular(), "%.2f", v -> {
-            glass.setSpecular(v);
-            refreshReadout();
-        }));
-        body.append(note("Rim is the hairline at the boundary; glow is the broad falloff. "
-                + "The rim should dominate \u2014 a highlight made mostly of glow reads as bloom."));
-        body.append(slider("Rim", 0f, 1f, glass.getEdgeHighlight(), "%.2f", v -> {
-            glass.setEdgeHighlight(v);
-            refreshReadout();
-        }));
-        body.append(slider("Rim width", 0f, 12f, glass.getEdgeWidth(), "%.1f", v -> {
-            glass.setEdgeWidth(v);
-            refreshReadout();
-        }));
-        body.append(slider("Rim evenness", 0f, 1f, glass.getRimAmbient(), "%.2f", v -> {
-            glass.setRimAmbient(v);
-            refreshReadout();
-        }));
-        body.append(slider("Glow", 0f, 1f, glass.getGlow(), "%.2f", v -> {
-            glass.setGlow(v);
-            refreshReadout();
-        }));
-        body.append(slider("Chromatic", 0f, 1f, glass.getChromatic(), "%.2f", v -> {
-            glass.setChromatic(v);
-            refreshReadout();
-        }));
-        body.append(slider("Noise", 0f, 0.25f, glass.getNoise(), "%.3f", v -> {
-            glass.setNoise(v);
-            refreshReadout();
-        }));
-        body.append(slider("Saturation", 0f, 3f, glass.getSaturation(), "%.2f", v -> {
-            glass.setSaturation(v);
-            refreshReadout();
-        }));
+        form.header("Backdrop");
+        glassSlider(form, "Blur", 0f, 40f, 0, glass::getBlurRadius, glass::setBlurRadius);
+        glassSlider(form, "Bezel", 0f, 40f, 0, glass::getBezel, glass::setBezel);
+        glassSlider(form, "Index of refraction", 1f, 2.5f, 2, glass::getIor, glass::setIor);
+        glassSlider(form, "Specular", 0f, 1.5f, 2, glass::getSpecular, glass::setSpecular);
+        form.note("Rim is the hairline at the boundary; glow is the broad falloff. "
+                + "The rim should dominate \u2014 a highlight made mostly of glow reads as bloom.");
+        glassSlider(form, "Rim", 0f, 1f, 2, glass::getEdgeHighlight, glass::setEdgeHighlight);
+        glassSlider(form, "Rim width", 0f, 12f, 1, glass::getEdgeWidth, glass::setEdgeWidth);
+        glassSlider(form, "Rim evenness", 0f, 1f, 2, glass::getRimAmbient, glass::setRimAmbient);
+        glassSlider(form, "Glow", 0f, 1f, 2, glass::getGlow, glass::setGlow);
+        glassSlider(form, "Chromatic", 0f, 1f, 2, glass::getChromatic, glass::setChromatic);
+        glassSlider(form, "Noise", 0f, 0.25f, 3, glass::getNoise, glass::setNoise);
+        glassSlider(form, "Saturation", 0f, 3f, 2, glass::getSaturation, glass::setSaturation);
         // THE ONE THAT WAS MISSING. The seed copied every other parameter and not this, so the designer
         // opened with the bar at luminosity 0 -- a plain alpha tint -- while the sheet ran it at 1, and
         // a tint alpha tuned here was tuned against a material the sheet does not draw.
-        body.append(note("Luminosity is the Windows layer: how much of the backdrop's BRIGHTNESS the "
+        form.note("Luminosity is the Windows layer: how much of the backdrop's BRIGHTNESS the "
                 + "tint's replaces, hue kept. 1 is Mica \u2014 a temperature, never a picture; 0 is a "
-                + "plain alpha tint, where the tint's alpha alone decides what shows through."));
-        body.append(slider("Luminosity", 0f, 1f, glass.getLuminosity(), "%.2f", v -> {
-            glass.setLuminosity(v);
+                + "plain alpha tint, where the tint's alpha alone decides what shows through.");
+        glassSlider(form, "Luminosity", 0f, 1f, 2, glass::getLuminosity, glass::setLuminosity);
+
+        form.header("Tint");
+        form.note("The colour laid over the blur. ALPHA IS THE ONE THAT MATTERS \u2014 it is how "
+                + "much of the tint sits over the backdrop, and the easiest thing here to overdo.");
+        form.prop(ConfigDescriptor.color("tint", "Tint"), Property.derived(glass::getTintArgb, argb -> {
+            glass.setTintArgb(argb);
             refreshReadout();
         }));
 
-        body.append(heading("Tint"));
-        body.append(note("The colour laid over the blur. ALPHA IS THE ONE THAT MATTERS \u2014 it is how "
-                + "much of the tint sits over the backdrop, and the easiest thing here to overdo."));
-        body.append(tintPicker());
-
-        body.append(heading("Tone"));
-        body.append(note("The accent wash under the entries \u2014 and under the hover preview and the "
-                + "switcher, which take the same tone. Alpha is how loud it is; the sheet ships 20%."));
-        body.append(tonePicker());
+        form.header("Tone");
+        form.note("The accent wash under the entries \u2014 and under the hover preview and the "
+                + "switcher, which take the same tone. Alpha is how loud it is; the sheet ships 20%.");
+        form.prop(ConfigDescriptor.color("tone", "Tone"), Property.derived(() -> tone, argb -> {
+            tone = argb;
+            applyTone();
+        }));
 
         // THE READOUT SCROLLS WITH THE CONTROLS; only the buttons are pinned. It is eight lines of CSS
         // and it grows, so below the scroll region it simply fell off the bottom of the window, taking
         // Copy CSS with it whenever the panel was short.
-        readout = new UIText("");
-        readout.addClass("__designer-readout__");
-        body.append(heading("CSS"));
-        body.append(readout);
+        form.header("CSS");
+        refreshReadout();
+        form.prop(ConfigDescriptor.note("css"), readout).addClass("__designer-readout__");
 
         content.append(body);
         content.append(actions());
-        refreshReadout();
         return content;
     }
 
@@ -311,12 +273,23 @@ public final class TaskbarDesigner {
         row.append(copy);
 
         Button reset = new Button("Reset");
-        reset.onPressed.connect(() -> {
-            for (Runnable r : resets) r.run();
-            refreshReadout();
-        });
+        reset.onPressed.connect(this::reset);
         row.append(reset);
         return row;
+    }
+
+    /**
+     * Every field back to what the bar had when the tuner opened.
+     *
+     * <p>LAST TO FIRST: Width's own write turns "Width follows content" off, so restoring it after the
+     * checkbox would leave a bar that followed its content showing a fixed width.</p>
+     */
+    private void reset() {
+        List<ConfigControl> controls = new ArrayList<>(body.controls().values());
+        for (int i = controls.size() - 1; i >= 0; i--) {
+            if (controls.get(i) instanceof ValueControl<?> field) field.restoreBoundValue();
+        }
+        refreshReadout();
     }
 
     // ── applying ─────────────────────────────────────────────────────────────────────────────────
@@ -499,7 +472,7 @@ public final class TaskbarDesigner {
     }
 
     private void refreshReadout() {
-        if (readout != null) readout.setText(css());
+        readout.set(css());
     }
 
     private static String hex(int argb) {
@@ -507,92 +480,27 @@ public final class TaskbarDesigner {
                 (argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF, (argb >>> 24) & 0xFF);
     }
 
-    // ── control builders ─────────────────────────────────────────────────────────────────────────
+    // ── control builders ─────────────────────────────────────────────────────────────────────────────
 
-    /**
-     * The tint, as a real picker rather than four channel sliders.
-     *
-     * <p><b>Alpha lives in the colour</b>, which is why {@link ColorSelector} is the right widget and not
-     * an approximation of one: it carries ARGB throughout and composites its swatches over a transparency
-     * checkerboard, so a half-alpha tint <em>reads</em> as half-alpha while you are choosing it. Four
-     * sliders can express the same number and cannot show you that, and this is a value judged by eye —
-     * the whole reason the panel exists.</p>
-     */
-    private UIElement tintPicker() {
-        int initial = glass.getTintArgb();
-        ColorSelector picker = new ColorSelector();
-        picker.addClass("__designer-tint__");
-        picker.setColor(initial);
-        picker.onColorChanged.connect(argb -> {
-            glass.setTintArgb(argb);
+    /** A slider over one of the tuner's own numbers. */
+    private void slider(PanelForm form, String label, float min, float max, int decimals,
+                        DoubleSupplier read, Consumer<Float> apply) {
+        form.prop(ConfigDescriptor.number(label, label).range(min, max).decimals(decimals),
+                Property.derived(read::getAsDouble, v -> apply.accept(v.floatValue())));
+    }
+
+    /** A slider over one of the glass's own parameters, which re-states the CSS as it moves. */
+    private void glassSlider(PanelForm form, String label, float min, float max, int decimals,
+                             FloatSupplier read, Consumer<Float> write) {
+        slider(form, label, min, max, decimals, read::get, v -> {
+            write.accept(v);
             refreshReadout();
         });
-        resets.add(() -> picker.setColor(initial));
-        return picker;
     }
 
-    /** The tone, the same picker as the tint: alpha is most of what is being chosen. */
-    private UIElement tonePicker() {
-        int initial = tone;
-        ColorSelector picker = new ColorSelector();
-        picker.addClass("__designer-tint__");
-        picker.setColor(initial);
-        picker.onColorChanged.connect(argb -> {
-            tone = argb;
-            applyTone();
-        });
-        resets.add(() -> picker.setColor(initial));
-        return picker;
-    }
-
-    private UIElement slider(String label, float min, float max, float initial,
-                             String format, Consumer<Float> apply) {
-        UIElement row = new UIElement();
-        row.addClass("__designer-row__");
-
-        UIText name = new UIText(label);
-        name.addClass("__designer-label__");
-        UIText value = new UIText(String.format(Locale.ROOT, format, initial));
-        value.addClass("__designer-value__");
-
-        Slider slider = new Slider();
-        slider.addClass("__designer-slider__");
-        slider.setRange(min, max).setValue(initial);
-        slider.onValueChanged.connect(v -> {
-            apply.accept(v);
-            value.setText(String.format(Locale.ROOT, format, v));
-        });
-        resets.add(() -> slider.setValue(initial));
-
-        row.append(name);
-        row.append(slider);
-        row.append(value);
-        return row;
-    }
-
-    private UIElement toggle(String label, boolean initial, Consumer<Boolean> apply) {
-        UIElement row = new UIElement();
-        row.addClass("__designer-row__");
-        Checkbox box = new Checkbox();
-        box.setChecked(initial);
-        box.onCheckedChanged.connect(apply::accept);
-        UIText name = new UIText(label);
-        name.addClass("__designer-label__");
-        resets.add(() -> box.setChecked(initial));
-        row.append(box);
-        row.append(name);
-        return row;
-    }
-
-    private static UIElement heading(String text) {
-        UIText t = new UIText(text);
-        t.addClass("__designer-heading__");
-        return t;
-    }
-
-    private static UIElement note(String text) {
-        UIText t = new UIText(text);
-        t.addClass("__designer-note__");
-        return t;
+    /** A {@code float} getter, which {@code java.util.function} does not have. */
+    @FunctionalInterface
+    private interface FloatSupplier {
+        float get();
     }
 }

@@ -11,6 +11,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.ConfigForm;
 
 /**
  * <b>A closed document takes its inspector sections with it.</b>
@@ -50,7 +51,7 @@ public class InspectorForgetsAClosedSubjectTest extends UiDocumentTestBase {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             // A section that writes NOTHING contributes no tab -- rebuild drops an empty form -- so a
             // test whose build() is a no-op asserts against a panel that was correctly left empty.
             form.header("Closable");

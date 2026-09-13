@@ -25,6 +25,7 @@ import com.crystalgui.widget.config.ConfiguratorGroup;
 import com.crystalgui.widget.config.ConfiguratorPanel;
 import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.widget.config.control.InfoControl;
+import com.crystalgui.widget.config.control.NoteControl;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -146,7 +147,9 @@ public final class WidgetCensus {
                 "Derived: a section heading read from the descriptor. It has no value -- it is the one "
                         + "kind of ConfigControl that is not a ValueControl.");
         WidgetContracts.localOnly(InfoControl.class,
-                "Derived: explanatory text read from the descriptor, as HeaderControl.");
+                "Derived: a read-only fact, read from a model nothing on the far side edits.");
+        WidgetContracts.localOnly(NoteControl.class,
+                "Derived: a paragraph of guidance or a read-only readout, as InfoControl.");
         WidgetContracts.localOnly(SymbolIcon.class,
                 "Derived. The glyph is chosen from a symbol's kind and modifiers, which is language "
                         + "data the analysis already carries.");

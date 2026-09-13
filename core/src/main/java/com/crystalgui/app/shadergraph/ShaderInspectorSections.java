@@ -8,6 +8,7 @@ import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
 import com.crystalgui.app.shadergraph.preview.MainPreviewPanel;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.property.Property;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.EdgeData;
@@ -20,17 +21,15 @@ import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.PortRef;
 import com.crystalgui.graph.PortSpec;
 import com.crystalgui.graph.PropertyEdits;
-import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.core.config.ConfigDescriptor;
-import com.crystalgui.widget.config.Configurator;
+import com.crystalgui.widget.config.ConfigForm;
 import com.crystalgui.widget.config.SettingsConfigurator;
 import com.crystalgui.widget.graph.GraphConnection;
 import com.crystalgui.widget.graph.node.NodeFieldBinder;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.GraphSelection;
 import com.crystalgui.widget.graph.NodePort;
-import com.crystalgui.widget.config.inspector.InspectorForm;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.surface.extension.SectionSet;
@@ -42,6 +41,10 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
+import java.util.function.Function;
+import java.util.function.Supplier;
+import java.util.function.ToIntFunction;
 import java.util.function.UnaryOperator;
 
 /**
@@ -127,8 +130,13 @@ public final class ShaderInspectorSections {
         return data == null ? null : ShaderPropertyNodes.resolve(editor.graph().getDocument(), data);
     }
 
-    private static void readOnly(InspectorForm group, String label, String value) {
+    private static void readOnly(ConfigForm group, String label, String value) {
         group.row(ConfigDescriptor.info(label, label), value);
+    }
+
+    /** A fact kept current while it is on screen. */
+    private static void live(ConfigForm group, String label, Supplier<String> value) {
+        group.prop(ConfigDescriptor.info(label, label), Property.derived(value));
     }
 
     // ── What is selected — asked once, answered once ────────────────────────────────────────────
@@ -205,7 +213,7 @@ public final class ShaderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             ShaderGraphEditor editor = editor(context);
             GraphNode widget = nodes(context).get(0);
             GraphDocument document = editor.graph().getDocument();
@@ -232,7 +240,7 @@ public final class ShaderInspectorSections {
      * inline editor uses. A port that something is wired into shows the source instead of its own value,
      * because a literal nothing reads is not "the value greyed out" — it has been overridden.</p>
      */
-    private static void fieldRow(InspectorForm form, ShaderGraphEditor editor, GraphNode widget,
+    private static void fieldRow(ConfigForm form, ShaderGraphEditor editor, GraphNode widget,
                                  NodeData data, NodeField field) {
         GraphDocument document = editor.graph().getDocument();
         EdgeData incoming = field.isPortField()
@@ -250,10 +258,10 @@ public final class ShaderInspectorSections {
                         data.properties().get(field.id()))
                 : field;
 
-        UIElement control = NodeFieldBinder.buildControl(shaped, document, data.id(),
+        ConfigControl control = NodeFieldBinder.buildControl(shaped, document, data.id(),
                 editor.graph().undoStack(), editor::recompile,
                 shaped == field ? null : shaped.defaultValue());
-        if (control instanceof ConfigControl typed) form.control(field.id(), field.label(), typed);
+        if (control != null) form.control(field.id(), field.label(), control);
     }
 
     /**
@@ -264,7 +272,7 @@ public final class ShaderInspectorSections {
      * to {@code Multiply.O…}. Spelled {@code from X}, not with an arrow: the bundled fonts have no U+2190
      * and it drew as a blank advance.</p>
      */
-    private static void connectedRow(InspectorForm form, ShaderGraphEditor editor, NodeField field,
+    private static void connectedRow(ConfigForm form, ShaderGraphEditor editor, NodeField field,
                                      EdgeData incoming) {
         GraphDocument document = editor.graph().getDocument();
         NodeData source = document.node(incoming.from().nodeId());
@@ -283,9 +291,9 @@ public final class ShaderInspectorSections {
      * {@code line 12 emitted by cg:Math/Basic/multiply}, and nothing else on screen says which node that
      * is.</p>
      */
-    private static void about(InspectorForm form, NodeTypeRegistry library, NodeData data,
+    private static void about(ConfigForm form, NodeTypeRegistry library, NodeData data,
                               @Nullable NodeType type) {
-        InspectorForm about = form.group("About", true);
+        ConfigForm about = form.group("About", true);
         readOnly(about, "Type", data.typeId());
         if (type != null && !type.category().isEmpty()) readOnly(about, "Category", type.category());
         readOnly(about, "Node id", data.id());
@@ -375,7 +383,7 @@ public final class ShaderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             ShaderGraphEditor editor = editor(context);
             GraphDocument document = editor.graph().getDocument();
             List<GraphNode> nodes = nodes(context);
@@ -400,7 +408,7 @@ public final class ShaderInspectorSections {
             // indication of what was selected at all.
             NodeType type = typeIds.size() == 1 ? editor.library().get(typeIds.iterator().next()) : null;
             if (type == null || byLabel.size() != 1 || type.fields().isEmpty()) {
-                InspectorForm group = form.group("Selection", true);
+                ConfigForm group = form.group("Selection", true);
                 for (Map.Entry<String, Integer> entry : byLabel.entrySet()) {
                     readOnly(group, entry.getKey(), String.valueOf(entry.getValue()));
                 }
@@ -421,11 +429,9 @@ public final class ShaderInspectorSections {
                 // The row shows the first node's value, which is what every inspector does with a
                 // multi-selection: the write applies to all of them regardless, so it is a starting point
                 // rather than a claim that they agree.
-                UIElement control = NodeFieldBinder.buildMultiControl(field, document, ids, firstId,
+                ConfigControl control = NodeFieldBinder.buildMultiControl(field, document, ids, firstId,
                         editor.graph().undoStack(), editor::recompile);
-                if (control instanceof ConfigControl typed) {
-                    form.control(field.id(), field.label(), typed);
-                }
+                if (control != null) form.control(field.id(), field.label(), control);
             }
         }
     }
@@ -457,11 +463,11 @@ public final class ShaderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             ShaderGraphEditor editor = editor(context);
             GraphConnection wire = selection(context).wire();
             form.header("Connection");
-            InspectorForm about = form.group("About", true);
+            ConfigForm about = form.group("About", true);
             readOnly(about, "From", describe(editor, wire.from()));
             readOnly(about, "To", describe(editor, wire.to()));
         }
@@ -520,50 +526,61 @@ public final class ShaderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             ShaderGraphEditor editor = editor(context);
             GraphProperty property = resolve(context);
             if (property == null) return;
-            GraphDocument document = editor.graph().getDocument();
-            UndoStack undo = editor.graph().undoStack();
+            String id = property.id();
 
             form.header("Property: " + property.name());
 
-            bind(form.row(ConfigDescriptor.text("property.name", "Name")
-                            .tooltip("What the Blackboard and its nodes show."), property.name()),
-                    value -> edit(editor, property.id(), p -> p.withName(String.valueOf(value))));
+            form.prop(ConfigDescriptor.text("property.name", "Name")
+                            .tooltip("What the Blackboard and its nodes show."),
+                    field(editor, id, GraphProperty::name,
+                            (p, value) -> p.withName(String.valueOf(value))));
 
-            bind(form.row(ConfigDescriptor.text("property.reference", "Reference")
+            form.prop(ConfigDescriptor.text("property.reference", "Reference")
                             .tooltip("The uniform's name in the generated shader. Sanitised on entry."),
-                            property.reference()),
-                    value -> edit(editor, property.id(), p -> p.withReference(String.valueOf(value))));
+                    field(editor, id, GraphProperty::reference,
+                            (p, value) -> p.withReference(String.valueOf(value))));
 
             // TYPED, which is why this cannot be a fixed list of rows: two boxes for a Vector 2, a swatch
             // for a Colour, a checkbox for a Boolean. See ShaderPropertyForm.
-            bind(form.row(ShaderPropertyForm.describeDefault(property)
+            form.prop(ShaderPropertyForm.describeDefault(property)
                             .tooltip("What a material starts with when it has said nothing else."),
-                            ShaderPropertyForm.readDefault(property)),
-                    raw -> {
-                        String literal = ShaderPropertyForm.writeDefault(property, raw);
-                        if (literal != null) {
-                            edit(editor, property.id(), p -> p.withDefaultValue(literal));
-                        }
-                    });
+                    field(editor, id, ShaderPropertyForm::readDefault, (p, raw) -> {
+                        String literal = ShaderPropertyForm.writeDefault(p, raw);
+                        return literal == null ? p : p.withDefaultValue(literal);
+                    }));
 
-            bind(form.row(ConfigDescriptor.bool("property.exposed", "Exposed")
+            form.prop(ConfigDescriptor.bool("property.exposed", "Exposed")
                             .tooltip("Whether a material inspector offers it. It is a uniform either way."),
-                            property.exposed()),
-                    value -> edit(editor, property.id(),
-                            p -> p.withExposed(Boolean.TRUE.equals(value))));
+                    field(editor, id, GraphProperty::exposed,
+                            (p, value) -> p.withExposed(Boolean.TRUE.equals(value))));
 
-            InspectorForm about = form.group("About", true);
+            ConfigForm about = form.group("About", true);
             readOnly(about, "Type", BlackboardPanel.displayTypeOf(property));
             readOnly(about, "Wire type", property.typeId());
             readOnly(about, "Property id", property.id());
         }
 
-        private static void bind(@Nullable Configurator row, java.util.function.Consumer<Object> onChange) {
-            if (row != null) row.control().changed.connect(onChange::accept);
+        /**
+         * One of a property's own values, read and written by id.
+         *
+         * <p>By id rather than over the record the panel was built from: the panel outlives the record, and
+         * writing a stale copy back would silently undo whatever changed in between.</p>
+         */
+        @SuppressWarnings("unchecked")
+        private static <T> Property<T> field(ShaderGraphEditor editor, String propertyId,
+                                             Function<GraphProperty, ?> read,
+                                             BiFunction<GraphProperty, Object, GraphProperty> write) {
+            GraphDocument document = editor.graph().getDocument();
+            return (Property<T>) Property.<Object>derived(() -> {
+                        GraphProperty current = document.property(propertyId);
+                        return current == null ? null : read.apply(current);
+                    }, value -> edit(editor, propertyId, p -> write.apply(p, value)))
+                    .announcedBy(refresh -> document.onChanged.connect(refresh))
+                    .editedIn(editor.graph().undoStack());
         }
 
         /**
@@ -614,42 +631,36 @@ public final class ShaderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             ShaderGraphEditor editor = editor(context);
             GraphDocument document = editor.graph().getDocument();
 
             form.header("Shader");
-            SettingsConfigurator.build(form.panel(), document.settings(), SettingsLayer.DOCUMENT,
+            SettingsConfigurator.build(form, document.settings(), SettingsLayer.DOCUMENT,
                     ShaderGraphSettings.all(), editor.graph().undoStack());
 
             preview(form, editor.mainPreview());
-            compile(form, document, editor.lastCompile());
+            compile(form, editor);
         }
 
         /** Not saved with the graph — view state, in the sense the document/view boundary means. */
-        private static void preview(InspectorForm form, @Nullable MainPreviewPanel preview) {
+        private static void preview(ConfigForm form, @Nullable MainPreviewPanel preview) {
             if (preview == null) return;
-            InspectorForm group = form.group("Preview");
+            ConfigForm group = form.group("Preview");
 
             List<String> meshes = new ArrayList<>();
             for (CgPreviewMesh shape : CgPreviewMesh.values()) meshes.add(shape.label());
 
-            Configurator mesh = group.row(ConfigDescriptor.select("preview.mesh", "Mesh", meshes)
-                    .tooltip("Which shape the Main Preview draws. Not saved with the graph."),
-                    preview.mesh().label());
-            if (mesh != null) {
-                mesh.control().changed.connect(value -> {
-                    CgPreviewMesh chosen = meshNamed(String.valueOf(value));
-                    if (chosen != null) preview.setMesh(chosen);
-                });
-            }
+            group.prop(ConfigDescriptor.select("preview.mesh", "Mesh", meshes)
+                            .tooltip("Which shape the Main Preview draws. Not saved with the graph."),
+                    Property.derived(() -> preview.mesh().label(), label -> {
+                        CgPreviewMesh chosen = meshNamed(label);
+                        if (chosen != null) preview.setMesh(chosen);
+                    }));
 
-            Configurator lit = group.row(ConfigDescriptor.bool("preview.lighting", "Lighting")
-                    .tooltip("Viewport shading, not a lighting model — see CgShaderEmitter.Shading."),
-                    preview.isLit());
-            if (lit != null) {
-                lit.control().changed.connect(value -> preview.setLit(Boolean.TRUE.equals(value)));
-            }
+            group.prop(ConfigDescriptor.bool("preview.lighting", "Lighting")
+                            .tooltip("Viewport shading, not a lighting model — see CgShaderEmitter.Shading."),
+                    Property.derived(preview::isLit, lit -> preview.setLit(Boolean.TRUE.equals(lit))));
         }
 
         @Nullable
@@ -668,21 +679,26 @@ public final class ShaderInspectorSections {
          * <em>normal</em> state while one is being built, so the error count is worth somewhere
          * permanent.</p>
          *
-         * <p>Plain rows now, rebuilt when {@link #subjectKey} moves. They used to be a {@code List} of
-         * {@code Configurator}s poked by <b>index</b> — {@code setStat(3, …)} — which is a binding held
-         * together by counting.</p>
+         * <p>Each fact follows the graph and the last emit while it is on screen, so an animated graph's
+         * numbers move without the panel being rebuilt — which {@link #subjectKey} deliberately never
+         * asks for.</p>
          */
-        private static void compile(InspectorForm form, GraphDocument document,
-                                    @Nullable CgShaderEmitter.Result result) {
-            InspectorForm group = form.group("Compile", true);
+        private static void compile(ConfigForm form, ShaderGraphEditor editor) {
+            GraphDocument document = editor.graph().getDocument();
+            ConfigForm group = form.group("Compile", true);
             // INFO, not a disabled TEXT row: a compile count is a fact, and a text field drew it as
-            // something to type into -- which it also genuinely was, since disabling the wrapper never
-            // reached the field inside it.
-            readOnly(group, "Nodes", String.valueOf(document.nodeCount()));
-            readOnly(group, "Edges", String.valueOf(document.edges().size()));
-            readOnly(group, "Varyings", result == null ? "—" : String.valueOf(result.varyings().size()));
-            readOnly(group, "Characters", result == null ? "—" : String.valueOf(result.source().length()));
-            readOnly(group, "Errors", result == null ? "—" : String.valueOf(result.errors().size()));
+            // something to type into.
+            live(group, "Nodes", () -> String.valueOf(document.nodeCount()));
+            live(group, "Edges", () -> String.valueOf(document.edges().size()));
+            live(group, "Varyings", () -> stat(editor, result -> result.varyings().size()));
+            live(group, "Characters", () -> stat(editor, result -> result.source().length()));
+            live(group, "Errors", () -> stat(editor, result -> result.errors().size()));
+        }
+
+        private static String stat(ShaderGraphEditor editor,
+                                   ToIntFunction<CgShaderEmitter.Result> count) {
+            CgShaderEmitter.Result result = editor.lastCompile();
+            return result == null ? "—" : String.valueOf(count.applyAsInt(result));
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.core.property.Property;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.graph.NodeField;
@@ -13,6 +14,12 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.crystalgui.widget.overlay.Dropdown;
+import com.crystalgui.style.property.visual.text.WhiteSpace;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.text.TextOverflow;
+import com.crystalgui.widget.composite.ColorSelector;
+import java.util.function.Supplier;
 
 import static org.junit.Assert.*;
 
@@ -91,7 +98,7 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     private UIElement controlInNode(NodeField.Kind kind) {
         GraphNode node = new GraphNode("Node");
         NodeField field = fieldFor(kind);
-        UIElement widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> { });
+        UIElement widget = NodeFieldWidgets.create(field, Property.of(field.defaultValue()));
         assertNotNull("no widget registered for kind " + kind, widget);
         node.addControl(field.label(), widget);
         root.append(node);
@@ -137,7 +144,7 @@ public class NodeControlKitTest extends UiDocumentTestBase {
         openWindow();
         GraphNode node = new GraphNode("A Rather Long Node Title");
         node.addControl("A Rather Long Control Label", new UIElement());
-        com.crystalgui.widget.overlay.Dropdown dropdown = new com.crystalgui.widget.overlay.Dropdown("");
+        Dropdown dropdown = new Dropdown("");
         dropdown.addOption("A Rather Long Selected Value").select(0);
         root.append(node);
         root.append(dropdown);
@@ -154,13 +161,13 @@ public class NodeControlKitTest extends UiDocumentTestBase {
 
         for (UIElement label : List.of(title, controlLabel, dropdownLabel)) {
             assertEquals("must not wrap onto a second line: " + label,
-                    com.crystalgui.style.property.visual.text.WhiteSpace.NOWRAP,
+                    WhiteSpace.NOWRAP,
                     label.getStyle().getComputed(
-                            com.crystalgui.style.property.StylePropertyRegistry.WHITE_SPACE));
+                            StylePropertyRegistry.WHITE_SPACE));
             assertEquals("must clip with an ellipsis instead: " + label,
-                    com.crystalgui.style.property.visual.text.TextOverflow.ELLIPSIS,
+                    TextOverflow.ELLIPSIS,
                     label.getStyle().getComputed(
-                            com.crystalgui.style.property.StylePropertyRegistry.TEXT_OVERFLOW));
+                            StylePropertyRegistry.TEXT_OVERFLOW));
         }
     }
 
@@ -235,10 +242,10 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     private static final class Composite {
         final String name;
         final List<String> partNames;
-        private final java.util.function.Supplier<UIElement> factory;
+        private final Supplier<UIElement> factory;
         private final List<String> selectors;
 
-        Composite(String name, java.util.function.Supplier<UIElement> factory, String... selectors) {
+        Composite(String name, Supplier<UIElement> factory, String... selectors) {
             this.name = name;
             this.factory = factory;
             this.selectors = List.of(selectors);
@@ -262,9 +269,9 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     }
 
     private static final List<Composite> COMPOSITES = List.of(
-            new Composite("ColorSelector", com.crystalgui.widget.composite.ColorSelector::new,
-                    "." + com.crystalgui.widget.composite.ColorSelector.CHANNEL_ROW_CLASS + " textfield",
-                    "." + com.crystalgui.widget.composite.ColorSelector.CHANNEL_ROW_CLASS + " slider",
-                    "." + com.crystalgui.widget.composite.ColorSelector.RING_CLASS,
-                    "." + com.crystalgui.widget.composite.ColorSelector.SQUARE_CLASS));
+            new Composite("ColorSelector", ColorSelector::new,
+                    "." + ColorSelector.CHANNEL_ROW_CLASS + " textfield",
+                    "." + ColorSelector.CHANNEL_ROW_CLASS + " slider",
+                    "." + ColorSelector.RING_CLASS,
+                    "." + ColorSelector.SQUARE_CLASS));
 }

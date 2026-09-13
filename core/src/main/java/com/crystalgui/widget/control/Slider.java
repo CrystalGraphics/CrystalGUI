@@ -119,6 +119,12 @@ public class Slider extends UIElement {
     /** Fires whenever the value actually changes, from any source. */
     public final Signal.Value<Float> onValueChanged = new Signal.Value<>();
 
+    /**
+     * {@code true} when a press begins a drag — a track click's jump included — and {@code false} when it
+     * ends or is cancelled, so a host can make the values in between one undo step.
+     */
+    public final Signal.Value<Boolean> onDragging = new Signal.Value<>();
+
     private final ShadowRoot shadow;
     private final UIElement fill;
     private final UIElement thumb;
@@ -155,8 +161,12 @@ public class Slider extends UIElement {
             float rawX = event.getPosition().x(), rawY = event.getPosition().y();
             if (!containsSurfacePoint(rawX, rawY)) return;
 
+            if (document() == null) return;
+
             // MouseEvent positions are raw/physical; all geometry below is logical. Convert once.
             float mouseX = toLocal(rawX, rawY).x();
+            // The jump is part of the drag it starts, so the gesture opens before it.
+            onDragging.emit(true);
             if (!isOverThumb(mouseX)) {
                 setValue(valueAtX(mouseX)); // click on the track jumps first
             }
@@ -330,14 +340,26 @@ public class Slider extends UIElement {
     /** Takes the RAW pointer x — {@code UIDragController} does the local-space conversion, and
      * reports every subsequent coordinate already converted. */
     private void beginDrag(float rawMouseX) {
-        var window = document();
-        if (window == null) return;
         this.dragStartValue = this.value;
         float range = max - min;
         float travel = travelLength();
-        Drag.start(this, rawMouseX, box() == null ? 0f : box().y(),
+        Drag.start(this, rawMouseX, box() == null ? 0f : box().y(), new Drag.Listener() {
+            @Override
+            public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
                 // Delta from the grab point, not absolute: grabbing the thumb anywhere along its
                 // width must not teleport it so its centre lands under the cursor.
-                (mx, my, sx, sy, dx, dy) -> setValue(dragStartValue + (dx / travel) * range));
+                setValue(dragStartValue + (dx / travel) * range);
+            }
+
+            @Override
+            public void onDragEnd(float x, float y) {
+                onDragging.emit(false);
+            }
+
+            @Override
+            public void onDragCancel() {
+                onDragging.emit(false);
+            }
+        });
     }
 }

@@ -130,27 +130,12 @@ builderpane > contexttoolbar > .__context-page__ {
  *
  * Free Transform's page in the row above, which gives it its height, ground and gaps. */
 
-/* Dense, as Photoshop's and Paint.NET's bars are: a letter per number, and the unit inside the value. */
-.__transform-field__ {
-    flex-direction: row;
-    align-items: center;
-    gap: 2;
-}
-
-/* The label is also the scrub handle -- pressing it and sliding changes the number -- so it carries the
- * cursor that says so, exactly as an inspector row label does. */
-.__transform-label__ {
-    color: var(--tree-dimmed-fg, #9DA0A8);
-    cursor: slide-arrow;
-}
-
-.__transform-field__ > numbercontrol {
-    width: 38;
-}
+/* The page is a toolbar form: a letter per number and the unit inside the value, the pivot's grid and
+ * cells all the kit's own. What is left here is the one mark the kit cannot know about. */
 
 /* Photoshop's chain between W and H: dim while each scales alone, the accent while they go together. An
  * icon button, so the workbench's outline -- a rule for LABELLED buttons -- never reaches it. */
-.__transform-link__ {
+.__transform-link__ .__config-control__ button {
     width: 14px;
     height: 14px;
     min-width: 0px;
@@ -166,51 +151,16 @@ builderpane > contexttoolbar > .__context-page__ {
 }
 
 /* The panel header's icon hover: a brighter mark on a square behind it. */
-.__transform-link__:hover {
+.__transform-link__ .__config-control__ button:hover {
     color: var(--panel-header-icon-hover, #E0E0E0);
     background: none;
     background-color: var(--panel-header-icon-hover-bg, #393B40);
 }
 
-.__transform-link__.__on__,
-.__transform-link__.__on__:hover {
+.__transform-link__ .__config-control__ button.__on__,
+.__transform-link__ .__config-control__ button.__on__:hover {
     color: var(--builder-selected, #3574F0);
-}
-
-/* ── The pivot ───────────────────────────────────────────────────────────────────────────────────────
- *
- * Photoshop's 3x3 reference point: the cell the pivot sits on, and a click puts it on another. Nine cells
- * rather than a dropdown because the thing being chosen is a position, and a picture of the box is the only
- * spelling that does not need reading. None lights while the pivot is dragged between them. */
-.__transform-anchor__ {
-    flex-direction: column;
-    justify-content: center;
-    gap: 1;
-    padding-right: 4px;
-    /* THE ROW'S FULL HEIGHT, with the nine cells centred in it: this is what the grid's tooltip hangs
-     * from, and a box only as tall as the cells put it four pixels above every other tooltip on the
-     * bar -- over the toolbar rather than under it. */
-    height: 100%;
-}
-
-.__transform-anchor__ > * {
-    flex-direction: row;
-    gap: 1;
-}
-
-.__transform-anchor-cell__ {
-    width: 4;
-    height: 4;
-    background-color: var(--builder-selected-parent, #55607A);
-    cursor: pointer;
-}
-
-.__transform-anchor-cell__.__on__ {
-    background-color: var(--builder-selected, #3574F0);
-}
-
-buildertoolbar > dropdown {
-    min-width: 72;
+    background: none;
 }
 
 /* The plane fills what the toolbar left. NOT height: 100% -- see the note above.
@@ -403,11 +353,11 @@ hierarchypanel .__focused__ .__hierarchy-row__.__selected__ {
  * and for the same reason: one auto margin means one claimant, so it takes all the slack rather than
  * sharing it with the row's gaps. The dropdowns before it are settings ABOUT the page; this one changes
  * what the editor is, and IntelliJ separates the same switch on a Markdown file. */
-buildertoolbar > button.__preview__ {
+buildertoolbar > .__preview__ {
     margin-left: auto;
 }
 
-buildertoolbar > button.__active__ {
+buildertoolbar > .__preview__ button.__on__ {
     background: var(--tab-active-bg, #3A3A3A);
     color: var(--tab-active-fg, #FFFFFF);
     border-color: var(--tab-active-border, #4A4A4A);

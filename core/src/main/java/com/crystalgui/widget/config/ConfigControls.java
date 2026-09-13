@@ -3,6 +3,7 @@ package com.crystalgui.widget.config;
 import com.crystalgui.widget.config.control.*;
 
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.core.property.Property;
 import javax.annotation.Nullable;
 import java.util.*;
 
@@ -52,6 +53,10 @@ public final class ConfigControls {
         FACTORIES.put(ConfigDescriptor.Kind.HEADER, (d, v) -> new HeaderControl(d));
         FACTORIES.put(ConfigDescriptor.Kind.INFO,
                 (d, v) -> new InfoControl(d, v == null ? "" : String.valueOf(v)));
+        FACTORIES.put(ConfigDescriptor.Kind.NOTE,
+                (d, v) -> new NoteControl(d, v == null ? "" : String.valueOf(v)));
+        FACTORIES.put(ConfigDescriptor.Kind.ANCHOR,
+                (d, v) -> new AnchorControl(d, v instanceof double[] a ? a : null));
         FACTORIES.put(ConfigDescriptor.Kind.COLOR, (d, v) -> new ColorControl(d, v instanceof Integer i ? i : null));
         FACTORIES.put(ConfigDescriptor.Kind.MATRIX, (d, v) -> new MatrixControl(d, v instanceof double[] a ? a : null));
         FACTORIES.put(ConfigDescriptor.Kind.ASSET, (d, v) -> new AssetControl(d, v == null ? null : String.valueOf(v)));
@@ -74,6 +79,39 @@ public final class ConfigControls {
     public static ConfigControl create(ConfigDescriptor descriptor, @Nullable Object value) {
         Factory factory = FACTORIES.get(descriptor.kind());
         return factory == null ? null : factory.create(descriptor, value);
+    }
+
+    /**
+     * The control for a descriptor, or a thrown {@link IllegalArgumentException} naming the kind that has
+     * none — for a form, where a blank field is the failure this registry exists to prevent.
+     */
+    public static ConfigControl require(ConfigDescriptor descriptor, @Nullable Object value) {
+        ConfigControl control = create(descriptor, value);
+        if (control == null) {
+            throw new IllegalArgumentException("no control is registered for " + descriptor.kind()
+                    + " (" + descriptor.id() + ")");
+        }
+        return control;
+    }
+
+    /**
+     * The control for a descriptor, bound to {@code value}.
+     *
+     * <pre>{@code
+     * NumberControl angle = (NumberControl) ConfigControls.bound(ConfigDescriptor.number("r", "Rotation"), rotation);
+     * }</pre>
+     *
+     * @throws IllegalArgumentException when the kind has no control, or its control edits no value
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> ValueControl<T> bound(ConfigDescriptor descriptor, Property<T> value) {
+        ConfigControl control = require(descriptor, value.get());
+        if (!(control instanceof ValueControl<?> typed)) {
+            throw new IllegalArgumentException(descriptor.kind() + " edits no value, so it cannot be bound");
+        }
+        ValueControl<T> bound = (ValueControl<T>) typed;
+        bound.bind(value);
+        return bound;
     }
 
     /** True when {@code kind} can be built — what a caller checks before offering it. */

@@ -1,6 +1,7 @@
 package com.crystalgui.widget.config;
 
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
@@ -106,6 +107,28 @@ public class ConfiguratorPanel extends ScrollerView {
     }
 
     /**
+     * A form over this panel — the way to fill it.
+     *
+     * <pre>{@code
+     * PanelForm form = panel.form();
+     * form.prop(ConfigDescriptor.bool("wrap", "Word wrap"), wordWrap);
+     * }</pre>
+     */
+    public PanelForm form() {
+        return new PanelForm(this);
+    }
+
+    /** Builds a row for {@code descriptor}, bound to {@code value}, and appends it. @see ConfigForm#prop */
+    public <T> Configurator prop(ConfigDescriptor descriptor, Property<T> value) {
+        return propTo(this, descriptor, value);
+    }
+
+    /** As {@link #prop}, into a group's content rather than the panel root. */
+    public <T> Configurator propTo(UIElement parent, ConfigDescriptor descriptor, Property<T> value) {
+        return place(parent, descriptor.id(), new Configurator(descriptor, ConfigControls.bound(descriptor, value)));
+    }
+
+    /**
      * Builds a row for {@code descriptor} and appends it, or returns null when the kind has no control.
      *
      * @param value the current value, or null to take the descriptor's default
@@ -120,11 +143,7 @@ public class ConfiguratorPanel extends ScrollerView {
     public Configurator addTo(UIElement parent, ConfigDescriptor descriptor, @Nullable Object value) {
         ConfigControl control = ConfigControls.create(descriptor, value);
         if (control == null) return null;
-        Configurator row = new Configurator(descriptor, control);
-        controls.put(descriptor.id(), control);
-        control.changed.connect(v -> changed.emit(descriptor.id(), v));
-        parent.append(row);
-        return row;
+        return place(parent, descriptor.id(), new Configurator(descriptor, control));
     }
 
     /**
@@ -163,7 +182,11 @@ public class ConfiguratorPanel extends ScrollerView {
      * label column and change signal.</p>
      */
     public Configurator addRow(UIElement parent, String label, String id, ConfigControl control) {
-        Configurator row = new Configurator(label, control);
+        return place(parent, id, new Configurator(label, control));
+    }
+
+    private Configurator place(UIElement parent, String id, Configurator row) {
+        ConfigControl control = row.control();
         controls.put(id, control);
         control.changed.connect(value -> changed.emit(id, value));
         parent.append(row);

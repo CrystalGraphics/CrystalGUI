@@ -1,9 +1,11 @@
 package com.crystalgui.app.shadergraph.node;
 
+import com.crystalgui.core.property.Property;
 import com.crystalgui.graph.NodeField;
-import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.widget.config.ConfigControl;
+import com.crystalgui.widget.config.ConfigControls;
 import com.crystalgui.widget.config.control.ColorControl;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.node.NodeFieldWidgets;
@@ -49,19 +51,14 @@ public final class ShaderColorFieldWidget {
      */
     public static void install() {
         NodeFieldWidgets.register(NodeField.Kind.COLOR, ShaderColorFieldWidget::build);
-        // The inverse, so an edit made anywhere other than through this swatch reaches it — undo being
-        // the case that matters. setValueObject is silent, so this cannot echo back out as a new edit.
-        NodeFieldWidgets.registerApplier(NodeField.Kind.COLOR, (control, field, value) -> {
-            if (control instanceof ColorControl swatch) swatch.setValue(parseVec4(field.resolve(value)));
-        });
     }
 
-    private static UIElement build(NodeField field, String value, java.util.function.Consumer<String> onChange) {
-        ConfigDescriptor descriptor = ConfigDescriptor.color(field.id(), field.label());
-        ColorControl control = new ColorControl(descriptor, parseVec4(field.resolve(value)));
+    private static ConfigControl build(NodeField field, Property<String> stored) {
+        ConfigControl control = ConfigControls.bound(
+                NodeFieldWidgets.describe(field, ConfigDescriptor.color(field.id(), field.label())),
+                stored.map(ShaderColorFieldWidget::parseVec4, ShaderColorFieldWidget::formatVec4));
         // See the class javadoc: full width is this call site's decision, not the control's default.
         control.addClass(GraphNode.FULL_WIDTH_CLASS);
-        control.changed.connect(argb -> onChange.accept(formatVec4((Integer) argb)));
         return control;
     }
 

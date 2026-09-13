@@ -82,8 +82,11 @@ public class NumberControl extends ValueControl<Double> {
     @Nullable
     private final String unit;
 
-    /** Units per pixel of scrub, or NaN to let the magnitude curve decide. @see ConfigDescriptor#scrubRate */
+    /** Units per pixel of scrub, or NaN to let the range decide. @see ConfigDescriptor#scrubRate */
     private final double scrubRate;
+
+    /** Decimal places shown, or -1 for up to four. @see ConfigDescriptor#decimals */
+    private final int decimals;
 
     /** The value the live scrub began on. Every frame is computed from this, never from the running
      * value — {@link DragScrub} documents both bugs that live in the alternative. */
@@ -117,9 +120,11 @@ public class NumberControl extends ValueControl<Double> {
         this.range = descriptor.range();
         this.unit = descriptor.unit();
         this.scrubRate = descriptor.scrubRate();
+        this.decimals = descriptor.decimals();
         addClass("__number__");
         append(field);
-        writeToWidgets(defaultValue);
+        quietly(() -> writeToWidgets(defaultValue));
+        if (descriptor.commitsWhileTyping()) field.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
 
         field.attachListener(text -> {
             Double parsed = parse(text);
@@ -131,6 +136,13 @@ public class NumberControl extends ValueControl<Double> {
     /** The field itself, for a host that needs to reach the widget — sizing, focus, a max length. */
     public TextField field() {
         return field;
+    }
+
+    /** The label beside the box is its scrub handle. @see #scrubWith */
+    @Override
+    public boolean adoptLabel(UIElement label) {
+        scrubWith(label);
+        return true;
     }
 
     /** Text typed and not yet landed — the field publishes on Enter, Tab or a click away. */
@@ -340,6 +352,7 @@ public class NumberControl extends ValueControl<Double> {
 
     private String formatNumber(double v) {
         if (integral) return String.valueOf(Math.round(v));
+        if (decimals >= 0) return String.format(Locale.ROOT, "%." + decimals + "f", v);
         // Trailing zeros stripped, so 0.5 is "0.5" and 1.0 is "1" — Unity's own presentation, and the
         // difference between a readable node and one that is all decimal points.
         String s = String.format(Locale.ROOT, "%.4f", v);

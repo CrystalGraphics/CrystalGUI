@@ -11,8 +11,9 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.widget.overlay.InputDialog;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.config.ConfiguratorGroup;
+import com.crystalgui.widget.config.ConfigForm;
 import com.crystalgui.widget.config.ConfiguratorPanel;
+import com.crystalgui.widget.config.PanelForm;
 import com.crystalgui.widget.config.SettingsConfigurator;
 import com.crystalgui.core.collection.tree.PathTreeSource;
 import com.crystalgui.core.search.SearchMatcher;
@@ -227,23 +228,15 @@ public final class Preferences {
 
         ConfiguratorPanel panel = new ConfiguratorPanel();
         panel.addClass(PANEL_CLASS);
-        Map<String, UIElement> hostsBySection = new LinkedHashMap<>();
+        PanelForm page = panel.form();
+        Map<String, ConfigForm> formsBySection = new LinkedHashMap<>();
         for (String id : ids) {
             Setting<?> setting = SettingsRegistry.get().get(id);
             if (setting == null) continue;
-            UIElement host = hostsBySection.computeIfAbsent(paths.sectionOf(id), section -> {
-                if (section.isEmpty()) return panel;
-                ConfiguratorGroup group = panel.group(sectionTitle(path, section));
-                // ADDED, not merely built: `group()` deliberately does not attach, and forgetting it
-                // leaves every row parented to a detached element -- a page that reports a full set of
-                // controls and renders nothing.
-                panel.append(group);
-                return group.content();
-            });
-            if (SettingsConfigurator.addRow(panel, host, settings, SettingsLayer.USER, setting, null)
-                    != null) {
-                shown.add(setting);
-            }
+            ConfigForm section = formsBySection.computeIfAbsent(paths.sectionOf(id),
+                    name -> name.isEmpty() ? page : page.group(sectionTitle(path, name)));
+            SettingsConfigurator.addRow(section, settings, SettingsLayer.USER, setting, null);
+            shown.add(setting);
         }
         return panel;
     }

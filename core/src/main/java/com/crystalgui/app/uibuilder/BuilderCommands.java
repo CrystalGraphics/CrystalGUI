@@ -145,9 +145,8 @@ public final class BuilderCommands {
                 .binding("Ctrl+Alt+P")
                 .run(context -> {
                     BuilderEditor builder = builderOf(context);
+                    // The toolbar's toggle follows the surface, so the key needs to tell it nothing.
                     builder.surface().setDesignMode(!builder.surface().isDesignMode());
-                    // The toolbar shows the state, and the key is the other way of changing it.
-                    builder.toolbar().syncPreviewState();
                 })
                 .enabledWhen(BuilderCommands::hasBuilder));
 

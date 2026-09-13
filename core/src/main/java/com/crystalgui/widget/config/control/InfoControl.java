@@ -1,33 +1,33 @@
 package com.crystalgui.widget.config.control;
 
-import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.widget.config.ValueControl;
+import com.crystalgui.widget.text.UIText;
 
 import javax.annotation.Nullable;
-import com.crystalgui.ui.dom.Name;
 
 /**
  * A fact, not a field — read-only text in the control column.
  *
+ * <pre>{@code
+ * form.row(ConfigDescriptor.info("id", "Node id"), node.id());                        // written once
+ * form.prop(ConfigDescriptor.info("size", "size"), Property.derived(() -> sizeOf(box)));   // kept current
+ * }</pre>
+ *
  * <h3>Why this is a kind rather than a disabled {@link TextControl}</h3>
  * <p>Because a disabled text control is neither read-only nor read-only-<em>looking</em>. It draws the
- * full input chrome — a sunken box with a caret target — which says "type here", and
- * {@code setEnabled(false)} on the wrapper does not reach the {@link com.crystalgui.ui.elements.TextField}
- * inside it, so the row stayed genuinely editable. An inspector showing a node's id, its category and its
- * resolved port types as editable boxes invites the user to change facts that are not theirs to change,
- * and then silently discards what they typed.</p>
+ * full input chrome — a sunken box with a caret target — which says "type here". An inspector showing a
+ * node's id, its category and its resolved port types as editable boxes invites the user to change facts
+ * that are not theirs to change.</p>
  *
- * <p>{@code HEADER} already established that a non-value may wear the {@link ConfigControl} shape so it
- * travels through the same registry, row and kit-height machinery as everything else. This is the second
- * one, and it takes a label like an ordinary row rather than self-labelling, because a fact has a name
- * and a value where a header has only a name.</p>
+ * <p>Still writable <b>programmatically</b>: read-only means the user cannot type into it, not that a panel
+ * cannot refresh it.</p>
  *
  * <h3>Not focusable, and not merely un-editable</h3>
- * <p>Tab must not stop on it. A caret cannot appear in it, so a tab stop there is a dead one — the user
- * presses Tab, the focus ring lands on something inert, and the next press has to be made blind.</p>
+ * <p>Tab must not stop on it. A caret cannot appear in it, so a tab stop there is a dead one.</p>
  */
-public class InfoControl extends ConfigControl {
+public class InfoControl extends ValueControl<String> {
 
     public static final Name NAME = Name.of("infocontrol");
 
@@ -35,18 +35,15 @@ public class InfoControl extends ConfigControl {
 
     private final UIText value;
 
-    /** The no-argument constructor the registry's factory needs, over a NEUTRAL
-     * descriptor -- an unlabelled control of this kind, which is a real thing rather than a
-     * placeholder. Nothing decodes one: the kit is {@code localOnly}, and the registration
-     * exists so a theme can address {@code infocontrol } by tag. */
+    /** The no-argument constructor the registry's factory needs, over a NEUTRAL descriptor. */
     public InfoControl() {
         this(ConfigDescriptor.text("", ""), null);
     }
 
     public InfoControl(ConfigDescriptor descriptor, @Nullable String initial) {
-        super(NAME, descriptor);
+        super(NAME, descriptor, initial == null ? "" : initial);
         addClass(INFO_CLASS);
-        value = new UIText(initial == null ? "" : initial);
+        value = new UIText(getValue());
         value.addClass("__value__");
         // Scenery, like a Configurator's label: nothing here is interactive, and a text run that ate the
         // pointer would make the row's whole right-hand side dead to a click that was aimed past it.
@@ -60,14 +57,7 @@ public class InfoControl extends ConfigControl {
     }
 
     @Override
-    public Object getValueObject() {
-        return value.getText();
-    }
-
-    @Override
-    protected void applyValue(Object incoming) {
-        // Still writable PROGRAMMATICALLY -- read-only means the user cannot type into it, not that a
-        // panel cannot refresh it. The compile stats are exactly this: facts that change every emit.
-        value.setText(incoming == null ? "" : String.valueOf(incoming));
+    protected void writeToWidgets(@Nullable String incoming) {
+        value.setText(incoming == null ? "" : incoming);
     }
 }

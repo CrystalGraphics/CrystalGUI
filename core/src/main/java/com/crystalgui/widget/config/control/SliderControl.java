@@ -5,6 +5,7 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
@@ -67,12 +68,18 @@ public class SliderControl extends ValueControl<Double> {
         number = new NumberControl(
                 ConfigDescriptor.number(descriptor.id() + ".value", "")
                         .integral(descriptor.integral())
+                        .decimals(descriptor.decimals())
+                        .commitWhileTyping(descriptor.commitsWhileTyping())
                         .range(min, max),
                 defaultValue);
 
         append(slider);
         append(number);
 
+        // ONE GESTURE, whichever half made it: the host is handed this control, so a drag of the track or
+        // a scrub of the label has to surface here or it records one undo step per frame.
+        slider.onDragging.connect(this::interactionRelay);
+        number.interacting.connect(this::interactionRelay);
         slider.attachListener(v -> {
             number.setValue((double) v);
             commit((double) v);
@@ -82,6 +89,18 @@ public class SliderControl extends ValueControl<Double> {
             slider.setValue((float) d);
             commit(d);
         });
+    }
+
+    private void interactionRelay(Boolean active) {
+        if (Boolean.TRUE.equals(active)) beginInteraction();
+        else endInteraction();
+    }
+
+    /** The label scrubs the number beside the track. @see NumberControl#scrubWith */
+    @Override
+    public boolean adoptLabel(UIElement label) {
+        number.scrubWith(label);
+        return true;
     }
 
     public Slider slider() {

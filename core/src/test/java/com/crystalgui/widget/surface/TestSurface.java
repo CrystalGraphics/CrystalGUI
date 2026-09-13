@@ -9,7 +9,7 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.config.inspector.InspectorForm;
+import com.crystalgui.widget.config.ConfigForm;
 import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.surface.extension.SurfaceExtension;
 import com.crystalgui.widget.surface.insert.Insertable;
@@ -107,7 +107,7 @@ final class TestSurface {
                 }
 
                 @Override
-                public void build(InspectorForm form, DataContext context) {
+                public void build(ConfigForm form, DataContext context) {
                 }
             }));
             handles.add(surface.registerCommand(Command.of("test.surface.thing", "Thing")

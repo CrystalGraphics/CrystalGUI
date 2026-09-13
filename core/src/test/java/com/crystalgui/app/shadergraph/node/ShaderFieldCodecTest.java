@@ -1,5 +1,6 @@
 package com.crystalgui.app.shadergraph.node;
 
+import com.crystalgui.core.property.Property;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -8,6 +9,7 @@ import com.crystalgui.widget.config.control.ColorControl;
 import com.crystalgui.widget.config.control.VectorControl;
 import com.crystalgui.widget.graph.node.NodeFieldWidgets;
 import org.junit.Test;
+import java.util.List;
 
 import static org.junit.Assert.*;
 
@@ -78,14 +80,14 @@ public class ShaderFieldCodecTest extends UiDocumentTestBase {
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
         NodeField field = NodeField.color("tint", "Tint", "vec4(1.000, 1.000, 1.000, 1.000)");
-        String[] written = { null };
-        UIElement widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> written[0] = v);
+        Property<String> stored = Property.of(field.defaultValue());
+        UIElement widget = NodeFieldWidgets.create(field, stored);
         assertTrue(widget instanceof ColorControl);
         root.append(widget);
         frame();
 
         ((ColorControl) widget).picker().onColorChanged.emit(0xFF00FF00);
-        assertEquals("vec4(0.000, 1.000, 0.000, 1.000)", written[0]);
+        assertEquals("vec4(0.000, 1.000, 0.000, 1.000)", stored.get());
     }
 
     @Test
@@ -97,14 +99,14 @@ public class ShaderFieldCodecTest extends UiDocumentTestBase {
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
 
         NodeField field = new NodeField("uv", "UV", NodeField.Kind.VECTOR,
-                java.util.List.of(), "vec2(0.000, 0.000)", null);
-        String[] written = { null };
-        UIElement widget = NodeFieldWidgets.create(field, field.defaultValue(), v -> written[0] = v);
+                List.of(), "vec2(0.000, 0.000)", null);
+        Property<String> stored = Property.of(field.defaultValue());
+        UIElement widget = NodeFieldWidgets.create(field, stored);
         assertTrue(widget instanceof VectorControl);
         root.append(widget);
         frame();
 
         ((VectorControl) widget).components().get(0).field().setText("2");
-        assertEquals("vec2(2.000, 0.000)", written[0]);
+        assertEquals("vec2(2.000, 0.000)", stored.get());
     }
 }

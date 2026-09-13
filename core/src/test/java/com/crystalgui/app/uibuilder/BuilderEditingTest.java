@@ -12,7 +12,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
-import com.crystalgui.app.uibuilder.canvas.BuilderToolbar;
+import com.crystalgui.widget.config.control.BooleanControl;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
@@ -140,17 +140,17 @@ public class BuilderEditingTest extends UiDocumentTestBase {
     public void thePreviewButtonTogglesAndShowsIt() {
         Button preview = editor.toolbar().previewButton();
         assertTrue(editor.surface().isDesignMode());
-        assertFalse(preview.hasClass(BuilderToolbar.ACTIVE_CLASS));
+        assertFalse(preview.hasClass(BooleanControl.ON_CLASS));
 
         preview.onPressed.emit();
 
         assertFalse("the document is live now", editor.surface().isDesignMode());
-        assertTrue("and the button looks it", preview.hasClass(BuilderToolbar.ACTIVE_CLASS));
+        assertTrue("and the button looks it", preview.hasClass(BooleanControl.ON_CLASS));
 
         preview.onPressed.emit();
 
         assertTrue(editor.surface().isDesignMode());
-        assertFalse(preview.hasClass(BuilderToolbar.ACTIVE_CLASS));
+        assertFalse(preview.hasClass(BooleanControl.ON_CLASS));
     }
 
     // ── L4.7 ────────────────────────────────────────────────────────────────────────────────────

@@ -1,13 +1,14 @@
 package com.crystalgui.app.shadergraph.node;
 
+import com.crystalgui.core.property.Property;
 import com.crystalgui.graph.NodeField;
-import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.widget.config.ConfigControl;
+import com.crystalgui.widget.config.ConfigControls;
 import com.crystalgui.widget.config.control.VectorControl;
 import com.crystalgui.widget.graph.node.NodeFieldWidgets;
 
 import java.util.Locale;
-import java.util.function.Consumer;
 
 /**
  * Puts {@link VectorControl} behind every {@link NodeField.Kind#VECTOR} field — {@code vec2(x, y)}
@@ -35,18 +36,15 @@ public final class ShaderVectorFieldWidget {
     /** Registers the control for vector fields. Idempotent. */
     public static void install() {
         NodeFieldWidgets.register(NodeField.Kind.VECTOR, ShaderVectorFieldWidget::build);
-        // The inverse — see ShaderColorFieldWidget.install for why every kind needs one.
-        NodeFieldWidgets.registerApplier(NodeField.Kind.VECTOR, (control, field, value) -> {
-            if (control instanceof VectorControl vector) vector.setValue(parse(field.resolve(value)));
-        });
     }
 
-    private static UIElement build(NodeField field, String value, Consumer<String> onChange) {
-        double[] initial = parse(field.resolve(value));
-        ConfigDescriptor descriptor = ConfigDescriptor.vector(field.id(), field.label(), initial.length);
-        VectorControl control = new VectorControl(descriptor, initial);
-        control.changed.connect(v -> onChange.accept(format((double[]) v)));
-        return control;
+    private static ConfigControl build(NodeField field, Property<String> stored) {
+        // THE WIDTH IS THE LITERAL'S, read once: a control cannot restructure itself, and a dynamic port
+        // that changes width rebuilds its editor rather than asking this one to grow.
+        int arity = parse(stored.get()).length;
+        return ConfigControls.bound(
+                NodeFieldWidgets.describe(field, ConfigDescriptor.vector(field.id(), field.label(), arity)),
+                stored.map(ShaderVectorFieldWidget::parse, ShaderVectorFieldWidget::format));
     }
 
     /** {@code vecN(a, b, ...)} to its components. Malformed or missing falls back to a 2-vector of

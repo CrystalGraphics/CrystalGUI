@@ -70,7 +70,11 @@ public class VectorControl extends ValueControl<double[]> {
 
             NumberControl component = new NumberControl(
                     ConfigDescriptor.number(descriptor.id() + "." + AXES[i], AXES[i])
-                            .integral(descriptor.integral()),
+                            .integral(descriptor.integral())
+                            .decimals(descriptor.decimals())
+                            .unit(descriptor.unit())
+                            .scrubRate(descriptor.scrubRate())
+                            .commitWhileTyping(descriptor.commitsWhileTyping()),
                     defaultValue != null && axis < defaultValue.length ? defaultValue[axis] : 0d);
             component.changed.connect(v -> onComponentChanged(axis, (Double) v));
 

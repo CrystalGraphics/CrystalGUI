@@ -15,6 +15,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.ConfigForm;
 import com.crystalgui.widget.config.ConfiguratorPanel;
 import com.crystalgui.widget.scroll.ScrollerView;
 
@@ -59,7 +60,7 @@ public class InspectorHasOneScrollerPerTabTest extends UiDocumentTestBase {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             form.row(ConfigDescriptor.info("a", "size"), "64.0 x 24.0");
         }
     };
