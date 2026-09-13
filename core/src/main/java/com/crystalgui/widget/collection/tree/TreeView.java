@@ -3,6 +3,8 @@ package com.crystalgui.widget.collection.tree;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
@@ -14,6 +16,7 @@ import com.crystalgui.widget.collection.list.ListView;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -89,7 +92,25 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         // connected the signal to a fold that nothing raised. That is not five preferences; it is one
         // behaviour every tree wants, implemented five times.
         onRowActivated.connect(this::foldOnActivate);
+        putData(KEY, this);
         refresh();
+    }
+
+    /** The tree a command was invoked from — answered by the tree itself. @see TreeViewCommands */
+    @SuppressWarnings("rawtypes")
+    public static final DataKey<TreeView> KEY = DataKey.create("treeView", TreeView.class);
+
+    @Override
+    protected void registerCommands(CommandRegistry registry) {
+        super.registerCommands(registry);
+        TreeViewCommands.register();
+    }
+
+    /** Expand Selected, Expand All and Collapse All, on this tree's own keymap. */
+    @Override
+    protected void bindKeys() {
+        super.bindKeys();
+        TreeViewCommands.bindKeys(keymap());
     }
 
     /**
@@ -363,6 +384,48 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         expanded.clear();
         refresh();
         return this;
+    }
+
+    /** Whether anything is open, so Collapse All has something to do. */
+    public boolean hasExpanded() {
+        return !expanded.isEmpty();
+    }
+
+    /**
+     * Opens {@code items} and everything under them the source can already answer, in one re-flatten —
+     * IntelliJ's Expand Selected, and Expand All from the roots.
+     *
+     * <p>A lazily listed source answers what it has listed; what it lists later stays closed.</p>
+     */
+    public TreeView<T> expandSubtrees(Collection<T> items) {
+        boolean changed = false;
+        Set<T> visited = new HashSet<>();
+        List<T> pending = new ArrayList<>(items);
+        while (!pending.isEmpty()) {
+            T item = pending.remove(pending.size() - 1);
+            if (item == null || !visited.add(item) || !source.hasChildren(item)) continue;
+            changed |= expanded.add(item);
+            pending.addAll(source.children(item));
+        }
+        if (changed) refresh();
+        return this;
+    }
+
+    /** The items of the selected rows, in tree order. */
+    public List<T> selectedItems() {
+        List<Integer> indices = new ArrayList<>(getSelectedIndices());
+        Collections.sort(indices);
+        List<T> items = new ArrayList<>(indices.size());
+        for (int index : indices) {
+            TreeRow<T> row = rowAt(index);
+            if (row != null) items.add(row.item());
+        }
+        return items;
+    }
+
+    /** The source's roots — what Expand All starts from. */
+    public List<T> roots() {
+        return source.roots();
     }
 
     /**

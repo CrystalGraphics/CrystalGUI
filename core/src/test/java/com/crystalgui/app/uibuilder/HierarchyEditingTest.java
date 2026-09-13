@@ -141,6 +141,25 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
     }
 
     @Test
+    public void newGoesIntoASelectedContainerOrAfterASelectedLeafAsOneUndoStep() {
+        editor.selection().selectOnly(group);
+        settle();
+        UIElement inside = new UIElement();
+        hierarchy.insertNew(inside);
+        assertSame(group, inside.parentElement());
+        assertSame("the new node is not the selection", inside, editor.selection().node());
+
+        editor.selection().selectOnly(title);
+        settle();
+        UIElement after = new UIElement();
+        hierarchy.insertNew(after);
+        assertEquals(1, root.indexOf(after));
+
+        history().undo();
+        assertNull("one undo left the node in", after.parentElement());
+    }
+
+    @Test
     public void aNodeFromAnotherDocumentIsCopiedNotMoved() {
         UIElement foreign = new UIElement().setId("title");
         UIElement elsewhere = new UIElement();

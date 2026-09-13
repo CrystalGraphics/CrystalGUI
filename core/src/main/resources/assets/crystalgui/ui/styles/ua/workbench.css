@@ -281,31 +281,70 @@ dockgroup > tabview > .__panes__,
  *
  * NO FILL AT REST. `button` gives every button a background, and inherited here it drew the mark as a
  * grey chip in the corner of every header — read as a control that was already pressed. */
-.__panel-header__ .__hide__ {
-    margin-left: auto;
-    width: 16px;
-    height: 16px;
+.__panel-header__ .__hide__,
+.__panel-header__ .__action-button__ {
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
     min-height: 0px;
-    padding: 0px;
+    padding: 2px;
     border-radius: var(--radius-control, 3px);
     background: none;
     background-color: transparent;
-    overlay: shape("minus");
+    overlay-origin: content-box;
     overlay-size: contain;
     color: var(--panel-header-icon, #A0A0A0);
     opacity: 0;
     transition: opacity 120ms ease;
 }
 
-.__view-container__:hover .__header__ .__hide__ {
+/* THE MINUS IS WIDER THAN ITS NEIGHBOURS, as IntelliJ's is: a bar reads short at the glyphs' 10px. NO
+ * PADDING at all, because a shape draws in the square min(width, height) of its box -- trimming only the
+ * sides leaves the height, and so the bar, where it was. */
+.__panel-header__ .__hide__ {
+    overlay: shape("minus");
+    padding: 0px;
+}
+
+/* TITLE ACTIONS, right-aligned before ⋮ and Hide -- IntelliJ's ToolWindowHeader. All of them share one
+ * trailing row with no gap of its own: the 14px boxes around 10px glyphs are the spacing, IntelliJ's pitch
+ * relative to its font, so the icons sit evenly and tight against the edge. Hide's minus fills its 14px box.
+ * The dropdown gutter still spans the whole box, so it sits in the button's corner rather than the glyph's. */
+.__panel-header__ .__title-trailing__,
+.__panel-header__ .__title-actions__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 0px;
+}
+
+.__panel-header__ .__title-trailing__ {
+    margin-left: auto;
+}
+
+.__view-container__:hover .__header__ .__hide__,
+.__view-container__:hover .__header__ .__action-button__,
+.__header__.__caption-adopted__ .__action-button__ {
     opacity: 1;
 }
 
-.__panel-header__ .__hide__:hover {
+.__panel-header__ .__hide__:hover,
+.__panel-header__ .__action-button__:hover {
     color: var(--panel-header-icon-hover, #E0E0E0);
     background: none;
     background-color: var(--panel-header-icon-hover-bg, #393B40);
+}
+
+/* A DISABLED ACTION stays in its slot and dims, as IntelliJ's does -- a button that vanished would move the
+ * ones after it under the pointer. */
+.__panel-header__ .__action-button__:disabled {
+    background: none;
+    background-color: transparent;
+    color: var(--panel-header-icon, #A0A0A0);
+}
+
+.__view-container__:hover .__header__ .__action-button__:disabled {
+    opacity: 0.4;
 }
 
 .__view-container__ .__view-content__ {
@@ -1081,31 +1120,29 @@ problemspanel .__problems-head__ {
 problemspanel .__view-options__ {
     width: 12px;
     height: 12px;
+    min-height: 0px;
+    padding: 0px;
     flex-shrink: 0;
     cursor: pointer;
+    background: none;
+    background-color: transparent;
     overlay: icon("crystalgui:general/show");
     color: var(--problems-options-fg, #8A8D94);
 }
 
-problemspanel .__view-options__:hover {
+problemspanel .__view-options__:hover,
+problemspanel .__view-options__:active {
+    background: none;
+    background-color: transparent;
     color: var(--problems-options-hover-fg, #D5D7DB);
 }
 
-/* THE CORNER MARK that says the eye opens a menu rather than toggling something. Its own element because
- * `overlay` is one drawable and IntelliJ draws this BESIDE the glyph, in the bottom-right, not instead of
- * it. Out of flow so it cannot push the eye off centre. */
-problemspanel .__view-options__ .__dropdown-gutter__ {
-    position: absolute;
-    right: -1px;
-    bottom: -1px;
-    width: 14px;
-    height: 14px;
-    overlay: icon("crystalgui:general/dropdownGutter");
-    color: var(--problems-options-fg, #8A8D94);
-}
-
-problemspanel .__view-options__:hover .__dropdown-gutter__ {
-    color: var(--problems-options-hover-fg, #D5D7DB);
+/* THE CORNER MARK a pixel past the eye's own 12px box, where IntelliJ draws it against the glyph. */
+problemspanel .__view-options__::part(dropdown-gutter) {
+    left: 0px;
+    top: 0px;
+    width: 13px;
+    height: 13px;
 }
 
 /* THE ROWS START LEVEL WITH THE EYE. The tree is absolutely positioned inside the content box, so the

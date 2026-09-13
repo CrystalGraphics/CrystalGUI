@@ -84,6 +84,18 @@ button:disabled, dropdown:disabled {
     background: var(--button-disabled-bg, #6E6E6E);
     color: var(--button-disabled-fg, #4A4A4A);
 }
+/* THE DROPDOWN GUTTER -- IntelliJ's AllIcons.General.Dropdown, the corner triangle on a button that opens a
+ * menu. Button.setDropdownMark shows it. Laid over the whole box, since the drawing already sits in its own
+ * bottom-right corner; out of flow, so it never moves the icon; in the button's colour. */
+button::part(dropdown-gutter) {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 100%;
+    height: 100%;
+    overlay: icon("crystalgui:general/dropdownGutter");
+    overlay-size: contain;
+}
 
 /* ── Checkbox ───────────────────────────────────────────────────────────────────────────────────
  * align-self: flex-start is load-bearing, not cosmetic — see the matching note in ore.css. The root

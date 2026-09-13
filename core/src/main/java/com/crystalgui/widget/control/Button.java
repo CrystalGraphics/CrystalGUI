@@ -96,6 +96,10 @@ public class Button extends UIElement {
     public static final String POST_ICON_PART = "post-icon";
     /** What {@link #setUnderlay} was given — drawn behind the label. */
     public static final String UNDERLAY_PART = "underlay";
+    /** The corner mark saying a press opens a menu. {@code button::part(dropdown-gutter)}. @see #setDropdownMark */
+    public static final String DROPDOWN_MARK_PART = "dropdown-gutter";
+    /** On a button showing the dropdown mark, for a sheet that styles such a button apart. */
+    public static final String DROPDOWN_MARK_CLASS = "__dropdown-mark__";
 
 
     public final Signal.Action onPressed = new Signal.Action();
@@ -108,6 +112,8 @@ public class Button extends UIElement {
     private UIElement postIcon;
     @Nullable
     private UIElement underlay;
+    @Nullable
+    private UIElement dropdownMark;
 
     /**
      * The no-argument constructor the registry's factory needs.
@@ -290,6 +296,39 @@ public class Button extends UIElement {
             shadow.insertAt(0, underlay);
         }
         return this;
+    }
+
+    /**
+     * Shows or hides IntelliJ's dropdown gutter — the small corner triangle saying a press opens a menu rather
+     * than acting.
+     *
+     * <pre>{@code
+     * Button eye = new Button("");
+     * eye.setDropdownMark(true);                  // drawn by button::part(dropdown-gutter) in the UA sheet
+     * eye.onPressed.connect(() -> menu.showFor(eye, eye));
+     * }</pre>
+     *
+     * <p>A part the sheet draws over the button's box, as the rail's unread dot is: unhittable, out of flow,
+     * in the button's own {@code color}. It says a menu opens and opens none — the press is the caller's.</p>
+     */
+    public Button setDropdownMark(boolean shown) {
+        if (shown == (dropdownMark != null)) return this;
+        if (shown) {
+            dropdownMark = new UIElement();
+            dropdownMark.setHitTest(false);
+            dropdownMark.set(Attribute.PART, DROPDOWN_MARK_PART);
+            shadow.append(dropdownMark);
+            addClass(DROPDOWN_MARK_CLASS);
+        } else {
+            shadow.remove(dropdownMark);
+            dropdownMark = null;
+            removeClass(DROPDOWN_MARK_CLASS);
+        }
+        return this;
+    }
+
+    public boolean hasDropdownMark() {
+        return dropdownMark != null;
     }
 
     public Button attachListener(Runnable action) {

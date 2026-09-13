@@ -159,6 +159,42 @@ sink and keeps the handle, so a withdrawn extension stops writing to a button th
 > three of `region`, `side` and `anchor` — a panel the user dragged to the other rail stays there, which
 > is the whole point of persisting one.
 
+### Buttons on the title line
+
+A panel puts IntelliJ's title actions — `+`, locate, expand, collapse — before the header's ⋮ and Hide by
+implementing `TitleActionsContributor`. Each is an `ActionButton`: a command it runs, or a menu it drops down
+(which wears the dropdown gutter by itself).
+
+```java
+public final class MyPanel extends UIElement implements TitleActionsContributor {
+
+    private final List<ActionButton> actions = List.of(
+            ActionButton.menu("New Thing…", MY_NEW_MENU)
+                    .icon("crystalgui:general/action/add").context(tree),
+            ActionButton.command(TreeViewCommands.EXPAND_SELECTED)
+                    .icon("crystalgui:general/action/expandAll").context(tree)
+                    .hint(TreeViewCommands.EXPAND_ALL, "Press {} to expand all nodes"),
+            ActionButton.command(TreeViewCommands.COLLAPSE_ALL)
+                    .icon("crystalgui:general/action/collapseAll").context(tree));
+
+    public List<ActionButton> titleActions() { return actions; }
+
+    public MenuId optionsMenu() { return MY_OPTIONS; }   // optional: rows above View Mode in ⋮
+}
+```
+
+| Rule | Why |
+|---|---|
+| Name each button's `context` — the element the action is about | The header is outside your view, and in a floating window it is in the caption; commands resolve outward from the context |
+| A view whose content is replaced passes `context(() -> current)` | The buttons are asked for once, when the view is mounted |
+| Hand back the same buttons every time | The container keeps what it was given |
+| ⋮ is every tool window's: your `optionsMenu()`, then View Mode ▸ Dock Pinned / Float / Window | Nothing to write for the modes |
+| Actions show on hover, like Hide, and a disabled one dims in place | A button that disappeared would move the next one under the pointer |
+| Implement `FocusableView` and answer the element that should hold the keys — the tree | A press anywhere on the header, a title action included, activates the tool window and focuses it; without an answer the first focusable element gets it, which for a focusable panel is the panel, not its list |
+
+Any tree already answers `TreeViewCommands` — Expand Selected (Mod+=), Expand All (Mod+Shift+=), Collapse All
+(Mod+-) — on its own keymap. The Project and Hierarchy panels are the worked examples.
+
 ### A panel that works the second time
 
 Four of the things a panel used to have to do by hand are the engine's now. What is left is genuinely

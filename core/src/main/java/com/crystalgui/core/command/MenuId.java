@@ -42,6 +42,13 @@ public final class MenuId {
     public static final MenuId EXPLORER_NEW =
             of("explorer/context/new").nestedIn(EXPLORER_CONTEXT, "New", "1_new", 0);
 
+    /** A tool window's ⋮ menu, below whatever its view puts above it. */
+    public static final MenuId TOOL_WINDOW_OPTIONS = of("toolwindow/options");
+
+    /** View Mode ▸ Dock Pinned, Float, Window — in every tool window's ⋮ menu. */
+    public static final MenuId TOOL_WINDOW_VIEW_MODE =
+            of("toolwindow/options/viewMode").nestedIn(TOOL_WINDOW_OPTIONS, "View Mode", "9_view", 0);
+
     /** Right-click on a node graph's canvas. */
     public static final MenuId GRAPH_CONTEXT = of("graph/context");
 

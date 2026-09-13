@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder.panel;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -8,6 +9,8 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
+import com.crystalgui.app.uibuilder.document.TreeDropRules;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -37,7 +40,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  *
  * <pre>{@code
  * HierarchyPanel hierarchy = new HierarchyPanel(builder);
- * TreeEditing.contributeMenu(CommandRegistry.global(), HierarchyPanel.CONTEXT_MENU);   // once, by the feature
+ * HierarchyActions.register(CommandRegistry.global());   // once, by the feature: New ▸ and the edit rows
  * }</pre>
  *
  * <p>Rows show the node's {@code id} where it has one and its kind where it does not, which is the way
@@ -82,6 +85,10 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
 
     /** The right-click menu on a row. The feature contributes the kit's rows to it. */
     public static final MenuId CONTEXT_MENU = MenuId.of("uibuilder/hierarchy/context");
+
+    /** New ▸ — the kinds to insert. The title line's + drops it down; the row menu nests it. @see HierarchyActions */
+    public static final MenuId NEW_MENU =
+            MenuId.of("uibuilder/hierarchy/context/new").nestedIn(CONTEXT_MENU, "New", "1_new", 0);
 
     /** This panel, for a command that acts on one. */
     public static final DataKey<HierarchyPanel> HIERARCHY = DataKey.create("uibuilder.hierarchy", HierarchyPanel.class);
@@ -186,6 +193,33 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
     /** Drag, clipboard, duplicate, delete and rename over this tree's selection. */
     public TreeEditing<UIElement> editing() {
         return editing;
+    }
+
+    /**
+     * Inserts {@code node} into the selected container, after a selected leaf in its parent, or at the end of
+     * the root with nothing selected — one undo step, and the new node selected.
+     */
+    public void insertNew(UIElement node) {
+        UIElement root = builder.getDocument().root();
+        List<UIElement> selected = builder.builderSelection().nodes();
+        UIElement anchor = selected.isEmpty() ? root : selected.get(selected.size() - 1);
+        UIElement parent = TreeDropRules.isContainer(root, anchor) ? anchor : anchor.parentElement();
+        if (parent == null) return;
+        int index = parent == anchor ? parent.children().size() : parent.indexOf(anchor) + 1;
+        builder.getDocument().apply(new BuilderEdit.Insert(parent, node, index));
+        builder.builderSelection().replaceWith(List.of(node));
+    }
+
+    /** Unfolds to the canvas selection, highlights it and scrolls the first of it in — the title line's locate. */
+    public void revealSelection() {
+        List<UIElement> nodes = builder.builderSelection().nodes();
+        withoutWritingBack(() -> {
+            expandTo(nodes);
+            tree.refresh();
+            selectRowsFor(nodes);
+        });
+        List<Integer> rows = new ArrayList<>(tree.getSelectedIndices());
+        if (!rows.isEmpty()) tree.scrollToIndex(Collections.min(rows));
     }
 
     /** The node whose id is being renamed, or null. */

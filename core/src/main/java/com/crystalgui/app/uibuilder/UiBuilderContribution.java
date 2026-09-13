@@ -2,7 +2,7 @@ package com.crystalgui.app.uibuilder;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
+import com.crystalgui.app.uibuilder.panel.HierarchyActions;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.dispose.Disposable;
@@ -11,7 +11,6 @@ import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
 import com.crystalgui.workbench.extension.WorkbenchExtension;
-import com.crystalgui.widget.collection.tree.TreeEditing;
 
 /**
  * <b>The UI builder as a workbench feature</b> — one file type, opened on a design surface.
@@ -62,8 +61,8 @@ public final class UiBuilderContribution implements WorkbenchExtension {
         // empty the inspector under the second. The graph's own note, and the same shape.
         Disposable sections = BuilderInspectorSections.register();
 
-        // Cut, Copy, Paste, Duplicate, Rename and Delete on a row's right-click. Once, for every hierarchy.
-        Disposable rowMenu = TreeEditing.contributeMenu(CommandRegistry.global(), HierarchyPanel.CONTEXT_MENU);
+        // New ▸ and the edit rows on a row's right-click, and the title line's commands. Once, for every hierarchy.
+        Disposable rowMenu = HierarchyActions.register(CommandRegistry.global());
 
         Disposable panel = workbench.registerToolWindow(
                 ToolWindowKind.of(HIERARCHY_PANEL, "Hierarchy")
