@@ -74,8 +74,9 @@ public class AnchorControl extends ValueControl<double[]> {
     public AnchorControl(ConfigDescriptor descriptor, @Nullable double[] defaultValue) {
         super(NAME, descriptor, defaultValue == null ? new double[] {0.5d, 0.5d} : defaultValue.clone());
         addClass(ANCHOR_CLASS);
-        // ONE TOOLTIP ON THE WHOLE GRID, worded per cell: a cell is a few pixels tall, so a tooltip hanging
-        // from one would sit over whatever the grid is in rather than clear it.
+        // ONE TOOLTIP ON THE WHOLE GRID, reworded as the pointer crosses a cell. Not a Tooltip region: a
+        // region places the tooltip against ITSELF, and a cell is a few pixels tall in the middle of its
+        // row, so the hint covered the toolbar instead of clearing it.
         Tooltip hint = Tooltip.attach(this, describe(descriptor, 4));
         for (int row = 0; row < 3; row++) {
             UIElement line = new UIElement();
@@ -85,7 +86,8 @@ public class AnchorControl extends ValueControl<double[]> {
                 final double[] at = {column * 0.5d, row * 0.5d};
                 UIElement cell = new UIElement();
                 cell.addClass(CELL_CLASS);
-                hint.addRegion(cell, describe(descriptor, row * 3 + column));
+                final String says = describe(descriptor, row * 3 + column);
+                cell.onMouseEnter.attachListener((element, event) -> hint.setText(says), false, false);
                 cell.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
                     if (!isEnabled()) return;
                     double[] chosen = at.clone();
