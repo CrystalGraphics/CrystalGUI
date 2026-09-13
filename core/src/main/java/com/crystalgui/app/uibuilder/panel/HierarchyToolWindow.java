@@ -1,5 +1,7 @@
 package com.crystalgui.app.uibuilder.panel;
 
+import java.util.List;
+
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
@@ -7,8 +9,11 @@ import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.view.FocusableView;
+import com.crystalgui.workbench.view.TitleActionsContributor;
 
 /**
  * The <b>Hierarchy</b> tool window: the tree of whatever {@code .cgui} is in front.
@@ -21,7 +26,7 @@ import com.crystalgui.workbench.WorkbenchContext;
  * and goes moves everything beside it, and "the panel I docked has gone" is indistinguishable from a
  * bug.</p>
  */
-public final class HierarchyToolWindow extends UIElement {
+public final class HierarchyToolWindow extends UIElement implements TitleActionsContributor, FocusableView {
 
     public static final Name NAME = Name.of("hierarchytoolwindow");
 
@@ -44,6 +49,25 @@ public final class HierarchyToolWindow extends UIElement {
         whileConnected(() -> workbench.editors().onDidChangeActive.connect(tab -> follow()));
         whileConnected(() -> workbench.editors().onDidLoad.connect(tab -> follow()));
         onConnected(this::follow);
+    }
+
+    /** The current hierarchy's tree, or null while no builder is in front. */
+    @Nullable
+    @Override
+    public UIElement focusTarget() {
+        return hierarchy == null ? null : hierarchy.tree();
+    }
+
+    @Nullable
+    private List<ActionButton> titleActions;
+
+    /** @see HierarchyActions#titleActions — on the panel currently shown, since the window swaps it per tab. */
+    @Override
+    public List<ActionButton> titleActions() {
+        if (titleActions == null) {
+            titleActions = HierarchyActions.titleActions(() -> hierarchy == null ? null : hierarchy.tree());
+        }
+        return titleActions;
     }
 
     /** The hierarchy currently shown, or null when the tab in front is not a {@code .cgui}. */

@@ -4,7 +4,16 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgui.core.command.MenuId;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.widget.composite.ActionButton;
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.workbench.toolwindow.ToolWindowCommands;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.window.WindowChrome;
@@ -36,15 +45,26 @@ import java.util.List;
  * rather than inconsistent — the strip is what lets you choose, so with nothing to choose between it is
  * chrome for its own sake.</p>
  */
-public class ViewContainer extends UIElement implements WindowChrome {
+public class ViewContainer extends UIElement implements WindowChrome, DataProvider {
     /** A group of views sharing a region. Named by the sheets. */
     public static final Name NAME = Name.of("viewcontainer");
 
+    /** The container a command was invoked in — what the ⋮ menu's View Mode acts on. */
+    public static final DataKey<ViewContainer> KEY = DataKey.create("viewContainer", ViewContainer.class);
 
     public static final String CONTAINER_CLASS = "__view-container__";
     public static final String HEADER_CLASS = "__header__";
     public static final String TITLE_CLASS = "__title__";
     public static final String HIDE_CLASS = "__hide__";
+
+    /** The right-aligned row holding the title actions, ⋮ and Hide. */
+    public static final String TITLE_TRAILING_CLASS = "__title-trailing__";
+
+    /** The row a {@link TitleActionsContributor}'s buttons go in, before ⋮ and Hide. */
+    public static final String TITLE_ACTIONS_CLASS = "__title-actions__";
+
+    /** The ⋮ button. */
+    public static final String OPTIONS_CLASS = "__options__";
 
     /**
      * On the header as well as {@link #HEADER_CLASS}, and it is what its styling is keyed off.
@@ -88,10 +108,19 @@ public class ViewContainer extends UIElement implements WindowChrome {
     private final UIElement content = new UIElement();
     private final TabView tabs = new TabView();
     private final Button hide;
+    private final UIElement titleActions = new UIElement();
+    private final ActionButton options;
+
+    /** The mounted view's rows for the top of the ⋮ menu. @see TitleActionsContributor#optionsMenu */
+    @Nullable
+    private MenuId viewOptions;
+
+    /** The lone view, or null while there is none or several share the container. */
+    @Nullable
+    private UIElement mounted;
 
     /** Fires when the header's hide button is pressed — the region's occupant asking to go away. */
-    public final Signal.Action onHideRequested =
-            new com.crystalgui.core.signal.Signal.Action();
+    public final Signal.Action onHideRequested = new Signal.Action();
 
     public ViewContainer(String containerId, String titleText) {
         super(NAME);
@@ -112,6 +141,20 @@ public class ViewContainer extends UIElement implements WindowChrome {
         // to stop. A box that was never asked for cannot be protected by refusing to shrink it.
         header.append(title);
 
+        // ONE RIGHT-ALIGNED ROW for the view's actions, ⋮ and Hide, so one spacing rule governs every icon on the
+        // line and the auto margin that pushes them to the edge lives in one place.
+        UIElement trailing = new UIElement();
+        trailing.addClass(TITLE_TRAILING_CLASS);
+        titleActions.addClass(TITLE_ACTIONS_CLASS);
+        trailing.append(titleActions);
+
+        // IntelliJ's gear, as ⋮: the view's own options, then View Mode, which every tool window has.
+        ToolWindowCommands.register();
+        options = ActionButton.menu("Options", this::optionsMenu).icon("crystalgui:more-vertical");
+        options.setDropdownMark(false);
+        options.addClass(OPTIONS_CLASS);
+        trailing.append(options);
+
         // NO GLYPH. The bundled Minecraft fonts have no U+2715 and it renders as tofu -- the same trap
         // UIText records for U+2026 and ConfiguratorGroup for its chevron. The mark is a real vector icon
         // set in default.css, so a theme can restyle it and no Java names a character.
@@ -126,11 +169,19 @@ public class ViewContainer extends UIElement implements WindowChrome {
         // performs -- a tool window shows one or the other depending on whether it is docked, and two
         // presentations of one control answering at different speeds reads as a bug in the second.
         Tooltip.attach(hide, HIDE_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
-        header.append(hide);
+        trailing.append(hide);
+        header.append(trailing);
         append(header);
 
         content.addClass(CONTENT_CLASS);
         append(content);
+
+        // A PRESS ON THE HEADER ACTIVATES THE TOOL WINDOW, as in IntelliJ: the keys go into the view, so its
+        // selection shows focused. Title actions are on the header, so pressing one does it too. Bubbling,
+        // so it runs after the press has focused whatever it landed on.
+        header.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
+            if (event.getButtonId() == CgMouseCodes.LEFT_BUTTON) focusView();
+        }, false, true);
 
         // ── A TOOL WINDOW TAKES FOCUS WHEN YOU CLICK IT ──────────────────────────────────────────
         //
@@ -177,11 +228,14 @@ public class ViewContainer extends UIElement implements WindowChrome {
         content.setOnlyChild(null);
         tabs.clearTabs();
         clearContributedHeader();
+        options.context(this);
+        mounted = null;
         if (views.isEmpty()) return;
 
         if (views.size() == 1) {
             UIElement only = views.get(0).build();
             content.setOnlyChild(only);
+            mounted = only;
             // ITS CONTROLS GO ON THE TITLE LINE — IntelliJ's tool window title actions. @see
             // HeaderContributor. Only for a lone view: with two sharing a container the header names the
             // container, and one view's controls sitting beside it would look like they governed both.
@@ -189,6 +243,13 @@ public class ViewContainer extends UIElement implements WindowChrome {
                 contributed = contributor.headerContent();
                 if (contributed != null) header.insertAt(1, contributed);
             }
+            if (only instanceof TitleActionsContributor actions) {
+                for (ActionButton button : actions.titleActions()) titleActions.append(button);
+                viewOptions = actions.optionsMenu();
+            }
+            // THE VIEW IS WHAT ITS OPTIONS ARE ABOUT, and it sits inside this container, so View Mode still
+            // finds it.
+            options.context(only);
             return;
         }
         for (ViewContainerRegistry.ViewEntry view : views) {
@@ -200,9 +261,44 @@ public class ViewContainer extends UIElement implements WindowChrome {
 
     /** Takes the previous view's header controls off, so a container that swaps views does not keep them. */
     private void clearContributedHeader() {
+        titleActions.removeAll();
+        viewOptions = null;
         if (contributed == null) return;
         contributed.removeSelf();
         contributed = null;
+    }
+
+    /** The ⋮ menu: the view's options, then the tool window's own. */
+    private ContextMenu optionsMenu() {
+        ContextMenu menu = ContextMenu.builder();
+        if (viewOptions != null) menu.contributions(viewOptions).separator();
+        return menu.contributions(MenuId.TOOL_WINDOW_OPTIONS);
+    }
+
+    /**
+     * Puts the keyboard in the view: where it already is when that is inside, else the view's
+     * {@link FocusableView#focusTarget}, else the first focusable element in it.
+     */
+    public void focusView() {
+        UIDocument window = document();
+        if (window == null) return;
+        UIElement focused = window.focus().focused();
+        for (UIElement at = focused; at != null; at = at.parentElement()) {
+            if (at == content) return;
+        }
+        UIElement target = mounted instanceof FocusableView declared ? declared.focusTarget() : null;
+        if (target == null || !window.focus().focusable(target)) target = window.focus().firstFocusableIn(content);
+        if (target != null) window.focus().requestPointerFocus(target);
+    }
+
+    /** The action buttons on the title line, in order. For a test and for a theme's diagnostics. */
+    public List<UIElement> titleActions() {
+        return titleActions.children();
+    }
+
+    @Override
+    public Object getData(DataKey<?> key) {
+        return key == KEY ? this : null;
     }
 
     /** The mounted view's header controls, if it offered any. @see HeaderContributor */

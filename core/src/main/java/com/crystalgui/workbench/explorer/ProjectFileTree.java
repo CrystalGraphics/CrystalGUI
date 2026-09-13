@@ -1,6 +1,7 @@
 package com.crystalgui.workbench.explorer;
 
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.signal.Signal;
@@ -23,7 +24,11 @@ import com.crystalgui.widget.collection.tree.TreeClipboard;
 import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.collection.tree.TreeSearch;
 import com.crystalgui.widget.collection.tree.TreeView;
+import com.crystalgui.widget.collection.tree.TreeViewCommands;
+import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.view.FocusableView;
+import com.crystalgui.workbench.view.TitleActionsContributor;
 import com.crystalgui.workbench.decoration.FileDecorations;
 import com.crystalgui.ui.input.FocusPolicy;
 
@@ -92,7 +97,8 @@ import java.util.function.Supplier;
  * to whichever part happens to write them. And the public surface stays: {@code ExplorerCommands} asks
  * the <em>panel</em> to rename, not the panel's editing part.</p>
  */
-public class ProjectFileTree extends UIElement implements UndoScope, DataProvider {
+public class ProjectFileTree extends UIElement
+        implements UndoScope, DataProvider, TitleActionsContributor, FocusableView {
     /** The file panel. Named by the sheets. */
     public static final Name NAME = Name.of("projectfiletree");
 
@@ -804,6 +810,33 @@ public class ProjectFileTree extends UIElement implements UndoScope, DataProvide
     /** Drag, clipboard, rename and delete over this tree's selection. */
     public TreeEditing<CgPath> editing() {
         return editing;
+    }
+
+    /** The tree, so activating the tool window puts its keys and its focused selection there. */
+    @Override
+    public UIElement focusTarget() {
+        return tree;
+    }
+
+    @Nullable
+    private List<ActionButton> titleActions;
+
+    /** New ▸, Select Opened File, Expand Selected and Collapse All — IntelliJ's Project title line. */
+    @Override
+    public List<ActionButton> titleActions() {
+        if (titleActions == null) {
+            titleActions = List.of(
+                    ActionButton.menu("New File or Directory…", MenuId.EXPLORER_NEW)
+                            .icon("crystalgui:general/action/add").context(tree),
+                    ActionButton.command(ExplorerCommands.SELECT_OPENED_FILE)
+                            .icon("crystalgui:general/action/locate").context(tree),
+                    ActionButton.command(TreeViewCommands.EXPAND_SELECTED)
+                            .icon("crystalgui:general/action/expandAll").context(tree)
+                            .hint(TreeViewCommands.EXPAND_ALL, "Press {} to expand all nodes"),
+                    ActionButton.command(TreeViewCommands.COLLAPSE_ALL)
+                            .icon("crystalgui:general/action/collapseAll").context(tree));
+        }
+        return titleActions;
     }
 
     ExplorerFind find() {

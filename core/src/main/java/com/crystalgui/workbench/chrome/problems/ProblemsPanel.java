@@ -25,6 +25,8 @@ import com.crystalgui.text.diagnostic.ProblemsTreeSource;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeSearch;
@@ -67,7 +69,7 @@ import javax.annotation.Nullable;
  * <p>Because it changes the tree's shape rather than its paint — see {@link ProblemsTreeSource}. A file
  * whose only error is filtered out has to stop being a row.</p>
  */
-public class ProblemsPanel extends UIElement implements DataProvider, HeaderContributor {
+public class ProblemsPanel extends UIElement implements DataProvider, HeaderContributor, FocusableView {
 
     public static final Name NAME = Name.of("problemspanel");
 
@@ -210,17 +212,12 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
      */
     private void buildHead() {
         viewOptions.addClass(VIEW_OPTIONS_CLASS);
-        viewOptions.setFocusPolicy(FocusPolicy.CLICK);
         viewOptions.onMouseDown.attachListener((element, event) -> {
             event.stopPropagation();
             openViewMenu(event.getPosition().x(), event.getPosition().y());
         }, false, true);
-        // THE DROPDOWN CORNER, as its own element rather than a second overlay: `overlay` is one drawable,
-        // and IntelliJ's gutter mark sits in the icon's bottom-right corner rather than replacing it. It is
-        // what says the eye opens a menu instead of toggling something.
-        gutterMark.addClass(GUTTER_MARK_CLASS);
-        gutterMark.setHitTest(false);
-        viewOptions.append(gutterMark);
+        // THE CORNER MARK says the eye opens a menu instead of toggling something.
+        viewOptions.setDropdownMark(true);
 
         head.addClass(HEAD_CLASS);
         head.append(viewOptions);
@@ -384,8 +381,6 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
     public static final String VIEW_OPTIONS_CLASS = "__view-options__";
     /** The row holding the gutter and the tree, below the tabs. */
     public static final String BODY_CLASS = "__problems-body__";
-    /** IntelliJ's little corner mark saying the eye opens a menu. */
-    public static final String GUTTER_MARK_CLASS = "__dropdown-gutter__";
 
     /**
      * The view menu's rows, verbatim from VS Code's {@code markersViewActions.ts} — same wording, same
@@ -421,8 +416,7 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
 
     private final UIElement body = new UIElement();
     private final UIElement head = new UIElement();
-    private final UIElement gutterMark = new UIElement();
-    private final UIElement viewOptions = new UIElement();
+    private final Button viewOptions = new Button("");
     private final Menu viewMenu = new Menu();
     private MenuItem errorsItem;
     private MenuItem warningsItem;
@@ -459,6 +453,13 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
     /** The tree, once something has been bound. Null before that. */
     @Nullable
     public TreeView<ProblemNode> tree() {
+        return tree;
+    }
+
+    /** The tree, so a press on the header puts the keys in the list of problems. */
+    @Nullable
+    @Override
+    public UIElement focusTarget() {
         return tree;
     }
 

@@ -124,14 +124,7 @@ public final class TreeEditing<T> {
 
     /** The selected items in tree order, without any that sit inside another selected item. */
     public List<T> selection() {
-        List<Integer> indices = new ArrayList<>(tree.getSelectedIndices());
-        Collections.sort(indices);
-        List<TreeRow<T>> visible = tree.visibleRows();
-        List<T> selected = new ArrayList<>(indices.size());
-        for (int index : indices) {
-            if (index >= 0 && index < visible.size()) selected.add(visible.get(index).item());
-        }
-        return outermost(selected);
+        return outermost(tree.selectedItems());
     }
 
     private List<T> outermost(List<T> items) {

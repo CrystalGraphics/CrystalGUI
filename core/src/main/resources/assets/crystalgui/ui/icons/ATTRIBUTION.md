@@ -132,9 +132,9 @@ in `core/src/test/resources/` and not here: it is the SVG renderer's torture tes
 
 ## `general/action/` — IntelliJ Platform (Apache 2.0)
 
-`intentionBulb`, `addDirectory`, `addFile`, `copy`, `cut`, `delete`, `edit`, `paste`, `pin`,
-`pinHovered`, `pinSelected`, `reformatCode`, `refresh`, `run`, `rerun`, `save`, `scrollDown`,
-`softWrap`, `stop` — action icons from the IntelliJ
+`intentionBulb`, `add`, `addDirectory`, `addFile`, `collapseAll`, `copy`, `cut`, `delete`, `edit`,
+`expandAll`, `locate`, `paste`, `pin`, `pinHovered`, `pinSelected`, `reformatCode`, `refresh`, `run`,
+`rerun`, `save`, `scrollDown`, `softWrap`, `stop` — action icons from the IntelliJ
 Platform, © 2000-2023 JetBrains s.r.o. and contributors, used under the Apache License 2.0.
 
 **`link-2.svg` is not one of them.** It is Feather's, under the MIT notice above, filed here beside the
@@ -156,6 +156,9 @@ light/dark pair through `CgUiSvg.ofIcon`.
   `fill="currentColor"`. They are chrome marks in a console's control stripe, not coloured symbols, so
   they have to follow the theme and dim when their action is unavailable. Same change and same reason as
   `general/search/`.
+- `add`, `collapseAll`, `expandAll`, `locate` — every `fill`/`stroke="#6C707E"` replaced with `currentColor`,
+  and their `_dark` twins dropped: they are a tool window's title actions, drawn in the header's icon colour
+  and dimmed while their command is unavailable.
 - `pinHovered` — one fill retuned per variant: the pin head's `#EBECF0` → `#B4B8BF` (light) and
   `#43454A` → `#5A5D64` (dark). Geometry, outline and the second tone are untouched, and the file is
   still multi-tone — this is emphatically NOT the `currentColor` treatment two sections down, which

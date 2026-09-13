@@ -60,6 +60,9 @@ public final class ExplorerCommands {
      */
     public static final String RESTORE_DELETED = "explorer.restoreDeleted";
 
+    /** Reveal the active editor's file in the tree — IntelliJ's Select Opened File. */
+    public static final String SELECT_OPENED_FILE = "explorer.selectOpenedFile";
+
     /** Open a file by name — VS Code's Ctrl+P, IntelliJ's Go to File. */
     public static final String GO_TO_FILE = "explorer.goToFile";
 
@@ -201,6 +204,16 @@ public final class ExplorerCommands {
                     Preferences.open(window,
                             host != null ? host : window.settings());
                 }));
+
+        registry.register(Command.of(SELECT_OPENED_FILE, "Select Opened File")
+                // IntelliJ's locate button: expands to the active file, selects it and scrolls it in.
+                .run(context -> {
+                    Workbench workbench = workbenchFor(context);
+                    ProjectFileTree tree = treeFor(context);
+                    if (workbench != null && tree != null) tree.reveal(workbench.activeFilePath());
+                })
+                .enabledWhen(context -> workbenchFor(context) != null && treeFor(context) != null
+                        && workbenchFor(context).activeFilePath() != null));
 
         registry.register(Command.of(FIND_IN_TREE, "Find in Project View")
                 // ELEMENT-SCOPED, bound on the tree rather than declared globally: Ctrl+F means Find in
@@ -411,6 +424,6 @@ public final class ExplorerCommands {
 
     /** Every command id this set owns, for a host building its own menus. */
     public static List<String> ids() {
-        return List.of(NEW_FILE, NEW_FOLDER, COPY_PATH, COPY_RELATIVE_PATH, REFRESH, GO_TO_FILE);
+        return List.of(NEW_FILE, NEW_FOLDER, COPY_PATH, COPY_RELATIVE_PATH, REFRESH, GO_TO_FILE, SELECT_OPENED_FILE);
     }
 }

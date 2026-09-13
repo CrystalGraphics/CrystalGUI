@@ -190,6 +190,38 @@ when focused. Fires `CgPlatform.sound()` with `button_click`; silent unless the 
 - Tag `button` · internal `__pre-icon__`, `__post-icon__` · pseudo `:hover :active :focus :focus-visible :disabled`
 - Scenes: `cgui-button`, `cgui-ore-theme` (forced-state matrix), `cgui-gallery`
 
+**A button that opens a menu wears IntelliJ's dropdown gutter** — one call, drawn by the UA sheet over the
+button's box in its own colour, unhittable and out of flow. It says a menu opens; the press is still yours.
+
+```java
+eye.setDropdownMark(true);    // button::part(dropdown-gutter), and __dropdown-mark__ on the button
+```
+
+### `ActionButton` — a command or a menu, as an icon (`widget.composite`)
+
+IntelliJ's `ActionButton`. A `Button` by tag carrying `__action-button__`, and not a focus stop.
+
+```java
+ActionButton.command(TreeViewCommands.COLLAPSE_ALL)          // runs a command
+        .icon("crystalgui:general/action/collapseAll")
+        .context(tree);                                       // what it resolves against
+
+ActionButton.menu("New File or Directory…", MenuId.EXPLORER_NEW)   // drops a menu down, gutter and all
+        .icon("crystalgui:general/action/add")
+        .context(tree);
+
+expand.hint(TreeViewCommands.EXPAND_ALL, "Press {} to expand all nodes");   // second tooltip line
+```
+
+- The tooltip is IntelliJ's help tooltip: the command's label, its **live** chord beside it
+  (`Tooltip.setShortcut`) and the description or hint under them (`Tooltip.setDescription`), after the
+  `tooltip.__wait__` delay Hide shares. `tooltip()` is the observable.
+- A command button greys while the command is disabled, re-asked four times a second while in a tree.
+- A menu button's second press closes its menu; it is the menu's invoker.
+- Name the `context` whenever the button sits away from what it acts on — a header is outside its view.
+  `context(Supplier)` for content that is replaced under the button.
+- Consumers: every tool window's title line (`TitleActionsContributor`) and its ⋮.
+
 ## 2. `Checkbox` + `CheckboxGroup`
 
 ```java
@@ -998,7 +1030,8 @@ final class NodeModel implements TreeEditModel<Node> {
 - **Cut is performed at paste.** Until then the held rows carry `__cut__` (dimmed by the UA sheet) and
   nothing moves. A copy stays for the next paste; a cut is spent by one.
 - **Keys are on the tree's own keymap** — Mod+X/C/V, Mod+D, F2, Delete — so they never fire while typing
-  elsewhere. The Edit menu reaches Cut/Copy/Paste through `ClipboardActions`, which the kit installs on the
+  elsewhere. Every tree also answers `TreeViewCommands` without the kit: Expand Selected (Mod+=), Expand All
+  (Mod+Shift+=), Collapse All (Mod+-). The Edit menu reaches Cut/Copy/Paste through `ClipboardActions`, which the kit installs on the
   list.
 - **A right-click inside the selection keeps it**; outside, the clicked row becomes the selection.
 - **`canEdit` gates** cut, delete, rename and dragging; **`canDrop` gates** where a paste or drop may land
