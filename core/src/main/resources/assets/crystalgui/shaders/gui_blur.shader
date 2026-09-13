@@ -34,6 +34,12 @@
 // early break is the spelling every one of them handles. Material scope, so the compiler hoists it
 // into both stages. Keep in step with CgUiBackdrop.MAX_KERNEL_RADIUS.
 #define CG_BLUR_MAX_RADIUS 16
+// SKIA'S LINEAR-SAMPLED KERNEL. Each tap pair is one bilinear fetch between two texels, weighted and
+// offset on the CPU (LinearBlurKernel, a port of SkShaderBlurAlgorithm::Compute1DBlurLinearKernel), so a
+// radius of r costs r + 1 fetches instead of 2r + 1. Read as Skia's 1D blur effect reads them. Without
+// the keyword the pass is the incremental kernel below, kept for comparison.
+#pragma cg_feature LINEAR_KERNEL
+#define CG_BLUR_MAX_PAIRS 9
 
 Tags { "RenderType" = "Transparent" }
 Queue = "Overlay"
@@ -48,6 +54,17 @@ Properties {
     _Radius    ("Taps per side",             float)     = 6.0
     // The region of the source holding real content, as (u0, v0, u1, v1). Taps clamp into it.
     _Bounds    ("Valid source rect",         vec4)      = (0.0, 0.0, 1.0, 1.0)
+    // LINEAR_KERNEL: (offset, weight, offset, weight) per pair, offsets in texels; _Pairs of them live.
+    _Pairs     ("Live kernel pairs",         float)     = 0.0
+    _Kernel0   ("Kernel pair 0",             vec4)      = (0.0, 0.0, 0.0, 0.0)
+    _Kernel1   ("Kernel pair 1",             vec4)      = (0.0, 0.0, 0.0, 0.0)
+    _Kernel2   ("Kernel pair 2",             vec4)      = (0.0, 0.0, 0.0, 0.0)
+    _Kernel3   ("Kernel pair 3",             vec4)      = (0.0, 0.0, 0.0, 0.0)
+    _Kernel4   ("Kernel pair 4",             vec4)      = (0.0, 0.0, 0.0, 0.0)
+    _Kernel5   ("Kernel pair 5",             vec4)      = (0.0, 0.0, 0.0, 0.0)
+    _Kernel6   ("Kernel pair 6",             vec4)      = (0.0, 0.0, 0.0, 0.0)
+    _Kernel7   ("Kernel pair 7",             vec4)      = (0.0, 0.0, 0.0, 0.0)
+    _Kernel8   ("Kernel pair 8",             vec4)      = (0.0, 0.0, 0.0, 0.0)
 }
 
 struct v2f {
@@ -87,6 +104,20 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+#ifdef LINEAR_KERNEL
+        // Skia's 1D blur effect: sum += s.y * child(coord + s.x * dir) + s.w * child(coord + s.z * dir).
+        vec4 pairs[CG_BLUR_MAX_PAIRS] = vec4[CG_BLUR_MAX_PAIRS](
+                _Kernel0, _Kernel1, _Kernel2, _Kernel3, _Kernel4, _Kernel5, _Kernel6, _Kernel7, _Kernel8);
+        vec4 linearSum = vec4(0.0);
+        for (int k = 0; k < CG_BLUR_MAX_PAIRS; k++) {
+            if (float(k) >= _Pairs) break;
+            vec4 s = pairs[k];
+            linearSum += s.y * cg_tap(i.uv + s.x * _Step);
+            linearSum += s.w * cg_tap(i.uv + s.z * _Step);
+        }
+        // Premultiplied, as below: the weights already sum to one.
+        fragColor = linearSum;
+#else
         float sigma = max(_Sigma, 0.25);
         // Incremental Gaussian: g.x is the weight at the current tap, g.y the ratio to the next, g.z the
         // ratio's own growth. Starting from the centre, each step multiplies the pair through.
@@ -123,5 +154,6 @@ Pass {
         //
         // The consumer un-premultiplies. @see gui_backdrop_filter.shader#cg_backdrop
         fragColor = sum / weight;
+#endif
     }
 }

@@ -20,6 +20,8 @@ The repository-level index, with the full reasoning behind each entry, is
 | **IBM Plex Sans** | `assets/crystalgui/ui/fonts/IBMPlexSans-Regular.ttf` | SIL OFL 1.1 — © 2017 IBM Corp., Reserved Font Name "Plex" | Verbatim. Licence: `IBMPlexSans-OFL.txt`, beside it |
 | Minecraft fonts | `assets/crystalgui/ui/fonts/Minecraft*.otf` | Public domain | Verbatim |
 | **GrapesJS** sorter | `com/crystalgui/widget/dnd/SortPlacement`, `com/crystalgui/widget/surface/EdgePan`, `com/crystalgui/app/uibuilder/canvas/DropResolver`, `com/crystalgui/app/uibuilder/document/{TreeDropRules,TreeMoves}` | BSD-3-Clause — © 2017–current Artur Arseniev | **Ported source, modified.** Licence below |
+| **Chromium (Blink)** shadow parsing and interpolation | `com/crystalgui/style/property/visual/shadow/{ShadowParser,ShadowList}` | BSD-3-Clause — © The Chromium Authors | **Ported source, modified.** Licence below |
+| **Skia** linear-sampled blur kernel | `com/crystalgui/render/LinearBlurKernel`, `assets/crystalgui/shaders/gui_blur.shader` | BSD-3-Clause — © Google LLC | **Ported source, modified.** Licence below |
 | **jvmDowngrader** runtime stubs | `com/crystalgui/shadow/xyz/wagyourtail/` | MIT — © wagyourtail | Emitted by the downgrade that makes one jar load on Java 8 and Java 17 alike |
 
 `com/crystalgui/**` outside the rows above, and every shader, stylesheet and sprite under
@@ -27,6 +29,36 @@ The repository-level index, with the full reasoning behind each entry, is
 
 `assets/crystalgui/sources/` is this project's own Java sources, shipped so the documentation popup
 can quote a real declaration. Same licence as the classes beside them.
+
+## Chromium and Skia — BSD-3-Clause
+
+```
+Copyright The Chromium Authors (Chromium); Copyright Google LLC (Skia).
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+- Redistributions of source code must retain the above copyright notice, this
+  list of conditions and the following disclaimer.
+- Redistributions in binary form must reproduce the above copyright notice, this
+  list of conditions and the following disclaimer in the documentation and/or
+  other materials provided with the distribution.
+- Neither the name of Google Inc. nor the names of its contributors may be used
+  to endorse or promote products derived from this software without specific
+  prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
 
 ## GrapesJS — BSD-3-Clause
 

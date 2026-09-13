@@ -280,6 +280,30 @@ average cannot track a throughput that changes; an exponential moving average tr
 yo-yos. `AGENTS.md`'s *"Port, don't reinvent"* rule names exactly this class of problem, and both
 references consulted — Chromium and wget — independently land on a sliding window.
 
+## Chromium — CSS shadow values (BSD-3-Clause)
+
+`core/src/main/java/com/crystalgui/style/property/visual/shadow/ShadowParser.java` ports Blink's
+`css_parsing_utils::ConsumeShadow` and `ParseSingleShadow`
+(`third_party/blink/renderer/core/css/properties/css_parsing_utils.cc`), and `ShadowList.interpolate` ports
+`CSSShadowListInterpolationType::MaybeMergeSingles` and `InterpolableShadow`
+(`third_party/blink/renderer/core/animation/`) — Copyright The Chromium Authors, licensed BSD-3-Clause.
+
+**Modified**: the grammar switch carries a fourth case, CSS Text Decoration 4's non-negative text spread,
+which Blink does not parse; a bare number is a pixel length, as it is for every length here; there is no
+`calc()`; and the colour holds its `currentcolor` weight in a record rather than an `InterpolableColor`.
+`ShadowData`'s two rules — sigma is half the radius, and the `ceil(3σ)` outset — are Blink's too, but that
+file is LGPL and they are implemented from the spec sentence and from Skia instead.
+
+## Skia — the linear-sampled Gaussian kernel (BSD-3-Clause)
+
+`core/src/main/java/com/crystalgui/render/LinearBlurKernel.java` ports
+`SkShaderBlurAlgorithm::Compute1DBlurLinearKernel` and the one-dimensional case of `Compute2DBlurKernel`
+(`src/core/SkBlurEngine.cpp`), and `gui_blur.shader`'s `LINEAR_KERNEL` loop is its 1D blur effect
+(`src/core/SkKnownRuntimeEffects.cpp`) — Copyright Google LLC, licensed BSD-3-Clause.
+
+**Modified**: the pairs arrive as nine fixed `vec4` properties rather than a uniform array, since the
+material system binds no arrays.
+
 ## Chromium — `TableColumns` (BSD-3-Clause)
 
 `core/src/main/java/com/crystalgui/widget/text/TableColumns.java` is a port of Blink's table column
