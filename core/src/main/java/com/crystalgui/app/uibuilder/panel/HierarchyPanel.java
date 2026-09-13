@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
+import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.TreeDropRules;
 import com.crystalgui.core.collection.tree.TreeDataSource;
@@ -210,6 +211,16 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         builder.builderSelection().replaceWith(List.of(node));
     }
 
+    /** The nodes selected on the canvas and in this tree, which are one selection. */
+    public List<UIElement> selectedNodes() {
+        return builder.builderSelection().nodes();
+    }
+
+    /** The root of the document this panel shows. */
+    public UIElement documentRoot() {
+        return builder.getDocument().root();
+    }
+
     /** Unfolds to the canvas selection, highlights it and scrolls the first of it in — the title line's locate. */
     public void revealSelection() {
         List<UIElement> nodes = builder.builderSelection().nodes();
@@ -240,6 +251,12 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
     @Override
     public Object getData(DataKey<?> key) {
         if (key == HIERARCHY) return this;
+        // THE BUILDER'S OWN KEYS, so its commands on a row's menu -- Copy and Paste Attributes -- act on this
+        // document and its selection, as they do from the canvas.
+        if ((key == BuilderEditor.UI_BUILDER || key == BuilderEditor.BUILDER_SELECTION)
+                && builder instanceof DataProvider surface) {
+            return surface.getData(key);
+        }
         // THE HISTORY TOO. The walk stops at the first provider, and one answering only its own key hid the
         // document's history from every command asked from the panel.
         return undoScopeData(key);

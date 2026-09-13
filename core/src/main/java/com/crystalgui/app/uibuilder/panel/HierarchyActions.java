@@ -4,10 +4,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.app.uibuilder.BuilderCommands;
+import com.crystalgui.app.uibuilder.document.NodeSelectors;
 import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.collection.tree.TreeViewCommands;
@@ -20,7 +26,8 @@ import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
 
 /**
- * What the Hierarchy offers beyond its rows: the title line's buttons, New ▸ and the row menu's edit rows.
+ * What the Hierarchy offers beyond its rows: the title line's buttons, and the row menu's New ▸, edit rows,
+ * Copy and Paste Attributes, and Copy Selector.
  *
  * <pre>{@code
  * Disposable hierarchy = HierarchyActions.register(CommandRegistry.global());   // the feature, once
@@ -30,6 +37,9 @@ public final class HierarchyActions {
 
     /** Unfolds to the canvas selection and scrolls it in — the title line's locate. */
     public static final String SELECT_IN_HIERARCHY = "uibuilder.selectInHierarchy";
+
+    /** Puts a selector for each selected node on the clipboard — the Hierarchy's Copy Path. @see NodeSelectors */
+    public static final String COPY_SELECTOR = "uibuilder.copySelector";
 
     /** A kind New ▸ offers: what the row says, and a fresh node of it. */
     record Starter(String label, Supplier<UIElement> build) {
@@ -74,10 +84,25 @@ public final class HierarchyActions {
             }
             return rows;
         });
+        // THE BUILDER'S ATTRIBUTE COMMANDS, beside Copy Selector -- the panel answers the builder's keys, so they
+        // act on the row's node as they do on the canvas.
+        Disposable attributeRows = registry.contributeMenu(HierarchyPanel.CONTEXT_MENU, (menu, context) -> {
+            List<MenuEntry> rows = new ArrayList<>(2);
+            attributeRow(rows, registry, BuilderCommands.COPY_ATTRIBUTES, 10, context);
+            attributeRow(rows, registry, BuilderCommands.PASTE_ATTRIBUTES, 20, context);
+            return rows;
+        });
         return () -> {
+            attributeRows.dispose();
             newRows.dispose();
             editRows.dispose();
         };
+    }
+
+    private static void attributeRow(List<MenuEntry> rows, CommandRegistry registry, String id, int order,
+                                     CommandContext context) {
+        Command command = registry.get(id);
+        if (command != null) rows.add(new MenuEntry.Item(command, "3_attributes", order, command.isEnabled(context), false, false));
     }
 
     private static void declare(CommandRegistry registry) {
@@ -86,6 +111,24 @@ public final class HierarchyActions {
                 .runWithData(data -> {
                     HierarchyPanel panel = data.get(HierarchyPanel.HIERARCHY);
                     if (panel != null) panel.revealSelection();
+                }));
+        registry.register(Command.of(COPY_SELECTOR, "Copy Selector")
+                // BETWEEN THE CLIPBOARD AND MODIFY GROUPS, where the explorer's Copy Path sits.
+                .menu(HierarchyPanel.CONTEXT_MENU, "3_paths", 10)
+                .enabledWhereData(data -> {
+                    HierarchyPanel panel = data.get(HierarchyPanel.HIERARCHY);
+                    return panel != null && !panel.selectedNodes().isEmpty();
+                })
+                .runWithData(data -> {
+                    HierarchyPanel panel = data.get(HierarchyPanel.HIERARCHY);
+                    if (panel == null || panel.selectedNodes().isEmpty()) return;
+                    List<String> selectors = new ArrayList<>();
+                    for (UIElement node : panel.selectedNodes()) {
+                        selectors.add(NodeSelectors.cssPath(node, panel.documentRoot()));
+                    }
+                    String text = String.join("\n", selectors);
+                    CgPlatform.input().setClipboard(text);
+                    Notifications.show(Notification.info("Copied").withDetail(text));
                 }));
     }
 

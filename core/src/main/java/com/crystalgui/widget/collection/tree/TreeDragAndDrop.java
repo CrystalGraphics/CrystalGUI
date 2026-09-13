@@ -2,6 +2,7 @@ package com.crystalgui.widget.collection.tree;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 import javax.annotation.Nullable;
 
@@ -10,7 +11,6 @@ import org.joml.Vector2f;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -49,6 +49,31 @@ final class TreeDragAndDrop<T> {
 
     @Nullable
     private String markedClass;
+
+    /** How long a drag rests on a closed branch before it opens — VS Code's explorer. */
+    static final float AUTO_EXPAND_SECONDS = 0.5f;
+
+    /** How far inside the tree's top or bottom edge a drag scrolls it, in the tree's logical pixels. */
+    static final float SCROLL_BAND = 24f;
+
+    /** The most a drag scrolls the tree in one 60 Hz frame. */
+    static final float SCROLL_MAX_STEP = 10f;
+
+    /** Bumped when a drag leaves or drops, so the hook of an earlier drag ends itself. */
+    private int generation;
+
+    private boolean hovering;
+
+    /** The pointer, in surface pixels, as the last Over left it. */
+    private float pointerX;
+
+    private float pointerY;
+
+    /** The closed branch the drag would land in, and how long it has rested there. */
+    @Nullable
+    private T opening;
+
+    private float openingSeconds;
 
     /** The items being carried, and the editing they came from — so a drag from another tree is ignored. */
     private record Payload(TreeEditing<?> from, List<?> items) {
@@ -91,24 +116,134 @@ final class TreeDragAndDrop<T> {
         tree.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
             List<T> items = carried(event.getPayload());
             if (items == null) return;
-            Spot<T> spot = spotFor((UIElement) event.getTarget(), event.getPosition());
+            Spot<T> spot = spotFor((UIElement) event.getTarget(), event.getPosition().x(), event.getPosition().y());
             mark(spot);
-            // ACCEPTED BY preventDefault, re-asked every frame, so wandering over a refusal stops accepting.
+            pointerX = event.getPosition().x();
+            pointerY = event.getPosition().y();
+            aimAt(spot);
+            startHovering();
+            // ACCEPTED BY preventDefault, re-asked on every move, so wandering over a refusal stops accepting.
             if (spot != null && accepts(items, spot)) event.preventDefault();
         }, false, true);
-        tree.events.getGroup(DragEvent.Leave.class).attachListener((element, event) -> mark(null), false, true);
+        tree.events.getGroup(DragEvent.Leave.class).attachListener((element, event) -> {
+            // FROM THE TREE ITSELF, not a row: a Leave from each row the pointer crosses would stop the hook
+            // on every move.
+            if (event.getTarget() != tree) return;
+            stopHovering();
+            mark(null);
+        }, false, true);
         tree.events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
+            stopHovering();
             mark(null);
             List<T> items = carried(event.getPayload());
             TreeEditModel<T> model = editing.model();
             if (items == null || model == null) return;
-            Spot<T> spot = spotFor((UIElement) event.getTarget(), event.getPosition());
+            Spot<T> spot = spotFor((UIElement) event.getTarget(), event.getPosition().x(), event.getPosition().y());
             if (spot == null || !accepts(items, spot)) return;
             // AT DROP TIME, so the destination is picked first and the key held after.
             boolean copy = (CgPlatform.input().getCurrentModifiers() & model.copyModifier()) != 0;
             if (copy) model.copy(items, spot.target());
             else model.move(items, spot.target());
         }, false, true);
+    }
+
+    // ── While a drag is over the tree ───────────────────────────────────────────────────────────
+    //
+    // A Drag sends Over only when the pointer MOVES, and both of these are about a pointer held still: over a
+    // closed folder, and against the edge. So a per-frame hook runs them, from the first Over until the drag
+    // leaves the tree, drops, or stops.
+
+    /** Aims the auto-expand at {@code spot}'s row when the drop would land inside that row and it is closed. */
+    void aimAt(@Nullable Spot<T> spot) {
+        T candidate = null;
+        if (spot != null) {
+            TreeRow<T> row = rowOf(spot.row());
+            if (row != null && row.expandable() && !row.expanded()
+                    && Objects.equals(spot.target().parent(), row.item())) {
+                candidate = row.item();
+            }
+        }
+        if (Objects.equals(candidate, opening)) return;
+        opening = candidate;
+        openingSeconds = 0f;
+    }
+
+    private void startHovering() {
+        if (hovering) return;
+        UIDocument window = editing.tree().document();
+        if (window == null) return;
+        hovering = true;
+        int mine = ++generation;
+        window.animation().every(editing.tree(), delta -> {
+            if (mine != generation) return false;
+            if (window.input().mode(Drag.class) == null) {
+                stopHovering();
+                mark(null);
+                return false;
+            }
+            tickHover(delta);
+            return true;
+        });
+    }
+
+    private void stopHovering() {
+        generation++;
+        hovering = false;
+        opening = null;
+        openingSeconds = 0f;
+    }
+
+    /** One frame of a drag resting over the tree: scroll against an edge, then open a branch rested on. */
+    void tickHover(float deltaSeconds) {
+        TreeView<T> tree = editing.tree();
+        Box box = tree.box();
+        if (box == null) return;
+        float frames = Math.max(0f, deltaSeconds) * 60f;
+        float step = scrollStep(tree.toLocal(pointerX, pointerY).y, box.clientHeight()) * frames;
+        if (step != 0f) {
+            float before = box.scrollTop();
+            box.setScroll(box.scrollLeft(), before + step);
+            // THE ROWS MOVED UNDER A STILL POINTER, and no Over is coming to say which one it is on now. Only when
+            // they did: a tree already at its end clamps the step to nothing.
+            if (box.scrollTop() != before) reaim();
+        }
+        if (opening == null) return;
+        openingSeconds += Math.max(0f, deltaSeconds);
+        if (openingSeconds < AUTO_EXPAND_SECONDS) return;
+        T item = opening;
+        opening = null;
+        // OFF FIRST: opening re-flattens, and the marked row may come back showing another item.
+        mark(null);
+        tree.setExpanded(item, true);
+    }
+
+    /** Re-resolves the row under the still pointer after the rows moved. */
+    private void reaim() {
+        UIDocument window = editing.tree().document();
+        if (window == null) return;
+        Box under = window.boxes().hitTest(pointerX, pointerY, b -> window.focus().isInert(b.node()));
+        Spot<T> spot = under == null ? null : spotFor(under.node(), pointerX, pointerY);
+        mark(spot);
+        aimAt(spot);
+    }
+
+    /**
+     * How far one 60 Hz frame scrolls with the pointer {@code y} logical pixels down a viewport {@code height}
+     * tall — VS Code's {@code listView.ts} {@code animateDragAndDropScrollTop} (MIT): 0.3 of the depth into the
+     * band, capped, negative at the top. Its 35 px band and 14 px cap sized to this engine's denser rows.
+     */
+    static float scrollStep(float y, float height) {
+        if (height <= SCROLL_BAND * 2f) return 0f;
+        if (y < SCROLL_BAND) return Math.max(-SCROLL_MAX_STEP, 0.3f * (y - SCROLL_BAND));
+        float lower = height - SCROLL_BAND;
+        if (y > lower) return Math.min(SCROLL_MAX_STEP, 0.3f * (y - lower));
+        return 0f;
+    }
+
+    @Nullable
+    private TreeRow<T> rowOf(UIElement row) {
+        int index = editing.tree().indexOfRowElement(row);
+        return index < 0 ? null : editing.tree().rowAt(index);
     }
 
     @SuppressWarnings("unchecked")
@@ -122,15 +257,15 @@ final class TreeDragAndDrop<T> {
         return model != null && model.canDrop(items, spot.target().parent());
     }
 
-    /** Where a drop over {@code hit} at surface {@code position} lands, or null off the rows. */
+    /** Where a drop over {@code hit} at surface point ({@code x}, {@code y}) lands, or null off the rows. */
     @Nullable
-    Spot<T> spotFor(@Nullable UIElement hit, ReadOnlyVec2f position) {
+    Spot<T> spotFor(@Nullable UIElement hit, float x, float y) {
         TreeEditModel<T> model = editing.model();
         UIElement row = editing.rowElementFor(hit);
         T item = row == null ? null : editing.itemForRow(row);
         Box box = row == null ? null : row.box();
         if (model == null || item == null || box == null) return null;
-        Vector2f local = row.toLocal(position.x(), position.y());
+        Vector2f local = row.toLocal(x, y);
         return spotAt(model, row, item, local.y / Math.max(1f, box.height()));
     }
 
@@ -162,9 +297,7 @@ final class TreeDragAndDrop<T> {
     }
 
     private boolean isOpenWithChildren(UIElement row) {
-        TreeView<T> tree = editing.tree();
-        int index = tree.indexOfRowElement(row);
-        TreeRow<T> at = index < 0 ? null : tree.rowAt(index);
+        TreeRow<T> at = rowOf(row);
         return at != null && at.expandable() && at.expanded();
     }
 

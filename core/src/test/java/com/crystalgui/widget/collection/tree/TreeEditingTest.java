@@ -311,6 +311,30 @@ public class TreeEditingTest extends UiDocumentTestBase {
         assertFalse("a leaf takes nothing", model.canDrop(List.of(b), c));
     }
 
+    @Test
+    public void aDragRestingOnAClosedBranchOpensItAfterHalfASecond() {
+        tree.setExpanded(a, false);
+        settle();
+        TreeDragAndDrop<Node> drops = new TreeDragAndDrop<>(editing, new UIElement());
+        drops.aimAt(drops.spotAt(model, rowElement(a), a, 0.5f));
+        drops.tickHover(0.3f);
+        assertFalse("opened before the wait was up", tree.isExpanded(a));
+        drops.tickHover(0.3f);
+        assertTrue("resting on a closed branch never opened it", tree.isExpanded(a));
+    }
+
+    @Test
+    public void aDragAgainstAnEdgeScrollsByItsDepthIntoTheBandCapped() {
+        assertEquals(0f, TreeDragAndDrop.scrollStep(100f, 200f), 0f);
+        assertTrue("the top band scrolls up", TreeDragAndDrop.scrollStep(12f, 200f) < 0f);
+        assertTrue("deeper is faster",
+                TreeDragAndDrop.scrollStep(2f, 200f) < TreeDragAndDrop.scrollStep(20f, 200f));
+        assertEquals(-TreeDragAndDrop.SCROLL_MAX_STEP, TreeDragAndDrop.scrollStep(-500f, 200f), 0f);
+        assertTrue("the bottom band scrolls down", TreeDragAndDrop.scrollStep(190f, 200f) > 0f);
+        assertEquals("a viewport no taller than both bands never scrolls", 0f,
+                TreeDragAndDrop.scrollStep(10f, 40f), 0f);
+    }
+
     /** A mark whose gradient failed to parse draws nothing and says nothing, so the sheet is asked. */
     @Test
     public void theDropMarksAndTheCutMarkResolveInTheUserAgentSheet() {

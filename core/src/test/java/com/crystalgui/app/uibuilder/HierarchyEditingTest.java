@@ -7,15 +7,23 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.document.NodeSelectors;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.panel.HierarchyActions;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -157,6 +165,41 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
 
         history().undo();
         assertNull("one undo left the node in", after.parentElement());
+    }
+
+    @Test
+    public void aSelectorStopsAtTheNearestIdAndNamesClassesOnlyWhereASiblingShares() {
+        UIElement first = new UIElement();
+        UIElement second = new UIElement();
+        second.addClass("primary");
+        group.append(first, second);
+        String kind = second.tagName();
+        assertEquals("#title", NodeSelectors.cssPath(title, root));
+        assertEquals("#group > " + kind + ".primary", NodeSelectors.cssPath(second, root));
+        assertEquals("an engine state class is no part of a selector", "#group > " + kind,
+                NodeSelectors.cssPath(first.addClass("__selected__"), root));
+    }
+
+    @Test
+    public void theRowMenuOffersTheAttributesAndCopySelector() {
+        Disposable builder = BuilderCommands.register();
+        Disposable rows = HierarchyActions.register(CommandRegistry.global());
+        try {
+            editor.selection().selectOnly(title);
+            settle();
+            Menu menu = ContextMenu.of(HierarchyPanel.CONTEXT_MENU).build(CommandRegistry.global(), hierarchy.tree());
+            List<String> labels = new ArrayList<>();
+            MenuItem copyAttributes = null;
+            for (MenuItem item : menu.getItems()) {
+                labels.add(item.getText());
+                if ("Copy Attributes".equals(item.getText())) copyAttributes = item;
+            }
+            assertTrue(labels.toString(), labels.containsAll(List.of("Copy Attributes", "Paste Attributes", "Copy Selector")));
+            assertTrue("Copy Attributes cannot see the row's node", copyAttributes.isEnabled());
+        } finally {
+            rows.dispose();
+            builder.dispose();
+        }
     }
 
     @Test
