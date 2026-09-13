@@ -19,6 +19,7 @@ import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.text.TextStrokeStyle;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.GeneralGroup;
@@ -702,7 +703,7 @@ public final class UIText extends UIElement implements Measurable {
                 .at(contentX, contentY)
                 .color(fill)
                 .pose(ctx.getPoseStack());
-        applyStroke(draw, family, general, computed, color);
+        TextStrokeStyle.applyTo(draw, family, general, computed, color);
         draw.submit();
 
         if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
@@ -724,81 +725,6 @@ public final class UIText extends UIElement implements Measurable {
     public float maxStrokeWidthEm() {
         return CgFontRegistry.get().maxStrokeWidthEm(resolveFamily());
     }
-
-    /**
-     * Puts the cascade's stroke properties on the draw, or leaves it unstroked when nothing asked
-     * for one — which is the draw's own default, so every return here is simply a return.
-     *
-     * <p><b>Width converts to em here</b>, because this is the last place that knows the font size:
-     * {@code text-stroke-width} resolves against it (see the property's own note), and the backend
-     * wants em so the same stroke survives being rasterised at whatever size the pose resolves to.
-     * A percentage and a length therefore both land on the same quantity — {@code 10%} and
-     * {@code 0.1em} would mean the same thing, if {@code LengthPercent} parsed the second.</p>
-     */
-    private void applyStroke(CgTextRenderer.Draw draw, CgFontFamily family,
-                             GeneralGroup general, ComputedStyle computed,
-                             int inheritedColor) {
-        LengthPercent width = general.textStrokeWidth();
-        if (width == null) return;
-        float fontSize = general.fontSize();
-        if (fontSize <= 0f) return;
-        float widthEm = width.resolve(fontSize) / fontSize;
-        if (widthEm <= 0f) return;
-
-        // CAPPED HERE, not only in the shader. The field carries distance for a fraction of the em, so
-        // an outline wider than the band's ceiling cannot be drawn at any size -- the shader has always
-        // clamped per fragment, which meant the value this class handed down was one the renderer would
-        // never draw, and a caller reading it back got a number that was never true.
-        //
-        // Asked of the FAMILY, not read off CgTextStroke#MAX_FIELD_WIDTH_EM: that constant is the
-        // narrow band every face can hold, and a face with no dense script in it is banded 2.3x wider.
-        //
-        // Reported once per (width, size, ceiling), because the difference is invisible: a 2px outline
-        // on 12px text silently drew 0.67px, and nothing anywhere said which number was real.
-        float ceilingEm = CgFontRegistry.get().maxStrokeWidthEm(family);
-        if (widthEm > ceilingEm) {
-            warnStrokeClamped(widthEm, fontSize, ceilingEm);
-            widthEm = ceilingEm;
-        }
-
-        // Unset means `currentcolor`, so a width on its own outlines in the text's own colour. Asked
-        // the same way the fill is, and for the same reason -- see above.
-        int strokeColor = computed.isSet(StylePropertyRegistry.TEXT_STROKE_COLOR)
-                ? general.textStrokeColor() : inheritedColor;
-        if ((strokeColor >>> 24) == 0) return;
-
-        StrokeAlign align = general.strokeAlign();
-        draw.stroke(widthEm, strokeColor)
-                .strokeAlign(align == StrokeAlign.CENTER ? CgStrokeAlign.CENTER
-                        : align == StrokeAlign.INSET ? CgStrokeAlign.INSET : CgStrokeAlign.OUTSET)
-                // `paint-order: stroke` is the one that reorders; `fill` and `normal` are the same
-                // thing, which is why the enum carries all three rather than a boolean.
-                .strokeOverFill(general.paintOrder() != PaintOrder.STROKE);
-    }
-
-    /**
-     * Says, once per distinct (width, size), that a declared outline is wider than the distance field
-     * can describe and what it was drawn at instead.
-     *
-     * <p>Bounded: a paint method runs every frame, and a warning per frame is a log nobody reads. The
-     * set stops growing at {@link #MAX_REPORTED_CLAMPS} distinct pairs, which is far more than a sheet
-     * has and far less than a leak.</p>
-     */
-    private static void warnStrokeClamped(float widthEm, float fontSize, float ceilingEm) {
-        // The size check FIRST: this runs inside a paint method, so once the table is full every
-        // later frame would otherwise build a key string per label per frame to throw it away.
-        if (REPORTED_CLAMPS.size() >= MAX_REPORTED_CLAMPS) return;
-        if (!REPORTED_CLAMPS.add(Math.round(widthEm * 1000f) + "@" + Math.round(fontSize)
-                + "/" + Math.round(ceilingEm * 1000f))) return;
-        CrystalGuiCore.LOGGER.warn(String.format(
-                "[cgui] text-stroke %.2fpx on %.0fpx text is %.4fem, wider than the %.4fem the glyph "
-                        + "atlas can describe; drawing %.2fpx. A stroke is bounded by the stored "
-                        + "distance field, so the widest outline is a fraction of the em at every size.",
-                widthEm * fontSize, fontSize, widthEm, ceilingEm, ceilingEm * fontSize));
-    }
-
-    private static final int MAX_REPORTED_CLAMPS = 32;
-    private static final Set<String> REPORTED_CLAMPS = ConcurrentHashMap.newKeySet();
 
     /**
      * The band behind a highlighted range.
