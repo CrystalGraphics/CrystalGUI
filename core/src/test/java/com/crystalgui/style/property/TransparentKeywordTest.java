@@ -49,6 +49,6 @@ public class TransparentKeywordTest {
     /** An unknown keyword still degrades rather than throwing. */
     @Test
     public void anUnknownKeywordIsStillNull() {
-        org.junit.Assert.assertNull(ColorValue.parseColor("chartreuse"));
+        org.junit.Assert.assertNull(ColorValue.parseColor("notacolour"));
     }
 }
