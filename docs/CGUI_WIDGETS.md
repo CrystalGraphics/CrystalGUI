@@ -486,8 +486,8 @@ public UIElement options() {
   wants Enter leaves a focused field alone.
 - **A page hidden while it holds focus gives focus back** to whatever had it before focus entered the bar.
 - Pages arrive through `claim` and `setBase`. A child appended directly is not a page and is never hidden.
-- A live number on a page follows its source with `ValueControl.setLiveValue`, which leaves a field
-  alone while something is typed into it.
+- A page's fields come from a `ToolbarForm` bound to properties (§12d), so a live number follows its
+  source and is left alone while something is typed into it.
 
 - Tag `contexttoolbar` · pages carry `__context-page__`
 - Scenes: none yet — the UI builder's toolbar row is the consumer
@@ -862,6 +862,85 @@ own origin the plane origin, and is **cull-exempt** (`CanvasView.setCullExempt`)
 element's box where it is and a painter's box says nothing about where it draws. It culls per wire
 instead. Stroke width is clamped against the canvas's zoom so a pose-scaled 2px wire does not vanish at
 0.2×.
+
+---
+
+## 12d. The config kit — `ConfigForm` over `Property`
+
+`com.crystalgui.widget.config` · tags `configuratorpanel` / `configurator` / `configuratorgroup` and one
+per control (`numbercontrol`, `slidercontrol`, `booleancontrol`, `selectcontrol`, `textcontrol`,
+`colorcontrol`, `vectorcontrol`, `matrixcontrol`, `maskcontrol`, `assetcontrol`, `arraycontrol`,
+`anchorcontrol`, `infocontrol`, `notecontrol`, `headercontrol`) · `cgui-new-gallery` → **config kit**
+
+Blender's `layout.prop`, drawn as Unity's inspector. A `ConfigDescriptor` says what a field is, a
+`Property` says where its value lives, and a form builds the control and binds it. The same calls fill an
+inspector tab, a preferences page, a tuning window and a tool's toolbar page.
+
+```java
+// An inspector section
+public void build(ConfigForm form, DataContext ctx) {
+    Node node = ctx.get(NODE);
+    form.header("Transform");
+    form.prop(ConfigDescriptor.number("rotation", "Rotation").unit("°"),
+            Property.derived(node::rotation, node::setRotation).editedIn(document.undoStack()));
+
+    ConfigForm about = form.group("About", true);
+    about.prop(ConfigDescriptor.info("id", "Id"), Property.derived(node::id));   // read-only
+}
+```
+
+```java
+// A tool's page in a ContextToolbar: a letter per number, the full name on hover
+ToolbarForm form = ToolbarForm.into(this);
+form.prop(ConfigDescriptor.anchor("pivot", "Pivot"), pivot);
+form.separator();
+form.prop(ConfigDescriptor.number("w", "Width").shortLabel("W").unit("%"), scaleX)
+        .describeWith(Property.derived(() -> "Width: " + Math.round(box.width()) + " px"));
+form.prop(ConfigDescriptor.bool("link", "Maintain aspect ratio").toggle(true).shortLabel(""), linked);
+```
+
+```java
+// A panel of its own
+ConfiguratorPanel panel = new ConfiguratorPanel();
+PanelForm form = panel.form();
+form.note("Rim is the hairline at the boundary; glow is the broad falloff.");
+form.prop(ConfigDescriptor.number("blur", "Blur").range(0f, 40f),
+        Property.derived(() -> (double) glass.getBlurRadius(), v -> glass.setBlurRadius(v.floatValue())));
+```
+
+A value stored in another shape is mapped, never converted in the control — a shader graph keeps GLSL
+text, and its colour field binds `stored.map(ShaderColorFieldWidget::parseVec4, ShaderColorFieldWidget::formatVec4)`.
+
+| Kind | Property type |
+|---|---|
+| `NUMBER` — a slider when it has a `range` | `Double` |
+| `TEXT`, `SELECT`, `ASSET`, `INFO`, `NOTE` | `String` |
+| `BOOLEAN` | `Boolean` |
+| `COLOR` | `Integer` ARGB |
+| `VECTOR`, `MATRIX`, `ANCHOR` | `double[]` — an anchor is `[x, y]` as fractions of the box |
+| `MASK` | `Set<String>` |
+| `ARRAY` | `List<Object>` |
+
+- **A bound field needs nothing wired.** An edit writes the property; a change made anywhere else shows
+  up — at once for a stored or `announcedBy` property, after the next layout for a polled one — and only
+  while the field is in a tree, re-reading when it comes back. A host reacts to an edit in the property's
+  writer.
+- **A field holding a typed edit is never overwritten**, as in Dear ImGui and Unity. What moved meanwhile
+  shows once the edit lands or is dropped.
+- **A scrub or a slider drag is one step** of the property's `editedIn` history, however many values it
+  writes.
+- **`setValue` on a bound control writes the model** — there is no second copy to set. It emits nothing;
+  a user edit emits `changed`.
+- **The label is the scrub handle**, in a row and in a toolbar cell alike. A pixel is worth a hundredth of
+  the field's `range`, or one unit when it has none; Shift ×10, Ctrl ÷10; `scrubRate` overrides both.
+- **Prefer `prop` to `row`.** `row` starts at a value and follows nothing — a fact read once.
+- **A toolbar cell shows the `shortLabel`** and the full label on hover, hung from the cell so it clears
+  the bar. `group` in a toolbar starts a new cluster behind a separator; there is nowhere to fold.
+- **A kind with no registered control throws** — a blank field is what the registry exists to prevent.
+- A `PanelForm` group remembers being closed across a refill of its panel; the panel's rows are released
+  by `clearRows()`, which is what makes a rebuilt inspector free.
+- Geometry is `ua/inspector.css`. The one layout in Java is that a toolbar page, a cell and an anchor's
+  lines are rows, at `DEFAULT` origin, as a `Button` is.
 
 ---
 

@@ -42,6 +42,7 @@ import com.crystalgui.widget.surface.SurfacePolicy;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.config.Configurator;
 import com.crystalgui.widget.config.control.NumberControl;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -736,7 +737,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         enterFreeTransform();
         document.update(W, H);
         NumberControl angle = editor.options().fieldFor(Kind.ROTATE);
-        int[] at = centreOf(angle.parentElement().children().get(0));
+        int[] at = centreOf(scrubHandleOf(angle));
 
         press(at[0], at[1]);
         move(at[0] + 20, at[1]);
@@ -880,12 +881,12 @@ public class FreeTransformTest extends UiDocumentTestBase {
         box().gesture().scaleTo(new Vector2f(node.box().width() * 2f,
                 node.box().height() * 2f), false, false);
         box().release();
-        bar.sync();
+        document.frame(0f, W, H);
         assertEquals("the bar has to show what the drag did",
                 200d, bar.fieldFor(Kind.SCALE).getValue(), 0.5d);
 
         // Through the FIELD, which is what typing does: setValue is the programmatic path and
-        // deliberately does not announce, or a sync would be read straight back as an edit.
+        // deliberately does not announce, or following the box would be read straight back as an edit.
         bar.fieldFor(Kind.ROTATE).field().setText("90");
         assertEquals("and a typed angle has to reach the gesture",
                 Math.PI / 2d, box().gesture().rotation(), 0.001d);
@@ -933,15 +934,17 @@ public class FreeTransformTest extends UiDocumentTestBase {
         enterFreeTransform();
         document.update(W, H);
         TransformOptionsBar bar = editor.options();
-        bar.sync();
+        document.frame(0f, W, H);
         assertEquals("nothing has moved it yet", 0d, bar.fieldFor(Kind.MOVE).getValue(), 0.01d);
 
         // Turned about the middle, where the box stays put. About a corner it would genuinely swing, and
         // reporting that is the point of measuring the element rather than the transform's own numbers.
         bar.fieldFor(Kind.ROTATE).field().setText("30");
+        document.frame(0f, W, H);
         assertEquals("turning in place is not a move", 0d, bar.fieldFor(Kind.MOVE).getValue(), 0.5d);
 
         bar.placePivot(-1, -1);
+        document.frame(0f, W, H);
         assertEquals("nor is choosing a cell", 0d, bar.fieldFor(Kind.MOVE).getValue(), 0.01d);
 
         bar.fieldFor(Kind.MOVE).field().setText("40");
@@ -959,13 +962,14 @@ public class FreeTransformTest extends UiDocumentTestBase {
         enterFreeTransform();
         document.update(W, H);
         TransformOptionsBar bar = editor.options();
-        bar.sync();
+        document.frame(0f, W, H);
         assertEquals("it starts in the middle", 50d, bar.fieldFor(Kind.PIVOT).getValue(), 0.01d);
 
         bar.placePivot(1, 1);
+        document.frame(0f, W, H);
         assertEquals("a cell is the same pair, rounder", 100d, bar.fieldFor(Kind.PIVOT).getValue(), 0.01d);
 
-        // TYPED LAST, because a field holding an edit nobody landed is left alone by every sync -- the
+        // TYPED LAST, because a field holding an edit nobody landed is left alone by every frame -- the
         // config kit's rule, so asserting a readout after typing into it would assert the typing.
         Vector2f corner = box().gesture().apply(0f, 0f);
         bar.fieldFor(Kind.PIVOT).field().setText("0");
@@ -993,13 +997,21 @@ public class FreeTransformTest extends UiDocumentTestBase {
     /** Drags a field's label right by {@code pixels}, from {@code from}, and answers where it landed. */
     private double scrubBy(NumberControl control, double from, int pixels) {
         control.setValue(from);
-        int[] at = centreOf(control.parentElement().children().get(0));
+        int[] at = centreOf(scrubHandleOf(control));
         press(at[0], at[1]);
         move(at[0] + 8, at[1]);
         move(at[0] + pixels, at[1]);
         Double landed = control.getValue();
         release(at[0] + pixels, at[1]);
         return landed == null ? 0d : landed;
+    }
+
+    /** The letter in front of a field, which the field adopted as its scrub handle. */
+    private static UIElement scrubHandleOf(NumberControl control) {
+        for (UIElement at = control; at != null; at = at.parentElement()) {
+            if (at instanceof Configurator cell) return cell.label();
+        }
+        throw new AssertionError("the field is not in a cell");
     }
 
     /** <b>Linked, W takes H with it at the ratio the two had</b> — Photoshop's chain. Unlinked, each is its own. */

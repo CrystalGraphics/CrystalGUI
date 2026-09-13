@@ -1,7 +1,7 @@
 package com.crystalgui.widget.graph.node;
 
-import com.crystalgui.widget.graph.GraphNode;
-import com.crystalgui.widget.graph.NodePort;
+import com.crystalgui.core.property.Property;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
@@ -10,29 +10,36 @@ import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeField;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.SetNodeFieldEdit;
-import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControl;
+import com.crystalgui.widget.graph.GraphNode;
+import com.crystalgui.widget.graph.NodePort;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Puts a node type's editable fields onto a node widget, and writes changes back through the undo stack.
+ * Puts a node type's editable fields onto a node widget, each bound to its value in the document.
+ *
+ * <pre>{@code
+ * NodeFieldBinder.attach(nodeWidget, type, document, undoStack, preview::recompile);
+ * }</pre>
+ *
+ * <p>A field's value is a {@link Property} over the document ({@link #property}): an edit is a
+ * {@link SetNodeFieldEdit} on the undo stack, a scrub is one of them however long it lasts, and an undo —
+ * or any other change to the document — reaches the editor showing the field and re-runs
+ * {@code onChange}, so a preview recompiles for Ctrl+Z as it does for typing.</p>
  *
  * <h3>Domain-agnostic on purpose</h3>
- * <p>Nothing here knows about shaders. A field is a declaration on {@link NodeType}, the widget comes from
+ * <p>Nothing here knows about shaders. A field is a declaration on {@link NodeType}, the editor comes from
  * {@link NodeFieldWidgets}, and the write is a {@link SetNodeFieldEdit} — so a dialogue graph, a state
- * machine and a material graph all get inline editors from the same code. The shader library reaches this
- * by <em>describing</em> its properties as fields, not by having its own control layer.</p>
+ * machine and a material graph all get inline editors from the same code.</p>
  *
  * <h3>Two placements, one mechanism</h3>
  * <ul>
  *   <li><b>Body fields</b> go in the node's {@code __controls__} row, labelled.</li>
- *   <li><b>Port fields</b> become the port's {@link NodePort#getDefaultEditor()} — a floating widget
- *       {@code GraphView} places beside the port and shows only while it is unconnected, the behaviour
- *       {@code nodeport:blank} exists to express. This is why an unconnected {@code Value} can be typed
- *       into without any node needing a matching setting.</li>
+ *   <li><b>Port fields</b> become the port's {@link NodePort#getDefaultEditor()} — a floating editor
+ *       shown only while the port is unconnected.</li>
  * </ul>
  */
 public final class NodeFieldBinder {
@@ -43,12 +50,11 @@ public final class NodeFieldBinder {
     /**
      * Builds and attaches every field the type declares.
      *
-     * <p>Idempotent per widget only in the sense that the caller must not call it twice — controls are
-     * internal children with no cheap "is one already there" query, so a second call silently doubles
-     * them. Track attachment by node id.</p>
+     * <p>The caller must not call it twice for one widget — a second call doubles the controls. Track
+     * attachment by node id.</p>
      *
-     * @param undo     where changes are recorded; when null the field still edits, just not undoably
-     * @param onChange run after a change is written, for a caller that needs to recompile or re-render
+     * @param undo     where edits are recorded; when null a field still edits, just not undoably
+     * @param onChange run after the field's value changes, for a caller that recompiles or re-renders
      */
     public static void attach(GraphNode widget, NodeType type, GraphDocument document,
                               @Nullable UndoStack undo, @Nullable Runnable onChange) {
@@ -56,13 +62,13 @@ public final class NodeFieldBinder {
         if (nodeId == null) return;
 
         for (NodeField field : type.fields()) {
-            UIElement control = buildControl(field, document, nodeId, undo, onChange);
+            ConfigControl control = buildControl(field, document, nodeId, undo, onChange);
             if (control == null) continue;
 
             if (field.isPortField()) {
                 NodePort port = widget.portNamed(field.portId());
                 // A field naming a port the widget does not have is a declaration bug, but a silently
-                // missing editor is worse than a missing one you can see — so it falls back to the body.
+                // missing editor is worse than a misplaced one you can see — so it falls back to the body.
                 if (port != null) {
                     port.setDefaultEditor(control);
                     continue;
@@ -73,151 +79,110 @@ public final class NodeFieldBinder {
     }
 
     /**
-     * Builds one field's control, reading its current value from the document and wiring it to write
-     * back through {@code undo} — the same thing {@link #attach} does per field, exposed so a caller can
-     * REBUILD one later without duplicating the write path.
+     * A field's stored text in the document, as a property — the value every editor of it binds to.
      *
-     * <p>Rebuilding is a real need rather than a hypothetical: a shader graph's {@code dynamic} port
-     * changes how many components it edits as the graph is rewired ({@code A} becomes three boxes when a
-     * vec3 arrives), and a control cannot restructure itself — the widget kind and its arity are decided
-     * at construction. Whoever knows the new shape passes a field describing it; everything about where
-     * the value comes from and where it goes stays here, so there is only ever one writer.</p>
+     * <pre>{@code
+     * Property<String> stored = NodeFieldBinder.property(field, document, nodeId, undo, preview::recompile);
+     * }</pre>
+     *
+     * <p>Setting it records a {@link SetNodeFieldEdit} (nothing, for a value already there); it follows the
+     * document's own change signal; and {@code onChange} runs whenever the value moves, whoever moved it.</p>
+     */
+    public static Property<String> property(NodeField field, GraphDocument document, String nodeId,
+                                            @Nullable UndoStack undo, @Nullable Runnable onChange) {
+        Property<String> stored = Property.<String>derived(() -> currentValue(document, nodeId, field),
+                        value -> write(document, undo, nodeId, field, value))
+                .announcedBy(refresh -> document.onChanged.connect(refresh))
+                .editedIn(undo);
+        if (onChange != null) stored.changed.connect((was, now) -> onChange.run());
+        return stored;
+    }
+
+    /**
+     * Builds one field's editor, bound to its value in the document.
+     *
+     * <p>Exposed so a caller can REBUILD one later — a shader graph's dynamic port changes how many
+     * components it edits as the graph is rewired, and a control cannot restructure itself.</p>
      *
      * @return the control, or {@code null} when nothing is registered for the field's kind
      */
     @Nullable
-    public static UIElement buildControl(NodeField field, GraphDocument document, String nodeId,
-                                         @Nullable UndoStack undo, @Nullable Runnable onChange) {
-        return buildControl(field, document, nodeId, undo, onChange, null);
+    public static ConfigControl buildControl(NodeField field, GraphDocument document, String nodeId,
+                                             @Nullable UndoStack undo, @Nullable Runnable onChange) {
+        return NodeFieldWidgets.create(field, property(field, document, nodeId, undo, onChange));
     }
 
     /**
-     * As {@link #buildControl(NodeField, GraphDocument, String, UndoStack, Runnable)}, but starting from
-     * {@code presetValue} instead of what the document currently holds.
+     * As {@link #buildControl(NodeField, GraphDocument, String, UndoStack, Runnable)}, showing
+     * {@code presetValue} until the document's own value moves or the field is edited.
      *
-     * <p>For a rebuild that changes the control's SHAPE. A widget may infer its shape from the value it
-     * is handed — {@code ShaderVectorFieldWidget} counts the components in {@code vecN(...)} to decide how
-     * many boxes to draw — so re-shaping to three components while the document still holds the scalar
-     * {@code 1.0} would build the wrong widget from the right intent. The document is left alone: the
-     * stored literal is still valid for the port (a scalar promotes), and it is rewritten the moment the
-     * user actually edits one of the new boxes.</p>
+     * <p>For a rebuild that changes the control's SHAPE. A factory infers the shape from the value it is
+     * handed — {@code vecN(...)}'s component count — so re-shaping to three components while the document
+     * still holds the scalar {@code 1.0} would build the wrong editor from the right intent. The document
+     * is left alone: the stored scalar is still valid for the port, and is rewritten on the first edit.</p>
      */
     @Nullable
-    public static UIElement buildControl(NodeField field, GraphDocument document, String nodeId,
-                                         @Nullable UndoStack undo, @Nullable Runnable onChange,
-                                         @Nullable String presetValue) {
-        String current = presetValue != null ? presetValue : currentValue(document, nodeId, field);
-        // What this binding last put INTO the document, so a change arriving from anywhere else can be
-        // told apart from the echo of its own write.
-        String[] lastWritten = { current };
+    public static ConfigControl buildControl(NodeField field, GraphDocument document, String nodeId,
+                                             @Nullable UndoStack undo, @Nullable Runnable onChange,
+                                             @Nullable String presetValue) {
+        Property<String> stored = property(field, document, nodeId, undo, onChange);
+        return NodeFieldWidgets.create(field, presetValue == null ? stored : preset(stored, presetValue));
+    }
 
-        UIElement control = NodeFieldWidgets.create(field, current, value -> {
-            lastWritten[0] = value;
-            write(document, undo, nodeId, field, value, onChange);
-        });
-        bracketGestures(control, undo);
-        followDocument(control, document, nodeId, field, lastWritten, onChange);
-        return control;
+    /** {@code stored}, showing {@code value} instead until it moves or is written. */
+    private static Property<String> preset(Property<String> stored, String value) {
+        String[] shown = {value};
+        stored.refresh();
+        return Property.<String>derived(() -> shown[0] != null ? shown[0] : stored.get(),
+                        next -> {
+                            shown[0] = null;
+                            stored.set(next);
+                        })
+                .announcedBy(refresh -> {
+                    Connection moved = stored.changed.connect((was, now) -> {
+                        shown[0] = null;
+                        refresh.run();
+                    });
+                    Connection source = stored.watchSource();
+                    return () -> {
+                        moved.disconnect();
+                        source.disconnect();
+                    };
+                })
+                .editedIn(stored.history());
     }
 
     /**
-     * One control writing the same field on <b>several</b> nodes, as a single undo step.
+     * One editor writing the same field on <b>several</b> nodes, as a single undo step.
      *
-     * <p>What an inspector needs for a multi-selection, and the reason it is here rather than there:
-     * everything about where a value comes from and where it goes stays in this class, so there is still
-     * exactly one writer however many nodes are on the far end of it.</p>
-     *
-     * <p>The control shows {@code displayNodeId}'s value, which is what every inspector does with a
-     * multi-selection — the write applies to all of them regardless of what they held, so the displayed
-     * value is a starting point rather than a claim that they agree.</p>
-     *
-     * <p>A {@link CompositeEdit} rather than N pushes: N pushes is N presses of Ctrl+Z to undo one
-     * action. It undoes in reverse, which costs nothing here (these edits are independent) but is the
-     * behaviour the type guarantees and the reason not to hand-roll a loop.</p>
+     * <p>It shows {@code displayNodeId}'s value, which is what every inspector does with a multi-selection
+     * — the write applies to all of them regardless, so the displayed value is a starting point rather
+     * than a claim that they agree. A {@link CompositeEdit} rather than N pushes, so one Ctrl+Z undoes it.</p>
      *
      * @param nodeIds every node to write; ones that no longer exist are skipped at apply time
      */
     @Nullable
-    public static UIElement buildMultiControl(NodeField field, GraphDocument document,
-                                              List<String> nodeIds, String displayNodeId,
-                                              @Nullable UndoStack undo, @Nullable Runnable onChange) {
-        String current = currentValue(document, displayNodeId, field);
-        UIElement control = NodeFieldWidgets.create(field, current, value -> {
-            List<Edit> edits = new ArrayList<>();
-            for (String nodeId : nodeIds) {
-                SetNodeFieldEdit edit = SetNodeFieldEdit.of(document, nodeId, field.id(), value);
-                if (edit.changesAnything()) edits.add(edit);
-            }
-            if (edits.isEmpty()) return;
-
-            Edit combined = edits.size() == 1 ? edits.get(0)
-                    : new CompositeEdit(edits, "set " + field.id() + " on " + edits.size() + " nodes");
-            if (undo != null) undo.execute(combined);
-            else combined.apply();
-            if (onChange != null) onChange.run();
-        });
-        bracketGestures(control, undo);
-        return control;
-    }
-
-    /**
-     * Makes the widget follow the document, not only drive it.
-     *
-     * <h3>This is what made undo look broken</h3>
-     * <p>An {@code Edit} mutates the document directly — that is the whole point of the pattern. Nothing
-     * carried the result back to the control that had been displaying the old value, and nothing re-ran
-     * {@code onChange}, so undoing a field edit changed the document and <b>nothing visible happened</b>:
-     * the number box kept showing the value that had just been undone, and the shader never recompiled.
-     * Press Ctrl+Z, see nothing, press again, and watch some earlier action disappear instead — which is
-     * exactly how it was reported, and why every investigation went looking at the undo stack. The stack
-     * was correct the whole time.</p>
-     *
-     * <p>Only fires for a change this binding did not make: an edit written from here already left the
-     * control holding that value, and re-applying it would fight a caret mid-type. Skipped entirely while
-     * a gesture is live, so a scrub is not interrupted by its own per-frame writes.</p>
-     */
-    private static void followDocument(@Nullable UIElement control, GraphDocument document, String nodeId,
-                                       NodeField field, String[] lastWritten, @Nullable Runnable onChange) {
-        if (control == null) return;
-        if (!(control instanceof ConfigControl config)) return;
-        // DECLARED, not subscribed -- the document outlives every node in it, so the control decides when
-        // this is live. See ConfigControl.follows.
-        config.follows(() -> {
-            lastWritten[0] = currentValue(document, nodeId, field);
-            NodeFieldWidgets.applyValue(field, control, lastWritten[0]);
-            return document.onChanged.connect(() -> {
-                if (config.isInteracting()) return;
-                String live = currentValue(document, nodeId, field);
-                if (java.util.Objects.equals(live, lastWritten[0])) return;
-                lastWritten[0] = live;
-                NodeFieldWidgets.applyValue(field, control, live);
-                // The other half: whatever recompiles or re-renders has to hear about it too, or the
-                // picture stays as stale as the widget did.
-                if (onChange != null) onChange.run();
-            });
-        });
-    }
-
-    /**
-     * Makes a continuous gesture — a scrub, a slider drag — <b>one</b> undo step.
-     *
-     * <p>{@link #write} records an edit per change, which is right for typing and picking and wrong for a
-     * drag: a scrub emits a value every frame, so a two-second one would put ~120 entries on the stack and
-     * leave Ctrl+Z useless. The values still have to arrive live, or the node preview would not recompile
-     * until the button came up.</p>
-     *
-     * <p>Both at once is what a held merge run is for. {@code SetNodeFieldEdit.mergeWith} already collapses
-     * consecutive writes to the same field into a single edit keeping the first {@code before} and the
-     * last {@code after} — so the run costs one stack entry, not a composite of a hundred. Holding it is
-     * what makes the collapse independent of how long the user lingered; see
-     * {@link UndoStack#beginMergeRun()}.</p>
-     */
-    private static void bracketGestures(@Nullable UIElement control, @Nullable UndoStack undo) {
-        if (undo == null || !(control instanceof ConfigControl config)) return;
-        config.interacting.connect(active -> {
-            if (Boolean.TRUE.equals(active)) undo.beginMergeRun();
-            else undo.endMergeRun();
-        });
+    public static ConfigControl buildMultiControl(NodeField field, GraphDocument document,
+                                                  List<String> nodeIds, String displayNodeId,
+                                                  @Nullable UndoStack undo, @Nullable Runnable onChange) {
+        Property<String> shared = Property.<String>derived(
+                        () -> currentValue(document, displayNodeId, field),
+                        value -> {
+                            List<Edit> edits = new ArrayList<>();
+                            for (String nodeId : nodeIds) {
+                                SetNodeFieldEdit edit = SetNodeFieldEdit.of(document, nodeId, field.id(), value);
+                                if (edit.changesAnything()) edits.add(edit);
+                            }
+                            if (edits.isEmpty()) return;
+                            Edit combined = edits.size() == 1 ? edits.get(0)
+                                    : new CompositeEdit(edits, "set " + field.id() + " on " + edits.size() + " nodes");
+                            if (undo != null) undo.execute(combined);
+                            else combined.apply();
+                            if (onChange != null) onChange.run();
+                        })
+                .announcedBy(refresh -> document.onChanged.connect(refresh))
+                .editedIn(undo);
+        return NodeFieldWidgets.create(field, shared);
     }
 
     private static String currentValue(GraphDocument document, String nodeId, NodeField field) {
@@ -226,17 +191,12 @@ public final class NodeFieldBinder {
     }
 
     private static void write(GraphDocument document, @Nullable UndoStack undo, String nodeId,
-                              NodeField field, String value, @Nullable Runnable onChange) {
+                              NodeField field, String value) {
         SetNodeFieldEdit edit = SetNodeFieldEdit.of(document, nodeId, field.id(), value);
         // A no-op must not reach the stack: selecting the value that is already set would otherwise cost
         // the user an undo press that appears to do nothing.
         if (!edit.changesAnything()) return;
-
-        if (undo != null) {
-            undo.execute(edit);
-        } else {
-            edit.apply();
-        }
-        if (onChange != null) onChange.run();
+        if (undo != null) undo.execute(edit);
+        else edit.apply();
     }
 }

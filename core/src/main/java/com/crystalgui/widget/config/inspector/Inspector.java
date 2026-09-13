@@ -3,11 +3,11 @@ package com.crystalgui.widget.config.inspector;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.config.ConfigControl;
 
 import java.util.ArrayList;
 import com.crystalgui.widget.config.ConfiguratorPanel;
+import com.crystalgui.widget.config.PanelForm;
 import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.layout.TabView;
 
@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.crystalgui.core.CrystalGuiCore;
 
 /**
  * One inspector, for everything — Blender's Properties editor, DaVinci Resolve's Inspector.
@@ -268,7 +269,7 @@ public class Inspector extends UIElement {
         List<InspectorSection> sections =
                 context == null ? List.of() : InspectorRegistry.sectionsFor(context);
         if (DIAGNOSE) {
-            com.crystalgui.core.CrystalGuiCore.LOGGER.info(
+            CrystalGuiCore.LOGGER.info(
                     "[inspector] rebuild source={} attached={} sections={}",
                     source, source == null ? null : source.document() != null, sections.size());
         }
@@ -333,14 +334,14 @@ public class Inspector extends UIElement {
         // Filled DETACHED, then attached only where something was actually written. A section may accept
         // and still contribute nothing -- accepts() answers about a KIND of subject -- and a tab holding
         // an empty panel reads as broken, which is why Blender hides a panel outright when its poll fails.
-        Map<String, InspectorForm> forms = new LinkedHashMap<>();
+        Map<String, PanelForm> forms = new LinkedHashMap<>();
         for (InspectorSection section : sections) {
-            InspectorForm form = forms.computeIfAbsent(section.tab(), this::formFor);
+            PanelForm form = forms.computeIfAbsent(section.tab(), this::formFor);
             section.build(form, context);
         }
-        for (Map.Entry<String, InspectorForm> entry : forms.entrySet()) {
-            InspectorForm form = entry.getValue();
-            if (!form.wroteAnything()) continue;
+        for (Map.Entry<String, PanelForm> entry : forms.entrySet()) {
+            PanelForm form = entry.getValue();
+            if (form.isEmpty()) continue;
             hostFor(entry.getKey()).append(form.panel());
             livePanels.add(form.panel());
         }
@@ -413,15 +414,16 @@ public class Inspector extends UIElement {
      * comes back, and dropping the panel with the tab is the same bug one level up. The map is bounded by
      * the number of distinct tab names, which is a handful.</p>
      *
-     * <p>Safe only because sections subscribe <b>per row</b> ({@code control().changed}) and rows are
-     * destroyed by {@code clearRows()}. A section that connected to something panel-scoped or longer-lived
-     * on each build would accumulate one listener per rebuild, and the reuse is what would make that
-     * visible — see {@code SettingsConfigurator.bind}.</p>
+     * <p>Safe only because a row follows its property <b>while it is in the tree</b>, and
+     * {@code clearRows()} takes the rows out. A section that connected to something panel-scoped or
+     * longer-lived on each build would accumulate one listener per rebuild, and the reuse is what would make
+     * that visible — so a store's signal goes in the property's {@code announcedBy}, as
+     * {@code SettingsConfigurator.property} does, never in a listener the section holds.</p>
      */
     private final Map<String, ConfiguratorPanel> panelsByTab = new LinkedHashMap<>();
 
     /** The form for a tab: its panel, emptied of rows but not of what it remembers. */
-    private InspectorForm formFor(String tab) {
+    private PanelForm formFor(String tab) {
         ConfiguratorPanel panel = panelsByTab.computeIfAbsent(tab, t -> {
             ConfiguratorPanel made = new ConfiguratorPanel();
             // IT IS THE SCROLLER NOW. @see #SCROLL_CLASS
@@ -433,7 +435,7 @@ public class Inspector extends UIElement {
         // drops the tabs, not the panel's parent pointer -- and re-adding it without this reparents from
         // under a stale owner.
         panel.removeSelf();
-        return new InspectorForm(panel);
+        return panel.form();
     }
 
     /**

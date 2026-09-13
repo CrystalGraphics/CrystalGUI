@@ -30,10 +30,10 @@ public final class ConfigDescriptor {
     /**
      * The shape of a value — never the control that edits it.
      *
-     * <p>Deliberately a small closed set. A consumer wanting a colour wheel instead of a text box
-     * registers a factory for {@link #COLOR}; it does not invent a kind. A new kind makes every
-     * document written before it unreadable, which is a much worse trade than a control that is
-     * temporarily plainer than it could be.</p>
+     * <p>A consumer wanting a colour wheel instead of a text box registers a factory for {@link #COLOR};
+     * it does not invent a kind. A kind is added when a value has a genuinely different SHAPE — a point
+     * on a box, a paragraph — and every kind needs a control in {@code ConfigControls}, which
+     * {@code ConfigKitTest} holds it to.</p>
      */
     public enum Kind {
         /** Free text. Pair with {@link #validator()} to constrain it. */
@@ -78,7 +78,21 @@ public final class ConfigDescriptor {
          * {@link #TEXT} row still draws a sunken box that says "type here", and disabling the wrapper
          * never reached the text field inside it, so those rows stayed genuinely editable.</p>
          */
-        INFO
+        INFO,
+        /**
+         * Structure, not a field: a paragraph across the whole row, with no label column — Blender's
+         * {@code layout.label}, Unity's help box.
+         *
+         * <p>Read-only like {@link #INFO}, and bindable the same way, so a note can be a live readout as
+         * well as a sentence of guidance.</p>
+         */
+        NOTE,
+        /**
+         * A point on a box as two fractions, {@code [x, y]} each 0..1 — Photoshop's 3x3 reference point,
+         * Unity's anchor presets. Nine cells put it on the corners, edge midpoints and centre; any other
+         * value lights none.
+         */
+        ANCHOR
     }
 
     /** An inclusive numeric range. {@code null} anywhere means "no bound stated". */
@@ -95,6 +109,10 @@ public final class ConfigDescriptor {
     private boolean integral;
     private boolean hdr;
     private String unit;
+    private String shortLabel;
+    private int decimals = -1;
+    private boolean commitWhileTyping;
+    private boolean toggle;
     private double scrubRate = Double.NaN;
     private Predicate<String> validator;
     private ConfigDescriptor element;
@@ -159,6 +177,16 @@ public final class ConfigDescriptor {
         return of(id, label, Kind.INFO);
     }
 
+    /** A paragraph across the row, its text being the value. @see Kind#NOTE */
+    public static ConfigDescriptor note(String id) {
+        return of(id, "", Kind.NOTE);
+    }
+
+    /** A point on a box, as two fractions. @see Kind#ANCHOR */
+    public static ConfigDescriptor anchor(String id, String label) {
+        return of(id, label, Kind.ANCHOR);
+    }
+
     // ── Reads ───────────────────────────────────────────────────────────────
 
     public String id() {
@@ -206,7 +234,28 @@ public final class ConfigDescriptor {
         return unit;
     }
 
-    /** Units per pixel of scrub, or {@code NaN} to let the magnitude curve decide. @see #scrubRate(double) */
+    /** What a compact field shows in front of its control, or null to show {@link #label()}. */
+    @Nullable
+    public String shortLabel() {
+        return shortLabel;
+    }
+
+    /** Decimal places a number is shown to, or -1 for up to four with trailing zeros dropped. */
+    public int decimals() {
+        return decimals;
+    }
+
+    /** Whether a typed value lands on every keystroke rather than on Enter, Tab or a click away. */
+    public boolean commitsWhileTyping() {
+        return commitWhileTyping;
+    }
+
+    /** Whether a {@link Kind#BOOLEAN} is a pressed-or-not button rather than a checkbox. */
+    public boolean toggle() {
+        return toggle;
+    }
+
+    /** Units per pixel of scrub, or {@code NaN} to let the range decide. @see #scrubRate(double) */
     public double scrubRate() {
         return scrubRate;
     }
@@ -272,14 +321,69 @@ public final class ConfigDescriptor {
     }
 
     /**
+     * The letter a compact field shows in front of its control, with {@link #label()} on hover.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("rotation", "Rotation").shortLabel("R").unit("°");   // R [45°], "Rotation" on hover
+     * }</pre>
+     *
+     * <p>A row in a panel always shows the full label.</p>
+     */
+    public ConfigDescriptor shortLabel(@Nullable String value) {
+        this.shortLabel = value;
+        return this;
+    }
+
+    /**
+     * Shows a number to exactly this many decimal places.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("ior", "Index of refraction").range(1f, 2.5f).decimals(2);   // 1.50
+     * }</pre>
+     *
+     * <p>Display only: a scrub or a typed value keeps its full precision.</p>
+     */
+    public ConfigDescriptor decimals(int places) {
+        this.decimals = places;
+        return this;
+    }
+
+    /**
+     * Lands a typed value on every keystroke, as a node's port editor does, rather than on Enter, Tab or
+     * a click away.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("value", "X").commitWhileTyping(true);   // the preview follows each digit
+     * }</pre>
+     */
+    public ConfigDescriptor commitWhileTyping(boolean value) {
+        this.commitWhileTyping = value;
+        return this;
+    }
+
+    /**
+     * Draws a {@link Kind#BOOLEAN} as a button that stays pressed while it is on — Blender's
+     * {@code prop(toggle=True)}, Photoshop's chain between width and height.
+     *
+     * <pre>{@code
+     * form.prop(ConfigDescriptor.bool("link", "Maintain aspect ratio").toggle(true), linked)
+     *         .addClass(LINK_CLASS);   // the sheet gives it its icon
+     * }</pre>
+     */
+    public ConfigDescriptor toggle(boolean value) {
+        this.toggle = value;
+        return this;
+    }
+
+    /**
      * What one pixel of a drag-scrub is worth on this number, for a field that knows its own scale.
      *
      * <pre>{@code
-     * ConfigDescriptor.number("px", "Pivot X").unit("%").scrubRate(1d);   // one percent per pixel
+     * ConfigDescriptor.number("zoom", "Zoom").scrubRate(0.05d);   // a fine unbounded quantity
      * }</pre>
      *
-     * <p>Left unset, the rate follows the value's magnitude — right for an unbounded quantity, and wrong
-     * for a percentage or a coordinate, which crawl near zero. @see com.crystalgui.ui.input.DragScrub</p>
+     * <p>Left unset, a pixel is worth a hundredth of the field's {@link #range}, or one unit when it has
+     * none — so most fields never need this. @see com.crystalgui.ui.input.DragScrub</p>
      */
     public ConfigDescriptor scrubRate(double unitsPerPixel) {
         this.scrubRate = unitsPerPixel;

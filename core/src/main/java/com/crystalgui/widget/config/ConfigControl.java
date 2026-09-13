@@ -1,17 +1,13 @@
 package com.crystalgui.widget.config;
 
 import java.util.Objects;
-import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 
 import com.crystalgui.core.config.ConfigDescriptor;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Supplier;
-import com.crystalgui.widget.overlay.Tooltip;
 
 /**
  * <b>The bare editor for one value — no label, no row, no idea where it is mounted.</b>
@@ -40,12 +36,12 @@ import com.crystalgui.widget.overlay.Tooltip;
  * and {@code ColorSelector} both already carry a private version of this guard; this is the general
  * one.</p>
  *
- * <h3>Undo belongs to the host</h3>
+ * <h3>Undo belongs to the value, not the control</h3>
  * <p>LDLib2 hangs an {@code EditAction} off the row. Ours cannot: an {@code UndoStack} belongs to a
  * <em>document</em>, and a control has no document — the same control edits a shader graph, a settings
- * object and a preview pane. So {@link #changed} reports what the user did and the host decides whether
- * that is an {@code Edit}, which is also what keeps a read-only inspector from silently recording
- * history.</p>
+ * object and a preview pane. A {@link ValueControl} is bound to a {@code Property} whose writer records
+ * whatever edit its domain records, and names the history a gesture is one step of; a control bound to
+ * nothing records nothing, which is what keeps a read-only inspector from silently recording history.</p>
  */
 public abstract class ConfigControl extends UIElement {
 
@@ -75,42 +71,6 @@ public abstract class ConfigControl extends UIElement {
      */
     public final Signal.Value<Boolean> interacting = new Signal.Value<>();
 
-    /**
-     * Declares how this control follows something that outlives it. <b>The engine decides when.</b>
-     *
-     * <h3>Nobody releases these, because nobody can be trusted to</h3>
-     *
-     * <p>The first version of this had a binder subscribe directly and every <em>owner</em> release: a
-     * {@link ConfiguratorPanel} replacing its rows, a {@code GraphNode} being deleted, the graph clearing
-     * every node, and a floating port editor being unmounted. Four owners sharing no supertype, each
-     * needing to remember a call whose omission is invisible — which is the same bookkeeping the
-     * ownership tree exists to remove, and a fifth owner would simply not know.</p>
-     *
-     * <p>So the control does it. {@code onWindowChanged} fires for every element of a detached subtree,
-     * so leaving the tree is already announced; the binder states the subscription and never thinks about
-     * its lifetime again.</p>
-     *
-     * <h3>Re-established on re-attach, not merely dropped</h3>
-     *
-     * <p>Releasing on detach alone would be a trap: a control taken out of the tree and put back — a tab
-     * hidden and shown, a pane retargeted — would come back permanently deaf, and only in cases nobody
-     * tests. Re-subscribing makes detachment ordinary rather than terminal.</p>
-     *
-     * <p>Which is also why a control does not need to follow anything while detached: it cannot be seen,
-     * so there is nothing to keep current. {@code subscribe} is expected to <b>read the live value
-     * first</b> and then connect, so a control that was away during an edit comes back correct rather
-     * than stale.</p>
-     */
-    public void follows(Supplier<Connection> subscribe) {
-        if (subscribe == null) return;
-        // The engine's, since M6.5 -- this class had its own copy of it, which is what
-        // UINode.whileConnected was generalised FROM. A binder may run either side of attachment
-        // (SettingsConfigurator builds into a detached panel, NodeFieldBinder rebuilds a port editor on
-        // a live plane) and that method binds now or on the next attach as needed, so neither has to
-        // know which it is.
-        whileConnected(subscribe);
-    }
-
     private final ConfigDescriptor descriptor;
 
     /** True while a programmatic write is in flight; suppresses {@link #changed}. */
@@ -132,9 +92,23 @@ public abstract class ConfigControl extends UIElement {
         super(name);
         this.descriptor = descriptor;
         addClass(CONTROL_CLASS);
-        if (descriptor.tooltip() != null) {
-            Tooltip.attach(this, descriptor.tooltip());
-        }
+    }
+
+    /**
+     * Offered the label a host puts beside this control; answers whether it took the label as a handle.
+     *
+     * <p>A number takes it as a scrub handle, as Unity's and Blender's field labels are — so dragging the
+     * word beside a box changes the value in an inspector row, a toolbar cell and a port editor alike. A
+     * control that does not take it leaves it scenery, and the host turns its hit-testing off so the label
+     * never eats a press aimed past it.</p>
+     *
+     * <pre>{@code
+     * UIText label = new UIText("X");
+     * if (!control.adoptLabel(label)) label.setHitTest(false);
+     * }</pre>
+     */
+    public boolean adoptLabel(UIElement label) {
+        return false;
     }
 
     public ConfigDescriptor descriptor() {
@@ -167,7 +141,7 @@ public abstract class ConfigControl extends UIElement {
         // which is the shape every server-side panel is written in -- sends a delta per tick carrying a
         // value nobody moved. That is ProgressBar.setFraction's defect, and this is the one place the
         // whole kit can avoid it.
-        if (!Objects.equals(before, getValueObject())) notifyStateChanged();
+        if (!Objects.deepEquals(before, getValueObject())) notifyStateChanged();
     }
 
     /** Writes {@code value} into the underlying widgets. Never emits. */
@@ -187,6 +161,23 @@ public abstract class ConfigControl extends UIElement {
     /** True while {@link #setValueObject} is running — for controls that rebuild rather than write. */
     protected final boolean isUpdating() {
         return updating;
+    }
+
+    /**
+     * Runs a write to this control's widgets with {@link #changed} silenced, as {@link #setValueObject}
+     * does — for a value arriving from somewhere other than a programmatic set.
+     *
+     * <p>A checkbox reports being checked however it came to be checked, so a widget written without this
+     * reports the write back out as a user edit.</p>
+     */
+    protected final void quietly(Runnable write) {
+        boolean wasUpdating = updating;
+        updating = true;
+        try {
+            write.run();
+        } finally {
+            updating = wasUpdating;
+        }
     }
 
     /**

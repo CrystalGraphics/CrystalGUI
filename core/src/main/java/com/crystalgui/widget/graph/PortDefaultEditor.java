@@ -4,10 +4,9 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.canvas.CanvasView;
-import com.crystalgui.widget.config.control.NumberControl;
+import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.widget.config.control.VectorControl;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import org.joml.Vector2f;
@@ -161,7 +160,6 @@ final class PortDefaultEditor {
 
         detachControl();
         control = current;
-        if (control != null) applyLiveUpdateMode(control);
         rebuildBoxContents();
         return true;
     }
@@ -205,31 +203,13 @@ final class PortDefaultEditor {
             String portId = port.getPortId();
             label = new UIText(isAxisLetter(portId) ? portId : "X");
             label.addClass(NodePort.EDITOR_LABEL_CLASS);
-            // Hit-testable, NOT scenery, when there is a number behind it: this letter is the drag handle
-            // that scrubs the value. `VectorControl` needs no equivalent here — it labels its own
-            // components internally and hands each letter to its own component in its constructor.
-            if (control instanceof NumberControl number) number.scrubWith(label);
-            else label.setHitTest(false);
+            // THE CONTROL IS OFFERED THE LETTER, as a row's label is: a number takes it as the handle that
+            // scrubs it, and anything else leaves it scenery. `VectorControl` never reaches here -- it
+            // labels its own components and hands each letter to its component.
+            if (!(control instanceof ConfigControl config && config.adoptLabel(label))) label.setHitTest(false);
             box.append(label);
         }
         box.append(control);
-    }
-
-    /**
-     * Live, not on-commit: a port default is a value you drag/scrub as much as type, and Unity's own
-     * fields update the preview on every keystroke rather than waiting for Enter or a blur. Only the two
-     * kinds that actually contain a plain number field get this — {@link NumberControl} directly, or
-     * {@link VectorControl}'s own per-axis ones — {@code ColorControl} and {@code BooleanControl} have no
-     * number text field to set a mode on at all.
-     */
-    private static void applyLiveUpdateMode(UIElement control) {
-        if (control instanceof NumberControl number) {
-            number.field().setUpdateMode(TextField.UpdateMode.IMMEDIATE);
-        } else if (control instanceof VectorControl vector) {
-            for (NumberControl component : vector.components()) {
-                component.field().setUpdateMode(TextField.UpdateMode.IMMEDIATE);
-            }
-        }
     }
 
     /** Whether {@code portId} is already one of the bare axis letters {@link VectorControl}'s own

@@ -77,6 +77,10 @@ PART	(unowned)	tile-6	A	2	proposed	leaf in every rule
 PART	(unowned)	track	A	4	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	(unowned)	v-scroller	A	3	proposed	leaf in every rule
 PART	(unowned)	warning	A	1	proposed	leaf in every rule
+PART	AnchorControl	anchor	B	4	proposed	a rule selects through it (3)
+PART	AnchorControl	anchor-cell	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	AnchorControl	anchor-line	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	AnchorControl	on	C	3	proposed	state adjective
 PART	ArrayControl	add	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ArrayControl	array	B	10	confirmed	a rule selects through it (9)
 PART	ArrayControl	body	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -102,13 +106,14 @@ PART	BlackboardPanel	head	B	4	confirmed	a rule selects through it (2)
 PART	BlackboardPanel	subtitle	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	BlackboardPanel	title	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	BlackboardPanel	titles	B	5	confirmed	a rule selects through it (4)
-PART	BooleanControl	boolean	B	10	confirmed	a rule selects through it (9)
+PART	BooleanControl	boolean	B	11	confirmed	a rule selects through it (10)
+PART	BooleanControl	on	C	3	proposed	state adjective
+PART	BooleanControl	toggle	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	Breadcrumbs	crumb	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-current	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-sep	B	0	confirmed	leaf in every rule
 PART	BuilderPane	builder-pane	A	0	proposed	leaf in every rule
-PART	BuilderToolbar	active	C	3	proposed	state adjective
 PART	BuilderToolbar	builder-toolbar	A	0	proposed	leaf in every rule
 PART	BuilderToolbar	preview	A	0	proposed	leaf in every rule
 PART	Button	labelled	A	0	proposed	leaf in every rule
@@ -150,10 +155,11 @@ PART	CompletionPopup	completion-mark-static	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-options	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-params	B	2	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	CompletionPopup	completion-row	B	2	confirmed	leaf in every rule
-PART	ConfigControl	config-control	B	73	confirmed	a rule selects through it (63)
-PART	Configurator	configurator	B	6	confirmed	a rule selects through it (5)
-PART	Configurator	inline	C	4	confirmed	state adjective
-PART	Configurator	label	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
+PART	ConfigControl	config-control	B	79	confirmed	a rule selects through it (68)
+PART	Configurator	compact	B	9	proposed	a rule selects through it (8)
+PART	Configurator	configurator	B	16	confirmed	a rule selects through it (14)
+PART	Configurator	inline	C	7	confirmed	state adjective
+PART	Configurator	label	B	6	confirmed	leaf in every rule, scoped by an ancestor in 6
 PART	ConfiguratorGroup	arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ConfiguratorGroup	collapsed	C	4	confirmed	state adjective
 PART	ConfiguratorGroup	configurator-group	B	14	confirmed	a rule selects through it (13)
@@ -374,6 +380,8 @@ PART	NodePort	label	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	NodePort	output	B	3	confirmed	a rule selects through it (1)
 PART	NodeWidgetFactory	unknown-type	C	0	confirmed	state adjective
 PART	NodeWireLayer	wire-layer	B	0	confirmed	leaf in every rule
+PART	NoteControl	note	B	1	proposed	a rule selects through it (1)
+PART	NoteControl	value	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	NotesView	notes	A	0	proposed	leaf in every rule
 PART	NotesView	notes-add	A	0	proposed	leaf in every rule
 PART	NotesView	notes-row	A	0	proposed	leaf in every rule
@@ -405,6 +413,7 @@ PART	NumberControl	scrub-handle	B	1	confirmed	leaf in every rule
 PART	NumberControl	scrubbing	C	0	confirmed	leaf in every rule
 PART	PageStack	page	B	0	confirmed	leaf in every rule
 PART	PageStack	page-placeholder	B	0	confirmed	leaf in every rule
+PART	PanelForm	configurator-separator	A	1	proposed	leaf in every rule
 PART	PasteAttributesDialog	paste-actions	A	1	proposed	leaf in every rule
 PART	PasteAttributesDialog	paste-attributes	B	7	proposed	a rule selects through it (4)
 PART	PasteAttributesDialog	paste-buttons	B	2	proposed	a rule selects through it (1)
@@ -506,7 +515,7 @@ PART	Resizer	resizer	A	1	proposed	leaf in every rule
 PART	RunConsoleView	over-link	A	0	proposed	leaf in every rule
 PART	RunConsoleView	run-console	A	0	proposed	leaf in every rule
 PART	RunIndicators	running	A	0	proposed	leaf in every rule
-PART	RunPanel	on	C	5	proposed	state adjective
+PART	RunPanel	on	C	2	proposed	state adjective
 PART	RunPanel	run-action	A	0	proposed	leaf in every rule
 PART	RunPanel	run-bar	A	0	proposed	leaf in every rule
 PART	RunPanel	run-body	A	0	proposed	leaf in every rule
@@ -532,7 +541,7 @@ PART	Scroller	vertical	C	12	confirmed	state adjective
 PART	ScrollerView	scroll-view	A	1	proposed	leaf in every rule
 PART	SearchField	focused	C	1	confirmed	state adjective
 PART	SearchField	not-found	B	2	confirmed	a rule selects through it (1)
-PART	SearchField	on	C	5	confirmed	state adjective
+PART	SearchField	on	C	2	confirmed	state adjective
 PART	SearchField	search-field	B	14	confirmed	a rule selects through it (6)
 PART	SearchField	search-option	A	4	confirmed	leaf in every rule
 PART	SearchReplaceBar	expanded	C	1	confirmed	state adjective
@@ -632,14 +641,7 @@ PART	Taskbar	progress	B	1	confirmed	leaf in every rule, scoped by an ancestor in
 PART	TaskbarDesigner	designer	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	TaskbarDesigner	designer-actions	B	1	confirmed	leaf in every rule
 PART	TaskbarDesigner	designer-body	B	1	confirmed	leaf in every rule
-PART	TaskbarDesigner	designer-heading	B	2	confirmed	leaf in every rule
-PART	TaskbarDesigner	designer-label	B	3	confirmed	leaf in every rule
-PART	TaskbarDesigner	designer-note	B	2	confirmed	leaf in every rule
-PART	TaskbarDesigner	designer-readout	B	1	confirmed	leaf in every rule
-PART	TaskbarDesigner	designer-row	B	1	confirmed	leaf in every rule
-PART	TaskbarDesigner	designer-slider	B	1	confirmed	leaf in every rule
-PART	TaskbarDesigner	designer-tint	B	0	confirmed	leaf in every rule
-PART	TaskbarDesigner	designer-value	B	2	confirmed	leaf in every rule
+PART	TaskbarDesigner	designer-readout	B	1	confirmed	a rule selects through it (1)
 PART	TaskbarDesigner	taskbar-designer	B	1	confirmed	a rule selects through it (1)
 PART	TaskbarPreviews	placing	C	3	confirmed	state adjective
 PART	TextControl	text	B	2	confirmed	a rule selects through it (1)
@@ -679,14 +681,10 @@ PART	ToolWindowFrame	dock	A	2	confirmed	leaf in every rule, scoped by an ancesto
 PART	ToolWindowFrame	floating	C	0	confirmed	state adjective
 PART	ToolWindowFrame	tool-window	B	10	confirmed	a rule selects through it (9)
 PART	ToolWindowFrame	windowed	C	0	confirmed	state adjective
+PART	ToolbarForm	config-toolbar	A	1	proposed	leaf in every rule
 PART	Tooltip	wait	A	1	proposed	leaf in every rule
 PART	TransformBox	transform-box	A	0	proposed	leaf in every rule
-PART	TransformOptionsBar	on	C	5	proposed	state adjective
-PART	TransformOptionsBar	transform-anchor	B	2	proposed	a rule selects through it (1)
-PART	TransformOptionsBar	transform-anchor-cell	A	2	proposed	leaf in every rule
-PART	TransformOptionsBar	transform-field	B	2	proposed	a rule selects through it (1)
-PART	TransformOptionsBar	transform-label	A	1	proposed	leaf in every rule
-PART	TransformOptionsBar	transform-link	A	4	proposed	leaf in every rule
+PART	TransformOptionsBar	transform-link	B	4	proposed	a rule selects through it (4)
 PART	TransformOptionsBar	transform-options	A	0	proposed	leaf in every rule
 PART	TreeSearch	dimmed	C	1	confirmed	state adjective
 PART	TreeSearch	find-bar	B	32	confirmed	a rule selects through it (31)
@@ -698,7 +696,7 @@ PART	TreeSearch	find-next	B	5	confirmed	leaf in every rule, scoped by an ancesto
 PART	TreeSearch	find-prev	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	TreeSearch	match	C	2	confirmed	state adjective
 PART	TreeSearch	off	C	2	confirmed	state adjective
-PART	TreeSearch	on	C	6	confirmed	state adjective
+PART	TreeSearch	on	C	3	confirmed	state adjective
 PART	TreeSearch	option-match-case	B	1	confirmed	leaf in every rule
 PART	TreeSearch	option-regex	B	1	confirmed	leaf in every rule
 PART	TreeSearch	option-words	B	1	confirmed	leaf in every rule

@@ -138,6 +138,52 @@
     padding-right: var(--cfg-pad-x);
 }
 
+/* ── A compact field: a toolbar's cell ─────────────────────────────────────────────────────────────
+ * The short label in front of the control, each sized to what it holds -- Photoshop's and Paint.NET's
+ * options bars fit a dozen numbers across by giving each exactly its digits. The cell is the bar's full
+ * height, so its hint hangs from under the bar rather than over it. */
+.__configurator__.__compact__ {
+    gap: 2px;
+    height: 100%;
+    min-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+.__configurator__.__compact__ > .__label__ {
+    flex-basis: auto;
+    padding-left: 0;
+    padding-right: 0;
+    flex-shrink: 0;
+}
+.__configurator__.__compact__ > .__inline__ {
+    width: auto;
+    flex-grow: 0;
+    height: 100%;
+}
+.__configurator__.__compact__ > .__inline__ > .__config-control__ {
+    width: auto;
+    flex-grow: 0;
+    min-width: 0;
+    padding-right: 0;
+}
+/* A leaf's field fills its control in a row, from a zero basis -- which, in a cell with no width of its
+ * own, is nothing. So a cell says how wide each kind is. */
+.__configurator__.__compact__ .__config-control__.__number__ { width: 38px; }
+.__configurator__.__compact__ .__config-control__.__text__,
+.__configurator__.__compact__ .__config-control__.__asset__ { width: 80px; }
+.__configurator__.__compact__ .__config-control__.__select__ dropdown {
+    width: auto;
+    flex-grow: 0;
+    min-width: 72px;
+}
+.__configurator__.__compact__ .__config-control__.__anchor__ { height: 100%; }
+
+/* The page a toolbar form fills. */
+.__config-toolbar__ {
+    flex-direction: row;
+    align-items: center;
+}
+
 /* ── THE KIT ────────────────────────────────────────────────────────────────────────────────────
  * One height for every control kind, so a panel of unlike controls sits on one rhythm. Their base
  * rules disagree by design — a text field is 16px, a dropdown 14, a checkbox 12, each right on its own
@@ -544,6 +590,57 @@
     flex-grow: 1;
     flex-shrink: 0;
     white-space: nowrap;
+}
+
+/* A NOTE is prose, so unlike a fact it wraps to the panel's width. Inset like a header, having no label
+ * column to be inset by. */
+.__configurator__ > .__inline__ > .__config-control__.__note__ {
+    flex-direction: row;
+    min-height: var(--cfg-ctrl-h);
+    padding-left: var(--cfg-pad-x);
+}
+.__config-control__.__note__ .__value__ {
+    font-size: var(--cfg-font);
+    color: var(--cfg-label-text);
+    white-space: normal;
+    width: 100%;
+}
+
+/* A hairline between two runs of rows. */
+.__configurator-separator__ {
+    height: 1px;
+    margin-top: 3px;
+    margin-bottom: 3px;
+    background-color: var(--statusbar-sep, #3C3F41);
+}
+
+/* ── Anchors ────────────────────────────────────────────────────────────────────────────────────
+ * Nine cells, the value's lit. A picture of the box rather than a list of positions, because what is
+ * chosen is a place on it. */
+.__config-control__.__anchor__ {
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    min-height: var(--cfg-ctrl-h);
+}
+.__config-control__.__anchor__ > .__anchor-line__ {
+    flex-direction: row;
+    gap: 1px;
+}
+.__config-control__.__anchor__ .__anchor-cell__ {
+    width: 4px;
+    height: 4px;
+    background-color: var(--border-strong, #55607A);
+    cursor: pointer;
+}
+.__config-control__.__anchor__ .__anchor-cell__.__on__ {
+    background-color: var(--accent, #3574F0);
+}
+
+/* ── Toggles ────────────────────────────────────────────────────────────────────────────────────
+ * A boolean drawn as a button that stays pressed: the pressed face is the state. */
+.__config-control__.__boolean__ .__toggle__.__on__ {
+    background: var(--configkit-dropdown-pressed-bg, #3D3D3D);
 }
 
 /* ── Arrays ─────────────────────────────────────────────────────────────────────────────────────

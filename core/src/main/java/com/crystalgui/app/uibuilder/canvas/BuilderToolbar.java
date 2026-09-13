@@ -3,17 +3,22 @@ package com.crystalgui.app.uibuilder.canvas;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.annotation.Nullable;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 
-import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.core.property.Property;
 import com.crystalgui.style.theme.ThemeRegistry;
 import com.crystalgui.style.theme.UiTheme;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.Configurator;
+import com.crystalgui.widget.config.ToolbarForm;
+import com.crystalgui.widget.config.control.BooleanControl;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.overlay.Dropdown;
 
 /**
  * The strip above the canvas: what size, at what scale, in which theme, and design or preview.
@@ -23,12 +28,11 @@ import com.crystalgui.widget.overlay.Dropdown;
  * }</pre>
  *
  * <p>Four questions, and each is one a designer changes while working rather than a setting. The canvas
- * <b>preset</b> is the document's own — resizing the page rewrites it, so the presets are authored by
- * dragging rather than typed into a file — while {@code uiScale}, theme and preview are the viewer's and
- * are never written to the document.</p>
+ * <b>preset</b> is the document's own — resizing the page rewrites it — while {@code uiScale}, theme and
+ * preview are the viewer's and are never written to the document.</p>
  *
- * <p>It builds no chrome of its own beyond a row: the widgets are ordinary ones and {@code
- * ua/uibuilder.css} says what a builder toolbar looks like.</p>
+ * <p>Each is a field bound to where its answer lives, so the strip shows the state however it was changed
+ * — a key, a command, another window switching the theme.</p>
  */
 public final class BuilderToolbar extends UIElement {
 
@@ -36,15 +40,12 @@ public final class BuilderToolbar extends UIElement {
 
     public static final String BAR_CLASS = "__builder-toolbar__";
 
-    /** On the preview button while preview is on. */
-    public static final String ACTIVE_CLASS = "__active__";
-
     /**
-     * On the preview button, always.
+     * On the preview field, always.
      *
-     * <p>Everything else on this bar describes the page you are editing — its size, its scale, its
-     * theme. Preview is the one control that changes what the editor IS, so it sits apart from them,
-     * which is where IntelliJ puts the same switch on a Markdown file.</p>
+     * <p>Everything else on this bar describes the page you are editing. Preview is the one control that
+     * changes what the editor IS, so it sits apart from them, which is where IntelliJ puts the same switch
+     * on a Markdown file.</p>
      */
     public static final String PREVIEW_CLASS = "__preview__";
 
@@ -54,17 +55,11 @@ public final class BuilderToolbar extends UIElement {
     /** Offered when a document declares no {@code preview.sizes} of its own. */
     private static final float[][] FALLBACK_PRESETS = {{800f, 480f}, {427f, 240f}, {1280f, 720f}};
 
-    /** Fires with the preview state — true while the UI is being USED rather than designed. */
-    public final Signal.Value<Boolean> onDidTogglePreview = new Signal.Value<>();
-
     private final BuilderSurfaceHost host;
 
     private final List<float[]> presets = new ArrayList<>();
 
-    private final Dropdown preset = new Dropdown("Size");
-    private final Dropdown scale = new Dropdown("Scale");
-    private final Dropdown theme = new Dropdown("Theme");
-    private final Button preview = new Button("Preview");
+    private final Configurator preview;
 
     /** What the toolbar drives. Narrow on purpose: a toolbar may not reach the whole editor. */
     public interface BuilderSurfaceHost {
@@ -80,68 +75,49 @@ public final class BuilderToolbar extends UIElement {
         super(NAME);
         this.host = host;
         addClass(BAR_CLASS);
-
         buildPresets();
-        for (float[] size : presets) {
-            preset.addOption(Math.round(size[0]) + " x " + Math.round(size[1]));
-        }
-        preset.select(0);
-        whileConnected(() -> preset.onSelectionChanged.connect(this::choosePreset));
 
-        for (int each : UI_SCALES) scale.addOption(each + "x");
-        scale.select(0);
-        whileConnected(() -> scale.onSelectionChanged.connect(this::chooseScale));
-
-        for (UiTheme installed : ThemeRegistry.themes()) theme.addOption(installed.id());
-        String active = UiThemeManager.getInstance().activeThemeId();
-        if (active != null) theme.select(active);
-        whileConnected(() -> theme.onSelectionChanged.connect(this::chooseTheme));
-
+        ToolbarForm form = ToolbarForm.into(this);
+        form.prop(ConfigDescriptor.select("size", "Size", presetLabels()),
+                Property.derived(this::presetShown, this::choosePreset));
+        form.prop(ConfigDescriptor.select("scale", "Scale", scaleLabels()),
+                Property.derived(() -> scaleLabel(host.artboard().uiScale()), this::chooseScale));
+        UiThemeManager themes = UiThemeManager.getInstance();
+        form.prop(ConfigDescriptor.select("theme", "Theme", themeIds()),
+                Property.derived(themes::activeThemeId, themes::setTheme)
+                        .announcedBy(refresh -> themes.onChanged.connect(refresh)));
+        preview = form.prop(ConfigDescriptor.bool("preview", "Preview").toggle(true),
+                Property.derived(() -> !host.isDesignMode(), this::setPreview));
         preview.addClass(PREVIEW_CLASS);
-        preview.onPressed.connect(() -> setPreview(host.isDesignMode()));
-
-        append(preset, scale, theme, preview);
     }
 
-    /** The sizes on offer, first being the one a document opens at. */
-    public List<float[]> presets() {
-        return List.copyOf(presets);
-    }
-
-    /** For a test, and for the command that toggles it from a key. */
+    /** The preview toggle's button — for a test. */
     public Button previewButton() {
-        return preview;
+        return ((BooleanControl) preview.control()).toggleButton();
     }
 
-    /**
-     * @see #onDidTogglePreview
-     *
-     * <p>The button carries its own state, and that is not decoration. Preview's visible effect is that
-     * the document's widgets become live — so on a document with nothing to press, a toggle with no
-     * appearance of its own looks like a button that does nothing at all.</p>
-     */
+    /** Switches between using the document and designing it. */
     public void setPreview(boolean previewing) {
-        if (host.isDesignMode() != previewing) return;
         host.setDesignMode(!previewing);
-        showPreviewState(previewing);
-        onDidTogglePreview.emit(previewing);
     }
 
-    /** Reads the state back off the host — for a toggle driven from the command rather than the button. */
-    public void syncPreviewState() {
-        showPreviewState(!host.isDesignMode());
+    /** The preset the page is at, or null for a size no preset names. */
+    @Nullable
+    private String presetShown() {
+        Artboard artboard = host.artboard();
+        for (float[] size : presets) {
+            if (size[0] == artboard.boardWidth() && size[1] == artboard.boardHeight()) return labelOf(size);
+        }
+        return null;
     }
 
-    private void showPreviewState(boolean previewing) {
-        if (previewing) preview.addClass(ACTIVE_CLASS);
-        else preview.removeClass(ACTIVE_CLASS);
-        preview.setText(previewing ? "Previewing" : "Preview");
-    }
-
-    private void choosePreset(int index) {
-        if (index < 0 || index >= presets.size()) return;
-        float[] size = presets.get(index);
-        host.artboard().setSize(size[0], size[1]);
+    private void choosePreset(@Nullable String label) {
+        for (float[] size : presets) {
+            if (labelOf(size).equals(label)) {
+                host.artboard().setSize(size[0], size[1]);
+                return;
+            }
+        }
     }
 
     /**
@@ -152,15 +128,36 @@ public final class BuilderToolbar extends UIElement {
      * document that is wrong. Layout underneath stays in logical pixels either way — {@code transform}
      * never reflows.</p>
      */
-    private void chooseScale(int index) {
-        if (index < 0 || index >= UI_SCALES.length) return;
-        host.artboard().setUiScale(UI_SCALES[index]);
+    private void chooseScale(@Nullable String label) {
+        for (int each : UI_SCALES) {
+            if (scaleLabel(each).equals(label)) host.artboard().setUiScale(each);
+        }
     }
 
-    private void chooseTheme(int index) {
-        List<String> ids = theme.getOptions();
-        if (index < 0 || index >= ids.size()) return;
-        UiThemeManager.getInstance().setTheme(ids.get(index));
+    private List<String> presetLabels() {
+        List<String> labels = new ArrayList<>(presets.size());
+        for (float[] size : presets) labels.add(labelOf(size));
+        return labels;
+    }
+
+    private static String labelOf(float[] size) {
+        return Math.round(size[0]) + " x " + Math.round(size[1]);
+    }
+
+    private static List<String> scaleLabels() {
+        List<String> labels = new ArrayList<>(UI_SCALES.length);
+        for (int each : UI_SCALES) labels.add(scaleLabel(each));
+        return labels;
+    }
+
+    private static String scaleLabel(float scale) {
+        return Math.round(scale) + "x";
+    }
+
+    private static List<String> themeIds() {
+        List<String> ids = new ArrayList<>();
+        for (UiTheme installed : ThemeRegistry.themes()) ids.add(installed.id());
+        return ids;
     }
 
     /** The document's own sizes when it names any, and a workable set when it does not. */
@@ -182,5 +179,4 @@ public final class BuilderToolbar extends UIElement {
             for (float[] fallback : FALLBACK_PRESETS) presets.add(fallback);
         }
     }
-
 }

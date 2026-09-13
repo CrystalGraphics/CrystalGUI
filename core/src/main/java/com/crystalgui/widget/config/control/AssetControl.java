@@ -63,6 +63,7 @@ public class AssetControl extends ValueControl<String> {
         addClass("__asset__");
         field.addClass(FIELD_CLASS);
         field.setText(defaultValue == null ? "" : defaultValue);
+        if (descriptor.commitsWhileTyping()) field.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
         field.attachListener(this::commit);
 
         browse.addClass(BROWSE_CLASS);

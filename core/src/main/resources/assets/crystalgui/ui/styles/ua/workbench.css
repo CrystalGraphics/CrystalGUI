@@ -1276,6 +1276,27 @@ workbench dropdown:disabled {
     background: #00000000;
 }
 
+/* AND A TOOLBAR FORM'S CONTROLS ARE THE SHELL'S, not the inspector's. The kit gives its dropdown a raised
+ * face and its button a fill (`.__config-control__ dropdown`, 11), which is right in a panel of fields and
+ * reads as a different toolkit in a row of outlined chrome -- so the outline is restated where a form lays
+ * its fields out as a toolbar. */
+workbench .__config-toolbar__ .__config-control__ button.__labelled__,
+workbench .__config-toolbar__ .__config-control__ dropdown {
+    background: #00000000;
+    border-width: 1px;
+    border-color: var(--button-border, #393B40);
+    padding-left: 6px;
+    padding-right: 6px;
+}
+workbench .__config-toolbar__ .__config-control__ button.__labelled__:hover,
+workbench .__config-toolbar__ .__config-control__ dropdown:hover {
+    background: var(--workbench-control-hover-bg, #2E3033);
+}
+workbench .__config-toolbar__ .__config-control__ button.__labelled__:active,
+workbench .__config-toolbar__ .__config-control__ dropdown:active {
+    background: var(--workbench-control-pressed-bg, #35373B);
+}
+
 /* ── AND A CHECKBOX IS THE SAME CONTROL, SMALLER ─────────────────────────────────────────────────
  *
  * The mark is a 12px button: the same empty face, the same border, the same two pointer states. It was

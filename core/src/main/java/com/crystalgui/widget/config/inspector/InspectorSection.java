@@ -1,7 +1,7 @@
 package com.crystalgui.widget.config.inspector;
 
 import com.crystalgui.core.data.DataContext;
-import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.widget.config.ConfigForm;
 
 /**
  * Something that can describe a subject to the {@link Inspector} — Blender's {@code Panel} plus its
@@ -62,11 +62,20 @@ public interface InspectorSection {
      * group headers and a visible seam. It also keeps the engine owning the engine-shaped parts: the
      * panel, its scrolling, its group collapse state, and when to clear it.</p>
      *
-     * <p>Prefer {@link InspectorForm#row(ConfigDescriptor)} over building controls: a descriptor says
-     * what the field <em>is</em> and the engine picks the widget, which is the mechanism that makes this
-     * work for kinds of subject nobody has written yet.</p>
+     * <p>Prefer {@link ConfigForm#prop} over building controls: a descriptor says what the field
+     * <em>is</em>, a property says where its value lives, and the engine picks the widget and keeps it
+     * current — the mechanism that makes this work for kinds of subject nobody has written yet.</p>
+     *
+     * <pre>{@code
+     * public void build(ConfigForm form, DataContext context) {
+     *     Node node = context.get(NODE);
+     *     form.header(node.label());
+     *     form.prop(ConfigDescriptor.number("scale", "Scale"),
+     *             Property.derived(node::scale, node::setScale).editedIn(node.history()));
+     * }
+     * }</pre>
      */
-    void build(InspectorForm form, DataContext context);
+    void build(ConfigForm form, DataContext context);
 
     /** Ordering within a tab. Declared, so two features cannot interleave by class-loading order. */
     default int order() {

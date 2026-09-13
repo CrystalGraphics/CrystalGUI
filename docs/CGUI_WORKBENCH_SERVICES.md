@@ -253,18 +253,18 @@ anywhere else reaches it. The store outlives the widget by a long way: a `Settin
 application and a `GraphDocument` as long as the file is open, while an inspector rebuilds every control
 it shows on every click.
 
-**A binder declares the subscription; the engine decides when it is live.**
+**A binder declares where the value lives and what announces it; the engine decides when that is live.**
 
 ```java
-control.follows(() -> {                       // ConfigControl.follows
-    control.setValueObject(read(store));      // read FIRST — it may have moved while detached
-    return store.onChanged.connect(...);
-});
+Property<Object> value = Property.derived(() -> read(store), v -> write(store, v))
+        .announcedBy(refresh -> store.onChanged.connect(change -> refresh.run()));
+form.prop(descriptor, value);                 // or control.bind(value)
 ```
 
-`ConfigControl` connects on attach, disconnects on detach, and **re-establishes on re-attach** —
-`onWindowChanged` already fires for every element of a detached subtree, so leaving the tree is announced
-without anyone arranging it.
+A bound control connects the announcement on attach, drops it on detach, and **re-reads and reconnects on
+re-attach** — `whileConnected` runs for every element of a subtree entering the tree, so leaving and coming
+back are announced without anyone arranging it. A property with no announcement is polled after layout
+instead, for the same span.
 
 > **Nobody releases these, because nobody can be trusted to.** The first version had the binder subscribe
 > directly and every *owner* release: a `ConfiguratorPanel` replacing its rows, a `GraphNode` being
@@ -279,8 +279,8 @@ without anyone arranging it.
 
 > **This is the failure mode the whole `Disposable` layer exists for, and it is invisible from both ends.**
 > The host looks correct because it subscribed; the store looks correct because it notified. Nothing
-> throws, nothing logs, and the only symptom is a session that gets slower the longer it is open. It went
-> unnoticed in both `SettingsConfigurator` and `NodeFieldBinder`. Pinned by
+> throws, nothing logs, and the only symptom is a session that gets slower the longer it is open. It once
+> went unnoticed in both `SettingsConfigurator` and `NodeFieldBinder`. Pinned by
 > `ConfiguratorPanelLifetimeTest`, which asserts both that the count stops growing **and** that the
 > surviving rows still follow the store — a fix that disconnects everything passes the first alone.
 
@@ -1324,7 +1324,7 @@ wrong for a `.txt`.
 InspectorRegistry.register(new InspectorSection() {
     public String tab()                             { return "Node"; }
     public boolean accepts(DataContext ctx)         { return ctx.has(SHADER_GRAPH); }   // Blender's poll()
-    public void build(InspectorForm form, DataContext ctx) { form.row(descriptor, value); }
+    public void build(ConfigForm form, DataContext ctx) { form.prop(descriptor, property); }
     public String subjectKey(DataContext ctx)       { return "node:" + …; }             // identity, for dedup
 });
 ```
@@ -1403,7 +1403,7 @@ and an add-on's own datablock through three mechanisms:
 |---|---|
 | a `Panel` declares `bl_context` (tab) and `poll(context)` | `InspectorSection.tab()` and `accepts(DataContext)` |
 | the subject comes from `context.object` etc., never from the editor | `DataContext` |
-| `layout.prop(data, "x")` draws **reflectively** from the declared property | `ConfigDescriptor` / `SettingsConfigurator` |
+| `layout.prop(data, "x")` draws **reflectively** from the declared property | `ConfigForm.prop(ConfigDescriptor, Property)` — and `SettingsConfigurator` for a whole settings section |
 
 > **The third is doing most of the work and is the easiest to miss.** With contributions but no
 > reflection you still hand-write a form per type — you have only moved where it lives. A section should

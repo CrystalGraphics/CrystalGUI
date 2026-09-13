@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder;
 
 import java.util.List;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import dev.vfyjxf.taffy.geometry.FloatRect;
 import com.crystalgui.ui.box.Box;
@@ -19,16 +20,14 @@ import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.property.Property;
 import com.crystalgui.template.TemplateInstance;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.config.Configurator;
-import com.crystalgui.widget.config.control.InfoControl;
-import com.crystalgui.widget.config.inspector.InspectorForm;
+import com.crystalgui.widget.config.ConfigForm;
 import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.surface.extension.SectionSet;
 
@@ -129,12 +128,12 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
             form.header(node.tagName());
-            form.row(ConfigDescriptor.info("id", "id"), node.getId() == null ? "" : node.getId());
-            form.row(ConfigDescriptor.info("classes", "classes"), String.join(" ", node.classes()));
+            live(form, "id", "id", () -> node.getId() == null ? "" : node.getId());
+            live(form, "classes", "classes", () -> String.join(" ", node.classes()));
         }
     }
 
@@ -166,13 +165,12 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
             form.header("Attributes");
             for (Attribute<?> attribute : node.setAttributes()) {
-                form.row(ConfigDescriptor.info("attr." + attribute.name(), attribute.name()),
-                        String.valueOf(node.get(attribute)));
+                live(form, "attr." + attribute.name(), attribute.name(), () -> String.valueOf(node.get(attribute)));
             }
         }
     }
@@ -209,14 +207,13 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             WidgetContract<Object> contract = contractOf(node);
             if (node == null || contract == null) return;
             form.header("State");
             for (State<Object, ?> state : ordered(contract)) {
-                form.row(ConfigDescriptor.info("state." + state.key(), state.key()),
-                        String.valueOf(state.read(node)));
+                live(form, "state." + state.key(), state.key(), () -> String.valueOf(state.read(node)));
             }
         }
     }
@@ -261,17 +258,15 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
             form.header("Force state");
             for (PseudoClasses pseudo : FORCEABLE) {
-                Boolean forced = node.forcedState(pseudo);
                 String name = ":" + pseudo.name().toLowerCase(Locale.ROOT).replace("_", "-");
-                form.row(ConfigDescriptor.bool("force" + pseudo.name(), name),
-                                Boolean.TRUE.equals(forced))
-                        .control().changed.connect(value ->
-                                node.forceState(pseudo, Boolean.TRUE.equals(value) ? Boolean.TRUE : null));
+                form.prop(ConfigDescriptor.bool("force" + pseudo.name(), name),
+                        Property.derived(() -> Boolean.TRUE.equals(node.forcedState(pseudo)),
+                                on -> node.forceState(pseudo, Boolean.TRUE.equals(on) ? Boolean.TRUE : null)));
             }
         }
     }
@@ -290,7 +285,7 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
             for (MatchedRules.Rule rule : MatchedRules.of(node)) {
@@ -330,7 +325,7 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
             List<StyleProperty<?>> inline = new ArrayList<>();
@@ -341,10 +336,9 @@ public final class BuilderInspectorSections {
 
             form.header("Inline (this session only)");
             for (StyleProperty<?> property : inline) {
-                form.row(ConfigDescriptor.text("inline." + property.name, property.name),
-                                String.valueOf(node.getStyle().getComputed(cast(property))))
-                        .control().changed.connect(value ->
-                                LiveEdits.setInline(node, cast(property), String.valueOf(value)));
+                form.prop(ConfigDescriptor.text("inline." + property.name, property.name),
+                        Property.derived(() -> String.valueOf(node.getStyle().getComputed(cast(property))),
+                                value -> LiveEdits.setInline(node, cast(property), value)));
             }
         }
     }
@@ -363,19 +357,19 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
             // THE FORM IT HANDS BACK, which is the whole point of the return value: `group` writes into
             // the group's CONTENT, and rows added to `form` are siblings of the group rather than its
             // children. The group was therefore always empty -- collapsing it hid nothing and its
             // hundred-odd rows stayed on screen, so the twisty read as dead.
-            InspectorForm computed = form.group("Computed", true);
+            ConfigForm computed = form.group("Computed", true);
             List<StyleProperty<?>> properties = new ArrayList<>(node.getStyle().candidates.keySet());
             properties.sort((a, b) -> a.name.compareTo(b.name));
             for (StyleProperty<?> property : properties) {
-                computed.row(ConfigDescriptor.info("computed." + property.name, property.name),
-                        String.valueOf(node.getStyle().getComputed(cast(property))));
+                live(computed, "computed." + property.name, property.name,
+                        () -> String.valueOf(node.getStyle().getComputed(cast(property))));
             }
         }
     }
@@ -399,26 +393,20 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
-            Box box = node == null ? null : node.box();
-            if (box == null) {
-                form.row(ConfigDescriptor.info("box.none", "box"), "not laid out");
-                return;
-            }
+            if (node == null) return;
             form.header("Box");
-            live(form, "box.size", "size",
-                    () -> round(node.box().width()) + " x " + round(node.box().height()), node);
-            live(form, "box.margin", "margin", () -> edges(node.box().margin()), node);
-            live(form, "box.border", "border", () -> edges(node.box().border()), node);
-            live(form, "box.padding", "padding", () -> edges(node.box().padding()), node);
+            live(form, "box.size", "size", () -> ofBox(node, box -> round(box.width()) + " x " + round(box.height())));
+            live(form, "box.margin", "margin", () -> ofBox(node, box -> edges(box.margin())));
+            live(form, "box.border", "border", () -> ofBox(node, box -> edges(box.border())));
+            live(form, "box.padding", "padding", () -> ofBox(node, box -> edges(box.padding())));
             // THE CONTENT BOX, not contentWidth(): those are different questions and this panel is
             // asking the box model's. contentWidth() is the extent of what is INSIDE, which for a leaf
             // that draws its own glyphs is zero -- so a text node reported "0.0 x 0.0" for a row every
             // reader takes to mean the box its text is laid out in.
             live(form, "box.content", "content",
-                    () -> round(node.box().contentBoxWidth()) + " x "
-                            + round(node.box().contentBoxHeight()), node);
+                    () -> ofBox(node, box -> round(box.contentBoxWidth()) + " x " + round(box.contentBoxHeight())));
         }
     }
 
@@ -436,7 +424,7 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public void build(InspectorForm form, DataContext context) {
+        public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
             UIElement parent = node.parentElement();
@@ -450,41 +438,30 @@ public final class BuilderInspectorSections {
             // every one of these has an initial the layout actually uses, so three untouched defaults
             // were reported as three nulls.
             live(form, "flex.direction", "parent direction",
-                    () -> String.valueOf(parent.getStyle().computed()
-                            .get(LayoutProperties.FLEX_DIRECTION)), node);
+                    () -> String.valueOf(parent.getStyle().computed().get(LayoutProperties.FLEX_DIRECTION)));
             live(form, "flex.grow", "grow",
-                    () -> String.valueOf(node.getStyle().computed()
-                            .get(LayoutProperties.FLEX_GROW)), node);
+                    () -> String.valueOf(node.getStyle().computed().get(LayoutProperties.FLEX_GROW)));
             live(form, "flex.shrink", "shrink",
-                    () -> String.valueOf(node.getStyle().computed()
-                            .get(LayoutProperties.FLEX_SHRINK)), node);
+                    () -> String.valueOf(node.getStyle().computed().get(LayoutProperties.FLEX_SHRINK)));
         }
     }
 
     /**
-     * A row that re-reads its own value each frame.
+     * A fact that follows what it describes.
      *
-     * <p>These describe GEOMETRY, and geometry changes without the subject changing: dragging a resize
-     * handle rewrites the box sixty times a second and never touches which node is selected. The panel
-     * rebuilds on a subject change, so a row written once showed the size the box had when it was last
-     * selected and never moved again — which reads as a number you are supposed to commit somehow.</p>
-     *
-     * <p>Per frame rather than on a signal because nothing announces a box: layout is recomputed for
-     * whatever reason it likes. The read is a field access and the row is only written when the text
-     * actually differs, and the hook is owned by the form's own panel so it goes when the panel does.</p>
+     * <p>These change without the subject changing — dragging a resize handle rewrites the box sixty times a
+     * second and never touches which node is selected, and the panel rebuilds only on a subject change. So
+     * each is a polled {@link Property}: nothing announces a box, and a bound fact re-reads after every
+     * layout for as long as it is on screen.</p>
      */
-    private static void live(InspectorForm form, String id, String label,
-                             Supplier<String> value, UIElement node) {
-        Configurator row = form.row(ConfigDescriptor.info(id, label), value.get());
-        if (!(row.control() instanceof InfoControl info)) return;
-        UIDocument window = form.panel().document();
-        if (window == null) return;
-        window.animation().every(form.panel(), delta -> {
-            if (node.box() == null) return true;
-            String now = value.get();
-            if (!now.equals(info.text().getText())) info.text().setText(now);
-            return true;
-        });
+    private static void live(ConfigForm form, String id, String label, Supplier<String> value) {
+        form.prop(ConfigDescriptor.info(id, label), Property.derived(value));
+    }
+
+    /** A box's answer, or what a node with no box has instead. */
+    private static String ofBox(UIElement node, Function<Box, String> read) {
+        Box box = node.box();
+        return box == null ? "not laid out" : read.apply(box);
     }
 
     private static String edges(FloatRect rect) {
@@ -507,7 +484,7 @@ public final class BuilderInspectorSections {
         List<State<Object, ?>> declared = contract.states();
         State<Object, ?> primary = contract.primary();
         if (primary == null || declared.isEmpty() || declared.get(0) == primary) return declared;
-        List<State<Object, ?>> out = new java.util.ArrayList<>(declared.size());
+        List<State<Object, ?>> out = new ArrayList<>(declared.size());
         out.add(primary);
         for (State<Object, ?> state : declared) {
             if (state != primary) out.add(state);

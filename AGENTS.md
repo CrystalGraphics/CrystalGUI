@@ -1294,7 +1294,9 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                replacement for CgGraphicsLifecycle's registry sweep; it exists to
                                release on CLOSE rather than on exit, and to reach createOwned GL
                                objects no registry can see. docs/CGUI_WORKBENCH_SERVICES.md
-  .property                    Property<T> (binding, equality-suppressing set), ObservableList<T>
+  .property                    Property<T> — a value held here or DERIVED from a model (read and
+                               write through, polled or announcedBy, the history its edits go into,
+                               map), what every config control binds to; ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
   .storage                     WHERE ANYTHING PRIVATE GOES. ConfigStorage (the key/value SPI),
                                LocalConfigStorage (one real directory, atomic writes, and `scoped`
