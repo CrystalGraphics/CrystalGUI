@@ -2,6 +2,24 @@ package com.crystalgui.style.property.visual.color;
 
 import com.crystalgui.style.property.StyleValue;
 
+import java.util.Locale;
+
+/**
+ * A CSS {@code <color>} declaration, and the one parser for that syntax: every style property, every
+ * value that embeds a colour and the SVG renderer read colours here.
+ *
+ * <pre>{@code
+ * ColorValue.parseCssColor("#4cf");                  // 0xFF44CCFF
+ * ColorValue.parseCssColor("rgb(255 0 0 / 50%)");    // 0x80FF0000
+ * ColorValue.parseCssColor("gold");                  // 0xFFFFD700
+ * ColorValue.parseCssColor("-1");                    // null: CSS has no integer colour
+ * ColorValue.parseColor("-1");                       // 0xFFFFFFFF: a colour PROPERTY also takes ARGB literals
+ * }</pre>
+ *
+ * <p>Easy to get wrong: a grammar where a bare number means something else, such as a shadow's lengths,
+ * must use {@link #parseCssColor}, or its {@code 0} reads as a transparent colour. And {@code currentcolor}
+ * is not a colour here; a property that means it keeps it unresolved itself, as {@link StyleColor} does.</p>
+ */
 public class ColorValue extends StyleValue<Integer> {
 
     public ColorValue(String rawValue) {
@@ -13,12 +31,27 @@ public class ColorValue extends StyleValue<Integer> {
         return parseColor(rawValue);
     }
 
+    /**
+     * A colour property's value, straight ARGB: a CSS {@code <color>}, or a decimal ARGB literal such as
+     * {@code -1} for opaque white. Null when it is neither.
+     */
     public static Integer parseColor(String value) {
+        Integer css = parseCssColor(value);
+        if (css != null || value == null) return css;
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException notAColour) {
+            return null;
+        }
+    }
+
+    /** A CSS {@code <color>}, straight ARGB, or null when {@code value} is not one. */
+    public static Integer parseCssColor(String value) {
         if (value == null || value.trim().isEmpty()) {
             return null;
         }
 
-        value = value.trim().toLowerCase();
+        value = value.trim().toLowerCase(Locale.ROOT);
 
         // `transparent` — a CSS-wide colour keyword, and the one this parser was missing.
         //
@@ -35,65 +68,84 @@ public class ColorValue extends StyleValue<Integer> {
         // background they were written to clear.
         if (value.equals("transparent")) return 0x00000000;
 
-        try {
-            if (value.startsWith("#")) {
-                String hex = value.substring(1);
-                switch (hex.length()) {
-                    case 3: // #RGB
-                        int r = Integer.parseInt(hex.substring(0, 1), 16) * 17; // F -> FF
-                        int g = Integer.parseInt(hex.substring(1, 2), 16) * 17;
-                        int b = Integer.parseInt(hex.substring(2, 3), 16) * 17;
-                        return 0xFF000000 | (r << 16) | (g << 8) | b;
-                    case 6: // #RRGGBB
-                        return 0xFF000000 | Integer.parseInt(hex, 16);
-                    case 8: { // #RRGGBBAA (CSS-standard order, alpha last)
-                        long rgba = Long.parseLong(hex, 16) & 0xFFFFFFFFL;
-                        long rgb = rgba >>> 8;
-                        long a = rgba & 0xFF;
-                        return (int) ((a << 24) | rgb);
-                    }
-                    default:
-                        return null;
-                }
-            } else if (value.startsWith("rgb(") && value.endsWith(")")) {
-                String[] parts = value.substring(4, value.length() - 1).split(",");
-                if (parts.length != 3) return null;
+        if (value.charAt(0) == '#') return hex(value.substring(1));
+        if (value.startsWith("rgb(") || value.startsWith("rgba(")) return functional(value);
 
-                int r = parseColorComponent(parts[0].trim());
-                int g = parseColorComponent(parts[1].trim());
-                int b = parseColorComponent(parts[2].trim());
-
-                if (r < 0 || g < 0 || b < 0) return null;
-
-                return 0xFF000000 | (r << 16) | (g << 8) | b;
-            } else if (value.startsWith("rgba(") && value.endsWith(")")) {
-                String[] parts = value.substring(5, value.length() - 1).split(",");
-                if (parts.length != 4) return null;
-
-                int r = parseColorComponent(parts[0].trim());
-                int g = parseColorComponent(parts[1].trim());
-                int b = parseColorComponent(parts[2].trim());
-                float alpha = Float.parseFloat(parts[3].trim());
-
-                if (r < 0 || g < 0 || b < 0 || alpha < 0.0f || alpha > 1.0f) return null;
-
-                int a = Math.round(alpha * 255);
-                return (a << 24) | (r << 16) | (g << 8) | b;
-            } else {
-                // Plain decimal ARGB literal, e.g. "background-color: -1;" for opaque white.
-                return Integer.parseInt(value);
-            }
-        } catch (NumberFormatException ignored) {
-        }
-        return null;
+        return NamedColors.argb(value);
     }
 
-    public static int parseColorComponent(String component) {
-        try {
-            int value = Integer.parseInt(component);
-            return (value >= 0 && value <= 255) ? value : -1;
-        } catch (NumberFormatException e) {
-            return -1;
+    /**
+     * {@code #rgb}, {@code #rgba}, {@code #rrggbb}, {@code #rrggbbaa}.
+     *
+     * <p>The three- and four-digit forms double each digit rather than shifting: {@code #f00} is
+     * {@code #ff0000}, not {@code #f00000}. Shifting is the tempting one-liner and it darkens every short
+     * hex by a few percent, which is invisible per-colour and wrong everywhere.</p>
+     */
+    private static Integer hex(String digits) {
+        for (int i = 0; i < digits.length(); i++) {
+            if (Character.digit(digits.charAt(i), 16) < 0) return null;
         }
+        switch (digits.length()) {
+            case 3:
+            case 4: {
+                int alpha = digits.length() == 4 ? nibble(digits.charAt(3)) : 0xF;
+                return pack(alpha * 17, nibble(digits.charAt(0)) * 17,
+                        nibble(digits.charAt(1)) * 17, nibble(digits.charAt(2)) * 17);
+            }
+            case 6:
+                return 0xFF000000 | Integer.parseInt(digits, 16);
+            case 8: {
+                long full = Long.parseLong(digits, 16);
+                // #rrggbbaa puts alpha LAST, unlike our ARGB int.
+                return (int) (((full & 0xFF) << 24) | (full >>> 8));
+            }
+            default:
+                return null;
+        }
+    }
+
+    private static int nibble(char c) {
+        return Character.digit(c, 16);
+    }
+
+    /**
+     * {@code rgb()} and {@code rgba()}, either name with or without alpha, channels as numbers or
+     * percentages, separated by commas or by spaces with a slash before the alpha. Out-of-range values
+     * clamp, as CSS Color 4 says they do.
+     */
+    private static Integer functional(String value) {
+        int open = value.indexOf('(');
+        if (!value.endsWith(")")) return null;
+        String[] parts = value.substring(open + 1, value.length() - 1).trim().split("[\\s,/]+");
+        if (parts.length < 3 || parts.length > 4) return null;
+        try {
+            int r = channel(parts[0]);
+            int g = channel(parts[1]);
+            int b = channel(parts[2]);
+            int a = parts.length > 3 ? Math.round(clamp01(alpha(parts[3])) * 255f) : 255;
+            return pack(a, r, g, b);
+        } catch (NumberFormatException malformed) {
+            return null;
+        }
+    }
+
+    private static int channel(String raw) {
+        if (raw.endsWith("%")) {
+            float percent = Float.parseFloat(raw.substring(0, raw.length() - 1));
+            return Math.round(clamp01(percent / 100f) * 255f);
+        }
+        return Math.max(0, Math.min(255, Math.round(Float.parseFloat(raw))));
+    }
+
+    private static float alpha(String raw) {
+        return raw.endsWith("%") ? Float.parseFloat(raw.substring(0, raw.length() - 1)) / 100f : Float.parseFloat(raw);
+    }
+
+    private static float clamp01(float v) {
+        return Math.max(0f, Math.min(1f, v));
+    }
+
+    private static int pack(int a, int r, int g, int b) {
+        return ((a & 0xFF) << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
     }
 }
