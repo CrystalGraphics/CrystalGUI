@@ -70,7 +70,10 @@ public class StyleGovernanceTest {
             // hue coming from the data. It derives from no system role because it is not a role --
             // there is no surface or foreground it could be a shade of -- and the same wash suits a
             // light theme as a dark one, which is the test this set exists to express.
-            "--radar-fill");
+            "--radar-fill",
+            // A mark drawn OVER the artboard, whose colours are the user's rather than the theme's: white
+            // on a dark halo reads on either, as Photoshop's reference point does.
+            "--builder-pivot", "--builder-pivot-halo");
 
     /**
      * <b>Offered hooks: defined by no theme, and that is the point.</b> Distinct from a palette —
