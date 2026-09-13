@@ -325,6 +325,27 @@ hierarchypanel .__hierarchy-row__ .__label__ {
     text-overflow: ellipsis;
 }
 
+/* The id being renamed, in the row -- the project tree's field, so the two trees rename alike. Shown by
+ * RowEditing in place of the label. */
+hierarchypanel .__hierarchy-row__ .__rename__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    height: 16px;
+    padding-left: 2px;
+    padding-right: 2px;
+    font-size: 10;
+    background-color: var(--tree-editor-bg, #1E1F22);
+    border-width: 1px;
+    border-color: var(--tree-editor-border, #4A88C7);
+    border-radius: 2px;
+}
+
+/* TextField's conflict edge, restated here only because the rule above outranks `textfield.__conflict__`. */
+hierarchypanel .__hierarchy-row__ .__rename__.__conflict__ {
+    border-color: var(--field-conflict-border, #F14C4C);
+}
+
 /* AND THIS TREE ALWAYS SCROLLS SIDEWAYS, so the label never gives way -- it is the thing being scrolled
  * to. `flex-shrink: 0` is the whole switch: a shrinkable item contributes ZERO to its row's min-content
  * width, so with it on there is no overflow, the range is always exactly the viewport, and the bar can

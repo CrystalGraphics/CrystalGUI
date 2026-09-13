@@ -1,7 +1,6 @@
 package com.crystalgui.app.uibuilder;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -90,7 +89,7 @@ public class TreeMovesTest {
         UIElement copy = row.children().get(2);
         assertEquals(copies.get(0).node(), copy);
         assertEquals(new JsonPrimitive("hint"), model.extras().get(copy, DocumentExtras.DESIGN));
-        assertNotEquals("b", copy.id());
-        assertNotEquals("b-inner", copy.children().get(0).id());
+        assertEquals("numbered as a rename's offer is", "b2", copy.id());
+        assertEquals("b-inner2", copy.children().get(0).id());
     }
 }
