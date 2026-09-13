@@ -104,13 +104,39 @@ tooltip {
      *
      * The property, not a constant in the widget: this class's own doc asked for it that way. */
     tooltip-delay: 0;
-    background: var(--tooltip-bg, #1E1E1EF0);
-    outline: 1px var(--tooltip-border, #00000080);
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 2px;
-    padding-bottom: 2px;
+    /* IntelliJ's tooltip: the overlay surface, a hairline border, 4px corners and room around the words. */
+    background: var(--tooltip-bg, #2B2D30);
+    outline: 1px var(--tooltip-border, #43454A);
+    border-radius: var(--radius-control, 4px);
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 3px;
+    padding-bottom: 4px;
     margin-top: 3px;
+}
+
+/* THE HELP TOOLTIP -- IntelliJ's HelpTooltip: the name, its shortcut beside it in the dimmer tone, and a
+ * description under both. Tooltip.setShortcut / setDescription fill the parts; empty ones take no space. */
+tooltip::part(heading) {
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+tooltip::part(shortcut) {
+    font-size: 8;
+    color: var(--fg-secondary, #9DA0A8);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+tooltip::part(description) {
+    font-size: 8;
+    color: var(--fg-secondary, #9DA0A8);
+    max-width: 170px;
+    margin-top: 2px;
+    white-space: normal;
+    flex-shrink: 0;
 }
 /* A WAIT, for a tooltip whose anchor the pointer CROSSES rather than aims at -- see
  * Tooltip.WAIT_CLASS, which is what puts this class on one. A window caption's controls are the
@@ -122,7 +148,7 @@ tooltip {
  * sheet's siblings had been written that way, asking for two seconds and getting whatever the rule
  * above said. */
 tooltip.__wait__ {
-    tooltip-delay: 1;
+    tooltip-delay: 0.5;
 }
 
 
@@ -134,6 +160,9 @@ tooltip.__wait__ {
  * the size of what actually draws. */
 tooltip .__label__,
 tooltip::part(label) {
+    /* UNDER THE SHELL'S 10, as IntelliJ's tooltips sit under its UI font -- a tooltip is read in
+     * passing, beside the text it explains, and at the same size it reads as more of that text. */
+    font-size: 8;
     color: var(--tooltip-fg, #FFFFFF);
     max-width: 170px;
     /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing

@@ -523,6 +523,9 @@ public class DockGroup extends UIElement {
         if (text == null) return;
 
         Tooltip tooltip = Tooltip.attach(tab, text);
+        // THE SHARED WAIT: a strip of tabs is crossed on the way to the one wanted, and a path popping up
+        // over each one covers the tabs being read.
+        tooltip.addClass(Tooltip.WAIT_CLASS);
         // RETAINED, so a later icon can re-anchor its region rather than attaching a second tooltip.
         tabTooltips.put(tab, tooltip);
         String iconText = area.registry().iconTooltipOf(panel);

@@ -13,6 +13,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
+import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import javax.annotation.Nullable;
@@ -71,6 +72,15 @@ public class Tooltip extends UIElement {
     /** {@code tooltip::part(label)} in a sheet. */
     public static final String LABEL_PART = "label";
 
+    /** The row holding the label and the shortcut. @see #setShortcut */
+    public static final String HEADING_PART = "heading";
+
+    /** The shortcut beside the label, dimmer. @see #setShortcut */
+    public static final String SHORTCUT_PART = "shortcut";
+
+    /** The line under the heading. @see #setDescription */
+    public static final String DESCRIPTION_PART = "description";
+
     /**
      * Which side of its anchor the tooltip prefers, and how far off it sits.
      *
@@ -106,6 +116,8 @@ public class Tooltip extends UIElement {
 
     private final ShadowRoot shadow;
     private final UIText label;
+    private final UIText shortcut = new UIText("");
+    private final UIText description = new UIText("");
 
     /**
      * What {@link #setText} wrote — what this tooltip says outside every {@linkplain #addRegion region}.
@@ -161,7 +173,22 @@ public class Tooltip extends UIElement {
         // the engine asks per layout now (Measurable.Fit), so there is no latch to pre-empt.
         this.label.setHitTest(false);
         this.label.set(Attribute.PART, LABEL_PART);
-        this.shadow.append(this.label);
+        // IntelliJ's HelpTooltip: [title  shortcut] over a description. The row and the line are empty, and
+        // take no space, until a caller says there is a shortcut or a description.
+        UIElement heading = new UIElement();
+        heading.set(Attribute.PART, HEADING_PART);
+        heading.setHitTest(false);
+        StyleGroup.defaultPipeline(heading.getStyle().getLayoutGroup(), l -> l.flexDirection(FlexDirection.ROW));
+        heading.append(this.label);
+        shortcut.set(Attribute.PART, SHORTCUT_PART);
+        shortcut.setHitTest(false);
+        heading.append(shortcut);
+        description.set(Attribute.PART, DESCRIPTION_PART);
+        description.setHitTest(false);
+        this.shadow.append(heading);
+        this.shadow.append(description);
+        collapseWhenEmpty(shortcut);
+        collapseWhenEmpty(description);
 
         // A tooltip is decoration: it must never eat the pointer, or hovering the tooltip that
         // appeared under the cursor would count as leaving the anchor, hiding it, which un-hovers
@@ -325,6 +352,43 @@ public class Tooltip extends UIElement {
         this.baseText = text == null ? "" : text;
         if (activeRegion == null) label.setText(baseText);
         return this;
+    }
+
+    /**
+     * The chord beside the text, dimmer — {@code "Ctrl+="}. Empty or null for none.
+     *
+     * <pre>{@code
+     * tooltip.setText("Expand Selected").setShortcut("Ctrl+=")
+     *         .setDescription("Press Ctrl+Shift+= to expand all nodes");
+     * }</pre>
+     *
+     * <p>Local presentation, like the accelerator a menu row draws: not part of the tooltip's wire state.</p>
+     */
+    public Tooltip setShortcut(@Nullable String chord) {
+        shortcut.setText(chord == null ? "" : chord);
+        collapseWhenEmpty(shortcut);
+        return this;
+    }
+
+    public String getShortcut() {
+        return shortcut.text();
+    }
+
+    /** The line under the text, dimmer and wrapped — IntelliJ's help-tooltip description. Empty or null for none. */
+    public Tooltip setDescription(@Nullable String text) {
+        description.setText(text == null ? "" : text);
+        collapseWhenEmpty(description);
+        return this;
+    }
+
+    public String getDescription() {
+        return description.text();
+    }
+
+    private static void collapseWhenEmpty(UIText part) {
+        boolean empty = part.text().isEmpty();
+        StyleGroup.inlinePipeline(part.getStyle().getLayoutGroup(),
+                l -> l.display(empty ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
     }
 
     /** What is <b>displayed</b> — a region's wording while one is active, else {@link #getBaseText}. */
