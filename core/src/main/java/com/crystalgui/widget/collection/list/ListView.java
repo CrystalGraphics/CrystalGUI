@@ -103,6 +103,9 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      */
     private static final int OVERSCAN = 2;
 
+    /** @see #setOverscan */
+    private int overscan = OVERSCAN;
+
     @Getter
     private final ObservableList<T> model;
 
@@ -232,6 +235,24 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     public ListView<T> setSizeStrategy(ItemSizeStrategy strategy) {
         this.sizeStrategy = strategy == null ? new FixedHeightStrategy(16f) : strategy;
         recycleAll();
+        invalidateWindow();
+        return this;
+    }
+
+    /**
+     * Rows realised beyond the viewport on each side — 2 unless set. A list whose rows are expensive to bind and
+     * few in number can keep them all, so scrolling never rebinds one.
+     *
+     * <pre>{@code
+     * library.setOverscan(Integer.MAX_VALUE);   // every row realised, bound once
+     * }</pre>
+     *
+     * <p>A realised row off screen costs no paint, only its style and layout, which are settled.</p>
+     */
+    public ListView<T> setOverscan(int rows) {
+        int wanted = Math.max(0, rows);
+        if (wanted == overscan) return this;
+        overscan = wanted;
         invalidateWindow();
         return this;
     }
@@ -566,7 +587,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     }
 
     /**
-     * Realises exactly the rows the viewport can see, plus {@link #OVERSCAN} either side, recycling
+     * Realises exactly the rows the viewport can see, plus {@link #setOverscan overscan} either side, recycling
      * everything else.
      *
      * <p>Early-returns when the range is unchanged, which is what makes this safe to call from every
@@ -595,10 +616,10 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         float viewportHeight = viewportHeight();
         // Before the first real layout the box is zero-sized; realising one row rather than none keeps
         // scrollToIndex and focus restoration from having to special-case an empty window.
-        int first = Math.max(0, sizeStrategy.indexAt(scrollTop(), count) - OVERSCAN);
+        int first = (int) Math.max(0L, (long) sizeStrategy.indexAt(scrollTop(), count) - overscan);
         int last = viewportHeight <= 0f
                 ? first
-                : Math.min(count - 1, sizeStrategy.indexAt(scrollTop() + viewportHeight, count) + OVERSCAN);
+                : (int) Math.min(count - 1L, (long) sizeStrategy.indexAt(scrollTop() + viewportHeight, count) + overscan);
 
         if (first == firstRealised && last == lastRealised) return;
 

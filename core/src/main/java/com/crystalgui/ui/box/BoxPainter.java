@@ -1,7 +1,6 @@
 package com.crystalgui.ui.box;
 
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.LayerRegion;
@@ -76,6 +75,14 @@ public final class BoxPainter {
     private static void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base) {
         float opacity = box.opacity();
         if (opacity <= 0f) return;
+        // NOTHING OF IT CAN LAND: a row scrolled past its list's edge draws nothing the scissor would keep.
+        if (CgUiPaintContext.CULL) {
+            inkThrough(box, base);
+            if (ctx.outsideClip(INK[0], INK[1], INK[2], INK[3])) {
+                FrameProfile.count("culled", 1);
+                return;
+            }
+        }
         UIElement node = box.node();
         ComputedStyle style = node.computedStyle();
         PoseStack pose = ctx.getPoseStack();
@@ -221,6 +228,15 @@ public final class BoxPainter {
      * answer for an allocation.</p>
      */
     private static LayerRegion regionOf(Box box, CgUiPaintContext ctx, Matrix4f base) {
+        inkThrough(box, base);
+        return ctx.layerRegion(INK[0], INK[1], INK[2], INK[3]);
+    }
+
+    /**
+     * The box's subtree ink bounds carried through {@code base} into the target's pixels, written to {@link #INK} as
+     * {@code x0, y0, x1, y1}. Asked per box by the cull, so into scratch rather than a new rectangle.
+     */
+    private static void inkThrough(Box box, Matrix4f base) {
         float x0 = box.inkX0(), y0 = box.inkY0(), x1 = box.inkX1(), y1 = box.inkY1();
         float m00 = base.m00(), m10 = base.m10(), m30 = base.m30();
         float m01 = base.m01(), m11 = base.m11(), m31 = base.m31();
@@ -228,12 +244,14 @@ public final class BoxPainter {
         float bx = m00 * x1 + m10 * y0 + m30, by = m01 * x1 + m11 * y0 + m31;
         float cx = m00 * x1 + m10 * y1 + m30, cy = m01 * x1 + m11 * y1 + m31;
         float dx = m00 * x0 + m10 * y1 + m30, dy = m01 * x0 + m11 * y1 + m31;
-        return ctx.layerRegion(
-                Math.min(Math.min(ax, bx), Math.min(cx, dx)),
-                Math.min(Math.min(ay, by), Math.min(cy, dy)),
-                Math.max(Math.max(ax, bx), Math.max(cx, dx)),
-                Math.max(Math.max(ay, by), Math.max(cy, dy)));
+        INK[0] = Math.min(Math.min(ax, bx), Math.min(cx, dx));
+        INK[1] = Math.min(Math.min(ay, by), Math.min(cy, dy));
+        INK[2] = Math.max(Math.max(ax, bx), Math.max(cx, dx));
+        INK[3] = Math.max(Math.max(ay, by), Math.max(cy, dy));
     }
+
+    /** {@link #inkThrough}'s answer. Read immediately: the frame thread paints one box at a time. */
+    private static final float[] INK = new float[4];
 
     private static void paintChildren(Box box, CgUiPaintContext ctx, Matrix4f base, boolean scissor) {
         if (box.children().isEmpty()) return;

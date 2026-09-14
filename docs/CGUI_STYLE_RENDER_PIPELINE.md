@@ -621,6 +621,19 @@ containing a node whose `paintsDynamically()` is true (the default for anything 
 hook) or a `backdrop-filter`, whose subject is not in this tree at all. `UIElement.repaint()` is the
 door for a widget whose picture changes without moving a box.
 
+**A rounded clip over live content costs three layers every frame.** The subtree, the children and the
+mask each take a target, and a subtree holding a `paintsDynamically()` node is never retained — nor is
+one that moved, which a scrolled list's rows do every frame. Where the content cannot reach the rounded
+corners, clip with a square box inset inside the curve instead: square `overflow: hidden` is a scissor
+and opens no layer. The Library's cards do exactly that (`PreviewCard`'s `__preview-clip__`, 2px inside a
+5px radius); measured while scrolling, 103 layers a frame fell to 2 and the median frame from 12.5ms to 8.5.
+
+**A subtree drawn wholly outside the clip is not walked.** `BoxPainter` carries each box's ink bounds
+through the pose and asks `CgUiPaintContext.outsideClip` before painting it — Blink's cull rect, against
+the live scissor or the enclosing layer's region. It is what lets a list keep rows realised past its
+viewport for free. `-Dcrystalgui.paint.cull=false` paints everything, to rule it out. The same undeclared
+paint outside a box's ink that a layer clips is, here, not drawn at all once the box leaves the clip.
+
 **Why an offscreen layer at all**: without one, overlapping translucent children blend against
 whatever's already drawn one at a time, then each gets faded independently — the classic
 double-blend seam at the overlap. Isolating the whole subtree in its own buffer first, then fading
