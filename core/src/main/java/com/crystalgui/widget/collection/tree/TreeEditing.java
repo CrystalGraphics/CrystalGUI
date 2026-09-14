@@ -298,7 +298,7 @@ public final class TreeEditing<T> {
     /** Wires a row once, from {@code createTemplate}: its drag, and its rename field. */
     public void installRow(UIElement row, TextField field) {
         rows.installEditor(row, field);
-        dragAndDrop.installRow(row);
+        dragAndDrop.installRow(row, field);
     }
 
     /** Puts a row's state in line with {@code item}, from every {@code bind}: the rename field, and the cut mark. */
