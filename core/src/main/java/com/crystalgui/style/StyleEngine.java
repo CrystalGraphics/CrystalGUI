@@ -141,14 +141,23 @@ public final class StyleEngine {
      */
     public void addStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
         sheets.add(new Installed(sheet, root));
+        sheetsRevision++;
         markAllDirty();
     }
 
     /** Removes EVERY installation of {@code sheet}, whatever it was scoped to. @see #removeStylesheet(StyleSheet, StyleScope) */
     public void removeStylesheet(StyleSheet sheet) {
         if (sheets.removeIf(installed -> installed.sheet() == sheet)) {
+            sheetsRevision++;
             markAllDirty();
         }
+    }
+
+    private int sheetsRevision;
+
+    /** Changes whenever a sheet is installed or removed — so a mirror of the list can tell, per frame, that nothing did. */
+    public int sheetsRevision() {
+        return sheetsRevision;
     }
 
     /**
@@ -161,6 +170,7 @@ public final class StyleEngine {
      */
     public void removeStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
         if (sheets.removeIf(installed -> installed.sheet() == sheet && installed.root() == root)) {
+            sheetsRevision++;
             markAllDirty();
         }
     }
@@ -753,6 +763,23 @@ public final class StyleEngine {
         return out;
     }
 
+    /** The sheets installed against exactly {@code root} — null for the unscoped ones — in cascade order. */
+    public List<StyleSheet> getSheets(@Nullable StyleScope root) {
+        List<StyleSheet> out = new ArrayList<>();
+        for (Installed installed : sheets) {
+            if (installed.root() == root) out.add(installed.sheet());
+        }
+        return out;
+    }
+
+    /** Whether {@code sheet} is installed against exactly {@code root}. */
+    public boolean hasStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
+        for (Installed installed : sheets) {
+            if (installed.sheet() == sheet && installed.root() == root) return true;
+        }
+        return false;
+    }
+
     /** Hops from {@code element} up to {@code root} inclusive, or -1 when {@code root} is not above it. */
     private static int proximityOf(StyleScope element, StyleScope root) {
         int hops = 0;
@@ -760,7 +787,7 @@ public final class StyleEngine {
         // matters here: getParent() answers null when the parent is a shadow root, so a sheet scoped
         // to a composite's own shadow root would be unreachable from every part inside it.
         for (StyleScope at = element; at != null; at = at.styleScopeParent(), hops++) {
-            if (at == root) return hops;
+            if (root.scopes(at)) return hops;
         }
         return -1;
     }
