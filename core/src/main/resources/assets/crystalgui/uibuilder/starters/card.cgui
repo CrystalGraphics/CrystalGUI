@@ -1,0 +1,41 @@
+{
+  "cgui": 1,
+  "root": {
+    "kind": "element",
+    "style": {
+      "flex-direction": "column",
+      "gap": "6px 6px",
+      "padding-top": "12px",
+      "padding-right": "12px",
+      "padding-bottom": "12px",
+      "padding-left": "12px",
+      "border-top-left-radius-x": "6px",
+      "border-top-left-radius-y": "6px",
+      "border-top-right-radius-x": "6px",
+      "border-top-right-radius-y": "6px",
+      "border-bottom-right-radius-x": "6px",
+      "border-bottom-right-radius-y": "6px",
+      "border-bottom-left-radius-x": "6px",
+      "border-bottom-left-radius-y": "6px",
+      "background-color": "#2B2D30"
+    },
+    "children": [
+      {
+        "kind": "text",
+        "style": {
+          "font-weight": "bold",
+          "font-size": "13"
+        },
+        "state": {
+          "text": "Title"
+        }
+      },
+      {
+        "kind": "text",
+        "state": {
+          "text": "A short line about what this card holds."
+        }
+      }
+    ]
+  }
+}

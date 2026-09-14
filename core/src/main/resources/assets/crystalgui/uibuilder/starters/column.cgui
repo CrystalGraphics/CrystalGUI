@@ -1,0 +1,24 @@
+{
+  "cgui": 1,
+  "root": {
+    "kind": "element",
+    "style": {
+      "flex-direction": "column",
+      "gap": "6px 6px"
+    },
+    "children": [
+      {
+        "kind": "text",
+        "state": {
+          "text": "Item"
+        }
+      },
+      {
+        "kind": "text",
+        "state": {
+          "text": "Item"
+        }
+      }
+    ]
+  }
+}

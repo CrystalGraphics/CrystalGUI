@@ -139,6 +139,9 @@ public final class BuilderCommands {
     /** A copy of the selection after it. @see #DUPLICATE_UP */
     public static final String DUPLICATE_DOWN = "uibuilder.duplicateDown";
 
+    /** The Insert menu under the selection — Blender's Shift+A, for a tree. Bound on the surface as Shift+Space. */
+    public static final String INSERT = "uibuilder.insert";
+
     /** Registers them, and hands back the way to withdraw them. */
     public static Disposable register() {
         CommandRegistry.global().contribute(BuilderCommands.class, BuilderCommands::declare);
@@ -211,6 +214,10 @@ public final class BuilderCommands {
         registry.register(Command.of(DUPLICATE_DOWN, "Duplicate Down")
                 .run(context -> shift(context, true, true))
                 .enabledWhen(BuilderCommands::canShift));
+
+        registry.register(Command.of(INSERT, "Insert…")
+                .run(context -> builderOf(context).insert().openForSelection())
+                .enabledWhen(context -> hasBuilder(context) && builderOf(context).surface().isDesignMode()));
 
         // ONE NODE, AND A LAID-OUT ONE. The tool cannot refuse a bad selection from inside `activated`
         // without re-entering the mode stack mid-change, so the gate is here where it costs nothing.

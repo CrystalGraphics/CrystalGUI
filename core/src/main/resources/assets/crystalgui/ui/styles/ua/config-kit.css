@@ -802,6 +802,155 @@ searchfield::part(clear) {
 }
 nodecreationmenu .__empty__ { padding: 4px; }
 
+/* ── InsertMenu ─────────────────────────────────────────────────────────────────────────────────
+ * The surface's Add menu: title, a consumer's placement band, search, the offers, and a footer that
+ * describes the highlighted one. A quick-input family member, so it reads like the command palette
+ * rather than like the graph's own node menu. Definite size for the same reason as that menu: the tree
+ * is virtualised and has no intrinsic height. */
+insertmenu {
+    width: 280px;
+    height: 340px;
+    min-width: 200px;
+    min-height: 140px;
+    resize: both;
+    overflow: hidden;
+    flex-direction: column;
+    background: var(--insertmenu-bg, #191A1C);
+    outline-width: 1px;
+    outline-color: var(--insertmenu-border, #5A5D63);
+    border-radius: 6px;
+    color: var(--insertmenu-target-fg, #DFE1E5);
+}
+insertmenu .__title-bar__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 22px;
+    padding-left: 10px;
+    padding-right: 10px;
+    cursor: grab;
+}
+insertmenu .__title__ {
+    font-weight: bold;
+    color: var(--insertmenu-title-fg, #9DA0A8);
+}
+/* The consumer's line, a band raised between two hairlines: context the list below is about, not a
+ * row of it. */
+insertmenu .__insert-header__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    height: 24px;
+    padding-left: 10px;
+    padding-right: 8px;
+    gap: 5px;
+    background: var(--insertmenu-band-bg, #26282B);
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-color: var(--insertmenu-divider, #393B40);
+}
+insertmenu searchtree {
+    padding: 6px;
+    gap: 4px;
+}
+insertmenu .__search__ {
+    height: 22px;
+    flex-shrink: 0;
+    padding-left: 6px;
+    padding-right: 5px;
+    gap: 4px;
+    border-radius: 4px;
+    background: var(--insertmenu-field-bg, #131416);
+    outline-color: var(--insertmenu-field-border, #393B40);
+}
+insertmenu .__search__.__focused__ {
+    outline-color: var(--insertmenu-field-focus-border, #3574F0);
+}
+/* NO height and NO padding-left: both are the view's, written from Java. See nodecreationmenu above. */
+insertmenu .__entry__ {
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 5px;
+    padding-right: 14px;
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+}
+insertmenu .__entry__:hover { background: var(--insertmenu-hover-bg, #2E3033); }
+insertmenu .__entry__.__selected__ { background: var(--insertmenu-selected-bg, #04395E); }
+/* The Library's twisty: two shapes rather than one rotated, the tree's colours, and its own hover. */
+insertmenu .__twisty__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--tree-twisty-fg, #FFFFFF);
+}
+insertmenu .__twisty__:hover { color: var(--tree-twisty-hover-fg, #FFFFFF); }
+insertmenu .__collapsed__ > .__twisty__ { overlay: shape("chevron-right"); }
+insertmenu .__expanded__ > .__twisty__ { overlay: shape("chevron-down"); }
+insertmenu .__leaf__ > .__twisty__ { overlay: none; }
+/* The kind's own mark, tinted by its role class where a consumer gives one. */
+insertmenu .__entry-icon__ {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    overlay-size: contain;
+    color: var(--insertmenu-icon-fg, #9DA0A8);
+}
+insertmenu .__entry__ .__label__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+/* A heading over the offers, as the Library's folders are: the tree's own colour, bold. */
+insertmenu .__entry__.__category__ .__label__ {
+    font-weight: bold;
+    color: var(--tree-fg, #FFFFFF);
+}
+insertmenu .__entry__ .__entry-category__ {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 1;
+    overflow: hidden;
+}
+insertmenu .__entry__ .__category-segment__ {
+    flex-shrink: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--insertmenu-hint-fg, #7A7A7A);
+}
+insertmenu .__entry__ .__category-separator__ {
+    width: 8px;
+    height: 8px;
+    flex-shrink: 0;
+    margin-left: 2px;
+    margin-right: 2px;
+    overlay: shape("triangle-right");
+    color: var(--insertmenu-hint-fg, #7A7A7A);
+}
+insertmenu .__empty__ {
+    padding: 8px;
+    color: var(--insertmenu-hint-fg, #7A7A7A);
+}
+insertmenu .__insert-footer__ {
+    flex-shrink: 0;
+    height: 22px;
+    padding-left: 10px;
+    padding-right: 10px;
+    border-top-width: 1px;
+    border-color: var(--insertmenu-divider, #393B40);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    color: var(--insertmenu-hint-fg, #7A7A7A);
+}
+
 /* `pointer` marks anything clickable, as it does on the web for links and buttons. */
 button, checkbox, switch, tab, dropdown, menuitem { cursor: pointer; }
 /* Not set on `textfield`: `cursor: auto` already resolves to `text` over an editable element, which

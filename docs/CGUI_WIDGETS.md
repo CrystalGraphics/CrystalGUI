@@ -293,6 +293,29 @@ search.setRows(rows);                       // roots(query), children, label, is
 search.onChosen.connect(kind -> place(kind));
 ```
 
+A row draws an icon when `Rows.icon(node)` names one, wearing `Rows.iconClass(node)` so a theme can tint it
+(`.__entry-icon__`); a category row never does.
+
+### A surface's Add menu — `InsertMenu` (`widget.surface.insert`)
+
+What every registered `InsertSource` offers, searchable, opened at a world point: Blender's Shift+A. Browsing
+groups offers by `path()` in the order sources gave them; a query ranks label, synonyms and path, and skips an
+offer marked `browsingOnly()` (a Recent row, which the search finds under its own path). The footer describes the
+highlighted offer.
+
+```java
+surface.registerInsertSource(() -> offers);          // Insertable: label, path, synonyms, description, icon, insert
+InsertMenu menu = surface.openInsertMenu(worldX, worldY);
+menu.header().append(placementLine);                 // a consumer's band above the search
+menu.showHeader(true);
+menu.onCycle.connect(step -> placement.cycle(step)); // Tab / Shift+Tab in the search box
+```
+
+- `onCycle` takes Tab only while something is connected to it; otherwise Tab keeps its meaning.
+- The header is hidden until `showHeader(true)`.
+- The UI builder's consumer is `BuilderInsert`: Shift+Space under the selection, right-click on blank page at the
+  pointer, *Insert…* first on a node's menu.
+
 ### A kind drawn as itself — `PreviewCard` (`app.uibuilder.library`)
 
 A Library card: the kind's sample in a shadow root wearing the window's sheets and no panel rule, fitted into

@@ -1,0 +1,28 @@
+{
+  "cgui": 1,
+  "root": {
+    "kind": "element",
+    "style": {
+      "flex-direction": "row",
+      "align-items": "center",
+      "gap": "8px 8px"
+    },
+    "children": [
+      {
+        "kind": "text",
+        "state": {
+          "text": "Label"
+        }
+      },
+      {
+        "kind": "textfield",
+        "style": {
+          "width": "120px"
+        },
+        "state": {
+          "placeholder": "Value"
+        }
+      }
+    ]
+  }
+}

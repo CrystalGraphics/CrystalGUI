@@ -248,6 +248,8 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
             // take whole elements.
             builderKeymap.bind("Alt+C", BuilderCommands.COPY_ATTRIBUTES);
             builderKeymap.bind("Alt+V", BuilderCommands.PASTE_ATTRIBUTES);
+            // The graph's Add is Space; Shift+Space inserts here, on the surface where a text field cannot hear it.
+            builderKeymap.bind("Shift+Space", BuilderCommands.INSERT);
         }
         return builderKeymap;
     }

@@ -132,6 +132,11 @@ public final class LibraryCatalog {
         return entries;
     }
 
+    /** The shipped groups, then the user's, in the order the Library lists them. */
+    public List<Group> groups() {
+        return groups;
+    }
+
     @Nullable
     public Entry entry(Name kind) {
         return byKind.get(kind);

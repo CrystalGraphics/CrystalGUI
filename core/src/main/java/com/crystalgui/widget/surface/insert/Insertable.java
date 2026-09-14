@@ -7,9 +7,9 @@ import javax.annotation.Nullable;
 /**
  * One row in the insert menu, and what happens when it is chosen.
  *
- * <p>Offered by an {@code InsertSource}. The engine's menu searches the {@link #label}, the
- * {@link #path} and the {@link #synonyms}, groups rows by path, and calls {@link #insert} with the
- * world point the menu was opened at.</p>
+ * <p>Offered by an {@code InsertSource}. The engine's menu ranks the {@link #label}, the {@link #synonyms} and the
+ * {@link #path} against a query, groups rows by path while browsing, and calls {@link #insert} with the world
+ * point the menu was opened at.</p>
  *
  * <pre>{@code
  * new Insertable() {
@@ -19,8 +19,12 @@ import javax.annotation.Nullable;
  * }
  * }</pre>
  *
- * <p>A source builds these already bound to whatever they need — the engine hands nothing but the
- * point, so an insertable holds its own document, context or factory.</p>
+ * <ul>
+ *   <li>A source builds these already bound to whatever they need — the engine hands nothing but the point, so an
+ *       insertable holds its own document, context or factory.</li>
+ *   <li>A shortcut to an offer listed elsewhere — a Recent row — is {@link #browsingOnly}, so a search does not
+ *       list it twice.</li>
+ * </ul>
  */
 public interface Insertable {
 
@@ -37,10 +41,27 @@ public interface Insertable {
         return List.of();
     }
 
+    /** One line saying what it is, shown for the highlighted row, or null. */
+    @Nullable
+    default String description() {
+        return null;
+    }
+
     /** An icon id, or null for none. */
     @Nullable
     default String icon() {
         return null;
+    }
+
+    /** A class the icon wears, so a theme can tint it, or null. */
+    @Nullable
+    default String iconClass() {
+        return null;
+    }
+
+    /** Whether the row is only listed while browsing: a shortcut to an offer a search already finds under its own path. */
+    default boolean browsingOnly() {
+        return false;
     }
 
     /** Inserts, at the point the menu was opened. */

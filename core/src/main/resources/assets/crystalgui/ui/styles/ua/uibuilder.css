@@ -337,6 +337,59 @@ hierarchypanel .__leaf__ .__twisty__ {
 .__glyph__.__glyph-overlay__ { color: var(--kind-glyph-overlay, #68C4BE); }
 .__glyph__.__glyph-addon__ { color: var(--kind-glyph-addon, #7AC0A0); }
 
+/* The Insert menu's rows: the same marks in the same role colours, and the brighter twins on the selected row. */
+insertmenu .__entry-icon__.__glyph-layout__ { color: var(--kind-glyph-layout, #AEA79C); }
+insertmenu .__entry-icon__.__glyph-text__ { color: var(--kind-glyph-text, #CAA875); }
+insertmenu .__entry-icon__.__glyph-control__ { color: var(--kind-glyph-control, #75B1ED); }
+insertmenu .__entry-icon__.__glyph-collection__ { color: var(--kind-glyph-collection, #B38FD8); }
+insertmenu .__entry-icon__.__glyph-overlay__ { color: var(--kind-glyph-overlay, #68C4BE); }
+insertmenu .__entry-icon__.__glyph-addon__ { color: var(--kind-glyph-addon, #7AC0A0); }
+insertmenu .__selected__ .__entry-icon__.__glyph-layout__ { color: var(--kind-glyph-layout-selected, #E2D9CB); }
+insertmenu .__selected__ .__entry-icon__.__glyph-text__ { color: var(--kind-glyph-text-selected, #FFDA98); }
+insertmenu .__selected__ .__entry-icon__.__glyph-control__ { color: var(--kind-glyph-control-selected, #92E8FF); }
+insertmenu .__selected__ .__entry-icon__.__glyph-collection__ { color: var(--kind-glyph-collection-selected, #E9BAFF); }
+insertmenu .__selected__ .__entry-icon__.__glyph-overlay__ { color: var(--kind-glyph-overlay-selected, #8CEFE8); }
+insertmenu .__selected__ .__entry-icon__.__glyph-addon__ { color: var(--kind-glyph-addon-selected, #9EF2CB); }
+
+/* The placement band: Inside [glyph] Card #profile ........ [Tab] 1/3 */
+insertmenu .__insert-relation__ {
+    flex-shrink: 0;
+    white-space: nowrap;
+    color: var(--insertmenu-relation-fg, #9DA0A8);
+}
+insertmenu .__insert-header__ .__glyph__ {
+    margin-left: 1px;
+}
+insertmenu .__insert-target__ {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-weight: bold;
+    color: var(--insertmenu-target-fg, #DFE1E5);
+}
+insertmenu .__insert-spacer__ {
+    width: 0;
+    flex-grow: 1;
+}
+/* A key, drawn as one: the chip says Tab changes the place without a sentence saying so. */
+insertmenu .__keycap__ {
+    flex-shrink: 0;
+    padding: 1px 4px 1px 4px;
+    border-radius: 3px;
+    background: var(--insertmenu-key-bg, #2B2B2B);
+    outline-width: 1px;
+    outline-color: var(--insertmenu-key-border, #5A5D63);
+    font-size: 8;
+    color: var(--insertmenu-key-fg, #9DA0A8);
+}
+insertmenu .__insert-cycle__ {
+    flex-shrink: 0;
+    font-size: 8;
+    color: var(--insertmenu-count-fg, #7A7A7A);
+}
+
 /* The Element tab's heading: [glyph] words ........ tag. The band is the section header's own; the glyph sits
  * where a row's does, and the tag is code — the name a selector types — so it takes the code face, a size down
  * and the hint colour, where it reads as an annotation rather than a second title. */
