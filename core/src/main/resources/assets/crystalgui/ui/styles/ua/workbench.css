@@ -1583,6 +1583,39 @@ workbench splitview.__vertical__ > .__divider__ {
     display: none;
 }
 
+/* A TREE ROW'S GHOST: live copies of the row's own icon and label (DragGhost's icon-copy and label-copy parts)
+ * in one capsule, outlined in the accent on a see-through panel ground. The chip above stands for a rail button,
+ * which has no label of its own. After the __iconless__ rule, which "3 items" also carries. */
+.__drag-ghost__.__row-ghost__,
+.__drag-ghost__.__row-ghost__.__iconless__ {
+    width: auto;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    padding-left: 6px;
+    padding-right: 8px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    border-radius: var(--radius-control, 3px);
+    border-width: 1px;
+    border-color: var(--accent, #3574F0);
+    background-color: var(--ghost-row-bg, #191A1CA0);
+}
+
+.__drag-ghost__.__row-ghost__ .__label__,
+.__drag-ghost__.__row-ghost__::part(label) {
+    position: relative;
+    left: 0;
+    margin-left: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    background-color: #00000000;
+    color: var(--fg, #DFE1E5);
+}
+
 /* ── Region drop overlay ───────────────────────────────────────────────────────────────────────
  * Where a dragged tool window would land. The layer covers the whole workbench and is unhittable;
  * only the preview rectangle inside it is ever visible, and it is shown by OPACITY rather than by

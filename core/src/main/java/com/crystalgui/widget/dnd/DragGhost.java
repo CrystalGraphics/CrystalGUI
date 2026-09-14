@@ -3,10 +3,14 @@ package com.crystalgui.widget.dnd;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.box.Measurable;
 import com.crystalgui.ui.dom.*;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.dom.UIElement;
 
+import dev.vfyjxf.taffy.geometry.FloatRect;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -105,6 +109,14 @@ public class DragGhost extends UIElement {
     private final UIElement icon = new UIElement();
     private final UIText label = new UIText("");
 
+    /** {@code ::part(icon-copy)}: where {@link #follow(UIDocument, UIElement, UIElement)} draws the source's icon. */
+    public static final String ICON_COPY_PART = "icon-copy";
+    /** {@code ::part(label-copy)}: where it draws the source's label. */
+    public static final String LABEL_COPY_PART = "label-copy";
+
+    private final Copy iconCopy = new Copy(ICON_COPY_PART, false);
+    private final Copy labelCopy = new Copy(LABEL_COPY_PART, true);
+
     public DragGhost() {
         super(NAME);
         addClass(GHOST_CLASS);
@@ -117,7 +129,9 @@ public class DragGhost extends UIElement {
         icon.setHitTest(false);
         label.set(Attribute.PART, LABEL_PART);
         shadow.append(icon);
+        shadow.append(iconCopy.slot);
         shadow.append(label);
+        shadow.append(labelCopy.slot);
 
         // RULE 2, and it must be here rather than in the stylesheet -- see the class note.
         //
@@ -164,8 +178,48 @@ public class DragGhost extends UIElement {
      * <p>Placed by {@link #anchoredBy}, which is a property of the widget rather than of the drag.</p>
      */
     public DragGhost follow(@Nullable UIDocument window, @Nullable String iconName, String text) {
+        iconCopy.source(null);
+        labelCopy.source(null);
+        showText(true);
         label.setText(text == null ? "" : text);
         setIcon(iconName);
+        return offer(window);
+    }
+
+    /**
+     * Shows a live copy of {@code icon} and {@code label} under the cursor for this drag — the elements
+     * themselves, as they are drawn where they live, so a layered symbol, a theme's overlay or a selected
+     * tint all come along. A sheet restyles the ghost around them, never the copies.
+     *
+     * <pre>
+     * // on mouse-down, before Drag.start, with the pressed row's own parts:
+     * ghost.follow(window, rowIcon, rowLabel);
+     * </pre>
+     *
+     * <ul>
+     *   <li>Each copy is its source's size, except that a {@link UIText} label is cut to its text, so a
+     *       label stretched across its row does not stretch the ghost.</li>
+     *   <li>A source that loses its box — its row scrolled out and recycled — drops out of the ghost.</li>
+     *   <li>Null leaves that part out; {@link #follow(UIDocument, String, String)} is the call for a drag
+     *       with no single element to show, such as "3 items".</li>
+     * </ul>
+     */
+    public DragGhost follow(@Nullable UIDocument window, @Nullable UIElement icon, @Nullable UIElement label) {
+        this.label.setText("");
+        setIcon(null);
+        showText(false);
+        iconCopy.source(icon);
+        labelCopy.source(label);
+        if (hasClass(ICONLESS_CLASS) != (icon == null)) toggleClass(ICONLESS_CLASS, icon == null);
+        return offer(window);
+    }
+
+    private void showText(boolean shown) {
+        StyleGroup.inlinePipeline(label.getStyle().getLayoutGroup(),
+                l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+    }
+
+    private DragGhost offer(@Nullable UIDocument window) {
         if (window == null) return this;
         // THE LIVE DRAG, asked for by type. The old controller was a singleton with a setGhost of its
         // own; a Drag is an InputMode now, so the ghost is handed to the gesture that will carry it.
@@ -295,6 +349,106 @@ public class DragGhost extends UIElement {
         // THE BOX IS THE ICON'S, so it goes with the icon: a tinted square holding nothing reads as a glyph
         // that failed to load. @see ICONLESS_CLASS
         if (hasClass(ICONLESS_CLASS) == shown) toggleClass(ICONLESS_CLASS, !shown);
+    }
+
+    @Override
+    protected void connected() {
+        super.connected();
+        UIDocument document = document();
+        if (document == null) return;
+        // POST-LAYOUT: a copy is sized from its source's measured box.
+        document.animation().afterLayout(this, delta -> {
+            iconCopy.sync(document);
+            labelCopy.sync(document);
+            return true;
+        });
+    }
+
+    @Override
+    protected void disconnected() {
+        // A MIRROR IS A LAYOUT, and the boxes it made outlive the hook ownership drops.
+        UIDocument document = document();
+        iconCopy.drop(document);
+        labelCopy.drop(document);
+        super.disconnected();
+    }
+
+    /** One part drawn as a live second layout of an element elsewhere — {@code BoxTree.mirror}, as a taskbar thumbnail is. */
+    private final class Copy {
+
+        final UIElement slot = new UIElement();
+
+        /** Cut a {@link UIText} source to its text rather than its box. */
+        private final boolean hugText;
+
+        @Nullable
+        private UIElement source;
+
+        @Nullable
+        private Box mirror;
+
+        @Nullable
+        private UIElement mirrored;
+
+        private float width = Float.NaN;
+
+        private float height = Float.NaN;
+
+        Copy(String part, boolean hugText) {
+            this.hugText = hugText;
+            slot.set(Attribute.PART, part);
+            slot.setHitTest(false);
+            show(false);
+        }
+
+        void source(@Nullable UIElement value) {
+            source = value;
+            show(value != null);
+        }
+
+        private void show(boolean shown) {
+            StyleGroup.inlinePipeline(slot.getStyle().getLayoutGroup(),
+                    l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        }
+
+        void sync(UIDocument document) {
+            Box slotBox = slot.box();
+            Box sourceBox = source == null ? null : source.box();
+            if (box() == null || slotBox == null || sourceBox == null) {
+                drop(document);
+                return;
+            }
+            float w = sourceBox.width();
+            float h = sourceBox.height();
+            if (hugText && source instanceof UIText text) {
+                Measurable.Size natural = text.measure(new Measurable.Constraints(Float.NaN, Float.NaN,
+                        Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, Measurable.Fit.MAX_CONTENT,
+                        Measurable.Fit.MAX_CONTENT));
+                FloatRect padding = sourceBox.padding();
+                FloatRect border = sourceBox.border();
+                w = Math.min(w, natural.width() + padding.left + padding.right + border.left + border.right);
+            }
+            if (w != width || h != height) {
+                width = w;
+                height = h;
+                StyleGroup.inlinePipeline(slot.getStyle().getLayoutGroup(), l -> l.width(width).height(height));
+            }
+            if (mirror == null || mirrored != source) {
+                drop(document);
+                mirror = document.boxes().mirror(source, slotBox);
+                mirrored = source;
+            }
+            // THE SOURCE'S MARGINS place a hosted copy inside the slot; the slot is already the gap.
+            FloatRect margin = mirror.margin();
+            mirror.setTransform(margin.left == 0f && margin.top == 0f
+                    ? null : Transform.translate(-margin.left, -margin.top));
+        }
+
+        void drop(@Nullable UIDocument document) {
+            if (mirror != null && document != null) document.boxes().unmirror(mirror);
+            mirror = null;
+            mirrored = null;
+        }
     }
 
 }

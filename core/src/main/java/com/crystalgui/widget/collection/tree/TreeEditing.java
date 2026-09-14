@@ -36,7 +36,7 @@ import com.crystalgui.widget.overlay.ContextMenu;
  * TreeEditing.contributeMenu(CommandRegistry.global(), NODE_MENU); // once: its six rows in that menu
  *
  * // the renderer
- * public UIElement createTemplate() { ... editing.installRow(row, field); ... }
+ * public UIElement createTemplate() { ... editing.installRow(row, icon, label, field); ... }
  * public void bind(Node item, TreeRow<Node> row, int i, UIElement template) {
  *     editing.bindRow(template, label, field, item);
  * }
@@ -295,10 +295,13 @@ public final class TreeEditing<T> {
 
     // ── Rows ─────────────────────────────────────────────────────────────────────────────────────
 
-    /** Wires a row once, from {@code createTemplate}: its drag, and its rename field. */
-    public void installRow(UIElement row, TextField field) {
+    /**
+     * Wires a row once, from {@code createTemplate}: its drag, whose ghost is a live copy of {@code icon} (null for
+     * none) and {@code label}, and its rename field.
+     */
+    public void installRow(UIElement row, @Nullable UIElement icon, UIElement label, TextField field) {
         rows.installEditor(row, field);
-        dragAndDrop.installRow(row, field);
+        dragAndDrop.installRow(row, icon, label, field);
     }
 
     /** Puts a row's state in line with {@code item}, from every {@code bind}: the rename field, and the cut mark. */

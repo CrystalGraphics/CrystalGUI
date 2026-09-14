@@ -313,6 +313,7 @@ editor scheme's.
 | `--ghost-bg` | `#2F5F9EC0` | crystal-dark.css |
 | `--ghost-label-bg` | `#3C3F41F0` | crystal-dark.css |
 | `--ghost-label-fg` | `var(--fg-on-accent)` | base.css |
+| `--ghost-row-bg` | `#191A1CA0` | crystal-dark.css |
 | `--graph-canvas` | `var(--surface-editor)` | base.css |
 | `--graph-collapse-fg` | `var(--fg-secondary)` | base.css |
 | `--graph-collapse-hover-fg` | `var(--fg)` | base.css |

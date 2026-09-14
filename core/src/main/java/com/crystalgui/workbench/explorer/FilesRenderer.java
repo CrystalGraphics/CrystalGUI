@@ -131,7 +131,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         tips.put(row, tip);
         slots.put(row, new ProjectFileTree.RowParts(twisty, icon, label, badge, editor));
         // The rename field, and the drag: the selection when the pressed row is in it, else this row.
-        tree.editing().installRow(row, editor);
+        tree.editing().installRow(row, icon, label, editor);
         // A FOLDER TOGGLES ON ONE CLICK; A FILE OPENS ON TWO. Not one rule for both, and the
         // difference is not a compromise -- the two rows mean different things.
         //

@@ -159,7 +159,7 @@ public class TreeEditingTest extends UiDocumentTestBase {
                 UIText label = new UIText("");
                 TextField field = new TextField();
                 row.append(label, field);
-                editing.installRow(row, field);
+                editing.installRow(row, null, label, field);
                 return row;
             }
 
