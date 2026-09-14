@@ -56,6 +56,19 @@ public class LibraryPanelTest extends UiDocumentTestBase {
     }
 
     @Test
+    public void aKindInTwoCategoriesHasACardInEach() {
+        for (LibraryPanel.Row row : panel.tree().roots()) {
+            if (row instanceof LibraryPanel.Folder folder && folder.label().equals("Controls")) {
+                panel.tree().setExpanded(folder, true);
+            }
+        }
+        settle();
+
+        assertEquals("Button is in Common and in Controls", 2,
+                kinds().stream().filter(Button.NAME::equals).count());
+    }
+
+    @Test
     public void compactRowsListEachKindOnARowOfItsOwn() {
         panel.setRows(true);
         settle();

@@ -36,6 +36,8 @@ public class LibrarySamplesTest extends UiDocumentTestBase {
             cards.put(entry.kind(), card);
         }
         PreviewStyles.of(document).sync();
+        // BUILT A FEW A FRAME, so every one has had its turn, then a frame to lay out and fit.
+        for (int i = 0; i < 400 && !PreviewBuilds.of(document).isIdle(); i++) frame();
         for (int i = 0; i < 4; i++) frame();
 
         List<String> empty = new ArrayList<>();
