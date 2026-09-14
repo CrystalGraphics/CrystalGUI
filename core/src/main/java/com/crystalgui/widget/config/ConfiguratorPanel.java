@@ -4,6 +4,10 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.visual.Overflow;
+import dev.vfyjxf.taffy.geometry.FloatRect;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.ui.dom.Name;
@@ -77,11 +81,11 @@ public class ConfiguratorPanel extends ScrollerView {
      * the width a band wants is the one thing CSS here cannot name: it belongs to the scroller, several
      * levels up.</p>
      *
-     * <p><b>Scroll-exempt, which is what stops this closing a loop.</b> The extent is the widest thing in
-     * the panel; a band stretched TO the extent would then be that widest thing, and the extent would be
-     * defined in terms of itself. Exempting it from the scroll measurement means it follows the width
-     * without ever contributing to it — the same rule {@code ListView} states for anything pinned to a
-     * row's trailing edge.</p>
+     * <p><b>Counted by its contents, which is what stops this closing a loop.</b> The extent is the widest thing
+     * in the panel; a band stretched TO the extent would then be that widest thing, and the extent would be
+     * defined in terms of itself — so a band never narrowed again once the panel had been wide.
+     * {@link #scrollExtent} counts a band by what it holds, so a long heading still widens the panel while the
+     * stretch never does. Scroll-exempt as well, so a band does not slide away when the panel scrolls.</p>
      */
     @Override
     protected void connected() {
@@ -104,6 +108,55 @@ public class ConfiguratorPanel extends ScrollerView {
             node.setScrollExempt(true);
             StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> l.width(span));
         }
+    }
+
+    /**
+     * The width the content needs, counting a section band by what it holds rather than by its box — the box is
+     * stretched TO this width, so counting it would hold the panel at the widest it has ever been. Heights are
+     * read from the box as usual.
+     */
+    @Override
+    public float scrollExtent(boolean horizontal) {
+        if (!horizontal || box() == null) return -1f;
+        return widestContent(this, 0f);
+    }
+
+    /** The furthest right edge under {@code parent}, in {@code parent}'s space offset by {@code left}. */
+    private static float widestContent(UIElement parent, float left) {
+        float widest = 0f;
+        for (UIElement child : parent.composedChildren()) {
+            // A bar pinned to the viewport is not content the rows need room for.
+            if (child.isScrollExempt() && !(child instanceof HeaderControl)) continue;
+            Box box = child.box();
+            if (box == null) continue;
+            float x = left + box.x();
+            if (child instanceof HeaderControl) {
+                widest = Math.max(widest, x + naturalWidth(child, box));
+                continue;
+            }
+            widest = Math.max(widest, x + box.width());
+            // A NESTED SCROLLER keeps its overflow to itself: only its own box is this panel's business.
+            if (child.getStyle().computed().get(StylePropertyRegistry.OVERFLOW) == Overflow.VISIBLE) {
+                widest = Math.max(widest, widestContent(child, x));
+            }
+        }
+        return widest;
+    }
+
+    /**
+     * How wide a band's contents are laid end to end: its padding, and each part that does not grow with its
+     * margins. A part that grows is taking the band's stretch, which is exactly what must not be counted.
+     */
+    private static float naturalWidth(UIElement band, Box box) {
+        FloatRect padding = box.padding();
+        float width = padding.left + padding.right;
+        for (UIElement part : band.composedChildren()) {
+            Box partBox = part.box();
+            if (partBox == null || part.getStyle().computed().get(LayoutProperties.FLEX_GROW) > 0f) continue;
+            FloatRect margin = partBox.margin();
+            width += margin.left + partBox.width() + margin.right;
+        }
+        return width;
     }
 
     /**
