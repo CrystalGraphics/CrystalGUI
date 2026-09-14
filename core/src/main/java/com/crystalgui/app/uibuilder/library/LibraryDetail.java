@@ -14,7 +14,7 @@ import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 
 /**
- * The Library's foot: the selected kind drawn larger, with its name, its tag and what it is for. Hidden while
+ * The Library's foot: the selected kind or starter drawn larger, with its name, its tag and what it is for. Hidden while
  * nothing is selected. As tall as its preview however narrow the panel: the words scroll beside it.
  *
  * <pre>{@code
@@ -62,7 +62,7 @@ public final class LibraryDetail extends UIElement {
         display(this, entry != null);
         if (entry == null) return;
         name.setText(entry.label());
-        tag.setText(entry.kind().toString());
+        tag.setText(entry.isStarter() ? LibraryStarters.FOLDER : entry.kind().toString());
         String about = entry.info().description();
         description.setText(about == null ? "" : about);
         display(description, about != null);

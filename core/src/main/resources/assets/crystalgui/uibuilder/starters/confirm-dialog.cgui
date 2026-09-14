@@ -3,9 +3,9 @@
   "root": {
     "kind": "element",
     "style": {
-      "width": "180px",
       "flex-direction": "column",
-      "gap": "6px 6px",
+      "width": "220px",
+      "gap": "8px 8px",
       "padding-top": "12px",
       "padding-right": "12px",
       "padding-bottom": "12px",
@@ -28,14 +28,42 @@
           "font-size": "13"
         },
         "state": {
-          "text": "Title"
+          "text": "Delete world?"
         }
       },
       {
         "kind": "text",
         "state": {
-          "text": "A line of text."
+          "text": "This cannot be undone."
         }
+      },
+      {
+        "kind": "element",
+        "style": {
+          "flex-direction": "row",
+          "align-items": "center",
+          "gap": "4px 4px"
+        },
+        "children": [
+          {
+            "kind": "element",
+            "style": {
+              "flex-grow": "1"
+            }
+          },
+          {
+            "kind": "button",
+            "state": {
+              "text": "Cancel"
+            }
+          },
+          {
+            "kind": "button",
+            "state": {
+              "text": "Delete"
+            }
+          }
+        ]
       }
     ]
   }

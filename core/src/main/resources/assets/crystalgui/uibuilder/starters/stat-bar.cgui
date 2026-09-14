@@ -5,24 +5,30 @@
     "style": {
       "flex-direction": "row",
       "align-items": "center",
+      "width": "220px",
       "gap": "8px 8px"
     },
     "children": [
       {
         "kind": "text",
         "state": {
-          "text": "Label"
+          "text": "Health"
         }
       },
       {
-        "kind": "textfield",
+        "kind": "progressbar",
         "style": {
-          "width": "60px",
-          "outline-width": "1px",
-          "outline-color": "#3C3C3C"
+          "width": "0px",
+          "flex-grow": "1"
         },
         "state": {
-          "placeholder": "Value"
+          "fraction": 0.9
+        }
+      },
+      {
+        "kind": "text",
+        "state": {
+          "text": "18 / 20"
         }
       }
     ]

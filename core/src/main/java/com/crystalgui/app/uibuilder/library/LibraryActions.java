@@ -82,7 +82,9 @@ public final class LibraryActions {
                     LibraryCatalog.Entry card = context.data().get(LibraryPanel.ENTRY);
                     UserLibrary user = panel.userLibrary();
                     InputDialog.ask(UIElement.sourceOf(context), "New Group", "Name", "", name -> {
-                        if (user.createGroup(name) && card != null) user.addToGroup(name.trim(), card.kind());
+                        if (user.createGroup(name) && card != null && !card.isStarter()) {
+                            user.addToGroup(name.trim(), card.kind());
+                        }
                     });
                 }));
         registry.register(Command.of(RENAME_GROUP, "Rename Group…")
@@ -108,7 +110,7 @@ public final class LibraryActions {
                 .enabledWhereData(data -> {
                     LibraryCatalog.Group group = userGroup(data);
                     LibraryCatalog.Entry card = data.get(LibraryPanel.ENTRY);
-                    return group != null && card != null && group.kinds().contains(card.kind());
+                    return group != null && card != null && !card.isStarter() && group.kinds().contains(card.kind());
                 })
                 .runWithData(data -> {
                     LibraryCatalog.Group group = userGroup(data);
@@ -125,7 +127,7 @@ public final class LibraryActions {
         LibraryPanel panel = context.data().get(LibraryPanel.LIBRARY);
         LibraryCatalog.Entry card = context.data().get(LibraryPanel.ENTRY);
         List<MenuEntry> rows = new ArrayList<>();
-        if (panel != null && card != null) {
+        if (panel != null && card != null && !card.isStarter()) {
             List<LibraryCatalog.Group> groups = panel.userLibrary().groups();
             for (int i = 0; i < groups.size(); i++) {
                 LibraryCatalog.Group group = groups.get(i);

@@ -11,8 +11,10 @@ import java.util.Map;
 
 import org.junit.Test;
 
+import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.taskbar.Taskbar;
+import com.crystalgui.ui.dom.GlyphRole;
 import com.crystalgui.ui.dom.KindInfo;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.Preview;
@@ -40,6 +42,37 @@ public class LibraryCatalogTest {
         LibraryCatalog.Node folder = catalog.tree().get(0);
         assertEquals("testmod", folder.label());
         assertEquals(GIZMO, folder.children().get(0).entry().kind());
+    }
+
+    /** A starter is listed ahead of every group and category, found by a search, and known by its id. */
+    @Test
+    public void startersComeFirstAndAreSearched() {
+        UIElement snippet = new UIElement();
+        LibraryCatalog.Entry panel = LibraryCatalog.Entry.starter("testmod:starters/panel", "Panel",
+                KindInfo.named("Panel").inCategory(LibraryStarters.FOLDER).synonyms("box")
+                        .glyph("testmod:nodes/ui/panel", GlyphRole.LAYOUT).starter(() -> snippet));
+        LibraryCatalog catalog = catalog(Map.of(GIZMO, KindInfo.derived())).withStarters(List.of(panel));
+
+        LibraryCatalog.Node first = catalog.tree().get(0);
+        assertEquals(LibraryStarters.FOLDER, first.label());
+        assertSame(panel, first.children().get(0).entry());
+        assertEquals("testmod", catalog.tree().get(1).label());
+
+        assertSame(panel, catalog.search("box").get(0).entry());
+        assertSame(panel, catalog.entry("starter:testmod:starters/panel"));
+        assertNull(panel.kind());
+        assertSame(snippet, panel.build());
+        assertEquals("testmod:nodes/ui/panel", panel.glyph().icon());
+    }
+
+    /** A starter that declares no glyph draws the component mark rather than failing wherever it is listed. */
+    @Test
+    public void aStarterWithNoGlyphDrawsTheComponentMark() {
+        LibraryCatalog.Entry bare = LibraryCatalog.Entry.starter("testmod:starters/bare", "Bare",
+                KindInfo.named("Bare").starter(UIElement::new));
+
+        assertEquals(KindGlyphs.COMPONENT_ICON, bare.glyph().icon());
+        assertEquals(GlyphRole.LAYOUT, bare.glyph().role());
     }
 
     @Test
@@ -102,11 +135,14 @@ public class LibraryCatalogTest {
         }
     }
 
+    /** The shipped starters, then Common: what is reached for most, ahead of the categories. */
     @Test
-    public void commonComesFirst() {
-        LibraryCatalog.Node first = LibraryCatalog.current().tree().get(0);
-        assertEquals("Common", first.label());
-        assertEquals(Button.NAME, first.children().get(2).entry().kind());
+    public void startersThenCommonComeFirst() {
+        List<LibraryCatalog.Node> roots = LibraryCatalog.current().tree();
+        assertEquals(LibraryStarters.FOLDER, roots.get(0).label());
+        assertEquals(LibraryStarters.ALL.size(), roots.get(0).children().size());
+        assertEquals("Common", roots.get(1).label());
+        assertEquals(Button.NAME, roots.get(1).children().get(2).entry().kind());
     }
 
     private static LibraryCatalog catalog(Map<Name, KindInfo> kinds) {

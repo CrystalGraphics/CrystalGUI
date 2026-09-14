@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder.library;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
@@ -40,6 +41,18 @@ public class LibraryPanelTest extends UiDocumentTestBase {
         host.append(panel);
         document.append(host);
         settle();
+    }
+
+    /** The Starters folder draws each snippet as its card, the way a kind's card draws its sample. */
+    @Test
+    public void aStarterHasACardDrawingItsSnippet() {
+        expand(LibraryStarters.FOLDER);
+        for (int i = 0; i < 30; i++) frame();
+
+        PreviewCard card = panel.realisedCards().stream()
+                .filter(shown -> shown.entry() == LibraryStarters.CARD).findFirst().orElse(null);
+        assertNotNull("the Card starter has no card on screen", card);
+        assertNotNull("the Card starter's snippet was never built", card.sample());
     }
 
     @Test
@@ -110,7 +123,7 @@ public class LibraryPanelTest extends UiDocumentTestBase {
         for (LibraryPanel.Row row : panel.tree().roots()) {
             if (row instanceof LibraryPanel.Folder folder) folders.add(folder.label());
         }
-        assertEquals(List.of("Common", "Favourites"), folders.subList(0, 2));
+        assertEquals(List.of(LibraryStarters.FOLDER, "Common", "Favourites"), folders.subList(0, 3));
         List<PreviewCard> buttons = panel.realisedCards().stream()
                 .filter(card -> card.entry().kind().equals(Button.NAME)).toList();
         assertEquals("a card in Common and one in Favourites", 2, buttons.size());

@@ -52,6 +52,9 @@ public final class KindGlyphs {
 
     private static final String ICONS = "crystalgui:nodes/ui/";
 
+    /** The mark for something that says nothing about itself. */
+    public static final String COMPONENT_ICON = ICONS + "component";
+
     private static final Glyph COLUMN = layout("column", "Column layout");
     private static final Glyph ROW = layout("row", "Row layout");
     private static final Glyph WRAP = layout("wrap", "Wrapping layout");
@@ -86,7 +89,7 @@ public final class KindGlyphs {
         }
 
         boolean addon = !Name.DEFAULT_NAMESPACE.equals(kind.namespace());
-        return new Glyph(ICONS + "component", addon ? GlyphRole.ADDON : GlyphRole.LAYOUT,
+        return new Glyph(COMPONENT_ICON, addon ? GlyphRole.ADDON : GlyphRole.LAYOUT,
                 addon ? displayName(node, info) + " · " + kind.namespace() : displayName(node, info));
     }
 
@@ -143,7 +146,7 @@ public final class KindGlyphs {
         if (declared != null) return declared;
         if (UIElement.NAME.equals(kind)) return new Glyph(FRAME.icon(), FRAME.role(), "Element");
         boolean addon = !Name.DEFAULT_NAMESPACE.equals(kind.namespace());
-        return new Glyph(ICONS + "component", addon ? GlyphRole.ADDON : GlyphRole.LAYOUT, kind.local());
+        return new Glyph(COMPONENT_ICON, addon ? GlyphRole.ADDON : GlyphRole.LAYOUT, kind.local());
     }
 
     // ── The chain ────────────────────────────────────────────────────────────────────────────────

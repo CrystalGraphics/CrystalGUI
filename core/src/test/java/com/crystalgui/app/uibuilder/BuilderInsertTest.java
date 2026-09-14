@@ -18,8 +18,9 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.insert.BuilderInsert;
-import com.crystalgui.app.uibuilder.insert.BuilderStarters;
 import com.crystalgui.app.uibuilder.insert.InsertTarget;
+import com.crystalgui.app.uibuilder.library.LibraryCatalog;
+import com.crystalgui.app.uibuilder.library.LibraryStarters;
 import com.crystalgui.app.uibuilder.library.UserLibrary;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
@@ -214,7 +215,7 @@ public class BuilderInsertTest extends UiDocumentTestBase {
     @Test
     public void startersPlace() {
         open();
-        for (BuilderStarters.Starter starter : BuilderStarters.ALL) {
+        for (LibraryCatalog.Entry starter : LibraryStarters.ALL) {
             assertFalse(starter.label() + " is empty", starter.build().children().isEmpty());
         }
         editor.selection().selectOnly(model.root());

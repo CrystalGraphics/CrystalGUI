@@ -10,9 +10,11 @@ import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
+import com.crystalgui.ui.dom.GlyphRole;
 import com.crystalgui.ui.dom.KindInfo;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.Preview;
@@ -20,14 +22,15 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
 /**
- * Every kind a document can place, filed as the Library panel lists it: shipped groups first, then a tree of
- * categories, each kind with the preview a card draws.
+ * Everything a document can place, filed as the Library panel lists it: the starters, then the groups, then a tree
+ * of categories, each entry with the preview a card draws.
  *
  * <pre>{@code
  * LibraryCatalog catalog = LibraryCatalog.current();
- * catalog.roots("");        // Common, then Controls ▸, Layout ▸, … and one folder per addon namespace
+ * catalog.roots("");        // Starters, Common, then Controls ▸, Layout ▸, … and one folder per addon namespace
  * catalog.roots("press");   // a ranked flat list — Button first, by its synonym
  * catalog.entry(Button.NAME).preview();
+ * catalog.entry("starter:crystalgui:uibuilder/starters/card").build();
  * }</pre>
  *
  * <p>A kind is listed when it can be built and its {@link KindInfo#listed} is true — an addon's widget needs
@@ -35,8 +38,40 @@ import com.crystalgui.ui.dom.UIElementRegistry;
  */
 public final class LibraryCatalog {
 
-    /** One placeable kind. */
-    public record Entry(Name kind, String label, KindInfo info) {
+    /**
+     * One thing to place: a kind, or a starter — a snippet of several nodes, which is no one kind.
+     *
+     * <pre>{@code
+     * new Entry(Button.NAME, "Button", info);                             // id "kind:crystalgui:button"
+     * Entry.starter("crystalgui:uibuilder/starters/card", "Card", info);   // kind null; info carries the build
+     * }</pre>
+     *
+     * @param id   what a card, a selection and a recent pick know it by
+     * @param kind the kind, or null for a starter
+     */
+    public record Entry(String id, @Nullable Name kind, String label, KindInfo info) {
+
+        /** A kind. */
+        public Entry(Name kind, String label, KindInfo info) {
+            this("kind:" + kind, kind, label, info);
+        }
+
+        /** A starter, built by {@code info}'s starter and drawn by its glyph. */
+        public static Entry starter(String asset, String label, KindInfo info) {
+            if (info.starter() == null) throw new IllegalArgumentException("a starter's info must build it: " + asset);
+            return new Entry("starter:" + asset, null, label, info);
+        }
+
+        public boolean isStarter() {
+            return kind == null;
+        }
+
+        /** What a row and a card draw for it: a kind's own glyph, or the one a starter declares, else a component. */
+        public KindGlyphs.Glyph glyph() {
+            if (kind != null) return KindGlyphs.ofKind(kind);
+            String icon = info.glyphIcon() != null ? info.glyphIcon() : KindGlyphs.COMPONENT_ICON;
+            return new KindGlyphs.Glyph(icon, info.glyphRole() != null ? info.glyphRole() : GlyphRole.LAYOUT, label);
+        }
 
         public Preview preview() {
             return info.preview();
@@ -55,7 +90,7 @@ public final class LibraryCatalog {
         /** Where it files: its category's segments, else its namespace. */
         public List<String> path() {
             List<String> segments = info.categorySegments();
-            return segments.isEmpty() ? List.of(kind.namespace()) : segments;
+            return segments.isEmpty() && kind != null ? List.of(kind.namespace()) : segments;
         }
     }
 
@@ -89,12 +124,18 @@ public final class LibraryCatalog {
     }
 
     private final List<Entry> entries;
+    private final List<Entry> starters;
     private final Map<Name, Entry> byKind = new LinkedHashMap<>();
+    /** Starters then kinds, which is also the order a search considers them in. */
+    private final Map<String, Entry> byId = new LinkedHashMap<>();
     private final List<Group> groups;
 
-    private LibraryCatalog(List<Entry> entries, List<Group> groups) {
+    private LibraryCatalog(List<Entry> entries, List<Entry> starters, List<Group> groups) {
         this.entries = List.copyOf(entries);
+        this.starters = List.copyOf(starters);
         for (Entry entry : this.entries) byKind.put(entry.kind(), entry);
+        for (Entry entry : this.starters) byId.put(entry.id(), entry);
+        for (Entry entry : this.entries) byId.put(entry.id(), entry);
         this.groups = List.copyOf(groups);
     }
 
@@ -111,7 +152,7 @@ public final class LibraryCatalog {
         }
         List<Group> groups = new ArrayList<>(LibraryGroups.SHIPPED);
         groups.addAll(userGroups);
-        return of(buildable, UIElementRegistry::infoOf, groups);
+        return of(buildable, UIElementRegistry::infoOf, groups).withStarters(LibraryStarters.ALL);
     }
 
     /** A catalog over {@code kinds}, each already known to be buildable, described by {@code info}. */
@@ -124,12 +165,22 @@ public final class LibraryCatalog {
             entries.add(new Entry(kind, label, described));
         }
         entries.sort(Comparator.comparing(Entry::label, String.CASE_INSENSITIVE_ORDER));
-        return new LibraryCatalog(entries, groups);
+        return new LibraryCatalog(entries, List.of(), groups);
     }
 
-    /** Every listed entry, by label. */
+    /** This catalog with {@code starters} listed ahead of everything, in the order given. */
+    public LibraryCatalog withStarters(List<Entry> starters) {
+        return new LibraryCatalog(entries, starters, groups);
+    }
+
+    /** Every listed kind, by label. */
     public List<Entry> entries() {
         return entries;
+    }
+
+    /** The starters, in the order they are listed. */
+    public List<Entry> starters() {
+        return starters;
     }
 
     /** The shipped groups, then the user's, in the order the Library lists them. */
@@ -142,14 +193,25 @@ public final class LibraryCatalog {
         return byKind.get(kind);
     }
 
+    /** A kind or a starter by its {@link Entry#id}. */
+    @Nullable
+    public Entry entry(String id) {
+        return byId.get(id);
+    }
+
     /** The browsing tree for a blank query; a ranked flat list for anything else. */
     public List<Node> roots(String query) {
         return query.trim().isEmpty() ? tree() : search(query);
     }
 
-    /** Groups first, then categories by name, each holding its sub-categories before its entries. */
+    /** Starters first, then groups, then categories by name, each holding its sub-categories before its entries. */
     public List<Node> tree() {
         List<Node> roots = new ArrayList<>();
+        if (!starters.isEmpty()) {
+            List<Node> snippets = new ArrayList<>(starters.size());
+            for (Entry starter : starters) snippets.add(leaf(starter));
+            roots.add(new Node(LibraryStarters.FOLDER, null, snippets));
+        }
         for (Group group : groups) {
             List<Node> members = new ArrayList<>();
             for (Name kind : group.kinds()) {
@@ -174,7 +236,7 @@ public final class LibraryCatalog {
     public List<Node> search(String query) {
         SearchQuery parsed = SearchQuery.of(query);
         List<Ranked> ranked = new ArrayList<>();
-        for (Entry entry : entries) {
+        for (Entry entry : byId.values()) {
             SearchMatch match = SearchMatcher.match(parsed, entry.label(), SearchMatch.FIELD_PRIMARY);
             match = SearchMatch.best(match, SearchMatcher.matchAny(parsed, entry.info().synonyms(), SearchMatch.FIELD_ALIAS));
             match = SearchMatch.best(match, SearchMatcher.matchAny(parsed, entry.path(), SearchMatch.FIELD_CONTEXT));

@@ -14,7 +14,6 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.app.uibuilder.document.NewNode;
 import com.crystalgui.app.uibuilder.glyph.GlyphView;
-import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.core.collection.list.ItemSizeStrategy;
 import com.crystalgui.core.collection.list.VariableHeightStrategy;
 import com.crystalgui.core.collection.tree.TreeRow;
@@ -67,7 +66,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     /** This panel, for a command that acts on one. */
     public static final DataKey<LibraryPanel> LIBRARY = DataKey.create("uibuilder.library", LibraryPanel.class);
 
-    /** The kind a card or a compact row shows, for a command run from its menu. */
+    /** The kind or starter a card or a compact row shows, for a command run from its menu. */
     public static final DataKey<LibraryCatalog.Entry> ENTRY =
             DataKey.create("uibuilder.library.entry", LibraryCatalog.Entry.class);
 
@@ -371,10 +370,10 @@ public final class LibraryPanel extends UIElement implements DataProvider {
 
     /** Selects the card for {@code entry}, or clears the selection. */
     public void select(@Nullable LibraryCatalog.Entry entry) {
-        if (Objects.equals(entry == null ? null : entry.kind(), selected == null ? null : selected.kind())) return;
+        if (Objects.equals(entry == null ? null : entry.id(), selected == null ? null : selected.id())) return;
         selected = entry;
         for (PreviewCard card : cards.values()) {
-            toggle(card, PreviewCard.SELECTED_CLASS, sameKind(card.entry(), selected));
+            toggle(card, PreviewCard.SELECTED_CLASS, same(card.entry(), selected));
         }
         onSelect.emit(entry);
     }
@@ -425,7 +424,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
                        List<Row> out) {
         if (run.isEmpty()) return;
         if (rows) {
-            for (LibraryCatalog.Entry entry : run) out.add(new Item(path + "|" + entry.kind(), entry, group));
+            for (LibraryCatalog.Entry entry : run) out.add(new Item(path + "|" + entry.id(), entry, group));
         } else {
             for (int start = 0; start < run.size(); start += perStrip) {
                 List<LibraryCatalog.Entry> strip = List.copyOf(run.subList(start, Math.min(run.size(), start + perStrip)));
@@ -603,7 +602,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             if (compact) {
                 LibraryCatalog.Entry entry = ((Item) item).entry();
                 label.setText(entry.label());
-                glyph.showKind(entry.kind());
+                glyph.showGlyph(entry.glyph());
             }
             if (item instanceof Strip run) bindStrip(run);
             else park(0);
@@ -618,7 +617,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             return out;
         }
 
-        /** Moves each kind's card into its place here; whatever this strip held past the run is parked. */
+        /** Moves each entry's card into its place here; whatever this strip held past the run is parked. */
         private void bindStrip(Strip run) {
             UIDocument window = document();
             if (window == null) return;
@@ -638,9 +637,9 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         }
     }
 
-    /** The kind's card in {@code folder}, made on first sight. @see #cards */
+    /** The entry's card in {@code folder}, made on first sight. @see #cards */
     private PreviewCard cardFor(String folder, LibraryCatalog.Entry entry, UIDocument window) {
-        String key = folder + "|" + entry.kind();
+        String key = folder + "|" + entry.id();
         PreviewCard card = cards.get(key);
         if (card != null) return card;
         card = new PreviewCard(PreviewStyles.of(window).group());
@@ -649,7 +648,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             if (shown != null) press(shown, element, event);
         }, false, true);
         card.show(entry);
-        toggle(card, PreviewCard.SELECTED_CLASS, sameKind(entry, selected));
+        toggle(card, PreviewCard.SELECTED_CLASS, same(entry, selected));
         cards.put(key, card);
         return card;
     }
@@ -673,13 +672,14 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     /** The card's menu for a card or compact row, the group's for a user's group, else the panel's. */
     private ContextMenu menuFor(UIElement pressed) {
         for (UIElement at = pressed; at != null && at != tree(); at = at.parent() instanceof UIElement up ? up : null) {
+            // A STARTER JOINS NO GROUP, so its card offers what the panel does.
             if (at instanceof PreviewCard card && card.entry() != null) {
                 select(card.entry());
-                return ContextMenu.of(CARD_MENU);
+                return ContextMenu.of(card.entry().isStarter() ? PANEL_MENU : CARD_MENU);
             }
             RowView view = views.get(at);
             if (view == null) continue;
-            if (view.bound instanceof Item) return ContextMenu.of(CARD_MENU);
+            if (view.bound instanceof Item item) return ContextMenu.of(item.entry().isStarter() ? PANEL_MENU : CARD_MENU);
             if (view.bound instanceof Folder folder && folder.group() != null && folder.group().user()) {
                 return ContextMenu.of(GROUP_MENU);
             }
@@ -699,7 +699,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         }
         UIDocument window = document();
         if (window == null) return;
-        ghost.follow(window, KindGlyphs.ofKind(entry.kind()).icon(), entry.label());
+        ghost.follow(window, entry.glyph().icon(), entry.label());
         Drag.start(source, event.getPosition().x(), event.getPosition().y(), CgMouseCodes.LEFT_BUTTON,
                 new NewNode(entry.label(), entry.kind(), entry::build), Drag.DEFAULT_THRESHOLD_PX, (x, y, sx, sy, dx, dy) -> { });
     }
@@ -720,8 +720,8 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         }
     }
 
-    private static boolean sameKind(@Nullable LibraryCatalog.Entry a, @Nullable LibraryCatalog.Entry b) {
-        return a != null && b != null && a.kind().equals(b.kind());
+    private static boolean same(@Nullable LibraryCatalog.Entry a, @Nullable LibraryCatalog.Entry b) {
+        return a != null && b != null && a.id().equals(b.id());
     }
 
     private static void toggle(UIElement element, String className, boolean on) {

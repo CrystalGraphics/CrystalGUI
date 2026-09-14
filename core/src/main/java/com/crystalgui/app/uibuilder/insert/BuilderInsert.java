@@ -23,7 +23,6 @@ import com.crystalgui.core.storage.ConfigRecord;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.serialization.Codecs;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.GlyphRole;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.surface.insert.InsertMenu;
@@ -187,8 +186,8 @@ public final class BuilderInsert implements InsertSource {
     // ── What it offers ──────────────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Recent picks first, then the starters, then the Library's groups — shipped and the user's — then every listed
-     * kind by category. A recent pick and a group's member are shortcuts to a kind listed under its category too.
+     * Recent picks first, then the Library's starters and groups — shipped and the user's — then every listed kind
+     * by category. A recent pick and a group's member are shortcuts to an entry listed under its own path too.
      */
     @Override
     public List<Insertable> offers() {
@@ -198,45 +197,27 @@ public final class BuilderInsert implements InsertSource {
         recents.reload();
         List<Insertable> out = new ArrayList<>();
         for (String id : recents.get()) {
-            Offer offer = offerFor(id, catalog);
-            if (offer != null) out.add(offer.shortcutUnder("Recent"));
+            LibraryCatalog.Entry entry = catalog.entry(id);
+            if (entry != null) out.add(offer(entry).shortcutUnder("Recent"));
         }
-        for (BuilderStarters.Starter starter : BuilderStarters.ALL) out.add(starterOffer(starter));
+        for (LibraryCatalog.Entry starter : catalog.starters()) out.add(offer(starter));
         for (LibraryCatalog.Group group : catalog.groups()) {
             for (Name kind : group.kinds()) {
                 LibraryCatalog.Entry entry = catalog.entry(kind);
-                if (entry != null) out.add(kindOffer(entry).shortcutUnder(group.label()));
+                if (entry != null) out.add(offer(entry).shortcutUnder(group.label()));
             }
         }
         List<LibraryCatalog.Entry> entries = new ArrayList<>(catalog.entries());
         entries.sort(Comparator.comparing((LibraryCatalog.Entry entry) -> String.join("/", entry.path()),
                 String.CASE_INSENSITIVE_ORDER).thenComparing(LibraryCatalog.Entry::label, String.CASE_INSENSITIVE_ORDER));
-        for (LibraryCatalog.Entry entry : entries) out.add(kindOffer(entry));
+        for (LibraryCatalog.Entry entry : entries) out.add(offer(entry));
         return out;
     }
 
-    @Nullable
-    private Offer offerFor(String id, LibraryCatalog catalog) {
-        if (id.startsWith("kind:")) {
-            LibraryCatalog.Entry entry = catalog.entry(Name.parse(id.substring("kind:".length())));
-            return entry == null ? null : kindOffer(entry);
-        }
-        for (BuilderStarters.Starter starter : BuilderStarters.ALL) {
-            if (starter.id().equals(id)) return starterOffer(starter);
-        }
-        return null;
-    }
-
-    private Offer kindOffer(LibraryCatalog.Entry entry) {
-        KindGlyphs.Glyph glyph = KindGlyphs.ofKind(entry.kind());
-        String about = entry.info().description();
-        return new Offer(this, "kind:" + entry.kind(), entry.label(), entry.path(), entry.info().synonyms(),
-                about, glyph.icon(), glyph.role().cssClass(), false, entry::build);
-    }
-
-    private Offer starterOffer(BuilderStarters.Starter starter) {
-        return new Offer(this, starter.id(), starter.label(), List.of("Starters"), starter.synonyms(),
-                starter.description(), starter.icon(), GlyphRole.LAYOUT.cssClass(), false, starter::build);
+    private Offer offer(LibraryCatalog.Entry entry) {
+        KindGlyphs.Glyph glyph = entry.glyph();
+        return new Offer(this, entry.id(), entry.label(), entry.path(), entry.info().synonyms(),
+                entry.info().description(), glyph.icon(), glyph.role().cssClass(), false, entry::build);
     }
 
     /** Places a fresh node at the current place, and remembers the pick. */
