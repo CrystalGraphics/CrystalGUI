@@ -1303,8 +1303,12 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                LocalConfigStorage (one real directory, atomic writes, and `scoped`
                                answering a real SUBDIRECTORY), ScopedConfigStorage (the default
                                `scoped` — a key prefix), InMemoryConfigStorage, and StorageLayout —
-                               the `crystalgui/` tree stated ONCE: workspace-config/ (durable),
-                               cache/ (deletable at any moment), projects/ (the user's own files).
+                               the `crystalgui/` tree stated ONCE: workspace-config/ (durable —
+                               apps/ an application's, projects/<key>/ a workspace's, extensions/
+                               what a user made with an extension), cache/ (deletable at any
+                               moment), projects/ (the user's own files). ConfigRecord<T> is one
+                               typed JSON record in a store: codec + default, update, onChanged,
+                               an unreadable file left alone.
                                A host answers WHERE its installation is and nothing else; nothing
                                outside StorageLayout may spell those segments.
                                plan/crystalgui/fs-rewrite/fs-storage-layout.md

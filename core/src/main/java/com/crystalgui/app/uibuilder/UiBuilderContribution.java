@@ -81,7 +81,7 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                 ToolWindowKind.of(LIBRARY_PANEL, "Library")
                         .icon("crystalgui:toolwindows/library")
                         .region(DockRegion.SIDEBAR)
-                        .view(new LibraryToolWindow(workbench)));
+                        .view(new LibraryToolWindow(workbench, ID)));
 
         return () -> {
             library.dispose();

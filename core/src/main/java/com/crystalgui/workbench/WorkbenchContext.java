@@ -254,19 +254,23 @@ public interface WorkbenchContext extends SettingsScope {
     Path cacheDirectory(String name);
 
     /**
-     * A private store for an extension's own records — what a user chose, kept for them and never shipped with a
-     * project — or null on a host with nowhere private to keep one.
+     * An extension's own durable store — what a user made with it, the same in every application and workspace —
+     * or null on a host with nowhere private to keep one.
      *
      * <pre>{@code
-     * ConfigStorage store = workbench.config("uibuilder.library");
-     * if (store != null) store.write("groups.json", json);
+     * ConfigRecord<Shelf> shelf = ConfigRecord.in(workbench.extensionStore(MyExtension.ID), "shelf.json",
+     *         Shelf.CODEC, Shelf.EMPTY);
      * }</pre>
      *
-     * <p>Durable, unlike {@link #cacheDirectory}: nothing here is rebuildable. One scope per name, so two
-     * extensions never read each other's files. Null is an ordinary answer, as a test host is.</p>
+     * <ul>
+     *   <li>Durable, unlike {@link #cacheDirectory}: nothing here is rebuildable.</li>
+     *   <li>Keyed by the extension's id, so two extensions never read each other's files.</li>
+     *   <li><b>Ask on attach, not while activating</b>: extensions activate inside the workbench's constructor,
+     *       and the application supplies the stores after it. Asked earlier, it is null.</li>
+     * </ul>
      */
     @Nullable
-    ConfigStorage config(String name);
+    ConfigStorage extensionStore(String extensionId);
 
     /** Adds a panel type and how to build one. */
     WorkbenchContext registerPanel(DockPanelDescriptor descriptor,

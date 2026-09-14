@@ -14,6 +14,11 @@ import java.nio.file.Path;
  * Path config = StorageLayout.configIn(gameDir);        // …/workspace-config   durable
  * Path cache  = StorageLayout.cacheIn(gameDir);         // …/cache              disposable
  *
+ * // under workspace-config, each placed by the desktop:
+ * //   apps/<application>/        an application's preferences          ApplicationRegistry
+ * //   projects/<workspace>/      one workspace's session and backups   Desktop.workspaceStore
+ * //   extensions/<extension>/    what a user made with an extension    Desktop.extensionStore
+ *
  * // a server, from the world directory in single-player or the server directory on a dedicated one
  * Path projects = StorageLayout.projectsIn(worldDir);   // …/crystalgui/projects
  * }</pre>
@@ -52,6 +57,15 @@ public final class StorageLayout {
 
     /** One application's own corner, under {@link #CONFIG} or {@link #CACHE}. */
     public static final String APPS = "apps";
+
+    /**
+     * One workbench extension's own records, under {@link #CONFIG}: what a user made with it — the UI builder's
+     * Library groups — the same in every application and every workspace. VS Code's {@code globalStorage}.
+     *
+     * <p>Neither of its neighbours fits such a record: {@link #APPS} is one application's, so a second product
+     * hosting the same extension would start empty, and a workspace's store is one workspace's.</p>
+     */
+    public static final String EXTENSIONS = "extensions";
 
     /**
      * Unsaved work, under one workspace's directory.

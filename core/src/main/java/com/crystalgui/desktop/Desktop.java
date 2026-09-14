@@ -1429,6 +1429,19 @@ public class Desktop extends UIElement implements DataProvider {
         return root.scoped(StorageLayout.PROJECTS).scoped(identity);
     }
 
+    /**
+     * Where one workbench extension keeps what a user made with it, the same in every application and workspace
+     * on this installation — or null when this desktop was given nowhere to write.
+     *
+     * <pre>{@code
+     * ConfigStorage library = desktop.extensionStore("crystalgui:uibuilder");   // …/extensions/crystalgui.uibuilder
+     * }</pre>
+     */
+    @Nullable
+    public ConfigStorage extensionStore(String extensionId) {
+        return config == null ? null : config.scoped(StorageLayout.EXTENSIONS).scoped(extensionId);
+    }
+
     /** Where this desktop's private records go, or null when it was never given anywhere. */
     @Nullable
     public ConfigStorage config() {

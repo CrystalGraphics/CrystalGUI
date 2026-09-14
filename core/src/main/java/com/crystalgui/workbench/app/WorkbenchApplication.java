@@ -275,6 +275,8 @@ public class WorkbenchApplication extends UIElement
         // THE STORE, BEFORE THE PREFERENCES ARE READ. Scoped to this application by the registry, so two
         // products on one desktop do not write each other's settings.json (D20).
         workbench.useConfig(storage);
+        // AND WHAT A USER MAKES WITH AN EXTENSION, which is neither this application's nor one workspace's.
+        workbench.useExtensionStores(desktop::extensionStore);
         // AND THE CACHE ROOT IN THE SAME BREATH, because extensions activate while the workbench is
         // being built and ask for their cache directory as they do -- a root supplied after this line
         // is a root nobody ever sees. @see Workbench#useCache
