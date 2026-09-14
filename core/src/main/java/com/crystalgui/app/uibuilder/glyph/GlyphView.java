@@ -5,6 +5,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.overlay.Tooltip;
 
@@ -63,7 +64,16 @@ public final class GlyphView {
         if (next == node && nextSignature == signature && shown != null) return false;
         node = next;
         signature = nextSignature;
-        KindGlyphs.Glyph glyph = KindGlyphs.of(next);
+        return draw(KindGlyphs.of(next));
+    }
+
+    /** Draws the glyph of a new node of {@code kind} — a row offering the kind rather than showing a node. */
+    public boolean showKind(Name kind) {
+        node = null;
+        return draw(KindGlyphs.ofKind(kind));
+    }
+
+    private boolean draw(KindGlyphs.Glyph glyph) {
         if (glyph.equals(shown)) return false;
         if (shown == null || !glyph.icon().equals(shown.icon())) {
             CgUiSvg drawn = CgUiSvg.ofIcon(glyph.icon());

@@ -9,7 +9,9 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
+import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
+import com.crystalgui.app.uibuilder.document.NewNode;
 import com.crystalgui.app.uibuilder.document.NodeIds;
 import com.crystalgui.app.uibuilder.document.TreeDropRules;
 import com.crystalgui.app.uibuilder.document.TreeMoves;
@@ -78,6 +80,17 @@ final class HierarchyEditModel implements TreeEditModel<UIElement> {
     @Override
     public boolean canDrop(List<UIElement> nodes, UIElement parent) {
         return TreeDropRules.canMove(root(), nodes, parent);
+    }
+
+    /** A Library card, into any container. */
+    @Override
+    public boolean canDropForeign(Object payload, UIElement parent) {
+        return payload instanceof NewNode && isContainer(parent);
+    }
+
+    @Override
+    public void dropForeign(Object payload, Target<UIElement> to) {
+        if (payload instanceof NewNode created) Placement.at(builder, to.parent(), indexIn(to), created.build().get());
     }
 
     @Override

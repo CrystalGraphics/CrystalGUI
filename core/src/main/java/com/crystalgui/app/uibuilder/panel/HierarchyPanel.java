@@ -14,8 +14,7 @@ import com.crystalgui.app.uibuilder.glyph.GlyphView;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
-import com.crystalgui.app.uibuilder.document.BuilderEdit;
-import com.crystalgui.app.uibuilder.document.TreeDropRules;
+import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -214,19 +213,9 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         return editing;
     }
 
-    /**
-     * Inserts {@code node} into the selected container, after a selected leaf in its parent, or at the end of
-     * the root with nothing selected — one undo step, and the new node selected.
-     */
+    /** Inserts {@code node} by the rule every placement shares. @see Placement#intoSelection */
     public void insertNew(UIElement node) {
-        UIElement root = builder.getDocument().root();
-        List<UIElement> selected = builder.builderSelection().nodes();
-        UIElement anchor = selected.isEmpty() ? root : selected.get(selected.size() - 1);
-        UIElement parent = TreeDropRules.isContainer(root, anchor) ? anchor : anchor.parentElement();
-        if (parent == null) return;
-        int index = parent == anchor ? parent.children().size() : parent.indexOf(anchor) + 1;
-        builder.getDocument().apply(new BuilderEdit.Insert(parent, node, index));
-        builder.builderSelection().replaceWith(List.of(node));
+        Placement.intoSelection(builder, node);
     }
 
     /** The nodes selected on the canvas and in this tree, which are one selection. */

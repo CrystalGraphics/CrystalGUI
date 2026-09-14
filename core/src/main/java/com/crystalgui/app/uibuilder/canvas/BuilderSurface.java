@@ -159,6 +159,12 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         this.owner = editor;
     }
 
+    /** The editor this plane belongs to, or null before one claims it. */
+    @Nullable
+    BuilderEditor owner() {
+        return owner;
+    }
+
     /**
      * The one selection the canvas, the hierarchy and the inspector share.
      *

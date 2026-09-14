@@ -133,16 +133,25 @@ final class TreeDragAndDrop<T> {
     void installDropTarget() {
         TreeView<T> tree = editing.tree();
         tree.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
-            List<T> items = carried(event.getPayload());
-            if (items == null) return;
+            TreeEditModel<T> model = editing.model();
+            Object payload = event.getPayload();
+            List<T> items = carried(payload);
+            if (model == null || payload == null) return;
             Spot<T> spot = spotFor((UIElement) event.getTarget(), event.getPosition().x(), event.getPosition().y());
+            boolean accepted = spot != null && (items != null ? accepts(items, spot)
+                    : model.canDropForeign(payload, spot.target().parent()));
+            // A PAYLOAD FROM OUTSIDE that the model refuses leaves the rows unmarked: another tree's drag is not about this one.
+            if (items == null && !accepted) {
+                mark(null);
+                return;
+            }
             mark(spot);
             pointerX = event.getPosition().x();
             pointerY = event.getPosition().y();
             aimAt(spot);
             startHovering();
             // ACCEPTED BY preventDefault, re-asked on every move, so wandering over a refusal stops accepting.
-            if (spot != null && accepts(items, spot)) event.preventDefault();
+            if (accepted) event.preventDefault();
         }, false, true);
         tree.events.getGroup(DragEvent.Leave.class).attachListener((element, event) -> {
             // FROM THE TREE ITSELF, not a row: a Leave from each row the pointer crosses would stop the hook
@@ -156,9 +165,17 @@ final class TreeDragAndDrop<T> {
             mark(null);
             List<T> items = carried(event.getPayload());
             TreeEditModel<T> model = editing.model();
-            if (items == null || model == null) return;
+            if (model == null) return;
             Spot<T> spot = spotFor((UIElement) event.getTarget(), event.getPosition().x(), event.getPosition().y());
-            if (spot == null || !accepts(items, spot)) return;
+            if (spot == null) return;
+            if (items == null) {
+                Object foreign = event.getPayload();
+                if (foreign != null && model.canDropForeign(foreign, spot.target().parent())) {
+                    model.dropForeign(foreign, spot.target());
+                }
+                return;
+            }
+            if (!accepts(items, spot)) return;
             // AT DROP TIME, so the destination is picked first and the key held after.
             boolean copy = (CgPlatform.input().getCurrentModifiers() & model.copyModifier()) != 0;
             if (copy) model.copy(items, spot.target());
