@@ -2,6 +2,7 @@ package com.crystalgui.workbench;
 
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.text.diff.ThreeWayMerge;
+import com.crystalgui.ui.dom.KindInfo;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UIElement;
@@ -60,14 +61,14 @@ public final class WorkbenchKinds implements NodeKinds {
         // `null, null` was the obvious spelling and the walk caught it in one run -- which is the
         // difference between a registration that exists and one that works.
         UIElementRegistry.register(DockGroup.NAME,
-                () -> new DockGroup(emptyArea(), new DockLeaf()), NodeContract.INERT);
+                () -> new DockGroup(emptyArea(), new DockLeaf()), NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.registerTag(DockWindow.NAME, NodeContract.INERT);
         // A banner bar is built from a Notification and never decoded; registered so the tag exists,
         // since `ua/workbench.css` styles it. An EMPTY notification rather than null, because unlike
         // the three above it reads its argument in the constructor -- which the coverage walk found
         // by building every registered kind, and is the whole reason that walk builds them.
         UIElementRegistry.register(DockBannerBar.NAME,
-                () -> new DockBannerBar(Notification.info("")), NodeContract.INERT);
+                () -> new DockBannerBar(Notification.info("")), NodeContract.INERT, KindInfo.hidden());
 
         // THE SHELL AND ITS PARTS. Same argument as the dock's above: none of these has a
         // no-argument constructor and all of them need a TAG, because a node declaring no kind
@@ -83,18 +84,18 @@ public final class WorkbenchKinds implements NodeKinds {
         UIElementRegistry.registerTag(WorkbenchApplication.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ProjectFileTree.NAME, NodeContract.INERT);
         UIElementRegistry.register(ViewContainer.NAME,
-                () -> new ViewContainer("", ""), NodeContract.INERT);
+                () -> new ViewContainer("", ""), NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.register(RegionHost.NAME,
-                () -> new RegionHost(DockRegion.SIDEBAR), NodeContract.INERT);
+                () -> new RegionHost(DockRegion.SIDEBAR), NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.registerTag(RegionDropOverlay.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(StripeView.NAME, NodeContract.INERT);
         UIElementRegistry.register(DiffView.NAME,
-                () -> new DiffView("", "", "", ""), NodeContract.INERT);
+                () -> new DiffView("", "", "", ""), NodeContract.INERT, KindInfo.hidden());
         // A REAL merge, because the constructor reads it. `null` was the obvious spelling and the
         // coverage walk caught it in one run, which is the difference between a registration that
         // exists and one that works -- the same lesson DockGroup's `null, null` taught two stages ago.
         UIElementRegistry.register(MergeView.NAME,
-                () -> new MergeView(ThreeWayMerge.of("", "", "")), NodeContract.INERT);
+                () -> new MergeView(ThreeWayMerge.of("", "", "")), NodeContract.INERT, KindInfo.hidden());
         // A tool window's frame: built per show and destroyed per hide, never decoded. Registered so
         // the TAG exists -- and it has one of its own rather than answering `window`, because a Name
         // is bound to a factory. `WindowFrame.WINDOW_CLASS` is what carries a window's look to it.
