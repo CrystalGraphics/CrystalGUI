@@ -169,6 +169,25 @@ programmatic focus, false after a mouse click — except on elements that take t
   factory)`. Without it the widget has no `tagName()`, cannot be a CSS type selector, and cannot be
   serialized. Current tags: `element`, `button`, `checkbox`, `scroller`, `scrollerview`, `slider`,
   `splitview`, `switch`, `tab`, `tabview`, `textfield`, `text`.
+- **Say what a tree calls it and draws for it** with a `KindInfo` at registration. The builder's Hierarchy
+  shows every node with a 12 px glyph and a tooltip, and a kind that says nothing still gets one:
+
+  ```java
+  UIElementRegistry.register(MachineGauge.NAME, MachineGauge::new, CONTRACT,
+          KindInfo.named("Machine Gauge").glyph(GlyphRole.CONTROL));   // ships mymod:nodes/ui/machinegauge.svg
+
+  KindInfo.named("Heat Field").glyphOf(Slider.NAME);                   // draws the slider's glyph and role
+  KindInfo.named("Reactor").glyph("mymod:machines/reactor", GlyphRole.COLLECTION);   // a file named otherwise
+  ```
+
+  | Your kind declares | The row draws |
+  |---|---|
+  | a glyph | it — a 16-unit SVG in `currentColor`, tinted by the role's `--kind-glyph-*` token |
+  | nothing, and extends a kind that has one | that kind's glyph, under your class name split at capitals |
+  | nothing, and lays out children | its layout from computed style — column, row, wrap, grid — or a frame while empty |
+  | nothing else | a diamond tinted as an addon, saying *Your Name · yourmod* |
+
+  Declaring a glyph without shipping its file draws nothing.
 - **Override `writeState`/`readState`** if the widget carries state a server would want to send or a
   client would want to report back. See `CGUI_SERVER_AND_SERIALIZATION.md`.
 
@@ -677,6 +696,17 @@ one**, it fights placement every frame.
 per the ARIA pattern), Home/End; Enter/Space comes from `Button`. The whole menu is **one Tab stop** — its
 items are `CLICK_NOT_TABBABLE`, and unlike `Tab` the stop does not rove, because an open menu holds focus
 outright and Tab has nothing to do inside it.
+
+**An icon before a row's label** comes from its command, so every menu showing the command draws it; a menu
+holding any such row reserves the icon column on every row (`__has-icons__`), so labels stay aligned:
+
+```java
+Command.of("new.button", "Button").icon("crystalgui:nodes/ui/button", GlyphRole.CONTROL.cssClass());
+item.setIcon("crystalgui:general/action/add", null);   // on a MenuItem built by hand
+```
+
+The class lands on the row and tints the icon through `menuitem.<class>::part(pre-icon)`. A checkable row
+draws its checkmark in that slot instead and takes no icon.
 
 **Submenus open on hover**, after `Menu.DEFAULT_SUBMENU_DELAY` (0.4s — Windows' own `MenuShowDelay` default;
 `setSubmenuDelay` to change it). Instant opening makes submenus flash as the pointer sweeps past. `addSubmenu`

@@ -217,4 +217,22 @@ theme {
     --diff-removed-fg: #CF222E59;
     --diff-changed-bg: #0969DA1F;
     --diff-changed-fg: #0969DA4D;
+
+    /* -- A tree row's kind glyph, by role -----------------------------------------------------------
+     *
+     * The dark theme's hues, one step deeper so they hold on white and no deeper: darker read as muddy beside
+     * the dark theme's. @see crystal-dark.css */
+    --kind-glyph-layout: #8C8780;
+    --kind-glyph-text: #CAA875;
+    --kind-glyph-control: #4E93DE;
+    --kind-glyph-collection: #9A6FCB;
+    --kind-glyph-overlay: #3AA39C;
+    --kind-glyph-addon: #4FA27D;
+    /* A step deeper again on the light selection band, where the base tones would wash out. */
+    --kind-glyph-layout-selected: #6F6A63;
+    --kind-glyph-text-selected: #946C28;
+    --kind-glyph-control-selected: #2F6FC0;
+    --kind-glyph-collection-selected: #7B51AE;
+    --kind-glyph-overlay-selected: #237F79;
+    --kind-glyph-addon-selected: #357F5E;
 }

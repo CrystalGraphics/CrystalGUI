@@ -2,12 +2,16 @@ package com.crystalgui.app.uibuilder.panel;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
+import com.crystalgui.app.uibuilder.glyph.GlyphView;
+import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
@@ -32,6 +36,7 @@ import com.crystalgui.widget.collection.tree.TreeSearch;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -183,11 +188,25 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         // moved, with nothing listening, so a panel that comes back showing the tree it left with is
         // showing a stale one.
         onConnected(this::followSelection);
+        // OWNED BY THE PANEL, so it stops with it; and remade on every attach, since a hook dropped on detach
+        // never comes back by itself.
+        onConnected(() -> document().animation().every(this, this::refreshGlyphs));
     }
 
     /** The tree, for a test and for whoever wants to expand a branch. */
     public TreeView<UIElement> tree() {
         return tree;
+    }
+
+    /** What {@code node}'s realised row draws as its glyph now, or null when the row is not on screen. For a test. */
+    @Nullable
+    public KindGlyphs.Glyph glyphOnRow(UIElement node) {
+        for (Map.Entry<Integer, UIElement> realised : tree.realisedRows().entrySet()) {
+            TreeRow<UIElement> row = tree.rowAt(realised.getKey());
+            GlyphView glyph = glyphs.get(realised.getValue());
+            if (row != null && row.item() == node && glyph != null) return glyph.shown();
+        }
+        return null;
     }
 
     /** Drag, clipboard, duplicate, delete and rename over this tree's selection. */
@@ -449,6 +468,13 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
             twisty.events.getGroup(MouseEvent.Down.class)
                     .attachListener((element, event) -> foldFromTwisty(row, event), false, false);
             row.append(twisty);
+            // ONCE PER TEMPLATE: `attach` adds a listener pair, and the words are the glyph's region, rewritten
+            // per node. The wait is the explorer's -- an icon crossed on the way to the label.
+            Tooltip tip = Tooltip.attach(row, "");
+            tip.addClass(Tooltip.WAIT_CLASS);
+            GlyphView glyph = new GlyphView(tip);
+            row.append(glyph.element());
+            glyphs.put(row, glyph);
             UIText label = new UIText();
             label.addClass(LABEL_CLASS);
             row.append(label);
@@ -469,12 +495,33 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
             }
             if (label != null) label.setText(describe(node));
             if (label != null && field != null) editing.bindRow(template, label, field, node);
+            GlyphView glyph = glyphs.get(template);
+            if (glyph != null) glyph.show(node);
             boolean selected = builder.builderSelection().contains(node);
             if (selected != template.hasClass(SELECTED_CLASS)) {
                 if (selected) template.addClass(SELECTED_CLASS);
                 else template.removeClass(SELECTED_CLASS);
             }
         }
+    }
+
+    /** Each template's glyph. @see RowRenderer#createTemplate */
+    private final Map<UIElement, GlyphView> glyphs = new HashMap<>();
+
+    /**
+     * Re-asks each realised row's glyph once a frame.
+     *
+     * <p>A glyph follows COMPUTED style, which an inline-style or class edit only changes on the next frame and a
+     * sheet or theme switch changes with no document change at all — so re-binding on the edit would read the
+     * old layout. Asking per frame over what is on screen covers all three with nothing to subscribe to.</p>
+     */
+    private boolean refreshGlyphs(float deltaSeconds) {
+        for (Map.Entry<Integer, UIElement> realised : tree.realisedRows().entrySet()) {
+            GlyphView glyph = glyphs.get(realised.getValue());
+            TreeRow<UIElement> row = tree.rowAt(realised.getKey());
+            if (glyph != null && row != null) glyph.show(row.item());
+        }
+        return true;
     }
 
     /** {@code #title} where the node is named, {@code text} where it is not. */

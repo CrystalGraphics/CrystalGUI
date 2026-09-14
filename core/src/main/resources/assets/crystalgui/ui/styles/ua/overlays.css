@@ -647,6 +647,31 @@ menu.__has-checkable__ menuitem.__checkable__:checked::part(mark) {
 menu.__has-checkable__ menuitem {
     padding-left: 0px;
 }
+
+/* A menu with icons: the same menu-level gutter, holding each row's icon — Windows' icon column, so a row
+ * without one lines up with the rows that have one. */
+menu.__has-icons__ menuitem .__mark__,
+menu.__has-icons__ menuitem::part(pre-icon),
+menu.__has-icons__ menuitem::part(mark) {
+    width: 12px;
+    height: 12px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    align-self: center;
+    margin-right: 5px;
+    overlay-size: contain;
+}
+menu.__has-icons__ menuitem {
+    padding-left: 4px;
+}
+
+/* A kind's glyph in a menu, tinted by its role as the Hierarchy tints it. @see GlyphRole */
+menuitem.__glyph-layout__::part(pre-icon) { color: var(--kind-glyph-layout, #AEA79C); }
+menuitem.__glyph-text__::part(pre-icon) { color: var(--kind-glyph-text, #CAA875); }
+menuitem.__glyph-control__::part(pre-icon) { color: var(--kind-glyph-control, #75B1ED); }
+menuitem.__glyph-collection__::part(pre-icon) { color: var(--kind-glyph-collection, #B38FD8); }
+menuitem.__glyph-overlay__::part(pre-icon) { color: var(--kind-glyph-overlay, #68C4BE); }
+menuitem.__glyph-addon__::part(pre-icon) { color: var(--kind-glyph-addon, #7AC0A0); }
 /* The base `menuitem` rule's 6px left padding was sized for a bare label with no mark before it — once
  * the 12px gutter above sits in front of it, the checkmark reads as floating well clear of the row's
  * edge rather than beside it. Tightened for every row in a dropdown's menu (checked or not), so the
