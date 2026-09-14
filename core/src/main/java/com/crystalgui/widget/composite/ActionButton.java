@@ -127,14 +127,31 @@ public class ActionButton extends Button {
         tooltip = Tooltip.attach(this, "");
         tooltip.addClass(Tooltip.WAIT_CLASS);
         onPressed.connect(this::activate);
+        onConnected(this::drawIcon);
     }
 
     /** Draws {@code iconName} — {@code "crystalgui:general/action/add"} — as the button's glyph. */
     public ActionButton icon(String iconName) {
+        this.iconName = iconName;
+        if (document() != null) drawIcon();
+        return this;
+    }
+
+    @Nullable
+    private String iconName;
+
+    /**
+     * Reads the icon once the button is on a surface.
+     *
+     * <p>NOT FROM {@link #icon}: an SVG is read through CrystalGraphics' {@code CgIO}, which a dedicated server
+     * does not have, and a view built there — a {@code ViewContainer} decoded by kind — calls {@code icon} from
+     * its constructor.</p>
+     */
+    private void drawIcon() {
+        if (iconName == null) return;
         CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
         CgUiDrawable drawn = glyph == null ? CgUiDrawable.EMPTY : glyph;
         StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overlay(drawn));
-        return this;
     }
 
     /** What the command and the menu resolve against. This button itself when none is named. */
