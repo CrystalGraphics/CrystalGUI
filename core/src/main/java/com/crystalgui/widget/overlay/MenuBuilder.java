@@ -209,6 +209,10 @@ public final class MenuBuilder {
         item.setAccelerator(chord == null ? null : chord.toString());
 
         if (resolved == null) return item;
+        if (resolved.getIcon() != null && !checkable) {
+            item.setIcon(resolved.getIcon(), resolved.getIconClass());
+            menu.addClass(Menu.HAS_ICONS_CLASS);
+        }
         CommandContext context = CommandContext.of(source);
         item.attachListener(() -> {
             // RE-CHECKED at activation, and run THROUGH THE REGISTRY where the id is known. The menu may

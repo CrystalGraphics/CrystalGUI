@@ -1,5 +1,7 @@
 package com.crystalgui.template;
 
+import com.crystalgui.ui.dom.GlyphRole;
+import com.crystalgui.ui.dom.KindInfo;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -20,6 +22,7 @@ public final class TemplateKinds implements NodeKinds {
     public void register() {
         // INERT and buildable: an instance travels as one node -- the template it places is the far
         // side's to inflate, which is what makes a window that places one forty times describe it once.
-        UIElementRegistry.register(TemplateInstance.NAME, TemplateInstance::new, NodeContract.INERT);
+        UIElementRegistry.register(TemplateInstance.NAME, TemplateInstance::new, NodeContract.INERT,
+                KindInfo.named("Template Instance").glyph(GlyphRole.COLLECTION));
     }
 }

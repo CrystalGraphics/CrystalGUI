@@ -63,6 +63,33 @@ public final class Command {
         return run(context -> handler.run());
     }
 
+    /** The icon a menu row draws before the label, {@code namespace:path} under {@code ui/icons/}, or null. */
+    @Getter @Nullable private String icon;
+
+    /** A class the row's icon carries, so a sheet tints it — a kind glyph's role. Null for the menu's own colour. */
+    @Getter @Nullable private String iconClass;
+
+    /**
+     * Draws {@code iconId} before this command's label wherever a menu shows it.
+     *
+     * <pre>{@code
+     * Command.of("edit.copy", "Copy").icon("crystalgui:general/action/copy");
+     * Command.of("new.button", "Button").icon("crystalgui:nodes/ui/button", GlyphRole.CONTROL.cssClass());
+     * }</pre>
+     *
+     * <p>A menu holding any row with an icon reserves the column on every row, so labels stay aligned.</p>
+     */
+    public Command icon(@Nullable String iconId) {
+        return icon(iconId, null);
+    }
+
+    /** As {@link #icon(String)}, with a class on the icon a sheet colours it by. */
+    public Command icon(@Nullable String iconId, @Nullable String cssClass) {
+        this.icon = iconId;
+        this.iconClass = cssClass;
+        return this;
+    }
+
     /** @see #isEnabled */
     public Command enabledWhen(Predicate<CommandContext> predicate) {
         this.enabled = predicate == null ? context -> true : predicate;

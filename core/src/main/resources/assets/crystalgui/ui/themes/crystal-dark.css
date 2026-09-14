@@ -253,4 +253,24 @@ theme {
      * line is not a warning. */
     --diff-changed-bg: #58A6FF1F;
     --diff-changed-fg: #58A6FF4D;
+
+    /* -- A tree row's kind glyph, by role -----------------------------------------------------------
+     *
+     * One hue per role rather than per kind, so a tree stays scannable: layout grey, text amber, controls
+     * blue, collections violet, overlays teal, addons green. Hues no system role carries. The values are the
+     * signed-off mock as a colour-managed browser DISPLAYED it, not its CSS: this engine writes raw sRGB, so
+     * matching the look means matching what was on screen. The -selected twins sit on the focused selection
+     * band. */
+    --kind-glyph-layout: #AEA79C;
+    --kind-glyph-text: #CAA875;
+    --kind-glyph-control: #75B1ED;
+    --kind-glyph-collection: #B38FD8;
+    --kind-glyph-overlay: #68C4BE;
+    --kind-glyph-addon: #7AC0A0;
+    --kind-glyph-layout-selected: #E2D9CB;
+    --kind-glyph-text-selected: #FFDA98;
+    --kind-glyph-control-selected: #92E8FF;
+    --kind-glyph-collection-selected: #E9BAFF;
+    --kind-glyph-overlay-selected: #8CEFE8;
+    --kind-glyph-addon-selected: #9EF2CB;
 }

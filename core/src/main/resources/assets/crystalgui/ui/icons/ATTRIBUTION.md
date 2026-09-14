@@ -124,6 +124,13 @@ which Feather does have, serves as the close mark.
 > IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 > THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+## `nodes/ui/` — this project's own
+
+The Hierarchy's element glyphs are **drawn for CrystalGUI** and carry no third-party notice: one file per
+kind, named after the kind's tag (`button.svg`, `tabview.svg`), plus the layout marks `column`, `row`,
+`wrap`, `grid`, `frame`, `absolute` and the addon `component`. 16-unit view box, single-tone in
+`currentColor`, so none has a `_dark` twin — the tint is a theme's `--kind-glyph-*` token.
+
 ## Trademarks
 
 Neither licence grants trademark rights — Apache 2.0 § 6 says so outright. The file-type icons above are

@@ -131,7 +131,8 @@ public final class BuilderInspectorSections {
         public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
-            form.header(node.tagName());
+            // A ROW, as `header` makes one, so the band's rules reach it.
+            form.control("kind", "", new KindHeader(node));
             live(form, "id", "id", () -> node.getId() == null ? "" : node.getId());
             live(form, "classes", "classes", () -> String.join(" ", node.classes()));
         }

@@ -18,6 +18,7 @@ import com.crystalgui.app.uibuilder.document.NodeSelectors;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.panel.HierarchyActions;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
+import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.undo.UndoStack;
@@ -26,12 +27,15 @@ import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.ui.dom.GlyphRole;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.collection.tree.TreeEditModel;
 import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.text.UIText;
+
+import dev.vfyjxf.taffy.style.FlexDirection;
 
 /**
  * <b>L4.7 — the Hierarchy edits the document like a file tree</b>: a drop, a paste, a duplicate and a
@@ -219,6 +223,36 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
         Drag drag = document.input().mode(Drag.class);
         assertTrue("a press on the label did not drag the row", drag != null && drag.isActivated());
         release(at[0], at[1] + 20f * uiScale());
+    }
+
+    @Test
+    public void newOffersEachKindUnderItsOwnNameAndGlyph() {
+        Disposable rows = HierarchyActions.register(CommandRegistry.global());
+        try {
+            Menu menu = ContextMenu.of(HierarchyPanel.NEW_MENU).build(CommandRegistry.global(), hierarchy.tree());
+            MenuItem button = null;
+            for (MenuItem item : menu.getItems()) {
+                if ("Button".equals(item.getText())) button = item;
+            }
+            assertTrue("New offers no Button row", button != null);
+            assertTrue("the Button row draws no icon", button.hasClass(MenuItem.ICON_CLASS));
+            assertTrue("and it is not tinted as a control", button.hasClass(GlyphRole.CONTROL.cssClass()));
+            assertTrue("the menu reserves no icon column", menu.hasClass(Menu.HAS_ICONS_CLASS));
+        } finally {
+            rows.dispose();
+        }
+    }
+
+    @Test
+    public void aRowDrawsItsNodesGlyphAndFollowsALayoutChangeWithinAFrame() {
+        KindGlyphs.Glyph text = hierarchy.glyphOnRow(title);
+        assertEquals("crystalgui:nodes/ui/text", text.icon());
+        assertEquals("crystalgui:nodes/ui/column", hierarchy.glyphOnRow(root).icon());
+
+        // NOT THROUGH THE DOCUMENT, so nothing tells the panel: only the per-frame check can notice.
+        root.layout(l -> l.flexDirection(FlexDirection.ROW));
+        settle();
+        assertEquals("crystalgui:nodes/ui/row", hierarchy.glyphOnRow(root).icon());
     }
 
     @Test

@@ -4,7 +4,6 @@ import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.core.config.ConfigDescriptor;
 
-import javax.annotation.Nullable;
 import com.crystalgui.ui.dom.Name;
 
 /**
@@ -34,13 +33,20 @@ public class HeaderControl extends ConfigControl {
         this(ConfigDescriptor.text("", ""));
     }
 
+    private final UIText title;
+
     public HeaderControl(ConfigDescriptor descriptor) {
         super(NAME, descriptor);
         addClass("__header__");
-        UIText title = new UIText(descriptor.label());
+        title = new UIText(descriptor.label());
         title.addClass("__title__");
         title.setHitTest(false);
         append(title);
+    }
+
+    /** The heading's words, for a subclass that says something other than its descriptor's label. */
+    protected final UIText title() {
+        return title;
     }
 
     @Override

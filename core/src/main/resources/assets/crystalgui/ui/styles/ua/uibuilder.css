@@ -314,6 +314,57 @@ hierarchypanel .__leaf__ .__twisty__ {
     overlay: none;
 }
 
+/* What a node is, tinted by its role — a Hierarchy row's glyph and the Inspector heading's. The icon is written
+ * from Java, since it follows the node's kind and computed layout; the colour is the theme's. @see GlyphView
+ *
+ * ON THE GLYPH ALONE: a menu's rows carry the same role classes, and a bare `.__glyph-text__` tinted their
+ * labels. */
+.__glyph__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    overlay-size: contain;
+    color: var(--kind-glyph-layout, #AEA79C);
+}
+
+.__glyph__.__glyph-text__ { color: var(--kind-glyph-text, #CAA875); }
+.__glyph__.__glyph-control__ { color: var(--kind-glyph-control, #75B1ED); }
+.__glyph__.__glyph-collection__ { color: var(--kind-glyph-collection, #B38FD8); }
+.__glyph__.__glyph-overlay__ { color: var(--kind-glyph-overlay, #68C4BE); }
+.__glyph__.__glyph-addon__ { color: var(--kind-glyph-addon, #7AC0A0); }
+
+/* The Element tab's heading: [glyph] words ........ tag. The band is the section header's own; the glyph sits
+ * where a row's does, and the tag is code — the name a selector types — so it takes the code face, a size down
+ * and the hint colour, where it reads as an annotation rather than a second title. */
+.__kind-header__ .__glyph__ {
+    margin-right: 6px;
+}
+
+/* The free space between the words and the tag: the band stretches, the spacer takes it, and every other part
+ * keeps its natural width — which is what the panel measures a band by. */
+.__kind-header__ .__kind-spacer__ {
+    width: 0;
+    flex-grow: 1;
+}
+
+.__kind-header__ .__kind-tag__ {
+    flex-shrink: 0;
+    margin-left: 8px;
+    white-space: nowrap;
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
+                 "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
+    font-size: 8;
+    color: var(--fg-hint, #7A7A7A);
+}
+
+/* On the focused selection band, each role's brighter twin, so the glyph stays legible on the accent. */
+hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-layout__ { color: var(--kind-glyph-layout-selected, #E2D9CB); }
+hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-text__ { color: var(--kind-glyph-text-selected, #FFDA98); }
+hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-control__ { color: var(--kind-glyph-control-selected, #92E8FF); }
+hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-collection__ { color: var(--kind-glyph-collection-selected, #E9BAFF); }
+hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-overlay__ { color: var(--kind-glyph-overlay-selected, #8CEFE8); }
+hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-addon__ { color: var(--kind-glyph-addon-selected, #9EF2CB); }
+
 /* THE PROJECT TREE'S SHAPE HERE TOO, which it was not: `flex-grow: 1` with `width: 0` pins the label to
  * exactly the free space, so its box can never stick out past the row -- and a row that cannot overflow
  * has nothing to scroll to, whatever the list is set to. `min-width: 0` is the shrinkable version of the

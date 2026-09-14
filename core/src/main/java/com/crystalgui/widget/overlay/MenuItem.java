@@ -1,5 +1,8 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -106,6 +109,50 @@ public class MenuItem extends Button {
 
     private boolean selected = false;
 
+    /** The leading slot: the selection mark, or this row's icon. */
+    private final UIElement mark = new UIElement();
+
+    /** On a row drawing an icon in its leading slot. @see #setIcon */
+    public static final String ICON_CLASS = "__icon__";
+
+    @Nullable
+    private String iconId;
+
+    @Nullable
+    private String iconClass;
+
+    /**
+     * Draws {@code iconId} in the leading slot, the row carrying {@code cssClass} so a sheet can tint the icon;
+     * a null {@code iconId} clears both.
+     *
+     * <p>A row with an icon is not a toggle — the two share the slot. The menu reserves the column for every
+     * row: {@link Menu#HAS_ICONS_CLASS}. The file is read once the row is on a surface, since an SVG is read
+     * through CrystalGraphics and a menu may be built where it is absent.</p>
+     */
+    public MenuItem setIcon(@Nullable String iconId, @Nullable String cssClass) {
+        boolean hadIcon = this.iconId != null;
+        this.iconId = iconId;
+        toggleClass(ICON_CLASS, iconId != null);
+        // ON THE ROW, not the mark: the mark is a part of this button's shadow tree, which a sheet reaches as
+        // `menuitem.<class>::part(pre-icon)` and a bare class rule cannot reach at all.
+        if (iconClass != null) removeClass(iconClass);
+        iconClass = iconId == null ? null : cssClass;
+        if (iconClass != null) addClass(iconClass);
+        if (iconId == null && hadIcon) {
+            StyleGroup.defaultPipeline(mark.getStyle().getGeneralGroup(), g -> g.overlay(CgUiDrawable.EMPTY));
+        } else if (document() != null) {
+            drawIcon();
+        }
+        return this;
+    }
+
+    private void drawIcon() {
+        if (iconId == null) return;
+        CgUiSvg glyph = CgUiSvg.ofIcon(iconId);
+        CgUiDrawable drawn = glyph == null ? CgUiDrawable.EMPTY : glyph;
+        StyleGroup.defaultPipeline(mark.getStyle().getGeneralGroup(), g -> g.overlay(drawn));
+    }
+
     /** The no-argument constructor the registry's factory needs. @see Button#Button() */
     public MenuItem() {
         this("");
@@ -115,10 +162,10 @@ public class MenuItem extends Button {
         super(NAME, label);
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
 
-        UIElement mark = new UIElement();
         mark.addClass(MARK_CLASS);
         mark.setHitTest(false);
         setPreIcon(mark);
+        onConnected(this::drawIcon);
 
         // PRESS-DRAG-RELEASE. Button already fires on a release whose press landed here; this adds the
         // release whose press landed on the MENU BAR TITLE that opened the menu, which is the gesture

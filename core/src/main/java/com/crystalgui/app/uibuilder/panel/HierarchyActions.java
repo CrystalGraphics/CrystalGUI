@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.NodeSelectors;
+import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -14,6 +15,7 @@ import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.collection.tree.TreeViewCommands;
@@ -41,8 +43,8 @@ public final class HierarchyActions {
     /** Puts a selector for each selected node on the clipboard — the Hierarchy's Copy Path. @see NodeSelectors */
     public static final String COPY_SELECTOR = "uibuilder.copySelector";
 
-    /** A kind New ▸ offers: what the row says, and a fresh node of it. */
-    record Starter(String label, Supplier<UIElement> build) {
+    /** A kind New ▸ offers, and a fresh node of it. The row's words and glyph are the kind's. @see KindGlyphs#ofKind */
+    record Starter(Name kind, Supplier<UIElement> build) {
     }
 
     /**
@@ -50,13 +52,13 @@ public final class HierarchyActions {
      * every workbench and desktop kind, which have no place in a document.
      */
     static final List<Starter> STARTERS = List.of(
-            new Starter("Element", UIElement::new),
-            new Starter("Text", () -> new UIText("Text")),
-            new Starter("Button", () -> new Button("Button")),
-            new Starter("Text Field", TextField::new),
-            new Starter("Checkbox", Checkbox::new),
-            new Starter("Switch", Switch::new),
-            new Starter("Slider", Slider::new));
+            new Starter(UIElement.NAME, UIElement::new),
+            new Starter(UIText.NAME, () -> new UIText("Text")),
+            new Starter(Button.NAME, () -> new Button("Button")),
+            new Starter(TextField.NAME, TextField::new),
+            new Starter(Checkbox.NAME, Checkbox::new),
+            new Starter(Switch.NAME, Switch::new),
+            new Starter(Slider.NAME, Slider::new));
 
     private HierarchyActions() {
     }
@@ -73,8 +75,10 @@ public final class HierarchyActions {
             boolean enabled = context.data().get(HierarchyPanel.HIERARCHY) != null;
             for (int i = 0; i < STARTERS.size(); i++) {
                 Starter starter = STARTERS.get(i);
+                KindGlyphs.Glyph glyph = KindGlyphs.ofKind(starter.kind());
                 // UNREGISTERED: one row per kind has no business in the palette. @see MenuContributor
-                Command insert = Command.of("uibuilder.new." + i, starter.label())
+                Command insert = Command.of("uibuilder.new." + i, glyph.words())
+                        .icon(glyph.icon(), glyph.role().cssClass())
                         .runWithData(data -> {
                             HierarchyPanel panel = data.get(HierarchyPanel.HIERARCHY);
                             if (panel != null) panel.insertNew(starter.build().get());

@@ -87,6 +87,9 @@ public class Menu extends Popover {
      */
     public static final String HAS_CHECKABLE_CLASS = "__has-checkable__";
 
+    /** On a menu with any row drawing an icon, so every row reserves the icon column. @see MenuItem#setIcon */
+    public static final String HAS_ICONS_CLASS = "__has-icons__";
+
     /** Fires with the activated item. Emitted before the menu closes, so a listener can inspect it. */
     public final Signal.Value<MenuItem> onItemActivated = new Signal.Value<>();
 
