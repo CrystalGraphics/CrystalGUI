@@ -122,6 +122,19 @@ Two mechanisms answer these and only one exists: a sheet **scoped** to the compo
 `StyleSlot.proximity` ranks **between specificity and source order** — so a composite's own sheet beats
 an outer rule of equal specificity and loses to a more specific one.
 
+**Many roots wearing the same sheets take a `ScopeGroup`, not one install each.** Every install re-matches
+the whole window, so installing per root costs a window re-match per root — the Library's preview cards,
+one shadow root each, would pay it on every scroll. Install once against the group and add roots to it:
+
+```java
+ScopeGroup cards = new ScopeGroup();
+window.styles().addStylesheet(sheet, cards);
+cards.add(card.attachShadow());   // before its content is attached
+```
+
+`StyleEngine.sheetsRevision()` moves on every install and removal, so a mirror of the sheet list checks it
+per frame for free.
+
 This replaced a textual rewrite that prefixed every selector with a scoping class, and the difference is
 worth knowing because the prefix version had a bug no amount of care removes: CSS has no "this element
 or below", so `.scope S` cannot match the element WEARING `.scope`. Every rule aimed at the scoped root

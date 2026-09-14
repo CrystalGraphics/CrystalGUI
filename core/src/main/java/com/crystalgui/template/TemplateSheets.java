@@ -26,7 +26,7 @@ final class TemplateSheets {
         try {
             StyleSheet sheet = StyleSheetRegistry.of(id);
             if (sheet == null) return;
-            if (root == null && window.styles().getSheets().contains(sheet)) return;
+            if (root == null && window.styles().hasStylesheet(sheet, null)) return;
             window.styles().addStylesheet(sheet, root);
         } catch (RuntimeException | LinkageError missing) {
             // A sheet a document names and the host has not got costs the LOOK, never the tree. The

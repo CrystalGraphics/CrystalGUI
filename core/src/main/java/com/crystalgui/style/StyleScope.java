@@ -33,4 +33,9 @@ public interface StyleScope {
      */
     @Nullable
     StyleScope styleScopeParent();
+
+    /** Whether a sheet scoped to this reaches {@code candidate} as its root — itself, unless this is a {@link ScopeGroup}. */
+    default boolean scopes(StyleScope candidate) {
+        return candidate == this;
+    }
 }
