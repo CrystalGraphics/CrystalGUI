@@ -131,8 +131,8 @@ kind, named after the kind's tag (`button.svg`, `tabview.svg`), plus the layout 
 `wrap`, `grid`, `frame`, `absolute` and the addon `component`. 16-unit view box, single-tone in
 `currentColor`, so none has a `_dark` twin — the tint is a theme's `--kind-glyph-*` token.
 
-`toolwindows/library.svg` and `general/action/viewRows.svg` are ours too, drawn the same way for the
-Library's stripe button and its rows toggle.
+`toolwindows/library.svg`, `general/action/viewRows.svg` and `general/action/viewCards.svg` are ours too,
+drawn the same way for the Library's stripe button and the two faces of its view toggle.
 
 ## Trademarks
 
