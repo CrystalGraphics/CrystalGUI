@@ -125,7 +125,10 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         row.append(editor);
         // ATTACHED ONCE, here rather than in bind: `Tooltip.attach` ADDS a listener pair rather than
         // replacing one, so a row that was bound twice would show two tooltips.
-        tips.put(row, Tooltip.attach(row, ""));
+        Tooltip tip = Tooltip.attach(row, "");
+        // The icon is crossed on the way to the label, so its words wait as the Hierarchy's glyphs do.
+        tip.addClass(Tooltip.WAIT_CLASS);
+        tips.put(row, tip);
         slots.put(row, new ProjectFileTree.RowParts(twisty, icon, label, badge, editor));
         // The rename field, and the drag: the selection when the pressed row is in it, else this row.
         tree.editing().installRow(row, editor);
