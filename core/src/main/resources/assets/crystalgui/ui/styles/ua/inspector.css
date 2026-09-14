@@ -544,10 +544,12 @@
 /* Same fix, same reason as the group head's title just above — a header IS full width, so there is no
  * label column to have already solved this the way an ordinary row's `.__label__` does. */
 /* @see the group title above — same rule, same reason. */
+/* NOT GROWING: the band's own width is the stretch, and a title that took up the slack would carry that width
+ * as its own -- which is what ConfiguratorPanel measures a band's natural width from. */
 .__config-control__.__header__ .__title__ {
     font-size: var(--cfg-font);
     width: auto;
-    flex-grow: 1;
+    flex-grow: 0;
     flex-shrink: 0;
     white-space: nowrap;
 }
