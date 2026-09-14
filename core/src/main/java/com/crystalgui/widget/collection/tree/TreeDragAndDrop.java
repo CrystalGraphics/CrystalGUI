@@ -88,12 +88,16 @@ final class TreeDragAndDrop<T> {
         ghost.parkIn(host);
     }
 
-    /** Makes a row draggable. Once per row, from {@code createTemplate}. */
-    void installRow(UIElement row) {
+    /** Makes a row draggable from anywhere in it but its rename {@code field}. Once per row, from {@code createTemplate}. */
+    void installRow(UIElement row, UIElement field) {
+        // BUBBLING, as the list's own selection does: a press lands on the row's label or icon as often as on the
+        // row, and a renderer need not make its parts unhittable for the row to drag.
         row.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
             // NEVER FROM THE KEYBOARD: Enter and Space arrive as a synthesized press at the resting cursor, and
             // a drag armed by one can never be released.
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON || event.getDetail() == Input.KEYBOARD_DETAIL) return;
+            // THE RENAME FIELD'S PRESS IS ITS OWN: a row drag pushed above its selection drag would take its moves.
+            if (isInside((UIElement) event.getTarget(), field)) return;
             TreeEditModel<T> model = editing.model();
             UIDocument window = editing.tree().document();
             T item = editing.itemForRow(row);
@@ -107,7 +111,14 @@ final class TreeDragAndDrop<T> {
             Drag.start(row, event.getPosition().x(), event.getPosition().y(), CgMouseCodes.LEFT_BUTTON,
                     new Payload(editing, carried), Drag.DEFAULT_THRESHOLD_PX,
                     (x, y, sx, sy, dx, dy) -> { });
-        }, false, false);
+        }, false, true);
+    }
+
+    private static boolean isInside(@Nullable UIElement node, UIElement ancestor) {
+        for (UIElement at = node; at != null; at = at.composedParent()) {
+            if (at == ancestor) return true;
+        }
+        return false;
     }
 
     /** Makes the tree take drops from its own rows. Once. */

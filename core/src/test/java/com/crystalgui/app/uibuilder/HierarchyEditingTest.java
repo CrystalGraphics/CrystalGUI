@@ -28,8 +28,10 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.collection.tree.TreeEditModel;
 import com.crystalgui.widget.collection.tree.TreeEditing;
+import com.crystalgui.widget.text.UIText;
 
 /**
  * <b>L4.7 — the Hierarchy edits the document like a file tree</b>: a drop, a paste, a duplicate and a
@@ -200,6 +202,23 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
             rows.dispose();
             builder.dispose();
         }
+    }
+
+    @Test
+    public void aPressOnARowsLabelDragsTheRow() {
+        UIText label = null;
+        for (UIElement row : hierarchy.tree().realisedRows().values()) {
+            for (UIElement child : row.children()) {
+                if (child instanceof UIText text && "#title".equals(text.getText())) label = text;
+            }
+        }
+        int[] at = centreOf(label);
+        assertSame("the press must land on the label, not the row", label, hitTarget(at[0], at[1]));
+        press(at[0], at[1]);
+        move(at[0], at[1] + 20f * uiScale());
+        Drag drag = document.input().mode(Drag.class);
+        assertTrue("a press on the label did not drag the row", drag != null && drag.isActivated());
+        release(at[0], at[1] + 20f * uiScale());
     }
 
     @Test
