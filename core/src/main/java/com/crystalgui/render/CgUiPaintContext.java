@@ -1666,27 +1666,53 @@ public final class CgUiPaintContext {
      */
     public static final boolean LEGACY_LAYERS = Boolean.getBoolean("crystalgui.layers.legacy");
 
+    /**
+     * Skips painting a subtree whose ink lies wholly outside what the current target can show — Blink's cull rect.
+     * {@code -Dcrystalgui.paint.cull=false} paints everything, to rule the cull out.
+     */
+    public static final boolean CULL = !"false".equals(System.getProperty("crystalgui.paint.cull"));
+
+    /**
+     * Whether the rectangle, in the current target's pixels, misses the live clip entirely: the scissor where one
+     * is set, else the enclosing layer's region or the target. Allocates nothing, since it is asked per box.
+     */
+    public boolean outsideClip(float x0, float y0, float x1, float y1) {
+        if (LEGACY_LAYERS) return false;
+        resolveClip();
+        return x1 <= clipX0 || x0 >= clipX1 || y1 <= clipY0 || y0 >= clipY1;
+    }
+
     public LayerRegion layerRegion(float x0, float y0, float x1, float y1) {
         if (LEGACY_LAYERS) return new LayerRegion(0, 0, targetWidth(), targetHeight());
-        // The enclosing REGION where there is one, not the buffer: a pooled target is bucketed, so
-        // its slack is space the enclosing composite will never read and a child sized into it would
-        // be allocating for pixels that cannot reach the screen.
-        LayerFrame enclosing = layerStack.peek();
-        LayerRegion bounds = enclosing == null ? null : enclosing.region();
-        float clipX0 = 0f, clipY0 = 0f;
-        float clipX1 = bounds != null ? bounds.width() : targetWidth();
-        float clipY1 = bounds != null ? bounds.height() : targetHeight();
-        if (scissorStack.hasScissor()) {
-            clipX0 = scissorStack.currentX();
-            clipY0 = scissorStack.currentY();
-            clipX1 = clipX0 + scissorStack.currentW();
-            clipY1 = clipY0 + scissorStack.currentH();
-        }
+        resolveClip();
         int left = (int) Math.floor(Math.max(x0, clipX0));
         int top = (int) Math.floor(Math.max(y0, clipY0));
         int right = (int) Math.ceil(Math.min(x1, clipX1));
         int bottom = (int) Math.ceil(Math.min(y1, clipY1));
         return new LayerRegion(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+    }
+
+    /** {@link #resolveClip}'s answer, in the current target's pixels. */
+    private float clipX0, clipY0, clipX1, clipY1;
+
+    /**
+     * What the current target can show: the scissor where one is set, else the enclosing layer's REGION rather than
+     * its buffer — a pooled target is bucketed, so its slack is space the enclosing composite will never read, and a
+     * child sized into it would be allocating for pixels that cannot reach the screen.
+     */
+    private void resolveClip() {
+        if (scissorStack.hasScissor()) {
+            clipX0 = scissorStack.currentX();
+            clipY0 = scissorStack.currentY();
+            clipX1 = clipX0 + scissorStack.currentW();
+            clipY1 = clipY0 + scissorStack.currentH();
+            return;
+        }
+        LayerFrame enclosing = layerStack.peek();
+        clipX0 = 0f;
+        clipY0 = 0f;
+        clipX1 = enclosing != null ? enclosing.region().width() : targetWidth();
+        clipY1 = enclosing != null ? enclosing.region().height() : targetHeight();
     }
 
     /** Acquires (creating on first use) the pooled layer FBO for a nesting depth and a wanted size. */
