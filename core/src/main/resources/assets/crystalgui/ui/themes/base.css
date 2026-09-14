@@ -672,6 +672,8 @@ theme {
     --panel-bg: var(--surface-panel);
     --tree-fg: var(--fg);
     --tree-twisty-fg: var(--fg-secondary);
+    /* A fold arrow is a control of its own, so it answers the pointer as the panel header's icons do. */
+    --tree-twisty-hover-fg: var(--fg);
     --workbench-bg: var(--surface-base);
     /* A SHELL CONTROL IS AN OUTLINE, so its two states are the neutral ladder measured against the
      * PANEL it sits on -- not the `--button-*` family, which is tuned for a filled face on

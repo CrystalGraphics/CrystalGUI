@@ -707,6 +707,7 @@ editor scheme's.
 | `--tree-selected-inactive-bg` | `var(--selection-inactive-bg)` | base.css |
 | `--tree-selected-inactive-fg` | `var(--fg)` | base.css |
 | `--tree-twisty-fg` | `var(--fg-secondary)` | base.css |
+| `--tree-twisty-hover-fg` | `var(--fg)` | base.css |
 | `--warning` | `#CCA700` | crystal-dark.css |
 | `--warning-icon` | `#FFAF0F` | crystal-dark.css |
 | `--window-bg` | `var(--surface-panel)` | base.css |
