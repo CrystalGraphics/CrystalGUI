@@ -16,6 +16,7 @@ import com.crystalgui.app.uibuilder.document.NewNode;
 import com.crystalgui.app.uibuilder.glyph.GlyphView;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.core.collection.list.ItemSizeStrategy;
+import com.crystalgui.core.collection.list.VariableHeightStrategy;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -90,7 +91,8 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         }
     }
 
-    public record Strip(String key, List<LibraryCatalog.Entry> entries) implements Row {
+    /** @param folder the category it lists, its cards' home: a kind filed under two categories has a card in each */
+    public record Strip(String key, String folder, List<LibraryCatalog.Entry> entries) implements Row {
         @Override
         public boolean equals(Object other) {
             return other instanceof Strip strip && strip.key.equals(key);
@@ -129,10 +131,27 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     private final DragGhost ghost = new DragGhost();
     private final Map<UIElement, RowView> views = new HashMap<>();
 
+    /**
+     * ONE CARD PER KIND PER CATEGORY for the panel's life, moved into whichever of that category's strips shows it.
+     * A card bound to a strip SLOT rebuilt its sample whenever a re-flow or a keystroke shifted another kind into
+     * the slot, and a move within the window is not re-matched at all. Per category, because Common lists kinds
+     * that are filed elsewhere too, and one element can only be in one strip.
+     */
+    private final Map<String, PreviewCard> cards = new HashMap<>();
+
+    /** Where a card no strip shows waits, hidden and still in the window: taking it out would re-match it on return. */
+    private final UIElement parked = new UIElement();
+
+    private final Heights heights = new Heights();
+
     private boolean rows;
     private int perStrip = 1;
     private float stripHeight = DEFAULT_STRIP_HEIGHT;
     private boolean opened;
+
+    /** Set after layout when the strips no longer fit, or a card's height changed; acted on before the next frame's style. @see #measure */
+    private boolean reflowPending;
+    private boolean resizePending;
 
     @Nullable
     private LibraryCatalog.Entry selected;
@@ -181,14 +200,18 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         search.onChosen.connect(onPlace::emit);
         search.searchBox().setPlaceholder("Search elements");
         tree().setRenderer(new Renderer());
-        tree().setSizeStrategy(new Heights());
-        // KEPT, NOT RECYCLED: a strip rebound as it scrolls in rebuilds every sample on it, which is a frame's
-        // budget for a colour selector. Bounded all the same, for a catalog an addon has made long.
+        tree().setSizeStrategy(heights);
+        tree().getModel().onChange(change -> heights.invalidate());
+        // KEPT, NOT RECYCLED: a strip scrolling back in re-creates its cards' boxes and lays their samples out again.
+        // Measured against the default two: a scroll's p90 7.5ms against 8.6, for about 2ms more on a re-flow frame.
+        // Bounded all the same, for a catalog an addon has made long.
         tree().setOverscan(REALISED_ROWS);
 
         content.append(search);
         append(content);
         append(detail);
+        StyleGroup.defaultPipeline(parked.getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
+        append(parked);
         onSelect.connect(detail::show);
         ghost.addClass("__row-ghost__");
         // IN THE TREE BEFORE A DRAG CAN PROMOTE IT. @see DragGhost
@@ -210,6 +233,15 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             }
             window.animation().every(this, delta -> {
                 PreviewStyles.of(window).sync();
+                if (reflowPending) {
+                    reflowPending = false;
+                    resizePending = false;
+                    search.refresh();
+                } else if (resizePending) {
+                    resizePending = false;
+                    heights.invalidate();
+                    tree().setSizeStrategy(heights);
+                }
                 return true;
             });
             window.animation().afterLayout(this, delta -> {
@@ -265,7 +297,9 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     public void select(@Nullable LibraryCatalog.Entry entry) {
         if (Objects.equals(entry == null ? null : entry.kind(), selected == null ? null : selected.kind())) return;
         selected = entry;
-        for (RowView view : views.values()) view.markSelection();
+        for (PreviewCard card : cards.values()) {
+            toggle(card, PreviewCard.SELECTED_CLASS, sameKind(card.entry(), selected));
+        }
         onSelect.emit(entry);
     }
 
@@ -274,8 +308,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         List<PreviewCard> out = new ArrayList<>();
         for (Map.Entry<Integer, UIElement> realised : tree().realisedRows().entrySet()) {
             RowView view = views.get(realised.getValue());
-            if (view == null) continue;
-            out.addAll(view.cards.subList(0, view.used));
+            if (view != null && view.isStrip()) out.addAll(view.cards());
         }
         return out;
     }
@@ -318,7 +351,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         } else {
             for (int start = 0; start < run.size(); start += perStrip) {
                 List<LibraryCatalog.Entry> strip = List.copyOf(run.subList(start, Math.min(run.size(), start + perStrip)));
-                out.add(new Strip(path + "#" + start / perStrip, strip));
+                out.add(new Strip(path + "#" + start / perStrip, path, strip));
             }
         }
         run.clear();
@@ -328,6 +361,9 @@ public final class LibraryPanel extends UIElement implements DataProvider {
      * Re-flows the strips when a card's pitch or the panel's width changed, and re-sizes them to a card's height.
      *
      * <p>Measured rather than declared: a card's width is the sheet's, and so is the gap between cards.</p>
+     *
+     * <p>Both only flag themselves: rebuilding the rows here, after layout, moved every card and made the frame lay
+     * itself out twice. The next frame's hook acts on them before its style and layout run.</p>
      */
     private void measure() {
         if (rows) return;
@@ -335,9 +371,10 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             RowView view = views.get(realised.getValue());
             Box stripBox = realised.getValue().box();
             if (view == null || stripBox == null || !view.isStrip()) continue;
-            Box first = view.cards.isEmpty() ? null : view.cards.get(0).box();
+            List<PreviewCard> strip = view.cards();
+            Box first = strip.isEmpty() ? null : strip.get(0).box();
             if (first == null || first.width() < 1f) continue;
-            Box second = view.used > 1 ? view.cards.get(1).box() : null;
+            Box second = strip.size() > 1 ? strip.get(1).box() : null;
             float gap = second == null ? 0f : second.x() - first.x() - first.width();
             float pitch = first.width() + Math.max(0f, gap);
             // THE ROW, not the strip inside it: the strip is as wide as the cards it holds, so it would only ever fit them.
@@ -348,41 +385,55 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             boolean resize = Math.abs(height - stripHeight) > 0.5f;
             if (reflow) perStrip = fits;
             if (resize) stripHeight = height;
-            if (reflow) search.refresh();
-            else if (resize) tree().setSizeStrategy(new Heights());
+            if (reflow) reflowPending = true;
+            else if (resize) resizePending = true;
             return;
         }
     }
 
-    /** A folder or a row is {@link #ROW_HEIGHT}; a strip is a card's height. */
+    /**
+     * A folder or a row is {@link #ROW_HEIGHT}; a strip is a card's height. Prefix sums over the visible rows,
+     * re-read from the tree on the first query after its rows or the strip height changed.
+     */
     private final class Heights implements ItemSizeStrategy {
+
+        private final VariableHeightStrategy sizes = new VariableHeightStrategy(ROW_HEIGHT);
+        private boolean stale = true;
+
+        void invalidate() {
+            stale = true;
+        }
+
+        private VariableHeightStrategy sizes() {
+            if (!stale) return sizes;
+            stale = false;
+            int count = tree().getModel().size();
+            sizes.setCount(count);
+            for (int i = 0; i < count; i++) {
+                TreeRow<Row> row = tree().rowAt(i);
+                sizes.setSize(i, row != null && row.item() instanceof Strip ? stripHeight : ROW_HEIGHT);
+            }
+            return sizes;
+        }
 
         @Override
         public float sizeOf(int index) {
-            TreeRow<Row> row = tree().rowAt(index);
-            return row != null && row.item() instanceof Strip ? stripHeight : ROW_HEIGHT;
+            return sizes().sizeOf(index);
         }
 
         @Override
         public float totalSize(int count) {
-            return offsetOf(count);
+            return sizes().totalSize(count);
         }
 
         @Override
         public float offsetOf(int index) {
-            float offset = 0f;
-            for (int i = 0; i < index; i++) offset += sizeOf(i);
-            return offset;
+            return sizes().offsetOf(index);
         }
 
         @Override
         public int indexAt(float offset, int count) {
-            float bottom = 0f;
-            for (int i = 0; i < count; i++) {
-                bottom += sizeOf(i);
-                if (bottom > offset) return i;
-            }
-            return count;
+            return sizes().indexAt(offset, count);
         }
     }
 
@@ -396,10 +447,6 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         final GlyphView glyph = new GlyphView(null);
         final UIText label = new UIText("");
         final UIElement strip = new UIElement();
-        final List<PreviewCard> cards = new ArrayList<>();
-
-        /** How many of {@link #cards} the bound strip shows; the rest are hidden spares. */
-        int used;
 
         @Nullable
         Row bound;
@@ -446,35 +493,52 @@ public final class LibraryPanel extends UIElement implements DataProvider {
                 glyph.showKind(entry.kind());
             }
             if (item instanceof Strip run) bindStrip(run);
-            else used = 0;
-            markSelection();
+            else park(0);
         }
 
+        /** The cards this strip holds, in order. */
+        List<PreviewCard> cards() {
+            List<PreviewCard> out = new ArrayList<>();
+            for (UIElement child : strip.children()) {
+                if (child instanceof PreviewCard card) out.add(card);
+            }
+            return out;
+        }
+
+        /** Moves each kind's card into its place here; whatever this strip held past the run is parked. */
         private void bindStrip(Strip run) {
             UIDocument window = document();
-            while (cards.size() < run.entries().size() && window != null) {
-                PreviewCard card = new PreviewCard(PreviewStyles.of(window).group());
-                card.onMouseDown.attachListener((element, event) -> {
-                    LibraryCatalog.Entry entry = ((PreviewCard) element).entry();
-                    if (entry != null) press(entry, element, event);
-                }, false, true);
-                cards.add(card);
-                strip.append(card);
+            if (window == null) return;
+            List<LibraryCatalog.Entry> entries = run.entries();
+            for (int i = 0; i < entries.size(); i++) {
+                PreviewCard card = cardFor(run.folder(), entries.get(i), window);
+                List<UIElement> held = strip.children();
+                if (i >= held.size() || held.get(i) != card) card.moveTo(strip, i);
             }
-            used = Math.min(cards.size(), run.entries().size());
-            for (int i = 0; i < cards.size(); i++) {
-                boolean shown = i < used;
-                if (shown) cards.get(i).show(run.entries().get(i));
-                show(cards.get(i), shown);
-            }
+            park(entries.size());
         }
 
-        /** A card marks itself; a compact row is marked by the list, whose selection drives {@link #select}. */
-        void markSelection() {
-            for (PreviewCard card : cards) {
-                toggle(card, PreviewCard.SELECTED_CLASS, card.entry() != null && sameKind(card.entry(), selected));
+        private void park(int from) {
+            while (strip.children().size() > from) {
+                strip.children().get(from).moveTo(parked, parked.children().size());
             }
         }
+    }
+
+    /** The kind's card in {@code folder}, made on first sight. @see #cards */
+    private PreviewCard cardFor(String folder, LibraryCatalog.Entry entry, UIDocument window) {
+        String key = folder + "|" + entry.kind();
+        PreviewCard card = cards.get(key);
+        if (card != null) return card;
+        card = new PreviewCard(PreviewStyles.of(window).group());
+        card.onMouseDown.attachListener((element, event) -> {
+            LibraryCatalog.Entry shown = ((PreviewCard) element).entry();
+            if (shown != null) press(shown, element, event);
+        }, false, true);
+        card.show(entry);
+        toggle(card, PreviewCard.SELECTED_CLASS, sameKind(entry, selected));
+        cards.put(key, card);
+        return card;
     }
 
     /** A click selects, a double-click places, and a press that travels drags a {@link NewNode} to a drop target. */

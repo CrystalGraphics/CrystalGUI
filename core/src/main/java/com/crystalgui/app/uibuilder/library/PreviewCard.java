@@ -41,6 +41,7 @@ import com.crystalgui.widget.text.UIText;
  *
  * <ul>
  *   <li>{@link #show} rebuilds only when the kind changes, so a recycled card rebinding the same kind is free.</li>
+ *   <li>The sample is built on its turn in the window's {@link PreviewBuilds}; until then the card shows its glyph.</li>
  *   <li>The fit runs after layout, so a new sample is scaled on the frame after it first lays out.</li>
  * </ul>
  */
@@ -80,6 +81,9 @@ public final class PreviewCard extends UIElement {
     @Nullable
     private UIElement frame;
 
+    /** Whether the sample is waiting for its turn to be built. @see PreviewBuilds */
+    private boolean pending;
+
     // What the last fit wrote, and to which box: a rebuilt box has lost its override.
     @Nullable
     private Box fittedBox;
@@ -107,7 +111,9 @@ public final class PreviewCard extends UIElement {
         hover.addClass(Tooltip.WAIT_CLASS);
         onConnected(() -> {
             UIDocument window = document();
-            if (window != null) window.animation().afterLayout(this, delta -> {
+            if (window == null) return;
+            if (pending) PreviewBuilds.of(window).request(this);
+            window.animation().afterLayout(this, delta -> {
                 fit();
                 return true;
             });
@@ -142,17 +148,36 @@ public final class PreviewCard extends UIElement {
             JsonObject style = new JsonObject();
             style.add("background", new JsonPrimitive(picture.background()));
             InlineStyleCodec.replaceInto(JsonOps.INSTANCE, style, built);
+            pending = false;
             showPlaceholder(false);
         } else {
-            UIElement sample = sampleOf(entry);
-            if (sample != null) built.append(sample);
-            // ON THE SAMPLE, not the frame: a widget's own sheet width outranks anything its container says.
-            if (sample != null && entry.preview() instanceof Preview.Sample declared && declared.width() > 0f) {
-                StyleGroup.inlinePipeline(sample.getStyle().getLayoutGroup(), l -> l.width(declared.width()));
-            }
-            showPlaceholder(sample == null);
+            pending = true;
+            removeClass(PLACEHOLDER_CLASS);
+            showGlyph(true);
+            UIDocument window = document();
+            if (window != null) PreviewBuilds.of(window).request(this);
         }
         clip.append(built);
+    }
+
+    /** Whether the sample is still waiting to be built, the card showing its glyph meanwhile. */
+    public boolean isPending() {
+        return pending;
+    }
+
+    /** Builds the waiting sample. Called by {@link PreviewBuilds} on the card's turn. */
+    void buildSample() {
+        if (!pending || entry == null || frame == null) return;
+        pending = false;
+        UIElement sample = sampleOf(entry);
+        if (sample != null) {
+            frame.append(sample);
+            // ON THE SAMPLE, not the frame: a widget's own sheet width outranks anything its container says.
+            if (entry.preview() instanceof Preview.Sample declared && declared.width() > 0f) {
+                StyleGroup.inlinePipeline(sample.getStyle().getLayoutGroup(), l -> l.width(declared.width()));
+            }
+        }
+        showPlaceholder(sample == null);
     }
 
     @Nullable
@@ -160,7 +185,7 @@ public final class PreviewCard extends UIElement {
         return entry;
     }
 
-    /** The element drawn in the stage, or null for a picture or a placeholder. */
+    /** The element drawn in the stage, or null for a picture, a placeholder or a sample not yet built. */
     @Nullable
     public UIElement sample() {
         return frame == null || frame.children().isEmpty() ? null : frame.children().get(0);
@@ -181,7 +206,7 @@ public final class PreviewCard extends UIElement {
         UIElement drawn = frame;
         Box clipBox = clip.box();
         Box frameBox = drawn == null ? null : drawn.box();
-        if (clipBox == null || frameBox == null || hasClass(PICTURE_CLASS) || isPlaceholder()) return;
+        if (pending || clipBox == null || frameBox == null || hasClass(PICTURE_CLASS) || isPlaceholder()) return;
 
         // WHAT IS DRAWN, which a sample wider than its frame spills past: the frame's own box would clip it.
         float frameWidth = frameBox.width();
@@ -217,8 +242,13 @@ public final class PreviewCard extends UIElement {
     private void showPlaceholder(boolean placeholder) {
         if (placeholder) addClass(PLACEHOLDER_CLASS);
         else removeClass(PLACEHOLDER_CLASS);
-        display(glyph.element(), placeholder);
-        if (frame != null) display(frame, !placeholder);
+        showGlyph(placeholder);
+    }
+
+    /** The glyph or the frame, never both: the glyph while there is no sample to draw, or none yet. */
+    private void showGlyph(boolean shown) {
+        display(glyph.element(), shown);
+        if (frame != null) display(frame, !shown);
     }
 
     private static void display(UIElement element, boolean visible) {
