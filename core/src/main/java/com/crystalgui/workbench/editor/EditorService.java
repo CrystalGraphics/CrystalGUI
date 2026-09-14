@@ -148,6 +148,10 @@ public final class EditorService implements Disposable {
     @Nullable
     private Tab pendingActivation;
 
+    /** The tab last asked to the front, loaded or not: what a read landing later may still bring forward. */
+    @Nullable
+    private Tab wanted;
+
     public EditorService(Workspace workspace, WorkspaceDocuments documents, DocumentKinds kinds) {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.documents = Objects.requireNonNull(documents, "documents");
@@ -187,6 +191,7 @@ public final class EditorService implements Disposable {
 
         Tab tab = new Tab(input);
         tabs.put(input, tab);
+        if (activate) wanted = tab;
         onDidOpen.emit(tab);
 
         PendingReply<Tab> opened = new PendingReply<>(() -> close(tab));
@@ -200,7 +205,10 @@ public final class EditorService implements Disposable {
                     // AFTER THE BIND, which is the whole point of the signal: before it there is no
                     // document on this tab and `editor()` answers null.
                     onDidLoad.emit(tab);
-                    if (activate) activate(tab);
+                    // ONLY IF NOTHING WAS BROUGHT FORWARD SINCE. A read lands whenever it lands, so a tab asked
+                    // for first but loaded last took the front from the one chosen after it: a restored window's
+                    // tab over the session's own, a file opened and then clicked away from.
+                    if (activate && wanted == tab) activate(tab);
                     opened.resolve(tab);
                 });
         return opened;
@@ -233,6 +241,7 @@ public final class EditorService implements Disposable {
     }
 
     public void activate(Tab tab) {
+        wanted = tab;
         if (active == tab) return;
         if (active != null) active.setActive(false);
         active = tab;
@@ -252,6 +261,7 @@ public final class EditorService implements Disposable {
     public void close(Tab tab) {
         if (tabs.remove(tab.input()) == null) return;
         boolean wasInFront = active == tab;
+        if (wanted == tab) wanted = null;
         if (wasInFront) {
             active = null;
             tab.setActive(false);
