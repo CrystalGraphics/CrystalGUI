@@ -302,6 +302,10 @@ hierarchypanel .__twisty__ {
     color: var(--tree-twisty-fg, #FFFFFF);
 }
 
+hierarchypanel .__twisty__:hover {
+    color: var(--tree-twisty-hover-fg, #FFFFFF);
+}
+
 hierarchypanel .__collapsed__ .__twisty__ {
     overlay: shape("chevron-right");
 }
@@ -482,6 +486,10 @@ librarypanel .__twisty__ {
     color: var(--tree-twisty-fg, #FFFFFF);
 }
 
+librarypanel .__twisty__:hover {
+    color: var(--tree-twisty-hover-fg, #FFFFFF);
+}
+
 librarypanel .__collapsed__ .__twisty__ {
     overlay: shape("chevron-right");
 }
@@ -501,8 +509,10 @@ librarypanel .__library-row__ > .__label__ {
     text-overflow: ellipsis;
 }
 
+/* A heading over the cards, so it reads as one: the tree's own colour, bold. */
 .__library-folder__ > .__label__ {
-    color: var(--tree-dimmed-fg, #9DA0A8);
+    color: var(--tree-fg, #FFFFFF);
+    font-weight: bold;
 }
 
 .__card-strip__ {
@@ -524,13 +534,19 @@ previewcard.__selected__ .__label__ {
 
 /* The foot: the selected kind drawn larger beside what it is. Hidden from Java while nothing is selected. */
 librarydetail {
-    width: 100%;
+    /* OVER THE VIEW CONTENT'S OWN 1px EDGES, which it keeps transparent to draw the header's line -- so this
+     * line meets the panel's sides as that one does. Stretched rather than 100%, which the margins would shift. */
+    margin-left: -1px;
+    margin-right: -1px;
     flex-shrink: 0;
     flex-direction: row;
     gap: 6px;
     padding: 6px;
-    border-width: 1 0 0 0;
-    border-color: var(--panel-header-sep, #393B40);
+    /* THE PANEL HEADER'S LINE, the way it is drawn: a rect's stroke takes its width from the left edge alone,
+     * so a top-only width paints nothing. @see `.__view-content__` in ua/workbench.css */
+    border-width: 1px;
+    border-color: #00000000;
+    border-top-color: var(--panel-header-sep, #00000000);
 }
 
 librarydetail previewcard {

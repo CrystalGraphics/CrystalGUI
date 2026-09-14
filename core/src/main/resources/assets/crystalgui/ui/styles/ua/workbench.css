@@ -1957,6 +1957,10 @@ projectfiletree .__project-row__ .__twisty__ {
     color: var(--tree-twisty-fg, #FFFFFF);
 }
 
+projectfiletree .__project-row__ .__twisty__:hover {
+    color: var(--tree-twisty-hover-fg, #FFFFFF);
+}
+
 projectfiletree .__project-row__.__collapsed__ .__twisty__ {
     overlay: shape("chevron-right");
 }
