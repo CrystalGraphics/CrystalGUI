@@ -70,6 +70,9 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     /** Space a strip keeps below its cards. */
     private static final float STRIP_SLACK = 4f;
 
+    /** Rows kept realised beyond the viewport each side: every row of the shipped catalog, at any width. */
+    private static final int REALISED_ROWS = 64;
+
     /** A row of the tree: a folder, a strip of cards, or one kind in compact mode. Equal by key, so folds survive a refresh. */
     public sealed interface Row permits Folder, Strip, Item {
         String key();
@@ -179,6 +182,9 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         search.searchBox().setPlaceholder("Search elements");
         tree().setRenderer(new Renderer());
         tree().setSizeStrategy(new Heights());
+        // KEPT, NOT RECYCLED: a strip rebound as it scrolls in rebuilds every sample on it, which is a frame's
+        // budget for a colour selector. Bounded all the same, for a catalog an addon has made long.
+        tree().setOverscan(REALISED_ROWS);
 
         content.append(search);
         append(content);

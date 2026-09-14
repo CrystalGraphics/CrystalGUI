@@ -2153,7 +2153,6 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         return gutterWidth;
     }
 
-    /** Sets the language. Pass {@link SyntaxTokenizer#NONE} for plain text. */
     /**
      * Where an indent level comes from when Enter is pressed, or null for the syntactic rule.
      *
@@ -2169,6 +2168,15 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         return this;
     }
 
+    /**
+     * What colours the text. {@link #setLanguage} does not: it sets editing rules — comments, brackets — only.
+     *
+     * <pre>{@code
+     * editor.setLanguage(Language.JAVA).setTokenizer(LanguageRegistry.forLanguage(Language.JAVA).newTokenizer());
+     * }</pre>
+     *
+     * Pass {@link SyntaxTokenizer#NONE} for plain text.
+     */
     public TextEditor setTokenizer(SyntaxTokenizer newTokenizer) {
         if (this.tokenizer == newTokenizer) return this;
         // Detach the old one's listener before dropping it, or a tokenizer that is still finishing work

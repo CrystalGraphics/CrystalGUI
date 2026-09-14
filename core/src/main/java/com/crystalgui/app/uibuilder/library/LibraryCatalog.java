@@ -42,9 +42,14 @@ public final class LibraryCatalog {
             return info.preview();
         }
 
-        /** A fresh node to place: the declared sample, so a button arrives labelled, else a plain build. */
+        /** A fresh node to place: the kind's starter, so a button arrives labelled, else its factory's plain build. */
         public UIElement build() {
-            return info.preview() instanceof Preview.Sample sample ? sample.sample().get() : UIElementRegistry.create(kind);
+            return info.starter() != null ? info.starter().get() : UIElementRegistry.create(kind);
+        }
+
+        /** A fresh node for a card: the declared sample, else what placing it would insert. */
+        public UIElement sample() {
+            return info.preview() instanceof Preview.Sample sample ? sample.sample().get() : build();
         }
 
         /** Where it files: its category's segments, else its namespace. */

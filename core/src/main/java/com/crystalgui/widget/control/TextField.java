@@ -23,6 +23,7 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.FocusEvent;
@@ -842,6 +843,30 @@ public class TextField extends UIElement implements Measurable {
         onStyleChanged();
     }
 
+    /**
+     * Draws this field as it looks while typed into — caret, placeholder, focus styling — without taking focus: a
+     * picture of one, for a Library card or a style guide.
+     *
+     * <pre>{@code
+     * card.append(new TextField().setPlaceholder("Type here").presentFocused());
+     * }</pre>
+     *
+     * <p>Only the appearance, and the caret holds still. Nothing is focused, so no key reaches the field.</p>
+     */
+    public TextField presentFocused() {
+        presentedFocused = true;
+        forceState(PseudoClasses.FOCUS, true);
+        return this;
+    }
+
+    /** @see #presentFocused */
+    private boolean presentedFocused;
+
+    /** Whether this paints as focused: really focused, or presented so. */
+    private boolean drawsFocused() {
+        return presentedFocused || isFocused();
+    }
+
     // ── Blink ───────────────────────────────────────────────────────────────
 
     /** Whether the caret is in its visible half of the blink. The headless-testable surface. */
@@ -1178,7 +1203,7 @@ public class TextField extends UIElement implements Measurable {
     private void ensureCaretVisible() {
         // A DIVISOR, so max(1) and never 0 -- see Slider.travelLength.
         float inner = box() == null ? 1f : Math.max(1f, box().contentBoxWidth());
-        displayOffset = scrollOffsetFor(isFocused(), caretX(caret), caretX(text.length()),
+        displayOffset = scrollOffsetFor(drawsFocused(), caretX(caret), caretX(text.length()),
                 inner, displayOffset);
     }
 
@@ -1310,7 +1335,7 @@ public class TextField extends UIElement implements Measurable {
         // so refocusing restores the range — but painting it while something else has focus reads as a
         // second, live cursor. The Blur listener deliberately only commits and resets the blink; do not
         // reach for clearSelection() here, that would lose the range rather than just stop drawing it.
-        if (isFocused() && hasSelection()) {
+        if (drawsFocused() && hasSelection()) {
             float from = originX + prefixWidths[getSelectionStart()];
             float to = originX + prefixWidths[getSelectionEnd()];
             ctx.fillRect(from, originY, to - from, inkHeight, styleGen.selectionColor());
@@ -1327,7 +1352,7 @@ public class TextField extends UIElement implements Measurable {
         // un-popped -- "Unbalanced scissor stack after the main paint pass: depth 1, expected 0", and the
         // whole window flickering before it threw. Anything that decides not to paint has to fall through
         // to the same teardown as anything that does.
-        String shown = showingPlaceholder && !isFocused() ? "" : showingPlaceholder ? placeholder : text;
+        String shown = showingPlaceholder && !drawsFocused() ? "" : showingPlaceholder ? placeholder : text;
         if (!shown.isEmpty()) {
             // A draw that did not get the glyph tier it asked for is provisional, so come back for it
             // next frame. @see CgUiPaintContext#textDegradedDrawCount
@@ -1352,7 +1377,7 @@ public class TextField extends UIElement implements Measurable {
 
         // Caret only while focused, never alongside a selection, and only in the visible half of the
         // blink. No invalidation needed: the tree repaints every frame and tickAnimations runs first.
-        if (isFocused() && !hasSelection() && caretVisible) {
+        if (drawsFocused() && !hasSelection() && caretVisible) {
             float x = originX + prefixWidths[caret];
             // originY, not a re-centred value: the glyphs are drawn `.at(originY)` and CrystalGraphics
             // puts the baseline at originY + ascender, so [originY, originY + ascender + descender] is

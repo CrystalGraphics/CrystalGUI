@@ -2,6 +2,7 @@ package com.crystalgui.widget.overlay;
 
 import com.crystalgui.ui.dom.*;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
@@ -10,6 +11,7 @@ import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -392,6 +394,27 @@ public class Popover extends UIElement {
      */
     public static UIElement hostFor(UIDocument window, @Nullable UIElement near) {
         return window.overlayHost(near);
+    }
+
+    /**
+     * Draws this popover as it looks open, where it stands in its parent's flow — a picture of one, for a
+     * Library card or a style guide.
+     *
+     * <pre>{@code
+     * Menu menu = new Menu();
+     * menu.addItem("Cut");
+     * card.append(menu.presentInline());
+     * }</pre>
+     *
+     * <p>Only the appearance: nothing is promoted, placed, dismissed or focused, and {@link #isOpen()} stays
+     * false, so {@link #hide()} has nothing to undo. Do not {@code show} a popover presented this way.</p>
+     */
+    public Popover presentInline() {
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.FLEX).positionType(TaffyPosition.RELATIVE));
+        addClass(OPEN_CLASS);
+        forceState(PseudoClasses.OPEN, true);
+        return this;
     }
 
     /** Hook for subclasses to move focus inside, once the popover is open and promoted. */

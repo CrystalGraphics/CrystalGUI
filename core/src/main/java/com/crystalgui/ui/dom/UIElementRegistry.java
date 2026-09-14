@@ -52,10 +52,8 @@ public final class UIElementRegistry {
      * name for the cascade and nothing to build from the wire.</p>
      */
     static {
-        register(UIElement.NAME, UIElement::new, plain(UIElement.NAME, true),
-                KindInfo.named("Element").inCategory("Layout")
-                        .synonyms("div", "container", "box", "group", "row", "column")
-                        .describedAs("A plain container that lays out its children."));
+        // WHAT A PICKER SAYS ABOUT IT is the widget layer's, which describes it. @see #describe
+        register(UIElement.NAME, UIElement::new, plain(UIElement.NAME, true));
         register(UISlot.NAME, UISlot::new, plain(UISlot.NAME, true), KindInfo.hidden());
         register(UIDocument.NAME, UIDocument::new, plain(UIDocument.NAME, true), KindInfo.hidden());
     }
@@ -127,6 +125,24 @@ public final class UIElementRegistry {
         Objects.requireNonNull(factory, "factory");
         Objects.requireNonNull(contract, "contract");
         ENTRIES.put(name, new Entry(factory, contract, info == null ? KindInfo.derived() : info));
+    }
+
+    /**
+     * Replaces what pickers say about a kind another layer registered, keeping its factory and contract.
+     *
+     * <pre>{@code
+     * // ui.dom registers the plain element; the widget layer, which owns the Library's vocabulary, files it
+     * UIElementRegistry.describe(UIElement.NAME, KindInfo.named("Element").inCategory("Layout"));
+     * }</pre>
+     *
+     * @throws IllegalStateException when nothing registered {@code name} — a description with no kind under it
+     */
+    public static void describe(Name name, KindInfo info) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(info, "info");
+        Entry registered = ENTRIES.get(name);
+        if (registered == null) throw new IllegalStateException("No kind " + name + " to describe");
+        ENTRIES.put(name, new Entry(registered.factory(), registered.contract(), info));
     }
 
     /**

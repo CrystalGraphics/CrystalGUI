@@ -106,7 +106,7 @@ theme {
     --configkit-list-head-bg: var(--surface-raised);
     --configkit-panel-bg: var(--surface-panel);
     --configkit-popup-bg: var(--surface-overlay);
-    --configkit-slider-fill: var(--border-strong);
+    --configkit-slider-fill: var(--success);
     --configkit-swatch-border: var(--border-base);
     --configkit-value-fg: var(--fg);
 
@@ -519,6 +519,12 @@ theme {
     --searchfield-icon-fg: var(--fg-secondary);
     --searchfield-option-fg: var(--fg-secondary);
     --searchfield-option-hover-bg: var(--hover-bg);
+    /* A picker sample's props: blocks drawn on the editor's page colour, edged as a parent outline is, and bars
+     * standing in for text in the hint colour. */
+    --sample-block-bg: var(--surface-editor);
+    --sample-block-border: var(--border-strong);
+    --sample-line-fg: var(--fg-hint);
+
     --searchfield-option-hover-fg: var(--fg);
     --searchfield-option-on-bg: var(--accent);
     --searchfield-option-on-fg: var(--fg-on-accent);
