@@ -378,6 +378,7 @@ public class EditorServiceTest {
         assertEquals(1, restored);
         EditorService.Tab back = editors.tabFor(EditorInput.of(MAIN));
         assertNotNull(back);
+        assertNull("a restore puts nothing in front of the tab the session showed", editors.active());
         // THE BYTES, which is what "gives it back" MEANS. Opening alone reads the server's copy and
         // settles CLEAN, so this method read the store, counted, and threw the work away -- and the
         // count above is all the test used to assert, so it passed against exactly that.
@@ -434,7 +435,7 @@ public class EditorServiceTest {
                 beforeTheyWrote, back.document().etag());
 
         List<ReplyError> errors = new ArrayList<>();
-        editors.saveActive().onError(errors::add);
+        documents.save(back.document()).onError(errors::add);
         pump();
         assertFalse("so the save is refused rather than silently winning", errors.isEmpty());
         assertEquals(FsError.CONFLICT, errors.get(0).code());

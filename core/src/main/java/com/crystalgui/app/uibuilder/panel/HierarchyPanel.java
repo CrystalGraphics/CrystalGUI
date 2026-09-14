@@ -109,6 +109,10 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
     /** Guards the two directions against answering each other. */
     private boolean syncing;
 
+    /** The root the expansion was last stated against. @see #followRoot */
+    @Nullable
+    private UIElement shownRoot;
+
     public HierarchyPanel(BuilderContext builder) {
         super(NAME);
         this.builder = builder;
@@ -131,12 +135,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
                 return !item.children().isEmpty();
             }
         });
-        // THE ROOT AND ITS CHILDREN. A tree that opens fully collapsed shows one row and reads as a
-        // panel that failed to load; opening everything buries the shape in a document of any size. One
-        // level is what both references settle on.
-        UIElement root = builder.getDocument().root();
-        tree.setExpanded(root, true);
-        for (UIElement child : root.children()) tree.setExpanded(child, true);
+        followRoot();
         // THE FILL IDIOM, at DEFAULT origin so a sheet still decides. Without it the tree lays out at
         // zero height: the rows exist, the panel is the right size, and nothing is drawn -- which reads
         // as "the panel is empty" and is why asserting on visibleRows() could not see it. The project
@@ -270,6 +269,55 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         return at == null ? null : at.item();
     }
 
+    /**
+     * States the expansion against the document's current root.
+     *
+     * <p>First the root and its children: fully collapsed reads as a panel that failed to load, fully open
+     * buries the shape. After that, a reload or a restored backup mints a new root, and what was open stays
+     * open at the same place in the new tree — IntelliJ's {@code TreeState} by path, a child index being a
+     * node's only path that survives a re-parse.</p>
+     */
+    private void followRoot() {
+        UIElement root = builder.getDocument().root();
+        if (root == shownRoot) return;
+        UIElement previous = shownRoot;
+        shownRoot = root;
+        List<UIElement> open = new ArrayList<>();
+        if (previous == null) {
+            open.add(root);
+            for (UIElement child : root.children()) {
+                if (!child.children().isEmpty()) open.add(child);
+            }
+        } else {
+            for (UIElement item : tree.expandedItems()) {
+                UIElement same = samePlace(item, previous, root);
+                if (same != null) open.add(same);
+            }
+        }
+        tree.setExpandedItems(open);
+    }
+
+    /** The node at {@code node}'s child-index path under {@code from}, followed under {@code to}; or null. */
+    @Nullable
+    private static UIElement samePlace(UIElement node, UIElement from, UIElement to) {
+        List<Integer> path = new ArrayList<>();
+        UIElement at = node;
+        for (; at != null && at != from; at = at.parentElement()) {
+            UIElement parent = at.parentElement();
+            if (parent == null) return null;
+            path.add(parent.indexOf(at));
+        }
+        if (at == null) return null;
+        UIElement same = to;
+        for (int i = path.size() - 1; i >= 0; i--) {
+            List<UIElement> children = same.children();
+            int index = path.get(i);
+            if (index < 0 || index >= children.size()) return null;
+            same = children.get(index);
+        }
+        return same;
+    }
+
     private void expandTo(List<UIElement> nodes) {
         for (UIElement node : nodes) {
             for (UIElement at = node.parentElement(); at != null; at = at.parentElement()) {
@@ -342,6 +390,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         if (syncing) return;
         List<UIElement> nodes = builder.builderSelection().nodes();
         withoutWritingBack(() -> {
+            followRoot();
             expandTo(nodes);
             tree.refresh();
             // A CLEARED CANVAS CLEARS THE PANEL, which selectRowsFor does when no row answers.
