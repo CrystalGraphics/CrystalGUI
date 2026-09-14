@@ -83,11 +83,6 @@ public interface TreeEditModel<T> {
         return nameOf(item);
     }
 
-    /** An icon for a one-item drag's ghost, or null. */
-    @Nullable
-    default String iconOf(T item) {
-        return null;
-    }
 
     /** What an item is, for a question about one — {@code "file"}, {@code "element"}. */
     default String noun() {

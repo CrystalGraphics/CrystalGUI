@@ -199,6 +199,7 @@ theme {
 
     --ghost-bg: #2F5F9EC0;
     --ghost-label-bg: #3C3F41F0;
+    --ghost-row-bg: #191A1CA0;
 
     --graph-control-row-bg: #56565676;
     --graph-exposed-dot: #7BD64B;

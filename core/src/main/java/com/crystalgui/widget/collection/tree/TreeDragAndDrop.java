@@ -40,6 +40,9 @@ final class TreeDragAndDrop<T> {
     /** On the row a drop would land after. */
     static final String DROP_AFTER_CLASS = "__drop-after__";
 
+    /** On a tree's ghost: a row's icon and label in one capsule, where a rail button's ghost is a chip. */
+    static final String ROW_GHOST_CLASS = "__row-ghost__";
+
     private final TreeEditing<T> editing;
 
     private final DragGhost ghost = new DragGhost();
@@ -85,11 +88,15 @@ final class TreeDragAndDrop<T> {
 
     TreeDragAndDrop(TreeEditing<T> editing, UIElement host) {
         this.editing = editing;
+        ghost.addClass(ROW_GHOST_CLASS);
         ghost.parkIn(host);
     }
 
-    /** Makes a row draggable from anywhere in it but its rename {@code field}. Once per row, from {@code createTemplate}. */
-    void installRow(UIElement row, UIElement field) {
+    /**
+     * Makes a row draggable from anywhere in it but its rename {@code field}, with a ghost copying its {@code icon}
+     * and {@code label}. Once per row, from {@code createTemplate}.
+     */
+    void installRow(UIElement row, @Nullable UIElement icon, UIElement label, UIElement field) {
         // BUBBLING, as the list's own selection does: a press lands on the row's label or icon as often as on the
         // row, and a renderer need not make its parts unhittable for the row to drag.
         row.events.getGroup(MouseEvent.Down.class).attachListener((element, event) -> {
@@ -106,8 +113,9 @@ final class TreeDragAndDrop<T> {
             List<T> carried = new ArrayList<>(selection.contains(item) ? selection : List.of(item));
             carried.removeIf(each -> !model.canEdit(each));
             if (carried.isEmpty()) return;
-            ghost.follow(window, carried.size() == 1 ? model.iconOf(carried.get(0)) : null,
-                    carried.size() == 1 ? model.labelOf(carried.get(0)) : carried.size() + " items");
+            // ONE ITEM IS THE PRESSED ROW, which is always editable and always carried.
+            if (carried.size() == 1) ghost.follow(window, icon, label);
+            else ghost.follow(window, null, carried.size() + " items");
             Drag.start(row, event.getPosition().x(), event.getPosition().y(), CgMouseCodes.LEFT_BUTTON,
                     new Payload(editing, carried), Drag.DEFAULT_THRESHOLD_PX,
                     (x, y, sx, sy, dx, dy) -> { });

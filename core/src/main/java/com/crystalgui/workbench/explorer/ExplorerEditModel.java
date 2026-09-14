@@ -10,7 +10,6 @@ import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.FileOperations;
-import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.widget.collection.tree.TreeEditModel;
 import com.crystalgui.widget.overlay.InputDialog;
 import com.crystalgui.workbench.WorkbenchContext;
@@ -69,12 +68,6 @@ final class ExplorerEditModel implements TreeEditModel<CgPath> {
     @Override
     public String nameOf(CgPath path) {
         return path.name();
-    }
-
-    @Nullable
-    @Override
-    public String iconOf(CgPath path) {
-        return FileIconTheme.getDefault().iconFor(path.name(), tree.isDirectory(path), false);
     }
 
     @Override

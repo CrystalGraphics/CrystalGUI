@@ -68,4 +68,35 @@ public class DragGhostShowsTest extends UiDocumentTestBase {
         assertNull("the ghost kept its box after the drag ended", ghost.box());
         assertFalse("the ghost stayed promoted after the drag", document.isPromoted(ghost));
     }
+
+    @Test
+    public void aCopyingGhostTakesItsSourcesSize() {
+        withDefaultStyles();
+        UIElement row = new UIElement().layout(l -> l.width(200).height(20));
+        UIElement icon = new UIElement().layout(l -> l.width(14).height(14));
+        row.append(icon);
+        document.append(row);
+        DragGhost ghost = new DragGhost();
+        document.append(ghost);
+        frame();
+
+        ghost.follow(document, icon, null);
+        Drag drag = Drag.start(row, 10f, 10f, CgMouseCodes.LEFT_BUTTON, "payload",
+                Drag.DEFAULT_THRESHOLD_PX, new Drag.Listener() {
+                    @Override
+                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
+                    }
+                });
+        drag.pointerMoved(60f, 60f);
+        // Two frames: the copy is sized after the layout that first gives the ghost a box.
+        frame();
+        frame();
+
+        UIElement copy = (UIElement) ghost.shadowRoot().children().get(1);
+        assertNotNull("the icon copy has no box", copy.box());
+        assertEquals("the icon copy is not its source's size", 14f, copy.box().width(), 0.01f);
+        assertEquals("the icon copy is not its source's size", 14f, copy.box().height(), 0.01f);
+        drag.cancel();
+        frame();
+    }
 }

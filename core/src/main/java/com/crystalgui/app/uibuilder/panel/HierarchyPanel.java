@@ -480,7 +480,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
             row.append(label);
             TextField field = new TextField();
             field.addClass(RENAME_CLASS);
-            editing.installRow(row, field);
+            editing.installRow(row, glyph.element(), label, field);
             row.append(field);
             return row;
         }
