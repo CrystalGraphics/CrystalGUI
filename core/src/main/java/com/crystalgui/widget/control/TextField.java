@@ -255,6 +255,9 @@ public class TextField extends UIElement implements Measurable {
     private static final float DEFAULT_BLINK_SECONDS = 0.53f;
     private float blinkSeconds = DEFAULT_BLINK_SECONDS;
     private float blinkPhase = 0f;
+
+    /** The live blink ticker's number; an older one stops. */
+    private int blinkGeneration;
     private boolean caretVisible = true;
 
     public TextField() {
@@ -337,9 +340,14 @@ public class TextField extends UIElement implements Measurable {
         this.events.getGroup(FocusEvent.Focus.class).attachListener((el, event) -> {
             moveCaret(text.length(), false);
             var window = document();
-            // registerTicker is backed by a HashSet, so re-registering on every refocus is
-            // idempotent; the ticker drops itself by returning false once unfocused.
-            if (window != null) document().animation().every(this, this::tickFrame);
+            // ONE TICKER, THE NEWEST. Hooks are a list, so a refocus within one frame -- a press that blurs
+            // and refocuses, as a search tree's rows do -- added a second ticker before the first saw the
+            // blur, and every one after flipped the caret too: it blinked faster with each press. An older
+            // generation drops itself on its next tick.
+            if (window != null) {
+                int generation = ++blinkGeneration;
+                window.animation().every(this, delta -> generation == blinkGeneration && tickFrame(delta));
+            }
         }, false, false);
 
         this.events.getGroup(FocusEvent.Blur.class).attachListener((el, event) -> {
