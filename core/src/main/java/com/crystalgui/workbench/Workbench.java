@@ -1109,10 +1109,22 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return cacheRoot == null ? null : cacheRoot.resolve(name);
     }
 
+    @Nullable
+    private Function<String, ConfigStorage> extensionStores;
+
+    /**
+     * Where extensions keep what a user made with them. Called by the application beside {@link #useConfig}, from
+     * its desktop — the placement is the desktop's, so a workbench names no desktop. Null: nowhere.
+     */
+    public Workbench useExtensionStores(@Nullable Function<String, ConfigStorage> stores) {
+        this.extensionStores = stores;
+        return this;
+    }
+
     @Override
     @Nullable
-    public ConfigStorage config(String name) {
-        return storage == null ? null : storage.scoped(name);
+    public ConfigStorage extensionStore(String extensionId) {
+        return extensionStores == null ? null : extensionStores.apply(extensionId);
     }
 
     /** The bar an entry goes on. @see UiDataKeys#STATUS_BAR */

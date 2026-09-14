@@ -541,15 +541,18 @@ works, and a test is exactly that host.
 Ask for it while your extension is being activated, not later: extensions activate while the workbench
 is being built, and that is when the root is set.
 
-For what a user chose and would miss — their groups, a remembered view — the private store instead:
+For what a user makes with your extension and would miss — their groups, a remembered view — your
+extension's own store, as a typed record:
 
 ```java
-ConfigStorage mine = workbench.config("mymod");   // durable, per user, never in a project
-if (mine != null) mine.write("layout.json", json);
+// from connected(), not from activate(): the stores are supplied after the extensions activate
+ConfigRecord<Shelf> shelf = ConfigRecord.in(workbench.extensionStore(ID), "shelf.json", Shelf.CODEC, Shelf.EMPTY);
+shelf.update(s -> s.withPinned(kind));
 ```
 
-It is scoped to the name, so two extensions never read each other's files, and null on a host with nowhere
-private to keep one. The builder's Library keeps its user groups there (`uibuilder.library`).
+That is `workspace-config/extensions/<your id>/`, the same in every application and workspace, and null on a
+host with nowhere private to keep one. The builder's Library keeps its user groups there. See *Extension
+records* in `CGUI_WORKBENCH_SERVICES.md`.
 
 A **widget kind** your mod adds needs nothing from here to reach the builder's Library: it is listed under
 your namespace as registered. Filing it, its card and what placing it inserts are the widget's declaration —

@@ -32,7 +32,7 @@ looks like a needed helper is the symptom of one that does not — see
 | `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
 | `JobScheduler` — work off the UI thread | **shipped** | [Background work](#background-work) |
 | `LanguageServices` — the engine behind a document | **seam shipped, no engine yet** | [Language services](#language-services) |
-| `WorkbenchContext.config` — an extension's private records | **shipped** | [Private records](#private-records) |
+| `WorkbenchContext.extensionStore` + `ConfigRecord` — what a user made with an extension | **shipped** | [Extension records](#extension-records) |
 
 ---
 
@@ -290,20 +290,31 @@ release the same way, because none of them is doing anything — leaving the tre
 
 ---
 
-## Private records
+## Extension records
 
-What a user chose and would miss lives in the workspace's private store, never in a project and never in
-the cache. An extension asks for its own corner by name:
+What a user makes with an extension — the UI builder's Library groups — is neither one application's
+preference nor one workspace's state. It lives in the extension's own store,
+`workspace-config/extensions/<extension-id>/`, the same in every application and workspace (VS Code's
+`globalStorage`), kept as a typed record:
 
 ```java
-ConfigStorage store = workbench.config("uibuilder.library");   // scoped: files are yours alone
-if (store != null) store.write("library.json", json);
+record Shelf(boolean rows, List<String> pinned) { static final Codec<Shelf> CODEC = ...; }
+
+ConfigRecord<Shelf> shelf = ConfigRecord.in(workbench.extensionStore(MyExtension.ID), "shelf.json",
+        Shelf.CODEC, new Shelf(false, List.of()));
+shelf.onChanged.connect(this::redraw);
+shelf.update(s -> new Shelf(!s.rows(), s.pinned()));   // written pretty-printed, then announced
 ```
 
-- **Durable**, unlike `cacheDirectory`, which may be deleted at any moment: nothing here is rebuildable.
-- **Null on a host with nowhere private** — a test, a server — which is an ordinary answer. The Library
-  then keeps its groups for the session (`UserLibrary.in(null)`).
-- **The application supplies it** (`Workbench.useConfig`); a host says only where its installation is.
+- **Ask on attach, not while activating.** Extensions activate inside the `Workbench` constructor, and the
+  application supplies the stores after it (`useExtensionStores(desktop::extensionStore)`), so an early ask
+  is null — which is how the Library's groups were first kept for the session only.
+- **Durable**, unlike `cacheDirectory`, and **null on a host with nowhere private**; a record with no store
+  lives for the session.
+- **A file that cannot be read gives the default and is left alone** until the value next changes; an equal
+  value writes nothing.
+- **Placed by the desktop** (`Desktop.extensionStore`); the three tiers under `workspace-config/` are
+  `apps/`, `projects/<key>/` and `extensions/`, spelled only by `StorageLayout`.
 
 ---
 
