@@ -313,6 +313,9 @@ shelf.update(s -> new Shelf(!s.rows(), s.pinned()));   // written pretty-printed
   lives for the session.
 - **A file that cannot be read gives the default and is left alone** until the value next changes; an equal
   value writes nothing.
+- **Several records may hold one file** — the Insert menu of every open `.cgui` keeps the same recent picks.
+  `update` re-reads the file before changing it, so no holder writes over another's change; call `reload()`
+  before showing a value another holder may have changed.
 - **Placed by the desktop** (`Desktop.extensionStore`); the three tiers under `workspace-config/` are
   `apps/`, `projects/<key>/` and `extensions/`, spelled only by `StorageLayout`.
 

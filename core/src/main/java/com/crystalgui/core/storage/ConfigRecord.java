@@ -14,8 +14,8 @@ import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.JsonOps;
 
 /**
- * One typed record kept as a JSON file in a {@link ConfigStorage} — what a user chose and would miss, read once
- * and rewritten whole on each change.
+ * One typed record kept as a JSON file in a {@link ConfigStorage} — what a user chose and would miss, rewritten whole on
+ * each change.
  *
  * <pre>{@code
  * record Shelf(boolean rows, List<String> pinned) { static final Codec<Shelf> CODEC = ...; }
@@ -31,6 +31,9 @@ import com.crystalgui.serialization.JsonOps;
  *       comparison by {@code equals}: setting an equal value writes nothing and announces nothing.</li>
  *   <li><b>A file that cannot be read yields the default</b> and is left alone until the next change, so a file
  *       somebody is halfway through editing by hand is not destroyed by having been read.</li>
+ *   <li><b>Several records may hold one file</b> — two open editors, two panels. {@link #update} re-reads the file
+ *       before changing it, so one holder's change is never written over with another's stale copy; {@link #reload}
+ *       picks up what another holder wrote before showing it.</li>
  *   <li><b>With no store</b> — a test, a host with nowhere private — the record lives for the session.</li>
  *   <li>Written pretty-printed, since this is a file somebody may open. Atomic when the store is
  *       {@link LocalConfigStorage}.</li>
@@ -79,9 +82,18 @@ public final class ConfigRecord<T> {
         onChanged.emit(next);
     }
 
-    /** {@link #set} with what {@code change} makes of the current value. */
+    /** {@link #set} with what {@code change} makes of the value the file holds now. */
     public void update(UnaryOperator<T> change) {
+        reload();
         set(change.apply(value));
+    }
+
+    /** Takes what the file holds now, announcing it when it differs; an unreadable file keeps the current value. */
+    public void reload() {
+        T read = read(value);
+        if (read.equals(value)) return;
+        value = read;
+        onChanged.emit(read);
     }
 
     private T read(T empty) {
