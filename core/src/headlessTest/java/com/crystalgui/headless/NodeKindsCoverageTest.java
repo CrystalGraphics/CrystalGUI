@@ -50,6 +50,16 @@ public class NodeKindsCoverageTest {
             "com/crystalgui/workbench");
 
     /**
+     * Concrete subclasses that are their parent's kind ON PURPOSE, each with why that loses nothing.
+     *
+     * <p>{@code ActionButton} is a {@code button} so every button rule styles a title line's glyphs; it is
+     * chrome a view builds, never a node a description carries, so decoding {@code button} to a plain
+     * {@code Button} cannot drop one.</p>
+     */
+    private static final Set<String> SHARES_ITS_PARENTS_KIND = Set.of(
+            "com.crystalgui.widget.composite.ActionButton");
+
+    /**
      * Every {@link UIElement} subclass under a ported layer that declares a {@code public static final
      * Name NAME}.
      */
@@ -80,6 +90,7 @@ public class NodeKindsCoverageTest {
                     // forgets its NAME still inherits one and is still caught, which is the trap this
                     // exists for and the one M6.2 hit five times in its first tranche.
                     if (Modifier.isAbstract(type.getModifiers())) continue;
+                    if (SHARES_ITS_PARENTS_KIND.contains(type.getName())) continue;
                     Name name = nameOf(type);
                     if (name != null) kinds.put(type, name);
                 }
