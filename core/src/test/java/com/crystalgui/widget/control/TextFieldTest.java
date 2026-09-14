@@ -489,6 +489,17 @@ public class TextFieldTest extends UiDocumentTestBase {
         assertTrue(field.isCaretVisible());
     }
 
+    /** A blur and refocus within one frame -- a search tree's row press -- must not leave two tickers flipping it. */
+    @Test
+    public void refocusingWithinAFrameKeepsTheBlinkRate() {
+        document.focus().requestFocus(focusSink());
+        document.focus().requestFocus(field);
+        tick(0.6f);
+        assertFalse("a second ticker flipped the caret back within one half-period", field.isCaretVisible());
+        tick(0.6f);
+        assertTrue(field.isCaretVisible());
+    }
+
     @Test
     public void blinkStopsOnBlurAndResumesOnRefocus() {
         document.focus().requestFocus(focusSink());
