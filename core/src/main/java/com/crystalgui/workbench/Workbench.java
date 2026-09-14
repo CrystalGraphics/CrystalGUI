@@ -933,6 +933,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
             CgPath path = tab.resource().asPath();
             if (path != null) onDidOpenDocument.emit(path);
         }));
+        // THE TAB THE DOCK SHOWS MAY APPEAR AFTER THE DOCK SAID SO. A session restore puts its panels up before
+        // anything opens their files, and a restored backup opens them without activating, so the front
+        // panel's tab arriving is the moment to put it in front.
+        lifetime.add(editors.onDidOpen.connect(tab -> syncActiveTab()));
         // PRESENCE MOVES WITHOUT THE TAB MOVING. It was refreshed on a tab change alone, which was
         // enough while nothing ever pushed one -- somebody else opening the file you are looking at
         // changes the answer and changes nothing about which tab is in front.

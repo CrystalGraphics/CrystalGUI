@@ -1,11 +1,14 @@
 package com.crystalgui.app.uibuilder;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.joml.Vector2f;
@@ -17,8 +20,10 @@ import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.core.data.Transform2D;
+import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -39,6 +44,10 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.WorkbenchSession;
+import com.crystalgui.workbench.dock.DockGroup;
+import com.crystalgui.workbench.dock.layout.DockLeaf;
+import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
 
 /**
@@ -274,6 +283,54 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
             if (child.hasClass("__twisty__")) return child;
         }
         throw new AssertionError("the row has no twisty to press");
+    }
+
+    /** <b>Unsaved work adopted into the {@code .cgui} in front</b> replaces its root, and the panel keeps its rows. */
+    @Test
+    public void aRestoredUnsavedCguiFillsTheHierarchyPanel() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        for (int i = 0; i < 16; i++) frameAndPump();
+        Workspace workspace = workbench.workspace();
+        workspace.setStorage(new InMemoryConfigStorage());
+        workspace.backup().save(Resource.of(FILE), SOURCE.replace("bao", "unsaved").getBytes(StandardCharsets.UTF_8),
+                "whatever");
+        workbench.editors().restoreUnsavedWork();
+        for (int i = 0; i < 16; i++) frameAndPump();
+
+        HierarchyToolWindow window = panel();
+        assertNotNull("the panel is empty with a restored .cgui in front", window.hierarchy());
+        assertTrue("rows " + window.hierarchy().tree().visibleRows(),
+                window.hierarchy().tree().visibleRows().size() >= 2);
+    }
+
+    /**
+     * <b>A relaunch: the session puts the {@code .cgui} in front, and a backup of a file with no tab lands after.</b>
+     *
+     * <p>Reported as the panel empty on launch until another tab was opened and this one clicked again.</p>
+     */
+    @Test
+    public void aBackupRestoredAtLaunchLeavesTheSessionsTabInFront() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        for (int i = 0; i < 16; i++) frameAndPump();
+        WorkbenchSession session = new WorkbenchSession(workbench);
+        String record = session.toJson(1200, 800);
+        for (DockLeaf leaf : new ArrayList<>(workbench.dock().layout().leaves())) {
+            DockGroup group = workbench.dock().groupFor(leaf);
+            if (group != null) for (DockPanelRef each : new ArrayList<>(group.panels())) workbench.dock().closePanel(each);
+        }
+        for (int i = 0; i < 4; i++) frameAndPump();
+
+        Workspace workspace = workbench.workspace();
+        workspace.setStorage(new InMemoryConfigStorage());
+        workspace.backup().save(Resource.of(FILE), SOURCE.replace("bao", "unsaved").getBytes(StandardCharsets.UTF_8), "a");
+        workspace.backup().save(Resource.of(OTHER), "unsaved notes\n".getBytes(StandardCharsets.UTF_8), "b");
+        assertTrue(session.fromJson(record));
+        workbench.editors().restoreUnsavedWork();
+        for (int i = 0; i < 16; i++) frameAndPump();
+
+        assertEquals("a restored backup took the front from the tab on screen",
+                Resource.of(FILE), workbench.editors().active() == null ? null : workbench.editors().active().resource());
+        assertNotNull("the panel is empty with the session's .cgui in front", panel().hierarchy());
     }
 
     /** With nothing open it is empty, which is the state it must not be stuck in. */

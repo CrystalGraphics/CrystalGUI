@@ -1035,6 +1035,10 @@ overload and no way to ask.** That is why VS Code's is `openEditor(input, option
 - **A ref is a panel's identity**, so the same ref cannot be opened twice. Two tabs on one file means two
   panel *types* over one path, which is what the release guard checks for.
 - `open` returns the leaf it landed in, so a caller acts on it rather than searching for it again.
+- **The dock decides what is in front; `EditorService.active()` follows it.** Loading a document with no
+  tab of its own uses `editors.open(input, false)`, which loads and announces the tab but leaves the front
+  alone, now and when the read lands. Restoring unsaved work at launch opens this way. When the tab behind
+  the dock's front panel appears, the workbench makes it active.
 
 ## `UINode.setOnlyChild`
 

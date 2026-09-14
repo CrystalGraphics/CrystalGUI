@@ -165,9 +165,23 @@ public final class EditorService implements Disposable {
      * a nullable document.</p>
      */
     public Reply<Tab> open(EditorInput input) {
+        return open(input, true);
+    }
+
+    /**
+     * Opens an input, bringing it to the front only when {@code activate} is set.
+     *
+     * <pre>{@code
+     * editors.open(input, false).then(tab -> …);   // behind whatever is in front: restoring a backup
+     * }</pre>
+     *
+     * <p>An inactive open still loads, still announces {@link #onDidOpen} and {@link #onDidLoad}, and never
+     * moves {@link #active()} — neither now nor when its read lands.</p>
+     */
+    public Reply<Tab> open(EditorInput input, boolean activate) {
         Tab existing = tabs.get(input);
         if (existing != null) {
-            activate(existing);
+            if (activate) activate(existing);
             return Reply.of(existing);
         }
 
@@ -186,7 +200,7 @@ public final class EditorService implements Disposable {
                     // AFTER THE BIND, which is the whole point of the signal: before it there is no
                     // document on this tab and `editor()` answers null.
                     onDidLoad.emit(tab);
-                    activate(tab);
+                    if (activate) activate(tab);
                     opened.resolve(tab);
                 });
         return opened;
@@ -346,7 +360,10 @@ public final class EditorService implements Disposable {
             // THE BYTES, once the document is there. Opening alone reads the SERVER's copy and settles
             // CLEAN, so the work this method exists to give back was read from the store, counted, and
             // thrown away -- and the count is what the covering test asserted, so it passed throughout.
-            open(EditorInput.of(entry.resource())).then(tab -> {
+            //
+            // INACTIVE: a backup landing put its file in front of the tab the session restored, with no dock
+            // tab of its own, so everything following the active editor described a file nobody was shown.
+            open(EditorInput.of(entry.resource()), false).then(tab -> {
                 Document document = tab.document();
                 if (document == null) return;
                 // COMPARED AGAINST THE FILE, because a backup is a CLAIM that there is unsaved work and
