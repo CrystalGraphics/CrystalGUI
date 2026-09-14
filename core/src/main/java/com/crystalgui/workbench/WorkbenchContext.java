@@ -3,6 +3,7 @@ package com.crystalgui.workbench;
 import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.workbench.dock.panel.DockOpenOptions;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -251,6 +252,21 @@ public interface WorkbenchContext extends SettingsScope {
      */
     @Nullable
     Path cacheDirectory(String name);
+
+    /**
+     * A private store for an extension's own records — what a user chose, kept for them and never shipped with a
+     * project — or null on a host with nowhere private to keep one.
+     *
+     * <pre>{@code
+     * ConfigStorage store = workbench.config("uibuilder.library");
+     * if (store != null) store.write("groups.json", json);
+     * }</pre>
+     *
+     * <p>Durable, unlike {@link #cacheDirectory}: nothing here is rebuildable. One scope per name, so two
+     * extensions never read each other's files. Null is an ordinary answer, as a test host is.</p>
+     */
+    @Nullable
+    ConfigStorage config(String name);
 
     /** Adds a panel type and how to build one. */
     WorkbenchContext registerPanel(DockPanelDescriptor descriptor,

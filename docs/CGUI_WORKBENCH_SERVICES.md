@@ -32,6 +32,7 @@ looks like a needed helper is the symptom of one that does not — see
 | `DockBannerProvider` — a strip above a panel | **shipped** | [Contributions](#contributions) |
 | `JobScheduler` — work off the UI thread | **shipped** | [Background work](#background-work) |
 | `LanguageServices` — the engine behind a document | **seam shipped, no engine yet** | [Language services](#language-services) |
+| `WorkbenchContext.config` — an extension's private records | **shipped** | [Private records](#private-records) |
 
 ---
 
@@ -286,6 +287,23 @@ instead, for the same span.
 
 No known gap here. A node's field controls, a floating port editor's control and an inspector row all
 release the same way, because none of them is doing anything — leaving the tree is the release.
+
+---
+
+## Private records
+
+What a user chose and would miss lives in the workspace's private store, never in a project and never in
+the cache. An extension asks for its own corner by name:
+
+```java
+ConfigStorage store = workbench.config("uibuilder.library");   // scoped: files are yours alone
+if (store != null) store.write("library.json", json);
+```
+
+- **Durable**, unlike `cacheDirectory`, which may be deleted at any moment: nothing here is rebuildable.
+- **Null on a host with nowhere private** — a test, a server — which is an ordinary answer. The Library
+  then keeps its groups for the session (`UserLibrary.in(null)`).
+- **The application supplies it** (`Workbench.useConfig`); a host says only where its installation is.
 
 ---
 

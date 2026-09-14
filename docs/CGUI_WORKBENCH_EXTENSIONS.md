@@ -541,6 +541,20 @@ works, and a test is exactly that host.
 Ask for it while your extension is being activated, not later: extensions activate while the workbench
 is being built, and that is when the root is set.
 
+For what a user chose and would miss — their groups, a remembered view — the private store instead:
+
+```java
+ConfigStorage mine = workbench.config("mymod");   // durable, per user, never in a project
+if (mine != null) mine.write("layout.json", json);
+```
+
+It is scoped to the name, so two extensions never read each other's files, and null on a host with nowhere
+private to keep one. The builder's Library keeps its user groups there (`uibuilder.library`).
+
+A **widget kind** your mod adds needs nothing from here to reach the builder's Library: it is listed under
+your namespace as registered. Filing it, its card and what placing it inserts are the widget's declaration —
+see *Say where the builder's Library files it* in `CGUI_WIDGETS.md`.
+
 ---
 
 ## 12. A whole product

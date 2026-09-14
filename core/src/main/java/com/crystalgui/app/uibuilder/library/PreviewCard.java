@@ -11,6 +11,8 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import com.crystalgui.app.uibuilder.glyph.GlyphView;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.ScopeGroup;
@@ -45,7 +47,7 @@ import com.crystalgui.widget.text.UIText;
  *   <li>The fit runs after layout, so a new sample is scaled on the frame after it first lays out.</li>
  * </ul>
  */
-public final class PreviewCard extends UIElement {
+public final class PreviewCard extends UIElement implements DataProvider {
 
     public static final Name NAME = Name.of("previewcard");
 
@@ -265,6 +267,13 @@ public final class PreviewCard extends UIElement {
             CrystalGuiCore.LOGGER.warn("[cgui] the Library could not build a preview of <{}>", entry.kind(), failed);
             return null;
         }
+    }
+
+    /** The kind drawn, for a command run from the card's menu. @see LibraryPanel#ENTRY */
+    @Override
+    @Nullable
+    public Object getData(DataKey<?> key) {
+        return key == LibraryPanel.ENTRY ? entry : null;
     }
 
     /** None: the stage and the label are rebuilt by the constructor. */

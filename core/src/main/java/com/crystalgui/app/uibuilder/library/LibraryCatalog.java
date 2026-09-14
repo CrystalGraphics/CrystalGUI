@@ -59,16 +59,33 @@ public final class LibraryCatalog {
         }
     }
 
-    /** A row of the catalog: a folder with children, or one entry. */
-    public record Node(String label, @Nullable Entry entry, List<Node> children) {
+    /**
+     * A row of the catalog: a folder with children, or one entry.
+     *
+     * @param group the group a folder lists, or null for a category or an entry
+     */
+    public record Node(String label, @Nullable Entry entry, List<Node> children, @Nullable Group group) {
+
+        public Node(String label, @Nullable Entry entry, List<Node> children) {
+            this(label, entry, children, null);
+        }
 
         public boolean isCategory() {
             return entry == null;
         }
     }
 
-    /** A shipped group listed ahead of the categories. */
-    public record Group(String label, List<Name> kinds) {
+    /**
+     * A group listed ahead of the categories: a shipped one, or one a user made.
+     *
+     * @param user whether a user made it, and may rename, delete and fill it
+     */
+    public record Group(String label, List<Name> kinds, boolean user) {
+
+        /** A shipped group. */
+        public Group(String label, List<Name> kinds) {
+            this(label, kinds, false);
+        }
     }
 
     private final List<Entry> entries;
@@ -83,11 +100,18 @@ public final class LibraryCatalog {
 
     /** The catalog of everything registered now, with the shipped groups. */
     public static LibraryCatalog current() {
+        return current(List.of());
+    }
+
+    /** As {@link #current()}, with a user's groups after the shipped ones. */
+    public static LibraryCatalog current(List<Group> userGroups) {
         List<Name> buildable = new ArrayList<>();
         for (Name name : UIElementRegistry.names()) {
             if (UIElementRegistry.isBuildable(name)) buildable.add(name);
         }
-        return of(buildable, UIElementRegistry::infoOf, LibraryGroups.SHIPPED);
+        List<Group> groups = new ArrayList<>(LibraryGroups.SHIPPED);
+        groups.addAll(userGroups);
+        return of(buildable, UIElementRegistry::infoOf, groups);
     }
 
     /** A catalog over {@code kinds}, each already known to be buildable, described by {@code info}. */
@@ -127,7 +151,8 @@ public final class LibraryCatalog {
                 Entry entry = byKind.get(kind);
                 if (entry != null) members.add(leaf(entry));
             }
-            if (!members.isEmpty()) roots.add(new Node(group.label(), null, members));
+            // A USER'S EMPTY GROUP IS LISTED, or a group just made would have nowhere to drag a card to.
+            if (!members.isEmpty() || group.user()) roots.add(new Node(group.label(), null, members, group));
         }
 
         Folder root = new Folder();

@@ -24,6 +24,9 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
 
     public static final Name NAME = Name.of("librarytoolwindow");
 
+    /** The private store's scope for the user's Library. @see WorkbenchContext#config */
+    public static final String STORE = "uibuilder.library";
+
     private final WorkbenchContext workbench;
     private final LibraryPanel panel = new LibraryPanel(LibraryCatalog.current());
 
@@ -34,6 +37,8 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
         super(NAME);
         this.workbench = workbench;
         append(panel);
+        // THE USER'S GROUPS AND VIEW, from the workspace's private store; kept for the session on a host with none.
+        panel.useLibrary(UserLibrary.in(workbench.config(STORE)));
         panel.onPlace.connect(this::place);
     }
 

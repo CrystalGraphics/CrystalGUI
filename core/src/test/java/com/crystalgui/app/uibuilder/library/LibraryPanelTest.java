@@ -5,15 +5,22 @@ import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.widget.overlay.MenuItem;
 
 /** B.5: an addon's kind is listed with no builder change, and the strips follow the panel's width. */
 public class LibraryPanelTest extends UiDocumentTestBase {
@@ -88,6 +95,90 @@ public class LibraryPanelTest extends UiDocumentTestBase {
         assertEquals(Button.NAME, panel.selected().kind());
         assertEquals("A labelled push button.", panel.detail().descriptionText());
         assertTrue(button.hoverText().contains("A labelled push button."));
+    }
+
+    @Test
+    public void aUserGroupListsAfterCommonAndPlacesWhatEitherGroupHolds() {
+        UserLibrary mine = UserLibrary.in(null);
+        panel.useLibrary(mine);
+        mine.createGroup("Favourites");
+        mine.addToGroup("Favourites", Button.NAME);
+        expand("Favourites");
+        settle();
+
+        List<String> folders = new ArrayList<>();
+        for (LibraryPanel.Row row : panel.tree().roots()) {
+            if (row instanceof LibraryPanel.Folder folder) folders.add(folder.label());
+        }
+        assertEquals(List.of("Common", "Favourites"), folders.subList(0, 2));
+        List<PreviewCard> buttons = panel.realisedCards().stream()
+                .filter(card -> card.entry().kind().equals(Button.NAME)).toList();
+        assertEquals("a card in Common and one in Favourites", 2, buttons.size());
+        for (PreviewCard card : buttons) {
+            assertEquals("Button", ((Button) card.entry().build()).getText());
+        }
+    }
+
+    @Test
+    public void aCardsMenuActsOnThatCardInItsOwnGroup() {
+        Disposable commands = LibraryActions.register(CommandRegistry.global());
+        try {
+            UserLibrary mine = UserLibrary.in(null);
+            panel.useLibrary(mine);
+            mine.createGroup("Favourites");
+            mine.addToGroup("Favourites", Button.NAME);
+            expand("Favourites");
+            settle();
+
+            int removable = 0;
+            for (PreviewCard card : panel.realisedCards()) {
+                if (!card.entry().kind().equals(Button.NAME)) continue;
+                Menu menu = ContextMenu.of(LibraryPanel.CARD_MENU).build(CommandRegistry.global(), card);
+                for (MenuItem item : menu.getItems()) {
+                    if ("Remove from Group".equals(item.getText()) && item.isEnabled()) removable++;
+                }
+            }
+            assertEquals("only the card inside Favourites can leave it", 1, removable);
+        } finally {
+            commands.dispose();
+        }
+    }
+
+    @Test
+    public void aCardDraggedOntoAUsersGroupJoinsIt() {
+        UserLibrary mine = UserLibrary.in(null);
+        panel.useLibrary(mine);
+        mine.createGroup("Favourites");
+        settle();
+
+        PreviewCard button = panel.realisedCards().stream()
+                .filter(card -> card.entry().kind().equals(Button.NAME)).findFirst().orElseThrow();
+        UIElement favourites = null;
+        for (Map.Entry<Integer, UIElement> realised : panel.tree().realisedRows().entrySet()) {
+            TreeRow<LibraryPanel.Row> row = panel.tree().rowAt(realised.getKey());
+            if (row != null && row.item() instanceof LibraryPanel.Folder folder && folder.label().equals("Favourites")) {
+                favourites = realised.getValue();
+            }
+        }
+        int[] from = centreOf(button);
+        int[] onto = centreOf(favourites);
+        press(from[0], from[1]);
+        move(from[0] + 8, from[1] + 8);
+        move(onto[0], onto[1]);
+        frame();
+        assertTrue("the group does not offer to take the card", favourites.hasClass(LibraryPanel.DROP_CLASS));
+        release(onto[0], onto[1]);
+        settle();
+
+        assertEquals(List.of(Button.NAME), mine.group("Favourites").kinds());
+    }
+
+    private void expand(String label) {
+        for (LibraryPanel.Row row : panel.tree().roots()) {
+            if (row instanceof LibraryPanel.Folder folder && folder.label().equals(label)) {
+                panel.tree().setExpanded(folder, true);
+            }
+        }
     }
 
     private List<Name> kinds() {

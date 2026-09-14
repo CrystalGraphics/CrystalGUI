@@ -1109,6 +1109,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return cacheRoot == null ? null : cacheRoot.resolve(name);
     }
 
+    @Override
+    @Nullable
+    public ConfigStorage config(String name) {
+        return storage == null ? null : storage.scoped(name);
+    }
+
     /** The bar an entry goes on. @see UiDataKeys#STATUS_BAR */
     @Override
     public StatusBar statusBar() {

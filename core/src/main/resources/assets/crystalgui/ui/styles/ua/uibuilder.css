@@ -536,6 +536,12 @@ previewcard.__selected__ .__label__ {
     color: var(--accent-hover, #4A82F2);
 }
 
+/* A user's group a dragged card would join: the selection's accent round the row, as a tree drop into a folder is. */
+.__library-row__.__drop-target__ {
+    border-radius: 3px;
+    outline: 1px var(--accent, #3574F0);
+}
+
 /* The foot: the selected kind drawn larger beside what it is. Hidden from Java while nothing is selected. */
 librarydetail {
     /* OVER THE VIEW CONTENT'S OWN 1px EDGES, which it keeps transparent to draw the header's line -- so this
