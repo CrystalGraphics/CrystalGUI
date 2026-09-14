@@ -120,6 +120,25 @@ public class TitleActionsTest extends UiDocumentTestBase {
     }
 
     @Test
+    public void aToggleShowsWhatAPressSwitchesTo() {
+        boolean[] rows = {false};
+        CommandRegistry.global().register(Command.of("test.titleActions.rows", "Show as Rows")
+                .toggledWhen(ctx -> rows[0]).run(() -> rows[0] = !rows[0]));
+        ActionButton toggle = ActionButton.command("test.titleActions.rows").icon("crystalgui:general/action/viewRows")
+                .whenToggled("crystalgui:general/action/viewCards", "Show as Cards");
+        document.append(toggle);
+        settle();
+        assertEquals("Show as Rows", toggle.tooltip().getBaseText());
+        Object cardsFace = toggle.getStyle().getGeneralGroup().overlay();
+
+        toggle.onPressed.emit();
+        assertTrue(rows[0]);
+        assertEquals("the press did not turn the button to its other face", "Show as Cards", toggle.tooltip().getBaseText());
+        settle();
+        assertFalse("the icon did not change with the face", cardsFace.equals(toggle.getStyle().getGeneralGroup().overlay()));
+    }
+
+    @Test
     public void theActionsSitInOrderBeforeTheOptionsMenuAndHide() {
         assertEquals(List.of(panel.add, panel.expand, panel.collapse), container.titleActions());
         UIElement trailing = panel.add.parentElement().parentElement();

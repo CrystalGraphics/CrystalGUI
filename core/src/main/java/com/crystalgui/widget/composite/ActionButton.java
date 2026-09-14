@@ -148,8 +148,9 @@ public class ActionButton extends Button {
      * its constructor.</p>
      */
     private void drawIcon() {
-        if (iconName == null) return;
-        CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
+        String shown = showingToggled ? toggledIconName : iconName;
+        if (shown == null) return;
+        CgUiSvg glyph = CgUiSvg.ofIcon(shown);
         CgUiDrawable drawn = glyph == null ? CgUiDrawable.EMPTY : glyph;
         StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overlay(drawn));
     }
@@ -169,6 +170,33 @@ public class ActionButton extends Button {
         this.context = Objects.requireNonNull(element, "element");
         return this;
     }
+
+    /**
+     * A second face for a toggle: {@code iconName} and {@code label} replace the button's own while its command is
+     * toggled, so the button shows what a press switches to.
+     *
+     * <pre>{@code
+     * ActionButton.command(TOGGLE_ROWS).icon("crystalgui:general/action/viewRows")          // "Show as Rows"
+     *         .whenToggled("crystalgui:general/action/viewCards", "Show as Cards");
+     * }</pre>
+     *
+     * <p>Followed on the button's refresh, a few times a second; a command that is not checkable never shows it.</p>
+     */
+    public ActionButton whenToggled(String iconName, String label) {
+        this.toggledIconName = Objects.requireNonNull(iconName, "iconName");
+        this.toggledLabel = Objects.requireNonNull(label, "label");
+        refreshFace();
+        return this;
+    }
+
+    @Nullable
+    private String toggledIconName;
+
+    @Nullable
+    private String toggledLabel;
+
+    /** Whether the toggled face is the one shown. */
+    private boolean showingToggled;
 
     /** A second tooltip line. */
     public ActionButton description(@Nullable String text) {
@@ -240,6 +268,8 @@ public class ActionButton extends Button {
         Command command = registry.get(commandId);
         if (command != null && command.isEnabled(CommandContext.of(source()))) {
             registry.run(commandId, CommandContext.of(source()));
+            // AT ONCE, not on the next refresh: a toggle's face is the answer to the press.
+            refreshFace();
         }
     }
 
@@ -251,12 +281,23 @@ public class ActionButton extends Button {
         if (enabled != isEnabled()) setEnabled(enabled);
     }
 
+    /** Shows the toggled face while the command is toggled. @see #whenToggled */
+    private void refreshFace() {
+        if (commandId == null || toggledIconName == null) return;
+        Command command = registry.get(commandId);
+        boolean toggled = command != null && command.isCheckable() && command.isToggled(CommandContext.of(source()));
+        if (toggled == showingToggled) return;
+        showingToggled = toggled;
+        if (document() != null) drawIcon();
+        refreshTooltip();
+    }
+
     private void refreshTooltip() {
         String label = menuLabel;
         KeyChord chord = null;
         if (commandId != null) {
             Command command = registry.get(commandId);
-            label = command == null ? commandId : command.getLabel();
+            label = command == null ? commandId : showingToggled ? toggledLabel : command.getLabel();
             chord = Keymap.acceleratorFor(source(), commandId);
         }
         String detail = description;
@@ -273,6 +314,7 @@ public class ActionButton extends Button {
     protected void connected() {
         super.connected();
         refreshEnabled();
+        refreshFace();
         UIDocument window = document();
         if (commandId == null || ticking || window == null) return;
         ticking = true;
@@ -292,6 +334,7 @@ public class ActionButton extends Button {
         if (sinceRefresh < REFRESH_SECONDS) return true;
         sinceRefresh = 0f;
         refreshEnabled();
+        refreshFace();
         return true;
     }
 }
