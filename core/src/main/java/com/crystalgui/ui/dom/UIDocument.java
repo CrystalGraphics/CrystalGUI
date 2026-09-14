@@ -466,12 +466,18 @@ public final class UIDocument extends UIElement {
             JobScheduler.shared().drain();
         }
         input().beginFrame();
+        long timed = FrameProfile.begin();
         animation().tick(deltaSeconds);
+        FrameProfile.end(timed, "frame:hooks");
         calculateStyle(deltaSeconds);
+        timed = FrameProfile.begin();
         layout(width, height);
+        FrameProfile.end(timed, "frame:layout");
         // AFTER layout, for the hooks that READ geometry -- see Animation.afterLayout. Before
         // endFrame, so a placement made here is what the hover diff and the paint both see.
+        timed = FrameProfile.begin();
         settleAfterLayout(width, height, deltaSeconds);
+        FrameProfile.end(timed, "frame:afterLayout");
         input().endFrame();
     }
 
