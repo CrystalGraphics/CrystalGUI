@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.widget.composite.CreateMenu;
+import com.crystalgui.widget.composite.SearchTree;
 import com.crystalgui.widget.surface.SurfaceContext;
 
 /**
@@ -41,7 +42,7 @@ public final class InsertMenu extends CreateMenu<InsertMenu.Row, Insertable> {
         super(NAME, "Insert");
         this.ctx = ctx;
         addClass("insertmenu");
-        setRows(new Rows<Row, Insertable>() {
+        setRows(new SearchTree.Rows<Row, Insertable>() {
             @Override
             public List<Row> roots(String query) {
                 return build(query);

@@ -623,6 +623,22 @@ nodecreationmenu .__title-bar__ {
     padding-left: 4px;
     cursor: grab;
 }
+/* The search box over the tree, docked or inside a menu. Fills what is left, which is the only thing that
+ * gives the virtualised tree inside a viewport. */
+searchtree {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-direction: column;
+    gap: 2px;
+}
+searchtree > .__items__ {
+    width: 100%;
+    height: 0;
+    flex-grow: 1;
+    flex-shrink: 1;
+}
 nodecreationmenu .__search__ { width: 100%; height: 14px; }
 /* `height: 0` + `flex-grow: 1` — correct only because the parent above has a definite height. A
  * virtualised list has no intrinsic height, so growing into the leftover space is the ONLY thing that

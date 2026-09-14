@@ -12,6 +12,7 @@ import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.CreateMenu;
+import com.crystalgui.widget.composite.SearchTree;
 
 /**
  * Unity's "Create Node" window: search a categorised library and pick a node type — optionally filtered
@@ -57,7 +58,7 @@ public class NodeCreationMenu extends CreateMenu<NodeMenuTree.Node, NodeTypeRegi
         super(NAME, "Create Node");
         this.library = library;
         addClass("nodecreationmenu");
-        setRows(new Rows<NodeMenuTree.Node, NodeTypeRegistry.Offer>() {
+        setRows(new SearchTree.Rows<NodeMenuTree.Node, NodeTypeRegistry.Offer>() {
             @Override
             public List<NodeMenuTree.Node> roots(String query) {
                 List<NodeTypeRegistry.Offer> offers = currentOffers(query);
