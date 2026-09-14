@@ -1,0 +1,54 @@
+{
+  "cgui": 1,
+  "root": {
+    "kind": "element",
+    "style": {
+      "flex-direction": "column",
+      "gap": "2px 2px",
+      "padding-top": "6px",
+      "padding-right": "6px",
+      "padding-bottom": "6px",
+      "padding-left": "6px",
+      "border-top-left-radius-x": "3px",
+      "border-top-left-radius-y": "3px",
+      "border-top-right-radius-x": "3px",
+      "border-top-right-radius-y": "3px",
+      "border-bottom-right-radius-x": "3px",
+      "border-bottom-right-radius-y": "3px",
+      "border-bottom-left-radius-x": "3px",
+      "border-bottom-left-radius-y": "3px",
+      "background-color": "#100010",
+      "outline-width": "1px",
+      "outline-color": "#2D0A5F"
+    },
+    "children": [
+      {
+        "kind": "text",
+        "style": {
+          "color": "#55FFFF"
+        },
+        "state": {
+          "text": "Diamond Sword"
+        }
+      },
+      {
+        "kind": "text",
+        "style": {
+          "color": "#AAAAAA"
+        },
+        "state": {
+          "text": "+7 Attack Damage"
+        }
+      },
+      {
+        "kind": "text",
+        "style": {
+          "color": "#AAAAAA"
+        },
+        "state": {
+          "text": "Sharpness III"
+        }
+      }
+    ]
+  }
+}

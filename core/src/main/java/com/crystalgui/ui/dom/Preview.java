@@ -27,7 +27,7 @@ public sealed interface Preview {
     Preview DERIVED = new Derived();
 
     static Sample sample(Supplier<? extends UIElement> sample) {
-        return new Sample(sample, 0f, false);
+        return new Sample(sample, 0f, false, false);
     }
 
     static Preview picture(String background) {
@@ -39,23 +39,32 @@ public sealed interface Preview {
      *
      * <pre>{@code
      * Preview.sample(() -> panelOfThreeRows()).width(150).whole();   // its shape matters more than its words
+     * Preview.sample(() -> headerBar()).atCardWidth();              // a row whose far end matters, squeezed to fit
      * }</pre>
      *
      * @param width the logical width it is laid out at, or 0 for its own
      * @param fitWhole whether it is shrunk to fit however small that makes it, rather than cropped once its text would
      *              stop reading — for a sample recognised by its shape, a form's band over its rows
+     * @param cardWidth whether it is laid out as wide as the card shows at its smallest readable scale, overriding
+     *              {@code width} — for a row that stretches, whose far end would otherwise be cropped
      */
-    record Sample(Supplier<? extends UIElement> sample, float width, boolean fitWhole) implements Preview {
+    record Sample(Supplier<? extends UIElement> sample, float width, boolean fitWhole, boolean cardWidth)
+            implements Preview {
         public Sample {
             Objects.requireNonNull(sample, "sample");
         }
 
         public Sample width(float logicalWidth) {
-            return new Sample(sample, Math.max(0f, logicalWidth), fitWhole);
+            return new Sample(sample, Math.max(0f, logicalWidth), fitWhole, false);
         }
 
         public Sample whole() {
-            return new Sample(sample, width, true);
+            return new Sample(sample, width, true, cardWidth);
+        }
+
+        /** Laid out at the card's own width and shrunk whole to fit: all of it shows, centred, at any card size. */
+        public Sample atCardWidth() {
+            return new Sample(sample, 0f, true, true);
         }
     }
 

@@ -69,8 +69,13 @@ public final class GlyphView {
 
     /** Draws the glyph of a new node of {@code kind} — a row offering the kind rather than showing a node. */
     public boolean showKind(Name kind) {
+        return showGlyph(KindGlyphs.ofKind(kind));
+    }
+
+    /** Draws {@code glyph} as given — what a Library starter, which is no one kind, is drawn by. */
+    public boolean showGlyph(KindGlyphs.Glyph glyph) {
         node = null;
-        return draw(KindGlyphs.ofKind(kind));
+        return draw(glyph);
     }
 
     private boolean draw(KindGlyphs.Glyph glyph) {

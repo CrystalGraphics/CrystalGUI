@@ -1,0 +1,94 @@
+{
+  "cgui": 1,
+  "root": {
+    "kind": "element",
+    "style": {
+      "flex-direction": "column",
+      "width": "160px",
+      "gap": "4px 4px"
+    },
+    "children": [
+      {
+        "kind": "element",
+        "style": {
+          "flex-direction": "row",
+          "align-items": "center"
+        },
+        "children": [
+          {
+            "kind": "text",
+            "state": {
+              "text": "Level"
+            }
+          },
+          {
+            "kind": "element",
+            "style": {
+              "flex-grow": "1"
+            }
+          },
+          {
+            "kind": "text",
+            "state": {
+              "text": "12"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "element",
+        "style": {
+          "flex-direction": "row",
+          "align-items": "center"
+        },
+        "children": [
+          {
+            "kind": "text",
+            "state": {
+              "text": "Experience"
+            }
+          },
+          {
+            "kind": "element",
+            "style": {
+              "flex-grow": "1"
+            }
+          },
+          {
+            "kind": "text",
+            "state": {
+              "text": "340 / 500"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "element",
+        "style": {
+          "flex-direction": "row",
+          "align-items": "center"
+        },
+        "children": [
+          {
+            "kind": "text",
+            "state": {
+              "text": "Kills"
+            }
+          },
+          {
+            "kind": "element",
+            "style": {
+              "flex-grow": "1"
+            }
+          },
+          {
+            "kind": "text",
+            "state": {
+              "text": "27"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

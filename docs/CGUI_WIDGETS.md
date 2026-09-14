@@ -210,8 +210,9 @@ programmatic focus, false after a mouse click — except on elements that take t
 
   A sample's `width` is the logical width it is laid out at before the card scales it down; a control that
   fills its row needs one or it lays out to nothing. `whole()` shrinks it however small that makes it,
-  rather than cropping it once its text would stop reading. A widget whose look needs a state nothing is
-  in draws it with `presentInline()` (popovers, menus, dialogs, tooltips) or `presentFocused()` (a text
+  rather than cropping it once its text would stop reading; `atCardWidth()` lays it out as wide as the card
+  shows and fits it whole, for a stretching row whose far end would otherwise be cropped. A widget whose look
+  needs a state nothing is in draws it with `presentInline()` (popovers, menus, dialogs, tooltips) or `presentFocused()` (a text
   field). The shipped kinds' samples are `widget.WidgetSamples`, styled by `ua/samples.css`.
 - **Override `writeState`/`readState`** if the widget carries state a server would want to send or a
   client would want to report back. See `CGUI_SERVER_AND_SERIALIZATION.md`.
@@ -321,6 +322,15 @@ menu.onCycle.connect(step -> placement.cycle(step)); // Tab / Shift+Tab in the s
 A Library card: the kind's sample in a shadow root wearing the window's sheets and no panel rule, fitted into
 a tile and cropped by a square scissor, with its name under it. Samples build a few per frame through the
 window's `PreviewBuilds`; until its turn a card shows the kind's glyph.
+
+A card may also show a **starter** — a snippet of several nodes, listed first under *Starters* in the Library and
+the Insert menu. `LibraryStarters` declares each as a `LibraryCatalog.Entry` over a shipped `.cgui`:
+
+```java
+LibraryCatalog.Entry card = LibraryStarters.CARD;   // id "starter:crystalgui:uibuilder/starters/card"
+card.kind();                                        // null: a starter is no one kind, so it joins no user group
+card.build();                                       // a fresh tree of the snippet each call
+```
 
 ### Keeping rows realised — `ListView.setOverscan`
 

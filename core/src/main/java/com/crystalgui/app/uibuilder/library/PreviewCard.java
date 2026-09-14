@@ -28,7 +28,7 @@ import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 
 /**
- * One Library card: the kind drawn as itself, fitted into the card, with its name under it.
+ * One Library card: a kind or a starter drawn as itself, fitted into the card, with its name under it.
  *
  * <pre>{@code
  * PreviewCard card = new PreviewCard(PreviewStyles.of(window).group());
@@ -129,15 +129,15 @@ public final class PreviewCard extends UIElement implements DataProvider {
 
     /** Draws {@code entry}; a no-op when it is already the one drawn. */
     public void show(LibraryCatalog.Entry entry) {
-        if (this.entry != null && this.entry.kind().equals(entry.kind())) return;
+        if (this.entry != null && this.entry.id().equals(entry.id())) return;
         this.entry = entry;
         label.setText(entry.label());
         String about = entry.info().description();
-        hover.setText(entry.label() + (about == null ? "" : " — " + about) + "  <" + entry.kind() + ">");
+        hover.setText(entry.label() + (about == null ? "" : " — " + about) + (entry.isStarter() ? "" : "  <" + entry.kind() + ">"));
         clip.removeAll();
         removeClass(PICTURE_CLASS);
         fittedBox = null;
-        glyph.showKind(entry.kind());
+        glyph.showGlyph(entry.glyph());
         clip.append(glyph.element());
 
         UIElement built = new UIElement();
@@ -175,11 +175,20 @@ public final class PreviewCard extends UIElement implements DataProvider {
         if (sample != null) {
             frame.append(sample);
             // ON THE SAMPLE, not the frame: a widget's own sheet width outranks anything its container says.
-            if (entry.preview() instanceof Preview.Sample declared && declared.width() > 0f) {
-                StyleGroup.inlinePipeline(sample.getStyle().getLayoutGroup(), l -> l.width(declared.width()));
-            }
+            float width = entry.preview() instanceof Preview.Sample declared
+                    ? declared.cardWidth() ? cardLayoutWidth() : declared.width() : 0f;
+            if (width > 0f) StyleGroup.inlinePipeline(sample.getStyle().getLayoutGroup(), l -> l.width(width));
         }
         showPlaceholder(sample == null);
+    }
+
+    /**
+     * The widest a sample can be laid out and still show whole at {@link #MIN_SCALE}: this card's room, from its own
+     * clip, so a card sized differently — the detail strip's — gets its own. 0, its own width, before the card has a box.
+     */
+    private float cardLayoutWidth() {
+        Box clipBox = clip.box();
+        return clipBox == null ? 0f : Math.max(0f, clipBox.clientWidth() - INSET * 2f) / MIN_SCALE;
     }
 
     @Nullable
@@ -264,12 +273,12 @@ public final class PreviewCard extends UIElement implements DataProvider {
         try {
             return entry.sample();
         } catch (RuntimeException | LinkageError failed) {
-            CrystalGuiCore.LOGGER.warn("[cgui] the Library could not build a preview of <{}>", entry.kind(), failed);
+            CrystalGuiCore.LOGGER.warn("[cgui] the Library could not build a preview of {}", entry.id(), failed);
             return null;
         }
     }
 
-    /** The kind drawn, for a command run from the card's menu. @see LibraryPanel#ENTRY */
+    /** The entry drawn, for a command run from the card's menu. @see LibraryPanel#ENTRY */
     @Override
     @Nullable
     public Object getData(DataKey<?> key) {
