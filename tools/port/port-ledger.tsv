@@ -36,12 +36,12 @@ CLASS	language/run/view/TailFollow	127	language/run/view	6.7	copy	in-place
 PART	(unowned)	corner	A	7	proposed	leaf in every rule
 PART	(unowned)	error	A	1	proposed	leaf in every rule
 PART	(unowned)	fill	A	9	proposed	leaf in every rule, scoped by an ancestor in 3
-PART	(unowned)	glyph-addon	A	3	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	(unowned)	glyph-collection	A	3	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	(unowned)	glyph-control	A	3	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	(unowned)	glyph-layout	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	(unowned)	glyph-overlay	A	3	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	(unowned)	glyph-text	A	3	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	(unowned)	glyph-addon	A	5	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	(unowned)	glyph-collection	A	5	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	(unowned)	glyph-control	A	5	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	(unowned)	glyph-layout	A	4	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	(unowned)	glyph-overlay	A	5	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	(unowned)	glyph-text	A	5	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	(unowned)	h-scroller	A	3	proposed	leaf in every rule
 PART	(unowned)	handle-bottom	A	1	proposed	leaf in every rule
 PART	(unowned)	handle-bottom-left	A	1	proposed	leaf in every rule
@@ -119,6 +119,11 @@ PART	Breadcrumbs	crumb	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-current	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-sep	B	0	confirmed	leaf in every rule
+PART	BuilderInsert	insert-cycle	A	0	proposed	leaf in every rule
+PART	BuilderInsert	insert-relation	A	0	proposed	leaf in every rule
+PART	BuilderInsert	insert-spacer	A	0	proposed	leaf in every rule
+PART	BuilderInsert	insert-target	A	0	proposed	leaf in every rule
+PART	BuilderInsert	keycap	A	0	proposed	leaf in every rule
 PART	BuilderPane	builder-pane	A	0	proposed	leaf in every rule
 PART	BuilderToolbar	builder-toolbar	A	0	proposed	leaf in every rule
 PART	BuilderToolbar	preview	A	0	proposed	leaf in every rule
@@ -285,6 +290,8 @@ PART	InputDialog	dialog-detail	A	0	proposed	leaf in every rule
 PART	InputDialog	placing	C	3	confirmed	state adjective
 PART	InputDialog	prompt	B	4	confirmed	a rule selects through it (2)
 PART	InputDialog	prompt-caption	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	InsertMenu	insert-footer	A	0	proposed	leaf in every rule
+PART	InsertMenu	insert-header	A	0	proposed	leaf in every rule
 PART	InsertionMarker	insertion	A	1	confirmed	leaf in every rule
 PART	InspectionWidgetPart	inspection	B	1	confirmed	leaf in every rule
 PART	InspectionWidgetPart	inspection-clean	B	2	confirmed	a rule selects through it (2)
@@ -591,13 +598,14 @@ PART	SearchReplaceBar	option-preserve-case	B	1	confirmed	leaf in every rule
 PART	SearchReplaceBar	option-regex	B	1	confirmed	leaf in every rule
 PART	SearchReplaceBar	option-words	B	1	confirmed	leaf in every rule
 PART	SearchTree	category	A	0	proposed	leaf in every rule
-PART	SearchTree	category-segment	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	SearchTree	category-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchTree	category-segment	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchTree	category-separator	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	SearchTree	empty	C	2	proposed	state adjective
 PART	SearchTree	entry	A	0	proposed	leaf in every rule
-PART	SearchTree	entry-category	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchTree	entry-category	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchTree	entry-icon	A	0	proposed	leaf in every rule
 PART	SearchTree	items	A	0	proposed	leaf in every rule
-PART	SearchTree	label	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchTree	label	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
 PART	SearchTree	search	A	0	proposed	leaf in every rule
 PART	SearchTree	twisty	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	SelectControl	select	B	2	confirmed	a rule selects through it (1)

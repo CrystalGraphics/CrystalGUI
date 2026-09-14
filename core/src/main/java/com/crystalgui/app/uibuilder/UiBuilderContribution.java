@@ -56,7 +56,8 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                 .files(DocumentKind.FilePatterns.extension("cgui"))
                 .icon("crystalgui:layout")
                 .model((resource, bytes) -> new UiBuilderDocument(bytes, resource.toString()))
-                .editor(document -> new BuilderEditor((UiBuilderDocument) document.model())),
+                // The store is asked per editor: stores are supplied after extensions activate.
+                .editor(document -> new BuilderEditor((UiBuilderDocument) document.model(), workbench.extensionStore(ID))),
                 "cgui");
         // The kind is registered ON the workbench, so it goes when the workbench does and needs no
         // handle of its own. @see WorkbenchExtension

@@ -79,6 +79,25 @@ public final class DropResolver {
         return null;
     }
 
+    /**
+     * The drop into {@code target} at child {@code index}, drawn against the child it lands beside — what a place
+     * chosen by keyboard shows, as a pointer's is. Null when {@code target} has no layout box.
+     */
+    @Nullable
+    public Drop at(UIElement target, int index) {
+        float[] targetRect = CanvasRects.ofLayout(target, space);
+        if (targetRect == null) return null;
+        SortPlacement.Flow flow = SortPlacement.Flow.of(target);
+        List<UIElement> children = target.children();
+        int clamped = Math.max(0, Math.min(index, children.size()));
+        // THE CHILD AT THE INDEX, the new node going before it; past the end, the last child, going after it.
+        UIElement beside = clamped < children.size() ? children.get(clamped) : children.isEmpty() ? null : children.get(clamped - 1);
+        float[] rect = beside == null || !SortPlacement.inFlow(beside) ? null : CanvasRects.ofLayout(beside, space);
+        if (rect == null) return new Drop(target, clamped, null, flow.column(), targetRect);
+        SortPlacement.Side side = clamped < children.size() ? SortPlacement.Side.BEFORE : SortPlacement.Side.AFTER;
+        return new Drop(target, clamped, new Against(beside, side, rect), flow.column(), targetRect);
+    }
+
     private Drop dropInto(UIElement target, float[] targetRect, float x, float y) {
         SortPlacement.Flow flow = SortPlacement.Flow.of(target);
         List<UIElement> children = target.children();

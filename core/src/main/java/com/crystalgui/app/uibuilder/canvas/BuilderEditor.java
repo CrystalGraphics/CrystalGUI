@@ -12,7 +12,9 @@ import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
 import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.insert.BuilderInsert;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.widget.layout.ContextToolbar;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.surface.mode.ToolKind;
@@ -81,8 +83,14 @@ public final class BuilderEditor implements DocumentEditor {
     private final ReorderInFlow reorderGesture;
     private final TextEditGesture textEditing;
     private final BuilderPane pane;
+    private final BuilderInsert insert;
 
     public BuilderEditor(UiBuilderDocument document) {
+        this(document, null);
+    }
+
+    /** @param store the UI builder's extension store, where the Insert menu keeps recent picks; null for none */
+    public BuilderEditor(UiBuilderDocument document, @Nullable ConfigStorage store) {
         this.document = document;
         this.artboard = new Artboard(document);
         this.surface = new BuilderSurface(document, artboard,
@@ -123,6 +131,8 @@ public final class BuilderEditor implements DocumentEditor {
         surface.surface().addOverlay(textEditing);
         // A LIBRARY CARD DROPPED ON THE PLANE, which a hit in design mode always reaches: the artboard takes none.
         new NewNodeDrop(surface).installOn(surface);
+        this.insert = new BuilderInsert(surface, store);
+        surface.registerInsertSource(insert);
         // FREE TRANSFORM (L4.5a). Mounted directly like the handles rather than as an overlay kind: it
         // is a live gesture, not a view a designer turns on, and it draws nothing at all while down.
         this.transformBox = new TransformBox(surface, document);
@@ -258,7 +268,8 @@ public final class BuilderEditor implements DocumentEditor {
     }
 
     /**
-     * The menu for whatever was right-clicked, or <b>null for nothing</b>.
+     * The menu for whatever was right-clicked; for nothing — blank page or plane — <b>null</b>, having opened the
+     * Insert menu at the pointer instead, in design mode.
      *
      * <p>The commands resolve from the SELECTION, so a menu offered over empty plane describes an element
      * somewhere else entirely — you would be acting on something you cannot see from where you clicked.
@@ -271,14 +282,28 @@ public final class BuilderEditor implements DocumentEditor {
      */
     @Nullable
     public ContextMenu menuFor(@Nullable UIElement item) {
-        if (item == null) return null;
+        // BLANK PAGE OR PLANE: nothing to act on, so the one thing to do there is put something there.
+        if (item == null || item == document.root()) {
+            UIDocument window = surface.document();
+            if (window != null && surface.isDesignMode()) {
+                insert.openAtPointer(window.input().pointer().x(), window.input().pointer().y());
+            }
+            return null;
+        }
         if (!selection().nodes().contains(item)) selection().selectOnly(item);
         return ContextMenu.builder()
+                .item(BuilderCommands.INSERT)
+                .separator()
                 .item(BuilderCommands.COPY_ATTRIBUTES)
                 .item(BuilderCommands.PASTE_ATTRIBUTES)
                 .separator()
                 .item(BuilderCommands.FREE_TRANSFORM)
                 .item(BuilderCommands.CONVERT_TO_SIZE);
+    }
+
+    /** The Insert menu's placement and offers. */
+    public BuilderInsert insert() {
+        return insert;
     }
 
     /** The numbers behind a Free Transform, for a test. */

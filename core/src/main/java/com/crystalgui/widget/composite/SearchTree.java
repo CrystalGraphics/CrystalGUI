@@ -2,6 +2,7 @@ package com.crystalgui.widget.composite;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 
 import javax.annotation.Nullable;
@@ -16,6 +17,8 @@ import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.TextRange;
 import com.crystalgui.ui.box.Box;
@@ -63,6 +66,9 @@ public class SearchTree<N, T> extends UIElement {
     public static final String LABEL_CLASS = "__label__";
     public static final String CATEGORY_CLASS = "__category__";
 
+    /** A row's icon, drawn when {@link Rows#icon} names one; tinted by whatever class {@link Rows#iconClass} adds. */
+    public static final String ENTRY_ICON_CLASS = "__entry-icon__";
+
     /** The dimmed {@code Math ▸ Vector} suffix on a search result — what makes a category-only match legible. */
     public static final String ENTRY_CATEGORY_CLASS = "__entry-category__";
 
@@ -109,6 +115,18 @@ public class SearchTree<N, T> extends UIElement {
         /** The dimmed trail drawn after a search result — {@code Math}, {@code Vector}. */
         default List<String> categorySegments(N node) {
             return List.of();
+        }
+
+        /** An icon drawn before the label — {@code "crystalgui:nodes/ui/button"} — or null for none. */
+        @Nullable
+        default String icon(N node) {
+            return null;
+        }
+
+        /** One class the icon wears, so a theme tints it — a kind's role — or null. */
+        @Nullable
+        default String iconClass(N node) {
+            return null;
         }
     }
 
@@ -358,6 +376,17 @@ public class SearchTree<N, T> extends UIElement {
         public UIElement createTemplate() {
             EntryRow row = new EntryRow();
             // Listeners belong in the template, never in bind — an element is recycled across rows.
+            // THE TWISTY FOLDS on a single press, as the Library's and the Hierarchy's do, and the press stops
+            // there: the row would otherwise select a category it was only asked to open.
+            row.twisty.onMouseDown.attachListener((element, event) -> {
+                int index = tree.indexOfRowElement(row);
+                TreeRow<N> at = index < 0 ? null : tree.rowAt(index);
+                if (at == null || !at.expandable()) return;
+                event.stopPropagation();
+                event.preventDefault();
+                tree.requestToggleAt(index);
+                if (refocusAfterPress.getAsBoolean()) focusSearch();
+            }, false, false);
             row.onMouseDown.attachListener((element, event) -> {
                 int index = tree.indexOfRowElement(element);
                 if (index >= 0) activateRow(index);
@@ -377,6 +406,7 @@ public class SearchTree<N, T> extends UIElement {
             template.removeClass(CATEGORY_CLASS);
             if (category) template.addClass(CATEGORY_CLASS);
             entry.label.setText(rows.label(item));
+            entry.setIcon(category ? null : rows.icon(item), category ? null : rows.iconClass(item));
 
             // Suffix and match tint are recomputed per bind, because rows are recycled; matched against the
             // DRAWN string so the tint stays aligned with what is on screen.
@@ -415,7 +445,15 @@ public class SearchTree<N, T> extends UIElement {
         static final int MAX_CATEGORY_SEGMENTS = 3;
 
         private final UIElement twisty = new UIElement();
+        private final UIElement icon = new UIElement();
         private final UIText label = new UIText("");
+
+        /** What the icon holds, so a rebind to the same one redraws nothing. */
+        @Nullable
+        private String iconName;
+
+        @Nullable
+        private String iconTint;
         private final UIElement category = new UIElement();
         private final UIText[] categorySegments = new UIText[MAX_CATEGORY_SEGMENTS];
         private final UIElement[] categorySeparators = new UIElement[MAX_CATEGORY_SEGMENTS - 1];
@@ -423,9 +461,11 @@ public class SearchTree<N, T> extends UIElement {
         EntryRow() {
             addClass(ENTRY_CLASS);
             twisty.addClass(TWISTY_CLASS);
-            twisty.setHitTest(false);
             label.addClass(LABEL_CLASS);
             label.setHitTest(false);
+            icon.addClass(ENTRY_ICON_CLASS);
+            icon.setHitTest(false);
+            show(icon, false);
 
             // Built ONCE and shown/hidden per bind: creating elements in bind churns Taffy nodes per keystroke.
             category.addClass(ENTRY_CATEGORY_CLASS);
@@ -446,8 +486,25 @@ public class SearchTree<N, T> extends UIElement {
             }
 
             append(twisty);
+            append(icon);
             append(label);
             append(category);
+        }
+
+        /** Draws {@code name} tinted by {@code tint}, or hides the icon for null. */
+        void setIcon(@Nullable String name, @Nullable String tint) {
+            if (!Objects.equals(tint, iconTint)) {
+                if (iconTint != null) icon.removeClass(iconTint);
+                if (tint != null) icon.addClass(tint);
+                iconTint = tint;
+            }
+            if (Objects.equals(name, iconName)) return;
+            iconName = name;
+            show(icon, name != null);
+            if (name == null) return;
+            CgUiSvg svg = CgUiSvg.ofIcon(name);
+            CgUiDrawable drawn = svg == null ? CgUiDrawable.EMPTY : svg;
+            StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(), g -> g.overlay(drawn));
         }
 
         /** Shows exactly {@code segments.size()} labels and the marks between them; hides the rest. */

@@ -5,6 +5,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import org.junit.Test;
 
@@ -70,7 +71,7 @@ public class BuilderOpensOnAnArtboardTest extends UiDocumentTestBase {
         assertTrue("and the builder's own is too",
                 editor.surface().tools().stream()
                         .anyMatch(kind -> TreeSelectTool.ID.equals(kind.id())));
-        assertTrue("and nothing the builder has not written yet",
-                editor.surface().insertSources().isEmpty());
+        assertEquals("and one thing to insert from: its own Insert menu",
+                List.of(editor.insert()), editor.surface().insertSources());
     }
 }

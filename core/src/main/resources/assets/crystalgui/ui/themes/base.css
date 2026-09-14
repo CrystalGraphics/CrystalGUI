@@ -263,6 +263,27 @@ theme {
      * spelling "1 note" in the same colour as everything else. */
     --inspection-info-fg: var(--info);
 
+    /* The Insert menu: the panels' own ground, ringed by a strong border so it separates from the canvas it
+     * opens over, with the placement band raised beneath its title and the key chips on it. */
+    --insertmenu-bg: var(--surface-panel);
+    --insertmenu-border: var(--border-strong);
+    --insertmenu-title-fg: var(--fg-secondary);
+    --insertmenu-band-bg: var(--surface-base);
+    --insertmenu-divider: var(--border-base);
+    --insertmenu-relation-fg: var(--fg-secondary);
+    --insertmenu-target-fg: var(--fg);
+    --insertmenu-key-bg: var(--surface-raised);
+    --insertmenu-key-border: var(--border-strong);
+    --insertmenu-key-fg: var(--fg-secondary);
+    --insertmenu-count-fg: var(--fg-hint);
+    --insertmenu-field-bg: var(--surface-recessed);
+    --insertmenu-field-border: var(--border-field);
+    --insertmenu-field-focus-border: var(--accent);
+    --insertmenu-hover-bg: var(--hover-bg);
+    --insertmenu-icon-fg: var(--fg-secondary);
+    --insertmenu-selected-bg: var(--selection-bg);
+    --insertmenu-hint-fg: var(--fg-hint);
+
     --label-fg: var(--fg);
 
     --list-hover-bg: var(--hover-bg);
