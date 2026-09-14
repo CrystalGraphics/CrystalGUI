@@ -2,6 +2,8 @@ package com.crystalgui.app.uibuilder;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.library.LibraryActions;
+import com.crystalgui.app.uibuilder.library.LibraryToolWindow;
 import com.crystalgui.app.uibuilder.panel.HierarchyActions;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.core.command.CommandRegistry;
@@ -32,6 +34,9 @@ public final class UiBuilderContribution implements WorkbenchExtension {
 
     /** The hierarchy's tool window. */
     public static final String HIERARCHY_PANEL = "uibuilder.hierarchy";
+
+    /** The Library's tool window. */
+    public static final String LIBRARY_PANEL = "uibuilder.library";
 
     /** The file type. {@code DocumentKinds} resolves a {@code .cgui} to this. */
     public static final String DOCUMENT_TYPE = "cgui.file";
@@ -71,7 +76,16 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                         .view(new HierarchyToolWindow(workbench))
                         .openByDefault());
 
+        Disposable libraryCommands = LibraryActions.register(CommandRegistry.global());
+        Disposable library = workbench.registerToolWindow(
+                ToolWindowKind.of(LIBRARY_PANEL, "Library")
+                        .icon("crystalgui:toolwindows/library")
+                        .region(DockRegion.SIDEBAR)
+                        .view(new LibraryToolWindow(workbench)));
+
         return () -> {
+            library.dispose();
+            libraryCommands.dispose();
             panel.dispose();
             rowMenu.dispose();
             sections.dispose();

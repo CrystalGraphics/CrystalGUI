@@ -442,6 +442,190 @@ buildertoolbar > .__preview__ button.__on__ {
 }
 
 
+/* ── The Library panel ───────────────────────────────────────────────────────────────────────────────
+ *
+ * Every placeable kind, filed in a tree whose leaves are strips of cards. Folder rows and compact rows are
+ * the Hierarchy's rows, so the two panels in one sidebar read alike. */
+librarytoolwindow, librarypanel {
+    width: 100%;
+    height: 100%;
+    flex-direction: column;
+}
+
+librarypanel {
+    color: var(--tree-fg, #FFFFFF);
+}
+
+.__library-content__ {
+    padding: 4 4 0 4;
+}
+
+librarypanel .__search__ {
+    width: 100%;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+/* NO height and NO padding-left: the view writes both. */
+.__library-row__ {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    padding-right: 4px;
+    gap: 3;
+}
+
+librarypanel .__twisty__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--tree-twisty-fg, #FFFFFF);
+}
+
+librarypanel .__collapsed__ .__twisty__ {
+    overlay: shape("chevron-right");
+}
+
+librarypanel .__expanded__ .__twisty__ {
+    overlay: shape("chevron-down");
+}
+
+librarypanel .__leaf__ .__twisty__ {
+    overlay: none;
+}
+
+librarypanel .__library-row__ > .__label__ {
+    flex-shrink: 1;
+    min-width: 0px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.__library-folder__ > .__label__ {
+    color: var(--tree-dimmed-fg, #9DA0A8);
+}
+
+.__card-strip__ {
+    flex-grow: 1;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+.__library-item__.__selected__,
+previewcard.__selected__ {
+    background-color: var(--tree-selected-bg, #2F5F9E);
+    color: var(--tree-selected-fg, #FFFFFF);
+}
+
+previewcard.__selected__ .__label__ {
+    color: var(--tree-selected-fg, #FFFFFF);
+}
+
+/* The foot: the selected kind drawn larger beside what it is. Hidden from Java while nothing is selected. */
+librarydetail {
+    width: 100%;
+    flex-shrink: 0;
+    flex-direction: row;
+    gap: 6px;
+    padding: 6px;
+    border-width: 1 0 0 0;
+    border-color: var(--panel-header-sep, #393B40);
+}
+
+librarydetail previewcard {
+    width: 96px;
+    padding: 0;
+}
+
+librarydetail previewcard:hover {
+    background-color: transparent;
+}
+
+librarydetail previewcard .__stage__ {
+    height: 56px;
+}
+
+librarydetail previewcard .__label__ {
+    display: none;
+}
+
+.__detail-words__ {
+    width: 0;
+    flex-grow: 1;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.__detail-tag__ {
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
+                 "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
+    font-size: 8;
+    color: var(--fg-hint, #7A7A7A);
+}
+
+.__detail-description__ {
+    width: 100%;
+    color: var(--tree-dimmed-fg, #9DA0A8);
+}
+
+/* ── Library cards ───────────────────────────────────────────────────────────────────────────────────
+ *
+ * A card draws its kind as itself in a stage, scaled down to fit, with the name under it. The width is the
+ * one the panel divides its rows by. */
+previewcard {
+    width: 72px;
+    flex-shrink: 0;
+    flex-direction: column;
+    align-items: center;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 3px;
+}
+
+previewcard:hover {
+    background-color: var(--panel-header-icon-hover-bg, #393B40);
+}
+
+previewcard .__stage__ {
+    width: 100%;
+    height: 40px;
+    overflow: hidden;
+    border-radius: 2px;
+    background-color: var(--builder-surface-bg, #1B1B1F);
+}
+
+/* NOTHING TO SHOW: the frame without the sample, so the card still says a kind is there. */
+previewcard.__placeholder__ .__stage__ {
+    border-width: 1px;
+    border-color: var(--builder-selected-parent, #55607A);
+}
+
+previewcard .__label__ {
+    width: 100%;
+    font-size: 9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    color: var(--tree-fg, #CCCCCC);
+}
+
+/* INSIDE THE CARD'S SHADOW ROOT, reached by the copy of this sheet the card group carries. Out of flow, so
+ * the sample lays out at its own size rather than the stage's; the card scales and centres it. */
+.__preview-frame__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.__preview-frame__.__picture__ {
+    width: 100%;
+    height: 100%;
+    padding: 4px;
+    color: var(--tree-fg, #CCCCCC);
+}
+
 /* The live size readout during a resize. Sits below the box's bottom-left, placed by the widget, so
  * nothing here positions it -- only what it looks like. */
 .__resize-badge__ {

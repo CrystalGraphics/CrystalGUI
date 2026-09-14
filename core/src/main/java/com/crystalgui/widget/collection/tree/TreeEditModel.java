@@ -75,6 +75,23 @@ public interface TreeEditModel<T> {
         return true;
     }
 
+    /**
+     * Whether a drag from outside the tree carrying {@code payload} may land in {@code parent}. Refused by
+     * default, so a tree takes only its own rows until its model says otherwise.
+     *
+     * <pre>{@code
+     * public boolean canDropForeign(Object payload, Node parent) { return payload instanceof NewNode && isContainer(parent); }
+     * public void dropForeign(Object payload, Target<Node> to)   { document.apply(insert((NewNode) payload, to)); }
+     * }</pre>
+     */
+    default boolean canDropForeign(Object payload, T parent) {
+        return false;
+    }
+
+    /** Lands an outside drag's {@code payload} at {@code to}, which {@link #canDropForeign} passed, as one undo step. */
+    default void dropForeign(Object payload, Target<T> to) {
+    }
+
     /** The item's name: what rename opens with and edits. */
     String nameOf(T item);
 

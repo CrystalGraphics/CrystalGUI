@@ -6,11 +6,9 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
-import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
-import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.workbench.view.TitleActionsContributor;
@@ -78,19 +76,12 @@ public final class HierarchyToolWindow extends UIElement implements TitleActions
 
     /** Points the panel at whatever builder is in front, and rebuilds only when that changed. */
     public void follow() {
-        BuilderContext builder = activeBuilder();
+        BuilderContext builder = BuilderEditor.inFront(workbench.editors());
         if (builder == shown) return;
         shown = builder;
         removeAll();
         hierarchy = builder == null ? null : new HierarchyPanel(builder);
         if (hierarchy != null) append(hierarchy);
-    }
-
-    @Nullable
-    private BuilderContext activeBuilder() {
-        EditorService.Tab active = workbench.editors().active();
-        DocumentEditor view = active == null ? null : active.editor();
-        return view instanceof BuilderEditor builder ? builder.surface() : null;
     }
 
 }

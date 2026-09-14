@@ -24,6 +24,7 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.template.UiTemplates;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.widget.surface.mode.SelectExtension;
 
 /**
@@ -120,6 +121,8 @@ public final class BuilderEditor implements DocumentEditor {
         surface.reordersWith(reorderGesture);
         this.textEditing = new TextEditGesture(document);
         surface.surface().addOverlay(textEditing);
+        // A LIBRARY CARD DROPPED ON THE PLANE, which a hit in design mode always reaches: the artboard takes none.
+        new NewNodeDrop(surface).installOn(surface);
         // FREE TRANSFORM (L4.5a). Mounted directly like the handles rather than as an overlay kind: it
         // is a live gesture, not a view a designer turns on, and it draws nothing at all while down.
         this.transformBox = new TransformBox(surface, document);
@@ -197,6 +200,13 @@ public final class BuilderEditor implements DocumentEditor {
         UIElement node = edit instanceof BuilderEdit builderEdit ? builderEdit.node() : null;
         if (node == null || into.contains(node)) return;
         if (document.root().contains(node) || node == document.root()) into.add(node);
+    }
+
+    /** The builder in the active tab, or null when that tab is not a {@code .cgui} — what a panel following the builder asks. */
+    @Nullable
+    public static BuilderContext inFront(EditorService editors) {
+        EditorService.Tab active = editors.active();
+        return active != null && active.editor() instanceof BuilderEditor editor ? editor.surface() : null;
     }
 
     public UiBuilderDocument document() {
