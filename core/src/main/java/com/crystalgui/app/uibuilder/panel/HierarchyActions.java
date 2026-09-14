@@ -8,6 +8,8 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.NodeSelectors;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
+import com.crystalgui.app.uibuilder.library.LibraryCatalog;
+import com.crystalgui.app.uibuilder.library.LibraryGroups;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -20,12 +22,6 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.collection.tree.TreeViewCommands;
 import com.crystalgui.widget.composite.ActionButton;
-import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.control.Checkbox;
-import com.crystalgui.widget.control.Slider;
-import com.crystalgui.widget.control.Switch;
-import com.crystalgui.widget.control.TextField;
-import com.crystalgui.widget.text.UIText;
 
 /**
  * What the Hierarchy offers beyond its rows: the title line's buttons, and the row menu's New ▸, edit rows,
@@ -43,23 +39,6 @@ public final class HierarchyActions {
     /** Puts a selector for each selected node on the clipboard — the Hierarchy's Copy Path. @see NodeSelectors */
     public static final String COPY_SELECTOR = "uibuilder.copySelector";
 
-    /** A kind New ▸ offers, and a fresh node of it. The row's words and glyph are the kind's. @see KindGlyphs#ofKind */
-    record Starter(Name kind, Supplier<UIElement> build) {
-    }
-
-    /**
-     * A starter set, until the Library (L4.8) lists every buildable kind with search: the registry also holds
-     * every workbench and desktop kind, which have no place in a document.
-     */
-    static final List<Starter> STARTERS = List.of(
-            new Starter(UIElement.NAME, UIElement::new),
-            new Starter(UIText.NAME, () -> new UIText("Text")),
-            new Starter(Button.NAME, () -> new Button("Button")),
-            new Starter(TextField.NAME, TextField::new),
-            new Starter(Checkbox.NAME, Checkbox::new),
-            new Starter(Switch.NAME, Switch::new),
-            new Starter(Slider.NAME, Slider::new));
-
     private HierarchyActions() {
     }
 
@@ -71,17 +50,21 @@ public final class HierarchyActions {
         TreeViewCommands.register();
         Disposable editRows = TreeEditing.contributeMenu(registry, HierarchyPanel.CONTEXT_MENU);
         Disposable newRows = registry.contributeMenu(HierarchyPanel.NEW_MENU, (menu, context) -> {
-            List<MenuEntry> rows = new ArrayList<>(STARTERS.size());
+            // THE LIBRARY'S COMMON, so the two lists of what a document starts from cannot drift apart.
+            List<Name> kinds = LibraryGroups.COMMON.kinds();
+            LibraryCatalog catalog = LibraryCatalog.current();
+            List<MenuEntry> rows = new ArrayList<>(kinds.size());
             boolean enabled = context.data().get(HierarchyPanel.HIERARCHY) != null;
-            for (int i = 0; i < STARTERS.size(); i++) {
-                Starter starter = STARTERS.get(i);
-                KindGlyphs.Glyph glyph = KindGlyphs.ofKind(starter.kind());
+            for (int i = 0; i < kinds.size(); i++) {
+                LibraryCatalog.Entry entry = catalog.entry(kinds.get(i));
+                if (entry == null) continue;
+                KindGlyphs.Glyph glyph = KindGlyphs.ofKind(entry.kind());
                 // UNREGISTERED: one row per kind has no business in the palette. @see MenuContributor
                 Command insert = Command.of("uibuilder.new." + i, glyph.words())
                         .icon(glyph.icon(), glyph.role().cssClass())
                         .runWithData(data -> {
                             HierarchyPanel panel = data.get(HierarchyPanel.HIERARCHY);
-                            if (panel != null) panel.insertNew(starter.build().get());
+                            if (panel != null) panel.insertNew(entry.build());
                         })
                         .enabledWhereData(data -> data.get(HierarchyPanel.HIERARCHY) != null);
                 rows.add(new MenuEntry.Item(insert, "1_kinds", i, enabled, false, false));

@@ -17,6 +17,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.Preview;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.text.UIText;
 
 /** The B.4 probe: a sample in a card wears the document's rules and not the panel's, scales to fit, and is inert. */
@@ -72,6 +73,22 @@ public class PreviewCardTest extends UiDocumentTestBase {
         int[] centre = centreOf(card);
         assertSame(card, hitTarget(centre[0], centre[1]));
         assertNotNull(card.sample());
+    }
+
+    /** The B.8 probe. */
+    @Test
+    public void anOverlaySampleDrawsOpenInsideItsCardWithoutPromoting() {
+        Popover[] built = new Popover[1];
+        PreviewCard card = card(entry("popover", Preview.sample(() -> {
+            built[0] = new Popover();
+            built[0].append(sized("inside", 40f, 20f));
+            return built[0].presentInline();
+        })));
+        settle();
+
+        assertFalse(card.isPlaceholder());
+        assertFalse("the sample promoted itself out of its card", document.isPromoted(built[0]));
+        assertNotNull("the open popover has no box in the card", built[0].box());
     }
 
     private PreviewCard card(LibraryCatalog.Entry entry) {

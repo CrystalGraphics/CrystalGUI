@@ -18,18 +18,23 @@ import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.core.collection.list.ItemSizeStrategy;
 import com.crystalgui.core.collection.list.VariableHeightStrategy;
 import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.widget.dnd.DragGhost;
+import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.composite.SearchTree;
@@ -62,6 +67,26 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     /** This panel, for a command that acts on one. */
     public static final DataKey<LibraryPanel> LIBRARY = DataKey.create("uibuilder.library", LibraryPanel.class);
 
+    /** The kind a card or a compact row shows, for a command run from its menu. */
+    public static final DataKey<LibraryCatalog.Entry> ENTRY =
+            DataKey.create("uibuilder.library.entry", LibraryCatalog.Entry.class);
+
+    /** The group a row lists or sits in, for a command run from its menu. */
+    public static final DataKey<LibraryCatalog.Group> GROUP =
+            DataKey.create("uibuilder.library.group", LibraryCatalog.Group.class);
+
+    /** A card's or a compact row's menu. */
+    public static final MenuId CARD_MENU = MenuId.of("uibuilder/library/card");
+
+    /** A user's group's menu. */
+    public static final MenuId GROUP_MENU = MenuId.of("uibuilder/library/group");
+
+    /** The menu anywhere else in the panel. */
+    public static final MenuId PANEL_MENU = MenuId.of("uibuilder/library/panel");
+
+    /** On a user's group's row while a card dragged over it would land there. */
+    public static final String DROP_CLASS = "__drop-target__";
+
     /** A folder or compact row's height. The view positions rows, so the heights are the view's to state. */
     static final float ROW_HEIGHT = 20f;
 
@@ -79,7 +104,9 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         String key();
     }
 
-    public record Folder(String key, String label, List<Row> children) implements Row {
+    /** @param group the group this folder lists, or null for a category */
+    public record Folder(String key, String label, List<Row> children, @Nullable LibraryCatalog.Group group)
+            implements Row {
         @Override
         public boolean equals(Object other) {
             return other instanceof Folder folder && folder.key.equals(key);
@@ -91,8 +118,12 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         }
     }
 
-    /** @param folder the category it lists, its cards' home: a kind filed under two categories has a card in each */
-    public record Strip(String key, String folder, List<LibraryCatalog.Entry> entries) implements Row {
+    /**
+     * @param folder the category it lists, its cards' home: a kind filed under two categories has a card in each
+     * @param group the group it lists, or null
+     */
+    public record Strip(String key, String folder, List<LibraryCatalog.Entry> entries,
+                        @Nullable LibraryCatalog.Group group) implements Row {
         @Override
         public boolean equals(Object other) {
             return other instanceof Strip strip && strip.key.equals(key);
@@ -104,7 +135,8 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         }
     }
 
-    public record Item(String key, LibraryCatalog.Entry entry) implements Row {
+    /** @param group the group it is listed in, or null */
+    public record Item(String key, LibraryCatalog.Entry entry, @Nullable LibraryCatalog.Group group) implements Row {
         @Override
         public boolean equals(Object other) {
             return other instanceof Item item && item.key.equals(key);
@@ -123,6 +155,15 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     public final Signal.Value<LibraryCatalog.Entry> onSelect = new Signal.Value<>();
 
     private LibraryCatalog catalog;
+
+    /** What the user made of the Library; a session's own until a tool window hands over the stored one. */
+    private UserLibrary user = UserLibrary.in(null);
+
+    @Nullable
+    private Connection userConnection;
+
+    /** The user's groups as last listed, so a change to the view alone does not re-read the registry. */
+    private List<LibraryCatalog.Group> listedGroups = List.of();
     private final SearchTree<Row, LibraryCatalog.Entry> search = new SearchTree<>();
     private final UIElement content = new UIElement();
     private final LibraryDetail detail = new LibraryDetail();
@@ -168,7 +209,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         search.setRows(new SearchTree.Rows<>() {
             @Override
             public List<Row> roots(String query) {
-                return rowsFor(LibraryPanel.this.catalog.roots(query), "");
+                return rowsFor(LibraryPanel.this.catalog.roots(query), "", null);
             }
 
             @Override
@@ -217,6 +258,10 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         // IN THE TREE BEFORE A DRAG CAN PROMOTE IT. @see DragGhost
         ghost.parkIn(this);
 
+        // A MENU BY WHAT WAS PRESSED: a card's, a user's group's, or the panel's.
+        tree().suppressDefaultContextMenu();
+        ContextMenu.attach(tree(), CommandRegistry.global(), this::menuFor);
+
         // THE LIST'S SELECTION IS THE COMPACT ROWS' SELECTION, so the arrows move the detail strip as a click does.
         whileConnected(() -> tree().onSelectionChanged.connect(indices -> {
             if (indices == null || indices.size() != 1) return;
@@ -264,8 +309,39 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         return detail;
     }
 
-    /** Shows compact rows instead of cards. */
+    /**
+     * Keeps {@code library}'s groups and view: lists its groups after the shipped ones, shows cards or rows as it
+     * says, and writes the rows toggle back to it.
+     */
+    public LibraryPanel useLibrary(UserLibrary library) {
+        if (userConnection != null) userConnection.disconnect();
+        user = library;
+        userConnection = library.onChanged.connect(this::userChanged);
+        listedGroups = null;
+        userChanged();
+        return this;
+    }
+
+    /** What the user made of the Library. */
+    public UserLibrary userLibrary() {
+        return user;
+    }
+
+    private void userChanged() {
+        applyRows(user.isRows());
+        if (!user.groups().equals(listedGroups)) {
+            listedGroups = user.groups();
+            setCatalog(LibraryCatalog.current(listedGroups));
+        }
+    }
+
+    /** Shows compact rows instead of cards, and remembers it for the user. */
     public void setRows(boolean compact) {
+        applyRows(compact);
+        user.setRows(compact);
+    }
+
+    private void applyRows(boolean compact) {
         if (compact == rows) return;
         rows = compact;
         if (compact) addClass("__rows__");
@@ -328,30 +404,32 @@ public final class LibraryPanel extends UIElement implements DataProvider {
 
     // ── Building rows ───────────────────────────────────────────────────────
 
-    private List<Row> rowsFor(List<LibraryCatalog.Node> nodes, String path) {
+    private List<Row> rowsFor(List<LibraryCatalog.Node> nodes, String path, @Nullable LibraryCatalog.Group group) {
         List<Row> out = new ArrayList<>();
         List<LibraryCatalog.Entry> run = new ArrayList<>();
         for (LibraryCatalog.Node node : nodes) {
             if (node.isCategory()) {
-                flush(run, path, out);
-                String key = path + "/" + node.label();
-                out.add(new Folder(key, node.label(), rowsFor(node.children(), key)));
+                flush(run, path, group, out);
+                // A GROUP'S KEY IS ITS OWN, so a user's group named after a category is still a folder of its own.
+                String key = node.group() != null ? "group:" + node.label() : path + "/" + node.label();
+                out.add(new Folder(key, node.label(), rowsFor(node.children(), key, node.group()), node.group()));
             } else {
                 run.add(node.entry());
             }
         }
-        flush(run, path, out);
+        flush(run, path, group, out);
         return out;
     }
 
-    private void flush(List<LibraryCatalog.Entry> run, String path, List<Row> out) {
+    private void flush(List<LibraryCatalog.Entry> run, String path, @Nullable LibraryCatalog.Group group,
+                       List<Row> out) {
         if (run.isEmpty()) return;
         if (rows) {
-            for (LibraryCatalog.Entry entry : run) out.add(new Item(path + "|" + entry.kind(), entry));
+            for (LibraryCatalog.Entry entry : run) out.add(new Item(path + "|" + entry.kind(), entry, group));
         } else {
             for (int start = 0; start < run.size(); start += perStrip) {
                 List<LibraryCatalog.Entry> strip = List.copyOf(run.subList(start, Math.min(run.size(), start + perStrip)));
-                out.add(new Strip(path + "#" + start / perStrip, path, strip));
+                out.add(new Strip(path + "#" + start / perStrip, path, strip, group));
             }
         }
         run.clear();
@@ -442,7 +520,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     /** One recycled row element and its parts; which parts show depends on what the row stands for. */
     private final class RowView {
 
-        final UIElement row = new UIElement();
+        final UIElement row = new RowElement(this);
         final UIElement twisty = new UIElement();
         final GlyphView glyph = new GlyphView(null);
         final UIText label = new UIText("");
@@ -470,6 +548,41 @@ public final class LibraryPanel extends UIElement implements DataProvider {
                 if (bound instanceof Item item) press(item.entry(), row, event);
             }, false, true);
             row.append(twisty, glyph.element(), label, strip);
+
+            // A CARD DRAGGED ONTO A USER'S GROUP joins it. The same payload a canvas places, read for its kind.
+            row.events.getGroup(DragEvent.Over.class).attachListener((element, event) -> {
+                boolean lands = landsHere(event.getPayload());
+                toggle(row, DROP_CLASS, lands);
+                if (lands) event.preventDefault();
+            }, false, true);
+            row.events.getGroup(DragEvent.Leave.class).attachListener((element, event) -> {
+                if (event.getTarget() == row) toggle(row, DROP_CLASS, false);
+            }, false, false);
+            row.events.getGroup(DragEvent.Drop.class).attachListener((element, event) -> {
+                toggle(row, DROP_CLASS, false);
+                if (landsHere(event.getPayload()) && bound instanceof Folder folder && folder.group() != null) {
+                    user.addToGroup(folder.group().label(), ((NewNode) event.getPayload()).kind());
+                }
+            }, false, true);
+        }
+
+        /** Whether {@code payload} is a kind this row's user group does not hold yet. */
+        private boolean landsHere(Object payload) {
+            return bound instanceof Folder folder && folder.group() != null && folder.group().user()
+                    && payload instanceof NewNode created && created.kind() != null
+                    && !folder.group().kinds().contains(created.kind());
+        }
+
+        /** The group this row lists or sits in; the compact row's kind. @see #GROUP @see #ENTRY */
+        @Nullable
+        Object dataFor(DataKey<?> key) {
+            if (key == GROUP) {
+                if (bound instanceof Folder folder) return folder.group();
+                if (bound instanceof Strip run) return run.group();
+                if (bound instanceof Item item) return item.group();
+            }
+            if (key == ENTRY && bound instanceof Item item) return item.entry();
+            return null;
         }
 
         boolean isStrip() {
@@ -541,6 +654,40 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         return card;
     }
 
+    /** A row element that answers for what its view is bound to. */
+    private static final class RowElement extends UIElement implements DataProvider {
+
+        private final RowView view;
+
+        RowElement(RowView view) {
+            this.view = view;
+        }
+
+        @Override
+        @Nullable
+        public Object getData(DataKey<?> key) {
+            return view.dataFor(key);
+        }
+    }
+
+    /** The card's menu for a card or compact row, the group's for a user's group, else the panel's. */
+    private ContextMenu menuFor(UIElement pressed) {
+        for (UIElement at = pressed; at != null && at != tree(); at = at.parent() instanceof UIElement up ? up : null) {
+            if (at instanceof PreviewCard card && card.entry() != null) {
+                select(card.entry());
+                return ContextMenu.of(CARD_MENU);
+            }
+            RowView view = views.get(at);
+            if (view == null) continue;
+            if (view.bound instanceof Item) return ContextMenu.of(CARD_MENU);
+            if (view.bound instanceof Folder folder && folder.group() != null && folder.group().user()) {
+                return ContextMenu.of(GROUP_MENU);
+            }
+            break;
+        }
+        return ContextMenu.of(PANEL_MENU);
+    }
+
     /** A click selects, a double-click places, and a press that travels drags a {@link NewNode} to a drop target. */
     private void press(LibraryCatalog.Entry entry, UIElement source, MouseEvent.Down event) {
         // NEVER FROM THE KEYBOARD: a drag armed by a synthesized press can never be released.
@@ -554,7 +701,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         if (window == null) return;
         ghost.follow(window, KindGlyphs.ofKind(entry.kind()).icon(), entry.label());
         Drag.start(source, event.getPosition().x(), event.getPosition().y(), CgMouseCodes.LEFT_BUTTON,
-                new NewNode(entry.label(), entry::build), Drag.DEFAULT_THRESHOLD_PX, (x, y, sx, sy, dx, dy) -> { });
+                new NewNode(entry.label(), entry.kind(), entry::build), Drag.DEFAULT_THRESHOLD_PX, (x, y, sx, sy, dx, dy) -> { });
     }
 
     private final class Renderer implements TreeRenderer<Row> {

@@ -188,6 +188,31 @@ programmatic focus, false after a mouse click — except on elements that take t
   | nothing else | a diamond tinted as an addon, saying *Your Name · yourmod* |
 
   Declaring a glyph without shipping its file draws nothing.
+- **Say where the builder's Library files it, what a card shows and what placing inserts** — the same
+  `KindInfo`. A kind that declares nothing is still listed, under a folder named for its namespace, and its
+  card draws what its factory builds; machinery a document never holds hides itself:
+
+  ```java
+  KindInfo.named("Machine Gauge").inCategory("Machines")              // mymod's folder otherwise
+          .synonyms("dial", "meter").describedAs("A needle over a scale.")
+          .starter(() -> new MachineGauge().setValue(40))             // what a drop or double-click inserts
+          .preview(Preview.sample(() -> new MachineGauge().setValue(70)).width(80));   // what its card draws
+
+  KindInfo.named("Reactor").preview(Preview.picture("icon(\"mymod:reactor\")"));   // cannot be shown live
+  KindInfo.hidden();                                                  // a part, never listed
+  ```
+
+  | Supplier | Used by | Defaults to |
+  |---|---|---|
+  | the factory | a decode, and everything below when nothing else is declared | — |
+  | `starter` | placing the kind — the Library, the Hierarchy's New ▸ | the factory |
+  | `Preview.sample` | the card only, never placed | the starter |
+
+  A sample's `width` is the logical width it is laid out at before the card scales it down; a control that
+  fills its row needs one or it lays out to nothing. `whole()` shrinks it however small that makes it,
+  rather than cropping it once its text would stop reading. A widget whose look needs a state nothing is
+  in draws it with `presentInline()` (popovers, menus, dialogs, tooltips) or `presentFocused()` (a text
+  field). The shipped kinds' samples are `widget.WidgetSamples`, styled by `ua/samples.css`.
 - **Override `writeState`/`readState`** if the widget carries state a server would want to send or a
   client would want to report back. See `CGUI_SERVER_AND_SERIALIZATION.md`.
 
@@ -255,6 +280,24 @@ presented this way. Samples are declared per kind in `widget.WidgetSamples`, sty
 new TextField().setPlaceholder("Type here").presentFocused();   // caret, placeholder and :focus, no focus
 menu.presentInline();                                           // Popover, Menu, Dialog, Tooltip: open, in flow
 ```
+
+### A search box over a tree — `SearchTree` (`widget.composite`)
+
+The Create Node menu's search-and-tree half as a dockable element: a box that filters while the caret stays
+in it, a categorised tree for a blank query and a ranked flat list for anything else, arrows and Enter
+driving the list. `CreateMenu` wraps one in its popover; the builder's Library embeds one.
+
+```java
+SearchTree<Row, Kind> search = new SearchTree<>();
+search.setRows(rows);                       // roots(query), children, label, isCategory, payload
+search.onChosen.connect(kind -> place(kind));
+```
+
+### A kind drawn as itself — `PreviewCard` (`app.uibuilder.library`)
+
+A Library card: the kind's sample in a shadow root wearing the window's sheets and no panel rule, fitted into
+a tile and cropped by a square scissor, with its name under it. Samples build a few per frame through the
+window's `PreviewBuilds`; until its turn a card shows the kind's glyph.
 
 ### Keeping rows realised — `ListView.setOverscan`
 
