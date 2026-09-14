@@ -230,6 +230,9 @@ ActionButton.menu("New File or Directory…", MenuId.EXPLORER_NEW)   // drops a 
         .context(tree);
 
 expand.hint(TreeViewCommands.EXPAND_ALL, "Press {} to expand all nodes");   // second tooltip line
+
+ActionButton.command(TOGGLE_ROWS).icon("crystalgui:general/action/viewRows")   // "Show as Rows"
+        .whenToggled("crystalgui:general/action/viewCards", "Show as Cards");  // while the command is toggled
 ```
 
 - The tooltip is IntelliJ's help tooltip: the command's label, its **live** chord beside it
@@ -237,9 +240,27 @@ expand.hint(TreeViewCommands.EXPAND_ALL, "Press {} to expand all nodes");   // s
   `tooltip.__wait__` delay Hide shares. `tooltip()` is the observable.
 - A command button greys while the command is disabled, re-asked four times a second while in a tree.
 - A menu button's second press closes its menu; it is the menu's invoker.
+- A toggle's `whenToggled` face shows what a press switches to, and flips on the press itself.
 - Name the `context` whenever the button sits away from what it acts on — a header is outside its view.
   `context(Supplier)` for content that is replaced under the button.
 - Consumers: every tool window's title line (`TitleActionsContributor`) and its ⋮.
+
+### Drawn as a picture — for a Library card or a style guide
+
+A widget whose real appearance needs a state nothing is in — open, focused — can be told to draw it without
+entering it. Only the appearance: nothing is promoted, placed, focused or made modal, so never `show` one
+presented this way. Samples are declared per kind in `widget.WidgetSamples`, styled by `ua/samples.css`.
+
+```java
+new TextField().setPlaceholder("Type here").presentFocused();   // caret, placeholder and :focus, no focus
+menu.presentInline();                                           // Popover, Menu, Dialog, Tooltip: open, in flow
+```
+
+### Keeping rows realised — `ListView.setOverscan`
+
+A list realises the viewport plus two rows each side and rebinds rows as they scroll. A list whose rows are
+few and costly to bind keeps them instead: `tree.setOverscan(64)`. Rows off screen are culled from paint, so
+what they cost is their settled style and layout.
 
 ## 2. `Checkbox` + `CheckboxGroup`
 

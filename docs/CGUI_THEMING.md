@@ -199,7 +199,7 @@ editor scheme's.
 | `--configkit-list-head-bg` | `var(--surface-raised)` | base.css |
 | `--configkit-panel-bg` | `var(--surface-panel)` | base.css |
 | `--configkit-popup-bg` | `var(--surface-overlay)` | base.css |
-| `--configkit-slider-fill` | `var(--border-strong)` | base.css |
+| `--configkit-slider-fill` | `var(--success)` | base.css |
 | `--configkit-swatch-border` | `var(--border-base)` | base.css |
 | `--configkit-value-fg` | `var(--fg)` | base.css |
 | `--decoration-dirty` | `var(--modified)` | base.css |
@@ -517,6 +517,9 @@ editor scheme's.
 | `--run-rail-stopped` | `var(--warning-icon)` | base.css |
 | `--run-rail-time-fg` | `var(--fg-hint)` | base.css |
 | `--run-stripe-bg` | `var(--surface-panel)` | base.css |
+| `--sample-block-bg` | `var(--surface-editor)` | base.css |
+| `--sample-block-border` | `var(--border-strong)` | base.css |
+| `--sample-line-fg` | `var(--fg-hint)` | base.css |
 | `--scrollbar-corner` | `#00000000` | base.css |
 | `--scrollbar-tail` | `#00000000` | crystal-dark.css |
 | `--scrollbar-tail-hover` | `#8C8C8C33` | crystal-dark.css |

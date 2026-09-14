@@ -52,15 +52,25 @@ public class LibraryCatalogTest {
     }
 
     @Test
-    public void aDeclaredSampleIsWhatTheCatalogHandsOut() {
+    public void aCardShowsTheSampleAndPlacementInsertsTheStarter() {
         UIElement dressed = new UIElement();
+        UIElement starter = new UIElement();
         Preview sample = Preview.sample(() -> dressed);
-        LibraryCatalog catalog = catalog(Map.of(DIAL, KindInfo.of("Controls").preview(sample)));
+        LibraryCatalog catalog = catalog(Map.of(DIAL, KindInfo.of("Controls").preview(sample).starter(() -> starter)));
 
         LibraryCatalog.Entry entry = catalog.entry(DIAL);
         assertSame(sample, entry.preview());
-        assertSame(dressed, entry.build());
+        assertSame("a card shows the sample", dressed, entry.sample());
+        assertSame("a placement inserts the starter, never the sample", starter, entry.build());
         assertEquals(List.of("Controls"), entry.path());
+    }
+
+    @Test
+    public void withNoSampleACardShowsTheStarter() {
+        UIElement starter = new UIElement();
+        LibraryCatalog catalog = catalog(Map.of(DIAL, KindInfo.of("Controls").starter(() -> starter)));
+
+        assertSame(starter, catalog.entry(DIAL).sample());
     }
 
     @Test

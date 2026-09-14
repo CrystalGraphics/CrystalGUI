@@ -1,0 +1,104 @@
+/* ua/samples.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ *
+ * What a widget wears as a picker SAMPLE: the blocks, lines and small props `widget.WidgetSamples` builds a kind's
+ * card from, and the few overrides that make a real widget read at card size. The widget layer's, as its samples
+ * are, so any picker draws them alike — the UI builder's Library is the first.
+ *
+ * AFTER config-kit and inspector, whose form geometry the `__sample-form__` rules narrow.
+ *
+ * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
+ * one sheet the engine loads — rule order across files is as load-bearing as within one
+ * (:disabled after :hover ties), so files split at section boundaries and never reorder.
+ * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
+ * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+
+/* A block drawn only for a sample: a pane's content, a node on a canvas, an empty element. */
+.__sample-block__ {
+    border-width: 1px;
+    border-radius: 2px;
+    border-color: var(--sample-block-border, #5A5D63);
+    background-color: var(--sample-block-bg, #191A1C);
+}
+
+/* A canvas drawn for a sample wears its grid, which is what tells a plane from a panel. */
+canvasview.__sample-canvas__ {
+    background: grid(10, var(--divider, #2B2D30));
+}
+
+/* A heading inside a sample: a popover's title. */
+.__sample-title__ {
+    font-weight: bold;
+}
+
+/* A bare text field wears the edge a search field has: the field itself draws none, and each context that
+ * places one gives it its own. */
+textfield.__sample-field__ {
+    outline-width: 1px;
+    outline-color: var(--searchfield-border, #3C3C3C);
+}
+
+/* A form at card width: a label column as wide as its short labels and no floor under a control, so a
+ * row reads as a label beside its value rather than two ends of a wide row. */
+.__sample-form__ .__configurator__ > .__label__,
+.__configurator__.__sample-form__ > .__label__ {
+    flex-basis: 30px;
+}
+
+.__sample-form__ .__configurator__ > .__inline__ > .__config-control__,
+.__configurator__.__sample-form__ > .__inline__ > .__config-control__ {
+    min-width: 0;
+}
+
+/* A tree sample's fold arrow, the project tree's two shapes; a leaf keeps the slot. */
+.__sample-twisty__ {
+    width: 9px;
+    height: 9px;
+    flex-shrink: 0;
+    margin-right: 2px;
+    color: var(--tree-twisty-fg, #FFFFFF);
+}
+
+.__collapsed__ .__sample-twisty__ {
+    overlay: shape("chevron-right");
+}
+
+.__expanded__ .__sample-twisty__ {
+    overlay: shape("chevron-down");
+}
+
+/* The pages behind a page stack's front page: quieter, so the front one reads as shown. */
+.__sample-block__.__sample-back-page__ {
+    opacity: 0.55;
+}
+
+/* A settings popover's room: its own chrome is a menu's, packed tight for rows. */
+popover.__sample-popover__ {
+    padding: 5px 6px 6px 6px;
+    gap: 3px;
+}
+
+/* The point of a sample popover: a slot as tall as the tip that shows, holding a square turned a quarter-half
+ * whose lower half the popover covers. No negative margin, which would leave the card measuring the sample
+ * shorter than it draws. */
+.__sample-notch__ {
+    width: 9px;
+    height: 5px;
+    margin-top: 2px;
+}
+
+.__sample-notch-tip__ {
+    position: absolute;
+    left: 0;
+    top: 1px;
+    width: 9px;
+    height: 9px;
+    transform: rotate(45deg);
+    background: var(--menu-bg, #4B4B4B);
+    outline: 1px var(--menu-border, #8C8C8C);
+}
+
+/* A bar standing in for a line of text on a sample's page. */
+.__sample-line__ {
+    border-radius: 1px;
+    background-color: var(--sample-line-fg, #6F737A);
+}

@@ -560,6 +560,26 @@ public class Dialog extends UIElement {
     }
 
     /**
+     * Draws this dialog as it looks open, where it stands in its parent's flow — a picture of one, for a Library
+     * card or a style guide.
+     *
+     * <pre>{@code
+     * Dialog dialog = new Dialog("Delete file?");
+     * dialog.getContent().append(new UIText("This cannot be undone."));
+     * card.append(dialog.presentInline());
+     * }</pre>
+     *
+     * <p>Only the appearance: nothing is promoted, clamped, focused or made modal, it takes no pointer, and
+     * {@link #isOpen()} stays false. Do not {@code show} a dialog presented this way.</p>
+     */
+    public Dialog presentInline() {
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.FLEX).positionType(TaffyPosition.RELATIVE));
+        addClass(OPEN_CLASS);
+        return this;
+    }
+
+    /**
      * Closed dialogs are {@code display: none} — out of layout, unpainted and unhittable in one property,
      * exactly as a closed popover is on the web.
      *

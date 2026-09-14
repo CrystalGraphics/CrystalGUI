@@ -522,14 +522,18 @@ librarypanel .__library-row__ > .__label__ {
     gap: 4px;
 }
 
-.__library-item__.__selected__,
-previewcard.__selected__ {
+.__library-item__.__selected__ {
     background-color: var(--tree-selected-bg, #2F5F9E);
     color: var(--tree-selected-fg, #FFFFFF);
 }
 
+/* SELECTED BY ITS EDGE AND NAME, not a fill: a fill round the stage swallows the sample it is choosing. */
+previewcard.__selected__ .__stage__ {
+    border-color: var(--accent, #3574F0);
+}
+
 previewcard.__selected__ .__label__ {
-    color: var(--tree-selected-fg, #FFFFFF);
+    color: var(--accent-hover, #4A82F2);
 }
 
 /* The foot: the selected kind drawn larger beside what it is. Hidden from Java while nothing is selected. */
@@ -549,13 +553,16 @@ librarydetail {
     border-top-color: var(--panel-header-sep, #00000000);
 }
 
-librarydetail previewcard {
+/* SHRINKS TO A FLOOR in a narrow panel, so the words keep a column wide enough to read. The card fills it. */
+.__detail-preview__ {
     width: 96px;
-    padding: 0;
+    min-width: 48px;
+    flex-shrink: 1;
 }
 
-librarydetail previewcard:hover {
-    background-color: transparent;
+librarydetail previewcard {
+    width: 100%;
+    padding: 0;
 }
 
 librarydetail previewcard .__stage__ {
@@ -566,9 +573,17 @@ librarydetail previewcard .__label__ {
     display: none;
 }
 
-.__detail-words__ {
+/* The words column scrolls rather than growing the strip: a long description in a narrow panel would otherwise
+ * push the strip past the panel. Its height is the preview's, from the strip's own. */
+librarydetail > scrollerview {
     width: 0;
+    min-width: 64px;
     flex-grow: 1;
+    height: 56px;
+}
+
+.__detail-words__ {
+    width: 100%;
     flex-direction: column;
     gap: 2px;
 }
@@ -596,25 +611,48 @@ previewcard {
     align-items: center;
     padding: 3px;
     gap: 2px;
-    border-radius: 3px;
+    border-radius: 8px;
 }
 
-previewcard:hover {
-    background-color: var(--panel-header-icon-hover-bg, #393B40);
-}
-
+/* Centred, for the glyph a card shows when its kind draws nothing; a sample is out of flow and placed from Java.
+ * A tile on the builder's own dark ground, edged a device pixel at 2x; the card's radius is this one plus its padding,
+ * so the two curves run parallel. */
 previewcard .__stage__ {
     width: 100%;
-    height: 40px;
-    overflow: hidden;
-    border-radius: 2px;
+    height: 52px;
+    border-radius: 5px;
+    border-width: 0.5px;
+    border-color: var(--border-base, #393B40);
     background-color: var(--builder-surface-bg, #1B1B1F);
 }
 
-/* NOTHING TO SHOW: the frame without the sample, so the card still says a kind is there. */
-previewcard.__placeholder__ .__stage__ {
-    border-width: 1px;
-    border-color: var(--builder-selected-parent, #55607A);
+previewcard:hover .__stage__ {
+    border-color: var(--border-strong, #5A5D63);
+}
+
+/* AFTER THE HOVER EDGE, which ties the selected ring on specificity and would win by order. */
+previewcard.__selected__:hover .__stage__ {
+    border-color: var(--accent-hover, #4A82F2);
+}
+
+/* Where a sample is cropped: 2px inside the stage's rounded edge, which keeps its corners inside the curve, and
+ * square, so the crop is a scissor rather than a mask. Inside the card's shadow root. */
+.__preview-clip__ {
+    position: absolute;
+    left: 2px;
+    top: 2px;
+    right: 2px;
+    bottom: 2px;
+    overflow: hidden;
+    align-items: center;
+    justify-content: center;
+}
+
+/* NOTHING TO SHOW: the kind's own glyph, large and quiet, in its role's colour. Inside the card's shadow root. */
+.__glyph__.__preview-glyph__ {
+    width: 20px;
+    height: 20px;
+    opacity: 0.7;
 }
 
 previewcard .__label__ {

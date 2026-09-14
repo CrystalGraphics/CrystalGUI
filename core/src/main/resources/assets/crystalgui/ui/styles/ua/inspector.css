@@ -260,10 +260,9 @@
 .__config-control__ dropdown:active {
     background: var(--configkit-dropdown-pressed-bg, #3D3D3D);
 }
-/* Unity does not colour-code a slider's fill; a saturated green track reads as a progress bar or as a
- * validation state rather than as a value being chosen. */
+/* The fill every slider has, through the kit's own token so a theme can still set a form's apart. */
 .__config-control__.__slider__ slider .__fill__,
-.__config-control__.__slider__ slider::part(fill) { background: var(--configkit-slider-fill, #6A6A6A); }
+.__config-control__.__slider__ slider::part(fill) { background: var(--configkit-slider-fill, #3C8527); }
 .__config-control__.__slider__ slider .__track__ { background: var(--cfg-field); }
 /* The exception, and a real one: a checkbox is SQUARE — its width is a function of its height, not of
  * the space available. So it does not fill, and sits at the left of its column with the rest empty.

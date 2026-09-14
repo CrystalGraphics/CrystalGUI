@@ -15,6 +15,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -518,6 +519,22 @@ public class Tooltip extends UIElement {
     }
 
     // ── Show / hide ─────────────────────────────────────────────────────────
+
+    /**
+     * Draws this tooltip where it stands in its parent's flow — a picture of one, for a Library card or a style
+     * guide.
+     *
+     * <pre>{@code
+     * card.append(new Tooltip("Rename the file").setShortcut("F2").presentInline());
+     * }</pre>
+     *
+     * <p>Nothing is promoted, anchored or placed. Do not {@code showFor} a tooltip presented this way.</p>
+     */
+    public Tooltip presentInline() {
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
+                l -> l.display(TaffyDisplay.FLEX).positionType(TaffyPosition.RELATIVE));
+        return this;
+    }
 
     /**
      * Promotes this tooltip and anchors it to {@code anchor}. Idempotent — calling it again while

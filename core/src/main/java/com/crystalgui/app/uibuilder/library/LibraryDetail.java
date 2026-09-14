@@ -10,11 +10,12 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 
 /**
  * The Library's foot: the selected kind drawn larger, with its name, its tag and what it is for. Hidden while
- * nothing is selected.
+ * nothing is selected. As tall as its preview however narrow the panel: the words scroll beside it.
  *
  * <pre>{@code
  * panel.onSelect.connect(detail::show);
@@ -27,6 +28,8 @@ public final class LibraryDetail extends UIElement {
     public static final String NAME_CLASS = "__detail-name__";
     public static final String TAG_CLASS = "__detail-tag__";
     public static final String DESCRIPTION_CLASS = "__detail-description__";
+    public static final String WORDS_CLASS = "__detail-words__";
+    public static final String PREVIEW_CLASS = "__detail-preview__";
 
     private final UIElement preview = new UIElement();
     private final UIText name = new UIText("");
@@ -44,9 +47,12 @@ public final class LibraryDetail extends UIElement {
         name.addClass(NAME_CLASS);
         tag.addClass(TAG_CLASS);
         description.addClass(DESCRIPTION_CLASS);
-        UIElement words = new UIElement().addClass("__detail-words__");
+        preview.addClass(PREVIEW_CLASS);
+        UIElement words = new UIElement().addClass(WORDS_CLASS);
         words.append(name, tag, description);
-        append(preview, words);
+        ScrollerView scroller = new ScrollerView();
+        scroller.append(words);
+        append(preview, scroller);
         show(null);
     }
 

@@ -2,6 +2,7 @@ package com.crystalgui.ui.dom;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
@@ -17,7 +18,8 @@ import javax.annotation.Nullable;
  *                 .synonyms("press", "click")
  *                 .describedAs("A labelled push button.")
  *                 .glyph(GlyphRole.CONTROL)                    // draws crystalgui:nodes/ui/button
- *                 .preview(Preview.sample(() -> new Button("Save"))));
+ *                 .starter(() -> new Button("Button"))           // what placing one inserts
+ *                 .preview(Preview.sample(() -> new Button("Save")).width(60)));   // what its card shows
  *
  * // a kind that is another kind in all but name borrows its glyph, and its role with it
  * KindInfo.named("Boolean Field").glyphOf(Checkbox.NAME);
@@ -45,7 +47,8 @@ import javax.annotation.Nullable;
  */
 public record KindInfo(String category, List<String> synonyms, @Nullable String description,
         @Nullable String displayName, @Nullable GlyphRole glyphRole, @Nullable String glyphIcon,
-        @Nullable Name glyphOf, Preview preview, boolean listed) {
+        @Nullable Name glyphOf, Preview preview, boolean listed,
+        @Nullable Supplier<? extends UIElement> starter) {
 
     public KindInfo {
         category = category == null ? "" : category;
@@ -60,12 +63,12 @@ public record KindInfo(String category, List<String> synonyms, @Nullable String 
 
     /** Called {@code displayName} wherever a person reads the kind — {@code "Tab View"}. */
     public static KindInfo named(String displayName) {
-        return new KindInfo("", List.of(), null, displayName, null, null, null, Preview.DERIVED, true);
+        return new KindInfo("", List.of(), null, displayName, null, null, null, Preview.DERIVED, true, null);
     }
 
     /** What a kind that declared nothing gets: no category, no synonyms, no name, no glyph, listed. */
     public static KindInfo derived() {
-        return new KindInfo("", List.of(), null, null, null, null, null, Preview.DERIVED, true);
+        return new KindInfo("", List.of(), null, null, null, null, null, Preview.DERIVED, true, null);
     }
 
     /** A kind no picker lists — machinery, or a part that only means something inside its parent. */
@@ -74,40 +77,48 @@ public record KindInfo(String category, List<String> synonyms, @Nullable String 
     }
 
     public KindInfo inCategory(String category) {
-        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed);
+        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed, starter);
     }
 
     public KindInfo synonyms(String... words) {
-        return new KindInfo(category, List.of(words), description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed);
+        return new KindInfo(category, List.of(words), description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed, starter);
     }
 
     public KindInfo describedAs(String description) {
-        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed);
+        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed, starter);
     }
 
     /** This kind ships its own glyph, named after it — {@code mymod:machine} is {@code mymod:nodes/ui/machine} — tinted by {@code role}. */
     public KindInfo glyph(GlyphRole role) {
-        return new KindInfo(category, synonyms, description, displayName, role, null, null, preview, listed);
+        return new KindInfo(category, synonyms, description, displayName, role, null, null, preview, listed, starter);
     }
 
     /** This kind's glyph is the icon {@code icon}, {@code namespace:path} under {@code ui/icons/}, tinted by {@code role}. */
     public KindInfo glyph(String icon, GlyphRole role) {
-        return new KindInfo(category, synonyms, description, displayName, role, icon, null, preview, listed);
+        return new KindInfo(category, synonyms, description, displayName, role, icon, null, preview, listed, starter);
     }
 
     /** This kind draws {@code other}'s glyph in {@code other}'s role — a boolean field is a checkbox. */
     public KindInfo glyphOf(Name other) {
-        return new KindInfo(category, synonyms, description, displayName, null, null, other, preview, listed);
+        return new KindInfo(category, synonyms, description, displayName, null, null, other, preview, listed, starter);
     }
 
     /** What a Library card shows for this kind. */
     public KindInfo preview(Preview preview) {
-        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed);
+        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed, starter);
+    }
+
+    /**
+     * What placing this kind inserts — a button reading {@code Button}, a tab view with two tabs. Without one a
+     * placement builds the registered factory. The card shows this too, unless a {@link Preview.Sample} says otherwise.
+     */
+    public KindInfo starter(Supplier<? extends UIElement> starter) {
+        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, listed, starter);
     }
 
     /** Keeps this kind out of every picker; its name, glyph and category still answer where a node of it exists. */
     public KindInfo hide() {
-        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, false);
+        return new KindInfo(category, synonyms, description, displayName, glyphRole, glyphIcon, glyphOf, preview, false, starter);
     }
 
     /** The category as its segments, for a menu that draws a trail. Empty when it files under nothing. */
