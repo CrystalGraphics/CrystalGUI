@@ -41,6 +41,24 @@ public class ConfigRecordTest {
         assertEquals(new Shelf(true, "button"), ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY).get());
     }
 
+    /** Two holders of one file — two open editors — each change it; neither change is written over by the other. */
+    @Test
+    public void twoRecordsOverOneFileDoNotOverwriteEachOther() {
+        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        ConfigRecord<Shelf> first = ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY);
+        ConfigRecord<Shelf> second = ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY);
+
+        first.update(s -> new Shelf(true, s.pinned()));
+        second.update(s -> new Shelf(s.rows(), "button"));
+
+        assertEquals(new Shelf(true, "button"), second.get());
+        List<Shelf> heard = new ArrayList<>();
+        first.onChanged.connect(heard::add);
+        first.reload();
+        assertEquals(new Shelf(true, "button"), first.get());
+        assertEquals(List.of(new Shelf(true, "button")), heard);
+    }
+
     @Test
     public void anEqualValueWritesAndAnnouncesNothing() {
         InMemoryConfigStorage store = new InMemoryConfigStorage();
