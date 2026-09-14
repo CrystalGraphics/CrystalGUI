@@ -47,7 +47,7 @@ public final class InspectorExtension implements WorkbenchExtension {
         // builds it, and that it is open on a fresh workspace.
         Disposable panel = workbench.registerToolWindow(
                 ToolWindowKind.of(TYPE, "Inspector")
-                        .icon("crystalgui:package")
+                        .icon("crystalgui:nodes/ui/configurator")
                         .region(DockRegion.AUXILIARY)
                         .view(inspector)
                         .openByDefault());

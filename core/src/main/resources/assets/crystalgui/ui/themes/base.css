@@ -717,7 +717,7 @@ theme {
 
     /* THE GLYPH'S RESTING COLOUR. There was none: the icons are currentColor chrome marks and painted
      * hard white, which is the right answer on a dark rail and invisible on a light one. */
-    --activitybar-item-fg: var(--fg-secondary);
+    --activitybar-item-fg: var(--fg);
     /* The unread dot over a rail glyph. Its own colour now that the drawing is currentColor -- it used
      * to carry a literal blue, which is why it needed a _dark twin to say the same thing twice. */
     --activitybar-dot-fg: var(--accent);
