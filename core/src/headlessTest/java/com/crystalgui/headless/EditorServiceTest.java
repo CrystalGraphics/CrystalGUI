@@ -144,6 +144,36 @@ public class EditorServiceTest {
 
     // ── The one lane ────────────────────────────────────────────────────────────────────────────
 
+    /**
+     * <b>A read that lands late does not take the front from a tab chosen after it was opened.</b>
+     *
+     * <p>A relaunch restores a torn-out window's tab and the session's own; the session's is brought forward by
+     * the dock, and the other's read, landing afterwards, put itself in front — so every panel following the
+     * active editor described a tab nobody was looking at.</p>
+     */
+    @Test
+    public void aLateReadDoesNotTakeTheFrontFromATabChosenSince() {
+        editors.open(EditorInput.of(file("README.md")));
+        pump();
+        EditorService.Tab readme = editors.tabFor(EditorInput.of(file("README.md")));
+        assertSame(readme, editors.active());
+
+        editors.open(EditorInput.of(MAIN));
+        editors.activate(readme);
+        pump();
+
+        assertSame("the late read took the front from the tab chosen after it", readme, editors.active());
+    }
+
+    /** With nothing chosen since, the tab asked for comes forward when its read lands, as ever. */
+    @Test
+    public void aReadWithNothingChosenSinceStillComesForward() {
+        editors.open(EditorInput.of(MAIN));
+        pump();
+
+        assertSame(editors.tabFor(EditorInput.of(MAIN)), editors.active());
+    }
+
     @Test
     public void openingAFileGivesATabWithItsDocument() {
         EditorService.Tab tab = open(MAIN);
