@@ -52,9 +52,12 @@ public final class UIElementRegistry {
      * name for the cascade and nothing to build from the wire.</p>
      */
     static {
-        register(UIElement.NAME, UIElement::new, plain(UIElement.NAME, true));
-        register(UISlot.NAME, UISlot::new, plain(UISlot.NAME, true));
-        register(UIDocument.NAME, UIDocument::new, plain(UIDocument.NAME, true));
+        register(UIElement.NAME, UIElement::new, plain(UIElement.NAME, true),
+                KindInfo.named("Element").inCategory("Layout")
+                        .synonyms("div", "container", "box", "group", "row", "column")
+                        .describedAs("A plain container that lays out its children."));
+        register(UISlot.NAME, UISlot::new, plain(UISlot.NAME, true), KindInfo.hidden());
+        register(UIDocument.NAME, UIDocument::new, plain(UIDocument.NAME, true), KindInfo.hidden());
     }
 
     /** Whether the {@link NodeKinds} services have been run. @see #bootstrap() */

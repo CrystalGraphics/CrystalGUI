@@ -6,6 +6,7 @@ import com.crystalgui.desktop.taskbar.WindowPreview;
 import com.crystalgui.desktop.switcher.WindowSwitcher;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.taskbar.Taskbar;
+import com.crystalgui.ui.dom.KindInfo;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -25,25 +26,25 @@ public final class DesktopKinds implements NodeKinds {
 
     @Override
     public void register() {
-        UIElementRegistry.register(WindowIcon.NAME, WindowIcon::new, NodeContract.INERT);
+        UIElementRegistry.register(WindowIcon.NAME, WindowIcon::new, NodeContract.INERT, KindInfo.hidden());
         // THE THREE TAGS `ua/desktop.css` NAMES. A widget's cascade identity is its tag, so an
         // unregistered one matches nothing at all -- the ToolWindowFrame lesson, which cost a whole
         // unstyled widget. `windowswitcher` and `windowpreview` are deliberately absent: no shipped rule
         // names either, and both are built by the compositor rather than decoded from a description.
-        UIElementRegistry.register(Desktop.NAME, Desktop::new, NodeContract.INERT);
-        UIElementRegistry.register(Taskbar.NAME, Taskbar::new, NodeContract.INERT);
+        UIElementRegistry.register(Desktop.NAME, Desktop::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(Taskbar.NAME, Taskbar::new, NodeContract.INERT, KindInfo.hidden());
         // A frame takes a title, so it has no no-argument factory: a description that named `window`
         // would have to carry one, and nothing describes a window over a wire today. Registered with a
         // factory that opens an untitled frame rather than left out, so the TAG exists for the cascade.
-        UIElementRegistry.register(WindowFrame.NAME, () -> new WindowFrame(""), NodeContract.INERT);
+        UIElementRegistry.register(WindowFrame.NAME, () -> new WindowFrame(""), NodeContract.INERT, KindInfo.hidden());
         // No shipped rule names these three -- their sheets key on classes -- and they are registered
         // regardless, because a concrete node declaring no kind inherits `crystalgui:element` and would
         // match every bare `element` rule there is. The switcher is built by the compositor and takes
         // one, so a decoded one has no desktop: it is inert rather than useless, which is what a
         // description of a switcher would mean anyway.
-        UIElementRegistry.register(WindowSwitcher.NAME, () -> new WindowSwitcher(null), NodeContract.INERT);
-        UIElementRegistry.register(WindowPreview.NAME, WindowPreview::new, NodeContract.INERT);
-        UIElementRegistry.register(WindowThumbnail.NAME, WindowThumbnail::new, NodeContract.INERT);
+        UIElementRegistry.register(WindowSwitcher.NAME, () -> new WindowSwitcher(null), NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(WindowPreview.NAME, WindowPreview::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(WindowThumbnail.NAME, WindowThumbnail::new, NodeContract.INERT, KindInfo.hidden());
         // A RESIZE HANDLE IS NOT A KIND. It is built by `Resizer.install` for a resizable node and never
         // decoded from a description, and no shipped rule names the tag -- the sheet keys on
         // `.__resizer-*__` classes. Registering one with a factory that throws is a registration whose

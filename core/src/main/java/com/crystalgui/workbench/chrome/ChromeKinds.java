@@ -12,6 +12,7 @@ import com.crystalgui.workbench.chrome.status.ProcessesPopover;
 import com.crystalgui.workbench.chrome.status.ProgressStatusItem;
 import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.ui.dom.KindInfo;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.NodeKinds;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -41,19 +42,19 @@ public final class ChromeKinds implements NodeKinds {
 
     @Override
     public void register() {
-        UIElementRegistry.register(QuickPick.NAME, QuickPick::new, NodeContract.INERT);
-        UIElementRegistry.register(MenuBarView.NAME, () -> new MenuBarView(CommandRegistry.global()), NodeContract.INERT);
+        UIElementRegistry.register(QuickPick.NAME, QuickPick::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(MenuBarView.NAME, () -> new MenuBarView(CommandRegistry.global()), NodeContract.INERT, KindInfo.hidden());
         // A BAR OF ITS OWN when one is DECODED rather than built by a workbench. A described tree
         // names the kind and nothing else, so there is no workbench to ask -- and an unbound bar with
         // no entries is the honest answer, exactly as an unbound WindowFrame is.
         UIElementRegistry.register(StatusBarView.NAME, () -> new StatusBarView(new StatusBar()),
-                NodeContract.INERT);
-        UIElementRegistry.register(ProgressStatusItem.NAME, ProgressStatusItem::new, NodeContract.INERT);
-        UIElementRegistry.register(ProcessesPopover.NAME, ProcessesPopover::new, NodeContract.INERT);
-        UIElementRegistry.register(Breadcrumbs.NAME, Breadcrumbs::new, NodeContract.INERT);
-        UIElementRegistry.register(NotificationsView.NAME, NotificationsView::new, NodeContract.INERT);
-        UIElementRegistry.register(NotificationBalloons.NAME, NotificationBalloons::new, NodeContract.INERT);
-        UIElementRegistry.register(ProblemsPanel.NAME, ProblemsPanel::new, NodeContract.INERT);
-        UIElementRegistry.register(NavigatorView.NAME, NavigatorView::new, NodeContract.INERT);
+                NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(ProgressStatusItem.NAME, ProgressStatusItem::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(ProcessesPopover.NAME, ProcessesPopover::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(Breadcrumbs.NAME, Breadcrumbs::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(NotificationsView.NAME, NotificationsView::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(NotificationBalloons.NAME, NotificationBalloons::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(ProblemsPanel.NAME, ProblemsPanel::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(NavigatorView.NAME, NavigatorView::new, NodeContract.INERT, KindInfo.hidden());
     }
 }

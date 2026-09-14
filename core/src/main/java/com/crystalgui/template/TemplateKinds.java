@@ -23,6 +23,8 @@ public final class TemplateKinds implements NodeKinds {
         // INERT and buildable: an instance travels as one node -- the template it places is the far
         // side's to inflate, which is what makes a window that places one forty times describe it once.
         UIElementRegistry.register(TemplateInstance.NAME, TemplateInstance::new, NodeContract.INERT,
-                KindInfo.named("Template Instance").glyph(GlyphRole.COLLECTION));
+                KindInfo.named("Template Instance").glyph(GlyphRole.COLLECTION)
+                        // PLACED FROM ITS TEMPLATE, not as a bare kind: an instance of nothing draws nothing.
+                        .hide());
     }
 }
