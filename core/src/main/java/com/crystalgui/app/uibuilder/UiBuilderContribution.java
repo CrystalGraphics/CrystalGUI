@@ -54,7 +54,7 @@ public final class UiBuilderContribution implements WorkbenchExtension {
     public Disposable activate(WorkbenchContext workbench) {
         workbench.contribute(DocumentKind.of(DOCUMENT_TYPE, "UI Document")
                 .files(DocumentKind.FilePatterns.extension("cgui"))
-                .icon("crystalgui:layout")
+                .icon("crystalgui:filetypes/cgui")
                 .model((resource, bytes) -> new UiBuilderDocument(bytes, resource.toString()))
                 // The store is asked per editor: stores are supplied after extensions activate.
                 .editor(document -> new BuilderEditor((UiBuilderDocument) document.model(), workbench.extensionStore(ID))),
