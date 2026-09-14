@@ -57,6 +57,7 @@ import com.crystalgui.widget.graph.NodePort;
 import com.crystalgui.widget.graph.NodeWireLayer;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
 import com.crystalgui.widget.composite.CreateMenu;
+import com.crystalgui.widget.composite.SearchTree;
 import com.crystalgui.widget.surface.SurfaceEditor;
 import com.crystalgui.widget.surface.insert.InsertMenu;
 import com.crystalgui.widget.layout.ContextToolbar;
@@ -262,6 +263,7 @@ public final class Widgets implements NodeKinds {
         // library, which is not something a description could carry. InsertMenu is cascade-only -- it is
         // built with the surface it belongs to, so a registry has no way to make one.
         UIElementRegistry.register(CreateMenu.NAME, () -> new CreateMenu<>("Create"), NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(SearchTree.NAME, SearchTree::new, NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.registerTag(InsertMenu.NAME, NodeContract.INERT);
 
         // ── 6.2: the config kit ─────────────────────────────────────────────────────
