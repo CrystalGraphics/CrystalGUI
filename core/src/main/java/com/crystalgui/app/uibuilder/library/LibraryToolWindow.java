@@ -4,10 +4,13 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import dev.vfyjxf.taffy.style.TaffyDisplay;
+
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
@@ -18,14 +21,13 @@ import com.crystalgui.workbench.view.TitleActionsContributor;
 /**
  * The <b>Library</b> tool window: every placeable kind, placed into whatever {@code .cgui} is in front.
  *
- * <p>One panel for the whole workbench. Unlike the Hierarchy it keeps its content when no builder is in
- * front — the kinds do not depend on the document — and only placement needs one.</p>
+ * <p>One panel for the whole workbench, shown while a builder is in front and empty otherwise — the Hierarchy's
+ * rule, followed on the same signals. Hidden rather than rebuilt, because unlike a document's tree the kinds
+ * do not change with the tab: a card built once is kept, and coming back to a {@code .cgui} draws them at once.</p>
  */
 public final class LibraryToolWindow extends UIElement implements TitleActionsContributor, FocusableView {
 
     public static final Name NAME = Name.of("librarytoolwindow");
-
-
 
     private final WorkbenchContext workbench;
     private final LibraryPanel panel = new LibraryPanel(LibraryCatalog.current());
@@ -39,6 +41,9 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
     /** Whether the panel reads the extension's store yet. */
     private boolean storeBound;
 
+    /** Whether the panel is displayed; it starts so, and the first follow decides. */
+    private boolean showing = true;
+
     /** @param extensionId the extension this panel ships with, whose store keeps the user's groups */
     public LibraryToolWindow(WorkbenchContext workbench, String extensionId) {
         super(NAME);
@@ -46,6 +51,10 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
         this.extensionId = extensionId;
         append(panel);
         panel.onPlace.connect(this::place);
+        // WHICH TAB, and then WHETHER ITS CONTENT IS IN -- as the Hierarchy follows it. @see HierarchyToolWindow
+        whileConnected(() -> workbench.editors().onDidChangeActive.connect(tab -> follow()));
+        whileConnected(() -> workbench.editors().onDidLoad.connect(tab -> follow()));
+        onConnected(this::follow);
         // THE USER'S GROUPS AND VIEW, from the extension's store -- read on the first attach, NOT here: extensions
         // activate inside the Workbench constructor, and the application supplies the stores only after it, so
         // asked now the store is always null and every group was the session's alone. A host with no store
@@ -57,6 +66,20 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
             storeBound = true;
             panel.useLibrary(UserLibrary.in(store));
         });
+    }
+
+    /** Shows the panel while a builder is in front, and nothing otherwise. */
+    public void follow() {
+        boolean shown = builder() != null;
+        if (shown == showing) return;
+        showing = shown;
+        StyleGroup.inlinePipeline(panel.getStyle().getLayoutGroup(),
+                l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+    }
+
+    /** Whether the panel is shown: a {@code .cgui} is in front. */
+    public boolean isShowing() {
+        return showing;
     }
 
     /** Places {@code entry} into the builder in front, by the rule New ▸ uses. Nothing happens with no builder. */
@@ -78,12 +101,13 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
     @Override
     @Nullable
     public UIElement focusTarget() {
-        return panel.search().searchField();
+        return isShowing() ? panel.search().searchField() : null;
     }
 
+    /** @see LibraryActions#titleActions — on nothing while the panel is hidden, as the Hierarchy's are. */
     @Override
     public List<ActionButton> titleActions() {
-        if (titleActions == null) titleActions = LibraryActions.titleActions(() -> panel);
+        if (titleActions == null) titleActions = LibraryActions.titleActions(() -> isShowing() ? panel : null);
         return titleActions;
     }
 }
