@@ -17,6 +17,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.BuilderToolbar;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.BoxModelEditor;
@@ -704,27 +705,42 @@ public final class BuilderInspectorSections {
         @Override
         void build(ConfigForm form, UiBuilderDocument document) {
             form.header("Canvas");
+            // WHAT THE FILE SAYS, not what is on screen: the toolbar's size, scale and theme are the viewer's and
+            // are never saved, and two rows naming the same three things read as one setting shown twice.
+            form.note("What the document opens with, saved in the file. The toolbar changes only your view.");
             HeaderFields header = HeaderFields.on(document);
-            form.prop(ConfigDescriptor.of("canvas.sizes", "Sizes", ConfigDescriptor.Kind.ARRAY)
-                            .element(ConfigDescriptor.text("canvas.size", "").validator(text -> HeaderFields.parseSize(text) != null))
+            form.prop(ConfigDescriptor.of("canvas.sizes", "Preview sizes", ConfigDescriptor.Kind.ARRAY)
+                            .inlineList(true)
+                            .emptyText("Default: " + String.join(", ", BuilderToolbar.defaultSizeLabels()))
+                            .element(ConfigDescriptor.text("canvas.size", "").placeholder("800x480")
+                                    .validator(text -> HeaderFields.parseSize(text) != null))
                             .tooltip("preview.sizes")
                             .description("Sizes to preview at, as width x height. The first is the artboard's."),
                     header.preview(() -> sizesOf(header), BuilderInspectorSections::sizesJson, "sizes"));
-            form.prop(ConfigDescriptor.number("canvas.uiScale", "UI scale").range(1f, 4f).integral(true)
+            form.prop(ConfigDescriptor.select("canvas.uiScale", "UI scale", List.of("1x", "2x", "3x", "4x"))
                             .tooltip("preview.uiScale")
                             .description("How many screen pixels one pixel of the design is, when the document opens."),
                     header.preview(() -> {
                         JsonElement scale = header.previewKey("uiScale");
-                        return scale != null && scale.isJsonPrimitive() ? scale.getAsDouble() : 1d;
-                    }, scale -> new JsonPrimitive(Math.max(1, Math.round(scale))), "uiScale"));
+                        return (scale != null && scale.isJsonPrimitive() ? Math.round(scale.getAsFloat()) : 1) + "x";
+                    }, chosen -> {
+                        int scale = chosen == null ? 1 : Integer.parseInt(chosen.replace("x", "").trim());
+                        return scale <= 1 ? null : new JsonPrimitive(scale);
+                    }, "uiScale"));
             List<String> themes = new ArrayList<>();
-            themes.add("");
+            themes.add(WORKBENCH_THEME);
             for (UiTheme theme : ThemeRegistry.themes()) themes.add(theme.id());
             form.prop(ConfigDescriptor.select("canvas.theme", "Theme", themes)
                             .tooltip("preview.theme")
-                            .description("The theme the document opens in. Empty keeps the workbench's."),
-                    header.previewText("theme"));
+                            .description("The theme the document opens in. Workbench theme keeps whichever the workbench has."),
+                    header.preview(() -> {
+                        JsonElement theme = header.previewKey("theme");
+                        return theme != null && theme.isJsonPrimitive() ? theme.getAsString() : WORKBENCH_THEME;
+                    }, chosen -> chosen == null || chosen.equals(WORKBENCH_THEME) ? null : new JsonPrimitive(chosen), "theme"));
         }
+
+        /** The theme choice that writes no theme: the document opens in whichever the workbench has. */
+        private static final String WORKBENCH_THEME = "Workbench theme";
 
         private static List<Object> sizesOf(HeaderFields header) {
             List<Object> out = new ArrayList<>();
@@ -751,7 +767,9 @@ public final class BuilderInspectorSections {
         void build(ConfigForm form, UiBuilderDocument document) {
             form.header("Stylesheets");
             form.prop(ConfigDescriptor.of("document.sheets", "Sheets", ConfigDescriptor.Kind.ARRAY)
-                            .element(ConfigDescriptor.text("document.sheet", ""))
+                            .inlineList(true)
+                            .emptyText("None: drawn with the workbench's sheets")
+                            .element(ConfigDescriptor.text("document.sheet", "").placeholder("mymod:ui/status"))
                             .tooltip("stylesheets")
                             .description("The stylesheets this document is drawn with, as namespace:path. A later sheet wins over an earlier one."),
                     HeaderFields.on(document).strings("stylesheets"));
@@ -772,13 +790,17 @@ public final class BuilderInspectorSections {
         @Override
         void build(ConfigForm form, UiBuilderDocument document) {
             form.header("Export");
-            headerText(form, document, "model", "Model class", "The class a networked export binds its fields to.");
-            headerText(form, document, "package", "Package", "The Java package the generated class goes in.");
-            headerText(form, document, "kind-name", "Kind name", "A namespace:name tag, so other documents can place this one by it.");
+            headerText(form, document, "model", "Model class", "com.example.StatusModel",
+                    "The class a networked export binds its fields to.");
+            headerText(form, document, "package", "Package", "com.example.ui",
+                    "The Java package the generated class goes in.");
+            headerText(form, document, "kind-name", "Kind name", "mymod:status_page",
+                    "A namespace:name tag, so other documents can place this one by it.");
         }
 
-        private static void headerText(ConfigForm form, UiBuilderDocument document, String key, String label, String description) {
-            form.prop(ConfigDescriptor.text("export." + key, label).tooltip(key).description(description),
+        private static void headerText(ConfigForm form, UiBuilderDocument document, String key, String label, String example,
+                                       String description) {
+            form.prop(ConfigDescriptor.text("export." + key, label).placeholder(example).tooltip(key).description(description),
                     HeaderFields.on(document).text(key));
         }
     }
