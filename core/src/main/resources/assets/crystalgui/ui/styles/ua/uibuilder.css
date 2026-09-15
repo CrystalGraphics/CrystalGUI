@@ -861,6 +861,11 @@ smartguides {
     cursor: default;
 }
 
+/* A ROW WITH NO EFFECT RIGHT NOW — Grow on an absolute node. Readable, so what it will do stays visible, and
+ * quieter than a live row; its control takes no input. */
+.__configurator__.__inactive__ > .__label__ { color: var(--fg-disabled, #5A5D63); }
+.__configurator__.__inactive__ > .__inline__ { opacity: 0.5; }
+
 /* A ROW THIS NODE SETS — Unity's override marker: a bold label and an accent bar at the row's edge, so the
  * values a node changes are what the eye lands on. The bar is an OUTLINE gradient, which paints and takes
  * no space, so the label column does not move; a border would, and the engine has no per-edge left colour. */

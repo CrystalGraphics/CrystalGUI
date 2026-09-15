@@ -23,6 +23,9 @@ import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.property.StyleProperty;
+
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
+import dev.vfyjxf.taffy.style.TaffyDimension;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -207,11 +210,11 @@ public final class NodeFields {
                     number -> number == null ? null : inlineEdit(node, key, cssNumber(number, type == Integer.class)));
             return new Field(ConfigDescriptor.number(id, label).integral(type == Integer.class).tooltip(key.name), value);
         }
-        Property<String> value = bind(() -> {
-            Object current = computed.get();
-            return current == null ? "" : key.write(current);
-        }, text -> text == null ? null : inlineEdit(node, key, text.trim()));
-        return new Field(ConfigDescriptor.text(id, label).tooltip(key.name), value);
+        // AN AUTOMATIC VALUE READS AS AN EMPTY FIELD with auto greyed in it, as Figma leaves an unset value blank:
+        // typed out it looks like a value someone set. Clearing the field is the same auto again.
+        Property<String> value = bind(() -> cssText(key, computed.get()),
+                text -> text == null ? null : inlineEdit(node, key, text.trim()));
+        return new Field(ConfigDescriptor.text(id, label).placeholder("auto").tooltip(key.name), value);
     }
 
     /**
@@ -240,6 +243,31 @@ public final class NodeFields {
     public static JsonElement inlineStyleOf(UIElement node) {
         JsonElement encoded = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
         return encoded == null ? new JsonObject() : encoded;
+    }
+
+    /**
+     * A value as a field shows it: a length without a trailing {@code .0} ({@code 348px}), a percentage as written,
+     * and an automatic one as nothing, so the placeholder says auto.
+     */
+    private static String cssText(StyleProperty<Object> property, @Nullable Object value) {
+        if (value == null) return "";
+        if (value instanceof LengthPercentageAuto length) {
+            return switch (length.getType()) {
+                case AUTO -> "";
+                case LENGTH -> cssNumber(length.getValue(), false) + "px";
+                case PERCENT -> cssNumber(length.getValue() * 100d, false) + "%";
+                default -> property.write(value);
+            };
+        }
+        if (value instanceof TaffyDimension dimension) {
+            return switch (dimension.getType()) {
+                case AUTO -> "";
+                case LENGTH -> cssNumber(dimension.getValue(), false) + "px";
+                case PERCENT -> cssNumber(dimension.getValue() * 100d, false) + "%";
+                default -> property.write(value);
+            };
+        }
+        return property.write(value);
     }
 
     private static String cssNumber(double value, boolean integral) {
