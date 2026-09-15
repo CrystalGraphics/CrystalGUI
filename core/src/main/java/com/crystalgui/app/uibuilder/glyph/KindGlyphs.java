@@ -6,6 +6,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.style.ElementStyle;
+import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.box.Measurable;
 import com.crystalgui.ui.dom.GlyphRole;
@@ -36,7 +39,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  *   <li>the glyph of the nearest superclass kind that declares one, for a subclass that names itself — so an
  *       addon's {@code FancyButton extends Button} draws the button;</li>
  *   <li>for a node that lays out children, its layout from computed style: grid, wrap, row, else column, or
- *       a frame while it has no children — and an out-of-flow leaf is {@code absolute};</li>
+ *       a frame while it has no children and no layout of its own — and an out-of-flow leaf is {@code absolute};</li>
  *   <li>a diamond, tinted as an addon when the kind is not this engine's.</li>
  * </ol>
  *
@@ -102,7 +105,7 @@ public final class KindGlyphs {
     public static int signature(UIElement node) {
         var computed = node.getStyle().computed();
         // FOUR BITS A FIELD: every one of these enums has far fewer than sixteen constants.
-        int signature = node.children().isEmpty() ? 1 : 0;
+        int signature = (node.children().isEmpty() ? 1 : 0) | (authorsLayout(node) ? 2 : 0);
         signature = (signature << 4) | computed.get(LayoutProperties.DISPLAY).ordinal();
         signature = (signature << 4) | computed.get(LayoutProperties.FLEX_DIRECTION).ordinal();
         signature = (signature << 4) | computed.get(LayoutProperties.FLEX_WRAP).ordinal();
@@ -169,10 +172,25 @@ public final class KindGlyphs {
         return !(node instanceof Measurable) && node.acceptsPublicChildren();
     }
 
+    /** Whether a stylesheet or the node's own inline style declares how it lays out — not the user agent. */
+    private static boolean authorsLayout(UIElement node) {
+        var style = node.getStyle();
+        return authored(style, LayoutProperties.DISPLAY) || authored(style, LayoutProperties.FLEX_DIRECTION)
+                || authored(style, LayoutProperties.FLEX_WRAP);
+    }
+
+    private static boolean authored(ElementStyle style, StyleProperty<?> property) {
+        return style.containsCandidate(property,
+                slot -> slot.origin() != StyleOrigin.DEFAULT && slot.origin() != StyleOrigin.USER_AGENT);
+    }
+
     private static Glyph layoutOf(UIElement node) {
         var computed = node.getStyle().computed();
         boolean outOfFlow = computed.get(LayoutProperties.POSITION) == TaffyPosition.ABSOLUTE;
-        if (node.children().isEmpty()) return outOfFlow ? ABSOLUTE : FRAME;
+        // AN EMPTY NODE IS A FRAME UNTIL ITS LAYOUT IS SAID: Figma draws an empty auto-layout frame with its
+        // direction, because the setting is what the frame is. Only an author's word counts -- every element
+        // has the user agent's column, and every one of them drawn as a column would say nothing.
+        if (node.children().isEmpty() && !authorsLayout(node)) return outOfFlow ? ABSOLUTE : FRAME;
 
         TaffyDisplay display = computed.get(LayoutProperties.DISPLAY);
         FlexDirection direction = computed.get(LayoutProperties.FLEX_DIRECTION);
