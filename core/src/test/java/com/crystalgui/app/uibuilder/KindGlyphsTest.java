@@ -71,8 +71,9 @@ public class KindGlyphsTest extends UiDocumentTestBase {
         assertEquals(ICONS + "wrap", KindGlyphs.of(wrap).icon());
         assertEquals(ICONS + "grid", KindGlyphs.of(grid).icon());
         assertEquals("Row layout, reversed", KindGlyphs.of(reversed).words());
-        assertEquals("a container shows its children's flow and says it is out of flow",
-                "Column layout, absolutely positioned", KindGlyphs.of(floating).words());
+        assertEquals("out of flow is the mark", ICONS + "absolute", KindGlyphs.of(floating).icon());
+        assertEquals("and the words still say how it lays out its children",
+                "Absolutely positioned, column layout", KindGlyphs.of(floating).words());
     }
 
     @Test
