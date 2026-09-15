@@ -118,6 +118,27 @@ public final class Drag implements InputMode {
     }
 
     /** A positional drag: no payload, no threshold, live from the first movement. */
+    /**
+     * Physical pixels per one local unit of {@code handle}, measured through its own transform chain — what turns a
+     * {@link Listener}'s local deltas into how far the hand moved.
+     *
+     * <pre>{@code
+     * float perUnit = Drag.pixelsPerLocalUnit(handle);   // sample once, on press
+     * double value = DragScrub.value(anchor, deltaX * perUnit, deltaY * perUnit, modifiers, spec);
+     * }</pre>
+     *
+     * <p>A handle inside a zoomed plane or under {@code uiScale} reports local deltas, so a rate applied to them
+     * would change with the zoom. Answers 1 for a degenerate transform or a handle not laid out.</p>
+     */
+    public static float pixelsPerLocalUnit(UIElement handle) {
+        final float probe = 100f;
+        // Read before the second call: toLocal may hand back a shared vector.
+        float originX = handle.toLocal(0f, 0f).x();
+        float spanInLocalUnits = handle.toLocal(probe, 0f).x() - originX;
+        if (!Float.isFinite(spanInLocalUnits) || Math.abs(spanInLocalUnits) < 1e-4f) return 1f;
+        return probe / spanInLocalUnits;
+    }
+
     public static Drag start(UIElement source, float surfaceX, float surfaceY, Listener listener) {
         return start(source, surfaceX, surfaceY, heldButton(source), null, 0f, listener);
     }
