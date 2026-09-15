@@ -117,6 +117,9 @@ public final class ConfigDescriptor {
     private double scrubRate = Double.NaN;
     private DoubleSupplier scrubRateSource;
     private String description;
+    private boolean inlineList;
+    private String emptyText;
+    private String placeholder;
     private Predicate<String> validator;
     private ConfigDescriptor element;
     private final List<ConfigDescriptor> children = new ArrayList<>();
@@ -416,6 +419,53 @@ public final class ConfigDescriptor {
     public ConfigDescriptor scrubRate(DoubleSupplier unitsPerPixel) {
         this.scrubRateSource = unitsPerPixel;
         return this;
+    }
+
+    /**
+     * For {@link Kind#ARRAY}: drawn in its row like any field — beside the row's label, with no header band of its
+     * own and its + and − to the right of the entries.
+     *
+     * <pre>{@code
+     * form.prop(ConfigDescriptor.of("sizes", "Preview sizes", Kind.ARRAY).inlineList(true), sizes);
+     * }</pre>
+     *
+     * <p>For a list that is one field of a section. A list that IS the section keeps the band, as Unity draws one.</p>
+     */
+    public ConfigDescriptor inlineList(boolean value) {
+        this.inlineList = value;
+        return this;
+    }
+
+    public boolean inlineList() {
+        return inlineList;
+    }
+
+    /** For {@link Kind#ARRAY}: what an empty list says instead of "List is Empty" — what having none means. */
+    public ConfigDescriptor emptyText(@Nullable String value) {
+        this.emptyText = value;
+        return this;
+    }
+
+    @Nullable
+    public String emptyText() {
+        return emptyText;
+    }
+
+    /**
+     * For {@link Kind#TEXT}: an example shown greyed while the field is empty, focused or not.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.text("package", "Package").placeholder("com.example.ui");
+     * }</pre>
+     */
+    public ConfigDescriptor placeholder(@Nullable String value) {
+        this.placeholder = value;
+        return this;
+    }
+
+    @Nullable
+    public String placeholder() {
+        return placeholder;
     }
 
     /**

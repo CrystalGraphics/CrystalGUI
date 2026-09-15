@@ -875,6 +875,20 @@ public class TextField extends UIElement implements Measurable {
     /** @see #presentFocused */
     private boolean presentedFocused;
 
+    /** Whether the placeholder shows while blurred too. @see #setPlaceholderShownUnfocused */
+    private boolean placeholderShownUnfocused;
+
+    /**
+     * Shows the placeholder whether or not the field has focus — for a form field whose placeholder is an example
+     * of what goes in it. A search box keeps the default, where an unfocused placeholder reads as a query.
+     */
+    public TextField setPlaceholderShownUnfocused(boolean shown) {
+        if (placeholderShownUnfocused == shown) return this;
+        placeholderShownUnfocused = shown;
+        repaint();
+        return this;
+    }
+
     /** Whether this paints as focused: really focused, or presented so. */
     private boolean drawsFocused() {
         return presentedFocused || isFocused();
@@ -1365,7 +1379,7 @@ public class TextField extends UIElement implements Measurable {
         // un-popped -- "Unbalanced scissor stack after the main paint pass: depth 1, expected 0", and the
         // whole window flickering before it threw. Anything that decides not to paint has to fall through
         // to the same teardown as anything that does.
-        String shown = showingPlaceholder && !drawsFocused() ? "" : showingPlaceholder ? placeholder : text;
+        String shown = showingPlaceholder && !drawsFocused() && !placeholderShownUnfocused ? "" : showingPlaceholder ? placeholder : text;
         if (!shown.isEmpty()) {
             // A draw that did not get the glyph tier it asked for is provisional, so come back for it
             // next frame. @see CgUiPaintContext#textDegradedDrawCount

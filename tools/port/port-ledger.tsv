@@ -91,12 +91,13 @@ PART	AnchorControl	anchor-cell	A	2	proposed	leaf in every rule, scoped by an anc
 PART	AnchorControl	anchor-line	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	AnchorControl	on	C	3	proposed	state adjective
 PART	ArrayControl	add	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	ArrayControl	array	B	10	confirmed	a rule selects through it (9)
-PART	ArrayControl	body	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	ArrayControl	empty	C	3	confirmed	state adjective
-PART	ArrayControl	entry	B	2	confirmed	a rule selects through it (1)
-PART	ArrayControl	foot	B	2	confirmed	a rule selects through it (1)
+PART	ArrayControl	array	B	16	confirmed	a rule selects through it (14)
+PART	ArrayControl	body	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	ArrayControl	empty	C	4	confirmed	state adjective
+PART	ArrayControl	entry	B	3	confirmed	a rule selects through it (1)
+PART	ArrayControl	foot	B	4	confirmed	a rule selects through it (2)
 PART	ArrayControl	head	B	2	confirmed	a rule selects through it (1)
+PART	ArrayControl	inline-list	B	6	proposed	a rule selects through it (5)
 PART	ArrayControl	remove	B	0	confirmed	leaf in every rule
 PART	Artboard	artboard	A	0	proposed	leaf in every rule
 PART	AssetControl	asset	B	3	confirmed	a rule selects through it (2)
@@ -123,10 +124,10 @@ PART	BoxModelEditor	bm-content	A	2	proposed	leaf in every rule, scoped by an anc
 PART	BoxModelEditor	bm-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	BoxModelEditor	bm-head	B	2	proposed	a rule selects through it (1)
 PART	BoxModelEditor	bm-label	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	BoxModelEditor	bm-layer	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	BoxModelEditor	bm-row	B	3	proposed	a rule selects through it (2)
+PART	BoxModelEditor	bm-layer	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	BoxModelEditor	bm-row	B	4	proposed	a rule selects through it (2)
 PART	BoxModelEditor	bm-value	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
-PART	BoxModelEditor	boxmodel	B	17	proposed	a rule selects through it (16)
+PART	BoxModelEditor	boxmodel	B	20	proposed	a rule selects through it (18)
 PART	BoxModelEditor	no-box	B	2	proposed	a rule selects through it (2)
 PART	Breadcrumbs	crumb	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-current	B	0	confirmed	leaf in every rule
@@ -193,11 +194,12 @@ PART	CompletionPopup	completion-mark-static	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-options	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-params	B	2	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	CompletionPopup	completion-row	B	2	confirmed	leaf in every rule
-PART	ConfigControl	config-control	B	88	confirmed	a rule selects through it (76)
+PART	ConfigControl	config-control	B	94	confirmed	a rule selects through it (81)
 PART	Configurator	compact	B	9	proposed	a rule selects through it (8)
-PART	Configurator	configurator	B	19	confirmed	a rule selects through it (17)
+PART	Configurator	configurator	B	21	confirmed	a rule selects through it (18)
 PART	Configurator	inline	C	9	confirmed	state adjective
-PART	Configurator	label	B	9	confirmed	leaf in every rule, scoped by an ancestor in 9
+PART	Configurator	label	B	10	confirmed	leaf in every rule, scoped by an ancestor in 10
+PART	Configurator	list-row	B	2	proposed	a rule selects through it (1)
 PART	ConfiguratorGroup	arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ConfiguratorGroup	collapsed	C	5	confirmed	state adjective
 PART	ConfiguratorGroup	configurator-group	B	14	confirmed	a rule selects through it (13)

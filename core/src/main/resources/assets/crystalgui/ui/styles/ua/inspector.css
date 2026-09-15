@@ -784,6 +784,48 @@
     min-height: 12px;
     flex-grow: 0;
 }
+/* A LIST THAT IS ONE FIELD OF A SECTION: in its row's value column beside the label, with no band of its own and
+ * the +/- beside the entries rather than on a tab below them. Two bands in a row read as two sections. */
+.__config-control__.__array__.__inline-list__ {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 3px;
+}
+.__config-control__.__array__.__inline-list__ > .__body__ {
+    flex-basis: 0;
+    flex-grow: 1;
+    background: #00000000;
+    padding-top: 0px;
+    padding-bottom: 0px;
+}
+.__config-control__.__array__.__inline-list__ .__entry__ {
+    padding-left: 0px;
+    padding-right: 0px;
+}
+.__config-control__.__array__.__inline-list__ .__empty__ {
+    padding-left: 0px;
+    color: var(--fg-hint, #7A7A7A);
+}
+.__config-control__.__array__.__inline-list__ > .__foot__ {
+    align-self: flex-start;
+    height: var(--cfg-row-h);
+    align-items: center;
+    gap: 2px;
+    padding-left: 0px;
+    padding-right: 0px;
+    background: #00000000;
+}
+/* The buttons at a field's height, so they line up with the entry beside them rather than floating above it. */
+.__config-control__.__array__.__inline-list__ > .__foot__ button {
+    width: var(--cfg-ctrl-h);
+    height: var(--cfg-ctrl-h);
+    min-height: var(--cfg-ctrl-h);
+}
+/* The row holding one: its label against the FIRST entry, not centred down the whole list. A text draws at the top
+ * of its box, so the label is let down to where the first entry's field centres: a 13px line beside an 18px field
+ * one pixel lower, measured. */
+.__configurator__.__list-row__ { align-items: flex-start; }
+.__configurator__.__list-row__ > .__label__ { margin-top: 4px; }
 
 /* ── Main Preview (P6.3.12) ─────────────────────────────────────────────────────────────────────
  * The finished shader on a mesh, in a floating resizable panel. Functional geometry only — every

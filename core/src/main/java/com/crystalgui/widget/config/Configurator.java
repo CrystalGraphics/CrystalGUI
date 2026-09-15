@@ -48,6 +48,9 @@ public class Configurator extends UIElement {
     public static final String LABEL_CLASS = "__label__";
     public static final String INLINE_CLASS = "__inline__";
 
+    /** On a row holding an inline list, beside {@link #ROW_CLASS}. @see ConfigDescriptor#inlineList */
+    public static final String LIST_ROW_CLASS = "__list-row__";
+
     /** On a {@link Arrangement#COMPACT} field, beside {@link #ROW_CLASS}. */
     public static final String COMPACT_CLASS = "__compact__";
 
@@ -99,6 +102,10 @@ public class Configurator extends UIElement {
         super(NAME);
         this.control = control;
         addClass(ROW_CLASS);
+        // A ROW AS TALL AS A LIST: its label sits against the first entry rather than centred across all of them.
+        if (control.descriptor().kind() == ConfigDescriptor.Kind.ARRAY && control.descriptor().inlineList()) {
+            addClass(LIST_ROW_CLASS);
+        }
         if (arrangement == Arrangement.COMPACT) {
             addClass(COMPACT_CLASS);
             // The letter in front of its number with no sheet, as the toolbar it sits in is a row.
