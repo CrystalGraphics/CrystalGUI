@@ -11,6 +11,7 @@ import dev.vfyjxf.taffy.geometry.FloatRect;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.scroll.ScrollerView;
 import java.util.Collections;
@@ -126,6 +127,11 @@ public class ConfiguratorPanel extends ScrollerView {
         for (UIElement child : parent.composedChildren()) {
             // A bar pinned to the viewport is not content the rows need room for.
             if (child.isScrollExempt() && !(child instanceof HeaderControl)) continue;
+            // NOR IS A POPUP: an open dropdown's menu is a part of the dropdown and hosted by the top layer, so its box
+            // is placed in the top layer's space. Read here as the row's, the list stretched the panel and put a
+            // horizontal scrollbar under it for as long as it was open.
+            UIDocument window = child.document();
+            if (window != null && window.isPromoted(child)) continue;
             Box box = child.box();
             if (box == null) continue;
             float x = left + box.x();
