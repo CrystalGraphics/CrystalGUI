@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertNull;
@@ -44,6 +45,7 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.extension.InspectorExtension;
 import com.crystalgui.workbench.WorkbenchSession;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -137,6 +139,34 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
     }
 
     /** <b>The report.</b> Open a {@code .cgui} and the panel describes it. */
+    /**
+     * <b>Opening a .cgui brings up what edits it.</b> The Hierarchy and the Inspector are shown beside it, as a person
+     * opening one from the Project panel wants them.
+     */
+    @Test
+    public void openingACguiRevealsTheHierarchyAndTheInspector() {
+        workbench.toolWindowManager().hidePanel(UiBuilderContribution.HIERARCHY_PANEL);
+        workbench.toolWindowManager().hidePanel(InspectorExtension.TYPE);
+        frameAndPump();
+
+        workbench.openFile(FILE);
+        for (int i = 0; i < 16; i++) frameAndPump();
+
+        assertTrue(workbench.isPanelOpen(UiBuilderContribution.HIERARCHY_PANEL));
+        assertTrue(workbench.isPanelOpen(InspectorExtension.TYPE));
+
+        // SWITCHING TO IT AGAIN IS NOT OPENING IT: a tab already open brings nothing up.
+        workbench.toolWindowManager().hidePanel(UiBuilderContribution.HIERARCHY_PANEL);
+        workbench.toolWindowManager().hidePanel(InspectorExtension.TYPE);
+        frameAndPump();
+        workbench.openFile(OTHER);
+        for (int i = 0; i < 16; i++) frameAndPump();
+        workbench.openFile(FILE);
+        for (int i = 0; i < 16; i++) frameAndPump();
+        assertFalse(workbench.isPanelOpen(UiBuilderContribution.HIERARCHY_PANEL));
+        assertFalse(workbench.isPanelOpen(InspectorExtension.TYPE));
+    }
+
     @Test
     public void openingACguiFillsTheHierarchyPanel() {
         workbench.open(DockInput.of(workbench.refFor(FILE)));

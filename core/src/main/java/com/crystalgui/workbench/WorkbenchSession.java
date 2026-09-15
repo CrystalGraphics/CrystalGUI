@@ -814,7 +814,7 @@ public final class WorkbenchSession {
         // itself". That coupling was between the engine and one panel, and it is the explorer's own
         // business now: its slice hangs its retry off `onDidLoadListing` and its auto-reveal expands
         // whatever the open needs. @see SessionSlice
-        workbench.openFile(active);
+        workbench.openRestoredFile(active);
         return false;
     }
 

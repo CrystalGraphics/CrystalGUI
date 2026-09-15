@@ -755,6 +755,19 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return toolWindowManager != null && toolWindowManager.showPanel(typeId);
     }
 
+    /** As {@link #revealPanel}, leaving the keyboard where it is — a tool window shown beside what was just opened. */
+    public boolean revealPanelQuietly(String typeId) {
+        return toolWindowManager != null && toolWindowManager.showPanel(typeId, false);
+    }
+
+    /**
+     * Opens the file a restored session had in front. The same open as {@link #openFile}, except that it reveals none of
+     * the kind's tool windows: a restore brings those back as they were left. @see DocumentKind#revealsToolWindows
+     */
+    void openRestoredFile(CgPath path) {
+        opener.openFile(path, null, false);
+    }
+
     /** Reveals the Problems panel. What a failing status readout points at. */
     /** @deprecated @see ProblemsExtension#SHOW */
     @Deprecated
