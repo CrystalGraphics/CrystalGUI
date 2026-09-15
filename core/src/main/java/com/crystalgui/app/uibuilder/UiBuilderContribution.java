@@ -12,6 +12,7 @@ import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.toolwindow.ToolWindowKind;
+import com.crystalgui.workbench.extension.InspectorExtension;
 import com.crystalgui.workbench.extension.WorkbenchExtension;
 
 /**
@@ -55,6 +56,8 @@ public final class UiBuilderContribution implements WorkbenchExtension {
         workbench.contribute(DocumentKind.of(DOCUMENT_TYPE, "UI Document")
                 .files(DocumentKind.FilePatterns.extension("cgui"))
                 .icon("crystalgui:filetypes/cgui")
+                // THE TREE AND THE PROPERTIES ARE HOW A DOCUMENT IS EDITED, so opening one brings both up.
+                .revealsToolWindows(HIERARCHY_PANEL, InspectorExtension.TYPE)
                 .model((resource, bytes) -> new UiBuilderDocument(bytes, resource.toString()))
                 // The store is asked per editor: stores are supplied after extensions activate.
                 .editor(document -> new BuilderEditor((UiBuilderDocument) document.model(), workbench.extensionStore(ID))),

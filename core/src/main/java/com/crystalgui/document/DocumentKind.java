@@ -62,6 +62,7 @@ public final class DocumentKind {
     private Language language;
     private boolean isFallback;
     private boolean frozen;
+    private List<String> revealsToolWindows = List.of();
 
     private DocumentKind(String id, String displayName) {
         this.id = Objects.requireNonNull(id, "id");
@@ -102,6 +103,29 @@ public final class DocumentKind {
         checkOpen();
         this.isFallback = true;
         return this;
+    }
+
+    /**
+     * The tool windows a person opening a document of this kind wants beside it, shown without taking the keyboard.
+     *
+     * <pre>{@code
+     * DocumentKind.of("cgui.file", "UI Document")
+     *         .revealsToolWindows(UiBuilderContribution.HIERARCHY_PANEL, InspectorExtension.TYPE);
+     * }</pre>
+     *
+     * <p>Only when a person opens a document into a NEW tab — from the Project panel, Go to File, a menu. Switching to a
+     * tab already open reveals nothing, and neither does a session restore, which brings the tool windows back as they
+     * were left. An id no extension registered is skipped.</p>
+     */
+    public DocumentKind revealsToolWindows(String... toolWindowIds) {
+        checkOpen();
+        this.revealsToolWindows = List.of(toolWindowIds);
+        return this;
+    }
+
+    /** @see #revealsToolWindows(String...) */
+    public List<String> revealedToolWindows() {
+        return revealsToolWindows;
     }
 
     /** The icon a tab and a tree row show. Resolved through the icon theme like any other. */

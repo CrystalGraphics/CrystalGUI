@@ -199,6 +199,14 @@ public final class WorkbenchOpener {
      *                 if the read fails, since there is nothing to act on
      */
     public void openFile(CgPath path, @Nullable Runnable onOpened) {
+        openFile(path, onOpened, true);
+    }
+
+    /**
+     * As {@link #openFile(CgPath, Runnable)}, saying whether a NEW tab brings up the kind's tool windows — false for a
+     * session restore, which brings them back as they were left. @see DocumentKind#revealsToolWindows
+     */
+    public void openFile(CgPath path, @Nullable Runnable onOpened, boolean revealToolWindows) {
         // BEFORE the already-open early return below, so re-activating a tab still promotes the file.
         // "Recent" means recently used, not recently created -- and the branch that returns early is the
         // common one once a session has been running for a while.
@@ -207,7 +215,14 @@ public final class WorkbenchOpener {
             if (onOpened != null) onOpened.run();
             return;
         }
-        openResource(Resource.of(path), onOpened);
+        openResource(Resource.of(path), onOpened, revealToolWindows);
+    }
+
+    /** Shows the tool windows a document of {@code resource}'s kind wants beside it, keeping the keyboard where it is. */
+    private void revealToolWindowsFor(Resource resource) {
+        DocumentKind kind = workbench.kinds.forResource(resource);
+        if (kind == null) return;
+        for (String toolWindow : kind.revealedToolWindows()) workbench.revealPanelQuietly(toolWindow);
     }
 
     /**
@@ -256,6 +271,14 @@ public final class WorkbenchOpener {
      *                 since there is nothing to act on
      */
     public void openResource(Resource resource, @Nullable Runnable onOpened) {
+        openResource(resource, onOpened, true);
+    }
+
+    /**
+     * @param revealToolWindows whether a document opened into a NEW tab brings up its kind's tool windows. A tab already
+     *                          open is only brought to the front: switching to a document is not opening one.
+     */
+    private void openResource(Resource resource, @Nullable Runnable onOpened, boolean revealToolWindows) {
         if (resource == null) return;
         if (!resource.isProject() && workbench.workspace.providerFor(resource) == null) return;
         CgPath path = resource.asPath();
@@ -268,13 +291,14 @@ public final class WorkbenchOpener {
                     .then(tab -> workbench.runWhenReady(tab, onOpened));
             return;
         }
+        if (revealToolWindows) revealToolWindowsFor(resource);
         workbench.editors.open(EditorInput.of(resource))
                 .onError(failure -> Notifications.show(workbench.saveActions.openFailed(resource, failure)
                         // AN ACTION, because a read failure is the case actions exist for: it is usually
                         // transient (a server round trip), the recovery is exactly what was just
                         // attempted, and without one the message names a problem and leaves the user to
                         // find the verb again.
-                        .withAction("Retry", () -> openResource(resource, onOpened))))
+                        .withAction("Retry", () -> openResource(resource, onOpened, revealToolWindows))))
                 .then(tab -> {
                     open(DockInput.of(ref));
                     // AFTER open(), not before: the tab has to be the active one for activeEditor() to
