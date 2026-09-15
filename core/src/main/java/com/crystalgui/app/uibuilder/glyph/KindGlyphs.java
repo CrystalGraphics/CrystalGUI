@@ -1,5 +1,7 @@
 package com.crystalgui.app.uibuilder.glyph;
 
+import java.util.Locale;
+
 import java.lang.invoke.MethodHandles;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,7 +41,8 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  *   <li>the glyph of the nearest superclass kind that declares one, for a subclass that names itself — so an
  *       addon's {@code FancyButton extends Button} draws the button;</li>
  *   <li>for a node that lays out children, its layout from computed style: grid, wrap, row, else column, or
- *       a frame while it has no children and no layout of its own — and an out-of-flow leaf is {@code absolute};</li>
+ *       a frame while it has no children and no layout of its own — and any out-of-flow node is {@code absolute},
+ *       its layout named in the words;</li>
  *   <li>a diamond, tinted as an addon when the kind is not this engine's.</li>
  * </ol>
  *
@@ -209,9 +212,11 @@ public final class KindGlyphs {
             flow = COLUMN;
             reversed = direction == FlexDirection.COLUMN_REVERSE;
         }
-        if (!reversed && !outOfFlow) return flow;
-        String words = flow.words() + (reversed ? ", reversed" : "") + (outOfFlow ? ", absolutely positioned" : "");
-        return new Glyph(flow.icon(), flow.role(), words);
+        String layout = flow.words() + (reversed ? ", reversed" : "");
+        // OUT OF FLOW OUTRANKS HOW IT FLOWS: that it is placed by hand is the surprising fact about the node, and what
+        // it does with its children is the ordinary one, so the mark says absolute and the words say both.
+        if (outOfFlow) return new Glyph(ABSOLUTE.icon(), ABSOLUTE.role(), ABSOLUTE.words() + ", " + layout.toLowerCase(Locale.ROOT));
+        return reversed ? new Glyph(flow.icon(), flow.role(), layout) : flow;
     }
 
     // ── Names ────────────────────────────────────────────────────────────────────────────────────
