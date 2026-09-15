@@ -57,7 +57,8 @@ public class Tooltip extends UIElement {
     public static final State<Tooltip, String> TEXT =
             State.<Tooltip, String>of("text", StateTypes.STRING,
                             Tooltip::getBaseText, Tooltip::setText, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The tooltip's text.");
 
     /**
      * Reads {@code getBaseText} and not {@code getText}, and the difference matters: the displayed text

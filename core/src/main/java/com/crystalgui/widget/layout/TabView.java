@@ -65,7 +65,8 @@ public class TabView extends UIElement {
     public static final Name NAME = Name.of("tabview");
 
     public static final State<TabView, Integer> SELECTED =
-            State.of("selected", StateTypes.INT, TabView::getSelectedIndex, TabView::selectIndex, -1);
+            State.of("selected", StateTypes.INT, TabView::getSelectedIndex, TabView::selectIndex, -1)
+                    .describedAs("The index of the open tab; -1 opens none.");
 
     /** Which tab is showing. M1: a TabView could not say, so a server could not follow a user's page. */
     public static final Event<TabView, Integer> SELECTION = Event.<TabView, Integer>of("select",

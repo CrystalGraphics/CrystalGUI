@@ -1,6 +1,9 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.ui.input.FocusPolicy;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,11 +31,14 @@ public final class Attribute<T> {
     private static final Map<String, Attribute<?>> BY_NAME = new ConcurrentHashMap<>();
 
     /** Whether the node responds to input at all; {@code :disabled} when false. */
-    public static final Attribute<Boolean> ENABLED = of("enabled", Boolean.class, true);
+    public static final Attribute<Boolean> ENABLED = of("enabled", Boolean.class, true)
+            .describedAs("Whether it responds to input. A disabled element also matches :disabled.");
     /** The HTML {@code inert} attribute: the subtree keeps its box and stops being interactive. */
-    public static final Attribute<Boolean> INERT = of("inert", Boolean.class, false);
+    public static final Attribute<Boolean> INERT = of("inert", Boolean.class, false)
+            .describedAs("Takes no input and no focus, and neither does anything inside it.");
     /** Whether hit-testing may land on this subtree; {@code pointer-events: none} when false. */
-    public static final Attribute<Boolean> HIT_TEST = of("hit-test", Boolean.class, true);
+    public static final Attribute<Boolean> HIT_TEST = of("hit-test", Boolean.class, true)
+            .describedAs("Whether a click can land on it or on anything inside it.");
 
     /**
      * Never the answer to a hit test, though everything inside it still is.
@@ -48,7 +54,8 @@ public final class Attribute<T> {
      * which picks rather than hit-tests — sees the layer anyway.</p>
      */
     public static final Attribute<Boolean> HIT_TRANSPARENT =
-            of("hit-transparent", Boolean.class, false);
+            of("hit-transparent", Boolean.class, false)
+                    .describedAs("Clicks pass through it to what is behind, and still reach what is inside it.");
 
     /**
      * This subtree wants presses that carry a modifier, so a window-level gesture must not take them.
@@ -66,20 +73,25 @@ public final class Attribute<T> {
      * else in the window.</p>
      */
     public static final Attribute<Boolean> KEEPS_MODIFIER_PRESS =
-            of("keeps-modifier-press", Boolean.class, false);
+            of("keeps-modifier-press", Boolean.class, false)
+                    .describedAs("Alt and Ctrl presses stay here instead of moving the window.");
     /** The name of the slot a light child asks to be placed in; empty for the default slot. */
     /**
      * A focus navigation scope: a dialog, a window frame, a pane. Tab is trapped inside whichever
      * one a modal blocks, and "is focus already in here" is asked of one.
      */
-    public static final Attribute<Boolean> FOCUS_SCOPE = of("focus-scope", Boolean.class, false);
+    public static final Attribute<Boolean> FOCUS_SCOPE = of("focus-scope", Boolean.class, false)
+            .describedAs("Tab stays inside it, as it does in a dialog.");
 
     /** Whether and how this node takes focus. Four values, and two of them look alike. */
-    public static final Attribute<FocusPolicy> FOCUS_POLICY = of("focus-policy", FocusPolicy.class, FocusPolicy.NONE);
+    public static final Attribute<FocusPolicy> FOCUS_POLICY = of("focus-policy", FocusPolicy.class, FocusPolicy.NONE)
+            .describedAs("Whether it takes focus, and whether from a click, from Tab, or both.");
 
-    public static final Attribute<String> SLOT = of("slot", String.class, "");
+    public static final Attribute<String> SLOT = of("slot", String.class, "")
+            .describedAs("Which named slot of the template it is placed in; empty is the default slot.");
     /** The {@code ::part()} name a node inside a shadow tree is exposed under; empty for none. */
-    public static final Attribute<String> PART = of("part", String.class, "");
+    public static final Attribute<String> PART = of("part", String.class, "")
+            .describedAs("The name a theme reaches it by with ::part() from outside its template.");
 
     /**
      * Not on screen and taking no space — HTML's own {@code hidden}, with {@code [hidden] &#123;
@@ -96,7 +108,8 @@ public final class Attribute<T> {
      * hidden node still matches selectors, still runs its hooks and still holds a box's worth of
      * state, it merely lays out to nothing. Freezing is what stops a subtree working.</p>
      */
-    public static final Attribute<Boolean> HIDDEN = of("hidden", Boolean.class, false);
+    public static final Attribute<Boolean> HIDDEN = of("hidden", Boolean.class, false)
+            .describedAs("Not shown, and takes no space.");
 
     /**
      * This box does not move with what it is hosted in — a scrollbar, a gutter, a find bar.
@@ -105,7 +118,8 @@ public final class Attribute<T> {
      * scroller's own bars scroll away with the content they are for. Read by {@code BoxTree}'s
      * composition, which is the only place a host's scroll offset is applied.</p>
      */
-    public static final Attribute<Boolean> SCROLL_EXEMPT = of("scroll-exempt", Boolean.class, false);
+    public static final Attribute<Boolean> SCROLL_EXEMPT = of("scroll-exempt", Boolean.class, false)
+            .describedAs("Stays put when what holds it scrolls, like a scrollbar.");
 
     /**
      * Which of this node's kind's events a session has asked to hear about — space-separated, like
@@ -120,7 +134,8 @@ public final class Attribute<T> {
      * wire ({@link #isCarried()}), and inventing a fifth for one key would be a codec everything else
      * pays to know about. It is also what the DOM does with every multi-valued attribute it has.</p>
      */
-    public static final Attribute<String> REPORTS = of("reports", String.class, "");
+    public static final Attribute<String> REPORTS = of("reports", String.class, "")
+            .describedAs("Which of its events a server hears about, separated by spaces.");
 
     /**
      * Whether this node's state should outlive it across a session.
@@ -131,11 +146,15 @@ public final class Attribute<T> {
      * for the payload -- so opting in costs nothing for a widget whose contract carries no state.</p>
      */
     public static final Attribute<Boolean> SESSION_PERSISTENT =
-            of("session-persistent", Boolean.class, false);
+            of("session-persistent", Boolean.class, false)
+                    .describedAs("Keeps its state, such as a divider's position, across a restart.");
 
     private final String name;
     private final Class<T> type;
     private final T initial;
+
+    @Nullable
+    private volatile String description;
 
     private Attribute(String name, Class<T> type, T initial) {
         this.name = name;
@@ -159,6 +178,13 @@ public final class Attribute<T> {
         return attribute;
     }
 
+    /** Every declared key, by name — what an editor lists. */
+    public static List<Attribute<?>> declared() {
+        List<Attribute<?>> all = new ArrayList<>(BY_NAME.values());
+        all.sort(Comparator.comparing(Attribute::name));
+        return all;
+    }
+
     /** The key declared under {@code name}, or {@code null} — how the codec finds one it is handed. */
     @Nullable
     public static Attribute<?> named(String name) {
@@ -167,6 +193,25 @@ public final class Attribute<T> {
 
     public String name() {
         return name;
+    }
+
+    /**
+     * Says what this attribute does, for an editor's hint — declared where the attribute is.
+     *
+     * <pre>{@code
+     * public static final Attribute<Boolean> HIDDEN = of("hidden", Boolean.class, false)
+     *         .describedAs("Not shown, and takes no space.");
+     * }</pre>
+     */
+    public Attribute<T> describedAs(String text) {
+        this.description = text;
+        return this;
+    }
+
+    /** What {@link #describedAs} said, or null. */
+    @Nullable
+    public String description() {
+        return description;
     }
 
     public Class<T> type() {

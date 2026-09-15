@@ -73,15 +73,20 @@ public class ColorSelector extends UIElement {
 
     public static final State<ColorSelector, Mode> MODE =
             State.of("mode", StateTypes.enumOf(Mode.class),
-                    ColorSelector::getMode, ColorSelector::setMode, Mode.values()[0]);
+                    ColorSelector::getMode, ColorSelector::setMode, Mode.values()[0])
+                    .describedAs("How the picker shows channels: RGB 0-255, RGB 0-1 or HSV.");
 
     /** What Reset goes back to. Applied BEFORE the live colour -- see the contract below. */
     public static final State<ColorSelector, Integer> ORIGINAL =
             State.of("original", StateTypes.INT,
-                    ColorSelector::getOriginalColor, ColorSelector::setInitialColor, 0xFFFFFFFF);
+                    ColorSelector::getOriginalColor, ColorSelector::setInitialColor, 0xFFFFFFFF)
+                    .described(State.Hint.COLOR)
+                    .describedAs("The colour the picker opened with, kept beside the new one to compare.");
 
     public static final State<ColorSelector, Integer> COLOR =
-            State.of("color", StateTypes.INT, ColorSelector::getColor, ColorSelector::setColor, 0xFFFFFFFF);
+            State.of("color", StateTypes.INT, ColorSelector::getColor, ColorSelector::setColor, 0xFFFFFFFF)
+                    .described(State.Hint.COLOR)
+                    .describedAs("The picked colour.");
 
     /**
      * The colour moved. {@code plan/engine-rewrite.md} M1: a ColorSelector could not report at all, so a
@@ -156,6 +161,11 @@ public class ColorSelector extends UIElement {
         }
 
         public String label() {
+            return label;
+        }
+
+        @Override
+        public String toString() {
             return label;
         }
     }

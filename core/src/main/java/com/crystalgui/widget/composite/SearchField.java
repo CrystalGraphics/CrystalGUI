@@ -50,18 +50,21 @@ public class SearchField extends UIElement {
     public static final State<SearchField, String> TEXT =
             State.<SearchField, String>of("text", StateTypes.STRING,
                             SearchField::getText, SearchField::setText, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The query in the box.");
 
     public static final State<SearchField, String> PLACEHOLDER =
             State.<SearchField, String>of("placeholder", StateTypes.STRING,
                             SearchField::getPlaceholder, SearchField::setPlaceholder, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The hint shown while the box is empty.");
 
     /** The "no results" state, which is the server's answer to a query and not the client's. */
     public static final State<SearchField, Boolean> NOT_FOUND =
             State.<SearchField, Boolean>of("notFound", StateTypes.BOOL,
                             SearchField::isNotFound, SearchField::setNotFound, false)
-                    .omittedWhen(false);
+                    .omittedWhen(false)
+                    .describedAs("Marks the query as matching nothing.");
 
     /** Every keystroke, debounced -- a search box is the archetype the policy was written for. */
     public static final Event<SearchField, String> QUERY = Event.of("text",

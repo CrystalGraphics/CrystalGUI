@@ -49,7 +49,8 @@ public class Button extends UIElement {
 
     public static final State<Button, String> TEXT =
             State.<Button, String>of("text", StateTypes.STRING, Button::getText, Button::setText, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The label on the button.");
 
     /** The user pressed it. The one gesture; anything else asks for its own event. */
     public static final Event<Button, Void> ACTIVATE =

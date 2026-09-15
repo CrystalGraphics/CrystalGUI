@@ -71,7 +71,8 @@ public class Dialog extends UIElement {
 
     public static final State<Dialog, String> TITLE =
             State.<Dialog, String>of("title", StateTypes.STRING, Dialog::getTitle, Dialog::setTitle, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The text in the title bar.");
 
     /**
      * The user asked to close it. The veto path -- M4 is where the answer travels back, and until then

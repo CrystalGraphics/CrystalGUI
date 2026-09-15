@@ -120,6 +120,13 @@ public class Configurator extends UIElement {
         // than the bar, and a tooltip under it would sit over the bar rather than clear it.
         hint = hintText == null || hintText.isEmpty() ? null
                 : Tooltip.attach(arrangement == Arrangement.COMPACT ? this : control, hintText);
+        if (hint != null) {
+            // A FORM'S ROWS ARE CROSSED, not aimed at: the pointer passes over them on its way to one, and a hint
+            // arriving at once lands over the next row down. A toolbar's cell is aimed at, and answers at once.
+            // @see Tooltip#WAIT_CLASS
+            if (arrangement != Arrangement.COMPACT) hint.addClass(Tooltip.WAIT_CLASS);
+            hint.setDescription(control.descriptor().description());
+        }
     }
 
     private static String textFor(Arrangement arrangement, ConfigDescriptor descriptor) {

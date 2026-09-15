@@ -53,7 +53,8 @@ public class Switch extends UIElement {
     public static final State<Switch, Boolean> CHECKED =
             State.<Switch, Boolean>of("checked", StateTypes.BOOL,
                             Switch::isChecked, Switch::setChecked, false)
-                    .omittedWhen(false);
+                    .omittedWhen(false)
+                    .describedAs("Whether the switch is on.");
 
     public static final Event<Switch, Boolean> TOGGLE = Event.of("toggle",
             (toggle, sink) -> toggle.attachListener(sink::accept),

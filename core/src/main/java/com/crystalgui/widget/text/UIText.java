@@ -99,7 +99,9 @@ public final class UIText extends UIElement implements Measurable {
 
     public static final State<UIText, String> TEXT =
             State.<UIText, String>of("text", StateTypes.STRING, UIText::getText, UIText::setText, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .described(State.Hint.MULTILINE)
+                    .describedAs("The text shown.");
 
     /** Registered by {@link com.crystalgui.widget.Widgets}. @see com.crystalgui.ui.dom.NodeKinds */
     public static final WidgetContract<UIText> CONTRACT = WidgetContracts.register(

@@ -65,6 +65,9 @@ public class MaskControl extends ValueControl<Set<String>> {
                             StateTypes.stringListUnder("f").get(in, key, List.of());
                     return read.isEmpty() ? fallback : new LinkedHashSet<>(read);
                 }
+                @Override public Class<?> valueClass() {
+                    return Set.class;
+                }
             };
 
     /** The no-argument constructor the registry's factory needs, over a NEUTRAL

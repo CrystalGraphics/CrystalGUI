@@ -22,4 +22,15 @@ public interface StateType<V> {
 
     /** Reads back what {@link #put} wrote, or {@code fallback} when the key is absent. */
     <T> V get(StateMap<T> in, String key, V fallback);
+
+    /**
+     * The Java type of the value, or null when this type does not say.
+     *
+     * <p>What a generic form picks a control from — a {@code Boolean} is a checkbox, an enum a dropdown over
+     * its constants. Every type in {@link StateTypes} answers; a null gets a read-only row with the value's
+     * wire form.</p>
+     */
+    default Class<?> valueClass() {
+        return null;
+    }
 }

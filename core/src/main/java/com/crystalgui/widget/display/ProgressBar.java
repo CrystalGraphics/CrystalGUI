@@ -48,7 +48,9 @@ public class ProgressBar extends UIElement {
      * value here (indeterminate) and omitting it would be indistinguishable from a bar nobody has set.
      */
     public static final State<ProgressBar, Float> FRACTION =
-            State.of("fraction", StateTypes.FLOAT, ProgressBar::fraction, ProgressBar::setFraction, -1f);
+            State.of("fraction", StateTypes.FLOAT, ProgressBar::fraction, ProgressBar::setFraction, -1f)
+                    .described(State.Hint.range(-1f, 1f))
+                    .describedAs("How full the bar is, from 0 to 1; below 0 it is indeterminate.");
 
     public static final WidgetContract<ProgressBar> CONTRACT = WidgetContracts.register(
             WidgetContract.of(ProgressBar.class, "progressbar")
