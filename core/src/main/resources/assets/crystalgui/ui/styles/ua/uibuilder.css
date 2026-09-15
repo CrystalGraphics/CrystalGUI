@@ -793,11 +793,9 @@ smartguides {
  * green, content blue — rather than by fills, which on a dark panel read as four shades of the same grey.
  * A value set inline is bold, and a double-click turns it into a field. */
 .__boxmodel__ {
-    width: 100%;
     padding-block: 4px;
 }
 .__boxmodel__ .__bm-layer__ {
-    width: 100%;
     flex-direction: column;
     align-items: center;
     padding: 1px 4px 2px 4px;
@@ -808,18 +806,31 @@ smartguides {
 .__boxmodel__ .__bm-border__ { outline: 1px var(--border-strong, #5A5D63); background: var(--surface-recessed, #131416); }
 .__boxmodel__ .__bm-padding__ { outline: 1px var(--success, #3C8527); }
 .__boxmodel__ .__bm-row__ {
-    width: 100%;
+    align-self: stretch;
     flex-direction: row;
     align-items: center;
     justify-content: center;
     gap: 4px;
 }
+/* A ZERO BASIS THAT GROWS, AND A FLOOR AT WHAT IT HOLDS. The engine's minimum size is 0 where CSS's is auto, so
+ * without `min-width: auto` a narrow panel squeezed every layer until the numbers sat on top of each other. With
+ * it each box stops at its content, and the panel's own scroller carries the diagram as it does a wide row.
+ *
+ * The zero is on `flex-basis`, never `width`, and the diagram states no width: CSS §4.5 clamps the automatic
+ * minimum to a definite width, so `width: 0` or `100%` gave the floor back. @see inspector.css `.__label__` */
+.__boxmodel__,
+.__boxmodel__ .__bm-row__,
+.__boxmodel__ .__bm-layer__ {
+    min-width: auto;
+}
 .__boxmodel__ .__bm-row__ > .__bm-layer__,
 .__boxmodel__ .__bm-row__ > .__bm-content__ {
-    width: 0;
+    flex-basis: 0;
     flex-grow: 1;
 }
 .__boxmodel__ .__bm-content__ {
+    /* A floor of its own: the automatic one leaves the row's gaps out, and "0 × 36" spilled past both edges. */
+    min-width: 64px;
     height: 22px;
     border-radius: var(--radius-control, 3px);
     outline: 1px var(--info, #3794FF);
