@@ -9,7 +9,6 @@ import javax.annotation.Nullable;
 
 import com.google.gson.JsonElement;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 
@@ -81,6 +80,7 @@ public final class BoxModelEditor extends UIElement {
         private final Function<Box, Float> read;
         private final UIText text = new UIText("");
         private final boolean contentSize;
+        private final StyleScrub scrub;
 
         private Cell(StyleProperty<?> property, Function<Box, Float> read, boolean contentSize) {
             this.property = property;
@@ -90,6 +90,14 @@ public final class BoxModelEditor extends UIElement {
             text.addClass(NumberControl.SCRUB_HANDLE_CLASS);
             // A gesture needs the press, and a label is scenery with hit-testing off by default.
             text.setHitTest(true);
+            // A margin may go negative; padding, border and a size may not.
+            boolean margin = property == LayoutProperties.MARGIN_TOP || property == LayoutProperties.MARGIN_RIGHT
+                    || property == LayoutProperties.MARGIN_BOTTOM || property == LayoutProperties.MARGIN_LEFT;
+            scrub = StyleScrub.on(text, node, property, document)
+                    .measuring(this::measured)
+                    .writing(value -> cssValue(this, format((float) value)))
+                    .signed(margin)
+                    .allowedWhen(() -> editing == null);
             Tooltip hint = Tooltip.attach(text, property.name);
             hint.addClass(Tooltip.WAIT_CLASS);
             hint.setDescription(contentSize
@@ -100,7 +108,7 @@ public final class BoxModelEditor extends UIElement {
                 if (down.getDetail() >= 2) {
                     beginEdit(this);
                 } else {
-                    beginScrub(this, down.getPosition().x(), down.getPosition().y());
+                    scrub.begin(down.getPosition().x(), down.getPosition().y());
                 }
                 event.preventDefault();
             }, false, true);
@@ -330,115 +338,16 @@ public final class BoxModelEditor extends UIElement {
 
     // ── Scrubbing ───────────────────────────────────────────────────────────
 
-    /**
-     * Units per pixel, in whole units: a step a little over three pixels of travel, where a number field takes one.
-     * An edge wants a pixel's precision rather than reach.
-     */
-    private static final double SCRUB_RATE = 0.3;
-
-    /** Where a scrub began, what it has moved since, and the style to put back or record from. */
-    @Nullable
-    private Cell scrubbing;
-    private boolean scrubPassedThreshold;
-    private double scrubStart;
-    private double scrubAnchor;
-    private int scrubModifiers;
-    private float scrubAnchoredAtX;
-    private float scrubAnchoredAtY;
-    private float scrubPixelsPerUnit = 1f;
-    @Nullable
-    private JsonElement scrubBefore;
-
-    /**
-     * Starts a drag on {@code cell}; below the threshold it is a click and writes nothing. The same shape as
-     * {@code NumberControl.scrubWith}, anchored on the value at the press so out-and-back returns exactly.
-     */
-    private void beginScrub(Cell cell, float surfaceX, float surfaceY) {
-        if (document == null || editing != null || Double.isNaN(cell.measured())) return;
-        scrubbing = cell;
-        scrubPassedThreshold = false;
-        scrubStart = cell.measured();
-        scrubAnchor = scrubStart;
-        scrubModifiers = modifiersNow();
-        scrubAnchoredAtX = 0f;
-        scrubAnchoredAtY = 0f;
-        scrubPixelsPerUnit = Drag.pixelsPerLocalUnit(cell.text);
-        scrubBefore = inlineStyle();
-        Drag.start(cell.text, surfaceX, surfaceY, new Drag.Listener() {
-            @Override
-            public void onDragUpdate(float mouseX, float mouseY, float startX, float startY, float deltaX, float deltaY) {
-                scrubTo(deltaX * scrubPixelsPerUnit, deltaY * scrubPixelsPerUnit);
-            }
-
-            @Override
-            public void onDragEnd(float mouseX, float mouseY) {
-                endScrub(true);
-            }
-
-            @Override
-            public void onDragCancel() {
-                endScrub(false);
-            }
-        });
-    }
-
-    private void scrubTo(float dxPixels, float dyPixels) {
-        Cell cell = scrubbing;
-        if (cell == null) return;
-        if (!scrubPassedThreshold) {
-            if (!DragScrub.passesThreshold(dxPixels, dyPixels, DragScrub.DEFAULT_THRESHOLD_PX)) return;
-            scrubPassedThreshold = true;
-            // FROM HERE, not from the press: pricing the travel spent reaching the threshold made the first
-            // update leap by it.
-            scrubAnchoredAtX = dxPixels;
-            scrubAnchoredAtY = dyPixels;
+    /** Whether one of the numbers is being dragged. @see StyleScrub */
+    public boolean isScrubbing() {
+        for (Cell cell : cells) {
+            if (cell.scrub.isScrubbing()) return true;
         }
-        // A modifier pressed mid-drag re-anchors, so it prices only the travel still to come. @see NumberControl
-        int modifiers = modifiersNow();
-        if (modifiers != scrubModifiers) {
-            scrubAnchor = cell.measured();
-            scrubAnchoredAtX = dxPixels;
-            scrubAnchoredAtY = dyPixels;
-            scrubModifiers = modifiers;
-        }
-        // A margin may go negative; padding, border and a size may not.
-        boolean signed = cell.property == LayoutProperties.MARGIN_TOP || cell.property == LayoutProperties.MARGIN_RIGHT
-                || cell.property == LayoutProperties.MARGIN_BOTTOM || cell.property == LayoutProperties.MARGIN_LEFT;
-        DragScrub.Spec spec = DragScrub.Spec.INTEGRAL.withRate(SCRUB_RATE);
-        if (!signed) spec = spec.withRange(0d, Double.POSITIVE_INFINITY);
-        double value = DragScrub.value(scrubAnchor, dxPixels - scrubAnchoredAtX, dyPixels - scrubAnchoredAtY, modifiers, spec);
-        LiveEdits.setInline(node, cell.property, cssValue(cell, format((float) value)));
-    }
-
-    /** Records the scrub as one step, or puts the style back when it was cancelled or never moved. */
-    private void endScrub(boolean keep) {
-        Cell cell = scrubbing;
-        JsonElement was = scrubBefore;
-        scrubbing = null;
-        scrubBefore = null;
-        if (cell == null || was == null) return;
-        if (!keep || !scrubPassedThreshold) {
-            if (scrubPassedThreshold) InlineStyleCodec.replaceInto(JsonOps.INSTANCE, was, node);
-            return;
-        }
-        LiveEdits.dropIfRedundant(node, cell.property);
-        JsonElement after = inlineStyle();
-        if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
+        return false;
     }
 
     private JsonElement inlineStyle() {
         return NodeFields.inlineStyleOf(node);
-    }
-
-    /** Whether a scrub has passed its threshold and is writing values. */
-    public boolean isScrubbing() {
-        return scrubbing != null && scrubPassedThreshold;
-    }
-
-    /** What is held down now; none when there is no platform to ask, as in a headless tree. */
-    private static int modifiersNow() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
     }
 
     /** What is being typed, or null when nothing is open. */

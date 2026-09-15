@@ -12,6 +12,9 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
+import dev.vfyjxf.taffy.style.TaffyPosition;
+
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
@@ -25,6 +28,8 @@ import com.crystalgui.app.uibuilder.inspect.HeaderFields;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.app.uibuilder.inspect.MatchedRules;
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
+import com.crystalgui.app.uibuilder.inspect.StyleScrub;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
@@ -86,6 +91,9 @@ public final class BuilderInspectorSections {
 
     public static final String DOCUMENT_TAB = "Document";
 
+    /** On a row whose value has no effect in the node's current state — Grow while it is absolute. */
+    public static final String INACTIVE_CLASS = "__inactive__";
+
     /** On a row whose value was set — Unity's override bar: the rows a node changes stand out. */
     public static final String SET_CLASS = "__set__";
 
@@ -108,7 +116,7 @@ public final class BuilderInspectorSections {
             new NodeSection(), new MultiNodeSection(), new AttributesSection(), new StateSection(),
             new ForcedStatesSection(),
             new MatchedRulesSection(), new InlineStyleSection(), new ComputedSection(),
-            new BoxModelSection(), new FlexContextSection(),
+            new BoxModelSection(), new PositionSection(), new FlexContextSection(),
             new CanvasSection(), new DocumentSheetsSection(), new ExportSection());
 
     /**
@@ -628,15 +636,15 @@ public final class BuilderInspectorSections {
             // AS A CONTAINER: how it lays out what it holds. Read through ComputedStyle, which is what BoxStyle
             // hands Taffy -- an unset property shows the value layout actually uses, never a null.
             form.header("Flex");
-            flexRow(form, fields, node, LayoutProperties.FLEX_DIRECTION, "Direction",
+            styleRow(form, fields, node, LayoutProperties.FLEX_DIRECTION, "Direction",
                     "Whether children are laid out in a row or a column. A column here by default, unlike the web.");
-            flexRow(form, fields, node, LayoutProperties.FLEX_WRAP, "Wrap",
+            styleRow(form, fields, node, LayoutProperties.FLEX_WRAP, "Wrap",
                     "Whether children that do not fit start a new line.");
-            flexRow(form, fields, node, LayoutProperties.JUSTIFY_CONTENT, "Justify",
+            styleRow(form, fields, node, LayoutProperties.JUSTIFY_CONTENT, "Justify",
                     "Where children sit along the direction, and how spare room is shared between them.");
-            flexRow(form, fields, node, LayoutProperties.ALIGN_ITEMS, "Align items",
+            styleRow(form, fields, node, LayoutProperties.ALIGN_ITEMS, "Align items",
                     "Where children sit across the direction.");
-            flexRow(form, fields, node, LayoutProperties.GAP, "Gap",
+            styleRow(form, fields, node, LayoutProperties.GAP, "Gap",
                     "The space between children, as a length: 4px, or 4px 8px for rows then columns.");
 
             if (parent == null) return;
@@ -645,18 +653,95 @@ public final class BuilderInspectorSections {
             form.prop(ConfigDescriptor.info("flex.parent", "Parent direction").tooltip("flex-direction")
                             .description("Whether the parent lays its children out in a row or a column."),
                     Property.derived(() -> NodeFields.humanize(String.valueOf(parent.getStyle().computed().get(LayoutProperties.FLEX_DIRECTION)))));
-            Configurator grow = flexRow(form, fields, node, LayoutProperties.FLEX_GROW, "Grow",
-                    "How much of the parent's spare room this takes, against its siblings.");
-            Configurator shrink = flexRow(form, fields, node, LayoutProperties.FLEX_SHRINK, "Shrink",
-                    "How much this gives up when the parent is too small. 0 here by default, unlike the web.");
-            flexRow(form, fields, node, LayoutProperties.FLEX_BASIS, "Basis",
-                    "Its size along the parent's direction before growing or shrinking: auto, 40px or 50%.");
-            flexRow(form, fields, node, LayoutProperties.ALIGN_SELF, "Align self",
+            Configurator grow = styleRow(form, fields, node, LayoutProperties.FLEX_GROW, "Grow",
+                    "How much of the parent's spare room this takes, against its siblings. No effect while absolute.");
+            Configurator shrink = styleRow(form, fields, node, LayoutProperties.FLEX_SHRINK, "Shrink",
+                    "How much this gives up when the parent is too small. 0 here by default, unlike the web. No effect while absolute.");
+            Configurator basis = styleRow(form, fields, node, LayoutProperties.FLEX_BASIS, "Basis",
+                    "Its size along the parent's direction before growing or shrinking: auto, 40px or 50%. No effect while absolute.");
+            // AN ABSOLUTE NODE IS NOT ONE OF THE CHILDREN ITS PARENT SHARES ROOM BETWEEN, so these three say nothing
+            // while it is one. Greyed rather than hidden, so what it will do once relative stays readable. Align self
+            // stays live: with no inset set, it still places the node.
+            if (grow != null) {
+                Configurator[] itemRows = {grow, shrink, basis};
+                everyFrame(form, () -> {
+                    boolean absolute = isAbsolute(node);
+                    for (Configurator row : itemRows) {
+                        row.control().set(Attribute.INERT, absolute);
+                        if (absolute) row.addClass(INACTIVE_CLASS);
+                        else row.removeClass(INACTIVE_CLASS);
+                    }
+                });
+            }
+            styleRow(form, fields, node, LayoutProperties.ALIGN_SELF, "Align self",
                     "Where it sits across the parent's direction, overriding the parent's Align items.");
             // A tenth per pixel: grow and shrink are ratios, and a unit a pixel reaches 40 in a flick.
             for (Configurator row : new Configurator[] {grow, shrink}) {
                 if (row != null) row.control().descriptor().scrubRate(0.1d);
             }
+        }
+    }
+
+    /**
+     * Whether the node is in its parent's flow, and where it sits when it is not — {@code position} and the four
+     * insets, each written inline.
+     *
+     * <p>An absolute node is placed against its parent and no longer takes part in the parent's layout, and the
+     * canvas's move gesture works on it: dragging writes the insets.</p>
+     */
+    private static final class PositionSection extends NodeAware {
+
+        @Override
+        public String tab() {
+            return LAYOUT_TAB;
+        }
+
+        @Override
+        public int order() {
+            return 20;
+        }
+
+        @Override
+        public void build(ConfigForm form, DataContext context) {
+            UIElement node = node(context);
+            if (node == null) return;
+            NodeFields fields = editable(context, node);
+            form.header("Position");
+            Configurator position = styleRow(form, fields, node, LayoutProperties.POSITION, "Position",
+                    "Relative stays in the parent's flow. Absolute is placed against the parent by the insets below, "
+                            + "takes no space in its layout, and can be dragged on the canvas.");
+            Configurator[] insets = {
+                    styleRow(form, fields, node, LayoutProperties.LEFT, "Left",
+                            "The distance from the parent's left edge: auto, 20px or 10%. Drag the name to scrub it."),
+                    styleRow(form, fields, node, LayoutProperties.TOP, "Top",
+                            "The distance from the parent's top edge: auto, 20px or 10%. Drag the name to scrub it."),
+                    styleRow(form, fields, node, LayoutProperties.RIGHT, "Right",
+                            "The distance from the parent's right edge. With Left as well, it stretches between them."),
+                    styleRow(form, fields, node, LayoutProperties.BOTTOM, "Bottom",
+                            "The distance from the parent's bottom edge. With Top as well, it stretches between them.")};
+            if (fields == null || position == null) return;
+            StyleProperty<?>[] properties = {LayoutProperties.LEFT, LayoutProperties.TOP, LayoutProperties.RIGHT, LayoutProperties.BOTTOM};
+            for (int i = 0; i < insets.length; i++) {
+                StyleProperty<?> property = properties[i];
+                Configurator row = insets[i];
+                StyleScrub.on(row.label(), node, property, fields.document())
+                        .measuring(() -> insetOf(node, property))
+                        .rate(1d)
+                        .signed(true)
+                        .allowedWhen(() -> isAbsolute(node))
+                        // THE FIELD FOLLOWS THE DRAG: it hears of the document, and the drag records only on release.
+                        .onStep(() -> {
+                            if (row.control() instanceof ValueControl<?> control) control.property().refresh();
+                        })
+                        .attach();
+            }
+            // THE INSETS ARE AN ABSOLUTE NODE'S, so a relative one does not list them -- followed each frame, since
+            // choosing Absolute or undoing it restyles on the next one, and a rebuild would replace the dropdown just
+            // clicked.
+            everyFrame(form, () -> {
+                boolean absolute = isAbsolute(node);
+                for (Configurator inset : insets) inset.setDisplayed(absolute);
+            });
         }
     }
 
@@ -855,11 +940,11 @@ public final class BuilderInspectorSections {
     }
 
     /**
-     * One flex row: a control over the property's inline value in a document, marked while set on this node, or
+     * One style row: a control over the property's inline value in a document, marked while set on this node, or
      * the computed value as a fact over a live pick. Null for the fact.
      */
     @Nullable
-    private static Configurator flexRow(ConfigForm form, @Nullable NodeFields fields, UIElement node,
+    private static Configurator styleRow(ConfigForm form, @Nullable NodeFields fields, UIElement node,
                                         StyleProperty<?> property, String label, String description) {
         if (fields == null) {
             form.prop(ConfigDescriptor.info("style." + property.name, label).tooltip(property.name).description(description),
@@ -871,6 +956,56 @@ public final class BuilderInspectorSections {
         Configurator row = prop(form, field.descriptor(), field.value());
         markSet(row, () -> LiveEdits.hasInline(node, property));
         return row;
+    }
+
+    private static boolean isAbsolute(UIElement node) {
+        return node.getStyle().computed().get(LayoutProperties.POSITION) == TaffyPosition.ABSOLUTE;
+    }
+
+    /**
+     * Where {@code node} sits from its parent's edge on {@code inset}'s side: the length its style gives, else what
+     * layout placed it at. NaN with nothing laid out.
+     */
+    private static double insetOf(UIElement node, StyleProperty<?> inset) {
+        Object declared = node.getStyle().computed().get(inset);
+        if (declared instanceof LengthPercentageAuto length && length.getType() == LengthPercentageAuto.Type.LENGTH) {
+            return length.getValue();
+        }
+        Box box = node.box();
+        UIElement parent = node.parentElement();
+        Box host = parent == null ? null : parent.box();
+        if (box == null || host == null) return Double.NaN;
+        if (inset == LayoutProperties.LEFT) return box.x() - host.border().left;
+        if (inset == LayoutProperties.TOP) return box.y() - host.border().top;
+        if (inset == LayoutProperties.RIGHT) return host.width() - host.border().right - box.x() - box.width();
+        return host.height() - host.border().bottom - box.y() - box.height();
+    }
+
+    /**
+     * Runs {@code follow} now and after every layout for as long as the form is on screen — for rows that follow a fact
+     * the form does not rebuild on, such as the node's position changing under them.
+     */
+    private static void everyFrame(ConfigForm form, Runnable follow) {
+        follow.run();
+        form.custom(new FrameFollower(follow));
+    }
+
+    /**
+     * An invisible part of a form that owns a per-frame hook: placed with the rows, cleared with them, and the hook
+     * stops when it leaves the tree. A section cannot hang a hook on a row it did not build the class of.
+     */
+    private static final class FrameFollower extends UIElement {
+
+        FrameFollower(Runnable follow) {
+            setDisplayed(false);
+            onConnected(() -> {
+                UIDocument window = document();
+                if (window != null) window.animation().afterLayout(this, delta -> {
+                    follow.run();
+                    return true;
+                });
+            });
+        }
     }
 
     /** Marks a row while {@code isSet} holds, following the value as it changes. */

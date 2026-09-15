@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import org.joml.Vector2f;
 import org.junit.After;
 import org.junit.Before;
@@ -41,6 +42,9 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.config.ConfigControl;
+import com.crystalgui.widget.config.ConfiguratorPanel;
+import com.crystalgui.widget.config.control.SelectControl;
+import com.crystalgui.widget.config.Configurator;
 import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.widget.config.control.ClassChips;
 import com.crystalgui.widget.config.inspector.Inspector;
@@ -237,6 +241,96 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         model().history().undo();
         frame();
         assertFalse(LiveEdits.hasInline(page, LayoutProperties.FLEX_DIRECTION));
+    }
+
+    /**
+     * Absolute and an inset from the Position section take the node out of flow, one step each. The insets show only
+     * while it is absolute, and Grow stops taking input, both following the change with no rebuild.
+     */
+    @Test
+    public void thePositionSectionTakesANodeOutOfFlow() {
+        inspect(ok);
+        assertFalse("a relative node lists no insets", rowOf("style.left").isDisplayed());
+        assertFalse(rowOf("style.flex-grow").hasClass(BuilderInspectorSections.INACTIVE_CLASS));
+
+        this.<String>property("style.position").set("Absolute");
+        frame();
+        frame();
+        assertTrue(rowOf("style.left").isDisplayed());
+        assertTrue("grow has no effect on an absolute node", rowOf("style.flex-grow").hasClass(BuilderInspectorSections.INACTIVE_CLASS));
+
+        this.<String>property("style.left").set("20px");
+        frame();
+        assertEquals(TaffyPosition.ABSOLUTE, ok.getStyle().computed().get(LayoutProperties.POSITION));
+        assertTrue(LiveEdits.hasInline(ok, LayoutProperties.LEFT));
+        assertEquals(2, model().history().undoDepth());
+
+        model().history().undo();
+        model().history().undo();
+        frame();
+        frame();
+        assertFalse("undone to relative, the insets go again", rowOf("style.left").isDisplayed());
+    }
+
+    /** Dragging an inset's name scrubs it on an absolute node, as one undo step. */
+    @Test
+    public void anAbsoluteNodesInsetScrubsFromItsName() {
+        inspect(ok);
+        for (Tab tab : inspector.tabs().getTabs()) {
+            if (tab.getText().equals(BuilderInspectorSections.LAYOUT_TAB)) inspector.tabs().selectTab(tab);
+        }
+        this.<String>property("style.position").set("Absolute");
+        frame();
+        frame();
+        int depth = model().history().undoDepth();
+        assertEquals("an unset inset is an empty field, its placeholder saying auto", "", this.<String>property("style.left").get());
+        int[] at = centreOf(rowOf("style.left").label());
+
+        press(at[0], at[1]);
+        frame();
+        move(at[0] + 10, at[1]);
+        frame();
+        move(at[0] + 40, at[1]);
+        frame();
+        assertTrue("the field shows the value while dragging, not only on release",
+                ((ValueControl<?>) control("style.left")).getValueObject().toString().endsWith("px"));
+        release(at[0] + 40, at[1]);
+        frame();
+
+        assertTrue(LiveEdits.hasInline(ok, LayoutProperties.LEFT));
+        assertEquals(depth + 1, model().history().undoDepth());
+    }
+
+    /** An open dropdown's menu is not content: the panel does not widen and grow a horizontal scrollbar under it. */
+    @Test
+    public void anOpenDropdownDoesNotWidenThePanel() {
+        inspect(ok);
+        for (Tab tab : inspector.tabs().getTabs()) {
+            if (tab.getText().equals(BuilderInspectorSections.LAYOUT_TAB)) inspector.tabs().selectTab(tab);
+        }
+        frame();
+        frame();
+        ConfiguratorPanel panel = null;
+        for (UIElement each : inspector.composedSubtree()) {
+            if (each instanceof ConfiguratorPanel found && found.box() != null && found.box().width() > 0) panel = found;
+        }
+        assertNotNull(panel);
+        float before = panel.box().scrollWidth();
+
+        SelectControl direction = (SelectControl) control("style.flex-direction");
+        direction.dropdown().getMenu().showFor(direction.dropdown(), direction.dropdown());
+        frame();
+        frame();
+        frame();
+
+        assertEquals(before, panel.box().scrollWidth(), 0.5f);
+    }
+
+    private Configurator rowOf(String id) {
+        UIElement at = control(id);
+        while (at != null && !(at instanceof Configurator)) at = at.parentElement();
+        assertNotNull("no row for " + id, at);
+        return (Configurator) at;
     }
 
     /** A slider drag in the form is one undo step, however many frames it wrote. */

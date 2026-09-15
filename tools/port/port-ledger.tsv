@@ -138,6 +138,7 @@ PART	BuilderInsert	insert-relation	A	0	proposed	leaf in every rule
 PART	BuilderInsert	insert-spacer	A	0	proposed	leaf in every rule
 PART	BuilderInsert	insert-target	A	0	proposed	leaf in every rule
 PART	BuilderInsert	keycap	A	0	proposed	leaf in every rule
+PART	BuilderInspectorSections	inactive	B	2	proposed	a rule selects through it (2)
 PART	BuilderInspectorSections	set	B	1	proposed	a rule selects through it (1)
 PART	BuilderPane	builder-pane	A	0	proposed	leaf in every rule
 PART	BuilderToolbar	builder-toolbar	A	0	proposed	leaf in every rule
@@ -196,9 +197,9 @@ PART	CompletionPopup	completion-params	B	2	confirmed	leaf in every rule, scoped 
 PART	CompletionPopup	completion-row	B	2	confirmed	leaf in every rule
 PART	ConfigControl	config-control	B	94	confirmed	a rule selects through it (81)
 PART	Configurator	compact	B	9	proposed	a rule selects through it (8)
-PART	Configurator	configurator	B	21	confirmed	a rule selects through it (18)
-PART	Configurator	inline	C	9	confirmed	state adjective
-PART	Configurator	label	B	10	confirmed	leaf in every rule, scoped by an ancestor in 10
+PART	Configurator	configurator	B	23	confirmed	a rule selects through it (20)
+PART	Configurator	inline	C	10	confirmed	state adjective
+PART	Configurator	label	B	11	confirmed	leaf in every rule, scoped by an ancestor in 11
 PART	Configurator	list-row	B	2	proposed	a rule selects through it (1)
 PART	ConfiguratorGroup	arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ConfiguratorGroup	collapsed	C	5	confirmed	state adjective
