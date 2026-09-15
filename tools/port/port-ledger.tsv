@@ -118,15 +118,16 @@ PART	BlackboardPanel	titles	B	5	confirmed	a rule selects through it (4)
 PART	BooleanControl	boolean	B	11	confirmed	a rule selects through it (10)
 PART	BooleanControl	on	C	3	proposed	state adjective
 PART	BooleanControl	toggle	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	BoxModelEditor	authored	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	BoxModelEditor	authored	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	BoxModelEditor	bm-content	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	BoxModelEditor	bm-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	BoxModelEditor	bm-head	B	2	proposed	a rule selects through it (1)
 PART	BoxModelEditor	bm-label	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	BoxModelEditor	bm-layer	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	BoxModelEditor	bm-row	B	3	proposed	a rule selects through it (2)
-PART	BoxModelEditor	bm-value	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	BoxModelEditor	boxmodel	B	15	proposed	a rule selects through it (14)
+PART	BoxModelEditor	bm-value	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
+PART	BoxModelEditor	boxmodel	B	17	proposed	a rule selects through it (16)
+PART	BoxModelEditor	no-box	B	2	proposed	a rule selects through it (2)
 PART	Breadcrumbs	crumb	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-current	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	B	0	confirmed	leaf in every rule
@@ -196,11 +197,11 @@ PART	ConfigControl	config-control	B	88	confirmed	a rule selects through it (76)
 PART	Configurator	compact	B	9	proposed	a rule selects through it (8)
 PART	Configurator	configurator	B	19	confirmed	a rule selects through it (17)
 PART	Configurator	inline	C	9	confirmed	state adjective
-PART	Configurator	label	B	11	confirmed	leaf in every rule, scoped by an ancestor in 11
+PART	Configurator	label	B	9	confirmed	leaf in every rule, scoped by an ancestor in 9
 PART	ConfiguratorGroup	arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ConfiguratorGroup	collapsed	C	5	confirmed	state adjective
-PART	ConfiguratorGroup	configurator-group	B	16	confirmed	a rule selects through it (15)
-PART	ConfiguratorGroup	content	B	9	confirmed	a rule selects through it (7)
+PART	ConfiguratorGroup	configurator-group	B	14	confirmed	a rule selects through it (13)
+PART	ConfiguratorGroup	content	B	7	confirmed	a rule selects through it (5)
 PART	ConfiguratorGroup	head	B	6	confirmed	a rule selects through it (3)
 PART	ConfiguratorGroup	title	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	ConfiguratorPanel	configurator-panel	B	1	confirmed	leaf in every rule
@@ -222,7 +223,7 @@ PART	Desktop	windows	B	0	confirmed	leaf in every rule
 PART	Dialog	backdrop	B	0	confirmed	leaf in every rule
 PART	Dialog	close	B	7	confirmed	leaf in every rule, scoped by an ancestor in 7
 PART	Dialog	content	B	0	confirmed	leaf in every rule
-PART	Dialog	label	B	6	confirmed	leaf in every rule, scoped by an ancestor in 6
+PART	Dialog	label	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	Dialog	open	C	1	confirmed	state adjective
 PART	Dialog	pulse	C	1	confirmed	leaf in every rule
 PART	Dialog	title-bar	B	0	confirmed	leaf in every rule
@@ -299,10 +300,11 @@ PART	GraphNode	title-bar	B	0	confirmed	leaf in every rule
 PART	GraphView	marquee	B	0	confirmed	leaf in every rule
 PART	HeaderControl	header	B	3	confirmed	a rule selects through it (2)
 PART	HeaderControl	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	HierarchyPanel	hidden-node	A	0	proposed	leaf in every rule
 PART	HierarchyPanel	hierarchy	A	0	proposed	leaf in every rule
 PART	HierarchyPanel	hierarchy-content	B	3	proposed	a rule selects through it (1)
 PART	HierarchyPanel	hierarchy-row	A	1	proposed	leaf in every rule
-PART	HierarchyPanel	label	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	HierarchyPanel	label	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
 PART	HierarchyPanel	rename	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	HierarchyPanel	selected	C	11	proposed	state adjective
 PART	HierarchyPanel	twisty	A	0	proposed	leaf in every rule

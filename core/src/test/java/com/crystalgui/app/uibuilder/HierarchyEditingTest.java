@@ -1,5 +1,11 @@
 package com.crystalgui.app.uibuilder;
 
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
+
+import com.crystalgui.ui.dom.Attribute;
+
+import java.util.Map;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -264,5 +270,28 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
         assertSame("the other document lost its node", elsewhere, foreign.parentElement());
         assertEquals(1, group.children().size());
         assertEquals("a copy kept an id this document already has", "title2", group.children().get(0).id());
+    }
+
+    /** Hiding a node dims its row and every row under it; showing it again clears them. Disabled dims nothing. */
+    @Test
+    public void aHiddenNodesSubtreeIsDimmedInTheTree() {
+        editor.document().apply(new BuilderEdit.SetAttribute<>(root, Attribute.HIDDEN, false, true));
+        settle();
+        assertTrue(rowOf(title).hasClass(HierarchyPanel.HIDDEN_NODE_CLASS));
+
+        history().undo();
+        settle();
+        assertFalse(rowOf(title).hasClass(HierarchyPanel.HIDDEN_NODE_CLASS));
+
+        editor.document().apply(new BuilderEdit.SetAttribute<>(title, Attribute.ENABLED, true, false));
+        settle();
+        assertFalse(rowOf(title).hasClass(HierarchyPanel.HIDDEN_NODE_CLASS));
+    }
+
+    private UIElement rowOf(UIElement node) {
+        for (Map.Entry<Integer, UIElement> realised : hierarchy.tree().realisedRows().entrySet()) {
+            if (hierarchy.tree().rowAt(realised.getKey()).item() == node) return realised.getValue();
+        }
+        throw new AssertionError("no row for " + node);
     }
 }
