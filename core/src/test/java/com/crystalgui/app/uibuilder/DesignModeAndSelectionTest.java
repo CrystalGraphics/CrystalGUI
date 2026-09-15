@@ -217,6 +217,33 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
         assertFalse(editor.surface().selection().contains(editor.artboard()));
     }
 
+    /**
+     * <b>The plane selects the document too.</b> A root filling the artboard leaves no blank page, and a press on
+     * the empty plane is declined by the surface rather than handed to the tool.
+     */
+    @Test
+    public void aClickOnTheEmptyPlaneSelectsTheCanvas() {
+        // A SMALL PAGE, so there is plane around it to click -- the fixture's page fills its surface.
+        document.removeAll();
+        BuilderEditor small = new BuilderEditor(new UiBuilderDocument(("{ \"cgui\": 1, \"preview\": { \"sizes\": [[200, 100]] },"
+                + " \"root\": { \"kind\": \"element\", \"id\": \"root\", \"style\": { \"width\": \"100%\", \"height\": \"100%\" } } }")
+                .getBytes(StandardCharsets.UTF_8), "test:small"));
+        UIElement host = new UIElement().layout(l -> l.width(800).height(500));
+        host.append(small.view());
+        document.append(host);
+        document.update(W, H);
+        frame();
+        Box surface = small.surface().box();
+        Vector2f plane = Transform2D.apply(surface.localToWorld(), surface.width() - 8f, surface.height() - 8f);
+
+        pressAt(plane);
+        frame();
+        releaseAt(plane);
+        frame();
+
+        assertTrue(small.selection().canvasSelected());
+    }
+
     /** And a marquee across the whole page catches the document's nodes, not the page. */
     @Test
     public void aMarqueeCatchesNodesAndNotTheArtboard() {

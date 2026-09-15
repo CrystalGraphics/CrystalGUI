@@ -4,7 +4,11 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgMouseCodes;
+
 import com.crystalgui.app.uibuilder.BuilderSelection;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.widget.surface.SurfaceCommands;
 import com.crystalgui.app.uibuilder.BuilderCommands;
@@ -52,6 +56,13 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     /** Guards the two selections against answering each other. @see #bridgeSelections */
     private boolean syncingSelection;
 
+    /** Where a plain press on no node landed, or null — a release near it selects the canvas. @see #releaseBlankPress */
+    @Nullable
+    private float[] blankPress;
+
+    /** How far a blank press may travel and still be a click rather than a marquee, in surface pixels. */
+    private static final float CLICK_SLOP = 3f;
+
     BuilderSurface(UiBuilderDocument document, Artboard artboard, @Nullable List<String> enabled) {
         super(NAME, new TreePolicy(artboard), enabled);
         this.document = document;
@@ -60,8 +71,36 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         // Without this the desktop's Alt+drag takes the press first and moves the window instead.
         set(Attribute.KEEPS_MODIFIER_PRESS, true);
         bridgeSelections();
+        // A PRESS ON THE EMPTY PLANE is not the select tool's: the surface claims only presses that land on an
+        // element, so it reaches ordinary dispatch instead. Noted here so its release selects the canvas too --
+        // a page whose root fills the artboard has no blank page left to click.
+        onMouseDown.attachListener((element, event) -> {
+            if (!(event instanceof MouseEvent.Down down) || down.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            float x = down.getPosition().x(), y = down.getPosition().y();
+            var input = CgPlatform.input();
+            noteBlankPress(picking().itemAt(x, y) == null && (input == null || input.getCurrentModifiers() == 0), x, y);
+        }, true, false);
         // LAST: an extension activated any earlier gets a surface whose document and artboard are null.
         ensureExtensions();
+    }
+
+    /** Notes where a press landed, when {@code blank} — on no node, with no modifier held. */
+    void noteBlankPress(boolean blank, float x, float y) {
+        blankPress = blank ? new float[] {x, y} : null;
+    }
+
+    /**
+     * Selects the canvas when this release ends a blank press that did not travel — the document, which is what
+     * the Document tab describes, as a click on Unity UI Builder's canvas or Figma's empty page does.
+     *
+     * <p>A marquee that caught nothing is not a click, and a cleared selection alone is not one either: an empty
+     * selection has to let a live pick through.</p>
+     */
+    void releaseBlankPress(float x, float y) {
+        float[] press = blankPress;
+        blankPress = null;
+        if (press == null || Math.abs(x - press[0]) > CLICK_SLOP || Math.abs(y - press[1]) > CLICK_SLOP) return;
+        if (selection.isEmpty()) selection.selectCanvas(true);
     }
 
     /**
