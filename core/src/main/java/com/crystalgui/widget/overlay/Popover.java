@@ -53,7 +53,8 @@ public class Popover extends UIElement {
     public static final Name NAME = Name.of("popover");
 
     public static final State<Popover, Mode> MODE =
-            State.of("mode", StateTypes.enumOf(Mode.class), Popover::getMode, Popover::setMode, Mode.AUTO);
+            State.of("mode", StateTypes.enumOf(Mode.class), Popover::getMode, Popover::setMode, Mode.AUTO)
+                    .describedAs("Auto closes on a click outside or Escape; Manual closes only when code says so.");
 
     public static final WidgetContract<Popover> CONTRACT = WidgetContracts.register(
             WidgetContract.of(Popover.class, "popover")

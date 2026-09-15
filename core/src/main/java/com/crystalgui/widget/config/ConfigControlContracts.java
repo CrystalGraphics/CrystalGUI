@@ -80,10 +80,11 @@ public final class ConfigControlContracts {
     public static <C extends ConfigControl, V> WidgetContract<C> register(
             Class<C> type, String name, StateType<V> valueType, V fallback, Event<C, V> changed) {
 
-        State<C, V> value = State.of("value", valueType,
+        State<C, V> value = State.<C, V>of("value", valueType,
                 control -> (V) control.getValueObject(),
                 (control, next) -> control.setValueObject(next),
-                fallback);
+                fallback)
+                    .describedAs("The field's value.");
 
         return WidgetContracts.register(WidgetContract.of(type, name)
                 .state(value)

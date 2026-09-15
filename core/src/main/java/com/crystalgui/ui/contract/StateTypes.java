@@ -25,6 +25,9 @@ public final class StateTypes {
         @Override public <T> String get(StateMap<T> in, String key, String fallback) {
             return in.getString(key, fallback == null ? "" : fallback);
         }
+        @Override public Class<?> valueClass() {
+            return String.class;
+        }
     };
 
     public static final StateType<Integer> INT = new StateType<Integer>() {
@@ -33,6 +36,9 @@ public final class StateTypes {
         }
         @Override public <T> Integer get(StateMap<T> in, String key, Integer fallback) {
             return in.getInt(key, fallback);
+        }
+        @Override public Class<?> valueClass() {
+            return Integer.class;
         }
     };
 
@@ -43,6 +49,9 @@ public final class StateTypes {
         @Override public <T> Float get(StateMap<T> in, String key, Float fallback) {
             return in.getFloat(key, fallback);
         }
+        @Override public Class<?> valueClass() {
+            return Float.class;
+        }
     };
 
     public static final StateType<Double> DOUBLE = new StateType<Double>() {
@@ -52,6 +61,9 @@ public final class StateTypes {
         @Override public <T> Double get(StateMap<T> in, String key, Double fallback) {
             return in.getDouble(key, fallback);
         }
+        @Override public Class<?> valueClass() {
+            return Double.class;
+        }
     };
 
     public static final StateType<Boolean> BOOL = new StateType<Boolean>() {
@@ -60,6 +72,9 @@ public final class StateTypes {
         }
         @Override public <T> Boolean get(StateMap<T> in, String key, Boolean fallback) {
             return in.getBool(key, fallback);
+        }
+        @Override public Class<?> valueClass() {
+            return Boolean.class;
         }
     };
 
@@ -71,6 +86,9 @@ public final class StateTypes {
             }
             @Override public <T> E get(StateMap<T> in, String key, E fallback) {
                 return in.getEnum(key, type, fallback);
+            }
+            @Override public Class<?> valueClass() {
+                return type;
             }
         };
     }
@@ -91,6 +109,9 @@ public final class StateTypes {
             @Override public <T> List<String> get(StateMap<T> in, String key, List<String> fallback) {
                 List<String> read = in.getList(key, entry -> entry.getString(entryKey, ""));
                 return read.isEmpty() ? fallback : read;
+            }
+            @Override public Class<?> valueClass() {
+                return List.class;
             }
         };
     }
@@ -116,6 +137,9 @@ public final class StateTypes {
                 for (int i = 0; i < out.length; i++) out[i] = read.get(i);
                 return out;
             }
+            @Override public Class<?> valueClass() {
+                return float[].class;
+            }
         };
     }
 
@@ -134,6 +158,9 @@ public final class StateTypes {
                 for (int i = 0; i < out.length; i++) out[i] = read.get(i);
                 return out;
             }
+            @Override public Class<?> valueClass() {
+                return double[].class;
+            }
         };
     }
     /** An {@code int[]}, for a per-entry ARGB — a palette, which no sheet can enumerate. */
@@ -150,6 +177,9 @@ public final class StateTypes {
                 int[] out = new int[read.size()];
                 for (int i = 0; i < out.length; i++) out[i] = read.get(i);
                 return out;
+            }
+            @Override public Class<?> valueClass() {
+                return int[].class;
             }
         };
     }

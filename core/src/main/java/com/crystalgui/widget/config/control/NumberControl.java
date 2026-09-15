@@ -82,8 +82,6 @@ public class NumberControl extends ValueControl<Double> {
     @Nullable
     private final String unit;
 
-    /** Units per pixel of scrub, or NaN to let the range decide. @see ConfigDescriptor#scrubRate */
-    private final double scrubRate;
 
     /** Decimal places shown, or -1 for up to four. @see ConfigDescriptor#decimals */
     private final int decimals;
@@ -119,7 +117,6 @@ public class NumberControl extends ValueControl<Double> {
         this.integral = descriptor.integral();
         this.range = descriptor.range();
         this.unit = descriptor.unit();
-        this.scrubRate = descriptor.scrubRate();
         this.decimals = descriptor.decimals();
         addClass("__number__");
         append(field);
@@ -315,6 +312,8 @@ public class NumberControl extends ValueControl<Double> {
     private DragScrub.Spec scrubSpec() {
         DragScrub.Spec spec = integral ? DragScrub.Spec.INTEGRAL : DragScrub.Spec.FLOAT;
         if (range != null) spec = spec.withRange(range.min(), range.max());
+        // ASKED PER DRAG, since a rate may follow another value -- a slider's span. @see ConfigDescriptor#scrubRate
+        double scrubRate = descriptor().scrubRate();
         return Double.isNaN(scrubRate) ? spec : spec.withRate(scrubRate);
     }
 

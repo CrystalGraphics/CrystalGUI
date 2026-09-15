@@ -42,7 +42,8 @@ public class TemplateInstance extends UIElement {
     public static final Name NAME = Name.of("instance");
 
     /** Which document is placed here. Setting it builds the shadow tree. */
-    public static final Attribute<String> TEMPLATE = Attribute.of("template", String.class, "");
+    public static final Attribute<String> TEMPLATE = Attribute.of("template", String.class, "")
+            .describedAs("The .cgui document placed here.");
 
     /** Ids being inflated on this thread, so a template placing itself is caught rather than recursed. */
     private static final ThreadLocal<Deque<String>> INFLATING = ThreadLocal.withInitial(ArrayDeque::new);

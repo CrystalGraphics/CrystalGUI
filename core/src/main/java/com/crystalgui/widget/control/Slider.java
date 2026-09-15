@@ -61,13 +61,17 @@ public class Slider extends UIElement {
     public static final Name NAME = Name.of("slider");
 
     public static final State<Slider, Float> MIN =
-            State.of("min", StateTypes.FLOAT, Slider::getMin, (s, v) -> s.setRange(v, s.getMax()), 0f);
+            State.of("min", StateTypes.FLOAT, Slider::getMin, (s, v) -> s.setRange(v, s.getMax()), 0f)
+                    .describedAs("The lowest value the slider reaches.");
 
     public static final State<Slider, Float> MAX =
-            State.of("max", StateTypes.FLOAT, Slider::getMax, (s, v) -> s.setRange(s.getMin(), v), 1f);
+            State.of("max", StateTypes.FLOAT, Slider::getMax, (s, v) -> s.setRange(s.getMin(), v), 1f)
+                    .describedAs("The highest value the slider reaches.");
 
     public static final State<Slider, Float> STEP =
-            State.of("step", StateTypes.FLOAT, Slider::getStep, Slider::setStep, 0f);
+            State.of("step", StateTypes.FLOAT, Slider::getStep, Slider::setStep, 0f)
+                    .described(State.Hint.spanOf("min", "max"))
+                    .describedAs("The increment the value snaps to; 0 is continuous.");
 
     /**
      * Sanitized on the way in, and this is the slot that most needs it: a value is the one piece of a
@@ -77,7 +81,9 @@ public class Slider extends UIElement {
      */
     public static final State<Slider, Float> VALUE =
             State.of("value", StateTypes.FLOAT, Slider::getValue, Slider::setValue, 0f)
-                    .sanitizedBy(v -> v == null || Float.isNaN(v) ? 0f : v);
+                    .sanitizedBy(v -> v == null || Float.isNaN(v) ? 0f : v)
+                    .described(State.Hint.spanOf("min", "max"))
+                    .describedAs("Where the thumb is, between min and max.");
 
     /** A drag. Throttled, and the released value always travels. @see RatePolicy */
     public static final Event<Slider, Float> VALUE_CHANGED = Event.<Slider, Float>of("value",

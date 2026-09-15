@@ -46,23 +46,27 @@ public class MenuItem extends Button {
     public static final State<MenuItem, String> TEXT =
             State.<MenuItem, String>of("text", StateTypes.STRING,
                             MenuItem::getText, MenuItem::setText, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The item's label.");
 
     /** The shortcut shown on the right. Presentation, but the SERVER knows what it bound. */
     public static final State<MenuItem, String> ACCELERATOR =
             State.<MenuItem, String>of("accelerator", StateTypes.STRING,
                             MenuItem::getAccelerator, MenuItem::setAccelerator, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The shortcut shown beside the label.");
 
     public static final State<MenuItem, Boolean> CHECKABLE =
             State.<MenuItem, Boolean>of("checkable", StateTypes.BOOL,
                             MenuItem::isCheckable, MenuItem::setCheckable, false)
-                    .omittedWhen(false);
+                    .omittedWhen(false)
+                    .describedAs("Whether the item carries a check mark.");
 
     public static final State<MenuItem, Boolean> SELECTED =
             State.<MenuItem, Boolean>of("selected", StateTypes.BOOL,
                             MenuItem::isSelected, MenuItem::setSelected, false)
-                    .omittedWhen(false);
+                    .omittedWhen(false)
+                    .describedAs("Whether the check mark is on.");
 
     public static final Event<MenuItem, Void> ACTIVATE =
             Event.signal("activate", (item, sink) -> item.attachListener(sink));

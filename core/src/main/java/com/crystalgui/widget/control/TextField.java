@@ -85,21 +85,25 @@ public class TextField extends UIElement implements Measurable {
     public static final Name NAME = Name.of("textfield");
 
     public static final State<TextField, Mode> MODE =
-            State.of("mode", StateTypes.enumOf(Mode.class), TextField::getMode, TextField::setMode, Mode.STRING);
+            State.of("mode", StateTypes.enumOf(Mode.class), TextField::getMode, TextField::setMode, Mode.STRING)
+                    .describedAs("What the field accepts: any text, or a whole or decimal number.");
 
     public static final State<TextField, UpdateMode> UPDATE_MODE =
             State.of("updateMode", StateTypes.enumOf(UpdateMode.class),
-                    TextField::getUpdateMode, TextField::setUpdateMode, UpdateMode.ON_COMMIT);
+                    TextField::getUpdateMode, TextField::setUpdateMode, UpdateMode.ON_COMMIT)
+                    .describedAs("When a change counts: every keystroke, or only on Enter or leaving the field.");
 
     public static final State<TextField, String> PLACEHOLDER =
             State.<TextField, String>of("placeholder", StateTypes.STRING,
                             TextField::getPlaceholder, TextField::setPlaceholder, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The hint shown while the field is empty and focused.");
 
     public static final State<TextField, String> TEXT =
             State.<TextField, String>of("text", StateTypes.STRING,
                             TextField::getText, TextField::setText, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The text in the field.");
 
     /**
      * The value as PARSED by the mode, written and never read back.
@@ -112,7 +116,8 @@ public class TextField extends UIElement implements Measurable {
     public static final State<TextField, String> VALUE =
             State.<TextField, String>of("value", StateTypes.STRING,
                             TextField::getValue, (field, ignored) -> { }, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The text as the mode reads it. Set Text instead: this one is only reported.");
 
     /** Every keystroke, debounced. @see RatePolicy#TYPING */
     public static final Event<TextField, String> TEXT_CHANGED = Event.<TextField, String>of("text",

@@ -52,8 +52,11 @@ public final class State<W, V> {
     @Nullable
     private final UnaryOperator<V> sanitize;
 
+    @Nullable
+    private final Hint hint;
+
     private State(String key, StateType<V> type, Function<W, V> getter, BiConsumer<W, V> setter,
-                  V fallback, @Nullable V omitWhen, @Nullable UnaryOperator<V> sanitize) {
+                  V fallback, @Nullable V omitWhen, @Nullable UnaryOperator<V> sanitize, @Nullable Hint hint) {
         this.key = Objects.requireNonNull(key, "key");
         this.type = Objects.requireNonNull(type, "type");
         this.getter = Objects.requireNonNull(getter, "getter");
@@ -61,6 +64,7 @@ public final class State<W, V> {
         this.fallback = fallback;
         this.omitWhen = omitWhen;
         this.sanitize = sanitize;
+        this.hint = hint;
     }
 
     /**
@@ -73,7 +77,7 @@ public final class State<W, V> {
      */
     public static <W, V> State<W, V> of(
             String key, StateType<V> type, Function<W, V> getter, BiConsumer<W, V> setter, V fallback) {
-        return new State<>(key, type, getter, setter, fallback, null, null);
+        return new State<>(key, type, getter, setter, fallback, null, null, null);
     }
 
     /**
@@ -84,7 +88,7 @@ public final class State<W, V> {
      * not. The hand-written methods spelled this {@code putStringIfNot} / {@code putBoolIfNot}.</p>
      */
     public State<W, V> omittedWhen(V value) {
-        return new State<>(key, type, getter, setter, fallback, value, sanitize);
+        return new State<>(key, type, getter, setter, fallback, value, sanitize, hint);
     }
 
     /**
@@ -95,7 +99,116 @@ public final class State<W, V> {
      * the server-side validation path for reported events; here it already guards {@link #read}.</p>
      */
     public State<W, V> sanitizedBy(UnaryOperator<V> sanitize) {
-        return new State<>(key, type, getter, setter, fallback, omitWhen, sanitize);
+        return new State<>(key, type, getter, setter, fallback, omitWhen, sanitize, hint);
+    }
+
+    /**
+     * A copy of this slot carrying what an editor needs beyond the value's type.
+     *
+     * <pre>{@code
+     * State.of("color", StateTypes.INT, ColorSelector::getColor, ColorSelector::setColor, 0xFFFFFFFF)
+     *         .described(State.Hint.COLOR);
+     * State.of("fraction", StateTypes.FLOAT, ProgressBar::fraction, ProgressBar::setFraction, -1f)
+     *         .described(State.Hint.range(-1f, 1f));
+     * }</pre>
+     *
+     * <p>Optional, and read only by editors: a slot with no hint still gets a control chosen from
+     * {@link StateType#valueClass()}. Nothing on the wire changes.</p>
+     */
+    public State<W, V> described(Hint hint) {
+        Objects.requireNonNull(hint, "hint");
+        // A description said before the hint survives it, so the two can be declared in either order.
+        if (hint.description() == null && this.hint != null && this.hint.description() != null) {
+            hint = hint.describedAs(this.hint.description());
+        }
+        return new State<>(key, type, getter, setter, fallback, omitWhen, sanitize, hint);
+    }
+
+    /**
+     * A copy of this slot saying what it does, for an editor's hint.
+     *
+     * <pre>{@code
+     * State.of("step", StateTypes.FLOAT, Slider::getStep, Slider::setStep, 0f)
+     *         .describedAs("The increment the value snaps to; 0 is continuous.");
+     * }</pre>
+     */
+    public State<W, V> describedAs(String text) {
+        return new State<>(key, type, getter, setter, fallback, omitWhen, sanitize,
+                (hint == null ? Hint.NONE : hint).describedAs(text));
+    }
+
+    /** What this slot's editor was told, or null. */
+    @Nullable
+    public Hint hint() {
+        return hint;
+    }
+
+    /** The value's type. */
+    public StateType<V> type() {
+        return type;
+    }
+
+    /**
+     * Editor metadata for a slot: a display label, a numeric range, and what an {@code int} or a string
+     * really is.
+     *
+     * <pre>{@code
+     * State.Hint.COLOR                          // an ARGB int, or an int[] of them
+     * State.Hint.range(0f, 1f)                  // a slider rather than a number field
+     * State.Hint.MULTILINE.label("Body text")   // hints compose
+     * }</pre>
+     *
+     * @param label     shown instead of the key, or null
+     * @param min       the low end of a range, or NaN for none
+     * @param max       the high end of a range, or NaN for none
+     * @param color     an integer value is ARGB
+     * @param multiline a string value takes several lines
+     * @param asset     the kind of asset a string names ({@code "icon"}, {@code "sprite"}), or null
+     * @param spanMin   the key of a sibling slot holding this value's low bound, or null
+     * @param spanMax   the key of a sibling slot holding its high bound, or null
+     * @param description what the slot does, for a hint, or null
+     */
+    public record Hint(@Nullable String label, float min, float max, boolean color, boolean multiline,
+                       @Nullable String asset, @Nullable String spanMin, @Nullable String spanMax,
+                       @Nullable String description) {
+
+        public static final Hint NONE = new Hint(null, Float.NaN, Float.NaN, false, false, null, null, null, null);
+
+        public static final Hint COLOR = NONE.withColor();
+
+        public static final Hint MULTILINE = new Hint(null, Float.NaN, Float.NaN, false, true, null, null, null, null);
+
+        public static Hint range(float min, float max) {
+            return new Hint(null, min, max, false, false, null, null, null, null);
+        }
+
+        public static Hint asset(String kind) {
+            return new Hint(null, Float.NaN, Float.NaN, false, false, kind, null, null, null);
+        }
+
+        /**
+         * A value whose scale is the span between two SIBLING slots — a slider's value between its own min
+         * and max. An editor scrubs it at a hundredth of that span, read when the drag starts.
+         */
+        public static Hint spanOf(String minKey, String maxKey) {
+            return new Hint(null, Float.NaN, Float.NaN, false, false, null, minKey, maxKey, null);
+        }
+
+        public Hint label(String value) {
+            return new Hint(value, min, max, color, multiline, asset, spanMin, spanMax, description);
+        }
+
+        public Hint withColor() {
+            return new Hint(label, min, max, true, multiline, asset, spanMin, spanMax, description);
+        }
+
+        public Hint describedAs(String text) {
+            return new Hint(label, min, max, color, multiline, asset, spanMin, spanMax, text);
+        }
+
+        public boolean hasRange() {
+            return !Float.isNaN(min) && !Float.isNaN(max);
+        }
     }
 
     public String key() {

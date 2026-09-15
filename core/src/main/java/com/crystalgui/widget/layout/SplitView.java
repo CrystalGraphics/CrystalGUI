@@ -108,7 +108,8 @@ public class SplitView extends UIElement {
                         if (weights == null || weights.length == 0) return;
                         split.setWeights(weights);
                     },
-                    new float[0]);
+                    new float[0])
+                    .describedAs("Each pane's share of the space, in order.");
 
     /**
      * A divider was dragged. {@code plan/engine-rewrite.md} M1.

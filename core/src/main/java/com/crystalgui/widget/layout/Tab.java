@@ -58,7 +58,8 @@ public class Tab extends Button {
 
     public static final State<Tab, String> TEXT =
             State.<Tab, String>of("text", StateTypes.STRING, Tab::getText, Tab::setText, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The tab's title.");
 
     /**
      * The close button was pressed.

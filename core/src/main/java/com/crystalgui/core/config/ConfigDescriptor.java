@@ -4,6 +4,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.DoubleSupplier;
 import java.util.function.Predicate;
 
 /**
@@ -114,6 +115,8 @@ public final class ConfigDescriptor {
     private boolean commitWhileTyping;
     private boolean toggle;
     private double scrubRate = Double.NaN;
+    private DoubleSupplier scrubRateSource;
+    private String description;
     private Predicate<String> validator;
     private ConfigDescriptor element;
     private final List<ConfigDescriptor> children = new ArrayList<>();
@@ -202,6 +205,11 @@ public final class ConfigDescriptor {
     }
 
     @Nullable
+    public String description() {
+        return description;
+    }
+
+    @Nullable
     public String tooltip() {
         return tooltip;
     }
@@ -257,6 +265,10 @@ public final class ConfigDescriptor {
 
     /** Units per pixel of scrub, or {@code NaN} to let the range decide. @see #scrubRate(double) */
     public double scrubRate() {
+        if (scrubRateSource != null) {
+            double asked = scrubRateSource.getAsDouble();
+            return asked > 0d && Double.isFinite(asked) ? asked : Double.NaN;
+        }
         return scrubRate;
     }
 
@@ -387,6 +399,36 @@ public final class ConfigDescriptor {
      */
     public ConfigDescriptor scrubRate(double unitsPerPixel) {
         this.scrubRate = unitsPerPixel;
+        this.scrubRateSource = null;
+        return this;
+    }
+
+    /**
+     * A scrub rate asked for when each drag starts, for a number whose scale is another value.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("value", "Value").scrubRate(() -> (slider.getMax() - slider.getMin()) * 0.01);
+     * }</pre>
+     *
+     * <p>A slider's value moves between its own min and max, which can change while the form is on screen.
+     * NaN or a non-positive answer falls back as an unset rate does.</p>
+     */
+    public ConfigDescriptor scrubRate(DoubleSupplier unitsPerPixel) {
+        this.scrubRateSource = unitsPerPixel;
+        return this;
+    }
+
+    /**
+     * A sentence saying what the field does, shown under its name in the row's hint.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.bool("hit-test", "Hit test").tooltip("hit-test").description("Whether a click can land here.");
+     * }</pre>
+     *
+     * <p>The hint appears only when the descriptor also has a {@link #tooltip} — that is its heading.</p>
+     */
+    public ConfigDescriptor description(@Nullable String value) {
+        this.description = value;
         return this;
     }
 

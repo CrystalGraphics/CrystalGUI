@@ -82,32 +82,39 @@ public class RadarChart extends UIElement {
      */
     public static final State<RadarChart, List<String>> LABELS =
             State.of("labels", StateTypes.stringListUnder("label"),
-                    RadarChart::axisLabels, RadarChart::setAxisLabels, List.of());
+                    RadarChart::axisLabels, RadarChart::setAxisLabels, List.of())
+                    .describedAs("One name per axis, clockwise from the top.");
 
     /** One ARGB per axis. Data rather than theme: a registry declares a stat's colour. */
     public static final State<RadarChart, int[]> COLORS =
             State.of("colors", StateTypes.intArrayUnder("argb"),
-                    RadarChart::axisColors, RadarChart::setAxisColors, new int[0]);
+                    RadarChart::axisColors, RadarChart::setAxisColors, new int[0])
+                    .described(State.Hint.COLOR)
+                    .describedAs("One colour per axis.");
 
     /** What each axis's point says on hover. An empty entry says nothing. */
     public static final State<RadarChart, List<String>> DETAILS =
             State.of("details", StateTypes.stringListUnder("detail"),
-                    RadarChart::axisDetails, RadarChart::setAxisDetails, List.of());
+                    RadarChart::axisDetails, RadarChart::setAxisDetails, List.of())
+                    .describedAs("A line of detail per axis, shown under its name.");
 
     /** The data — the one slot a live chart sends per tick. */
     public static final State<RadarChart, double[]> VALUES =
             State.of("values", StateTypes.doubleArrayUnder("value"),
-                    RadarChart::values, RadarChart::setValues, new double[0]);
+                    RadarChart::values, RadarChart::setValues, new double[0])
+                    .describedAs("Each axis's value, from 0 at the centre to max at the rim.");
 
     /** {@code 0} means "the largest value present", which is why it is also what it is omitted at. */
     public static final State<RadarChart, Double> MAX =
             State.of("max", StateTypes.DOUBLE, RadarChart::getMax, RadarChart::setMax, 0d)
-                    .omittedWhen(0d);
+                    .omittedWhen(0d)
+                    .describedAs("The value at the rim; 0 fits the largest value.");
 
     public static final State<RadarChart, AxisGradient> GRADIENT =
             State.of("gradient", StateTypes.enumOf(AxisGradient.class),
                     RadarChart::getAxisGradient, RadarChart::setAxisGradient, AxisGradient.NONE)
-                    .omittedWhen(AxisGradient.NONE);
+                    .omittedWhen(AxisGradient.NONE)
+                    .describedAs("Whether each wedge is one colour or blends into the next axis's.");
 
     /**
      * LABELS BEFORE EVERYTHING PER-AXIS, which is why a contract applies slots in declaration order.

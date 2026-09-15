@@ -70,7 +70,8 @@ public class ArrayControl extends ValueControl<List<Object>> {
      */
     public static final State<ArrayControl, List<String>> ENTRIES = State.of("entries",
             StateTypes.stringListUnder("v"),
-            ArrayControl::entriesAsText, ArrayControl::setEntriesFromText, List.of());
+            ArrayControl::entriesAsText, ArrayControl::setEntriesFromText, List.of())
+                    .describedAs("The list's entries, in order.");
 
     /** An entry was added, removed or edited. Immediate: each is a discrete action. */
     public static final Event<ArrayControl, List<String>> CHANGED = Event.of("change",

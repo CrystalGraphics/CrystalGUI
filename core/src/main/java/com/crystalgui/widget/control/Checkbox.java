@@ -46,12 +46,14 @@ public class Checkbox extends UIElement {
     public static final State<Checkbox, Boolean> CHECKED =
             State.<Checkbox, Boolean>of("checked", StateTypes.BOOL,
                             Checkbox::isChecked, Checkbox::setChecked, false)
-                    .omittedWhen(false);
+                    .omittedWhen(false)
+                    .describedAs("Whether the box is ticked.");
 
     public static final State<Checkbox, String> LABEL =
             State.<Checkbox, String>of("label", StateTypes.STRING,
                             Checkbox::getLabel, Checkbox::setLabel, "")
-                    .omittedWhen("");
+                    .omittedWhen("")
+                    .describedAs("The text beside the box.");
 
     public static final Event<Checkbox, Boolean> TOGGLE = Event.of("toggle",
             (checkbox, sink) -> checkbox.attachListener(sink::accept),

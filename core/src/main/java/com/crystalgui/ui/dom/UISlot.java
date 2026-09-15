@@ -28,7 +28,8 @@ public class UISlot extends UIElement {
      * nowhere. Set it either way — {@link #setSlotName} writes the attribute and the attribute writes
      * the field.</p>
      */
-    public static final Attribute<String> SLOT_NAME = Attribute.of("name", String.class, "");
+    public static final Attribute<String> SLOT_NAME = Attribute.of("name", String.class, "")
+            .describedAs("The slot's name. A child whose Slot matches is placed here.");
 
     private String slotName;
     private final List<UIElement> assigned = new ArrayList<>();

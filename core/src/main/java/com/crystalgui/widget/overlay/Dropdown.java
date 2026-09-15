@@ -64,10 +64,12 @@ public class Dropdown extends Button {
                         dropdown.clearOptions();
                         for (String label : labels) dropdown.addOption(label);
                     },
-                    List.of());
+                    List.of())
+                    .describedAs("The choices, in order.");
 
     public static final State<Dropdown, Integer> SELECTED =
-            State.of("selected", StateTypes.INT, Dropdown::getSelectedIndex, Dropdown::select, -1);
+            State.of("selected", StateTypes.INT, Dropdown::getSelectedIndex, Dropdown::select, -1)
+                    .describedAs("The index of the chosen option; -1 chooses none.");
 
     /**
      * What was chosen. {@code plan/engine-rewrite.md} M1 -- a dropdown could not tell a server ANYTHING
