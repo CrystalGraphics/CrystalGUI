@@ -211,6 +211,34 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         assertTrue(ok.get(Attribute.HIT_TEST));
     }
 
+    /** A flex row writes the node's inline style as one step; undo takes the declaration away again. */
+    @Test
+    public void aFlexRowWritesInlineAsOneStep() {
+        UIElement page = editor.document().root();
+        inspect(page);
+        Property<String> direction = property("style.flex-direction");
+        assertEquals("Column", direction.get());
+
+        direction.set("Row");
+        frame();
+        assertEquals(FlexDirection.ROW, page.getStyle().computed().get(LayoutProperties.FLEX_DIRECTION));
+        assertTrue(LiveEdits.hasInline(page, LayoutProperties.FLEX_DIRECTION));
+        assertEquals(1, model().history().undoDepth());
+
+        direction.set("Column");
+        frame();
+        assertFalse("choosing what the sheets already give removes the declaration",
+                LiveEdits.hasInline(page, LayoutProperties.FLEX_DIRECTION));
+        assertEquals(2, model().history().undoDepth());
+
+        model().history().undo();
+        frame();
+        assertTrue(LiveEdits.hasInline(page, LayoutProperties.FLEX_DIRECTION));
+        model().history().undo();
+        frame();
+        assertFalse(LiveEdits.hasInline(page, LayoutProperties.FLEX_DIRECTION));
+    }
+
     /** A slider drag in the form is one undo step, however many frames it wrote. */
     @Test
     public void aScrubOfAStateSlotIsOneUndoStep() {

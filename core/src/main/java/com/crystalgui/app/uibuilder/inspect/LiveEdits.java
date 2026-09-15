@@ -1,5 +1,7 @@
 package com.crystalgui.app.uibuilder.inspect;
 
+import java.util.Objects;
+
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
@@ -66,6 +68,27 @@ public final class LiveEdits {
         ElementStyle style = element.getStyle();
         if (style == null) return;
         style.removeCandidates(property, slot -> slot.origin() == StyleOrigin.INLINE);
+    }
+
+    /**
+     * Removes {@code property}'s inline value when it equals what the element has without it, so choosing a value
+     * back leaves no declaration behind rather than a copy of what the sheets already say.
+     *
+     * <pre>{@code
+     * LiveEdits.setInline(node, LayoutProperties.FLEX_WRAP, "nowrap");
+     * LiveEdits.dropIfRedundant(node, LayoutProperties.FLEX_WRAP);   // gone again if the sheets say nowrap too
+     * }</pre>
+     *
+     * @return whether it was dropped
+     */
+    public static <T> boolean dropIfRedundant(@Nullable Styleable element, StyleProperty<T> property) {
+        if (!hasInline(element, property)) return false;
+        ElementStyle style = element.getStyle();
+        T inline = style.getComputed(property);
+        clearInline(element, property);
+        if (Objects.equals(inline, style.computed().get(property))) return true;
+        style.replaceOrPutCandidate(property, StyleSlot.of(property, StyleOrigin.INLINE, SPECIFICITY, 0L, inline));
+        return false;
     }
 
     /** Whether an inline value is currently set — what tells an edited row from an untouched one. */

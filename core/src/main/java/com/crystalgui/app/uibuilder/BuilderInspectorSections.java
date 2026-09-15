@@ -28,8 +28,6 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -534,12 +532,7 @@ public final class BuilderInspectorSections {
                 form.prop(ConfigDescriptor.text("inline." + property.name, property.name).tooltip(property.name)
                         .description("Set on this element itself, which beats every stylesheet rule."), fields == null
                         ? Property.derived(read, value -> LiveEdits.setInline(node, cast(property), value))
-                        : fields.bind(read, value -> {
-                            JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
-                            if (!LiveEdits.setInline(node, cast(property), value)) return null;
-                            JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
-                            return after.equals(was) ? null : new BuilderEdit.SetInlineStyle(node, was, after);
-                        }));
+                        : fields.bind(read, value -> value == null ? null : fields.inlineEdit(node, property, value)));
             }
         }
     }
@@ -606,7 +599,12 @@ public final class BuilderInspectorSections {
         }
     }
 
-    /** What the PARENT is doing to this node, which is where a flex surprise always comes from. */
+    /**
+     * The node's flex layout: how it lays out its children, and how its parent lays it out — every row written
+     * inline in a document.
+     *
+     * <p>What the PARENT is doing leads the second half, because that is where a flex surprise comes from.</p>
+     */
     private static final class FlexContextSection extends NodeAware {
 
         @Override
@@ -624,24 +622,40 @@ public final class BuilderInspectorSections {
             UIElement node = node(context);
             if (node == null) return;
             UIElement parent = node.parentElement();
+            NodeFields fields = editable(context, node);
+
+            // AS A CONTAINER: how it lays out what it holds. Read through ComputedStyle, which is what BoxStyle
+            // hands Taffy -- an unset property shows the value layout actually uses, never a null.
             form.header("Flex");
-            if (parent == null) {
-                form.row(ConfigDescriptor.info("flex.parent", "parent"), "none");
-                return;
-            }
-            // THROUGH ComputedStyle, which is what BoxStyle hands Taffy. getComputed answers the
-            // cascade SLOT and is null when no rule declared the property -- true, and not the question:
-            // every one of these has an initial the layout actually uses, so three untouched defaults
-            // were reported as three nulls.
-            form.prop(ConfigDescriptor.info("flex.direction", "Parent direction").tooltip("flex-direction")
+            flexRow(form, fields, node, LayoutProperties.FLEX_DIRECTION, "Direction",
+                    "Whether children are laid out in a row or a column. A column here by default, unlike the web.");
+            flexRow(form, fields, node, LayoutProperties.FLEX_WRAP, "Wrap",
+                    "Whether children that do not fit start a new line.");
+            flexRow(form, fields, node, LayoutProperties.JUSTIFY_CONTENT, "Justify",
+                    "Where children sit along the direction, and how spare room is shared between them.");
+            flexRow(form, fields, node, LayoutProperties.ALIGN_ITEMS, "Align items",
+                    "Where children sit across the direction.");
+            flexRow(form, fields, node, LayoutProperties.GAP, "Gap",
+                    "The space between children, as a length: 4px, or 4px 8px for rows then columns.");
+
+            if (parent == null) return;
+            // AS A CHILD: what its parent does with it.
+            form.header("In parent");
+            form.prop(ConfigDescriptor.info("flex.parent", "Parent direction").tooltip("flex-direction")
                             .description("Whether the parent lays its children out in a row or a column."),
-                    Property.derived(() -> String.valueOf(parent.getStyle().computed().get(LayoutProperties.FLEX_DIRECTION))));
-            form.prop(ConfigDescriptor.info("flex.grow", "Grow").tooltip("flex-grow")
-                            .description("How much of the parent's spare room this takes, against its siblings."),
-                    Property.derived(() -> String.valueOf(node.getStyle().computed().get(LayoutProperties.FLEX_GROW))));
-            form.prop(ConfigDescriptor.info("flex.shrink", "Shrink").tooltip("flex-shrink")
-                            .description("How much this gives up when the parent is too small. 0 here by default, unlike the web."),
-                    Property.derived(() -> String.valueOf(node.getStyle().computed().get(LayoutProperties.FLEX_SHRINK))));
+                    Property.derived(() -> NodeFields.humanize(String.valueOf(parent.getStyle().computed().get(LayoutProperties.FLEX_DIRECTION)))));
+            Configurator grow = flexRow(form, fields, node, LayoutProperties.FLEX_GROW, "Grow",
+                    "How much of the parent's spare room this takes, against its siblings.");
+            Configurator shrink = flexRow(form, fields, node, LayoutProperties.FLEX_SHRINK, "Shrink",
+                    "How much this gives up when the parent is too small. 0 here by default, unlike the web.");
+            flexRow(form, fields, node, LayoutProperties.FLEX_BASIS, "Basis",
+                    "Its size along the parent's direction before growing or shrinking: auto, 40px or 50%.");
+            flexRow(form, fields, node, LayoutProperties.ALIGN_SELF, "Align self",
+                    "Where it sits across the parent's direction, overriding the parent's Align items.");
+            // A tenth per pixel: grow and shrink are ratios, and a unit a pixel reaches 40 in a flick.
+            for (Configurator row : new Configurator[] {grow, shrink}) {
+                if (row != null) row.control().descriptor().scrubRate(0.1d);
+            }
         }
     }
 
@@ -816,6 +830,25 @@ public final class BuilderInspectorSections {
         Name kind = node.name();
         if (!UIElementRegistry.isBuildable(kind)) return null;
         return PRISTINE.computeIfAbsent(kind, UIElementRegistry::create);
+    }
+
+    /**
+     * One flex row: a control over the property's inline value in a document, marked while set on this node, or
+     * the computed value as a fact over a live pick. Null for the fact.
+     */
+    @Nullable
+    private static Configurator flexRow(ConfigForm form, @Nullable NodeFields fields, UIElement node,
+                                        StyleProperty<?> property, String label, String description) {
+        if (fields == null) {
+            form.prop(ConfigDescriptor.info("style." + property.name, label).tooltip(property.name).description(description),
+                    Property.derived(() -> String.valueOf(node.getStyle().computed().get(cast(property)))));
+            return null;
+        }
+        NodeFields.Field field = fields.style(node, property, label);
+        field.descriptor().description(description);
+        Configurator row = prop(form, field.descriptor(), field.value());
+        markSet(row, () -> LiveEdits.hasInline(node, property));
+        return row;
     }
 
     /** Marks a row while {@code isSet} holds, following the value as it changes. */

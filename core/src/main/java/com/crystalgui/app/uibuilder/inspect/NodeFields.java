@@ -21,6 +21,8 @@ import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.serialization.style.InlineStyleCodec;
+import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -173,6 +175,81 @@ public final class NodeFields {
         Object next = fromControl(offered, attribute.type());
         Object was = node.get(key);
         return next == null || Objects.equals(next, was) ? null : new BuilderEdit.SetAttribute(node, key, was, next);
+    }
+
+    // ── Inline style ────────────────────────────────────────────────────────
+
+    /**
+     * A control for one style property, written to the node's inline style: a dropdown for a keyword, a number for
+     * a number, and CSS text for anything with a syntax ({@code gap: 4px}, {@code flex-basis: 50%}). It shows the
+     * computed value, so an unset property reads as what the layout uses; an empty text clears the declaration.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Field style(UIElement node, StyleProperty<?> property, String label) {
+        StyleProperty<Object> key = (StyleProperty<Object>) property;
+        Class<?> type = key.type;
+        String id = "style." + key.name;
+        Supplier<Object> computed = () -> node.getStyle().computed().get(key);
+        if (type.isEnum()) {
+            List<String> labels = new ArrayList<>();
+            for (Object constant : type.getEnumConstants()) labels.add(labelOf((Enum<?>) constant));
+            Property<String> value = bind(() -> computed.get() instanceof Enum<?> constant ? labelOf(constant) : "",
+                    chosen -> {
+                        for (Object constant : type.getEnumConstants()) {
+                            if (labelOf((Enum<?>) constant).equals(chosen)) return inlineEdit(node, key, key.write(constant));
+                        }
+                        return null;
+                    });
+            return new Field(ConfigDescriptor.select(id, label, labels).tooltip(key.name), value);
+        }
+        if (type == Float.class || type == Double.class || type == Integer.class) {
+            Property<Double> value = bind(() -> computed.get() instanceof Number n ? n.doubleValue() : 0d,
+                    number -> number == null ? null : inlineEdit(node, key, cssNumber(number, type == Integer.class)));
+            return new Field(ConfigDescriptor.number(id, label).integral(type == Integer.class).tooltip(key.name), value);
+        }
+        Property<String> value = bind(() -> {
+            Object current = computed.get();
+            return current == null ? "" : key.write(current);
+        }, text -> text == null ? null : inlineEdit(node, key, text.trim()));
+        return new Field(ConfigDescriptor.text(id, label).tooltip(key.name), value);
+    }
+
+    /**
+     * The edit that sets {@code property} inline to {@code css}, or clears it for an empty string; null when the
+     * value does not parse or changes nothing. The node already holds the new value when this returns.
+     *
+     * <p>A value equal to what the node has WITHOUT its inline declaration removes the declaration instead of
+     * writing a copy: choosing No wrap back on a node whose sheets say no wrap leaves nothing inline, so the file
+     * carries no redundant line and the row stops reading as set.</p>
+     */
+    @Nullable
+    public BuilderEdit inlineEdit(UIElement node, StyleProperty<?> property, String css) {
+        JsonElement was = inlineStyleOf(node);
+        if (css.isEmpty()) {
+            LiveEdits.clearInline(node, property);
+        } else if (!LiveEdits.setInline(node, cast(property), css)) {
+            return null;
+        } else {
+            LiveEdits.dropIfRedundant(node, property);
+        }
+        JsonElement after = inlineStyleOf(node);
+        return after.equals(was) ? null : new BuilderEdit.SetInlineStyle(node, was, after);
+    }
+
+    /** The node's inline style as the codec writes it: an empty object, never null, for a node with none. */
+    public static JsonElement inlineStyleOf(UIElement node) {
+        JsonElement encoded = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        return encoded == null ? new JsonObject() : encoded;
+    }
+
+    private static String cssNumber(double value, boolean integral) {
+        if (integral || value == Math.rint(value)) return String.valueOf(Math.round(value));
+        return String.valueOf((float) value);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static StyleProperty<Object> cast(StyleProperty<?> property) {
+        return (StyleProperty<Object>) property;
     }
 
     // ── State ───────────────────────────────────────────────────────────────
