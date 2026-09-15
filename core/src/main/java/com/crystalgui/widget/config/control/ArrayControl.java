@@ -10,6 +10,7 @@ import com.crystalgui.widget.config.ValueControl;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.Event;
@@ -91,6 +92,9 @@ public class ArrayControl extends ValueControl<List<Object>> {
                     .event(CHANGED)
                     .build());
 
+    /** On a list drawn in its row: no band, the buttons beside the entries. @see ConfigDescriptor#inlineList */
+    public static final String INLINE_CLASS = "__inline-list__";
+
     private final UIElement body = new UIElement();
     private final UIElement foot = new UIElement();
     private final ConfigDescriptor element;
@@ -110,6 +114,7 @@ public class ArrayControl extends ValueControl<List<Object>> {
                 ? ConfigDescriptor.text(descriptor.id() + ".entry", "")
                 : descriptor.element();
         addClass("__array__");
+        if (descriptor.inlineList()) addClass(INLINE_CLASS);
         UIElement head = new UIElement();
         head.addClass(HEAD_CLASS);
         UIText title = new UIText(descriptor.label());
@@ -121,9 +126,11 @@ public class ArrayControl extends ValueControl<List<Object>> {
         Button add = new Button("+");
         add.addClass("__add__");
         add.attachListener(() -> {
-            values.add(null);
+            // A BLANK ROW IS NOT A VALUE YET, so it is not committed until it is typed into: a model that refuses
+            // an empty entry -- a size, a sheet id -- would write the list back without it, and the row would vanish
+            // the moment it was added.
+            values.add(blankEntry());
             rebuild();
-            commit(List.copyOf(values));
         });
         Button remove = new Button("-");
         remove.addClass("__remove__");
@@ -131,13 +138,13 @@ public class ArrayControl extends ValueControl<List<Object>> {
             if (values.isEmpty()) return;
             values.remove(values.size() - 1);
             rebuild();
-            commit(List.copyOf(values));
+            commit(snapshot());
         });
         foot.addClass(FOOT_CLASS);
         foot.append(add);
         foot.append(remove);
 
-        append(head);
+        if (!descriptor.inlineList()) append(head);
         append(body);
         append(foot);
 
@@ -145,10 +152,10 @@ public class ArrayControl extends ValueControl<List<Object>> {
         rebuild();
     }
 
-    /** Self-labelling: the header carries the name, so a row must not add a second one. */
+    /** Self-labelling: the header carries the name, so a row must not add a second one — unless it has no header. */
     @Override
     public boolean selfLabelling() {
-        return true;
+        return !descriptor().inlineList();
     }
 
     @Override
@@ -173,7 +180,7 @@ public class ArrayControl extends ValueControl<List<Object>> {
     private void rebuild() {
         body.removeAll();
         if (values.isEmpty()) {
-            UIText empty = new UIText("List is Empty");
+            UIText empty = new UIText(descriptor().emptyText() != null ? descriptor().emptyText() : "List is Empty");
             empty.addClass(EMPTY_CLASS);
             empty.setHitTest(false);
             body.append(empty);
@@ -188,7 +195,7 @@ public class ArrayControl extends ValueControl<List<Object>> {
                 // rather than recycled — see rebuild()'s note.
                 if (index < values.size()) {
                     values.set(index, v);
-                    commit(List.copyOf(values));
+                    commit(snapshot());
                 }
             });
             UIElement entry = new UIElement();
@@ -196,6 +203,23 @@ public class ArrayControl extends ValueControl<List<Object>> {
             entry.append(control);
             body.append(entry);
         }
+    }
+
+    /** What a new row holds, by the element's kind: nothing typed, zero, unticked. */
+    private Object blankEntry() {
+        return switch (element.kind()) {
+            case NUMBER -> 0d;
+            case BOOLEAN -> Boolean.FALSE;
+            default -> "";
+        };
+    }
+
+    /**
+     * The entries as a list that cannot change under the caller. Not {@code List.copyOf}, which refuses a null entry
+     * and threw on the first press of + before a blank row had a value.
+     */
+    private List<Object> snapshot() {
+        return Collections.unmodifiableList(new ArrayList<>(values));
     }
 
     public int size() {

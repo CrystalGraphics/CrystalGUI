@@ -65,6 +65,7 @@ public class TextControl extends ValueControl<String> {
         append(field);
         field.setText(defaultValue == null ? "" : defaultValue);
         if (descriptor.commitsWhileTyping()) field.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
+        if (descriptor.placeholder() != null) field.setPlaceholder(descriptor.placeholder()).setPlaceholderShownUnfocused(true);
 
         field.attachListener(text -> {
             boolean ok = validator == null || validator.test(text);
