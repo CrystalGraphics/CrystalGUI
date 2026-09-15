@@ -82,6 +82,14 @@ public class KindGlyphsTest extends UiDocumentTestBase {
         assertEquals(ICONS + "absolute", KindGlyphs.of(leaf).icon());
     }
 
+    /** An empty element whose author said how it lays out draws that layout, as Figma's empty auto-layout frame does. */
+    @Test
+    public void anEmptyElementWithAnAuthoredLayoutDrawsIt() {
+        assertEquals(ICONS + "row", KindGlyphs.of(mount(new UIElement().layout(l -> l.flexDirection(FlexDirection.ROW)))).icon());
+        assertEquals("a column said outright draws a column, not the frame", ICONS + "column",
+                KindGlyphs.of(mount(new UIElement().layout(l -> l.flexDirection(FlexDirection.COLUMN)))).icon());
+    }
+
     @Test
     public void aDeclaredGlyphWinsOverLayoutAndABorrowedOneTakesItsOwnersRole() {
         TabView tabs = new TabView();
