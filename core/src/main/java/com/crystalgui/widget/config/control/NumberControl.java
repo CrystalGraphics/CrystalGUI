@@ -13,7 +13,6 @@ import com.crystalgui.widget.control.TextField;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.ui.input.DragScrub;
-import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
 import java.util.Locale;
@@ -208,7 +207,7 @@ public class NumberControl extends ValueControl<Double> {
             scrubModifiers = modifiersNow();
             scrubAnchoredAtX = 0f;
             scrubAnchoredAtY = 0f;
-            scrubPixelsPerUnit = measurePixelsPerUnit(handle);
+            scrubPixelsPerUnit = Drag.pixelsPerLocalUnit(handle);
 
             Drag.start(handle, rawX, rawY,
                     new Drag.Listener() {
@@ -317,22 +316,6 @@ public class NumberControl extends ValueControl<Double> {
         return Double.isNaN(scrubRate) ? spec : spec.withRate(scrubRate);
     }
 
-    /**
-     * Physical pixels per one local unit of {@code handle}, measured through its own transform chain.
-     *
-     * <p>Two screen points a known distance apart are mapped into the handle's space and the ratio read
-     * back. Falls back to 1 for a degenerate transform (a zero scale, or a handle not yet laid out),
-     * which makes the scrub feel wrong rather than divide by zero.</p>
-     */
-    private static float measurePixelsPerUnit(UIElement handle) {
-        final float probe = 100f;
-        Vector2f origin = handle.toLocal(0f, 0f);
-        // Read before the second call: screenToLocal may hand back a shared vector.
-        float originX = origin.x();
-        float spanInLocalUnits = handle.toLocal(probe, 0f).x() - originX;
-        if (!Float.isFinite(spanInLocalUnits) || Math.abs(spanInLocalUnits) < 1e-4f) return 1f;
-        return probe / spanInLocalUnits;
-    }
 
     @Override
     protected void writeToWidgets(@Nullable Double value) {
