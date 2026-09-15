@@ -433,6 +433,14 @@ hierarchypanel .__hierarchy-row__ .__label__ {
     text-overflow: ellipsis;
 }
 
+/* A HIDDEN NODE'S ROW, and every row under it: the name and its glyph in the disabled tone. The tree is the
+ * only place a hidden node can still be seen, and dimming says why it is missing from the canvas. A selected
+ * row keeps its selected tint, which is the more specific rule. */
+hierarchypanel .__hierarchy-row__.__hidden-node__ .__label__,
+hierarchypanel .__hierarchy-row__.__hidden-node__ .__glyph__ {
+    color: var(--fg-disabled, #5A5D63);
+}
+
 /* The id being renamed, in the row -- the project tree's field, so the two trees rename alike. Shown by
  * RowEditing in place of the label. */
 hierarchypanel .__hierarchy-row__ .__rename__ {
@@ -829,10 +837,18 @@ smartguides {
     min-width: 14px;
     text-align: center;
     color: var(--fg-secondary, #9DA0A8);
-    cursor: text;
 }
 .__boxmodel__ .__bm-value__.__authored__ { color: var(--fg, #DFE1E5); font-weight: bold; }
-.__boxmodel__ .__bm-editor__ { width: 36px; height: 14px; }
+/* THREE CHARACTERS WIDE, which is what a box value is: a wider field pushes the diagram's column out of line
+ * for the moment it is open. A longer number scrolls inside it. */
+.__boxmodel__ .__bm-editor__ { width: 24px; min-width: 24px; height: 14px; flex-shrink: 0; }
+/* NOTHING LAID OUT — a hidden node, or one under something hidden. The numbers are what the style says, not what
+ * layout measured, so they read as quieter and a double-click opens nothing. */
+.__boxmodel__.__no-box__ .__bm-value__,
+.__boxmodel__.__no-box__ .__bm-value__.__authored__ {
+    color: var(--fg-disabled, #5A5D63);
+    cursor: default;
+}
 
 /* A ROW THIS NODE SETS — Unity's override marker: a bold label and an accent bar at the row's edge, so the
  * values a node changes are what the eye lands on. The bar is an OUTLINE gradient, which paints and takes

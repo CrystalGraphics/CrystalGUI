@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import dev.vfyjxf.taffy.style.FlexDirection;
 import org.joml.Vector2f;
 import org.junit.After;
 import org.junit.Before;
@@ -21,6 +22,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.BoxModelEditor;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
@@ -45,6 +47,7 @@ import com.crystalgui.widget.config.inspector.Inspector;
 import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.layout.Tab;
 
 /**
  * <b>L4.9 — the inspector edits the document.</b>
@@ -74,11 +77,16 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         UIElementRegistry.bootstrap();
         sections = BuilderInspectorSections.register();
         editor = new BuilderEditor(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
-        UIElement root = new UIElement().layout(l -> l.width(800).height(500));
+        // SIDE BY SIDE, as a workbench docks them: stacked, the inspector's lower rows fell outside the window
+        // and a press aimed at them landed on the document.
+        UIElement row = new UIElement().layout(l -> l.flexDirection(FlexDirection.ROW).width(W).height(H));
+        UIElement root = new UIElement().layout(l -> l.width(500).height(500));
         root.append(editor.view());
-        document.append(root);
+        row.append(root);
         inspector = new Inspector();
-        document.append(inspector);
+        inspector.layout(l -> l.width(300).height(H));
+        row.append(inspector);
+        document.append(row);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         document.update(W, H);
         frame();
@@ -263,6 +271,8 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         assertNotNull(box);
         BoxModelEditor.Cell left = box.cellFor(LayoutProperties.PADDING_LEFT);
 
+        UIElement focusable = document.focus().firstFocusableIn(inspector);
+        document.focus().requestFocus(focusable);
         box.beginEdit(left);
         box.field().setText("6");
         box.step(1, 0);
@@ -271,12 +281,78 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         assertEquals(1, model().history().undoDepth());
         assertTrue(LiveEdits.hasInline(ok, LayoutProperties.PADDING_LEFT));
 
+        assertNotNull("focus is handed back, so Ctrl+Z still reaches the document", document.focus().focused());
+
         box.beginEdit(box.cellFor(LayoutProperties.PADDING_TOP));
         box.field().setText("30");
         box.step(1, 0);
         box.cancel();
         assertEquals("nothing recorded", 1, model().history().undoDepth());
         assertFalse(LiveEdits.hasInline(ok, LayoutProperties.PADDING_TOP));
+    }
+
+    /** Dragging a box value scrubs it as one undo step; Escape mid-drag writes nothing. */
+    @Test
+    public void aBoxValueScrubsAsOneStepAndEscapeRestoresIt() {
+        inspect(ok);
+        for (Tab tab : inspector.tabs().getTabs()) {
+            if (tab.getText().equals(BuilderInspectorSections.LAYOUT_TAB)) inspector.tabs().selectTab(tab);
+        }
+        frame();
+        frame();
+        BoxModelEditor box = null;
+        for (UIElement each : inspector.composedSubtree()) {
+            if (each instanceof BoxModelEditor found) box = found;
+        }
+        assertNotNull(box);
+        BoxModelEditor.Cell left = box.cellFor(LayoutProperties.PADDING_LEFT);
+        double before = Double.parseDouble(left.shown());
+        int[] at = centreOf(left.element());
+
+        press(at[0], at[1]);
+        frame();
+        move(at[0] + 10, at[1]);
+        frame();
+        assertTrue(box.isScrubbing());
+        move(at[0] + 40, at[1]);
+        frame();
+        release(at[0] + 40, at[1]);
+        frame();
+        frame();
+
+        assertEquals(1, model().history().undoDepth());
+        assertTrue("dragging right grows it", Double.parseDouble(box.cellFor(LayoutProperties.PADDING_LEFT).shown()) > before);
+
+        at = centreOf(left.element());
+        press(at[0], at[1]);
+        frame();
+        move(at[0] + 30, at[1]);
+        frame();
+        keyPress(CgKeyCodes.KEY_ESCAPE);
+        release(at[0] + 30, at[1]);
+        frame();
+        assertEquals("cancelled, nothing recorded", 1, model().history().undoDepth());
+    }
+
+    /** A hidden node has no box: the diagram shows its style's values, greyed, and opens nothing for typing. */
+    @Test
+    public void aHiddenNodesBoxShowsItsStyleAndEditsNothing() {
+        inspect(ok);
+        LiveEdits.setInline(ok, LayoutProperties.PADDING_LEFT, "7px");
+        editor.document().apply(new BuilderEdit.SetAttribute<>(ok, Attribute.HIDDEN, false, true));
+        frame();
+        frame();
+        BoxModelEditor box = null;
+        for (UIElement each : inspector.composedSubtree()) {
+            if (each instanceof BoxModelEditor found) box = found;
+        }
+        assertNotNull(box);
+
+        assertNull(ok.box());
+        assertTrue(box.hasClass(BoxModelEditor.NO_BOX_CLASS));
+        assertEquals("7", box.cellFor(LayoutProperties.PADDING_LEFT).shown());
+        box.beginEdit(box.cellFor(LayoutProperties.PADDING_LEFT));
+        assertNull("nothing to type into", box.field());
     }
 
     /** A rebuild takes the previous subject's diagram with it, rather than stacking one per selection. */

@@ -26,6 +26,7 @@ import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.widget.collection.tree.TreeClipboard;
@@ -78,6 +79,12 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
 
     /** On the row whose node is selected. */
     public static final String SELECTED_CLASS = "__selected__";
+
+    /**
+     * On a row whose node draws nothing because it, or something above it, is hidden — Unity's greyed inactive
+     * objects, Figma's dimmed hidden layers. Disabled is not: a disabled node still draws and takes its space.
+     */
+    public static final String HIDDEN_NODE_CLASS = "__hidden-node__";
 
     /** The open/closed marker. Its appearance is CSS's, off {@code TreeView}'s own state classes. */
     public static final String TWISTY_CLASS = "__twisty__";
@@ -491,6 +498,12 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
                 if (selected) template.addClass(SELECTED_CLASS);
                 else template.removeClass(SELECTED_CLASS);
             }
+            // Rebound on every document change, so toggling Hidden on an ancestor re-dims its whole subtree.
+            boolean hidden = isHiddenInTree(node);
+            if (hidden != template.hasClass(HIDDEN_NODE_CLASS)) {
+                if (hidden) template.addClass(HIDDEN_NODE_CLASS);
+                else template.removeClass(HIDDEN_NODE_CLASS);
+            }
         }
     }
 
@@ -511,6 +524,14 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
             if (glyph != null && row != null) glyph.show(row.item());
         }
         return true;
+    }
+
+    /** Whether {@code node} or an ancestor within the document is hidden. */
+    static boolean isHiddenInTree(UIElement node) {
+        for (UIElement at = node; at != null; at = at.parentElement()) {
+            if (at.get(Attribute.HIDDEN)) return true;
+        }
+        return false;
     }
 
     /** {@code #title} where the node is named, {@code text} where it is not. */
