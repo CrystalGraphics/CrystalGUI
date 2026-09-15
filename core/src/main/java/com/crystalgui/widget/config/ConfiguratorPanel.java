@@ -13,7 +13,6 @@ import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.scroll.ScrollerView;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -253,24 +252,12 @@ public class ConfiguratorPanel extends ScrollerView {
      * selection is. Clearing the children without clearing the index would leave {@link #control} handing
      * back widgets that are no longer on screen, and {@link #setValue} silently writing into them.</p>
      *
-     * <h3>Why this cannot be {@code clearAllChildren()}</h3>
-     * <p>It was, and it removed <b>nothing at all</b>. {@link Configurator} and {@link ConfiguratorGroup}
-     * each call {@code markAsInternal()} on themselves — they are assembled widgets whose parts an
-     * inspector should not walk into — and {@code clearAllChildren()} deliberately skips internal
-     * children. So every rebuild appended, and a panel bound to a selection grew a fresh copy of itself
-     * on each change while showing every previous one above it.</p>
-     *
-     * <p>{@code removeInternalChild} is the documented escape hatch for exactly this: a widget removing a
-     * part it owns. It is applied <b>by type</b> rather than to every internal child, because a
-     * {@link ScrollerView} owns internal children too — its two scrollbars and their corner — and
-     * sweeping those out would leave the panel unable to scroll and unable to get them back.</p>
+     * <p><b>Every light child goes, not only rows and groups</b>: an element a form placed with
+     * {@code custom} is content too, and one left behind stacks a copy per rebuild. The scrollbars and
+     * their corner are shadow parts, never light children, so nothing the panel owns is swept out.</p>
      */
     public void clearRows() {
-        for (UIElement child : new ArrayList<>(children())) {
-            if (child instanceof Configurator || child instanceof ConfiguratorGroup) {
-                remove(child);
-            }
-        }
+        removeAll();
         controls.clear();
     }
 
