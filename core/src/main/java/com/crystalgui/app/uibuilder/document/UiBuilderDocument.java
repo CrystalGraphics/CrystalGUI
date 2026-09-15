@@ -61,6 +61,8 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
 
     public UiBuilderDocument(byte[] bytes, String origin) {
         this.origin = origin;
+        // No merge window: a value edit merges only inside a held gesture. @see #mergeable
+        history().setMergeWindowMillis(0L);
         adopt(bytes);
     }
 

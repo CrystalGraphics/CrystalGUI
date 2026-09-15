@@ -1,38 +1,63 @@
 package com.crystalgui.app.uibuilder;
 
-import java.util.List;
-import java.util.function.Function;
-import java.util.function.Supplier;
-import dev.vfyjxf.taffy.geometry.FloatRect;
-import com.crystalgui.ui.box.Box;
-import com.crystalgui.style.property.StyleProperty;
-import com.crystalgui.style.ComputedStyle;
-import com.crystalgui.style.property.layout.LayoutProperties;
-import com.crystalgui.style.PseudoClasses;
-import com.crystalgui.app.uibuilder.inspect.MatchedRules;
-import com.crystalgui.app.uibuilder.inspect.LiveEdits;
-import java.util.Locale;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonPrimitive;
+
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
+import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.inspect.BoxModelEditor;
+import com.crystalgui.app.uibuilder.inspect.HeaderFields;
+import com.crystalgui.app.uibuilder.inspect.LiveEdits;
+import com.crystalgui.app.uibuilder.inspect.MatchedRules;
+import com.crystalgui.app.uibuilder.inspect.NodeFields;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.property.Property;
+import com.crystalgui.serialization.JsonOps;
+import com.crystalgui.serialization.style.InlineStyleCodec;
+import com.crystalgui.style.PseudoClasses;
+import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.selector.CompoundSelector;
+import com.crystalgui.style.selector.SelectorType;
+import com.crystalgui.style.sheet.StyleRule;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.theme.ThemeRegistry;
+import com.crystalgui.style.theme.UiTheme;
 import com.crystalgui.template.TemplateInstance;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.ClassNames;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.config.ConfigForm;
+import com.crystalgui.widget.config.Configurator;
+import com.crystalgui.widget.config.ValueControl;
+import com.crystalgui.widget.config.control.ClassChips;
 import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.surface.extension.SectionSet;
 
 /**
- * What the inspector shows for a UI document — the Element tab.
+ * What the inspector shows for a UI document — the Element, Style, Layout and Document tabs.
  *
  * <p>Shaped on {@code ShaderInspectorSections} and keeping its three rules. <b>Instances, not
  * factories</b>: a section reads its subject out of the context and holds nothing, so one instance serves
@@ -42,7 +67,12 @@ import com.crystalgui.widget.surface.extension.SectionSet;
  * engine's design — the graph learned that when four sections were four answers to one question and a
  * marquee that caught a wire rendered two stacked panels.</p>
  *
- * <p>READ ONLY at L3.6. Every row here states what is; the editing half is L4.9.</p>
+ * <p><b>A row edits only when there is a document to write into</b> — {@link NodeFields#of} answers — and
+ * the node is in it. Over a live pick every row states what is, as before: there is nothing to save to.</p>
+ *
+ * <p>{@code subjectKey} is the identity of what is described, never a version: an edit made through a row
+ * must not rebuild the form under the pointer. Each control follows the document through its own
+ * property instead.</p>
  */
 public final class BuilderInspectorSections {
 
@@ -55,15 +85,32 @@ public final class BuilderInspectorSections {
 
     public static final String LAYOUT_TAB = "Layout";
 
+    public static final String DOCUMENT_TAB = "Document";
+
+    /** On a row whose value was set — Unity's override bar: the rows a node changes stand out. */
+    public static final String SET_CLASS = "__set__";
+
+    /** The attributes worth a row of their own; the rest fold under Advanced. */
+    private static final List<Attribute<?>> COMMON_ATTRIBUTES =
+            List.of(Attribute.ENABLED, Attribute.HIDDEN, Attribute.HIT_TEST, Attribute.FOCUS_POLICY);
+
+    /** Labels for names too long for the label column; the rest are the name made readable. */
+    private static final Map<String, String> SHORT_LABELS = Map.of(
+            "keeps-modifier-press", "Keeps modifiers",
+            "session-persistent", "Session persist",
+            "focus-policy", "Focus");
+
     /** What the current selection IS, decided once so no two sections can both claim it. */
     private enum Subject {
         NONE, CANVAS, NODE, MULTI, INSTANCE
     }
 
     private static final SectionSet SECTIONS = SectionSet.of(
-            new NodeSection(), new AttributesSection(), new StateSection(), new ForcedStatesSection(),
+            new NodeSection(), new MultiNodeSection(), new AttributesSection(), new StateSection(),
+            new ForcedStatesSection(),
             new MatchedRulesSection(), new InlineStyleSection(), new ComputedSection(),
-            new BoxModelSection(), new FlexContextSection());
+            new BoxModelSection(), new FlexContextSection(),
+            new CanvasSection(), new DocumentSheetsSection(), new ExportSection());
 
     /**
      * Registers the sections, counted.
@@ -102,8 +149,33 @@ public final class BuilderInspectorSections {
         return selection == null ? null : selection.node();
     }
 
+    /** The fields for {@code node} when it can be edited, else null — a live pick, or a node of another tree. */
+    @Nullable
+    private static NodeFields editable(DataContext context, @Nullable UIElement node) {
+        NodeFields fields = NodeFields.of(context);
+        return fields != null && fields.owns(node) ? fields : null;
+    }
+
+    /** Shared by every section that describes one node. */
+    private abstract static class NodeAware implements InspectorSection {
+
+        @Override
+        public boolean accepts(DataContext context) {
+            Subject subject = subject(context);
+            return subject == Subject.NODE || subject == Subject.INSTANCE;
+        }
+
+        @Override
+        public String subjectKey(DataContext context) {
+            UIElement node = node(context);
+            return getClass().getSimpleName() + ":" + (node == null ? "" : System.identityHashCode(node));
+        }
+    }
+
+    // ── Element ─────────────────────────────────────────────────────────────
+
     /** Describes ONE node: what kind it is, and how it is identified. */
-    private static final class NodeSection implements InspectorSection {
+    private static final class NodeSection extends NodeAware {
 
         @Override
         public String tab() {
@@ -116,30 +188,28 @@ public final class BuilderInspectorSections {
         }
 
         @Override
-        public boolean accepts(DataContext context) {
-            Subject subject = subject(context);
-            return subject == Subject.NODE || subject == Subject.INSTANCE;
-        }
-
-        @Override
-        public String subjectKey(DataContext context) {
-            UIElement node = node(context);
-            return "uibuilder.node:" + (node == null ? "" : System.identityHashCode(node));
-        }
-
-        @Override
         public void build(ConfigForm form, DataContext context) {
             UIElement node = node(context);
             if (node == null) return;
             // A ROW, as `header` makes one, so the band's rules reach it.
             form.control("kind", "", new KindHeader(node));
-            live(form, "id", "id", () -> node.getId() == null ? "" : node.getId());
-            live(form, "classes", "classes", () -> String.join(" ", node.classes()));
+            NodeFields fields = editable(context, node);
+            if (fields == null) {
+                live(form, "id", "Id", () -> node.getId() == null ? "" : node.getId());
+                live(form, "classes", "Classes", () -> String.join(" ", ClassNames.authored(node.classes())));
+                return;
+            }
+            form.prop(ConfigDescriptor.text("id", "Id")
+                            .tooltip("id")
+                            .description("What #id selectors and code find it by. Letters, digits, - and _, and no other element's.")
+                            .validator(id -> fields.idProblem(node, id) == null),
+                    fields.id(node));
+            form.control("classes", "Classes", classChips("classes", node, fields.classes(node)));
         }
     }
 
-    /** Every attribute the node actually carries — the ones it was given, not every one it could have. */
-    private static final class AttributesSection implements InspectorSection {
+    /** Every attribute a node can carry — the ones set, and the ones at their initial, to set from. */
+    private static final class AttributesSection extends NodeAware {
 
         @Override
         public String tab() {
@@ -148,21 +218,14 @@ public final class BuilderInspectorSections {
 
         @Override
         public int order() {
-            return 20;
+            return 30;
         }
 
         @Override
         public boolean accepts(DataContext context) {
-            Subject subject = subject(context);
-            if (subject != Subject.NODE && subject != Subject.INSTANCE) return false;
+            if (!super.accepts(context)) return false;
             UIElement node = node(context);
-            return node != null && !node.setAttributes().isEmpty();
-        }
-
-        @Override
-        public String subjectKey(DataContext context) {
-            UIElement node = node(context);
-            return "uibuilder.attributes:" + (node == null ? "" : System.identityHashCode(node));
+            return node != null && (editable(context, node) != null || !node.setAttributes().isEmpty());
         }
 
         @Override
@@ -170,8 +233,21 @@ public final class BuilderInspectorSections {
             UIElement node = node(context);
             if (node == null) return;
             form.header("Attributes");
-            for (Attribute<?> attribute : node.setAttributes()) {
-                live(form, "attr." + attribute.name(), attribute.name(), () -> String.valueOf(node.get(attribute)));
+            NodeFields fields = editable(context, node);
+            if (fields == null) {
+                for (Attribute<?> attribute : node.setAttributes()) {
+                    live(form, "attr." + attribute.name(), labelOf(attribute), () -> String.valueOf(node.get(attribute)));
+                }
+                return;
+            }
+            // THE FOUR A DESIGNER SETS, then everything else folded away: most carried attributes are engine and
+            // workbench plumbing, and a panel listing them all buries the ones that matter.
+            ConfigForm advanced = null;
+            for (Attribute<?> attribute : COMMON_ATTRIBUTES) attributeRow(form, fields, node, attribute);
+            for (Attribute<?> attribute : editableAttributes()) {
+                if (COMMON_ATTRIBUTES.contains(attribute)) continue;
+                if (advanced == null) advanced = form.group("Advanced", true);
+                attributeRow(advanced, fields, node, attribute);
             }
         }
     }
@@ -193,7 +269,7 @@ public final class BuilderInspectorSections {
 
         @Override
         public int order() {
-            return 30;
+            return 20;
         }
 
         @Override
@@ -213,25 +289,136 @@ public final class BuilderInspectorSections {
             WidgetContract<Object> contract = contractOf(node);
             if (node == null || contract == null) return;
             form.header("State");
+            NodeFields fields = editable(context, node);
             for (State<Object, ?> state : ordered(contract)) {
-                live(form, "state." + state.key(), state.key(), () -> String.valueOf(state.read(node)));
+                if (fields == null) {
+                    live(form, "state." + state.key(), NodeFields.humanize(state.key()), () -> String.valueOf(state.read(node)));
+                } else {
+                    NodeFields.Field field = fields.state(node, state);
+                    Configurator row = prop(form, field.descriptor(), field.value());
+                    UIElement pristine = pristineOf(node);
+                    markSet(row, () -> !Objects.deepEquals(state.read(node),
+                            pristine == null ? state.fallback() : state.read(pristine)));
+                }
             }
         }
     }
 
-    /** Shared by every section that describes one node. */
-    private abstract static class NodeAware implements InspectorSection {
+    /**
+     * Several nodes at once: what they are, and what they share — Figma's and Unity's multi-selection.
+     *
+     * <p>A class listed is one every node has; removing it removes it from all, adding one adds it to all.
+     * An attribute row shows the first node's value and a set writes every node; the attributes whose values
+     * differ are listed above them. Each change is one undo step for the lot.</p>
+     */
+    private static final class MultiNodeSection implements InspectorSection {
+
+        @Override
+        public String tab() {
+            return ELEMENT_TAB;
+        }
+
+        @Override
+        public int order() {
+            return 10;
+        }
 
         @Override
         public boolean accepts(DataContext context) {
-            Subject subject = subject(context);
-            return subject == Subject.NODE || subject == Subject.INSTANCE;
+            return subject(context) == Subject.MULTI;
         }
 
         @Override
         public String subjectKey(DataContext context) {
-            UIElement node = node(context);
-            return getClass().getSimpleName() + ":" + (node == null ? "" : System.identityHashCode(node));
+            BuilderSelection selection = selection(context);
+            StringBuilder key = new StringBuilder("uibuilder.multi:");
+            if (selection != null) {
+                for (UIElement node : selection.nodes()) key.append(System.identityHashCode(node)).append(',');
+            }
+            return key.toString();
+        }
+
+        @Override
+        public void build(ConfigForm form, DataContext context) {
+            BuilderSelection selection = selection(context);
+            if (selection == null) return;
+            List<UIElement> nodes = selection.nodes();
+            form.header(nodes.size() + " elements");
+            Set<String> kinds = new LinkedHashSet<>();
+            for (UIElement node : nodes) kinds.add(node.tagName());
+            form.row(ConfigDescriptor.info("multi.kinds", "Kinds").tooltip("kinds")
+                    .description("What the selected elements are."), String.join(", ", kinds));
+
+            NodeFields fields = NodeFields.of(context);
+            if (fields == null) return;
+            for (UIElement node : nodes) {
+                if (!fields.owns(node)) return;
+            }
+            form.control("multi.classes", "Shared classes", classChips("multi.classes", nodes.get(0), sharedClasses(nodes, fields)));
+
+            form.header("Attributes");
+            form.prop(ConfigDescriptor.info("multi.mixed", "Differ").tooltip("differ")
+                    .description("The attributes whose values are not the same on every selected element."), Property.derived(() -> {
+                List<String> mixed = new ArrayList<>();
+                for (Attribute<?> attribute : editableAttributes()) {
+                    for (UIElement node : nodes) {
+                        if (!Objects.equals(node.get(attribute), nodes.get(0).get(attribute))) {
+                            mixed.add(attribute.name());
+                            break;
+                        }
+                    }
+                }
+                return mixed.isEmpty() ? "none" : String.join(", ", mixed);
+            }));
+            ConfigForm advanced = null;
+            List<Attribute<?>> ordered = new ArrayList<>(COMMON_ATTRIBUTES);
+            for (Attribute<?> attribute : editableAttributes()) if (!ordered.contains(attribute)) ordered.add(attribute);
+            for (Attribute<?> attribute : ordered) {
+                NodeFields.Field first = fields.attribute(nodes.get(0), attribute, labelOf(attribute));
+                if (first.descriptor().kind() == ConfigDescriptor.Kind.INFO) continue;
+                ConfigForm into = form;
+                if (!COMMON_ATTRIBUTES.contains(attribute)) {
+                    if (advanced == null) advanced = form.group("Advanced", true);
+                    into = advanced;
+                }
+                attribute(into, new NodeFields.Field(first.descriptor(), allOf(first, nodes, attribute, fields)));
+            }
+        }
+
+        /** The classes all of {@code nodes} have; a change adds or removes on each, as one step. */
+        private static Property<List<String>> sharedClasses(List<UIElement> nodes, NodeFields fields) {
+            Supplier<List<String>> shared = () -> {
+                List<String> common = new ArrayList<>(ClassNames.authored(nodes.get(0).classes()));
+                for (UIElement node : nodes) common.retainAll(node.classes());
+                return common;
+            };
+            return fields.bindAll("set classes", shared, wanted -> {
+                List<String> was = shared.get();
+                List<BuilderEdit> edits = new ArrayList<>();
+                for (UIElement node : nodes) {
+                    List<String> before = ClassNames.authored(node.classes());
+                    List<String> after = new ArrayList<>(before);
+                    after.removeIf(name -> was.contains(name) && !wanted.contains(name));
+                    for (String name : wanted) if (!after.contains(name)) after.add(name);
+                    if (!after.equals(before)) edits.add(new BuilderEdit.SetClasses(node, before, after));
+                }
+                return edits;
+            });
+        }
+
+        /** The first node's attribute row, written to every node as one step. */
+        @SuppressWarnings("unchecked")
+        private static Property<?> allOf(NodeFields.Field first, List<UIElement> nodes, Attribute<?> attribute,
+                                         NodeFields fields) {
+            Property<Object> read = (Property<Object>) first.value();
+            return fields.bindAll("set " + attribute.name(), read::get, value -> {
+                List<BuilderEdit> edits = new ArrayList<>();
+                for (UIElement node : nodes) {
+                    BuilderEdit edit = fields.attributeEdit(node, attribute, value);
+                    if (edit != null) edits.add(edit);
+                }
+                return edits;
+            });
         }
     }
 
@@ -265,12 +452,17 @@ public final class BuilderInspectorSections {
             form.header("Force state");
             for (PseudoClasses pseudo : FORCEABLE) {
                 String name = ":" + pseudo.name().toLowerCase(Locale.ROOT).replace("_", "-");
-                form.prop(ConfigDescriptor.bool("force" + pseudo.name(), name),
+                form.prop(ConfigDescriptor.bool("force" + pseudo.name(), name)
+                                .tooltip(name)
+                                .description("Styles the element as if it were " + name.substring(1)
+                                        + ", so its rules can be seen. Shown only, never saved."),
                         Property.derived(() -> Boolean.TRUE.equals(node.forcedState(pseudo)),
                                 on -> node.forceState(pseudo, Boolean.TRUE.equals(on) ? Boolean.TRUE : null)));
             }
         }
     }
+
+    // ── Style ───────────────────────────────────────────────────────────────
 
     /** Every rule that reached this element, weakest first, with the beaten ones marked. */
     private static final class MatchedRulesSection extends NodeAware {
@@ -308,10 +500,10 @@ public final class BuilderInspectorSections {
     }
 
     /**
-     * What has been set inline on this element, editable — and gone at the next launch.
+     * What has been set inline on this element, editable.
      *
-     * <p>Unity's caveat, stated where it applies: a live pick has no document behind it, so an edit here
-     * changes the running screen and nothing else.</p>
+     * <p>In a document an edit is a {@code SetInlineStyle} and is saved. Over a live pick it changes the
+     * running screen and nothing else — Unity's caveat, stated in the header where it applies.</p>
      */
     private static final class InlineStyleSection extends NodeAware {
 
@@ -335,11 +527,19 @@ public final class BuilderInspectorSections {
             }
             if (inline.isEmpty()) return;
 
-            form.header("Inline (this session only)");
+            NodeFields fields = editable(context, node);
+            form.header(fields == null ? "Inline (this session only)" : "Inline");
             for (StyleProperty<?> property : inline) {
-                form.prop(ConfigDescriptor.text("inline." + property.name, property.name),
-                        Property.derived(() -> String.valueOf(node.getStyle().getComputed(cast(property))),
-                                value -> LiveEdits.setInline(node, cast(property), value)));
+                Supplier<String> read = () -> String.valueOf(node.getStyle().getComputed(cast(property)));
+                form.prop(ConfigDescriptor.text("inline." + property.name, property.name).tooltip(property.name)
+                        .description("Set on this element itself, which beats every stylesheet rule."), fields == null
+                        ? Property.derived(read, value -> LiveEdits.setInline(node, cast(property), value))
+                        : fields.bind(read, value -> {
+                            JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+                            if (!LiveEdits.setInline(node, cast(property), value)) return null;
+                            JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+                            return after.equals(was) ? null : new BuilderEdit.SetInlineStyle(node, was, after);
+                        }));
             }
         }
     }
@@ -375,8 +575,11 @@ public final class BuilderInspectorSections {
         }
     }
 
+    // ── Layout ──────────────────────────────────────────────────────────────
+
     /**
-     * The four box-model edges, as the layout RESOLVED them.
+     * The four box-model edges as the layout resolved them, as DevTools draws them — and in a document,
+     * each editable in place.
      *
      * <p>Null-safe by construction: a node that is hidden, frozen or not laid out yet has no box at all,
      * which is an ordinary state rather than an error.</p>
@@ -398,16 +601,8 @@ public final class BuilderInspectorSections {
             UIElement node = node(context);
             if (node == null) return;
             form.header("Box");
-            live(form, "box.size", "size", () -> ofBox(node, box -> round(box.width()) + " x " + round(box.height())));
-            live(form, "box.margin", "margin", () -> ofBox(node, box -> edges(box.margin())));
-            live(form, "box.border", "border", () -> ofBox(node, box -> edges(box.border())));
-            live(form, "box.padding", "padding", () -> ofBox(node, box -> edges(box.padding())));
-            // THE CONTENT BOX, not contentWidth(): those are different questions and this panel is
-            // asking the box model's. contentWidth() is the extent of what is INSIDE, which for a leaf
-            // that draws its own glyphs is zero -- so a text node reported "0.0 x 0.0" for a row every
-            // reader takes to mean the box its text is laid out in.
-            live(form, "box.content", "content",
-                    () -> ofBox(node, box -> round(box.contentBoxWidth()) + " x " + round(box.contentBoxHeight())));
+            NodeFields fields = editable(context, node);
+            form.custom(new BoxModelEditor(node, fields == null ? null : fields.document()));
         }
     }
 
@@ -438,14 +633,143 @@ public final class BuilderInspectorSections {
             // cascade SLOT and is null when no rule declared the property -- true, and not the question:
             // every one of these has an initial the layout actually uses, so three untouched defaults
             // were reported as three nulls.
-            live(form, "flex.direction", "parent direction",
-                    () -> String.valueOf(parent.getStyle().computed().get(LayoutProperties.FLEX_DIRECTION)));
-            live(form, "flex.grow", "grow",
-                    () -> String.valueOf(node.getStyle().computed().get(LayoutProperties.FLEX_GROW)));
-            live(form, "flex.shrink", "shrink",
-                    () -> String.valueOf(node.getStyle().computed().get(LayoutProperties.FLEX_SHRINK)));
+            form.prop(ConfigDescriptor.info("flex.direction", "Parent direction").tooltip("flex-direction")
+                            .description("Whether the parent lays its children out in a row or a column."),
+                    Property.derived(() -> String.valueOf(parent.getStyle().computed().get(LayoutProperties.FLEX_DIRECTION))));
+            form.prop(ConfigDescriptor.info("flex.grow", "Grow").tooltip("flex-grow")
+                            .description("How much of the parent's spare room this takes, against its siblings."),
+                    Property.derived(() -> String.valueOf(node.getStyle().computed().get(LayoutProperties.FLEX_GROW))));
+            form.prop(ConfigDescriptor.info("flex.shrink", "Shrink").tooltip("flex-shrink")
+                            .description("How much this gives up when the parent is too small. 0 here by default, unlike the web."),
+                    Property.derived(() -> String.valueOf(node.getStyle().computed().get(LayoutProperties.FLEX_SHRINK))));
         }
     }
+
+    // ── Document ────────────────────────────────────────────────────────────
+
+    /** Shared by the sections describing the document itself, shown when the canvas is selected. */
+    private abstract static class DocumentAware implements InspectorSection {
+
+        @Override
+        public String tab() {
+            return DOCUMENT_TAB;
+        }
+
+        @Override
+        public boolean accepts(DataContext context) {
+            return subject(context) == Subject.CANVAS && context.get(BuilderEditor.UI_DOCUMENT) != null;
+        }
+
+        @Override
+        public String subjectKey(DataContext context) {
+            UiBuilderDocument document = context.get(BuilderEditor.UI_DOCUMENT);
+            return getClass().getSimpleName() + ":" + (document == null ? "" : System.identityHashCode(document));
+        }
+
+        @Override
+        public void build(ConfigForm form, DataContext context) {
+            UiBuilderDocument document = context.get(BuilderEditor.UI_DOCUMENT);
+            if (document != null) build(form, document);
+        }
+
+        abstract void build(ConfigForm form, UiBuilderDocument document);
+    }
+
+    /**
+     * How the document is previewed by default — its sizes, scale and theme, the header's {@code preview}.
+     *
+     * <p>The toolbar's choices are the viewer's and are never saved; these are what a document opens with.</p>
+     */
+    private static final class CanvasSection extends DocumentAware {
+
+        @Override
+        public int order() {
+            return 10;
+        }
+
+        @Override
+        void build(ConfigForm form, UiBuilderDocument document) {
+            form.header("Canvas");
+            HeaderFields header = HeaderFields.on(document);
+            form.prop(ConfigDescriptor.of("canvas.sizes", "Sizes", ConfigDescriptor.Kind.ARRAY)
+                            .element(ConfigDescriptor.text("canvas.size", "").validator(text -> HeaderFields.parseSize(text) != null))
+                            .tooltip("preview.sizes")
+                            .description("Sizes to preview at, as width x height. The first is the artboard's."),
+                    header.preview(() -> sizesOf(header), BuilderInspectorSections::sizesJson, "sizes"));
+            form.prop(ConfigDescriptor.number("canvas.uiScale", "UI scale").range(1f, 4f).integral(true)
+                            .tooltip("preview.uiScale")
+                            .description("How many screen pixels one pixel of the design is, when the document opens."),
+                    header.preview(() -> {
+                        JsonElement scale = header.previewKey("uiScale");
+                        return scale != null && scale.isJsonPrimitive() ? scale.getAsDouble() : 1d;
+                    }, scale -> new JsonPrimitive(Math.max(1, Math.round(scale))), "uiScale"));
+            List<String> themes = new ArrayList<>();
+            themes.add("");
+            for (UiTheme theme : ThemeRegistry.themes()) themes.add(theme.id());
+            form.prop(ConfigDescriptor.select("canvas.theme", "Theme", themes)
+                            .tooltip("preview.theme")
+                            .description("The theme the document opens in. Empty keeps the workbench's."),
+                    header.previewText("theme"));
+        }
+
+        private static List<Object> sizesOf(HeaderFields header) {
+            List<Object> out = new ArrayList<>();
+            JsonElement sizes = header.previewKey("sizes");
+            if (sizes == null || !sizes.isJsonArray()) return out;
+            for (JsonElement each : sizes.getAsJsonArray()) {
+                if (!each.isJsonArray() || each.getAsJsonArray().size() < 2) continue;
+                JsonArray pair = each.getAsJsonArray();
+                out.add(Math.round(pair.get(0).getAsFloat()) + "x" + Math.round(pair.get(1).getAsFloat()));
+            }
+            return out;
+        }
+    }
+
+    /** The sheets the document names, in cascade order — the header's {@code stylesheets}. */
+    private static final class DocumentSheetsSection extends DocumentAware {
+
+        @Override
+        public int order() {
+            return 20;
+        }
+
+        @Override
+        void build(ConfigForm form, UiBuilderDocument document) {
+            form.header("Stylesheets");
+            form.prop(ConfigDescriptor.of("document.sheets", "Sheets", ConfigDescriptor.Kind.ARRAY)
+                            .element(ConfigDescriptor.text("document.sheet", ""))
+                            .tooltip("stylesheets")
+                            .description("The stylesheets this document is drawn with, as namespace:path. A later sheet wins over an earlier one."),
+                    HeaderFields.on(document).strings("stylesheets"));
+        }
+    }
+
+    /**
+     * What the Java exporter reads — the model class, the package, and the kind name a template registers
+     * under. <i>Export…</i> itself is L8.2.
+     */
+    private static final class ExportSection extends DocumentAware {
+
+        @Override
+        public int order() {
+            return 30;
+        }
+
+        @Override
+        void build(ConfigForm form, UiBuilderDocument document) {
+            form.header("Export");
+            headerText(form, document, "model", "Model class", "The class a networked export binds its fields to.");
+            headerText(form, document, "package", "Package", "The Java package the generated class goes in.");
+            headerText(form, document, "kind-name", "Kind name", "A namespace:name tag, so other documents can place this one by it.");
+        }
+
+        private static void headerText(ConfigForm form, UiBuilderDocument document, String key, String label, String description) {
+            form.prop(ConfigDescriptor.text("export." + key, label).tooltip(key).description(description),
+                    HeaderFields.on(document).text(key));
+        }
+    }
+
+    // ── Shared ──────────────────────────────────────────────────────────────
 
     /**
      * A fact that follows what it describes.
@@ -459,19 +783,114 @@ public final class BuilderInspectorSections {
         form.prop(ConfigDescriptor.info(id, label), Property.derived(value));
     }
 
-    /** A box's answer, or what a node with no box has instead. */
-    private static String ofBox(UIElement node, Function<Box, String> read) {
-        Box box = node.box();
-        return box == null ? "not laid out" : read.apply(box);
+    @SuppressWarnings("unchecked")
+    private static Configurator prop(ConfigForm form, ConfigDescriptor descriptor, Property<?> value) {
+        return form.prop(descriptor, (Property<Object>) value);
     }
 
-    private static String edges(FloatRect rect) {
-        return round(rect.top) + " " + round(rect.right) + " "
-                + round(rect.bottom) + " " + round(rect.left);
+    private static Configurator attribute(ConfigForm form, NodeFields.Field field) {
+        return prop(form, field.descriptor(), field.value());
     }
 
-    private static String round(float value) {
-        return String.valueOf(Math.round(value * 100f) / 100f);
+    private static void attributeRow(ConfigForm form, NodeFields fields, UIElement node, Attribute<?> attribute) {
+        Configurator row = attribute(form, fields.attribute(node, attribute, labelOf(attribute)));
+        UIElement pristine = pristineOf(node);
+        markSet(row, () -> !Objects.equals(node.get(attribute), pristine == null ? attribute.initial() : pristine.get(attribute)));
+    }
+
+    private static String labelOf(Attribute<?> attribute) {
+        return SHORT_LABELS.getOrDefault(attribute.name(), NodeFields.humanize(attribute.name()));
+    }
+
+    /** One untouched instance per kind, what "set" is measured against. */
+    private static final Map<Name, UIElement> PRISTINE = new HashMap<>();
+
+    /**
+     * A fresh node of {@code node}'s kind, or null when the kind cannot be built.
+     *
+     * <p>"Set" means different from what this KIND starts with, not from the attribute's global initial: a
+     * Button takes click focus in its own constructor, and marking that row would mark every button.</p>
+     */
+    @Nullable
+    private static UIElement pristineOf(UIElement node) {
+        Name kind = node.name();
+        if (!UIElementRegistry.isBuildable(kind)) return null;
+        return PRISTINE.computeIfAbsent(kind, UIElementRegistry::create);
+    }
+
+    /** Marks a row while {@code isSet} holds, following the value as it changes. */
+    private static void markSet(Configurator row, Supplier<Boolean> isSet) {
+        Runnable follow = () -> {
+            if (isSet.get()) row.addClass(SET_CLASS);
+            else row.removeClass(SET_CLASS);
+        };
+        follow.run();
+        if (row.control() instanceof ValueControl<?> control) {
+            control.property().changed.connect((was, now) -> follow.run());
+        }
+    }
+
+    /** The attributes a person edits: every carried one. */
+    private static List<Attribute<?>> editableAttributes() {
+        List<Attribute<?>> out = new ArrayList<>();
+        for (Attribute<?> attribute : Attribute.declared()) {
+            if (attribute.isCarried()) out.add(attribute);
+        }
+        return out;
+    }
+
+    /** Chips over {@code value}, completing from the classes the window's sheets mention. */
+    @SuppressWarnings("unchecked")
+    private static ClassChips classChips(String id, UIElement node, Property<List<String>> value) {
+        ClassChips chips = new ClassChips(ConfigDescriptor.of(id, "Classes", ConfigDescriptor.Kind.ARRAY)
+                .tooltip("class")
+                .description("The names .class selectors match. An outlined chip is a class no sheet mentions."), value.get());
+        chips.setAccepts(name -> !ClassNames.isEngine(name) && name.matches("[\\w-]+"));
+        // ONCE PER FORM: every rule of every installed sheet is walked, and the flag is asked per chip per redraw.
+        // The sheets do not change while a form is on screen; a rebuild asks again.
+        Set<String>[] known = new Set[1];
+        Supplier<Set<String>> names = () -> known[0] != null ? known[0] : (known[0] = sheetClassNames(node));
+        chips.setSuggestions(names);
+        chips.setFlagged(name -> !names.get().isEmpty() && !names.get().contains(name));
+        chips.bind(value);
+        return chips;
+    }
+
+    /**
+     * Every class a sheet installed on {@code node}'s window mentions in a selector, the engine's left out.
+     * Empty when the node is in no window, which flags nothing.
+     */
+    public static Set<String> sheetClassNames(UIElement node) {
+        Set<String> names = new LinkedHashSet<>();
+        UIDocument window = node.document();
+        if (window == null) return names;
+        for (StyleSheet sheet : window.styles().getSheets()) {
+            for (StyleRule rule : sheet.getRules()) {
+                for (CompoundSelector compound : rule.selector().compounds()) {
+                    for (CompoundSelector.Part part : compound.parts()) {
+                        if (part.type() == SelectorType.CLASS && !ClassNames.isEngine(part.identity())) {
+                            names.add(part.identity());
+                        }
+                    }
+                }
+            }
+        }
+        return names;
+    }
+
+    /** Sizes as the array control holds them, as the header's {@code [[w, h], ...]}; unreadable ones dropped. */
+    @Nullable
+    private static JsonElement sizesJson(List<Object> wanted) {
+        JsonArray sizes = new JsonArray();
+        for (Object each : wanted) {
+            float[] size = HeaderFields.parseSize(String.valueOf(each));
+            if (size == null) continue;
+            JsonArray pair = new JsonArray();
+            pair.add(new JsonPrimitive(size[0]));
+            pair.add(new JsonPrimitive(size[1]));
+            sizes.add(pair);
+        }
+        return sizes.size() == 0 ? null : sizes;
     }
 
     @SuppressWarnings("unchecked")

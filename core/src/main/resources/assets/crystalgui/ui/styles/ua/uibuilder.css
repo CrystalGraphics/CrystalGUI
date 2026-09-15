@@ -777,3 +777,67 @@ smartguides {
     color: var(--builder-tag-fg, #FFFFFF);
     background-color: var(--builder-guide, #F5555D);
 }
+
+
+/* ── The inspector's box model ──────────────────────────────────────────────────────────────────
+ * DevTools' metrics diagram: margin around border around padding around the content size, a number on
+ * every edge. The layers are told apart by an outline in DevTools' order of hues — margin warm, padding
+ * green, content blue — rather than by fills, which on a dark panel read as four shades of the same grey.
+ * A value set inline is bold, and a double-click turns it into a field. */
+.__boxmodel__ {
+    width: 100%;
+    padding-block: 4px;
+}
+.__boxmodel__ .__bm-layer__ {
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    padding: 1px 4px 2px 4px;
+    border-radius: var(--radius-control, 3px);
+    outline: 1px var(--border-base, #393B40);
+}
+.__boxmodel__ .__bm-margin__ { outline: 1px var(--warning, #CCA700); }
+.__boxmodel__ .__bm-border__ { outline: 1px var(--border-strong, #5A5D63); background: var(--surface-recessed, #131416); }
+.__boxmodel__ .__bm-padding__ { outline: 1px var(--success, #3C8527); }
+.__boxmodel__ .__bm-row__ {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+.__boxmodel__ .__bm-row__ > .__bm-layer__,
+.__boxmodel__ .__bm-row__ > .__bm-content__ {
+    width: 0;
+    flex-grow: 1;
+}
+.__boxmodel__ .__bm-content__ {
+    height: 22px;
+    border-radius: var(--radius-control, 3px);
+    outline: 1px var(--info, #3794FF);
+    background: var(--accent-soft, #2E436E);
+}
+/* The layer's name sits in its top-left corner, out of the flow, so the top value stays centred. */
+.__boxmodel__ .__bm-head__ { position: relative; }
+.__boxmodel__ .__bm-head__ > .__bm-label__ {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+.__boxmodel__ .__bm-label__ { color: var(--fg-hint, #7A7A7A); font-size: 8; }
+.__boxmodel__ .__bm-value__ {
+    min-width: 14px;
+    text-align: center;
+    color: var(--fg-secondary, #9DA0A8);
+    cursor: text;
+}
+.__boxmodel__ .__bm-value__.__authored__ { color: var(--fg, #DFE1E5); font-weight: bold; }
+.__boxmodel__ .__bm-editor__ { width: 36px; height: 14px; }
+
+/* A ROW THIS NODE SETS — Unity's override marker: a bold label and an accent bar at the row's edge, so the
+ * values a node changes are what the eye lands on. The bar is an OUTLINE gradient, which paints and takes
+ * no space, so the label column does not move; a border would, and the engine has no per-edge left colour. */
+.__configurator__.__set__ > .__label__ {
+    font-weight: bold;
+    outline: linear-gradient(to right, var(--accent, #3574F0) 0%, var(--accent, #3574F0) 2%, transparent 2%);
+}

@@ -33,6 +33,9 @@ CLASS	language/run/view/ScriptWorkbench	674	language/run/view	6.7	move	in-place
 CLASS	language/run/view/TailFollow	127	language/run/view	6.7	copy	in-place
 #
 # PART	owner	name	kind	uses	source	why
+PART	(unowned)	bm-border	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	(unowned)	bm-margin	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	(unowned)	bm-padding	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	(unowned)	corner	A	7	proposed	leaf in every rule
 PART	(unowned)	error	A	1	proposed	leaf in every rule
 PART	(unowned)	fill	A	9	proposed	leaf in every rule, scoped by an ancestor in 3
@@ -115,6 +118,15 @@ PART	BlackboardPanel	titles	B	5	confirmed	a rule selects through it (4)
 PART	BooleanControl	boolean	B	11	confirmed	a rule selects through it (10)
 PART	BooleanControl	on	C	3	proposed	state adjective
 PART	BooleanControl	toggle	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	BoxModelEditor	authored	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	BoxModelEditor	bm-content	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	BoxModelEditor	bm-editor	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	BoxModelEditor	bm-head	B	2	proposed	a rule selects through it (1)
+PART	BoxModelEditor	bm-label	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	BoxModelEditor	bm-layer	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	BoxModelEditor	bm-row	B	3	proposed	a rule selects through it (2)
+PART	BoxModelEditor	bm-value	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	BoxModelEditor	boxmodel	B	15	proposed	a rule selects through it (14)
 PART	Breadcrumbs	crumb	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-current	B	0	confirmed	leaf in every rule
 PART	Breadcrumbs	crumb-icon	B	0	confirmed	leaf in every rule
@@ -124,6 +136,7 @@ PART	BuilderInsert	insert-relation	A	0	proposed	leaf in every rule
 PART	BuilderInsert	insert-spacer	A	0	proposed	leaf in every rule
 PART	BuilderInsert	insert-target	A	0	proposed	leaf in every rule
 PART	BuilderInsert	keycap	A	0	proposed	leaf in every rule
+PART	BuilderInspectorSections	set	B	1	proposed	a rule selects through it (1)
 PART	BuilderPane	builder-pane	A	0	proposed	leaf in every rule
 PART	BuilderToolbar	builder-toolbar	A	0	proposed	leaf in every rule
 PART	BuilderToolbar	preview	A	0	proposed	leaf in every rule
@@ -135,6 +148,18 @@ PART	CategoryHeader	arrow	B	4	confirmed	leaf in every rule, scoped by an ancesto
 PART	CategoryHeader	category	B	0	confirmed	leaf in every rule
 PART	CategoryHeader	collapsed	C	5	confirmed	state adjective
 PART	CategoryHeader	name	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	ClassChips	active	C	4	proposed	state adjective
+PART	ClassChips	chip	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ClassChips	chip-hint	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ClassChips	chip-label	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ClassChips	chip-prompt	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ClassChips	chip-remove	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ClassChips	chip-suggestion	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
+PART	ClassChips	chip-suggestions	B	4	proposed	a rule selects through it (3)
+PART	ClassChips	chips	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ClassChips	classchips	B	9	proposed	a rule selects through it (8)
+PART	ClassChips	flagged	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ClassNames	labelled	A	0	proposed	leaf in every rule
 PART	ColorControl	alpha-bar	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ColorControl	alpha-fill	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ColorControl	color	B	4	confirmed	a rule selects through it (4)
@@ -167,15 +192,15 @@ PART	CompletionPopup	completion-mark-static	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-options	B	2	confirmed	leaf in every rule
 PART	CompletionPopup	completion-params	B	2	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	CompletionPopup	completion-row	B	2	confirmed	leaf in every rule
-PART	ConfigControl	config-control	B	79	confirmed	a rule selects through it (68)
+PART	ConfigControl	config-control	B	88	confirmed	a rule selects through it (76)
 PART	Configurator	compact	B	9	proposed	a rule selects through it (8)
-PART	Configurator	configurator	B	18	confirmed	a rule selects through it (16)
+PART	Configurator	configurator	B	19	confirmed	a rule selects through it (17)
 PART	Configurator	inline	C	9	confirmed	state adjective
-PART	Configurator	label	B	8	confirmed	leaf in every rule, scoped by an ancestor in 8
+PART	Configurator	label	B	11	confirmed	leaf in every rule, scoped by an ancestor in 11
 PART	ConfiguratorGroup	arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ConfiguratorGroup	collapsed	C	5	confirmed	state adjective
-PART	ConfiguratorGroup	configurator-group	B	14	confirmed	a rule selects through it (13)
-PART	ConfiguratorGroup	content	B	7	confirmed	a rule selects through it (5)
+PART	ConfiguratorGroup	configurator-group	B	16	confirmed	a rule selects through it (15)
+PART	ConfiguratorGroup	content	B	9	confirmed	a rule selects through it (7)
 PART	ConfiguratorGroup	head	B	6	confirmed	a rule selects through it (3)
 PART	ConfiguratorGroup	title	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	ConfiguratorPanel	configurator-panel	B	1	confirmed	leaf in every rule
@@ -197,7 +222,7 @@ PART	Desktop	windows	B	0	confirmed	leaf in every rule
 PART	Dialog	backdrop	B	0	confirmed	leaf in every rule
 PART	Dialog	close	B	7	confirmed	leaf in every rule, scoped by an ancestor in 7
 PART	Dialog	content	B	0	confirmed	leaf in every rule
-PART	Dialog	label	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
+PART	Dialog	label	B	6	confirmed	leaf in every rule, scoped by an ancestor in 6
 PART	Dialog	open	C	1	confirmed	state adjective
 PART	Dialog	pulse	C	1	confirmed	leaf in every rule
 PART	Dialog	title-bar	B	0	confirmed	leaf in every rule
