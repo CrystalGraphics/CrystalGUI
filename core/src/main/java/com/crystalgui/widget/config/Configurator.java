@@ -116,10 +116,10 @@ public class Configurator extends UIElement {
         if (labelled) append(label);
         append(inline);
 
-        // A ROW'S HINT HANGS FROM ITS CONTROL, a cell's from the whole cell: a toolbar's control is shorter
-        // than the bar, and a tooltip under it would sit over the bar rather than clear it.
-        hint = hintText == null || hintText.isEmpty() ? null
-                : Tooltip.attach(arrangement == Arrangement.COMPACT ? this : control, hintText);
+        // THE WHOLE ROW, label and control: the label is where a reader looks for what a field means, and a
+        // hint only over the control answered nobody pointing at the name. A toolbar's cell is the same shape
+        // for its own reason -- its control is shorter than the bar, and a hint under it would sit over the bar.
+        hint = hintText == null || hintText.isEmpty() ? null : Tooltip.attach(this, hintText);
         if (hint != null) {
             // A FORM'S ROWS ARE CROSSED, not aimed at: the pointer passes over them on its way to one, and a hint
             // arriving at once lands over the next row down. A toolbar's cell is aimed at, and answers at once.
