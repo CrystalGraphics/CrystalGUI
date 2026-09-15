@@ -371,6 +371,83 @@
 .__config-control__.__mask__ .__mask-row__:hover::part(mark) { background: var(--configkit-check-hover-bg, #3A3A3A); }
 .__config-control__.__mask__ .__mask-row__:checked:hover::part(mark) { background: var(--configkit-check-hover-bg, #3A3A3A); }
 
+/* ── Class chips ────────────────────────────────────────────────────────────────────────────────
+ * The names wrap onto as many lines as they need, with the add prompt as the last item in the flow — so a
+ * short list reads as one line and a long one grows the row rather than scrolling inside it. A flagged chip
+ * names a class no sheet mentions: an outline in the warning colour, which a typo should be. */
+.__config-control__.__classchips__ { flex-direction: column; }
+/* THE WELL IS THE FIELD, and the prompt inside it has no frame of its own: one recessed surface holding the
+ * chips and the caret reads as a list you add to, where a bordered prompt beside them read as one more
+ * text field like the rows around it. */
+.__config-control__.__classchips__ .__chips__ {
+    position: relative;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px;
+    width: 100%;
+    min-height: var(--cfg-ctrl-h);
+    padding: 2px;
+    background: var(--cfg-field);
+    border-width: 1px;
+    border-color: var(--configkit-field-border, #343434);
+    border-top-color: var(--cfg-field-border-top);
+    border-bottom-color: var(--cfg-field-border-bottom);
+    border-radius: 4px;
+}
+.__config-control__.__classchips__ .__chip__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    height: 14px;
+    padding-left: 5px;
+    padding-right: 2px;
+    border-radius: var(--radius-control, 3px);
+    background: var(--cfg-field);
+    outline: 1px var(--button-border, #393B40);
+}
+.__config-control__.__classchips__ .__chip__.__flagged__ { outline: 1px var(--warning, #CCA700); }
+.__config-control__.__classchips__ .__chip-label__ { color: var(--fg, #DFE1E5); }
+.__config-control__.__classchips__ .__chip-remove__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    padding: 2px;
+    border-radius: var(--radius-control, 3px);
+    overlay: icon("crystalgui:x");
+    overlay-size: contain;
+    overlay-origin: content-box;
+    color: var(--fg-secondary, #9DA0A8);
+    cursor: pointer;
+}
+.__config-control__.__classchips__ .__chip-remove__:hover {
+    background: var(--configkit-check-hover-bg, #3A3A3A);
+    color: var(--fg, #DFE1E5);
+}
+.__config-control__.__classchips__ .__chip-prompt__ {
+    width: 0;
+    min-width: 40px;
+    flex-grow: 1;
+    height: 14px;
+    min-height: 14px;
+    background: #00000000;
+    border-width: 0px;
+}
+.__config-control__.__classchips__ .__chip-hint__ {
+    position: absolute;
+    left: 6px;
+    top: 3px;
+    color: var(--fg-hint, #7A7A7A);
+}
+.__chip-suggestions__ { padding: 2px; min-width: 120px; }
+.__chip-suggestions__ .__chip-suggestion__ {
+    padding: 2px 6px;
+    border-radius: var(--radius-control, 3px);
+    color: var(--fg, #DFE1E5);
+}
+.__chip-suggestions__ .__chip-suggestion__:hover,
+.__chip-suggestions__ .__chip-suggestion__.__active__ { background: var(--accent-soft, #2E436E); }
+
 /* ── Matrix ─────────────────────────────────────────────────────────────────────────────────────
  * A grid: one row per `.__matrix-row__`, cells stretching evenly across it. Unlabelled by design —
  * see MatrixControl's javadoc on why it self-labels. */

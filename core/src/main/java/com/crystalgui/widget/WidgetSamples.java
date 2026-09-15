@@ -40,6 +40,7 @@ import com.crystalgui.widget.config.control.AnchorControl;
 import com.crystalgui.widget.config.control.ArrayControl;
 import com.crystalgui.widget.config.control.AssetControl;
 import com.crystalgui.widget.config.control.BooleanControl;
+import com.crystalgui.widget.config.control.ClassChips;
 import com.crystalgui.widget.config.control.ColorControl;
 import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.widget.config.control.InfoControl;
@@ -524,6 +525,11 @@ public final class WidgetSamples {
     public static Preview formNote() {
         return Preview.sample(() -> new NoteControl(ConfigDescriptor.note("note"), "Changes apply when saved."))
                 .width(FORM_WIDTH);
+    }
+
+    public static Preview classChipsField() {
+        ConfigDescriptor classes = ConfigDescriptor.of("classes", "Classes", ConfigDescriptor.Kind.ARRAY);
+        return field(classes, () -> new ClassChips(classes, List.of("title", "wide")));
     }
 
     public static Preview maskField() {

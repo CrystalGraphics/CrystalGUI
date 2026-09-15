@@ -22,6 +22,7 @@ import com.crystalgui.widget.config.control.AnchorControl;
 import com.crystalgui.widget.config.control.ArrayControl;
 import com.crystalgui.widget.config.control.AssetControl;
 import com.crystalgui.widget.config.control.BooleanControl;
+import com.crystalgui.widget.config.control.ClassChips;
 import com.crystalgui.widget.config.control.ColorControl;
 import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.widget.config.control.InfoControl;
@@ -338,6 +339,10 @@ public final class Widgets implements NodeKinds {
                 KindInfo.named("Boolean Field").glyphOf(Checkbox.NAME).inCategory(FORMS)
                         .synonyms("checkbox", "bool").describedAs("A labelled on/off field.")
                         .preview(WidgetSamples.booleanField()));
+        UIElementRegistry.register(ClassChips.NAME, ClassChips::new, NodeContract.INERT,
+                KindInfo.named("Class Chips").glyph(GlyphRole.CONTROL).inCategory(FORMS)
+                        .synonyms("tags", "classes", "tokens").describedAs("A list of names as chips, with a prompt that adds more.")
+                        .preview(WidgetSamples.classChipsField()));
         UIElementRegistry.register(ColorControl.NAME, ColorControl::new, NodeContract.INERT,
                 KindInfo.named("Color Field").glyphOf(ColorSelector.NAME).inCategory(FORMS)
                         .synonyms("colour", "swatch").describedAs("A labelled colour field.")
