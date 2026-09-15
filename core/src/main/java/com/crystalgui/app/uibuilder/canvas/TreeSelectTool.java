@@ -28,6 +28,12 @@ public final class TreeSelectTool implements Tool {
 
     private final SelectTool select;
 
+    /** Where a plain press on no node landed, or null — a release near it selects the canvas. */
+    private float[] blankPress;
+
+    /** How far a blank press may travel and still be a click rather than a marquee, in raw pixels. */
+    private static final float CLICK_SLOP = 3f;
+
     public TreeSelectTool(SurfaceContext ctx) {
         this.ctx = ctx;
         this.select = new SelectTool(ctx);
@@ -46,6 +52,7 @@ public final class TreeSelectTool implements Tool {
         // AFTER the selection, so the drag moves what the press just picked -- and only then, because
         // "press an already-selected node and drag them all" is the engine's rule and it has to have run.
         UIElement item = ctx.picking().itemAt(rawX, rawY);
+        blankPress = item == null && modifiers == 0 ? new float[] {rawX, rawY} : null;
         if (MoveOutOfFlow.isMovable(item)) {
             MoveOutOfFlow move = moveGesture();
             return move != null && move.begin(item, rawX, rawY) || consumed;
@@ -61,7 +68,18 @@ public final class TreeSelectTool implements Tool {
 
     @Override
     public boolean pointerUp(float rawX, float rawY, int button, int modifiers) {
-        return select.pointerUp(rawX, rawY, button, modifiers);
+        boolean consumed = select.pointerUp(rawX, rawY, button, modifiers);
+        float[] press = blankPress;
+        blankPress = null;
+        // A CLICK on the page itself selects the document, which is what the Document tab describes — Unity UI
+        // Builder's canvas. A marquee that caught nothing is not a click, and a cleared selection alone is not
+        // one either: an empty selection has to let a live pick through.
+        if (button == CgMouseCodes.LEFT_BUTTON && press != null
+                && Math.abs(rawX - press[0]) <= CLICK_SLOP && Math.abs(rawY - press[1]) <= CLICK_SLOP
+                && ctx instanceof BuilderSurface surface && surface.builderSelection().isEmpty()) {
+            surface.builderSelection().selectCanvas(true);
+        }
+        return consumed;
     }
 
     @Override

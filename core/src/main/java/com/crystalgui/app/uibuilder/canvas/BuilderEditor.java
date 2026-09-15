@@ -23,6 +23,8 @@ import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.serialization.StateMap;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.template.UiTemplates;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -176,6 +178,11 @@ public final class BuilderEditor implements DocumentEditor {
         // is not showing. resync() is a no-op unless the root instance actually changed, which is why it
         // can hang off the ordinary change signal.
         document.onChanged().connect(this::adoptNewTree);
+        // AND THE SHEETS IT NAMES: the Document tab edits the list, and a sheet added there has to restyle the
+        // canvas it is shown beside.
+        document.onChanged().connect(() -> {
+            if (!installedSheetIds.equals(document.stylesheets())) installSheets();
+        });
         // AND SHOW WHAT AN UNDO JUST DID. A reversal you cannot see is indistinguishable from a key that
         // did nothing -- especially on a canvas, where the changed node may be scrolled off or simply
         // one of forty that look alike. Selecting it puts the outline, the handles and the inspector on
@@ -391,8 +398,42 @@ public final class BuilderEditor implements DocumentEditor {
         surface.selection().clear();
     }
 
+    /**
+     * Puts the document's sheets on the window, in the document's order.
+     *
+     * <p>Only the sheets this editor added are taken off again when the list changes: the window is shared,
+     * and a sheet the workbench or another document installed is not this document's to remove.</p>
+     */
     private void installSheets() {
         UIDocument window = surface.document();
-        UiTemplates.installSheets(window, document.stylesheets());
+        if (window == null) return;
+        List<String> wanted = document.stylesheets();
+        for (String id : ownedSheetIds) {
+            StyleSheet sheet = sheetOrNull(id);
+            if (sheet != null) window.styles().removeStylesheet(sheet);
+        }
+        ownedSheetIds.clear();
+        for (String id : wanted) {
+            StyleSheet sheet = sheetOrNull(id);
+            boolean present = sheet != null && window.styles().hasStylesheet(sheet, null);
+            UiTemplates.installSheets(window, List.of(id));
+            if (sheet != null && !present && window.styles().hasStylesheet(sheet, null)) ownedSheetIds.add(id);
+        }
+        installedSheetIds = List.copyOf(wanted);
     }
+
+    @Nullable
+    private static StyleSheet sheetOrNull(String id) {
+        try {
+            return StyleSheetRegistry.of(id);
+        } catch (RuntimeException missing) {
+            return null;
+        }
+    }
+
+    /** The sheet ids last installed, in order — what a document change is compared against. */
+    private List<String> installedSheetIds = List.of();
+
+    /** The ids this editor put on the window itself, and may therefore take off. */
+    private final List<String> ownedSheetIds = new ArrayList<>();
 }

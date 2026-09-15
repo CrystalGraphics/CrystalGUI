@@ -23,6 +23,7 @@ import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -205,5 +206,69 @@ public class UiBuilderDocumentTest {
         assertEquals(800f, board.boardWidth(), 0.001f);
 
         editor.disposeView();
+    }
+
+    // ── L4.9 ────────────────────────────────────────────────────────────────────────────────────
+
+    /** <b>A scrub is one step</b>: sixty writes of one slot inside a held gesture undo to the first value. */
+    @Test
+    public void aHeldRunOfOneSlotIsOneUndoStep() {
+        UiBuilderDocument document = open();
+        UIText title = (UIText) document.root().getElementById("title");
+        String before = encoded(document);
+
+        document.history().beginMergeRun();
+        String previous = "Status";
+        for (int i = 0; i < 60; i++) {
+            String next = "Status " + i;
+            document.apply(new BuilderEdit.SetState(title, "text", new JsonPrimitive(previous), new JsonPrimitive(next)));
+            previous = next;
+        }
+        document.history().endMergeRun();
+
+        assertEquals(1, document.history().undoDepth());
+        document.history().undo();
+        assertEquals(before, encoded(document));
+    }
+
+    /** Two different slots are two steps even inside one gesture, and nothing merges outside one. */
+    @Test
+    public void editsOfDifferentFieldsOrOutsideAGestureStaySeparate() {
+        UiBuilderDocument document = open();
+        UIElement root = document.root();
+
+        document.history().beginMergeRun();
+        document.apply(new BuilderEdit.SetId(root, "root", "page"));
+        document.apply(new BuilderEdit.SetAttribute<>(root, Attribute.HIT_TEST, true, false));
+        document.history().endMergeRun();
+        assertEquals(2, document.history().undoDepth());
+
+        document.apply(new BuilderEdit.SetId(root, "page", "a"));
+        document.apply(new BuilderEdit.SetId(root, "a", "b"));
+        assertEquals("no merge window: typing twice is two steps", 4, document.history().undoDepth());
+    }
+
+    /**
+     * <b>Engine classes are the widget's, not the author's.</b> A labelled button saves without
+     * {@code __labelled__}, a class edit leaves it on the node, and undo does not take it away.
+     */
+    @Test
+    public void engineClassesAreNeitherSavedNorWrittenByAClassEdit() {
+        UIElementRegistry.bootstrap();
+        UiBuilderDocument document = new UiBuilderDocument(("{ \"cgui\": 1, \"root\": { \"kind\": \"element\","
+                + " \"children\": [ { \"kind\": \"button\", \"id\": \"ok\", \"state\": { \"text\": \"OK\" } } ] } }")
+                .getBytes(StandardCharsets.UTF_8), "test:button");
+        UIElement button = document.root().getElementById("ok");
+        assertTrue("the widget labels itself", button.hasClass(Button.LABELLED_CLASS));
+        assertFalse(encoded(document), encoded(document).contains(Button.LABELLED_CLASS));
+
+        document.apply(new BuilderEdit.SetClasses(button, List.copyOf(button.classes()), List.of("primary")));
+        assertTrue(button.hasClass("primary"));
+        assertTrue("left alone", button.hasClass(Button.LABELLED_CLASS));
+        assertFalse(encoded(document).contains(Button.LABELLED_CLASS));
+
+        document.history().undo();
+        assertFalse(button.hasClass("primary"));
+        assertTrue("and undo does not take it either", button.hasClass(Button.LABELLED_CLASS));
     }
 }

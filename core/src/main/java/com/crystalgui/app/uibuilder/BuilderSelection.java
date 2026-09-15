@@ -89,6 +89,7 @@ public final class BuilderSelection {
         if (next.size() == nodes.size() && nodes.containsAll(next)) return;
         nodes.clear();
         nodes.addAll(next);
+        if (!next.isEmpty()) canvasSelected = false;
         changed();
     }
 
@@ -98,6 +99,7 @@ public final class BuilderSelection {
 
     public void add(UIElement node) {
         if (node == null || !nodes.add(node)) return;
+        canvasSelected = false;
         changed();
     }
 
@@ -110,14 +112,16 @@ public final class BuilderSelection {
     public void toggle(UIElement node) {
         if (node == null) return;
         if (!nodes.remove(node)) nodes.add(node);
+        if (!nodes.isEmpty()) canvasSelected = false;
         changed();
     }
 
     public void clear() {
-        if (nodes.isEmpty() && rule == null && token == null) return;
+        if (nodes.isEmpty() && rule == null && token == null && !canvasSelected) return;
         nodes.clear();
         rule = null;
         token = null;
+        canvasSelected = false;
         changed();
     }
 

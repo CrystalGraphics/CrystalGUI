@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.crystalgui.ui.dom.ClassNames;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -66,10 +67,6 @@ public final class NodeSelectors {
     }
 
     private static Set<String> authoredClasses(UIElement node) {
-        Set<String> kept = new LinkedHashSet<>();
-        for (String name : node.getClasses()) {
-            if (!(name.startsWith("__") && name.endsWith("__"))) kept.add(name);
-        }
-        return kept;
+        return new LinkedHashSet<>(ClassNames.authored(node.getClasses()));
     }
 }

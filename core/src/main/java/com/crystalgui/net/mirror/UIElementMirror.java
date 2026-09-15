@@ -117,7 +117,8 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
         Map<T, T> fields = new LinkedHashMap<>();
         fields.put(key(keys.name()), ops.createString(spell(node.name())));
         if (!node.id().isEmpty()) fields.put(key(keys.id()), ops.createString(node.id()));
-        if (!node.classes().isEmpty()) fields.put(key(keys.classes()), ops.createString(String.join(" ", node.classes())));
+        List<String> classes = classesOf(node);
+        if (!classes.isEmpty()) fields.put(key(keys.classes()), ops.createString(String.join(" ", classes)));
         T attributes = attributesOf(node);
         if (attributes != null) fields.put(key(keys.attributes()), attributes);
         // A description carries the whole node, not merely its shape. The order here is FIXED and the
@@ -235,7 +236,7 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
     public T encodeAttributes(UIElement node) {
         Map<T, T> fields = new LinkedHashMap<>();
         fields.put(key(keys.id()), ops.createString(node.id()));
-        fields.put(key(keys.classes()), ops.createString(String.join(" ", node.classes())));
+        fields.put(key(keys.classes()), ops.createString(String.join(" ", classesOf(node))));
         T attributes = attributesOf(node);
         fields.put(key(keys.attributes()), attributes != null ? attributes : ops.createMap(Map.of()));
         return ops.createMap(fields);
@@ -244,6 +245,21 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
     @Override
     public void applyAttributes(T value, UIElement node) {
         applyIdentity(ops.getMapValue(value), node);
+    }
+
+    /**
+     * The classes a description carries: all of them on the wire, the authored ones in a document.
+     *
+     * <p>A widget adds its engine classes itself when it is built, so a file holding them would save widget
+     * state as if an author had written it. A peer on the wire may need a state class, so the wire keeps them.</p>
+     */
+    private List<String> classesOf(UIElement node) {
+        return authoredOnly() ? ClassNames.authored(node.classes()) : List.copyOf(node.classes());
+    }
+
+    /** Whether this dialect leaves engine classes to the widget. Applying one leaves them alone too. */
+    private boolean authoredOnly() {
+        return keys.equals(Keys.DOCUMENT);
     }
 
     @Nullable
@@ -271,6 +287,7 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
             List<String> wanted = new ArrayList<>();
             for (String c : ops.getStringValue(classes).split(" ")) if (!c.isEmpty()) wanted.add(c);
             for (String present : new ArrayList<>(node.classes())) {
+                if (authoredOnly() && ClassNames.isEngine(present)) continue;
                 if (!wanted.contains(present)) node.removeClass(present);
             }
             for (String c : wanted) node.addClass(c);

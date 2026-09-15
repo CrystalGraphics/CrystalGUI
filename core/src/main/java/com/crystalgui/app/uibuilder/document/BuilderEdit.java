@@ -1,6 +1,5 @@
 package com.crystalgui.app.uibuilder.document;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -13,9 +12,11 @@ import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.style.InlineStyleCodec;
+import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.ClassNames;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UINode;
 
@@ -32,6 +33,10 @@ import com.crystalgui.ui.dom.UINode;
  *
  * <p>Each carries <b>both</b> values rather than a closure, so undo is the same code as apply with the
  * arguments swapped, and a record's own {@code equals} says whether two edits are the same change.</p>
+ *
+ * <p>The value edits merge with a later edit of the same field, keeping the first {@code from}: a scrub in
+ * the inspector is one step. They merge only while a gesture holds the run — the document's history has no
+ * merge window. Structural edits and {@code SetClasses} never merge.</p>
  */
 public sealed interface BuilderEdit extends Edit {
 
@@ -128,14 +133,24 @@ public sealed interface BuilderEdit extends Edit {
         public String label() {
             return "set id";
         }
+
+        @Override
+        public Edit mergeWith(Edit next) {
+            return next instanceof SetId later && later.node == node ? new SetId(node, from, later.to) : null;
+        }
     }
 
-    /** The whole class list, because a set is invertible and a diff of one is not worth the arithmetic. */
+    /**
+     * The whole AUTHORED class list, because a set is invertible and a diff of one is not worth the arithmetic.
+     *
+     * <p>Engine classes are left as they are in both directions: undo restoring one the widget has since
+     * dropped would be the edit fighting the widget.</p>
+     */
     record SetClasses(UIElement node, List<String> from, List<String> to) implements BuilderEdit {
 
         public SetClasses {
-            from = List.copyOf(from);
-            to = List.copyOf(to);
+            from = ClassNames.authored(from);
+            to = ClassNames.authored(to);
         }
 
         @Override
@@ -149,7 +164,7 @@ public sealed interface BuilderEdit extends Edit {
         }
 
         private void write(List<String> wanted) {
-            for (String present : new ArrayList<>(node.classes())) node.removeClass(present);
+            for (String present : ClassNames.authored(node.classes())) node.removeClass(present);
             for (String each : wanted) node.addClass(each);
         }
 
@@ -173,17 +188,30 @@ public sealed interface BuilderEdit extends Edit {
             write(from);
         }
 
+        /**
+         * THE ONE SLOT, never the contract's whole read: that applies every slot and gives an absent one its
+         * fallback, so setting a slider's value reset its range to the fallback's and clamped the value to it.
+         */
         private void write(@Nullable JsonElement value) {
             WidgetContract<UIElement> contract = WidgetContracts.of(node);
             if (contract == null || value == null) return;
             JsonObject one = new JsonObject();
             one.add(key, value);
-            contract.read(node, new StateMap<>(JsonOps.INSTANCE, one));
+            StateMap<JsonElement> map = new StateMap<>(JsonOps.INSTANCE, one);
+            for (State<UIElement, ?> state : contract.states()) {
+                if (state.key().equals(key)) state.apply(node, map);
+            }
         }
 
         @Override
         public String label() {
             return "set " + key;
+        }
+
+        @Override
+        public Edit mergeWith(Edit next) {
+            return next instanceof SetState later && later.node == node && later.key.equals(key)
+                    ? new SetState(node, key, from, later.to) : null;
         }
     }
 
@@ -202,6 +230,13 @@ public sealed interface BuilderEdit extends Edit {
         @Override
         public String label() {
             return "set " + key.name();
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Edit mergeWith(Edit next) {
+            return next instanceof SetAttribute<?> later && later.node == node && later.key == key
+                    ? new SetAttribute<>(node, key, from, (T) later.to) : null;
         }
     }
 
@@ -234,6 +269,12 @@ public sealed interface BuilderEdit extends Edit {
         @Override
         public String label() {
             return "set style";
+        }
+
+        @Override
+        public Edit mergeWith(Edit next) {
+            return next instanceof SetInlineStyle later && later.node == node
+                    ? new SetInlineStyle(node, from, later.to) : null;
         }
     }
 
@@ -279,6 +320,12 @@ public sealed interface BuilderEdit extends Edit {
         @Override
         public String label() {
             return "set " + key;
+        }
+
+        @Override
+        public Edit mergeWith(Edit next) {
+            return next instanceof SetHeader later && later.header == header && later.key.equals(key)
+                    ? new SetHeader(header, key, from, later.to) : null;
         }
     }
 }
