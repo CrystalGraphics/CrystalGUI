@@ -164,6 +164,34 @@ public class TooltipTest extends UiDocumentTestBase {
                 y(anchor) + anchor.box().height(), y(tip), 0.5f);
     }
 
+    /** A press on the anchor hides its tip, and it stays hidden until the pointer leaves and comes back. */
+    @Test
+    public void aPressHidesTheTipUntilThePointerLeaves() {
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(40).marginLeft(50).marginTop(50));
+        newRoot().append(anchor);
+        attach();
+        Tooltip tip = Tooltip.attach(anchor, "explain");
+        int[] at = centreOf(anchor);
+
+        move(at[0], at[1]);
+        settle();
+        assertTrue("hovering shows it", tip.isShown());
+
+        press(at[0], at[1]);
+        release(at[0], at[1]);
+        settle();
+        assertFalse("the press hid it", tip.isShown());
+        move(at[0] + 4, at[1]);
+        settle();
+        assertFalse("and moving inside does not bring it back", tip.isShown());
+
+        move(1, 1);
+        settle();
+        move(at[0], at[1]);
+        settle();
+        assertTrue("leaving and returning does", tip.isShown());
+    }
+
     /** Near the bottom there is no room below, so it flips above — the useful subset of the web's
      * {@code position-try-fallbacks}. */
     @Test

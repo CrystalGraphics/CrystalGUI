@@ -304,6 +304,9 @@ public class Tooltip extends UIElement {
         return this;
     }
 
+    /** Set by a press on the anchor and cleared when the pointer leaves it; no tip shows in between. */
+    private boolean pressedSinceEnter;
+
     public static Tooltip attach(UIElement anchor, String text) {
         Objects.requireNonNull(anchor, "anchor");
         Tooltip tooltip = new Tooltip(text);
@@ -326,7 +329,17 @@ public class Tooltip extends UIElement {
         // breath. The earlier UIElement.setTooltip could be called repeatedly — and a
         // set(text)/set(null)/set(text) cycle silently attached a second pair every time.
         anchor.onMouseEnter.attachListener((el, event) -> tooltip.showAfterDelay(anchor), false, false);
-        anchor.onMouseLeave.attachListener((el, event) -> tooltip.hide(), false, false);
+        anchor.onMouseLeave.attachListener((el, event) -> {
+            tooltip.pressedSinceEnter = false;
+            tooltip.hide();
+        }, false, false);
+        // A PRESS ANSWERS THE QUESTION, as in every toolkit: the tip goes, and stays gone until the pointer
+        // leaves. Otherwise a dropdown opened its list under the hint for the thing just clicked. On the capture
+        // phase, so a control that stops its own press still reaches this.
+        anchor.onMouseDown.attachListener((el, event) -> {
+            tooltip.pressedSinceEnter = true;
+            tooltip.hide();
+        }, true, false);
         return tooltip;
     }
 
@@ -593,7 +606,7 @@ public class Tooltip extends UIElement {
      */
     public Tooltip showAfterDelay(UIElement anchor) {
         if (anchor == null || anchor.document() == null) return this;
-        if (dragIsLive(anchor)) return hide();
+        if (dragIsLive(anchor) || pressedSinceEnter) return hide();
 
         // JOINED AND STYLED BEFORE THE DELAY IS READ, and both halves are the point.
         //
