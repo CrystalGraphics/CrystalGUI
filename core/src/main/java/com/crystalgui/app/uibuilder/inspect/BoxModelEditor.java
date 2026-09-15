@@ -8,7 +8,6 @@ import java.util.function.Function;
 import javax.annotation.Nullable;
 
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -422,14 +421,13 @@ public final class BoxModelEditor extends UIElement {
             if (scrubPassedThreshold) InlineStyleCodec.replaceInto(JsonOps.INSTANCE, was, node);
             return;
         }
+        LiveEdits.dropIfRedundant(node, cell.property);
         JsonElement after = inlineStyle();
         if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
     }
 
-    /** The node's inline style as the codec writes it — an empty object, never null, for a node with none. */
     private JsonElement inlineStyle() {
-        JsonElement encoded = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
-        return encoded == null ? new JsonObject() : encoded;
+        return NodeFields.inlineStyleOf(node);
     }
 
     /** Whether a scrub has passed its threshold and is writing values. */
@@ -505,6 +503,7 @@ public final class BoxModelEditor extends UIElement {
             InlineStyleCodec.replaceInto(JsonOps.INSTANCE, was, node);
             return;
         }
+        LiveEdits.dropIfRedundant(node, cell.property);
         JsonElement after = inlineStyle();
         if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
     }
