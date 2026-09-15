@@ -2,6 +2,9 @@ package com.crystalgui.widget.config.inspector;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataContext;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControl;
 
@@ -43,7 +46,7 @@ import com.crystalgui.core.CrystalGuiCore;
  * nodes must not throw you back to the first tab, which is the one thing the old per-graph swap also got
  * wrong.</p>
  */
-public class Inspector extends UIElement {
+public class Inspector extends UIElement implements DataProvider {
 
     public static final Name NAME = Name.of("inspector");
 
@@ -114,6 +117,27 @@ public class Inspector extends UIElement {
     private UIElement pendingSource;
     private boolean pending;
 
+    /** What the panel is describing now, or null — whose history an edit made in it went into. */
+    @Nullable
+    private UIElement shownSource;
+
+    /**
+     * The undo history of what is being described, so Ctrl+Z pressed in a row undoes the edit that row
+     * made.
+     *
+     * <p>Commands resolve outward from focus, and the inspector sits beside the editor rather than inside
+     * it — so without this the walk from a focused checkbox reached the workbench and never the document
+     * the checkbox had just changed. A focused control with a history of its own, a text field's typing,
+     * answers first and keeps it.</p>
+     */
+    @Override
+    @Nullable
+    public Object getData(DataKey<?> key) {
+        if (key != UiDataKeys.UNDO_STACK) return null;
+        UIElement source = shownSource;
+        return source == null || source.document() == null ? null : DataContext.from(source).get(UiDataKeys.UNDO_STACK);
+    }
+
     @Override
     protected void connected() {
         super.connected();
@@ -183,6 +207,7 @@ public class Inspector extends UIElement {
             pendingSource = null;
         }
         shownKey = null;
+        shownSource = null;
         forcing = true;
         pending = true;
         if (document() == null) {
@@ -312,6 +337,7 @@ public class Inspector extends UIElement {
         // while the selection changes must not replace the row being scrubbed.
         if (isInteracting()) return;
         shownKey = key;
+        shownSource = context == null ? null : source;
 
         String wasSelected = selectedTabName();
         // Which tabs EXISTED, so the build below can tell a tab that has just appeared from one that was
