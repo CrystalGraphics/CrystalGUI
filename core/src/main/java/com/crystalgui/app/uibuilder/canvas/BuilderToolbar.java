@@ -1,5 +1,7 @@
 package com.crystalgui.app.uibuilder.canvas;
 
+import com.crystalgui.widget.overlay.Dropdown;
+import com.crystalgui.widget.config.control.SelectControl;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,6 +63,8 @@ public final class BuilderToolbar extends UIElement {
 
     private final Configurator preview;
 
+    private final Configurator sizeRow;
+
     /** What the toolbar drives. Narrow on purpose: a toolbar may not reach the whole editor. */
     public interface BuilderSurfaceHost {
 
@@ -78,8 +82,11 @@ public final class BuilderToolbar extends UIElement {
         buildPresets();
 
         ToolbarForm form = ToolbarForm.into(this);
-        form.prop(ConfigDescriptor.select("size", "Size", presetLabels()),
+        sizeRow = form.prop(ConfigDescriptor.select("size", "Size", presetLabels()),
                 Property.derived(this::presetShown, this::choosePreset));
+        // THE DOCUMENT'S SIZES ARE EDITABLE NOW, from the Document tab: read once, an added size never reached this
+        // list until the editor was reopened.
+        whileConnected(() -> host.artboard().model().onChanged().connect(this::followPresets));
         form.prop(ConfigDescriptor.select("scale", "Scale", scaleLabels()),
                 Property.derived(() -> scaleLabel(host.artboard().uiScale()), this::chooseScale));
         UiThemeManager themes = UiThemeManager.getInstance();
@@ -89,6 +96,11 @@ public final class BuilderToolbar extends UIElement {
         preview = form.prop(ConfigDescriptor.bool("preview", "Preview").toggle(true),
                 Property.derived(() -> !host.isDesignMode(), this::setPreview));
         preview.addClass(PREVIEW_CLASS);
+    }
+
+    /** The sizes the Size dropdown lists, as it labels them — for a test. */
+    public List<String> sizeOptions() {
+        return presetLabels();
     }
 
     /** The preview toggle's button — for a test. */
@@ -134,6 +146,13 @@ public final class BuilderToolbar extends UIElement {
         }
     }
 
+    /** The sizes offered when a document declares none, as a person reads them — what an empty size list means. */
+    public static List<String> defaultSizeLabels() {
+        List<String> labels = new ArrayList<>(FALLBACK_PRESETS.length);
+        for (float[] size : FALLBACK_PRESETS) labels.add(Math.round(size[0]) + "×" + Math.round(size[1]));
+        return labels;
+    }
+
     private List<String> presetLabels() {
         List<String> labels = new ArrayList<>(presets.size());
         for (float[] size : presets) labels.add(labelOf(size));
@@ -158,6 +177,20 @@ public final class BuilderToolbar extends UIElement {
         List<String> ids = new ArrayList<>();
         for (UiTheme installed : ThemeRegistry.themes()) ids.add(installed.id());
         return ids;
+    }
+
+    /** Re-reads the document's sizes, and re-lists them when they changed. */
+    private void followPresets() {
+        List<String> before = presetLabels();
+        presets.clear();
+        buildPresets();
+        List<String> after = presetLabels();
+        if (after.equals(before) || !(sizeRow.control() instanceof SelectControl select)) return;
+        Dropdown dropdown = select.dropdown();
+        dropdown.clearOptions();
+        for (String label : after) dropdown.addOption(label);
+        String shown = presetShown();
+        if (shown != null) dropdown.select(shown);
     }
 
     /** The document's own sizes when it names any, and a workable set when it does not. */

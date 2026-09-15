@@ -447,6 +447,21 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         assertEquals(before, new String(model().encode(), StandardCharsets.UTF_8));
     }
 
+    /** A size added in the Document tab is in the toolbar's Size list at once, not after the editor reopens. */
+    @Test
+    public void aPreviewSizeAddedInTheDocumentTabReachesTheToolbar() {
+        editor.selection().selectCanvas(true);
+        inspector.inspect(editor.view());
+        frame();
+        frame();
+
+        Property<List<Object>> sizes = property("canvas.sizes");
+        sizes.set(List.of("1920x1080", "640x360"));
+        frame();
+
+        assertEquals(List.of("1920 x 1080", "640 x 360"), editor.toolbar().sizeOptions());
+    }
+
     private void pointer(Vector2f at, boolean down) {
         document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
                 Math.round(at.x()), Math.round(at.y()), 0, 0, CgMouseCodes.LEFT_BUTTON, down, 0f, down ? 1L : 2L));

@@ -26,7 +26,8 @@ import com.crystalgui.core.property.Property;
  * <pre>{@code
  * HeaderFields header = HeaderFields.on(document);
  * form.prop(ConfigDescriptor.text("export.package", "Package"), header.text("package"));
- * form.prop(ConfigDescriptor.select("canvas.theme", "Theme", themes), header.previewText("theme"));
+ * form.prop(ConfigDescriptor.text("canvas.theme", "Theme"),
+ *         header.preview(() -> themeOf(header), theme -> new JsonPrimitive(theme), "theme"));
  * }</pre>
  *
  * <ul>
@@ -75,12 +76,6 @@ public final class HeaderFields {
             }
             return set(key, array.size() == 0 ? null : array);
         });
-    }
-
-    /** A string entry of {@code preview}; blank removes it. */
-    public Property<String> previewText(String key) {
-        return preview(() -> stringOf(previewKey(key)),
-                text -> text == null || text.isBlank() ? null : new JsonPrimitive(text.trim()), key);
     }
 
     /** An entry of {@code preview}, read and written through {@code read} and {@code write}. */
