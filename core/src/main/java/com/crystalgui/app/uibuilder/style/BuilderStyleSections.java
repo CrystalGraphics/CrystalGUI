@@ -48,6 +48,7 @@ public final class BuilderStyleSections {
     public static final String OVERRIDDEN_CLASS = "__overridden__";
     public static final String ROW_ACTION_CLASS = "__style-row-action__";
     public static final String STYLE_ROW_CLASS = "__style-row__";
+    /** A text button in the tab — a rule action — as opposed to a row's one-glyph {@link #ROW_ACTION_CLASS}. */
     public static final String TARGET_ACTION_CLASS = "__style-target-action__";
 
     private BuilderStyleSections() {
@@ -220,16 +221,17 @@ public final class BuilderStyleSections {
                 UIElement actions = new UIElement();
                 actions.addClass(StyleLab.ROW_CLASS);
                 UIElement anchor = actions;
-                actions.append(action("Edit as CSS", ROW_ACTION_CLASS, () -> RuleTextEditor.open(anchor, target)));
+                actions.append(action("Edit as CSS", TARGET_ACTION_CLASS, () -> RuleTextEditor.open(anchor, target)));
+                SheetDocuments sheets = sheets(context);
                 SheetDocuments.Sheet sheet = target.sheet();
-                if (sheet != null && sheet.resource() != null) {
-                    actions.append(action("Go to source", ROW_ACTION_CLASS, () -> SheetDocuments.goToSource(sheet)));
+                if (sheets != null && sheets.canReveal() && sheet != null && sheet.resource() != null) {
+                    actions.append(action("Go to source", TARGET_ACTION_CLASS, () -> sheets.goToSource(sheet)));
                 }
                 form.custom(actions);
             }
             SheetDocuments.Sheet sheet = firstEditableSheet(context);
             if (target.isInline() && sheet != null && !fields.declared().isEmpty()) {
-                form.custom(action("Promote to rule", ROW_ACTION_CLASS,
+                form.custom(action("Promote to rule", TARGET_ACTION_CLASS,
                         () -> RuleActions.promote(sheet, document, node, RuleActions.selectorFor(node))));
             }
         }

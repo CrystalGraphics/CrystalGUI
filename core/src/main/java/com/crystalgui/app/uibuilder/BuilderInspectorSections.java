@@ -85,8 +85,6 @@ public final class BuilderInspectorSections {
 
     public static final String ELEMENT_TAB = "Element";
 
-    public static final String STYLE_TAB = "Style";
-
     public static final String LAYOUT_TAB = "Layout";
 
     public static final String DOCUMENT_TAB = "Document";
@@ -477,13 +475,12 @@ public final class BuilderInspectorSections {
 
     // ── Style ───────────────────────────────────────────────────────────────
 
-    /** Every rule that reached this element, weakest first, with the beaten ones marked. */
     /** Every property with a value, and what it resolved to. Collapsed: it is long by design. */
     private static final class ComputedSection extends NodeAware {
 
         @Override
         public String tab() {
-            return STYLE_TAB;
+            return BuilderStyleSections.STYLE_TAB;
         }
 
         @Override

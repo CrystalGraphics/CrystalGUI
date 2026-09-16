@@ -64,12 +64,11 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                 .editor(document -> new BuilderEditor((UiBuilderDocument) document.model(), workbench.extensionStore(ID),
                         // A SHEET IN THE PROJECT IS A DOCUMENT: opened here, so this canvas and an editor
                         // tab on the same .css are one buffer and one history.
-                        new SheetDocuments(workbench.documents()::open, document.resource()))),
+                        new SheetDocuments(workbench.documents()::open, resource -> workbench.editors().open(resource),
+                                document.resource()))),
                 "cgui");
         // The kind is registered ON the workbench, so it goes when the workbench does and needs no
         // handle of its own. @see WorkbenchExtension
-        // GO TO SOURCE needs a tab, which only the workbench can open; the style package names no workbench.
-        SheetDocuments.revealWith(resource -> workbench.editors().open(resource));
         Disposable commands = BuilderCommands.register();
         // THE ONE THING IN A PROCESS-WIDE REGISTRY, so it is what this handle has to be able to take
         // back. Counted: a second editor must not double the forms, and the first one closing must not
