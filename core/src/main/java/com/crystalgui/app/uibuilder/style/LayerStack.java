@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder.style;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 
@@ -36,6 +37,8 @@ public final class LayerStack extends UIElement {
     public static final String STACK_CLASS = "__layer-stack__";
     public static final String ROW_CLASS = "__layer-row__";
     public static final String SAMPLE_CLASS = "__layer-sample__";
+    /** What a painter puts inside a sample when the layer needs something to act on. */
+    public static final String SAMPLE_TEXT_CLASS = "__layer-sample-text__";
     public static final String TEXT_CLASS = "__layer-text__";
     public static final String ACTIVE_CLASS = "__active__";
 
@@ -50,10 +53,31 @@ public final class LayerStack extends UIElement {
     @Nullable
     private Consumer<List<String>> onChange;
 
+    /** How a layer is drawn in its row, or null to apply the layer itself. @see #sample(BiConsumer) */
+    @Nullable
+    private BiConsumer<UIElement, String> painter;
+
     /** @param property what a row's sample draws with — the property whose layers these are */
     public LayerStack(StyleProperty<?> property) {
         this.property = property;
         addClass(STACK_CLASS);
+    }
+
+    /**
+     * How a layer is drawn in its row, when applying the value itself says nothing.
+     *
+     * <pre>{@code
+     * stack.sample((patch, layer) -> StyleChip.paintColour(patch, colourOf(layer)));
+     * }</pre>
+     *
+     * <p>The default applies the layer, which is right for a transform: a 20x14 chip genuinely moves.
+     * A shadow is the case it fails on -- a chip that size cannot hold a 16px blur, and with no text in
+     * it a {@code text-shadow} draws nothing at all, so five different shadows came out as five
+     * identical grey boxes.</p>
+     */
+    public LayerStack sample(BiConsumer<UIElement, String> painter) {
+        this.painter = painter;
+        return this;
     }
 
     /** Told when a row is picked: which one a lab's own gizmos then edit. */
@@ -97,7 +121,11 @@ public final class LayerStack extends UIElement {
 
         UIElement sample = new UIElement();
         sample.addClass(SAMPLE_CLASS);
-        LiveEdits.setInline(sample, cast(property), layers.get(index));
+        if (painter != null) {
+            painter.accept(sample, layers.get(index));
+        } else {
+            LiveEdits.setInline(sample, cast(property), layers.get(index));
+        }
         row.append(sample);
 
         UIText text = new UIText(layers.get(index));
@@ -114,6 +142,10 @@ public final class LayerStack extends UIElement {
         Button button = new Button(glyph);
         button.addClass(BuilderStyleSections.ROW_ACTION_CLASS);
         button.attachListener(done);
+        // THE PRESS STOPS HERE, and without that none of these could ever fire. Bubbling to the row
+        // selects it, selecting rebuilds every row, and the button the press landed on is destroyed
+        // before its own release arrives -- so it never activates. Reordering is not selecting anyway.
+        button.onMouseDown.attachListener((element, event) -> event.stopPropagation(), false, true);
         return button;
     }
 

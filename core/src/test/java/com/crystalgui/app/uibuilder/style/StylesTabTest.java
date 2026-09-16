@@ -141,6 +141,33 @@ public class StylesTabTest extends UiDocumentTestBase {
                 card.getStyle().getComputed(StylePropertyRegistry.OPACITY));
     }
 
+    /**
+     * <b>A property added from the palette appears as a row.</b>
+     *
+     * <p>Writing it is half the job: the set of rows is the form's SUBJECT, so a form that is not rebuilt
+     * shows the same rows it had — which is what "clicking a property does nothing" looked like.</p>
+     */
+    @Test
+    public void addingADeclarationPutsARowInTheForm() {
+        assertNull("nothing declares opacity yet", control("style.opacity"));
+
+        StyleFields fields = StyleFields.on(editor.document(), StyleTargets.of(card, editor.sheets()).chosen(""),
+                card);
+        fields.add("opacity", "1");
+        // NO REFRESH OF OUR OWN: this is the path a palette pick takes, and the panel has to notice by
+        // itself. It did not -- the edit reached the document and the rows were the ones built before it.
+        frame();
+        frame();
+
+        assertNotNull("the row is in the panel", control("style.opacity"));
+
+        fields = StyleFields.on(editor.document(), StyleTargets.of(card, editor.sheets()).chosen(""), card);
+        fields.remove("opacity");
+        frame();
+        frame();
+        assertNull("and removing it takes the row away", control("style.opacity"));
+    }
+
     private StyleTarget ruleTarget() {
         for (StyleTarget target : StyleTargets.of(card, editor.sheets()).targets()) {
             if (!target.isInline()) return target;

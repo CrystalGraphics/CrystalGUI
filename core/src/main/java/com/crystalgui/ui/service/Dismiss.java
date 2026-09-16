@@ -191,14 +191,38 @@ public final class Dismiss {
      * moving it. "Was this shown during the press" answers both with one rule.</p>
      */
     public void lightDismiss(@Nullable UIElement target, int shownBefore) {
-        if (autoPopovers.isEmpty()) return;
+        lightDismiss(pressedWithin(target), shownBefore);
+    }
+
+    /**
+     * What a press on {@code target} is <b>inside</b>: its innermost open auto popover, and everything
+     * below that in the stack. <b>Read before the press is dispatched</b> and handed to
+     * {@link #lightDismiss(List, int)} after.
+     *
+     * <p>Resolving it afterwards is the same mistake {@code shownBefore} exists to avoid, one step on: the
+     * press can detach the very node it landed on. A list that rebuilds its rows when one is selected
+     * destroys the pressed row while the press is still being delivered — so the walk up from it reached
+     * no parent at all, the answer was "inside nothing", and every popover the row lived in was closed as
+     * though the press had been somewhere else. Clicking a second shadow shut the shadow lab.</p>
+     *
+     * <p>The list rather than the ancestor alone, because the ancestor may itself be gone by then and a
+     * stack position cannot be recovered from an element that has left the stack.</p>
+     */
+    public List<UIElement> pressedWithin(@Nullable UIElement target) {
         UIElement ancestor = innermostPopoverAncestor(target);
+        int at = ancestor == null ? -1 : autoPopovers.indexOf(ancestor);
+        return at < 0 ? List.of() : List.copyOf(autoPopovers.subList(0, at + 1));
+    }
+
+    /** As {@link #lightDismiss(UIElement, int)}, against a {@link #pressedWithin} taken before dispatch. */
+    public void lightDismiss(List<UIElement> pressedWithin, int shownBefore) {
+        if (autoPopovers.isEmpty()) return;
         // Copy and walk downwards: closing mutates the live list, and requestClose() runs listener
         // code that may open or close further popovers.
         List<UIElement> doomed = new ArrayList<>();
         for (int i = autoPopovers.size() - 1; i >= 0; i--) {
             UIElement popover = autoPopovers.get(i);
-            if (popover == ancestor) break;
+            if (pressedWithin.contains(popover)) break;
             if (shownAt.getOrDefault(popover, 0) > shownBefore) continue;
             doomed.add(popover);
         }

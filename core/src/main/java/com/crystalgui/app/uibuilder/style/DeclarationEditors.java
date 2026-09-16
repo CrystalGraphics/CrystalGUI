@@ -210,10 +210,6 @@ public final class DeclarationEditors {
 
     /** A colour as a sheet spells it. Eight digits only when there is transparency to state. */
     private static String hex(@Nullable Integer argb) {
-        if (argb == null) return "";
-        int value = argb;
-        return (value >>> 24) == 0xFF
-                ? String.format("#%06X", value & 0xFFFFFF)
-                : String.format("#%08X", value);
+        return argb == null ? "" : CssValues.color(argb);
     }
 }

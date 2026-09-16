@@ -3,6 +3,8 @@ package com.crystalgui.app.uibuilder.style;
 import java.util.List;
 import java.util.function.Consumer;
 
+import javax.annotation.Nullable;
+
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -84,9 +86,39 @@ public final class StyleLabs {
     private static DeclarationEditors.Field chip(DeclarationEditors.Context context, Consumer<StyleChip> lab) {
         ConfigDescriptor descriptor = ConfigDescriptor.text(context.id(), context.label())
                 .tooltip(context.property().name + " — press to open the lab");
-        StyleChip chip = new StyleChip(descriptor, context.property());
+        StyleChip chip = new StyleChip(descriptor, drawable(context.property()) ? context.property() : null);
+        if (sampled(context.property())) chip.sample("Ag");
+        // A shadow is bigger than the swatch it is drawn in, so the swatch gets it to scale.
+        if (context.property() == StylePropertyRegistry.TEXT_SHADOW) chip.preview(ShadowLab::fitted);
+        chip.unit(unitOf(context.property()));
         chip.onOpen(() -> lab.accept(chip));
         chip.bind(context.css());
         return new DeclarationEditors.Field(descriptor, context.css(), chip);
+    }
+
+    /** Whether a swatch of this property says anything: a size or a width applied to a small box does not. */
+    private static boolean drawable(StyleProperty<?> property) {
+        return property != StylePropertyRegistry.FONT_SIZE
+                && property != StylePropertyRegistry.TEXT_STROKE_WIDTH;
+    }
+
+    /**
+     * What a bare number in this declaration means, for the row to say so.
+     *
+     * <p>Only where the property is a length the engine reads in pixels: {@code font-size: 34} is 34px, and
+     * a row that prints the number alone leaves a reader to guess.</p>
+     */
+    @Nullable
+    private static String unitOf(StyleProperty<?> property) {
+        return property == StylePropertyRegistry.FONT_SIZE
+                || property == StylePropertyRegistry.TEXT_STROKE_WIDTH ? "px" : null;
+    }
+
+    /** Whether the swatch needs something to apply the property TO — a face, a weight, a stroke colour. */
+    private static boolean sampled(StyleProperty<?> property) {
+        return property == StylePropertyRegistry.FONT_FAMILY || property == StylePropertyRegistry.FONT_WEIGHT
+                || property == StylePropertyRegistry.FONT_STYLE || property == StylePropertyRegistry.PAINT_ORDER
+                // A SHADOW IS CAST BY GLYPHS: on an empty box it paints nothing at all.
+                || property == StylePropertyRegistry.TEXT_SHADOW;
     }
 }

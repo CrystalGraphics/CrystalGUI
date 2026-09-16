@@ -5,13 +5,17 @@ import java.util.Objects;
 
 import javax.annotation.Nullable;
 
+import com.google.gson.JsonElement;
+
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
 import com.crystalgui.core.property.Property;
+import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.sheet.source.CssEdits;
 import com.crystalgui.style.sheet.source.CssSourceModel;
 import com.crystalgui.text.ChangeSet;
@@ -52,6 +56,13 @@ public final class StyleFields {
     @Nullable
     private final NodeFields nodes;
 
+    /** The sheet as last parsed, and the buffer version it was parsed at. @see #model() */
+    @Nullable
+    private CssSourceModel model;
+
+    private String modelText = "";
+    private int modelVersion = -1;
+
     private StyleFields(@Nullable UiBuilderDocument document, StyleTarget target, UIElement node) {
         this.document = document;
         this.target = Objects.requireNonNull(target, "target");
@@ -83,15 +94,99 @@ public final class StyleFields {
         return Property.derived(() -> valueOf(property), css -> write(property, css == null ? "" : css.trim()));
     }
 
-    /** What the target declares for {@code property} right now, or "" when it declares nothing. */
+    /**
+     * What the target declares for {@code property} right now, or "" when it declares nothing.
+     *
+     * <p><b>Read from where a write lands, never from the {@link StyleTarget}'s own list.</b> That list is
+     * a snapshot of one cascade pass, and the row set is deliberately not rebuilt when a value changes —
+     * so a control bound here, which re-reads every frame, would read back the value its own edit replaced
+     * and spring to it, while the element on the canvas showed the new one.</p>
+     */
     public String valueOf(String property) {
-        StyleTarget.Declared declared = target.declaring(property);
-        return declared == null ? "" : declared.value();
+        if (target.isInline()) return inlineValueOf(property);
+        CssSourceModel model = model();
+        // No buffer: the engine's own sheet, or one inside a jar. Unwritable, so its snapshot cannot go stale.
+        if (model == null) {
+            StyleTarget.Declared declared = target.declaring(property);
+            return declared == null ? "" : declared.value();
+        }
+        CssSourceModel.Rule rule = ruleOf(model);
+        if (rule == null) return "";
+        CssSourceModel.Declaration declaration = lastDeclarationOf(rule, property);
+        if (declaration != null) return declaration.value();
+        String disabled = commentedValueOf(model, rule, property);
+        return disabled == null ? "" : disabled;
     }
 
-    /** Adds a declaration this target does not have yet — what the palette's pick does. */
+    /** What the element itself carries, in the spelling a sheet would need to hold to mean the same thing. */
+    private String inlineValueOf(String property) {
+        StyleProperty<?> styled = propertyOf(property);
+        if (styled == null) return "";
+        List<StyleSlot<?>> slots = node.getStyle().candidates.get(styled);
+        if (slots == null) return "";
+        for (StyleSlot<?> slot : slots) {
+            if (slot.origin() == StyleOrigin.INLINE) return written(styled, slot.value());
+        }
+        return "";
+    }
+
+    /** A switched-off declaration is a comment in the rule body, and still has a value its row shows. */
+    @Nullable
+    private static String commentedValueOf(CssSourceModel model, CssSourceModel.Rule rule, String property) {
+        for (CssSourceModel.Comment comment : model.comments()) {
+            int at = comment.range().start();
+            if (at < rule.bodyRange().start() || at >= rule.bodyRange().end()) continue;
+            String inner = inner(comment.text());
+            if (inner == null || !inner.startsWith(property + ":")) continue;
+            String value = inner.substring(property.length() + 1).trim();
+            return value.endsWith(";") ? value.substring(0, value.length() - 1).trim() : value;
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String written(StyleProperty<?> property, @Nullable Object value) {
+        return value == null ? "" : ((StyleProperty<Object>) property).write(value);
+    }
+
+    /**
+     * The sheet's text, parsed once per edit rather than once per read — every bound control re-reads
+     * {@link #valueOf} every frame, and a project sheet is not free to parse.
+     */
+    @Nullable
+    private CssSourceModel model() {
+        TextBuffer buffer = target.buffer();
+        if (buffer == null) return null;
+        if (model == null || buffer.version() != modelVersion) {
+            modelVersion = buffer.version();
+            modelText = buffer.toString();
+            model = CssSourceModel.parse(modelText);
+        }
+        return model;
+    }
+
+    /**
+     * Adds a declaration this target does not have yet — what the palette's pick does.
+     *
+     * <p><b>Never dropped as redundant.</b> An ordinary inline write withdraws a value equal to what the
+     * element already computes without it, which is right when somebody sets a field back to its default —
+     * and wrong here, because a property added at its initial value is exactly that, so the row asked for
+     * vanished as it was created.</p>
+     */
     public void add(String property, String value) {
-        write(property, value);
+        if (!canWrite()) return;
+        if (!target.isInline()) {
+            write(property, value);
+            return;
+        }
+        StyleProperty<?> styled = propertyOf(property);
+        if (styled == null) return;
+        JsonElement was = NodeFields.inlineStyleOf(node);
+        if (!LiveEdits.setInline(node, cast(styled), value)) return;
+        JsonElement after = NodeFields.inlineStyleOf(node);
+        if (document != null && !after.equals(was)) {
+            document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
+        }
     }
 
     /** Takes the declaration out of the rule, or off the element. */
@@ -108,10 +203,11 @@ public final class StyleFields {
      * @return whether anything changed
      */
     public boolean setEnabled(String property, boolean enabled) {
+        if (target.isInline()) return false;
+        CssSourceModel model = model();
         TextBuffer buffer = target.buffer();
-        if (buffer == null || target.isInline()) return false;
-        String text = buffer.toString();
-        CssSourceModel model = CssSourceModel.parse(text);
+        if (model == null || buffer == null) return false;
+        String text = modelText;
         CssSourceModel.Rule rule = ruleOf(model);
         if (rule == null) return false;
 
@@ -150,10 +246,9 @@ public final class StyleFields {
             writeInline(property, css);
             return;
         }
+        CssSourceModel model = model();
         TextBuffer buffer = target.buffer();
-        if (buffer == null) return;
-        String text = buffer.toString();
-        CssSourceModel model = CssSourceModel.parse(text);
+        if (model == null || buffer == null) return;
         CssSourceModel.Rule rule = ruleOf(model);
         if (rule == null) return;   // the file changed under a stale pane; it will rebuild from the new text
 
@@ -224,7 +319,7 @@ public final class StyleFields {
     }
 
     @SuppressWarnings("unchecked")
-    private static StyleProperty<Object> cast(StyleProperty<?> property) {
+    static StyleProperty<Object> cast(StyleProperty<?> property) {
         return (StyleProperty<Object>) property;
     }
 }

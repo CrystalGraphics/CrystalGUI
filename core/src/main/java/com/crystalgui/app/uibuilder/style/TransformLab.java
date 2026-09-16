@@ -60,7 +60,7 @@ public final class TransformLab {
     }
 
     private void build() {
-        lab.specimens();
+        lab.specimen();
 
         UIElement row = new UIElement();
         row.addClass("__lab-row__");

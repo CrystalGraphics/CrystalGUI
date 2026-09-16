@@ -4,12 +4,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.color.ColorValue;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
@@ -33,7 +33,7 @@ public final class ShadowLab {
     public static final String PAD_CLASS = "__offset-pad__";
     public static final String DOT_CLASS = "__offset-dot__";
 
-    private static final String DEFAULT = "0 1px 2px #000000";
+    static final String DEFAULT = "0 1px 2px #000000";
 
     private final Property<String> css;
     private final StyleProperty<?> property;
@@ -42,7 +42,6 @@ public final class ShadowLab {
 
     private final UIElement pad = new UIElement();
     private final UIElement dot = new UIElement();
-    private final UIText numbers = new UIText("");
 
     private final List<String> layers = new ArrayList<>();
     private int selected;
@@ -71,7 +70,13 @@ public final class ShadowLab {
     }
 
     private void build() {
-        lab.specimens();
+        // TEXT, because `text-shadow` is what this lab edits and an empty box has nothing to cast one.
+        // The property inherits, so the shadow the lab applies to each specimen reaches the sample in it.
+        lab.specimen(() -> {
+            UIText sample = new UIText("Ag");
+            sample.addClass(StyleLab.SAMPLE_CLASS);
+            return sample;
+        });
 
         pad.addClass(PAD_CLASS);
         dot.addClass(DOT_CLASS);
@@ -88,19 +93,19 @@ public final class ShadowLab {
         }, false, true);
         lab.content().append(pad);
 
-        UIElement row = new UIElement();
-        row.addClass("__lab-row__");
-        row.append(numbers);
-        for (String step : List.of("blur −", "blur +")) {
-            Button button = new Button(step);
-            button.addClass("__lab-keyword__");
-            button.attachListener(() -> {
-                blur = Math.max(0f, blur + (step.endsWith("+") ? 1f : -1f));
-                replaceSelected();
-                commit();
-            });
-            row.append(button);
-        }
+        lab.form().prop(ConfigDescriptor.number("lab.blur", "Blur").range(0f, 40f).unit("px").decimals(2),
+                Property.derived(() -> (double) blur, value -> {
+                    blur = (float) CssValues.dragged(value);
+                    replaceSelected();
+                    commit();
+                }));
+        lab.form().prop(ConfigDescriptor.color("lab.colour", "Colour"),
+                Property.derived(() -> argb, colour -> {
+                    argb = colour;
+                    replaceSelected();
+                    commit();
+                }));
+
         Button add = new Button("+ shadow");
         add.addClass("__lab-keyword__");
         add.attachListener(() -> {
@@ -109,18 +114,18 @@ public final class ShadowLab {
             readSelected();
             commit();
         });
-        row.append(add);
-        lab.content().append(row);
+        lab.content().append(add);
 
-        ColorSelector picker = new ColorSelector();
-        picker.setColor(argb);
-        picker.onColorChanged.connect(colour -> {
-            argb = colour;
-            replaceSelected();
-            commit();
+        // THE SHADOW ITSELF, on the same "Ag" the inspector's own row draws it on. A shadow is a thing
+        // text does, so the patch needs some; `text-shadow` inherits, so applying the layer to the patch
+        // reaches the glyph inside it. Clipped by the patch, as the chip's is -- at this size a 16px blur
+        // is a smudge either way, and left unclipped it paints across the rows above and below.
+        stack.sample((patch, layer) -> {
+            UIText glyph = new UIText("Ag");
+            glyph.addClass(LayerStack.SAMPLE_TEXT_CLASS);
+            patch.append(glyph);
+            LiveEdits.setInline(patch, cast(property), fittedLayer(layer));
         });
-        lab.content().append(picker);
-
         stack.onSelect(index -> {
             selected = index;
             readSelected();
@@ -142,15 +147,79 @@ public final class ShadowLab {
 
     // ── The value ───────────────────────────────────────────────────────────
 
-    /** The selected layer's own terms: {@code x y blur colour}, in CSS's order. */
+    /**
+     * The selected layer's parts, <b>wherever they sit</b>.
+     *
+     * <p>CSS writes {@code 0 1px 2px #000} and this engine's own writer answers
+     * {@code #000 0px 1px 2px} — colour first. Both are valid input, so the colour is whichever term
+     * parses as one and the lengths are the rest in order. Reading by position instead took the colour for
+     * an offset, which is how a lab opened on a value it had itself written and showed different numbers.</p>
+     */
     private void readSelected() {
         if (selected < 0 || selected >= layers.size()) return;
-        List<String> terms = CssValues.terms(layers.get(selected));
-        x = CssValues.number(terms, 0, 0f);
-        y = CssValues.number(terms, 1, 0f);
-        blur = CssValues.number(terms, 2, 0f);
-        Integer colour = terms.isEmpty() ? null : ColorValue.parseColor(terms.get(terms.size() - 1));
-        argb = colour == null ? 0xFF000000 : colour;
+        String layer = layers.get(selected);
+        argb = colourOf(layer);
+        List<String> lengths = new ArrayList<>();
+        for (String term : CssValues.terms(layer)) {
+            if (ColorValue.parseCssColor(term) == null) lengths.add(term);
+        }
+        x = CssValues.number(lengths, 0, 0f);
+        y = CssValues.number(lengths, 1, 0f);
+        blur = CssValues.number(lengths, 2, 0f);
+    }
+
+    /**
+     * One shadow, scaled to fit a chip.
+     *
+     * <p>A swatch is 28x16 and a shadow is routinely larger than that in every direction, so at its own
+     * scale what reaches the box is a corner of a blur: the direction, the softness and most of the colour
+     * fall outside it. Scaling the offsets and the blur together keeps all three, which is what a reader
+     * is actually asking a 28x16 picture. <b>Display only</b> — the exact value is printed beside it, so
+     * the picture is the shape and the text is the truth.</p>
+     *
+     * <p>ONE layer. {@link #fitted} is the whole declaration, and handing this the comma list instead
+     * read it as a single shadow: a five-shadow stack drew as its first colour alone.</p>
+     */
+    static String fittedLayer(String layer) {
+        List<String> lengths = new ArrayList<>();
+        for (String term : CssValues.terms(layer)) {
+            if (ColorValue.parseCssColor(term) == null) lengths.add(term);
+        }
+        float x = CssValues.number(lengths, 0, 0f);
+        float y = CssValues.number(lengths, 1, 0f);
+        float blur = CssValues.number(lengths, 2, 0f);
+        float reach = Math.max(Math.abs(x), Math.abs(y)) + blur;
+        float scale = reach > SAMPLE_REACH ? SAMPLE_REACH / reach : 1f;
+        return CssValues.px(x * scale) + " " + CssValues.px(y * scale) + " " + CssValues.px(blur * scale)
+                + " " + CssValues.color(colourOf(layer));
+    }
+
+    /** How far a fitted shadow may reach from the mark, in px. Half the chip, so the far side survives. */
+    private static final float SAMPLE_REACH = 7f;
+
+    /** A whole {@code text-shadow}, every layer fitted to a chip and the stack kept. @see #fittedLayer */
+    static String fitted(String css) {
+        List<String> out = new ArrayList<>();
+        for (String layer : CssValues.layers(css)) out.add(fittedLayer(layer));
+        return CssValues.join(out);
+    }
+
+    /**
+     * A layer's colour, wherever it sits among the lengths, or opaque black.
+     *
+     * <p><b>{@code parseCssColor}, never {@code parseColor}</b>, and that distinction is this whole
+     * method. A colour PROPERTY also accepts a decimal ARGB literal, so {@code parseColor("0")} answers
+     * transparent black - and the first term of {@code 0 1px 2px #000000} is an OFFSET. Reading it as the
+     * colour made every shadow the lab added fully transparent and opened the picker at zero alpha, so
+     * choosing a colour for it changed the value and nothing on the screen. {@code ColorValue}'s own
+     * javadoc names a shadow's lengths as the case to watch for.</p>
+     */
+    static int colourOf(String layer) {
+        for (String term : CssValues.terms(layer)) {
+            Integer colour = ColorValue.parseCssColor(term);
+            if (colour != null) return colour;
+        }
+        return 0xFF000000;
     }
 
     private String written() {
@@ -171,7 +240,6 @@ public final class ShadowLab {
 
     private void refresh() {
         stack.show(layers, selected);
-        numbers.setText(written());
         // The dot sits where the offset says, from the pad's middle.
         LiveEdits.setInline(dot, cast(StylePropertyRegistry.TRANSFORM),
                 "translate(" + CssValues.px(x) + ", " + CssValues.px(y) + ")");

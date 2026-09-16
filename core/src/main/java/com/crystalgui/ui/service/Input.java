@@ -697,6 +697,8 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
         // THE POPOVER STACK AS IT STOOD BEFORE ANYONE SAW THE PRESS. @see #button
         int shownBefore = event.state() ? document.dismiss().showSeq() : 0;
+        List<UIElement> pressedWithin = event.state()
+                ? document.dismiss().pressedWithin(hoverTarget()) : List.of();
         for (InputMode mode : modes()) {
             if (mode.pointerButton(event.button(), event.state(), position.x, position.y)) {
                 // A CONSUMED PRESS STILL DISMISSES.
@@ -705,7 +707,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
                 // so on a surface whose tool consumes every left press, an open menu could not be closed
                 // by clicking the thing it was about. Who HANDLES a press and whether a press happened
                 // are different questions, and only the second one concerns the popover stack.
-                if (event.state()) document.dismiss().lightDismiss(hoverTarget(), shownBefore);
+                if (event.state()) document.dismiss().lightDismiss(pressedWithin, shownBefore);
                 return true;
             }
         }
@@ -736,6 +738,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
             // opened it -- it would appear never to open at all -- so light dismiss judges against the
             // stack as it was when the press landed, not as it is once the press has been delivered.
             int shownBefore = document.dismiss().showSeq();
+            // AND WHAT THE PRESS IS INSIDE, read at the same moment and for the same reason: the press
+            // can detach the node it landed on. @see Dismiss#pressedWithin
+            List<UIElement> pressedWithin = document.dismiss().pressedWithin(target);
             if (target != null && ordinal == 0) target.setPressed(true);
             document.focus().pressed(target, ordinal, false);
             send(target, new MouseEvent.Down(target, pointer, ordinal, detail));
@@ -743,7 +748,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
             // the tree under an undelivered event, so the press would never reach what it landed on.
             // On press rather than the spec's press/release pair -- that pairing exists for
             // text-selection drags, which this engine has no equivalent of.
-            document.dismiss().lightDismiss(target, shownBefore);
+            document.dismiss().lightDismiss(pressedWithin, shownBefore);
         } else {
             boolean wasPressTarget = target == pressTarget;
             if (pressTarget != null && ordinal == 0) pressTarget.setPressed(false);

@@ -302,7 +302,12 @@ public class StylePropertyRegistry {
      */
     public static final StyleProperty<FontWeight> FONT_WEIGHT =
             create("font-weight", FontWeight.class, FontWeight.NORMAL, FontWeightValue::new)
-                    .setInheritable(true);
+                    .setInheritable(true)
+                    // THE CSS KEYWORD, not the constant. A custom parser means this is not an
+                    // EnumProperty, so it had that class's default writer -- String.valueOf -- and
+                    // answered BOLD. The parser reads it back, so nothing failed; what it produced was a
+                    // row reading "BOLD" and a dropdown of lowercase options that matched none of them.
+                    .setWriter(weight -> weight.name().toLowerCase(Locale.ROOT));
     /**
      * CSS {@code font-style}. Inherited, initial {@code normal}. @see FontStyle
      *

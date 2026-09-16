@@ -161,6 +161,75 @@ public class StyleEditingTest {
         assertFalse(buffer.toString().contains("/* opacity"));
     }
 
+    /**
+     * <b>A field reads back what it just wrote, from the instance that wrote it.</b>
+     *
+     * <p>The row set is deliberately not rebuilt when a value changes, so one of these lives across many
+     * edits. Answering from the cascade snapshot it was built with meant every edit read back the value it
+     * had just replaced: the colour field sprang to the old colour, a slider rubber-banded, and a lab's
+     * specimen never moved — while the element on the canvas, restyled from the real sheet, showed the new
+     * value. Every test here rebuilt the fields after writing, which is how it got through.</p>
+     */
+    @Test
+    public void aFieldReadsBackWhatItWroteWithoutBeingRebuilt() {
+        StyleFields fields = StyleFields.on(null, ruleTarget(StyleTargets.of(node, sheets)), node);
+        Property<String> opacity = fields.value("opacity");
+        assertEquals("0.5", opacity.get());
+
+        opacity.set("0.25");
+        assertEquals("the same field answers the new value", "0.25", opacity.get());
+
+        fields.value("color").set("#FFFFFF");
+        assertEquals("a property the rule gained reads back too", "#FFFFFF", fields.valueOf("color"));
+
+        fields.remove("color");
+        assertEquals("and one taken out reads as nothing", "", fields.valueOf("color"));
+    }
+
+    /** The same, inline: the element itself is what an inline field reads. */
+    @Test
+    public void anInlineFieldReadsBackFromTheElement() {
+        StyleFields inline = StyleFields.on(null, StyleTargets.of(node, sheets).chosen(""), node);
+        assertEquals("nothing inline yet", "", inline.valueOf("color"));
+
+        inline.value("color").set("#E8913A");
+        assertEquals("the element's own value, in the spelling a sheet would need",
+                "#E8913A", inline.valueOf("color"));
+    }
+
+    /** A declaration switched off still has a value, so its row does not blank out. */
+    @Test
+    public void aSwitchedOffDeclarationStillReadsItsValue() {
+        StyleFields fields = StyleFields.on(null, ruleTarget(StyleTargets.of(node, sheets)), node);
+        assertTrue(fields.setEnabled("opacity", false));
+        assertEquals("0.5", fields.valueOf("opacity"));
+    }
+
+    /**
+     * <b>A sheet takes the stroke shorthand; an element takes the longhands.</b>
+     *
+     * <p>The asymmetry is the engine's own and it has no middle ground: {@code text-stroke-width} and
+     * {@code text-stroke-color} name {@code getAuthoredThrough}, so a stylesheet refuses them, while
+     * {@code text-stroke} is a shorthand the registry never holds — so there is no property to set inline
+     * under that name. A lab that writes one spelling everywhere is doing nothing at half its targets.</p>
+     */
+    @Test
+    public void aSheetTakesTheStrokeShorthandAndAnElementTakesTheLonghands() {
+        StyleFields inline = StyleFields.on(null, StyleTargets.of(node, sheets).chosen(""), node);
+        inline.value("text-stroke").set("3px #FFFFFF");
+        assertEquals("a shorthand names no property an element can carry",
+                "", inline.valueOf("text-stroke-width"));
+
+        inline.value("text-stroke-width").set("3px");
+        inline.value("text-stroke-color").set("#FFFFFF");
+        assertEquals(3f, CssValues.number(inline.valueOf("text-stroke-width"), 0f), 1e-6);
+        assertEquals("#FFFFFF", inline.valueOf("text-stroke-color"));
+
+        StyleFields rule = StyleFields.on(null, ruleTarget(StyleTargets.of(node, sheets)), node);
+        rule.value("text-stroke").set("3px #FFFFFF");
+        assertTrue("and the sheet holds the shorthand", buffer.toString().contains("text-stroke: 3px #FFFFFF"));
+    }
+
     @Test
     public void aReadOnlySheetRefusesTheWrite() {
         StyleTargets targets = StyleTargets.of(node, sheets);
@@ -172,6 +241,23 @@ public class StyleEditingTest {
         fields.value("opacity").set("0.9");
         assertTrue("nothing was written", buffer.toString().contains("opacity: 0.5;"));
         assertFalse(targets.targets().isEmpty());
+    }
+
+    /**
+     * <b>A property picked from the palette appears, even at its initial value.</b>
+     *
+     * <p>An inline write withdraws a value equal to what the element computes without it — right for a field
+     * set back to its default, and wrong for an explicit add, which is exactly a property at its initial.
+     * The row asked for vanished as it was created.</p>
+     */
+    @Test
+    public void addingAPropertyAtItsInitialValueKeepsIt() {
+        StyleFields inline = StyleFields.on(null, StyleTargets.of(node, sheets).chosen(""), node);
+        inline.add("opacity", "1");
+        frame();
+
+        StyleTarget target = StyleTargets.of(node, sheets).chosen("");
+        assertNotNull("the declaration is there", target.declaring("opacity"));
     }
 
     // ── S.4 / S.5 ───────────────────────────────────────────────────────────

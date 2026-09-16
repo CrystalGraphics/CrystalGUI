@@ -4,13 +4,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.visual.color.ColorValue;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.composite.ColorSelector;
-import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.control.Slider;
-import com.crystalgui.widget.text.UIText;
 
 /**
  * The glass lab: {@code backdrop-filter} on live sliders, over a backdrop worth filtering.
@@ -33,18 +31,20 @@ public final class GlassLab {
 
     private static final String DEFAULT = "blur(12px) saturate(1.2)";
 
-    /** The functions with a slider, in the order the gallery's page lists them: name, min, max. */
+    /** The functions with a slider, in the order the gallery's page lists them: label, name, min, max. */
     private static final Object[][] KNOBS = {
-            {"blur", 0f, 40f}, {"bezel", 0f, 24f}, {"ior", 1f, 2f},
-            {"specular", 0f, 1f}, {"noise", 0f, 0.2f}, {"saturate", 0f, 3f}};
+            {"Blur", "blur", 0f, 40f},
+            {"Bezel", "bezel", 0f, 24f},
+            {"Refraction", "ior", 1f, 2f},
+            {"Specular", "specular", 0f, 1f},
+            {"Noise", "noise", 0f, 0.2f},
+            {"Saturation", "saturate", 0f, 3f}};
 
     private final Property<String> css;
     private final StyleLab lab;
 
     /** Every function in the value, by name, so one this lab has no slider for is written back untouched. */
     private final Map<String, String> functions = new LinkedHashMap<>();
-
-    private final UIText numbers = new UIText("");
 
     private GlassLab(UIElement anchor, StyleProperty<?> property, Property<String> css) {
         this.css = css;
@@ -61,53 +61,35 @@ public final class GlassLab {
 
     private void build() {
         // OVER SOMETHING, not over a flat ground: a blur of nothing looks like no blur at all.
-        lab.specimens().backdrop();
+        lab.specimen().backdrop();
 
         for (Object[] knob : KNOBS) {
-            String name = (String) knob[0];
-            float min = (Float) knob[1];
-            float max = (Float) knob[2];
-
-            UIElement row = new UIElement();
-            row.addClass("__lab-row__");
-            row.append(new UIText(name));
-
-            Slider slider = new Slider();
-            slider.setRange(min, max);
-            slider.setValue(valueOf(name, min));
-            slider.onValueChanged.connect(value -> {
-                functions.put(name, CssValues.function(name, unit(name, value)));
-                write();
-            });
-            row.append(slider);
-            lab.content().append(row);
+            String label = (String) knob[0];
+            String name = (String) knob[1];
+            float min = (Float) knob[2];
+            float max = (Float) knob[3];
+            lab.form().prop(ConfigDescriptor.number("lab." + name, label).range(min, max).decimals(2),
+                    Property.derived(() -> (double) valueOf(name, min), value -> {
+                        functions.put(name, CssValues.function(name, unit(name, CssValues.dragged(value))));
+                        write();
+                    }));
         }
 
-        UIElement tint = new UIElement();
-        tint.addClass("__lab-row__");
-        tint.append(new UIText("tint"));
-        ColorSelector picker = new ColorSelector();
-        picker.onColorChanged.connect(argb -> {
-            functions.put("tint", CssValues.function("tint", CssValues.color(argb)));
-            write();
-        });
-        tint.append(picker);
-        Button clear = new Button("no tint");
-        clear.addClass("__lab-keyword__");
-        clear.attachListener(() -> {
-            functions.remove("tint");
-            write();
-        });
-        tint.append(clear);
-        lab.content().append(tint);
-        lab.content().append(numbers);
+        lab.form().separator();
+        lab.form().prop(ConfigDescriptor.color("lab.tint", "Tint"),
+                Property.derived(this::tint, argb -> {
+                    functions.put("tint", CssValues.function("tint", CssValues.color(argb)));
+                    write();
+                }));
 
-        lab.caption(() -> "blur " + CssValues.px(valueOf("blur", 0f))
-                + " · bezel " + CssValues.px(valueOf("bezel", 0f))
-                + " · ior " + CssValues.write(valueOf("ior", 1f))
-                + " — " + functions.size() + " functions, "
-                + (functions.size() - offered() > 0 ? (functions.size() - offered()) + " kept as written" : "all editable here"));
-        refresh();
+        lab.caption(() -> {
+            int kept = functions.size() - offered();
+            return functions.size() + " functions"
+                    + (kept > 0 ? ", " + kept + " kept as written" : ", all editable here")
+                    + " — blur " + CssValues.px(valueOf("blur", 0f))
+                    + ", ior " + CssValues.write(valueOf("ior", 1f));
+        });
+        lab.refresh();
     }
 
     /** How many of the value's functions this lab has a control for. */
@@ -121,7 +103,7 @@ public final class GlassLab {
 
     private static boolean hasKnob(String name) {
         for (Object[] knob : KNOBS) {
-            if (knob[0].equals(name)) return true;
+            if (knob[1].equals(name)) return true;
         }
         return false;
     }
@@ -142,6 +124,12 @@ public final class GlassLab {
         return function == null ? fallback : CssValues.number(CssValues.arguments(function), fallback);
     }
 
+    private int tint() {
+        String function = functions.get("tint");
+        Integer parsed = function == null ? null : ColorValue.parseCssColor(CssValues.arguments(function));
+        return parsed == null ? 0x00000000 : parsed;
+    }
+
     /** Lengths take px; ratios take a bare number — the grammar's own split. */
     private static String unit(String name, double value) {
         return "blur".equals(name) || "bezel".equals(name) ? CssValues.px(value) : CssValues.write(value);
@@ -149,11 +137,6 @@ public final class GlassLab {
 
     private void write() {
         css.set(CssValues.joinFunctions(new ArrayList<>(functions.values())));
-        refresh();
-    }
-
-    private void refresh() {
-        numbers.setText(CssValues.joinFunctions(new ArrayList<>(functions.values())));
         lab.refresh();
     }
 }

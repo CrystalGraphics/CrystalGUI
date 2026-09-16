@@ -46,6 +46,9 @@ theme {
     --builder-handle-bg: var(--fg-on-accent);
     --builder-guide: var(--error);
 
+    /* The style labs' one derived token; the rest are palette values and live in the theme file. */
+    --lab-stop-bg: var(--fg-on-accent);
+
     --breadcrumb-current-fg: var(--fg);
     --breadcrumb-link-fg: var(--link);
     --breadcrumb-sep-fg: var(--fg-hint);

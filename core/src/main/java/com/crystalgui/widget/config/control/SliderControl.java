@@ -6,6 +6,8 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.dom.UIElement;
+import javax.annotation.Nullable;
+
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
@@ -63,11 +65,21 @@ public class SliderControl extends ValueControl<Double> {
         addClass("__slider__");
         slider.setRange(min, max);
         slider.setValue((float) defaultValue);
-        if (descriptor.integral()) slider.setStep(1f);
+        // A DECLARED STEP FIRST: `integral` is the same thing at 1, and was the only one the kit had.
+        if (descriptor.step() > 0f) {
+            slider.setStep(descriptor.step());
+        } else if (descriptor.integral()) {
+            slider.setStep(1f);
+        }
 
         number = new NumberControl(
                 ConfigDescriptor.number(descriptor.id() + ".value", "")
                         .integral(descriptor.integral())
+                        .step(descriptor.step())
+                        // THE UNIT TOO, which this dropped: a ranged number showed a bare 29 where
+                        // the same descriptor without a range showed 29px, and the difference was
+                        // invisible in the declaration.
+                        .unit(descriptor.unit())
                         .decimals(descriptor.decimals())
                         .commitWhileTyping(descriptor.commitsWhileTyping())
                         .range(min, max),
@@ -101,6 +113,34 @@ public class SliderControl extends ValueControl<Double> {
     public boolean adoptLabel(UIElement label) {
         number.scrubWith(label);
         return true;
+    }
+
+    /**
+     * Moves the range of both halves at once.
+     *
+     * <pre>{@code
+     * stroke.setRange(0f, Math.max(8f, fontSize * 0.5f));
+     * }</pre>
+     *
+     * <p>Both, because they are one control: the track would scale to a new span while the field beside
+     * it went on clamping to the old one, and a value legal in one would be refused by the other.</p>
+     */
+    public SliderControl setRange(float min, float max) {
+        slider.setRange(min, max);
+        number.setRange(min, max);
+        return this;
+    }
+
+    /** The unit both halves show and accept. @see NumberControl#setUnit */
+    public SliderControl setUnit(@Nullable String unit) {
+        number.setUnit(unit);
+        return this;
+    }
+
+    /** The increment the track moves in. @see ConfigDescriptor#step(float) */
+    public SliderControl setStep(float step) {
+        slider.setStep(step);
+        return this;
     }
 
     public Slider slider() {

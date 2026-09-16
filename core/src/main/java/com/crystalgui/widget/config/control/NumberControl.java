@@ -75,11 +75,12 @@ public class NumberControl extends ValueControl<Double> {
     private final boolean integral;
 
     @Nullable
-    private final ConfigDescriptor.Range range;
+    /** Not final: a range can follow another value. @see #setRange */
+    private ConfigDescriptor.Range range;
 
     /** Shown after the number, and taken back off when typed. @see ConfigDescriptor#unit */
     @Nullable
-    private final String unit;
+    private String unit;
 
 
     /** Decimal places shown, or -1 for up to four. @see ConfigDescriptor#decimals */
@@ -301,6 +302,36 @@ public class NumberControl extends ValueControl<Double> {
     private static int modifiersNow() {
         var input = CgPlatform.input();
         return input == null ? 0 : input.getCurrentModifiers();
+    }
+
+    /**
+     * Moves the bounds this clamps and scrubs against.
+     *
+     * <pre>{@code
+     * number.setRange(0f, fontSize * 0.5f);   // a stroke measured in em, on a size that changes
+     * }</pre>
+     *
+     * <p>For a range that is a function of something else. The value is NOT re-clamped here: it is
+     * already whatever the model holds, and a model is not this control's to rewrite because a bound
+     * moved under it.</p>
+     */
+    public void setRange(float min, float max) {
+        this.range = new ConfigDescriptor.Range(min, max);
+    }
+
+    /**
+     * Changes what the number is measured in — the suffix shown, and the one stripped off what is typed.
+     *
+     * <pre>{@code
+     * stroke.setUnit("%");   // the same row, now editing a percentage rather than pixels
+     * }</pre>
+     *
+     * <p>For a control whose quantity is a choice the value itself records. The number is NOT converted:
+     * a caller switching the unit is telling this what the number already means.</p>
+     */
+    public void setUnit(@Nullable String value) {
+        this.unit = value;
+        writeToWidgets(getValue());
     }
 
     private double currentValue() {

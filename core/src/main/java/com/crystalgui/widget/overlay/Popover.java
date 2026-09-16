@@ -499,10 +499,25 @@ public class Popover extends UIElement {
      */
     public void hideChain() {
         List<Popover> chain = new ArrayList<>();
-        for (Popover popover = this; popover != null; popover = popover.parentPopover()) {
-            chain.add(popover);
+        chain.add(this);
+        for (Popover parent = parentPopover(); parent != null && parent.continuesChain();
+             parent = parent.parentPopover()) {
+            chain.add(parent);
         }
         for (Popover popover : chain) popover.hide();
+    }
+
+    /**
+     * Whether {@link #hideChain} keeps climbing past this popover — false here, true for a {@code Menu}.
+     *
+     * <p>{@link #parentPopover} answers the nearest open popover above the opener, which is the menu a
+     * submenu hangs off <b>and equally</b> any popover the menu merely sits inside. Those are not the same
+     * relationship: a dropdown inside a dialog, a style lab or a panel popup is CONTAINED by it rather than
+     * a level of it, and no toolkit shuts the dialog because you picked something from a select in it.
+     * Climbing indiscriminately did exactly that — choosing a face closed the type lab around it.</p>
+     */
+    protected boolean continuesChain() {
+        return false;
     }
 
     /**
