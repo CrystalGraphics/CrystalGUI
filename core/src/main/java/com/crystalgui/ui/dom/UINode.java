@@ -741,7 +741,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      * <p>Safe to call once the node is already attached: it subscribes on the spot as well as on every
      * attach after.</p>
      */
-    protected final void whileConnected(Supplier<Connection> subscribe) {
+    public final void whileConnected(Supplier<Connection> subscribe) {
         Objects.requireNonNull(subscribe, "subscribe");
         if (subscriptions == null) subscriptions = new ArrayList<>();
         subscriptions.add(subscribe);
@@ -759,7 +759,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      * onConnected(() -> document().animation().every(this, delta -> { tick(); return true; }));
      * }</pre>
      */
-    protected final void onConnected(Runnable action) {
+    public final void onConnected(Runnable action) {
         Objects.requireNonNull(action, "action");
         if (onConnected == null) onConnected = new ArrayList<>();
         onConnected.add(action);

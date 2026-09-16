@@ -6,152 +6,96 @@ import java.util.List;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.PropertyWatch;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
 /**
- * The transform lab: the ops in the order they compose, each edited where it can be seen.
+ * The transform lab: the ops in the order they compose, the picked one edited where it can be seen.
  *
  * <pre>{@code
  * TransformLab.open(chip, StylePropertyRegistry.TRANSFORM, css);
  * }</pre>
  *
- * <p><b>Order is the semantics here, not a preference.</b> {@code translate(10px) scale(2)} and
- * {@code scale(2) translate(10px)} put the element in different places, because CSS composes left to right
- * as matrix multiplication — so the stack is the editor, and moving a row up changes the result. That is
- * also why this cannot be three number fields: a decomposition into translate/scale/rotate cannot express
- * the difference at all.</p>
- *
- * <p>Translate drags on a pad, rotate points on a dial, scale and skew scrub. The specimen shows the whole
- * chain, which is the only way to judge a chain.</p>
+ * <p><b>Order is the semantics.</b> {@code translate(10px) scale(2)} and {@code scale(2) translate(10px)} put
+ * the element in different places, so the stack is the editor. Translate drags on a pad and rotate points on
+ * a dial; each edits the picked op only when it is that kind.</p>
  */
 public final class TransformLab {
 
-    public static final String PAD_CLASS = "__offset-pad__";
-    public static final String DOT_CLASS = "__offset-dot__";
-    public static final String DIAL_CLASS = "__angle-dial__";
-    public static final String NEEDLE_CLASS = "__angle-needle__";
-
-    private final Property<String> css;
-    private final StyleLab lab;
-    private final LayerStack stack;
-
-    private final UIElement pad = new UIElement();
-    private final UIElement dot = new UIElement();
-    private final UIElement dial = new UIElement();
-    private final UIElement needle = new UIElement();
-    private final UIText numbers = new UIText("");
-
-    private final List<String> ops = new ArrayList<>();
-    private int selected;
-
-    private TransformLab(UIElement anchor, StyleProperty<?> property, Property<String> css) {
-        this.css = css;
-        this.lab = StyleLab.over(anchor, "Transform", property, css);
-        this.stack = new LayerStack(property);
-        ops.addAll(CssValues.functions(css.get()));
+    private TransformLab() {
     }
 
-    public static TransformLab open(UIElement anchor, StyleProperty<?> property, Property<String> css) {
-        TransformLab transform = new TransformLab(anchor, property, css);
-        transform.build();
-        transform.lab.open();
-        return transform;
-    }
+    public static void open(UIElement anchor, StyleProperty<?> property, Property<String> css) {
+        StyleLab lab = StyleLab.over(anchor, "Transform");
+        lab.specimen().preview(property, css);
 
-    private void build() {
-        lab.specimen();
+        Property<Integer> selected = Property.of(0);
+        Property<List<String>> ops = css.map(CssValues::functions, CssValues::joinFunctions);
+        Property<String> op = Property.derived(
+                () -> at(ops.get(), selected.get()),
+                next -> {
+                    List<String> list = new ArrayList<>(ops.get());
+                    int index = selected.get() == null ? 0 : selected.get();
+                    if (index >= 0 && index < list.size()) list.set(index, next);
+                    ops.set(list);
+                }).editedIn(css.history());
 
         UIElement row = new UIElement();
-        row.addClass("__lab-row__");
-        pad.addClass(PAD_CLASS);
-        dot.addClass(DOT_CLASS);
-        pad.append(dot);
-        float[] start = new float[2];
-        StyleGizmos.drag(pad, (dx, dy) -> {
-            if (!"translate".equals(kind())) return;
-            List<String> terms = args();
-            setSelected(CssValues.function("translate",
-                    CssValues.px(CssValues.number(terms, 0, 0f) + dx),
-                    CssValues.px(CssValues.number(terms, 1, 0f) + dy)));
-            start[0] = dx;
-            start[1] = dy;
-        }, this::commit);
-        row.append(pad);
-
-        dial.addClass(DIAL_CLASS);
-        needle.addClass(NEEDLE_CLASS);
-        dial.append(needle);
-        StyleGizmos.aim(dial, degrees -> {
-            if (!"rotate".equals(kind())) return;
-            setSelected(CssValues.function("rotate", CssValues.write(Math.round(degrees)) + "deg"));
-        }, this::commit);
-        row.append(dial);
+        row.addClass(StyleLab.ROW_CLASS);
+        row.append(new OffsetPad("lab.translate").bind(op.map(TransformLab::translation, at ->
+                "translate".equals(CssValues.functionName(op.get()))
+                        ? CssValues.function("translate", CssValues.px(at[0]), CssValues.px(at[1]))
+                        : op.get())));
+        row.append(new AngleDial("lab.rotate").bind(op.map(TransformLab::rotation, degrees ->
+                "rotate".equals(CssValues.functionName(op.get()))
+                        ? CssValues.function("rotate", CssValues.write(degrees) + "deg")
+                        : op.get())));
+        UIText numbers = new UIText("");
+        PropertyWatch.follow(numbers, op, text -> numbers.setText(text.isEmpty() ? "—" : text));
         row.append(numbers);
         lab.content().append(row);
 
+        LayerStack stack = new LayerStack("lab.ops", property, selected);
+        stack.bind(ops);
         UIElement adds = new UIElement();
-        adds.addClass("__lab-row__");
-        addButton(adds, "translate", "translate(0px, 0px)");
-        addButton(adds, "rotate", "rotate(0deg)");
-        addButton(adds, "scale", "scale(1, 1)");
-        addButton(adds, "skew", "skew(0deg, 0deg)");
+        adds.addClass(StyleLab.ROW_CLASS);
+        for (String added : List.of("translate(0px, 0px)", "rotate(0deg)", "scale(1, 1)", "skew(0deg, 0deg)")) {
+            Button button = new Button("+ " + CssValues.functionName(added));
+            button.addClass(StyleLab.KEYWORD_CLASS);
+            button.attachListener(() -> {
+                List<String> list = new ArrayList<>(ops.get());
+                list.add(added);
+                ops.set(list);
+                selected.set(list.size() - 1);
+            });
+            adds.append(button);
+        }
         lab.content().append(adds);
-
-        stack.onSelect(index -> {
-            selected = index;
-            refresh();
-        });
-        stack.onChange(values -> {
-            ops.clear();
-            ops.addAll(values);
-            selected = stack.selected();
-            commit();
-        });
         lab.content().append(stack);
 
-        lab.caption(() -> ops.isEmpty() ? "no transform"
-                : ops.size() + (ops.size() == 1 ? " op" : " ops, applied left to right") + " — editing " + kind());
-        refresh();
+        lab.caption(Property.derived(() -> {
+            int count = ops.get().size();
+            return count == 0 ? "no transform"
+                    : count + (count == 1 ? " op" : " ops, applied left to right")
+                            + " — editing " + CssValues.functionName(op.get());
+        }));
+        lab.readout(property.name, css);
+        lab.open();
     }
 
-    private void addButton(UIElement row, String name, String op) {
-        Button button = new Button("+ " + name);
-        button.addClass("__lab-keyword__");
-        button.attachListener(() -> {
-            ops.add(op);
-            selected = ops.size() - 1;
-            commit();
-        });
-        row.append(button);
+    private static String at(List<String> ops, Integer index) {
+        int at = index == null ? 0 : index;
+        return at >= 0 && at < ops.size() ? ops.get(at) : "";
     }
 
-    // ── The value ───────────────────────────────────────────────────────────
-
-    /** What the selected op is: {@code translate}, {@code rotate}, {@code scale} or {@code skew}. */
-    private String kind() {
-        return selected >= 0 && selected < ops.size() ? CssValues.functionName(ops.get(selected)) : "";
+    private static double[] translation(String op) {
+        if (!"translate".equals(CssValues.functionName(op))) return new double[2];
+        List<String> terms = CssValues.layers(CssValues.arguments(op));
+        return new double[] {CssValues.number(terms, 0, 0f), CssValues.number(terms, 1, 0f)};
     }
 
-    private List<String> args() {
-        if (selected < 0 || selected >= ops.size()) return List.of();
-        return CssValues.layers(CssValues.arguments(ops.get(selected)));
-    }
-
-    private void setSelected(String op) {
-        if (selected < 0 || selected >= ops.size()) return;
-        ops.set(selected, op);
-        refresh();
-    }
-
-    private void commit() {
-        css.set(CssValues.joinFunctions(ops));
-        refresh();
-    }
-
-    private void refresh() {
-        stack.show(ops, selected);
-        numbers.setText(selected >= 0 && selected < ops.size() ? ops.get(selected) : "—");
-        lab.refresh();
+    private static double rotation(String op) {
+        return "rotate".equals(CssValues.functionName(op)) ? CssValues.number(CssValues.arguments(op), 0f) : 0d;
     }
 }

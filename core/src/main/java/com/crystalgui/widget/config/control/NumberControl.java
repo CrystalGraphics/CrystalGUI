@@ -11,6 +11,8 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.core.property.Property;
+import com.crystalgui.widget.config.PropertyWatch;
 import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.ui.input.DragScrub;
 
@@ -74,15 +76,6 @@ public class NumberControl extends ValueControl<Double> {
     private final TextField field = new TextField();
     private final boolean integral;
 
-    @Nullable
-    /** Not final: a range can follow another value. @see #setRange */
-    private ConfigDescriptor.Range range;
-
-    /** Shown after the number, and taken back off when typed. @see ConfigDescriptor#unit */
-    @Nullable
-    private String unit;
-
-
     /** Decimal places shown, or -1 for up to four. @see ConfigDescriptor#decimals */
     private final int decimals;
 
@@ -115,13 +108,20 @@ public class NumberControl extends ValueControl<Double> {
     public NumberControl(ConfigDescriptor descriptor, double defaultValue) {
         super(NAME, descriptor, defaultValue);
         this.integral = descriptor.integral();
-        this.range = descriptor.range();
-        this.unit = descriptor.unit();
         this.decimals = descriptor.decimals();
         addClass("__number__");
         append(field);
         quietly(() -> writeToWidgets(defaultValue));
         if (descriptor.commitsWhileTyping()) field.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
+
+        // A UNIT THAT FOLLOWS ANOTHER VALUE is re-shown when it moves, since the text is only written on a
+        // programmatic set and would otherwise keep the old suffix until the number itself changed.
+        if (descriptor.live()) {
+            PropertyWatch unitWatch = new PropertyWatch(this, Property.derived(descriptor::unit), (was, now) -> {
+                if (!isEditing()) quietly(() -> writeToWidgets(getValue()));
+            });
+            whileConnected(unitWatch::start);
+        }
 
         field.attachListener(text -> {
             Double parsed = parse(text);
@@ -304,36 +304,6 @@ public class NumberControl extends ValueControl<Double> {
         return input == null ? 0 : input.getCurrentModifiers();
     }
 
-    /**
-     * Moves the bounds this clamps and scrubs against.
-     *
-     * <pre>{@code
-     * number.setRange(0f, fontSize * 0.5f);   // a stroke measured in em, on a size that changes
-     * }</pre>
-     *
-     * <p>For a range that is a function of something else. The value is NOT re-clamped here: it is
-     * already whatever the model holds, and a model is not this control's to rewrite because a bound
-     * moved under it.</p>
-     */
-    public void setRange(float min, float max) {
-        this.range = new ConfigDescriptor.Range(min, max);
-    }
-
-    /**
-     * Changes what the number is measured in — the suffix shown, and the one stripped off what is typed.
-     *
-     * <pre>{@code
-     * stroke.setUnit("%");   // the same row, now editing a percentage rather than pixels
-     * }</pre>
-     *
-     * <p>For a control whose quantity is a choice the value itself records. The number is NOT converted:
-     * a caller switching the unit is telling this what the number already means.</p>
-     */
-    public void setUnit(@Nullable String value) {
-        this.unit = value;
-        writeToWidgets(getValue());
-    }
-
     private double currentValue() {
         Double held = getValue();
         return held == null ? 0d : held;
@@ -341,6 +311,7 @@ public class NumberControl extends ValueControl<Double> {
 
     private DragScrub.Spec scrubSpec() {
         DragScrub.Spec spec = integral ? DragScrub.Spec.INTEGRAL : DragScrub.Spec.FLOAT;
+        ConfigDescriptor.Range range = descriptor().range();
         if (range != null) spec = spec.withRange(range.min(), range.max());
         // ASKED PER DRAG, since a rate may follow another value -- a slider's span. @see ConfigDescriptor#scrubRate
         double scrubRate = descriptor().scrubRate();
@@ -354,12 +325,14 @@ public class NumberControl extends ValueControl<Double> {
     }
 
     private double clamp(double v) {
+        ConfigDescriptor.Range range = descriptor().range();
         if (range == null) return v;
         return Math.max(range.min(), Math.min(range.max(), v));
     }
 
     /** The number, then the descriptor's unit if it names one: {@code 45°}, {@code 100%}. */
     private String format(double v) {
+        String unit = descriptor().unit();
         return formatNumber(v) + (unit == null ? "" : unit);
     }
 
@@ -377,6 +350,7 @@ public class NumberControl extends ValueControl<Double> {
     @Nullable
     private Double parse(String text) {
         String trimmed = text.trim();
+        String unit = descriptor().unit();
         if (unit != null && trimmed.endsWith(unit)) {
             trimmed = trimmed.substring(0, trimmed.length() - unit.length()).trim();
         }

@@ -5,12 +5,15 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.property.Property;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.property.StyleValue;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.PropertyWatch;
 
 /**
  * Writing a value straight onto a live element — what a picked element's inspector edits do.
@@ -60,6 +63,27 @@ public final class LiveEdits {
         style.replaceOrPutCandidate(property,
                 StyleSlot.of(property, StyleOrigin.INLINE, SPECIFICITY, 0L, value));
         return true;
+    }
+
+    /**
+     * Keeps {@code property} on {@code element} equal to {@code css} for as long as the element is on screen:
+     * set inline while it holds a value, cleared while it is blank.
+     *
+     * <pre>{@code
+     * LiveEdits.follow(specimen, StylePropertyRegistry.TEXT_SHADOW, fields.value("text-shadow"));
+     * }</pre>
+     *
+     * <p>A preview of a declaration is this one call. A value that does not parse leaves the last one
+     * showing, as {@link #setInline} does.</p>
+     */
+    public static void follow(UIElement element, StyleProperty<?> property, Property<String> css) {
+        PropertyWatch.follow(element, css, value -> {
+            if (value == null || value.isBlank()) {
+                clearInline(element, property);
+            } else {
+                setInline(element, property, value);
+            }
+        });
     }
 
     /** Drops the inline value, so whatever the sheets say wins again. */

@@ -206,28 +206,25 @@ public class StyleEditingTest {
     }
 
     /**
-     * <b>A sheet takes the stroke shorthand; an element takes the longhands.</b>
+     * <b>{@code text-stroke} is one field on either target.</b>
      *
-     * <p>The asymmetry is the engine's own and it has no middle ground: {@code text-stroke-width} and
-     * {@code text-stroke-color} name {@code getAuthoredThrough}, so a stylesheet refuses them, while
-     * {@code text-stroke} is a shorthand the registry never holds — so there is no property to set inline
-     * under that name. A lab that writes one spelling everywhere is doing nothing at half its targets.</p>
+     * <p>A sheet refuses the longhands ({@code getAuthoredThrough}) and an element cannot hold the shorthand,
+     * which the registry never registers. {@link StyleFields} answers both, so a lab binds one name.</p>
      */
     @Test
-    public void aSheetTakesTheStrokeShorthandAndAnElementTakesTheLonghands() {
+    public void theStrokeIsOneFieldOnEitherTarget() {
         StyleFields inline = StyleFields.on(null, StyleTargets.of(node, sheets).chosen(""), node);
         inline.value("text-stroke").set("3px #FFFFFF");
-        assertEquals("a shorthand names no property an element can carry",
-                "", inline.valueOf("text-stroke-width"));
-
-        inline.value("text-stroke-width").set("3px");
-        inline.value("text-stroke-color").set("#FFFFFF");
-        assertEquals(3f, CssValues.number(inline.valueOf("text-stroke-width"), 0f), 1e-6);
+        assertEquals("the element carries the longhands", 3f,
+                CssValues.number(inline.valueOf("text-stroke-width"), 0f), 1e-6);
         assertEquals("#FFFFFF", inline.valueOf("text-stroke-color"));
+        assertEquals("and reads back as the shorthand", 3f,
+                CssValues.number(TypographyLab.width(inline.valueOf("text-stroke")), 0f), 1e-6);
+        assertEquals("#FFFFFF", TypographyLab.colour(inline.valueOf("text-stroke")));
 
         StyleFields rule = StyleFields.on(null, ruleTarget(StyleTargets.of(node, sheets)), node);
         rule.value("text-stroke").set("3px #FFFFFF");
-        assertTrue("and the sheet holds the shorthand", buffer.toString().contains("text-stroke: 3px #FFFFFF"));
+        assertTrue("the sheet holds the shorthand", buffer.toString().contains("text-stroke: 3px #FFFFFF"));
     }
 
     @Test

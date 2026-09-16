@@ -186,8 +186,20 @@ public final class AnchoredPlacement {
      */
     @Nullable
     public static Rect anchorRectInRoot(UIElement anchor, UIDocument document) {
+        return anchorRectIn(anchor, document.box());
+    }
+
+    /**
+     * An anchor's box in {@code container}'s space — the containing block a popup's {@code left}/{@code top}
+     * resolve against, which for an owned dialog is its frame rather than the document.
+     *
+     * <pre>{@code
+     * Rect rect = AnchoredPlacement.anchorRectIn(row, dialog.box().host());
+     * }</pre>
+     */
+    @Nullable
+    public static Rect anchorRectIn(UIElement anchor, @Nullable Box root) {
         Box box = anchor.box();
-        Box root = document.box();
         if (box == null || root == null) return null;
         // THROUGH THE ROOT'S INVERSE, not by subtracting its origin.
         //

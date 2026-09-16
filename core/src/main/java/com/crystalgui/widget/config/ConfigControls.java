@@ -43,7 +43,7 @@ public final class ConfigControls {
         // SliderControl able to assume it has a range, and NumberControl able to assume it has none.
         FACTORIES.put(ConfigDescriptor.Kind.NUMBER, (d, v) -> {
             double value = v instanceof Number n ? n.doubleValue() : 0d;
-            return d.range() == null ? new NumberControl(d, value) : new SliderControl(d, value);
+            return !d.ranged() ? new NumberControl(d, value) : new SliderControl(d, value);
         });
         FACTORIES.put(ConfigDescriptor.Kind.ARRAY, (d, v) -> {
             List<Object> list = v instanceof List<?> l ? new ArrayList<>((List<Object>) l) : null;

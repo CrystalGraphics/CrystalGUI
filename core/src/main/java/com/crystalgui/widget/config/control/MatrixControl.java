@@ -72,10 +72,7 @@ public class MatrixControl extends ValueControl<double[]> {
                 cell.addClass(CELL_CLASS);
 
                 NumberControl number = new NumberControl(
-                        ConfigDescriptor.number(descriptor.id() + "." + index, "")
-                                .integral(descriptor.integral())
-                                .decimals(descriptor.decimals())
-                                .commitWhileTyping(descriptor.commitsWhileTyping()),
+                        descriptor.part(descriptor.id() + "." + index, ""),
                         defaultValue != null && index < defaultValue.length ? defaultValue[index] : 0d);
                 number.changed.connect(v -> onCellChanged(index, (Double) v));
 

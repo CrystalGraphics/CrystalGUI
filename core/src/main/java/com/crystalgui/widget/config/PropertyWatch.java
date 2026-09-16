@@ -7,6 +7,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * <b>Keeps an element following a {@link Property} for as long as the element is on screen.</b>
@@ -53,6 +54,28 @@ public final class PropertyWatch {
         this.owner = Objects.requireNonNull(owner, "owner");
         this.property = Objects.requireNonNull(property, "property");
         this.onMoved = (Signal.Pair.Listener<Object, Object>) (Signal.Pair.Listener<?, ?>) onMoved;
+    }
+
+    /**
+     * Keeps {@code owner} showing {@code property} for as long as it is on screen — the one call for a view
+     * that is not a control: a caption, a preview, a handle's position.
+     *
+     * <pre>{@code
+     * PropertyWatch.follow(caption, summary, caption::setText);
+     * PropertyWatch.follow(dot, offset, at -> LiveEdits.setInline(dot, TRANSFORM, translate(at)));
+     * }</pre>
+     *
+     * <p>{@code show} runs at once and again on every change, including one made while the owner was off
+     * screen. Call it in a constructor or a build method; nothing needs refreshing by hand afterwards.</p>
+     */
+    public static <T> void follow(UIElement owner, Property<T> property, Consumer<T> show) {
+        show.accept(property.get());
+        PropertyWatch watch = new PropertyWatch(owner, property, (was, now) -> show.accept(now));
+        owner.whileConnected(() -> {
+            // A RE-ATTACH SHOWS WHAT MOVED WHILE DETACHED, which a watch reports only from its next change.
+            show.accept(property.get());
+            return watch.start();
+        });
     }
 
     /** The property being followed. */

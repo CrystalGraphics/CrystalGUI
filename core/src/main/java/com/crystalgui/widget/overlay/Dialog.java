@@ -19,6 +19,8 @@ import com.crystalgui.ui.dom.UINode;
 import java.util.List;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import java.util.function.Function;
+
 import org.joml.Vector2f;
 
 import com.crystalgui.ui.service.AnchoredPlacement;
@@ -763,32 +765,56 @@ public class Dialog extends UIElement {
      * @see AnchoredPlacement the one definition of putting a popup beside a thing
      */
     public Dialog placeAt(float left, float top) {
+        AnchoredPlacement.Rect point = new AnchoredPlacement.Rect(left, top, 0f, 0f);
+        return fitTo(container -> point, AnchoredPlacement.Side.BOTTOM, 0f);
+    }
+
+    /**
+     * Opens the dialog beside {@code anchor}, flipped to the other side when there is no room and fitted
+     * inside its containing block — a popover's placement, for a panel that must not light-dismiss.
+     *
+     * <pre>{@code
+     * dialog.show();
+     * dialog.placeBeside(row, AnchoredPlacement.Side.RIGHT, 8f);   // an inspector's editor, next to its row
+     * }</pre>
+     *
+     * <p>Deferred until measured, like {@link #placeAt}. The anchor is read when the dialog is fitted, so
+     * an anchor that has not been laid out yet either is still found.</p>
+     */
+    public Dialog placeBeside(UIElement anchor, AnchoredPlacement.Side side, float gap) {
+        return fitTo(container -> AnchoredPlacement.anchorRectIn(anchor, container), side, gap);
+    }
+
+    private Dialog fitTo(Function<Box, AnchoredPlacement.Rect> anchor, AnchoredPlacement.Side side, float gap) {
         placed = true;
-        pendingLeft = left;
-        pendingTop = top;
-        pendingFit = true;
+        pendingAnchor = anchor;
+        pendingSide = side;
+        pendingGap = gap;
         fitIfPending();
         return this;
     }
 
-    /** Where {@link #placeAt} was asked for, until there is a measured box to fit against. */
-    private float pendingLeft, pendingTop;
+    /** What {@link #placeAt} or {@link #placeBeside} asked for, in the containing block's space, until
+     * there is a measured box to fit against. Null once fitted. */
+    @Nullable
+    private Function<Box, AnchoredPlacement.Rect> pendingAnchor;
 
-    private boolean pendingFit;
+    private AnchoredPlacement.Side pendingSide = AnchoredPlacement.Side.BOTTOM;
+    private float pendingGap;
 
-    /** {@link #placeAt}, once both boxes can answer. @see #centreIfUnplaced for the same trap. */
+    /** The pending placement, once both boxes can answer. @see #centreIfUnplaced for the same trap. */
     private void fitIfPending() {
-        if (!pendingFit) return;
+        if (pendingAnchor == null) return;
         Box self = box();
         Box container = self == null ? null : self.host();
         if (container == null) return;
         if (self.width() <= 0f || self.height() <= 0f) return;
         if (container.width() <= 0f || container.height() <= 0f) return;
-        pendingFit = false;
-        Vector2f at = AnchoredPlacement.resolve(
-                new AnchoredPlacement.Rect(pendingLeft, pendingTop, 0f, 0f),
-                self.width(), self.height(), container.width(), container.height(),
-                AnchoredPlacement.Side.BOTTOM, 0f);
+        AnchoredPlacement.Rect rect = pendingAnchor.apply(container);
+        if (rect == null) return;
+        pendingAnchor = null;
+        Vector2f at = AnchoredPlacement.resolve(rect, self.width(), self.height(),
+                container.width(), container.height(), pendingSide, pendingGap);
         applyPosition(at.x(), at.y());
     }
 

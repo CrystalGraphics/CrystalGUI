@@ -4,133 +4,126 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
-import java.util.function.IntConsumer;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
+import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.ui.dom.ChildList;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.PropertyWatch;
+import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
 /**
- * A composite value as the stack it is: one row per layer, reorderable, each drawn as itself.
+ * A composite value as the stack it is: one row per layer, each drawn as itself, reorderable and removable.
  *
  * <pre>{@code
- * LayerStack stack = new LayerStack(StylePropertyRegistry.TEXT_SHADOW);
- * stack.onSelect(index -> edit(index));
- * stack.onChange(layers -> css.set(CssValues.join(layers)));
- * stack.show(CssValues.layers(css.get()), selected);
+ * Property<Integer> selected = Property.of(0);
+ * LayerStack stack = new LayerStack("layers", TEXT_SHADOW, selected);
+ * stack.bind(css.map(CssValues::layers, CssValues::join));   // the rows ARE the declaration's layers
  * }</pre>
  *
- * <p><b>Order is the value.</b> Every composite the engine has is an ordered list where the order decides
- * the result — {@code translate} then {@code scale} is not the reverse, and the first background layer is
- * the one on top — so moving a row is an edit, not a view preference. Photoshop's layer styles, at the size
- * a lab has room for.</p>
- *
- * <p>Each row carries a sample with just that layer applied, so a stack of three shadows reads as three
- * shadows rather than three strings.</p>
+ * <p><b>Order is the value.</b> {@code translate} then {@code scale} is not the reverse, and the first shadow
+ * is the one on top, so moving a row is an edit. Pressing a row sets {@code selected}, which is what a lab's
+ * other controls map through to edit that one layer.</p>
  */
-public final class LayerStack extends UIElement {
+public final class LayerStack extends ValueControl<List<String>> {
+
+    public static final Name NAME = Name.of("layerstack");
 
     public static final String STACK_CLASS = "__layer-stack__";
     public static final String ROW_CLASS = "__layer-row__";
     public static final String SAMPLE_CLASS = "__layer-sample__";
-    /** What a painter puts inside a sample when the layer needs something to act on. */
+    /** What a sample holds when the layer needs something to act on. @see #sample */
     public static final String SAMPLE_TEXT_CLASS = "__layer-sample-text__";
     public static final String TEXT_CLASS = "__layer-text__";
     public static final String ACTIVE_CLASS = "__active__";
 
     private final StyleProperty<?> property;
-
-    private final List<String> layers = new ArrayList<>();
-    private int selected;
-
-    @Nullable
-    private IntConsumer onSelect;
+    private final Property<Integer> selected;
+    private final ChildList<Row> rows = new ChildList<>(this, this::row);
 
     @Nullable
-    private Consumer<List<String>> onChange;
+    private Consumer<UIElement> sampleBuilder;
 
-    /** How a layer is drawn in its row, or null to apply the layer itself. @see #sample(BiConsumer) */
     @Nullable
-    private BiConsumer<UIElement, String> painter;
+    private BiConsumer<UIElement, String> samplePainter;
 
-    /** @param property what a row's sample draws with — the property whose layers these are */
-    public LayerStack(StyleProperty<?> property) {
+    /**
+     * @param property what a row's sample draws with — the property whose layers these are
+     * @param selected which layer is picked, shared with the controls that edit it
+     */
+    public LayerStack(String id, StyleProperty<?> property, Property<Integer> selected) {
+        super(NAME, ConfigDescriptor.of(id, "", ConfigDescriptor.Kind.ARRAY), List.of());
         this.property = property;
+        this.selected = selected;
         addClass(STACK_CLASS);
+        PropertyWatch.follow(this, selected, index -> paintSelection());
     }
 
     /**
-     * How a layer is drawn in its row, when applying the value itself says nothing.
+     * How a row's sample is drawn, when applying the layer to an empty box says nothing.
      *
      * <pre>{@code
-     * stack.sample((patch, layer) -> StyleChip.paintColour(patch, colourOf(layer)));
+     * stack.sample(patch -> patch.append(new UIText("Ag")),                  // once, when the row is made
+     *         (patch, layer) -> LiveEdits.setInline(patch, TEXT_SHADOW, fitted(layer)));   // on every change
      * }</pre>
-     *
-     * <p>The default applies the layer, which is right for a transform: a 20x14 chip genuinely moves.
-     * A shadow is the case it fails on -- a chip that size cannot hold a 16px blur, and with no text in
-     * it a {@code text-shadow} draws nothing at all, so five different shadows came out as five
-     * identical grey boxes.</p>
      */
-    public LayerStack sample(BiConsumer<UIElement, String> painter) {
-        this.painter = painter;
+    public LayerStack sample(Consumer<UIElement> build, BiConsumer<UIElement, String> paint) {
+        this.sampleBuilder = build;
+        this.samplePainter = paint;
         return this;
     }
 
-    /** Told when a row is picked: which one a lab's own gizmos then edit. */
-    public LayerStack onSelect(IntConsumer listener) {
-        this.onSelect = listener;
-        return this;
+    @Override
+    public boolean selfLabelling() {
+        return true;
     }
 
-    /** Told when the layers themselves change — reordered, removed, added. */
-    public LayerStack onChange(Consumer<List<String>> listener) {
-        this.onChange = listener;
-        return this;
-    }
-
-    /** The layers this is showing, in order. */
-    public List<String> layers() {
-        return List.copyOf(layers);
-    }
-
-    public int selected() {
-        return selected;
-    }
-
-    /** Draws {@code values}, with {@code selected} picked out. */
-    public void show(List<String> values, int selected) {
-        // COPIED FIRST: `changed` shows the list it just edited, and clearing the argument emptied it.
-        List<String> shown = new ArrayList<>(values);
-        layers.clear();
-        layers.addAll(shown);
-        this.selected = Math.max(0, Math.min(selected, layers.size() - 1));
-        removeAll();
-        for (int i = 0; i < layers.size(); i++) append(row(i));
-    }
-
-    private UIElement row(int index) {
-        UIElement row = new UIElement();
-        row.addClass(ROW_CLASS);
-        if (index == selected) row.addClass(ACTIVE_CLASS);
-        row.setHitTest(true);
-        row.onMouseDown.attachListener((element, event) -> select(index), false, true);
-
-        UIElement sample = new UIElement();
-        sample.addClass(SAMPLE_CLASS);
-        if (painter != null) {
-            painter.accept(sample, layers.get(index));
-        } else {
-            LiveEdits.setInline(sample, cast(property), layers.get(index));
+    @Override
+    protected void writeToWidgets(@Nullable List<String> layers) {
+        List<String> shown = layers == null ? List.of() : layers;
+        rows.resize(shown.size());
+        for (int i = 0; i < shown.size(); i++) {
+            Row row = rows.get(i);
+            if (samplePainter != null) {
+                samplePainter.accept(row.sample, shown.get(i));
+            } else {
+                LiveEdits.setInline(row.sample, property, shown.get(i));
+            }
+            row.text.setText(shown.get(i));
         }
-        row.append(sample);
+        paintSelection();
+    }
 
-        UIText text = new UIText(layers.get(index));
-        text.addClass(TEXT_CLASS);
-        row.append(text);
+    private void paintSelection() {
+        int at = selected.get() == null ? 0 : selected.get();
+        for (int i = 0; i < rows.size(); i++) rows.get(i).toggleClass(ACTIVE_CLASS, i == at);
+    }
+
+    /** One layer's row: its sample, its text and its actions. */
+    private static final class Row extends UIElement {
+        final UIElement sample = new UIElement();
+        final UIText text = new UIText("");
+    }
+
+    private Row row(int index) {
+        Row row = new Row();
+        row.addClass(ROW_CLASS);
+        row.setHitTest(true);
+        row.onMouseDown.attachListener((element, event) -> selected.set(index), false, true);
+
+        row.sample.addClass(SAMPLE_CLASS);
+        if (sampleBuilder != null) sampleBuilder.accept(row.sample);
+        row.append(row.sample);
+
+        row.text.addClass(TEXT_CLASS);
+        row.append(row.text);
 
         row.append(action("↑", () -> move(index, -1)));
         row.append(action("↓", () -> move(index, 1)));
@@ -142,54 +135,38 @@ public final class LayerStack extends UIElement {
         Button button = new Button(glyph);
         button.addClass(BuilderStyleSections.ROW_ACTION_CLASS);
         button.attachListener(done);
-        // THE PRESS STOPS HERE, and without that none of these could ever fire. Bubbling to the row
-        // selects it, selecting rebuilds every row, and the button the press landed on is destroyed
-        // before its own release arrives -- so it never activates. Reordering is not selecting anyway.
-        button.onMouseDown.attachListener((element, event) -> event.stopPropagation(), false, true);
         return button;
-    }
-
-    private void select(int index) {
-        selected = index;
-        show(layers, index);
-        if (onSelect != null) onSelect.accept(index);
     }
 
     /** Adds a layer on top — the first entry, since first is what a stack paints over the rest. */
     public void add(String layer) {
-        layers.add(0, layer);
-        changed(0);
+        List<String> next = layers();
+        next.add(0, layer);
+        commit(next);
+        selected.set(0);
     }
 
-    /** Replaces the selected layer, which is what a lab's gizmos do as they are dragged. */
-    public void replaceSelected(String layer) {
-        if (selected < 0 || selected >= layers.size()) return;
-        layers.set(selected, layer);
-        changed(selected);
-    }
-
-    /** Moves a layer by {@code by} places — what the row's arrows do, and an edit either way. */
+    /** Moves a layer by {@code by} places, keeping it selected — what the row's arrows do. */
     public void move(int index, int by) {
+        List<String> next = layers();
         int to = index + by;
-        if (to < 0 || to >= layers.size()) return;
-        layers.add(to, layers.remove(index));
-        changed(to);
+        if (to < 0 || to >= next.size()) return;
+        next.add(to, next.remove(index));
+        commit(next);
+        selected.set(to);
     }
 
-    /** Takes a layer out of the stack. */
+    /** Takes a layer out, selecting the one above it. */
     public void remove(int index) {
-        if (index < 0 || index >= layers.size()) return;
-        layers.remove(index);
-        changed(Math.max(0, index - 1));
+        List<String> next = layers();
+        if (index < 0 || index >= next.size()) return;
+        next.remove(index);
+        commit(next);
+        selected.set(Math.max(0, index - 1));
     }
 
-    private void changed(int nowSelected) {
-        show(layers, nowSelected);
-        if (onChange != null) onChange.accept(layers());
-    }
-
-    @SuppressWarnings("unchecked")
-    private static StyleProperty<Object> cast(StyleProperty<?> property) {
-        return (StyleProperty<Object>) property;
+    private List<String> layers() {
+        List<String> now = getValue();
+        return now == null ? new ArrayList<>() : new ArrayList<>(now);
     }
 }

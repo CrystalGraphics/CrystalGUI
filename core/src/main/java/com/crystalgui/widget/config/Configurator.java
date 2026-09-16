@@ -62,6 +62,9 @@ public class Configurator extends UIElement implements DataProvider {
      * form.prop(descriptor, value).editedIn(sheet.buffer().history());   // not the document's
      * }</pre>
      *
+     * <p>Usually unnecessary: a row bound to a property that names its history with
+     * {@link Property#editedIn} answers with that one.</p>
+     *
      * <p>A command resolves outward from focus, so without this a row in a panel beside the editor answers
      * with whatever the panel is describing — which is right until a row edits something else, as a rule's
      * row does: the declaration is in the stylesheet's buffer and the undo belongs with it.</p>
@@ -71,10 +74,13 @@ public class Configurator extends UIElement implements DataProvider {
         return this;
     }
 
+    /** The history named here, else the one the bound property's edits go into. @see Property#editedIn */
     @Override
     @Nullable
     public Object getData(DataKey<?> key) {
-        return key == UiDataKeys.UNDO_STACK ? history : null;
+        if (key != UiDataKeys.UNDO_STACK) return null;
+        if (history != null) return history;
+        return control instanceof ValueControl<?> value ? value.property().history() : null;
     }
 
     /** On a row holding an inline list, beside {@link #ROW_CLASS}. @see ConfigDescriptor#inlineList */

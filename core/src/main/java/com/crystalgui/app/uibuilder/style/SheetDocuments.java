@@ -19,7 +19,6 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
 
 /**
  * The stylesheets a {@code .cgui} names, as things that can be <b>edited</b>: a sheet in the project is one

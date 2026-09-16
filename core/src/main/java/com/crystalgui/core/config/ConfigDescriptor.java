@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.DoubleSupplier;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * <b>What to build, not how.</b> A description of one editable value, from which
@@ -25,6 +26,16 @@ import java.util.function.Predicate;
  * arriving at per-instance range is the evidence that it belongs here rather than in a registry of
  * kinds. The same applies to {@link #options()} — two dropdowns of the same kind rarely offer the same
  * choices.</p>
+ *
+ * <h3>A number's range, unit and step can follow another value</h3>
+ * <pre>{@code
+ * ConfigDescriptor.number("stroke", "Stroke")
+ *         .range(() -> new Range(0f, em() ? 13f : cap * fontSize()))
+ *         .unit(() -> em() ? "%" : "px")
+ *         .step(() -> 0.1);
+ * }</pre>
+ * <p>The control asks again while it is on screen, so nothing holds the control to push a new bound at it.
+ * A supplier is called every frame the control is shown: keep it a read, not a computation.</p>
  */
 public final class ConfigDescriptor {
 
@@ -106,13 +117,16 @@ public final class ConfigDescriptor {
     private String tooltip;
     private List<String> options = Collections.emptyList();
     private Range range;
+    private Supplier<Range> rangeSource;
     private int arity = 3;
     private boolean integral;
 
     /** @see #step(float) */
     private float step;
+    private DoubleSupplier stepSource;
     private boolean hdr;
     private String unit;
+    private Supplier<String> unitSource;
     private String shortLabel;
     private int decimals = -1;
     private boolean commitWhileTyping;
@@ -224,9 +238,20 @@ public final class ConfigDescriptor {
         return options;
     }
 
+    /** The range now — asked of its supplier when it has one. @see #range(Supplier) */
     @Nullable
     public Range range() {
-        return range;
+        return rangeSource != null ? rangeSource.get() : range;
+    }
+
+    /** Whether this number has a range at all, which is what makes it a slider rather than a field. */
+    public boolean ranged() {
+        return range != null || rangeSource != null;
+    }
+
+    /** Whether the range, unit or step is asked for rather than fixed — a control then keeps asking. */
+    public boolean live() {
+        return rangeSource != null || unitSource != null || stepSource != null;
     }
 
     /** Components for {@link Kind#VECTOR}; the side length for {@link Kind#MATRIX}. */
@@ -245,7 +270,7 @@ public final class ConfigDescriptor {
     /** What a number is measured in — {@code "%"}, {@code "°"}, {@code "px"} — or null for a bare number. */
     @Nullable
     public String unit() {
-        return unit;
+        return unitSource != null ? unitSource.get() : unit;
     }
 
     /** What a compact field shows in front of its control, or null to show {@link #label()}. */
@@ -308,6 +333,21 @@ public final class ConfigDescriptor {
 
     public ConfigDescriptor range(float min, float max) {
         this.range = new Range(min, max);
+        this.rangeSource = null;
+        return this;
+    }
+
+    /**
+     * A range asked for while the control is on screen, for a bound that is another value.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("stroke", "Stroke").range(() -> new Range(0f, fontSize() * 0.5f));
+     * }</pre>
+     *
+     * <p>The value is not clamped when the bound moves: a model is not the control's to rewrite.</p>
+     */
+    public ConfigDescriptor range(Supplier<Range> source) {
+        this.rangeSource = source;
         return this;
     }
 
@@ -329,12 +369,19 @@ public final class ConfigDescriptor {
      */
     public ConfigDescriptor step(float value) {
         this.step = value;
+        this.stepSource = null;
         return this;
     }
 
-    /** The declared step, or 0 for none. @see #step(float) */
+    /** A step asked for while the control is on screen. @see #range(Supplier) */
+    public ConfigDescriptor step(DoubleSupplier source) {
+        this.stepSource = source;
+        return this;
+    }
+
+    /** The step now, or 0 for none. @see #step(float) */
     public float step() {
-        return step;
+        return stepSource != null ? (float) stepSource.getAsDouble() : step;
     }
 
     public ConfigDescriptor integral(boolean value) {
@@ -356,6 +403,21 @@ public final class ConfigDescriptor {
      */
     public ConfigDescriptor unit(@Nullable String value) {
         this.unit = value;
+        this.unitSource = null;
+        return this;
+    }
+
+    /**
+     * A unit asked for while the control is on screen, for a number whose unit is a choice made elsewhere.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("stroke", "Stroke").unit(() -> em() ? "%" : "px");
+     * }</pre>
+     *
+     * <p>The number is not converted when the unit changes: the model already holds it in the new one.</p>
+     */
+    public ConfigDescriptor unit(Supplier<String> source) {
+        this.unitSource = source;
         return this;
     }
 
@@ -519,5 +581,35 @@ public final class ConfigDescriptor {
     public ConfigDescriptor child(ConfigDescriptor value) {
         this.children.add(value);
         return this;
+    }
+
+    /**
+     * A number that is one PART of this value — a slider's field, a vector's X — carrying everything that
+     * says what the number is and nothing that says what the row is.
+     *
+     * <pre>{@code
+     * NumberControl x = new NumberControl(descriptor.part(descriptor.id() + ".x", "X"), 0d);
+     * }</pre>
+     *
+     * <p>Range, unit, step, decimals, integral, scrub rate and typing mode, suppliers included, so a part
+     * follows the same live bound its whole does. The label, hint and description are the row's and stay
+     * behind. Copy through here rather than attribute by attribute: every hand copy in the kit dropped a
+     * different attribute, and a dropped one is invisible in the declaration.</p>
+     */
+    public ConfigDescriptor part(String partId, String partLabel) {
+        ConfigDescriptor part = number(partId, partLabel);
+        part.range = range;
+        part.rangeSource = rangeSource;
+        part.integral = integral;
+        part.step = step;
+        part.stepSource = stepSource;
+        part.unit = unit;
+        part.unitSource = unitSource;
+        part.decimals = decimals;
+        part.commitWhileTyping = commitWhileTyping;
+        part.scrubRate = scrubRate;
+        part.scrubRateSource = scrubRateSource;
+        part.hdr = hdr;
+        return part;
     }
 }
