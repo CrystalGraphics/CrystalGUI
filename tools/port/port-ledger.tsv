@@ -151,11 +151,11 @@ PART	BuilderStyleSections	active	C	8	proposed	state adjective
 PART	BuilderStyleSections	inactive	B	2	proposed	a rule selects through it (2)
 PART	BuilderStyleSections	overridden	B	1	proposed	a rule selects through it (1)
 PART	BuilderStyleSections	read-only	A	1	proposed	leaf in every rule
-PART	BuilderStyleSections	style-add	A	4	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	BuilderStyleSections	style-add	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	BuilderStyleSections	style-add-row	B	3	proposed	a rule selects through it (2)
 PART	BuilderStyleSections	style-declarations	A	0	proposed	leaf in every rule
-PART	BuilderStyleSections	style-row	B	5	proposed	a rule selects through it (4)
-PART	BuilderStyleSections	style-row-action	A	6	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	BuilderStyleSections	style-row	B	4	proposed	a rule selects through it (3)
+PART	BuilderStyleSections	style-row-action	A	5	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	BuilderStyleSections	style-target	A	4	proposed	leaf in every rule
 PART	BuilderStyleSections	style-target-action	A	3	proposed	leaf in every rule
 PART	BuilderStyleSections	style-target-sheet	A	1	proposed	leaf in every rule
@@ -216,9 +216,9 @@ PART	CompletionPopup	completion-params	B	2	confirmed	leaf in every rule, scoped 
 PART	CompletionPopup	completion-row	B	2	confirmed	leaf in every rule
 PART	ConfigControl	config-control	B	94	confirmed	a rule selects through it (81)
 PART	Configurator	compact	B	9	proposed	a rule selects through it (8)
-PART	Configurator	configurator	B	29	confirmed	a rule selects through it (25)
+PART	Configurator	configurator	B	28	confirmed	a rule selects through it (24)
 PART	Configurator	inline	C	12	confirmed	state adjective
-PART	Configurator	label	B	14	confirmed	leaf in every rule, scoped by an ancestor in 14
+PART	Configurator	label	B	13	confirmed	leaf in every rule, scoped by an ancestor in 13
 PART	Configurator	list-row	B	2	proposed	a rule selects through it (1)
 PART	ConfiguratorGroup	arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ConfiguratorGroup	collapsed	C	5	confirmed	state adjective
@@ -366,7 +366,7 @@ PART	KindHeader	kind-tag	A	1	proposed	leaf in every rule, scoped by an ancestor 
 PART	LayerStack	active	C	8	proposed	state adjective
 PART	LayerStack	layer-row	B	5	proposed	a rule selects through it (2)
 PART	LayerStack	layer-sample	A	1	proposed	leaf in every rule
-PART	LayerStack	layer-sample-text	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	LayerStack	layer-sample-text	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	LayerStack	layer-stack	B	5	proposed	a rule selects through it (4)
 PART	LayerStack	layer-text	A	2	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	LibraryDetail	detail-description	A	1	proposed	leaf in every rule
@@ -732,7 +732,7 @@ PART	StyleLab	lab-ground	A	0	proposed	leaf in every rule
 PART	StyleLab	lab-ground-pick	A	4	proposed	leaf in every rule
 PART	StyleLab	lab-grounds	A	1	proposed	leaf in every rule
 PART	StyleLab	lab-keyword	A	2	proposed	leaf in every rule
-PART	StyleLab	lab-row	B	3	proposed	a rule selects through it (2)
+PART	StyleLab	lab-row	B	2	proposed	a rule selects through it (1)
 PART	StyleLab	lab-sample	A	1	proposed	leaf in every rule
 PART	StyleLab	lab-shape	A	4	proposed	leaf in every rule
 PART	StyleLab	lab-specimen	A	2	proposed	leaf in every rule

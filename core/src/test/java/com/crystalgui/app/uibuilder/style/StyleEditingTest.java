@@ -24,6 +24,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -88,6 +89,23 @@ public class StyleEditingTest {
         frame();
         assertEquals("the canvas followed the text", Integer.valueOf(0xFF445566),
                 node.getStyle().getComputed(StylePropertyRegistry.BACKGROUND_COLOR));
+    }
+
+    /**
+     * <b>A shipped sheet the window already had stays when the document stops naming it.</b>
+     *
+     * <p>A registry sheet is one instance per process, so the workbench's theme and a document's reference to
+     * it are the same object; taking it off with the document took the workbench's look with it.</p>
+     */
+    @Test
+    public void aSharedSheetIsLeftOnTheWindow() {
+        StyleSheet ore = StyleSheetRegistry.of("crystalgui:ore");
+        window.styles().addStylesheet(ore);
+        sheets.install(window, List.of("menu.css", "crystalgui:ore"));
+        sheets.install(window, List.of("menu.css"));
+        assertTrue("the window's own sheet is still on it", window.styles().hasStylesheet(ore, null));
+        sheets.dispose();
+        assertTrue("and still after the document closes", window.styles().hasStylesheet(ore, null));
     }
 
     @Test

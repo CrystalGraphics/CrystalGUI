@@ -85,6 +85,7 @@ public class StyleLabsTest {
         assertEquals("#00000000", CssValues.readable("#00000000"));
         assertEquals("#00FF00", CssValues.readable("#00FF00"));
         assertEquals("#478B18FF 0px 0px 12px", CssValues.readable("#478B18FF 0.0px 0px 12.0px"));
+        assertEquals("a number inside a word is part of the word", "url(img2.png)", CssValues.readable("url(img2.png)"));
     }
 
     /** Reordering is an edit, because the order decides what the value does. */

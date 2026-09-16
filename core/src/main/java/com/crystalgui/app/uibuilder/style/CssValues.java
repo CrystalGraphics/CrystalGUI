@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.StylePropertyRegistry;
 
 /**
  * Reading and writing the composite values a lab edits: the layers of a declaration, and one number in a
@@ -193,9 +194,12 @@ public final class CssValues {
                 at = hex;
                 continue;
             }
-            boolean starts = Character.isDigit(c)
+            // NOT A NUMBER INSIDE A WORD: `img2.png` read the 2 and its dot as a length and came out `img2png`.
+            char before = at == 0 ? ' ' : value.charAt(at - 1);
+            boolean inWord = Character.isLetterOrDigit(before) || before == '_' || before == '.';
+            boolean starts = !inWord && (Character.isDigit(c)
                     || ((c == '-' || c == '+' || c == '.') && at + 1 < value.length()
-                        && Character.isDigit(value.charAt(at + 1)));
+                        && Character.isDigit(value.charAt(at + 1))));
             if (!starts) {
                 out.append(c);
                 at++;
@@ -245,10 +249,8 @@ public final class CssValues {
         return "";
     }
 
-    /** {@code #RRGGBB}, or {@code #RRGGBBAA} when there is transparency to state — CSS puts alpha last. */
+    /** {@code #RRGGBB}, or {@code #RRGGBBAA} when there is transparency to state — the colour writer's own spelling. */
     public static String color(int argb) {
-        return (argb >>> 24) == 0xFF
-                ? String.format("#%06X", argb & 0xFFFFFF)
-                : String.format("#%08X", ((argb & 0xFFFFFF) << 8) | (argb >>> 24));
+        return StylePropertyRegistry.COLOR.write(argb);
     }
 }

@@ -90,12 +90,13 @@ public final class BuilderEditor implements DocumentEditor {
         this(document, null, null);
     }
 
+    /** @param store the UI builder's extension store, where the Insert menu keeps recent picks; null for none */
     public BuilderEditor(UiBuilderDocument document, @Nullable ConfigStorage store) {
         this(document, store, null);
     }
 
-    /** @param store the UI builder's extension store, where the Insert menu keeps recent picks; null for none */
     /**
+     * @param store  the UI builder's extension store, where the Insert menu keeps recent picks; null for none
      * @param sheets where the document's stylesheets come from — null for none, which leaves the canvas
      *               styled by the engine's own sheet alone
      */

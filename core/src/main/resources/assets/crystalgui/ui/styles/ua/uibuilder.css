@@ -909,8 +909,6 @@ smartguides {
 .__style-target__.__read-only__ { opacity: 0.75; }
 .__style-target-sheet__ { color: var(--fg-hint, #7A7A7A); font-size: 8; }
 
-/* The rows below it are the detail, and read as it: one step down in brightness from their heading. */
-.__configurator__.__style-row__ > .__label__ { color: var(--fg-secondary, #9DA0A8); }
 /* A GLYPH IN A BOX, CENTRED, and nothing else. These are plain elements rather than Buttons: a Button
  * brings the theme's own box with it -- a background, a radius, and 1px of padding at the top against 2px
  * at the bottom -- and at sixteen pixels that asymmetry IS the box. Centring by flex, with no padding to
@@ -944,15 +942,10 @@ smartguides {
 /* IT IS A BUTTON, not a passage: pressing it selected its own words, which is what the blue fill was. */
 .__style-add-row__ text { selection-color: #00000000; }
 .__style-add-row__:hover .__style-add__ { color: var(--accent, #3574F0); }
-/* A single glyph is never elided: there is nothing left of it once it is. */
-.__style-add__::part(label), .__style-row-action__::part(label),
-.__style-target-action__::part(label) {
+/* A single glyph is never elided: there is nothing left of it once it is. A layer row's actions are Buttons. */
+.__style-row-action__::part(label), .__style-target-action__::part(label) {
     text-overflow: clip;
     overflow: visible;
-}
-.__style-add__:hover, .__style-row-action__:hover {
-    background: var(--list-hover-bg, #393B40);
-    color: var(--fg, #DFE1E5);
 }
 /* A DECLARATION THAT LOST: struck through where it is written, as a browser's own pane draws it. */
 .__configurator__.__overridden__ > .__label__ {
@@ -1022,6 +1015,8 @@ smartguides {
  * short by nature; CSS property names are not, so the Style tab pins the column and lets a name that will
  * not fit end in an ellipsis. */
 .__configurator__.__style-row__ > .__label__ {
+    /* The rows are the detail under their heading, one step down in brightness. */
+    color: var(--fg-secondary, #9DA0A8);
     flex-basis: 132px;
     min-width: 0px;
     overflow: hidden;
@@ -1058,8 +1053,6 @@ smartguides {
 /* The sample inside it is a specimen, not the value's own size -- and big enough to cast a shadow the
  * swatch can show, which a 9px glyph is not. */
 .__style-chip-swatch__ text { font-size: 12; font-weight: bold; }
-/* A ROW WITH NO SWATCH STILL KEEPS ITS COLUMN, so the values down a family start on one edge rather than
- * wherever their own chip happens to begin. */
 /* THE VALUE, SHORTENED TO THE ROW — a long declaration must not push the panel wider, which is what
  * brought the horizontal scroller back. */
 .__style-chip-text__ {
@@ -1168,8 +1161,8 @@ smartguides {
 .__lab-content__ {
     gap: 5px;
     width: 100%;
-    /* SIZED BY ITS CONTENT, capped: the popover is content-sized too, so a flex-grow child has nothing to
-     * grow into and collapsed to two pixels. The cap is what makes it scroll instead of running off. */
+    /* SIZED BY ITS CONTENT, capped: the lab is content-sized too, so a flex-grow child has nothing to grow
+     * into and collapsed to two pixels. The cap is what makes it scroll instead of running off. */
     max-height: 300px;
 }
 /* THIS ENGINE'S flex-shrink DEFAULTS TO 0, so a row of buttons keeps its natural width and overflows
@@ -1182,7 +1175,6 @@ smartguides {
     width: 100%;
 }
 .__lab-row__ > * { flex-shrink: 1; }
-.__lab-row__ > slider { width: 0px; flex-grow: 1; min-width: 90px; }
 /* The kit's own rows, at the lab's width. */
 .__lab-content__ .__configurator__ > .__inline__ > .__config-control__ { min-width: 70px; }
 .__lab-keyword__ {
@@ -1305,11 +1297,10 @@ smartguides {
     overflow: hidden;
     background: var(--configkit-band-bg, #3A3D42);
 }
-/* Bigger than a row label, because a shadow is cast BY the mark: a 9px glyph casts a 9px-wide one. */
-.__layer-sample-text__ { font-size: 13; font-weight: bold; color: var(--fg, #DFE1E5); }
-/* A LAYER STACK IS A CONFIG CONTROL, so the kit's `.__config-control__ text` and `button` rhythm
- * (specificity 11) reaches its rows. Scoped to the stack to keep the row's own sizes. */
-.__layer-stack__ .__layer-sample-text__ { font-size: 13; }
+/* Bigger than a row label, because a shadow is cast BY the mark: a 9px glyph casts a 9px-wide one.
+ * UNDER THE STACK, which is a config control: the kit's `.__config-control__ text` (specificity 11) reaches
+ * its rows and would otherwise set these at the form's size. */
+.__layer-stack__ .__layer-sample-text__ { font-size: 13; font-weight: bold; color: var(--fg, #DFE1E5); }
 .__layer-stack__ .__layer-text__ { font-size: 9; }
 .__layer-stack__ .__style-row-action__ { height: 16px; min-height: 16px; }
 .__layer-stack__ .__style-row-action__:hover { background: var(--list-hover-bg, #393B40); }
@@ -1317,7 +1308,6 @@ smartguides {
     width: 0px;
     flex-grow: 1;
     color: var(--fg-secondary, #9DA0A8);
-    font-size: 9;
     text-overflow: ellipsis;
 }
 .__style-target-action__ {

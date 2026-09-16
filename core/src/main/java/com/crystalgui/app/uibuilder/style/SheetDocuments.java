@@ -25,7 +25,7 @@ import com.crystalgui.ui.dom.UIDocument;
  * {@code TextBuffer}, shared with its editor tab, and the canvas follows it as it is typed into.
  *
  * <pre>{@code
- * SheetDocuments sheets = new SheetDocuments(workbench.documents()::open, document.resource());
+ * SheetDocuments sheets = new SheetDocuments(workbench.documents()::open, workbench.editors()::open, document.resource());
  * sheets.install(window, document.stylesheets());   // again whenever the list changes
  *
  * SheetDocuments.Sheet sheet = sheets.byId("menu.css");
@@ -44,7 +44,8 @@ import com.crystalgui.ui.dom.UIDocument;
  *       document's own order, so cascade order is what the file says rather than what arrived first.</li>
  *   <li>A sheet that cannot be read costs the look and never the tree — the canvas is built without it and
  *       the log names it.</li>
- *   <li>{@link #dispose} takes every installed sheet off the window and closes the documents it opened.</li>
+ *   <li>{@link #dispose} takes off the window what this put there and closes the documents it opened. A
+ *       shipped sheet the window already had — the workbench's theme — is used and left where it was.</li>
  * </ul>
  */
 public final class SheetDocuments {
@@ -60,26 +61,16 @@ public final class SheetDocuments {
         Reply<DocumentReference> open(Resource resource);
     }
 
-    /**
-     * How a sheet is put in front of a person — {@code workbench.editors()::open}, a tab on the file.
-     *
-     * <p>Static because <i>Go to source</i> is one gesture wherever it is pressed, and the button that
-     * offers it is several layers from whoever knows about tabs. A host that never sets one simply has no
-     * such button.</p>
-     */
-    @Nullable
-    private static Consumer<Resource> reveal;
-
-    /** @see #reveal */
-    public static void revealWith(@Nullable Consumer<Resource> opener) {
-        reveal = opener;
-    }
-
-    /** Opens {@code sheet}'s file in an editor, if a host said how. For the rule itself, @see RuleTextEditor */
-    public static boolean goToSource(Sheet sheet) {
+    /** Opens {@code sheet}'s file in an editor, if the host said how. For the rule itself, @see RuleTextEditor */
+    public boolean goToSource(Sheet sheet) {
         if (reveal == null || sheet.resource() == null) return false;
         reveal.accept(sheet.resource());
         return true;
+    }
+
+    /** Whether <i>Go to source</i> can do anything here. */
+    public boolean canReveal() {
+        return reveal != null;
     }
 
     /** One installed sheet: what it is, where it came from, and whether it can be written to. */
@@ -97,15 +88,19 @@ public final class SheetDocuments {
         @Nullable
         private final DocumentReference reference;
 
+        /** False for a shipped sheet the window already had, which this therefore neither moves nor removes. */
+        private final boolean owned;
+
         private Connection watch = Connection.DISCONNECTED;
 
         private Sheet(String id, StyleSheet sheet, @Nullable Resource resource, @Nullable TextBuffer buffer,
-                      @Nullable DocumentReference reference) {
+                      @Nullable DocumentReference reference, boolean owned) {
             this.id = id;
             this.sheet = sheet;
             this.resource = resource;
             this.buffer = buffer;
             this.reference = reference;
+            this.owned = owned;
         }
 
         /** The id the document named it by. */
@@ -144,6 +139,10 @@ public final class SheetDocuments {
     @Nullable
     private final SheetStore store;
 
+    /** How a file is put in front of a person — {@code workbench.editors()::open} — or null for no such button. */
+    @Nullable
+    private final Consumer<Resource> reveal;
+
     /** The document whose sheets these are — what a relative path is resolved against. */
     @Nullable
     private final Resource origin;
@@ -162,7 +161,13 @@ public final class SheetDocuments {
     private boolean disposed;
 
     public SheetDocuments(@Nullable SheetStore store, @Nullable Resource origin) {
+        this(store, null, origin);
+    }
+
+    /** @param reveal how <i>Go to source</i> opens a file, or null where there is nothing to open it in */
+    public SheetDocuments(@Nullable SheetStore store, @Nullable Consumer<Resource> reveal, @Nullable Resource origin) {
         this.store = store;
+        this.reveal = reveal;
         this.origin = origin;
     }
 
@@ -182,7 +187,7 @@ public final class SheetDocuments {
         for (String id : wanted) {
             if (installed.containsKey(id) || opening.contains(id)) continue;
             if (isAssetId(id)) {
-                Sheet sheet = assetSheet(id);
+                Sheet sheet = assetSheet(window, id);
                 if (sheet != null) installed.put(id, sheet);
             } else {
                 openProjectSheet(id);
@@ -232,11 +237,13 @@ public final class SheetDocuments {
     }
 
     @Nullable
-    private Sheet assetSheet(String id) {
+    private static Sheet assetSheet(UIDocument window, String id) {
         try {
             StyleSheet sheet = StyleSheetRegistry.of(id);
             if (sheet == null) return null;
-            return new Sheet(id, sheet, null, null, null);
+            // SHARED: a registry sheet is one instance per process, so the workbench may already style this
+            // window with it, and taking it off when this document closes would take the workbench's look too.
+            return new Sheet(id, sheet, null, null, null, !window.styles().hasStylesheet(sheet, null));
         } catch (RuntimeException | LinkageError missing) {
             // A sheet the document names and the host has not got costs the LOOK, never the tree.
             CrystalGuiCore.LOGGER.warn("[cgui] a document names the stylesheet '{}', which could not be "
@@ -270,7 +277,7 @@ public final class SheetDocuments {
             return;
         }
         TextBuffer buffer = model.buffer();
-        Sheet entry = new Sheet(id, parse(buffer.toString()), resource, buffer, reference);
+        Sheet entry = new Sheet(id, parse(buffer.toString()), resource, buffer, reference, true);
         // THE CANVAS FOLLOWS THE TEXT, whoever typed it -- this pane, an editor tab on the same file, or
         // an undo in either. One buffer is what makes that a subscription rather than a copy.
         entry.watch = buffer.onChanged.connect(change -> refill(entry));
@@ -301,16 +308,18 @@ public final class SheetDocuments {
     private void reorder() {
         if (window == null) return;
         for (Sheet entry : installed.values()) {
-            if (window.styles().hasStylesheet(entry.sheet, null)) window.styles().removeStylesheet(entry.sheet);
+            if (entry.owned && window.styles().hasStylesheet(entry.sheet, null)) window.styles().removeStylesheet(entry.sheet);
         }
-        for (Sheet entry : sheets()) window.styles().addStylesheet(entry.sheet);
+        for (Sheet entry : sheets()) {
+            if (entry.owned) window.styles().addStylesheet(entry.sheet);
+        }
     }
 
     private void remove(String id) {
         Sheet entry = installed.remove(id);
         if (entry == null) return;
         entry.watch.disconnect();
-        if (window != null && window.styles().hasStylesheet(entry.sheet, null)) {
+        if (entry.owned && window != null && window.styles().hasStylesheet(entry.sheet, null)) {
             window.styles().removeStylesheet(entry.sheet);
         }
         if (entry.reference != null) entry.reference.dispose();
