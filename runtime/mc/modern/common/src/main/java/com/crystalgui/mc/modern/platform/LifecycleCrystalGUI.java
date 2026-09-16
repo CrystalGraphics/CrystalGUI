@@ -12,12 +12,12 @@ import com.crystalgui.mc.modern.client.CgUiHud;
 import com.crystalgui.mc.modern.example.MachineExampleModern;
 import com.crystalgui.mc.modern.example.MachineExampleClientModern;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
-import com.crystalgui.mc.modern.client.CgUiAutoTest;
-import com.crystalgui.mc.modern.client.ClientProbe;
+import com.crystalgui.mc.modern.probe.CgUiAutoTest;
+import com.crystalgui.mc.modern.probe.ClientProbe;
 import com.crystalgui.mc.modern.client.CgUiScreen;
-import com.crystalgui.mc.modern.client.ConnectionProbeModern;
+import com.crystalgui.mc.modern.probe.ConnectionProbeModern;
 import com.crystalgui.mc.modern.net.Connections;
-import com.crystalgui.mc.modern.net.ServerSmokeModern;
+import com.crystalgui.mc.modern.probe.ServerSmokeModern;
 import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.probe.ConnectionProbe;
@@ -69,8 +69,9 @@ public final class LifecycleCrystalGUI {
 
         // THE CONNECTION PROBE RIDES THE TICK HOOKS, and is registered from HERE rather than called
         // from serverTick() -- that method runs on a dedicated server, and this probe is a client
-        // class. Registering in client init is what keeps it off a server entirely; serverSmoke's
-        // enumeration of the client package is what would catch it if that ever stopped being true.
+        // class. Registering in client init is what keeps it off a server entirely; serverSmoke
+        // enumerates `.probe` as well as `.client`, which is what would catch it if that ever stopped
+        // being true. @see ServerSmoke.Host#clientPackages()
         if (ConnectionProbe.enabled()) {
             onServerTick(ConnectionProbeModern::serverTick);
             onClientTick(ConnectionProbeModern::clientTick);

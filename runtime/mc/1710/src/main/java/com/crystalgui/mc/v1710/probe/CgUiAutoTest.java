@@ -1,5 +1,6 @@
-package com.crystalgui.mc.v1710.client;
+package com.crystalgui.mc.v1710.probe;
 
+import com.crystalgui.mc.v1710.client.CgUiScreen;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.probe.AutoTest;
@@ -144,7 +145,7 @@ public final class CgUiAutoTest {
      *
      * <p>This is the settling clock on 1.7.10, so the captures hang off it rather than off the tick.</p>
      */
-    static void onPainted(int framesPainted) {
+    public static void onPainted(int framesPainted) {
         AutoTest.runFrameSteps(framesPainted);
         AutoTest.settled(HOST, framesPainted);
     }

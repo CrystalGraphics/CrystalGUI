@@ -54,7 +54,7 @@ import com.crystalgui.ui.dom.UIElementRegistry;
  * <h3>Easy to get wrong</h3>
  *
  * <ul>
- *   <li>{@link Host#clientPackage()} is <b>enumerated, never listed</b>. A hand-written list is a guard
+ *   <li>{@link Host#clientPackages()} is <b>enumerated, never listed</b>. A hand-written list is a guard
  *       that rots: the 1.7.10 one named a class that had been deleted — so it passed forever — while
  *       three classes added after it was written were never checked at all.</li>
  *   <li>Load state is read from the JVM's own {@code -Xlog:class+load} file when the build supplies one.
@@ -122,10 +122,16 @@ public final class ServerSmoke {
         /** Whether the loader's connection lifecycle installed itself. */
         boolean connectionsRegistered();
 
-        /** A package whose every class is client-only. Enumerated, so it cannot go stale. */
-        String clientPackage();
+        /**
+         * Packages whose every class is client-only. Enumerated, so they cannot go stale.
+         *
+         * <p><b>This host's own class is excluded</b>, so a probe package may hold both the
+         * client-only probes and the server smoke that reports on them — which is the one class in
+         * there that is loaded on a server by definition.</p>
+         */
+        List<String> clientPackages();
 
-        /** Client-only classes that live outside {@link #clientPackage()}. */
+        /** Client-only classes that live outside {@link #clientPackages()}. */
         default List<String> alsoNeverLoaded() {
             return Collections.emptyList();
         }
@@ -305,16 +311,27 @@ public final class ServerSmoke {
      * <p>A container that cannot be read is a WARN and an empty list, never a silent pass.</p>
      */
     private static List<String> auditClientPackage(Host host, List<String> lines) {
-        String pkg = host.clientPackage();
-        List<String> found = classesIn(host, pkg);
-        if (found == null) {
-            lines.add("WARN  could not enumerate " + pkg
-                    + " from the code source; only the explicit list was checked");
-            return Collections.emptyList();
+        // THE ANCHOR EXCLUDES ITSELF, which is what lets a probe package be enumerated at all: it
+        // holds the client-only probes AND this smoke, and this smoke is running, so asserting its
+        // own package was never loaded would fail against itself.
+        String anchor = host.getClass().getName();
+        int nested = anchor.indexOf('$');
+        String anchorClass = nested < 0 ? anchor : anchor.substring(0, nested);
+
+        List<String> all = new ArrayList<>();
+        for (String pkg : host.clientPackages()) {
+            List<String> found = classesIn(host, pkg);
+            if (found == null) {
+                lines.add("WARN  could not enumerate " + pkg
+                        + " from the code source; only the explicit list was checked");
+                continue;
+            }
+            found.remove(anchorClass);
+            lines.add("INFO  " + pkg + " contributes " + found.size()
+                    + " class(es) to the never-loaded set: " + new TreeSet<>(found));
+            all.addAll(found);
         }
-        lines.add("INFO  " + pkg + " contributes " + found.size()
-                + " class(es) to the never-loaded set: " + new TreeSet<>(found));
-        return found;
+        return all;
     }
 
     /**

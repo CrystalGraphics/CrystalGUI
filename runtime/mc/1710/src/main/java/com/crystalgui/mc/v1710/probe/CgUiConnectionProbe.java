@@ -1,9 +1,10 @@
-package com.crystalgui.mc.v1710.client;
+package com.crystalgui.mc.v1710.probe;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.mc.v1710.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.mc.v1710.client.CgUiScreen;
 import com.crystalgui.probe.ConnectionProbe;
 
 import cpw.mods.fml.common.FMLCommonHandler;

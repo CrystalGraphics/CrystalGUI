@@ -1,4 +1,4 @@
-package com.crystalgui.mc.modern.client;
+package com.crystalgui.mc.modern.probe;
 
 import java.io.File;
 import java.lang.reflect.Method;
@@ -7,6 +7,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
+import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.AutoTest;
 
 import net.minecraft.client.Minecraft;

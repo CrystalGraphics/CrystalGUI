@@ -1,10 +1,10 @@
 package com.crystalgui.mc.v1710;
 
 import com.crystalgui.lifecycle.CgUiLifecycle;
-import com.crystalgui.mc.v1710.client.CgUiAutoTest;
+import com.crystalgui.mc.v1710.probe.CgUiAutoTest;
 import com.crystalgui.mc.v1710.client.CgUiHud;
-import com.crystalgui.mc.v1710.client.CgUiConnectionProbe;
-import com.crystalgui.mc.v1710.client.CgUiDesktopProbe;
+import com.crystalgui.mc.v1710.probe.CgUiConnectionProbe;
+import com.crystalgui.mc.v1710.probe.CgUiDesktopProbe;
 import com.crystalgui.mc.v1710.client.CgUiInput;
 import com.crystalgui.mc.v1710.client.CgUiScreen;
 import com.crystalgui.mc.v1710.example.MachineExampleClient1710;
