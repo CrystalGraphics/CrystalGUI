@@ -1,9 +1,11 @@
 package com.crystalgui.widget.config;
 
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
@@ -204,6 +206,18 @@ public abstract class ValueControl<T> extends ConfigControl {
         quietly(() -> writeToWidgets(value));
     }
 
+    /**
+     * The history a gesture here is one step of: the property's, else the one Ctrl+Z pressed here would reach.
+     *
+     * <p>The second because a row can name its history without its property doing so, and then a drag had no
+     * run to hold and recorded one step per frame.</p>
+     */
+    @Nullable
+    private UndoStack history() {
+        UndoStack own = source.history();
+        return own != null ? own : DataContext.from(this).get(UiDataKeys.UNDO_STACK);
+    }
+
     /** Shows the property's value on the first frame nothing is being typed or dragged here. */
     private void showOnceIdle() {
         if (staleWhileEditing) return;
@@ -222,7 +236,7 @@ public abstract class ValueControl<T> extends ConfigControl {
     private void holdGesture(Boolean active) {
         if (Boolean.TRUE.equals(active)) {
             if (heldRun != null) return;
-            heldRun = source.history();
+            heldRun = history();
             if (heldRun != null) heldRun.beginMergeRun();
         } else if (heldRun != null) {
             UndoStack run = heldRun;

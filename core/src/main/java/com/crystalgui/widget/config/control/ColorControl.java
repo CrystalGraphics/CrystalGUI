@@ -99,6 +99,14 @@ public class ColorControl extends ValueControl<Integer> {
             paint(argb);
             commit(argb);
         });
+        // ONE EDIT PER DRAG: the picker changes the colour every frame, and each would be its own undo step.
+        picker.onDragging.connect(active -> {
+            if (Boolean.TRUE.equals(active)) {
+                beginInteraction();
+            } else {
+                endInteraction();
+            }
+        });
         dialog.getContent().append(picker);
         swatch.append(dialog);
 

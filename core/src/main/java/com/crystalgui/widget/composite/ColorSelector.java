@@ -176,6 +176,17 @@ public class ColorSelector extends UIElement {
     /** Fires after any control changes {@link #color} — the signal a host binds to. */
     public final Signal.Value<Integer> onColorChanged = new Signal.Value<>();
 
+    /**
+     * {@code true} when a drag on the wheel, the square or a channel slider begins, {@code false} when it ends.
+     *
+     * <pre>{@code
+     * picker.onDragging.connect(active -> { if (active) history.beginMergeRun(); else history.endMergeRun(); });
+     * }</pre>
+     *
+     * <p>A drag emits {@link #onColorChanged} on every frame; this is what lets a host record it as one edit.</p>
+     */
+    public final Signal.Value<Boolean> onDragging = new Signal.Value<>();
+
     // Retained rather than derived — see the class docs. Alpha lives in the colour itself, which has
     // no such ambiguity.
     private float hue;
@@ -341,11 +352,16 @@ public class ColorSelector extends UIElement {
             // discards those the same way.
             if (!surface.containsSurfacePoint(rawX, rawY)) return;
 
+            // THE GESTURE OPENS BEFORE ITS FIRST POINT, so the press's own change is part of the one edit.
+            onDragging.emit(true);
             var local = surface.toLocal(rawX, rawY);
             onPoint.accept(local.x(), local.y());
 
             var window = document();
-            if (window == null) return;
+            if (window == null) {
+                onDragging.emit(false);
+                return;
+            }
             // ALREADY IN THE SURFACE'S OWN SPACE, with its origin at zero -- Drag converts through the
             // source's transform before calling this, and `toLocal` above answers in the same space.
             // Neither is converted again and neither is shifted.
@@ -356,8 +372,22 @@ public class ColorSelector extends UIElement {
             // surface sat. `toLocal` puts the box's origin at zero, so subtracting it again moves every
             // point up and left by the square's inset -- a click on the bottom-right corner landing
             // near the middle, which is precisely the old symptom running backwards.
-            Drag.start(surface, rawX, rawY,
-                    (mx, my, sx, sy, dx, dy) -> onPoint.accept(mx, my));
+            Drag.start(surface, rawX, rawY, new Drag.Listener() {
+                @Override
+                public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
+                    onPoint.accept(mx, my);
+                }
+
+                @Override
+                public void onDragEnd(float x, float y) {
+                    onDragging.emit(false);
+                }
+
+                @Override
+                public void onDragCancel() {
+                    onDragging.emit(false);
+                }
+            });
         }, false, false);
     }
 
@@ -641,6 +671,7 @@ public class ColorSelector extends UIElement {
                 if (updating) return;
                 writeChannel(index, v);
             });
+            slider.onDragging.connect(onDragging::emit);
             // Live, like the hex field — every control here is a view of one colour, so a field that
             // published only on Enter would sit showing a number the rest of the widget disagreed with.
             field.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
