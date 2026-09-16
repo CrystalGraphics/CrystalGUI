@@ -6,6 +6,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.mc.v1710.probe.CgUiServerSmoke;
 import com.crystalgui.net.protocol.Connections;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;

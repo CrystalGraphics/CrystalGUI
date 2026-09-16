@@ -1,6 +1,8 @@
-package com.crystalgui.mc.v1710.client;
+package com.crystalgui.mc.v1710.probe;
 
 import com.crystalgui.core.window.DesktopPresentation;
+import com.crystalgui.mc.v1710.client.CgUiHud;
+import com.crystalgui.mc.v1710.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
 import cpw.mods.fml.common.FMLCommonHandler;

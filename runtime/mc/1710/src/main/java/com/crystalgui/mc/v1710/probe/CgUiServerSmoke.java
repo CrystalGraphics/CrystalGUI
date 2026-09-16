@@ -1,8 +1,9 @@
-package com.crystalgui.mc.v1710.net;
+package com.crystalgui.mc.v1710.probe;
 
 import java.util.Arrays;
 import java.util.List;
 
+import com.crystalgui.mc.v1710.net.CgUiConnections;
 import com.crystalgui.probe.ServerSmoke;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -36,8 +37,9 @@ public final class CgUiServerSmoke {
     }
 
     /**
-     * In {@code .net} rather than {@code .client} deliberately: its own class is the anchor the client
-     * package is enumerated from, so it must be in the same container and must be loadable on a server.
+     * <b>The one class in {@code .probe} that a dedicated server loads</b>, and the anchor every other
+     * class in there is enumerated from — so it must ship in the same container as them, and it
+     * excludes itself from its own never-loaded set.
      */
     private static final class Host implements ServerSmoke.Host {
 
@@ -59,8 +61,11 @@ public final class CgUiServerSmoke {
         }
 
         @Override
-        public String clientPackage() {
-            return "com.crystalgui.mc.v1710.client";
+        public List<String> clientPackages() {
+            // .probe TOO, since the probes moved out of .client: every class in there is client-only
+            // bar this smoke, which excludes itself. Without it the three probes were checked by
+            // nothing at all.
+            return Arrays.asList("com.crystalgui.mc.v1710.client", "com.crystalgui.mc.v1710.probe");
         }
 
         @Override

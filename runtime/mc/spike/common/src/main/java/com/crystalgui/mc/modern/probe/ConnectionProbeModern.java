@@ -1,9 +1,10 @@
-package com.crystalgui.mc.modern.client;
+package com.crystalgui.mc.modern.probe;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.mc.modern.net.Connections;
 import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.ConnectionProbe;
 
 import net.minecraft.client.Minecraft;

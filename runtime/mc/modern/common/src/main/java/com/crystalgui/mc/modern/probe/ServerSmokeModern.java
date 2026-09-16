@@ -1,8 +1,9 @@
-package com.crystalgui.mc.modern.net;
+package com.crystalgui.mc.modern.probe;
 
 import java.util.Arrays;
 import java.util.List;
 
+import com.crystalgui.mc.modern.net.Connections;
 import com.crystalgui.probe.ServerSmoke;
 
 import javax.annotation.Nullable;
@@ -29,8 +30,9 @@ public final class ServerSmokeModern {
     }
 
     /**
-     * In {@code .net} rather than {@code .client} deliberately: its own class is the anchor the client
-     * package is enumerated from, so it must be in the same container and must be loadable on a server.
+     * <b>The one class in {@code .probe} that a dedicated server loads</b>, and the anchor every other
+     * class in there is enumerated from — so it must ship in the same container as them, and it
+     * excludes itself from its own never-loaded set.
      */
     private static final class Host implements ServerSmoke.Host {
 
@@ -57,8 +59,11 @@ public final class ServerSmokeModern {
         }
 
         @Override
-        public String clientPackage() {
-            return "com.crystalgui.mc.modern.client";
+        public List<String> clientPackages() {
+            // .probe TOO, since the probes moved out of .client. ConnectionProbeModern is registered
+            // from client init only, and this enumeration is what LifecycleCrystalGUI's comment says
+            // would catch that ever stopping being true. The smoke excludes itself.
+            return Arrays.asList("com.crystalgui.mc.modern.client", "com.crystalgui.mc.modern.probe");
         }
 
         @Override

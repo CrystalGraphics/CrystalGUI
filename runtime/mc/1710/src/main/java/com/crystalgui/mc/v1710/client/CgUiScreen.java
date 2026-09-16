@@ -9,6 +9,7 @@ import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
+import com.crystalgui.mc.v1710.probe.CgUiAutoTest;
 import com.crystalgui.probe.ConnectionProbe;
 import com.crystalgui.ui.dom.UIDocument;
 

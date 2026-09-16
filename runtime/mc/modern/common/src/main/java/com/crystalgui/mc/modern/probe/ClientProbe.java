@@ -1,7 +1,9 @@
-package com.crystalgui.mc.modern.client;
+package com.crystalgui.mc.modern.probe;
 
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
+import com.crystalgui.mc.modern.client.CgUiHud;
+import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
 import net.minecraft.client.Minecraft;

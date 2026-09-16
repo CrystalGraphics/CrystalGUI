@@ -14,7 +14,7 @@ import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
 import com.crystalgui.mc.v1710.net.CgUiConnections;
-import com.crystalgui.mc.v1710.net.CgUiServerSmoke;
+import com.crystalgui.mc.v1710.probe.CgUiServerSmoke;
 
 import java.util.List;
 import cpw.mods.fml.common.event.FMLInitializationEvent;

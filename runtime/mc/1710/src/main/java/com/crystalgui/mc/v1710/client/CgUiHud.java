@@ -119,7 +119,7 @@ public final class CgUiHud {
     }
 
     /** What the desktop should be showing right now. @see HostSession#presentation */
-    static DesktopPresentation presentation() {
+    public static DesktopPresentation presentation() {
         return HostSession.isInstalled()
                 ? HostSession.session().presentation(HOST) : DesktopPresentation.NONE;
     }

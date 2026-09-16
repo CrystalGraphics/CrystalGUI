@@ -16,8 +16,9 @@ compiles against one loader and is used by three.
 | Package | What it contains |
 |---|---|
 | `com.crystalgui.mc.modern.platform` | `LifecycleCrystalGUI` — **the one class a loader talks to**: bootstrap, client init, the server and client ticks, player join/leave, overlay paint, and the mouse/key offers. Plus `CrystalGUI`, which holds the mod id and name |
-| `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `HostModern` (`HostServices`), `CgUiInput`, `CgUiHud`, `CgUiHostGl`, `CgUiKeybinds`, `CgUiAutoTest`, and the two probe adapters `ClientProbe` and `ConnectionProbeModern` |
-| `com.crystalgui.mc.modern.net` | `Connections`, `Peer`, `WorkspaceHostModern` (where the served workspace is), and `ServerSmokeModern` |
+| `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `HostModern` (`HostServices`), `CgUiInput`, `CgUiHud`, `CgUiHostGl`, `CgUiKeybinds` |
+| `com.crystalgui.mc.modern.net` | `Connections`, `Peer`, `WorkspaceHostModern` — where the served workspace is |
+| `com.crystalgui.mc.modern.probe` | Every adapter over `core`'s probes: `CgUiAutoTest`, `ClientProbe`, `ConnectionProbeModern`, `ServerSmokeModern`. **`serverSmoke` enumerates this package as client-only**, the smoke itself excepted — so a probe added here is checked without anyone listing it |
 | `com.crystalgui.mc.modern.example` | `MachineExampleModern` and its client half — a key and a tick over `app.machine.MachineExample`; the worked example, not engine code |
 
 ## Key Design Points
