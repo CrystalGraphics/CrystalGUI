@@ -785,6 +785,16 @@ quality.addOptions("Low", "Medium", "High");
 quality.attachSelectionListener(index -> ...);
 ```
 
+**A popover built per opening removes itself** with `removeWhenHidden()` — `hide()` keeps a popover parented
+so it can be shown again, so one built on every press and never removed stays in the tree, hidden, one more per
+press. It waits for the close fade, as `Dialog.removeWhenClosed()` does.
+
+```java
+Popover palette = new Popover().removeWhenHidden();
+window.topLayerNode().append(palette);   // not beside the button, or presses inside bubble back to it
+palette.showFor(button, button);
+```
+
 `Popover.Mode.AUTO` gets light dismiss + Escape; `MANUAL` gets neither. Placement is
 `setPreferredSide` + `setOffset`, resolved by `AnchoredPlacement` — **never set `left`/`top` yourself on
 one**, it fights placement every frame.
@@ -822,9 +832,11 @@ Left closes back into the parent.
 > the engine eased *toward* zero and the removal retargeted it back before it arrived. Nothing visibly faded,
 > and no test noticed. Don't reintroduce it.
 
-**Choosing a leaf closes the whole chain; Escape peels one level.** `Popover.hideChain()` walks the invoker
-chain (`parentPopover()`) and closes all of it — what the ARIA pattern means by "activates the item and closes
-the menu". `hide()` alone closes a popover and its *descendants*, which leaves a submenu's parent standing.
+**Choosing a leaf closes the whole chain of menus; Escape peels one level.** `Popover.hideChain()` walks the
+invoker chain (`parentPopover()`) and closes it — what the ARIA pattern means by "activates the item and closes
+the menu" — and stops at a popover that only CONTAINS the menu, since `continuesChain()` is true for a `Menu`
+alone: picking from a dropdown inside a panel popup closes the dropdown, not the popup. `hide()` alone closes a
+popover and its *descendants*, which leaves a submenu's parent standing.
 
 > **Pass an invoker only for a *toggle*.** `showFor`/`showAt`'s invoker is excluded from light dismiss, which
 > is what a dropdown button needs (its own press must not close the menu it just opened) and wrong for a
@@ -1156,7 +1168,10 @@ panel.append(new OffsetPad("offset").bind(shadow.map(Shadow::offset, at -> shado
   `PropertyWatch.follow(element, property, show)`, or `LiveEdits.follow(element, styleProperty, css)` to
   show a declaration on an element.
 - **Children redrawn from the value are kept with `ChildList`**, never `removeAll` and append: a rebuild
-  destroys the row the pointer is pressing.
+  destroys the row the pointer is pressing. Children with an identity — a row per declaration — use
+  `ChildList.Keyed`, which adds and removes only the keys that came and went.
+- **A list of rows in a panel** builds each with `panel.row(descriptor, value)`, which registers without placing,
+  and hands a removed one to `panel.forget(row)`.
 - **Parts of a composite value are `Property.map`s** of the whole, and a selection is a `Property.of(0)`
   shared by the controls that edit through it. Write the setter as `v -> whole.get().withX(v)`, never
   `whole.get()::withX`, which reads the whole once when the lab opens.

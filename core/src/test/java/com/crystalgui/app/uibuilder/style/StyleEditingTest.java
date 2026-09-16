@@ -23,6 +23,7 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -110,10 +111,11 @@ public class StyleEditingTest {
         assertEquals("menu.css", rule.sheetLabel());
         assertTrue("a project rule can be written to", rule.isEditable());
 
+        StyleFields fields = StyleFields.on(null, rule, node);
         assertEquals("read from the TEXT, not from the cascade", "#112233",
-                rule.declaring("background-color").value());
+                fields.declared("background-color").value());
         // A COMMENTED DECLARATION IS STILL LISTED, which is what makes the toggle reversible.
-        StyleTarget.Declared off = rule.declaring("padding-left");
+        StyleFields.Declared off = fields.declared("padding-left");
         assertNotNull("a commented-out declaration is listed", off);
         assertTrue(off.disabled());
 
@@ -230,7 +232,7 @@ public class StyleEditingTest {
     @Test
     public void aReadOnlySheetRefusesTheWrite() {
         StyleTargets targets = StyleTargets.of(node, sheets);
-        StyleTarget engine = new StyleTarget(null, "engine", 0, ".card", List.of());
+        StyleTarget engine = StyleTarget.engineRule(StyleSheet.parse(".card { opacity: 1; }"), "engine", 0, ".card");
         assertFalse(engine.isEditable());
         assertNotNull("and says why", engine.readOnlyReason());
 
@@ -253,8 +255,7 @@ public class StyleEditingTest {
         inline.add("opacity", "1");
         frame();
 
-        StyleTarget target = StyleTargets.of(node, sheets).chosen("");
-        assertNotNull("the declaration is there", target.declaring("opacity"));
+        assertNotNull("the declaration is there", inline.declared("opacity"));
     }
 
     // ── S.4 / S.5 ───────────────────────────────────────────────────────────

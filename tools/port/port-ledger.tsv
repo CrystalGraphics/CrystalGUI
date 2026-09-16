@@ -149,7 +149,6 @@ PART	BuilderInspectorSections	set	B	1	proposed	a rule selects through it (1)
 PART	BuilderPane	builder-pane	A	0	proposed	leaf in every rule
 PART	BuilderStyleSections	active	C	8	proposed	state adjective
 PART	BuilderStyleSections	inactive	B	2	proposed	a rule selects through it (2)
-PART	BuilderStyleSections	lab-row	B	3	proposed	a rule selects through it (2)
 PART	BuilderStyleSections	overridden	B	1	proposed	a rule selects through it (1)
 PART	BuilderStyleSections	read-only	A	1	proposed	leaf in every rule
 PART	BuilderStyleSections	style-add	A	4	proposed	leaf in every rule, scoped by an ancestor in 1
