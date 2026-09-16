@@ -1,8 +1,8 @@
-package com.crystalgui.mc.example;
+package com.crystalgui.mc.v1710.example;
 
 import com.crystalgui.app.machine.MachineExample;
-import com.crystalgui.mc.client.CgUiScreen;
-import com.crystalgui.mc.net.CgUiConnections;
+import com.crystalgui.mc.v1710.client.CgUiScreen;
+import com.crystalgui.mc.v1710.net.CgUiConnections;
 
 import cpw.mods.fml.client.registry.ClientRegistry;
 import cpw.mods.fml.common.FMLCommonHandler;

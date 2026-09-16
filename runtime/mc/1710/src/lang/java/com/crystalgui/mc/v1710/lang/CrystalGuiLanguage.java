@@ -1,4 +1,4 @@
-package com.crystalgui.mc.lang;
+package com.crystalgui.mc.v1710.lang;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
@@ -6,6 +6,7 @@ import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
+import com.crystalgui.mc.v1710.CrystalGUI;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -40,7 +41,7 @@ public class CrystalGuiLanguage {
     public static final String NAME = "CrystalGUI Language";
 
     /** The host's, deliberately: the two ship from one build and a version skew is a bug, not a state. */
-    public static final String VERSION = com.crystalgui.CrystalGUI.VERSION;
+    public static final String VERSION = CrystalGUI.VERSION;
 
     /**
      * {@code .minecraft} on a client, {@code <serverdir>} on a dedicated server — where the engine

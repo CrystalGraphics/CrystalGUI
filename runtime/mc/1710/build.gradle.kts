@@ -642,7 +642,7 @@ afterEvaluate {
 //
 // `main` is on lang's compile classpath and NOT the reverse, and `:language` is declared HERE rather
 // than in dependencies.gradle, so a language import in `main` is a compile error rather than
-// something an import guard notices afterwards. Its own package (`com.crystalgui.mc.lang`) because
+// something an import guard notices afterwards. Its own package (`com.crystalgui.mc.v1710.lang`) because
 // the two source sets end up in two JARS, and two jars sharing a package is a split package.
 val lang: SourceSet by sourceSets.creating {
     compileClasspath += sourceSets["main"].compileClasspath + sourceSets["main"].output

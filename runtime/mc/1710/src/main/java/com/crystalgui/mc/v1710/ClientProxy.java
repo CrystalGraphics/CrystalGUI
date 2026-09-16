@@ -1,13 +1,13 @@
-package com.crystalgui.mc;
+package com.crystalgui.mc.v1710;
 
 import com.crystalgui.lifecycle.CgUiLifecycle;
-import com.crystalgui.mc.client.CgUiAutoTest;
-import com.crystalgui.mc.client.CgUiHud;
-import com.crystalgui.mc.client.CgUiConnectionProbe;
-import com.crystalgui.mc.client.CgUiDesktopProbe;
-import com.crystalgui.mc.client.CgUiInput;
-import com.crystalgui.mc.client.CgUiScreen;
-import com.crystalgui.mc.example.MachineExampleClient1710;
+import com.crystalgui.mc.v1710.client.CgUiAutoTest;
+import com.crystalgui.mc.v1710.client.CgUiHud;
+import com.crystalgui.mc.v1710.client.CgUiConnectionProbe;
+import com.crystalgui.mc.v1710.client.CgUiDesktopProbe;
+import com.crystalgui.mc.v1710.client.CgUiInput;
+import com.crystalgui.mc.v1710.client.CgUiScreen;
+import com.crystalgui.mc.v1710.example.MachineExampleClient1710;
 
 /**
  * The client half: register the key binding and the input pump.

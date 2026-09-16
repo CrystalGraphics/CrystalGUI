@@ -1,4 +1,4 @@
-package com.crystalgui.mc.lang;
+package com.crystalgui.mc.v1710.lang;
 
 import java.io.IOException;
 

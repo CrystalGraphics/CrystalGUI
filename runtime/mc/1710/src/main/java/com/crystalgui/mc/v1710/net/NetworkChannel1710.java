@@ -1,4 +1,4 @@
-package com.crystalgui.mc.net;
+package com.crystalgui.mc.v1710.net;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;

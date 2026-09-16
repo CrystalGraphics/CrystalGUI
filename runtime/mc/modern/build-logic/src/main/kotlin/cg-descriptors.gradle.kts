@@ -30,7 +30,7 @@ val cgDescriptor = ModDescriptor(
     variants = listOf(
         Variant(
             loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
-            commonEntry = "com.crystalgui.CrystalGUI",
+            commonEntry = "com.crystalgui.mc.v1710.CrystalGUI",
             mixinConfigs = listOf("mixins.crystalgui.json"),
             packFormat = 1,
         ),
@@ -91,7 +91,7 @@ val cgLangDescriptor = ModDescriptor(
     variants = listOf(
         Variant(
             loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
-            commonEntry = "com.crystalgui.mc.lang.CrystalGuiLanguage",
+            commonEntry = "com.crystalgui.mc.v1710.lang.CrystalGuiLanguage",
             packFormat = 1,
         ),
         Variant(

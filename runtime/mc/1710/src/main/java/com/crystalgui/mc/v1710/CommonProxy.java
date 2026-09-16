@@ -1,9 +1,10 @@
-package com.crystalgui.mc;
+package com.crystalgui.mc.v1710;
 
-import com.crystalgui.mc.example.MachineExample1710;
-import com.crystalgui.mc.net.CgUiConnections;
-import com.crystalgui.mc.net.CgUiWorkspaceHost;
-import com.crystalgui.mc.net.NetworkChannel1710;
+import com.crystalgui.mc.v1710.ClientProxy;
+import com.crystalgui.mc.v1710.example.MachineExample1710;
+import com.crystalgui.mc.v1710.net.CgUiConnections;
+import com.crystalgui.mc.v1710.net.CgUiWorkspaceHost;
+import com.crystalgui.mc.v1710.net.NetworkChannel1710;
 import com.crystalgui.net.window.WindowProtocol;
 
 /**

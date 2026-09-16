@@ -138,10 +138,10 @@ registerSingleJarPipeline(SingleJarSpec(
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             "mixins.crystalgui.json",
-            "com/crystalgui/mixins/CrystalGuiMixins.class",
+            "com/crystalgui/mc/v1710/mixins/CrystalGuiMixins.class",
             // Every entry point the descriptors name -- see the language jar's list for what this
             // catches. These four are each loader's own package, which no relocation touches.
-            "com/crystalgui/CrystalGUI.class",
+            "com/crystalgui/mc/v1710/CrystalGUI.class",
             "com/crystalgui/mc/forge/CrystalGUIForge.class",
             "com/crystalgui/mc/neoforge/CrystalGUINeoForge.class",
             "com/crystalgui/mc/fabric/CrystalGUIFabric.class",
@@ -279,9 +279,9 @@ registerSingleJarPipeline(SingleJarSpec(
             // a crash at mod construction on Forge and a hard loader error on Fabric, and nothing else
             // in this build looks: a rename that updated the classes and mangled the descriptor
             // strings passed every other check and produced a jar whose Fabric entrypoint did not
-            // exist. Only the `com.crystalgui.mc.lang` half is relocated, so the three loader entries
-            // keep their own package.
-            "com/crystalgui/mc/lang/CrystalGuiLanguage.class",
+            // exist. Only `com.crystalgui.mc.modern.lang` is relocated, so 1.7.10's and the three
+            // loader entries all keep their own package.
+            "com/crystalgui/mc/v1710/lang/CrystalGuiLanguage.class",
             "com/crystalgui/mc/forge/lang/CrystalGuiLanguageForge.class",
             "com/crystalgui/mc/neoforge/lang/CrystalGuiLanguageNeoForge.class",
             "com/crystalgui/mc/fabric/lang/CrystalGuiLanguageFabric.class",
