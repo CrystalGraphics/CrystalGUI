@@ -24,7 +24,6 @@ import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.text.UIText;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.widget.overlay.Dropdown;
 import com.crystalgui.widget.overlay.MenuItem;
@@ -99,7 +98,7 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         assertNotNull("the sheet's rule is a target", rule);
 
         StyleFields fields = StyleFields.on(null, rule, node);
-        TypographyLab.open(node, fields, StylePropertyRegistry.FONT_WEIGHT, fields.value("font-weight"), node);
+        TypographyLab.open(node, fields, node);
         for (int i = 0; i < 6; i++) frame();
 
         Dialog lab = labTitled("Type");
@@ -124,9 +123,9 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
     /**
      * <b>Choosing another layer leaves the lab open.</b>
      *
-     * <p>The stack rebuilds its rows when one is selected, so the row that was pressed is detached while
-     * the press is still being delivered. Light dismiss then asked a node with no parent which popover it
-     * was inside, got "none", and shut the lab as though the press had landed somewhere else.</p>
+     * <p>A press that detaches the row it landed on used to shut the lab: light dismiss asked a node with no
+     * parent which popover it was inside and got "none". The stack now keeps its rows, and light dismiss
+     * reads what a press is inside before delivering it, so either alone holds this.</p>
      */
     @Test
     public void choosingAnotherLayerLeavesTheLabOpen() {

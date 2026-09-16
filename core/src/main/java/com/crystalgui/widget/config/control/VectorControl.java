@@ -69,12 +69,7 @@ public class VectorControl extends ValueControl<double[]> {
             axisLabel.addClass("__axis__");
 
             NumberControl component = new NumberControl(
-                    ConfigDescriptor.number(descriptor.id() + "." + AXES[i], AXES[i])
-                            .integral(descriptor.integral())
-                            .decimals(descriptor.decimals())
-                            .unit(descriptor.unit())
-                            .scrubRate(descriptor.scrubRate())
-                            .commitWhileTyping(descriptor.commitsWhileTyping()),
+                    descriptor.part(descriptor.id() + "." + AXES[i], AXES[i]),
                     defaultValue != null && axis < defaultValue.length ? defaultValue[axis] : 0d);
             component.changed.connect(v -> onComponentChanged(axis, (Double) v));
 

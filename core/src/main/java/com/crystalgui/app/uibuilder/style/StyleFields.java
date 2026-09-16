@@ -12,10 +12,12 @@ import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
 import com.crystalgui.core.property.Property;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
+import com.crystalgui.style.property.visual.color.ColorValue;
 import com.crystalgui.style.sheet.source.CssEdits;
 import com.crystalgui.style.sheet.source.CssSourceModel;
 import com.crystalgui.text.ChangeSet;
@@ -43,9 +45,16 @@ import com.crystalgui.ui.dom.UIElement;
  *   <li>A rule is found by its NUMBER, never by re-matching a selector — the number the cascade gave the
  *       slot that put the value on screen.</li>
  *   <li>Writing a property the rule does not declare yet <b>adds</b> it; writing an empty value removes it.</li>
+ *   <li>{@code text-stroke} is one field on both targets. A sheet holds only the shorthand and an element
+ *       only its two longhands, so an inline target reads and writes the pair behind that one name.</li>
  * </ul>
  */
 public final class StyleFields {
+
+    /** The shorthand a sheet must use and an element cannot hold. @see #valueOf */
+    static final String TEXT_STROKE = "text-stroke";
+    private static final String STROKE_WIDTH = "text-stroke-width";
+    private static final String STROKE_COLOR = "text-stroke-color";
 
     private final StyleTarget target;
     private final UIElement node;
@@ -88,10 +97,20 @@ public final class StyleFields {
      * The declaration's value as CSS text, read from the target and written straight back into it.
      *
      * <p>Setting it to blank removes the declaration, which is what an emptied field means in DevTools and
-     * what makes "take this back off" reachable without a second control.</p>
+     * what makes "take this back off" reachable without a second control. Its edits go into the history
+     * the text lives in, so a drag bound to it is one undo step.</p>
      */
     public Property<String> value(String property) {
-        return Property.derived(() -> valueOf(property), css -> write(property, css == null ? "" : css.trim()));
+        return Property.derived(() -> valueOf(property), css -> write(property, css == null ? "" : css.trim()))
+                .editedIn(history());
+    }
+
+    /** Where an edit here is undone: the sheet's own buffer for a rule, the document for inline. */
+    @Nullable
+    public UndoStack history() {
+        if (target.isInline()) return document == null ? null : document.history();
+        TextBuffer buffer = target.buffer();
+        return buffer == null ? null : buffer.history();
     }
 
     /**
@@ -103,6 +122,11 @@ public final class StyleFields {
      * and spring to it, while the element on the canvas showed the new one.</p>
      */
     public String valueOf(String property) {
+        if (target.isInline() && TEXT_STROKE.equals(property)) {
+            String width = inlineValueOf(STROKE_WIDTH);
+            String colour = inlineValueOf(STROKE_COLOR);
+            return (width + " " + colour).trim();
+        }
         if (target.isInline()) return inlineValueOf(property);
         CssSourceModel model = model();
         // No buffer: the engine's own sheet, or one inside a jar. Unwritable, so its snapshot cannot go stale.
@@ -175,14 +199,14 @@ public final class StyleFields {
      */
     public void add(String property, String value) {
         if (!canWrite()) return;
-        if (!target.isInline()) {
+        if (!target.isInline() || TEXT_STROKE.equals(property)) {
             write(property, value);
             return;
         }
         StyleProperty<?> styled = propertyOf(property);
         if (styled == null) return;
         JsonElement was = NodeFields.inlineStyleOf(node);
-        if (!LiveEdits.setInline(node, cast(styled), value)) return;
+        if (!LiveEdits.setInline(node, styled, value)) return;
         JsonElement after = NodeFields.inlineStyleOf(node);
         if (document != null && !after.equals(was)) {
             document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
@@ -263,6 +287,18 @@ public final class StyleFields {
     }
 
     private void writeInline(String property, String css) {
+        if (TEXT_STROKE.equals(property)) {
+            // THE COLOUR IS WHICHEVER TERM PARSES AS ONE, the width the other: both orders are CSS.
+            String width = "";
+            String colour = "";
+            for (String term : CssValues.terms(css)) {
+                if (ColorValue.parseCssColor(term) != null) colour = term;
+                else width = term;
+            }
+            writeInline(STROKE_WIDTH, width);
+            writeInline(STROKE_COLOR, css.isEmpty() ? "" : colour);
+            return;
+        }
         StyleProperty<?> styled = propertyOf(property);
         if (styled == null) return;
         if (nodes != null && document != null) {
@@ -275,7 +311,7 @@ public final class StyleFields {
         if (css.isEmpty()) {
             LiveEdits.clearInline(node, styled);
         } else {
-            LiveEdits.setInline(node, cast(styled), css);
+            LiveEdits.setInline(node, styled, css);
         }
     }
 

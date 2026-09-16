@@ -6,10 +6,10 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.dom.UIElement;
-import javax.annotation.Nullable;
-
+import com.crystalgui.core.property.Property;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.widget.config.PropertyWatch;
 import com.crystalgui.widget.config.ValueControl;
 
 import javax.annotation.Nullable;
@@ -58,32 +58,17 @@ public class SliderControl extends ValueControl<Double> {
 
     public SliderControl(ConfigDescriptor descriptor, double defaultValue) {
         super(NAME, descriptor, defaultValue);
-        ConfigDescriptor.Range range = descriptor.range();
-        float min = range == null ? 0f : range.min();
-        float max = range == null ? 1f : range.max();
-
         addClass("__slider__");
-        slider.setRange(min, max);
+        track(track(descriptor));
         slider.setValue((float) defaultValue);
-        // A DECLARED STEP FIRST: `integral` is the same thing at 1, and was the only one the kit had.
-        if (descriptor.step() > 0f) {
-            slider.setStep(descriptor.step());
-        } else if (descriptor.integral()) {
-            slider.setStep(1f);
-        }
 
-        number = new NumberControl(
-                ConfigDescriptor.number(descriptor.id() + ".value", "")
-                        .integral(descriptor.integral())
-                        .step(descriptor.step())
-                        // THE UNIT TOO, which this dropped: a ranged number showed a bare 29 where
-                        // the same descriptor without a range showed 29px, and the difference was
-                        // invisible in the declaration.
-                        .unit(descriptor.unit())
-                        .decimals(descriptor.decimals())
-                        .commitWhileTyping(descriptor.commitsWhileTyping())
-                        .range(min, max),
-                defaultValue);
+        // ONE DESCRIPTOR FOR BOTH HALVES, suppliers included, so a live range or unit reaches the field.
+        number = new NumberControl(descriptor.part(descriptor.id() + ".value", ""), defaultValue);
+        if (descriptor.live()) {
+            PropertyWatch watch = new PropertyWatch(this, Property.derived(() -> track(descriptor)),
+                    (was, now) -> track(now));
+            whileConnected(watch::start);
+        }
 
         append(slider);
         append(number);
@@ -115,32 +100,20 @@ public class SliderControl extends ValueControl<Double> {
         return true;
     }
 
-    /**
-     * Moves the range of both halves at once.
-     *
-     * <pre>{@code
-     * stroke.setRange(0f, Math.max(8f, fontSize * 0.5f));
-     * }</pre>
-     *
-     * <p>Both, because they are one control: the track would scale to a new span while the field beside
-     * it went on clamping to the old one, and a value legal in one would be refused by the other.</p>
-     */
-    public SliderControl setRange(float min, float max) {
-        slider.setRange(min, max);
-        number.setRange(min, max);
-        return this;
+    /** The track's span and increment as the descriptor states them now. */
+    private record Track(float min, float max, float step) {
     }
 
-    /** The unit both halves show and accept. @see NumberControl#setUnit */
-    public SliderControl setUnit(@Nullable String unit) {
-        number.setUnit(unit);
-        return this;
+    private static Track track(ConfigDescriptor descriptor) {
+        ConfigDescriptor.Range range = descriptor.range();
+        // A DECLARED STEP FIRST: `integral` is the same thing at 1.
+        float step = descriptor.step() > 0f ? descriptor.step() : descriptor.integral() ? 1f : 0f;
+        return range == null ? new Track(0f, 1f, step) : new Track(range.min(), range.max(), step);
     }
 
-    /** The increment the track moves in. @see ConfigDescriptor#step(float) */
-    public SliderControl setStep(float step) {
-        slider.setStep(step);
-        return this;
+    private void track(Track track) {
+        slider.setRange(track.min(), track.max());
+        if (track.step() > 0f) slider.setStep(track.step());
     }
 
     public Slider slider() {

@@ -1307,6 +1307,12 @@ smartguides {
 }
 /* Bigger than a row label, because a shadow is cast BY the mark: a 9px glyph casts a 9px-wide one. */
 .__layer-sample-text__ { font-size: 13; font-weight: bold; color: var(--fg, #DFE1E5); }
+/* A LAYER STACK IS A CONFIG CONTROL, so the kit's `.__config-control__ text` and `button` rhythm
+ * (specificity 11) reaches its rows. Scoped to the stack to keep the row's own sizes. */
+.__layer-stack__ .__layer-sample-text__ { font-size: 13; }
+.__layer-stack__ .__layer-text__ { font-size: 9; }
+.__layer-stack__ .__style-row-action__ { height: 16px; min-height: 16px; }
+.__layer-stack__ .__style-row-action__:hover { background: var(--list-hover-bg, #393B40); }
 .__layer-text__ {
     width: 0px;
     flex-grow: 1;

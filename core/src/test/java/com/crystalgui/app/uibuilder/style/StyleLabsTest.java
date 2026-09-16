@@ -11,6 +11,7 @@ import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.color.ColorValue;
 import com.crystalgui.text.TextBuffer;
@@ -90,15 +91,15 @@ public class StyleLabsTest {
     /** Reordering is an edit, because the order decides what the value does. */
     @Test
     public void movingALayerChangesTheValue() {
-        LayerStack stack = new LayerStack(StylePropertyRegistry.TRANSFORM);
-        String[] written = {""};
-        stack.onChange(layers -> written[0] = CssValues.joinFunctions(layers));
-        stack.show(List.of("translate(10px, 0px)", "scale(2, 2)"), 0);
+        Property<String> css = Property.of("translate(10px, 0px) scale(2, 2)");
+        Property<Integer> selected = Property.of(1);
+        LayerStack stack = new LayerStack("ops", StylePropertyRegistry.TRANSFORM, selected);
+        stack.bind(css.map(CssValues::functions, CssValues::joinFunctions));
 
         stack.move(1, -1);   // what the row's up arrow does
 
-        assertEquals("scale(2, 2) translate(10px, 0px)", written[0]);
-        assertEquals("and the moved row stays the selected one", 0, stack.selected());
+        assertEquals("scale(2, 2) translate(10px, 0px)", css.get());
+        assertEquals("and the moved row stays the selected one", 0, (int) selected.get());
     }
 
     /**
@@ -246,72 +247,6 @@ public class StyleLabsTest {
         // AS THE CAPTION PRINTS IT, which is where the disagreement showed: two places of percentage
         // recovers 2.899px and the caption said so while the field still said 2.9.
         assertEquals("the trip through a percentage keeps the pixels", "2.9px", CssValues.px(back));
-    }
-
-    /**
-     * <b>A stroke in em is dragged as the percentage it is written as.</b>
-     *
-     * <p>The slider used to measure pixels whatever the file held, which made it a converter: the number
-     * moved on its own as the size changed, its track had to move with it, and dragging it authored a
-     * quantity nobody had asked for. The unit it shows is the unit the value is in, so there is one
-     * number the whole way through and a size change moves neither the track nor the written value.</p>
-     */
-    @Test
-    public void aStrokeIsDraggedInTheUnitItIsWrittenIn() {
-        assertEquals("a percentage is the number in the file", 18.6f,
-                CssValues.number("18.6%", 0f), 1e-4);
-        assertEquals("and pixels are too", 5.4f, CssValues.number("5.4px", 0f), 1e-4);
-
-        // A SIZE CHANGE MOVES NEITHER. The written value is what the slider shows, so growing the text
-        // leaves both alone -- where a pixel track had to grow with it or pin the value at its end.
-        assertEquals("18.6%", TypographyLab.spell(0.186f * 29f, 29f, true));
-        assertEquals("18.6%", TypographyLab.spell(0.186f * 96f, 96f, true));
-
-        // AND THE CEILING IS THE FACE'S, which is why it is asked for rather than assumed: a fraction of
-        // the em is one percentage at every size and a different number of pixels at each.
-        float cap = 0.13f;
-        assertEquals("a cap in em is a fixed percentage", 13f, cap * 100f, 1e-4);
-        assertEquals("and a moving number of pixels", 12.48f, cap * 96f, 1e-4);
-        assertEquals(3.77f, cap * 29f, 1e-4);
-    }
-
-    // ── S.8: a drag shows without writing ───────────────────────────────────
-
-    @Test
-    public void aPreviewShowsOnEveryElementTheRuleReachesAndLeavesTheFileAlone() {
-        UIElement sibling = new UIElement();
-        sibling.addClass("card");
-        window.append(sibling);
-        frame();
-
-        SheetPreview preview = SheetPreview.of(rule(), node);
-        preview.show(StylePropertyRegistry.OPACITY, "0.1");
-        frame();
-
-        assertEquals("the node shows the dragged value", Float.valueOf(0.1f),
-                node.getStyle().getComputed(StylePropertyRegistry.OPACITY));
-        assertEquals("and so does every other element the rule reaches", Float.valueOf(0.1f),
-                sibling.getStyle().getComputed(StylePropertyRegistry.OPACITY));
-        assertTrue("with nothing written yet", sheet.toString().contains("opacity: 0.5;"));
-
-        preview.cancel();
-        frame();
-        assertEquals("cancelled, the sheet's own value is back", Float.valueOf(0.5f),
-                node.getStyle().getComputed(StylePropertyRegistry.OPACITY));
-    }
-
-    @Test
-    public void committingAPreviewWritesOnce() {
-        StyleFields fields = StyleFields.on(null, rule(), node);
-        SheetPreview preview = SheetPreview.of(rule(), node);
-        for (int i = 0; i < 30; i++) preview.show(StylePropertyRegistry.OPACITY, "0." + (i % 9 + 1));
-        preview.commit(fields, "opacity", "0.25");
-        frame();
-
-        assertTrue("the value landed", sheet.toString().contains("opacity: 0.25"));
-        assertEquals("a 30-frame drag is one entry in the sheet's history", 1, sheet.history().undoDepth());
-        assertEquals("and the canvas reads it from the text", Float.valueOf(0.25f),
-                node.getStyle().getComputed(StylePropertyRegistry.OPACITY));
     }
 
     // ── S.15: how a rule comes into being ───────────────────────────────────

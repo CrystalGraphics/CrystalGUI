@@ -1120,6 +1120,47 @@ ConfigDescriptor.number("left", "Left").scrubRate(() -> 1d / zoom)   // units pe
 - **`scrubRate`** overrides the label-drag rate, and the `DoubleSupplier` form is asked at each step — what
   a canvas that zooms needs, where a pixel is worth a different number of units every frame.
 
+A number's **range, unit and step can follow another value** — the control keeps asking while it is shown,
+so nothing holds the control to push a bound at it:
+
+```java
+form.prop(ConfigDescriptor.number("stroke", "Stroke")
+        .range(() -> new ConfigDescriptor.Range(0f, em() ? 13f : cap * fontSize()))
+        .unit(() -> em() ? "%" : "px")
+        .step(0.1f), stroke);
+```
+
+- **A control built of numbers copies its descriptor with `part(id, label)`** — a slider's field, a
+  vector's X. Every attribute and supplier comes along; a hand copy drops whichever one it forgets.
+- **A row's Ctrl+Z reaches the property's `editedIn` history** with nothing named on the row.
+
+#### A control of your own
+
+Anything that edits a value is a `ValueControl<T>`, so it follows its property exactly as the kit's do:
+
+```java
+public final class OffsetPad extends ValueControl<double[]> {
+    public OffsetPad(String id) {
+        super(Name.of("offsetpad"), ConfigDescriptor.vector(id, "", 2), new double[2]);
+        StyleGizmos.drag(this, this::beginInteraction, (dx, dy) -> commit(offsetBy(dx, dy)), this::endInteraction);
+    }
+    @Override protected void writeToWidgets(double[] at) { /* draw the value; never emit */ }
+}
+
+panel.append(new OffsetPad("offset").bind(shadow.map(Shadow::offset, at -> shadow.get().withOffset(at))));
+```
+
+- **Draw in `writeToWidgets`, report with `commit`**, and bracket a drag with `beginInteraction` /
+  `endInteraction` so it is one undo step. Never keep a copy of the value in a field.
+- **A view that is not a control** — a caption, a preview — follows with
+  `PropertyWatch.follow(element, property, show)`, or `LiveEdits.follow(element, styleProperty, css)` to
+  show a declaration on an element.
+- **Children redrawn from the value are kept with `ChildList`**, never `removeAll` and append: a rebuild
+  destroys the row the pointer is pressing.
+- **Parts of a composite value are `Property.map`s** of the whole, and a selection is a `Property.of(0)`
+  shared by the controls that edit through it. Write the setter as `v -> whole.get().withX(v)`, never
+  `whole.get()::withX`, which reads the whole once when the lab opens.
+
 ### Chips for a list of names — `ClassChips`
 
 `com.crystalgui.widget.config.control` · tag `classchips`

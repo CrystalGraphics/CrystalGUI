@@ -185,12 +185,12 @@ public class StyleChip extends ValueControl<String> {
             // -- #E8913A under the band came out #27180A.
             Integer argb = ColorValue.parseColor(value);
             if (argb == null) {
-                LiveEdits.setInline(swatch, cast(StylePropertyRegistry.BACKGROUND), value);
+                LiveEdits.setInline(swatch, StylePropertyRegistry.BACKGROUND, value);
                 return;
             }
             paintColour(swatch, argb);
         } else {
-            LiveEdits.setInline(swatch, cast(property), preview == null ? value : preview.apply(value));
+            LiveEdits.setInline(swatch, property, preview == null ? value : preview.apply(value));
         }
     }
 
@@ -218,10 +218,5 @@ public class StyleChip extends ValueControl<String> {
             if (!Character.isDigit(c) && c != '.' && c != '-' && c != '+') return readable;
         }
         return readable + unit;
-    }
-
-    @SuppressWarnings("unchecked")
-    private static StyleProperty<Object> cast(StyleProperty<?> property) {
-        return (StyleProperty<Object>) property;
     }
 }

@@ -33,7 +33,7 @@ public final class StyleLabs {
 
     private static boolean registered;
 
-    /** Gives the four their labs. Idempotent — a second builder does not register them twice. */
+    /** Gives the six their labs. Idempotent — a second builder does not register them twice. */
     public static void register() {
         if (registered) return;
         registered = true;
@@ -51,9 +51,7 @@ public final class StyleLabs {
             DeclarationEditors.register(radius, context -> chip(context, anchor -> {
                 // EVERY CORNER AT ONCE, whichever longhand's row was pressed: the lab is about the shape,
                 // and a lab that edited one of eight numbers would be the row it was opened from.
-                if (context.fields() != null) {
-                    CornersLab.open(anchor, context.fields(), context.property(), context.css());
-                }
+                if (context.fields() != null) CornersLab.open(anchor, context.fields());
             }));
         }
 
@@ -74,10 +72,7 @@ public final class StyleLabs {
                 StylePropertyRegistry.PAINT_ORDER, StylePropertyRegistry.TEXT_STROKE_WIDTH,
                 StylePropertyRegistry.TEXT_STROKE_COLOR)) {
             DeclarationEditors.register(type, context -> chip(context, anchor -> {
-                if (context.fields() != null) {
-                    TypographyLab.open(anchor, context.fields(), context.property(), context.css(),
-                            context.node());
-                }
+                if (context.fields() != null) TypographyLab.open(anchor, context.fields(), context.node());
             }));
         }
     }

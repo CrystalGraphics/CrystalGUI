@@ -485,10 +485,6 @@ public final class BuilderStyleSections {
                     ? panel.propTo(list, field.descriptor(), cast(field.value()))
                     : panel.addRow(list, declared.name(), id, field.control());
             row.addClass(STYLE_ROW_CLASS);
-            // CTRL+Z IN THE ROW REACHES THE FILE THE ROW WROTE TO: a rule's edit is in the sheet's buffer,
-            // which is a different history from the document's and the same one its editor tab uses.
-            TextBuffer buffer = fields.target().buffer();
-            if (buffer != null) row.editedIn(buffer.history());
             if (declared.disabled()) row.addClass(DISABLED_CLASS);
             if (!declared.won() && !declared.disabled()) row.addClass(OVERRIDDEN_CLASS);
             if (!fields.canWrite()) return;
