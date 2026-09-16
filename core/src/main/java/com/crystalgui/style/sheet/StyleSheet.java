@@ -6,6 +6,8 @@ import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.selector.Selector;
 import com.crystalgui.style.selector.SelectorType;
 import com.crystalgui.style.Styleable;
+import javax.annotation.Nullable;
+
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -450,6 +452,17 @@ public final class StyleSheet {
     void refill(String newSource, Map<String, String> externalVariables) {
         this.rawSource = newSource;
         replaceRules(parse(newSource, externalVariables).getRules());
+    }
+
+    /**
+     * The text this was parsed from, or null for a sheet built any other way.
+     *
+     * <p>What an editor measures against: {@code CssSourceModel.parse(sheet.source())} gives the rules with
+     * their ranges, and every range is an offset into <em>this</em> string.</p>
+     */
+    @Nullable
+    public String source() {
+        return rawSource;
     }
 
     /**

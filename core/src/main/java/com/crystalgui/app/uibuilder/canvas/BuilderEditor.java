@@ -12,6 +12,7 @@ import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
 import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.style.SheetDocuments;
 import com.crystalgui.app.uibuilder.insert.BuilderInsert;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.storage.ConfigStorage;
@@ -23,9 +24,6 @@ import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.serialization.StateMap;
-import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.style.sheet.StyleSheetRegistry;
-import com.crystalgui.template.UiTemplates;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.editor.EditorService;
@@ -70,6 +68,7 @@ public final class BuilderEditor implements DocumentEditor {
     private static final String SCALE = "uiScale";
 
     private final UiBuilderDocument document;
+    private final SheetDocuments sheets;
     private final Artboard artboard;
     private final BuilderSurface surface;
     private final BuilderToolbar toolbar;
@@ -88,12 +87,22 @@ public final class BuilderEditor implements DocumentEditor {
     private final BuilderInsert insert;
 
     public BuilderEditor(UiBuilderDocument document) {
-        this(document, null);
+        this(document, null, null);
+    }
+
+    public BuilderEditor(UiBuilderDocument document, @Nullable ConfigStorage store) {
+        this(document, store, null);
     }
 
     /** @param store the UI builder's extension store, where the Insert menu keeps recent picks; null for none */
-    public BuilderEditor(UiBuilderDocument document, @Nullable ConfigStorage store) {
+    /**
+     * @param sheets where the document's stylesheets come from — null for none, which leaves the canvas
+     *               styled by the engine's own sheet alone
+     */
+    public BuilderEditor(UiBuilderDocument document, @Nullable ConfigStorage store,
+                         @Nullable SheetDocuments sheets) {
         this.document = document;
+        this.sheets = sheets != null ? sheets : new SheetDocuments(null, null);
         this.artboard = new Artboard(document);
         this.surface = new BuilderSurface(document, artboard,
                 List.of(SelectExtension.ID, BuilderOverlaysExtension.ID));
@@ -384,6 +393,7 @@ public final class BuilderEditor implements DocumentEditor {
     @Override
     public void disposeView() {
         surface.dispose();
+        sheets.dispose();
     }
 
     /**
@@ -405,35 +415,15 @@ public final class BuilderEditor implements DocumentEditor {
      * and a sheet the workbench or another document installed is not this document's to remove.</p>
      */
     private void installSheets() {
-        UIDocument window = surface.document();
-        if (window == null) return;
-        List<String> wanted = document.stylesheets();
-        for (String id : ownedSheetIds) {
-            StyleSheet sheet = sheetOrNull(id);
-            if (sheet != null) window.styles().removeStylesheet(sheet);
-        }
-        ownedSheetIds.clear();
-        for (String id : wanted) {
-            StyleSheet sheet = sheetOrNull(id);
-            boolean present = sheet != null && window.styles().hasStylesheet(sheet, null);
-            UiTemplates.installSheets(window, List.of(id));
-            if (sheet != null && !present && window.styles().hasStylesheet(sheet, null)) ownedSheetIds.add(id);
-        }
-        installedSheetIds = List.copyOf(wanted);
+        installedSheetIds = List.copyOf(document.stylesheets());
+        sheets.install(surface.document(), installedSheetIds);
     }
 
-    @Nullable
-    private static StyleSheet sheetOrNull(String id) {
-        try {
-            return StyleSheetRegistry.of(id);
-        } catch (RuntimeException missing) {
-            return null;
-        }
+    /** Where the document's sheets come from, and the one thing that can edit one. @see SheetDocuments */
+    public SheetDocuments sheets() {
+        return sheets;
     }
 
     /** The sheet ids last installed, in order — what a document change is compared against. */
     private List<String> installedSheetIds = List.of();
-
-    /** The ids this editor put on the window itself, and may therefore take off. */
-    private final List<String> ownedSheetIds = new ArrayList<>();
 }

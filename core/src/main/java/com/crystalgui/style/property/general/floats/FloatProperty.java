@@ -7,8 +7,11 @@ import lombok.experimental.Accessors;
 
 @Accessors(chain = true)
 public class FloatProperty extends StyleProperty<Float> {
+    /** Readable because an editor built from the property alone has no other way to know the range. */
+    @Getter
     @Setter
     private float min = -Float.MAX_VALUE;
+    @Getter
     @Setter
     private float max = Float.MAX_VALUE;
     @Getter

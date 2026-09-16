@@ -20,13 +20,13 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.style.BuilderStyleSections;
 import com.crystalgui.app.uibuilder.canvas.BuilderToolbar;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.BoxModelEditor;
 import com.crystalgui.app.uibuilder.inspect.HeaderFields;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
-import com.crystalgui.app.uibuilder.inspect.MatchedRules;
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
 import com.crystalgui.app.uibuilder.inspect.StyleScrub;
 import com.crystalgui.ui.box.Box;
@@ -112,12 +112,18 @@ public final class BuilderInspectorSections {
         NONE, CANVAS, NODE, MULTI, INSTANCE
     }
 
-    private static final SectionSet SECTIONS = SectionSet.of(
-            new NodeSection(), new MultiNodeSection(), new AttributesSection(), new StateSection(),
-            new ForcedStatesSection(),
-            new MatchedRulesSection(), new InlineStyleSection(), new ComputedSection(),
-            new BoxModelSection(), new PositionSection(), new FlexContextSection(),
-            new CanvasSection(), new DocumentSheetsSection(), new ExportSection());
+    private static final SectionSet SECTIONS = SectionSet.of(sections());
+
+    /** The Element, Layout and Document sections, plus the Style tab's own. @see BuilderStyleSections */
+    private static InspectorSection[] sections() {
+        List<InspectorSection> all = new ArrayList<>(List.of(
+                new NodeSection(), new MultiNodeSection(), new AttributesSection(), new StateSection(),
+                new ForcedStatesSection(), new ComputedSection(),
+                new BoxModelSection(), new PositionSection(), new FlexContextSection(),
+                new CanvasSection(), new DocumentSheetsSection(), new ExportSection()));
+        all.addAll(BuilderStyleSections.all());
+        return all.toArray(new InspectorSection[0]);
+    }
 
     /**
      * Registers the sections, counted.
@@ -472,80 +478,6 @@ public final class BuilderInspectorSections {
     // ── Style ───────────────────────────────────────────────────────────────
 
     /** Every rule that reached this element, weakest first, with the beaten ones marked. */
-    private static final class MatchedRulesSection extends NodeAware {
-
-        @Override
-        public String tab() {
-            return STYLE_TAB;
-        }
-
-        @Override
-        public int order() {
-            return 10;
-        }
-
-        @Override
-        public void build(ConfigForm form, DataContext context) {
-            UIElement node = node(context);
-            if (node == null) return;
-            for (MatchedRules.Rule rule : MatchedRules.of(node)) {
-                form.header(rule.origin().name().toLowerCase(Locale.ROOT)
-                        + (rule.sheetIndex() < 0 ? ""
-                                : "  sheet " + rule.sheetIndex() + " rule " + rule.ruleOrder()));
-                for (MatchedRules.Declaration declaration : rule.declarations()) {
-                    // OVERRIDDEN, not hidden: that a declaration matched and lost is the fact this pane
-                    // exists to show. The strikethrough is the theme's; this says which rows get it.
-                    String label = declaration.won()
-                            ? declaration.property().name
-                            : declaration.property().name + "  (overridden)";
-                    form.row(ConfigDescriptor.info("matched." + rule.origin() + "." + rule.ruleOrder()
-                                    + "." + declaration.property().name, label),
-                            String.valueOf(declaration.value()));
-                }
-            }
-        }
-    }
-
-    /**
-     * What has been set inline on this element, editable.
-     *
-     * <p>In a document an edit is a {@code SetInlineStyle} and is saved. Over a live pick it changes the
-     * running screen and nothing else — Unity's caveat, stated in the header where it applies.</p>
-     */
-    private static final class InlineStyleSection extends NodeAware {
-
-        @Override
-        public String tab() {
-            return STYLE_TAB;
-        }
-
-        @Override
-        public int order() {
-            return 20;
-        }
-
-        @Override
-        public void build(ConfigForm form, DataContext context) {
-            UIElement node = node(context);
-            if (node == null) return;
-            List<StyleProperty<?>> inline = new ArrayList<>();
-            for (StyleProperty<?> property : node.getStyle().candidates.keySet()) {
-                if (LiveEdits.hasInline(node, property)) inline.add(property);
-            }
-            if (inline.isEmpty()) return;
-
-            NodeFields fields = editable(context, node);
-            form.header(fields == null ? "Inline (this session only)" : "Inline");
-            for (StyleProperty<?> property : inline) {
-                Supplier<String> read = () -> String.valueOf(node.getStyle().getComputed(cast(property)));
-                form.prop(ConfigDescriptor.text("inline." + property.name, property.name).tooltip(property.name)
-                        .description("Set on this element itself, which beats every stylesheet rule."), fields == null
-                        ? Property.derived(read, value -> LiveEdits.setInline(node, cast(property), value))
-                        : fields.bind(read, value -> value == null ? null : fields.inlineEdit(node, property, value)));
-            }
-        }
-    }
-
     /** Every property with a value, and what it resolved to. Collapsed: it is long by design. */
     private static final class ComputedSection extends NodeAware {
 
@@ -854,9 +786,11 @@ public final class BuilderInspectorSections {
             form.prop(ConfigDescriptor.of("document.sheets", "Sheets", ConfigDescriptor.Kind.ARRAY)
                             .inlineList(true)
                             .emptyText("None: drawn with the workbench's sheets")
-                            .element(ConfigDescriptor.text("document.sheet", "").placeholder("mymod:ui/status"))
+                            .element(ConfigDescriptor.text("document.sheet", "").placeholder("menu.css"))
                             .tooltip("stylesheets")
-                            .description("The stylesheets this document is drawn with, as namespace:path. A later sheet wins over an earlier one."),
+                            .description("The stylesheets this document is drawn with. A file beside it (menu.css) or from the "
+                                    + "project root (/ui/menu.css) is editable here; a shipped one (mymod:ui/status) is read-only. "
+                                    + "A later sheet wins over an earlier one."),
                     HeaderFields.on(document).strings("stylesheets"));
         }
     }

@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.style.SheetDocuments;
 import com.crystalgui.app.uibuilder.library.LibraryActions;
 import com.crystalgui.app.uibuilder.library.LibraryToolWindow;
 import com.crystalgui.app.uibuilder.panel.HierarchyActions;
@@ -60,7 +61,10 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                 .revealsToolWindows(HIERARCHY_PANEL, InspectorExtension.TYPE)
                 .model((resource, bytes) -> new UiBuilderDocument(bytes, resource.toString()))
                 // The store is asked per editor: stores are supplied after extensions activate.
-                .editor(document -> new BuilderEditor((UiBuilderDocument) document.model(), workbench.extensionStore(ID))),
+                .editor(document -> new BuilderEditor((UiBuilderDocument) document.model(), workbench.extensionStore(ID),
+                        // A SHEET IN THE PROJECT IS A DOCUMENT: opened here, so this canvas and an editor
+                        // tab on the same .css are one buffer and one history.
+                        new SheetDocuments(workbench.documents()::open, document.resource()))),
                 "cgui");
         // The kind is registered ON the workbench, so it goes when the workbench does and needs no
         // handle of its own. @see WorkbenchExtension

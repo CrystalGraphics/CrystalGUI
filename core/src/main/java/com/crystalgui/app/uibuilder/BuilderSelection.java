@@ -43,6 +43,8 @@ public final class BuilderSelection {
     @Nullable
     private String token;
 
+    private String styleTarget = "";
+
     private boolean canvasSelected;
 
     /** The selected nodes, in the order they were selected. */
@@ -163,6 +165,23 @@ public final class BuilderSelection {
     public void selectToken(@Nullable String chosen) {
         if (chosen == null ? token == null : chosen.equals(token)) return;
         token = chosen;
+        changed();
+    }
+
+    /**
+     * Where a style edit lands: {@code ""} for the element's own inline style, else a
+     * {@code StyleTarget.key()}. Kept here because it outlives the panel that shows it — the Style tab is
+     * rebuilt whenever the selection changes and would otherwise forget which rule you were writing to.
+     */
+    public String styleTarget() {
+        return styleTarget;
+    }
+
+    /** @see #styleTarget */
+    public void selectStyleTarget(@Nullable String key) {
+        String chosen = key == null ? "" : key;
+        if (chosen.equals(styleTarget)) return;
+        styleTarget = chosen;
         changed();
     }
 
