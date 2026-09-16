@@ -873,3 +873,106 @@ smartguides {
     font-weight: bold;
     outline: linear-gradient(to right, var(--accent, #3574F0) 0%, var(--accent, #3574F0) 2%, transparent 2%);
 }
+
+/* ───────────────────────────── The Styles tab ─────────────────────────────
+ * Where an edit lands is the first thing on it, because a style editor that guesses which rule you meant
+ * writes to the wrong file eventually and cannot show that it did. */
+.__style-targets__ {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 3px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+}
+.__style-target__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding-left: 6px;
+    padding-right: 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    border-radius: 3px;
+    background: var(--bg-input, #2B2D30);
+    color: var(--fg-secondary, #9DA0A8);
+    cursor: pointer;
+}
+.__style-target__:hover { background: var(--bg-hover, #393B40); }
+/* THE ONE BEING WRITTEN TO, in the accent every other "this is live" mark uses. */
+.__style-target__.__active__ {
+    background: var(--accent, #3574F0);
+    color: var(--fg-on-accent, #FFFFFF);
+}
+/* Readable, and plainly not writable: the engine's own sheet and anything inside a jar. */
+.__style-target__.__read-only__ { opacity: 0.75; }
+.__style-target-sheet__ { color: var(--fg-hint, #7A7A7A); font-size: 8; }
+
+/* A family's heading, with what it can add. */
+.__style-family__ {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding-left: 6px;
+    padding-right: 4px;
+    padding-top: 7px;
+    padding-bottom: 1px;
+}
+.__style-family-label__ { color: var(--fg-hint, #7A7A7A); font-size: 8; }
+.__style-add__, .__style-row-action__ {
+    width: 15px;
+    height: 15px;
+    min-height: 15px;
+    flex-shrink: 0;
+    background: #00000000;
+    color: var(--fg-hint, #7A7A7A);
+}
+.__style-add__:hover, .__style-row-action__:hover {
+    background: var(--bg-hover, #393B40);
+    color: var(--fg, #DFE1E5);
+}
+/* A DECLARATION THAT LOST: struck through where it is written, as a browser's own pane draws it. */
+.__configurator__.__overridden__ > .__label__ {
+    text-decoration-line: line-through;
+    color: var(--fg-disabled, #5A5D63);
+}
+
+/* The palette: a property is found by seeing what it does. */
+.__property-palette__ {
+    width: 250px;
+    max-height: 300px;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    gap: 3px;
+}
+.__palette-search__ { height: 18px; min-height: 18px; flex-shrink: 0; }
+.__palette-row__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 7px;
+    padding-left: 4px;
+    padding-right: 4px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.__palette-row__:hover { background: var(--bg-hover, #393B40); }
+/* The sample IS the property, applied: the chip is the ground it is applied to. */
+.__palette-sample__ {
+    width: 22px;
+    height: 14px;
+    flex-shrink: 0;
+    border-radius: 2px;
+    background: var(--bg-elevated, #3A3D42);
+}
+.__palette-name__ { color: var(--fg, #DFE1E5); }
+/* Already declared here — listed, because being told it is already on beats finding nothing. */
+.__palette-row__.__declared__ .__palette-name__ { color: var(--fg-hint, #7A7A7A); }
+
+/* Edit as CSS: the sheet's own buffer, so this is the file rather than a copy of it. */
+.__rule-editor__ { width: 480px; height: 240px; }
+.__rule-editor__-popover { padding-left: 0px; padding-right: 0px; padding-top: 0px; padding-bottom: 0px; }
