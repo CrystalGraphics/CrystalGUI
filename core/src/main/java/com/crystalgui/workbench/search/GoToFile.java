@@ -320,9 +320,9 @@ public final class GoToFile {
      * <p>A file's location is a {@code CgPath}, which reads {@code project:dir/dir}. The project id is
      * common to every file in the workspace, so matching against it makes every query that happens to
      * hit the project name return the ENTIRE workspace — and the partition above then puts all of it
-     * ahead of the classpath. Typing {@code Minecraft} in a workspace called {@code minecraft.workspace}
-     * listed {@code README.md}, {@code shader.shadergraph} and every {@code .js} file in it, with
-     * {@code net.minecraft.client.Minecraft} — an exact hit on the name — last.</p>
+     * ahead of the classpath. In a workspace whose project id contains {@code minecraft}, typing
+     * {@code Minecraft} listed {@code README.md}, {@code shader.shadergraph} and every {@code .js} file
+     * in it, with {@code net.minecraft.client.Minecraft} — an exact hit on the name — last.</p>
      *
      * <p>The rest of the path is genuinely worth matching and is kept: {@code util} finding the files
      * under {@code util} is the reason a location is searched at all, and it is how a qualified query

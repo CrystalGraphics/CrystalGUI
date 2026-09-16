@@ -47,13 +47,13 @@ import net.minecraft.network.NetHandlerPlayServer;
  * <p>So a send resolves its target at send time rather than capturing it, which is the same thing FML's
  * own {@code PLAYER} outbound target does one layer down.</p>
  */
-public final class Mc1710Peer {
+public final class Peer1710 {
 
     private final UUID id;
     private final String name;
     private final NetHandlerPlayServer handler;
 
-    Mc1710Peer(UUID id, String name, NetHandlerPlayServer handler) {
+    Peer1710(UUID id, String name, NetHandlerPlayServer handler) {
         this.id = id;
         this.name = name;
         this.handler = handler;
@@ -64,10 +64,10 @@ public final class Mc1710Peer {
      * which a fake player or a not-yet-attached entity legitimately does not.
      */
     @Nullable
-    static Mc1710Peer of(EntityPlayerMP player) {
+    static Peer1710 of(EntityPlayerMP player) {
         if (player == null || player.playerNetServerHandler == null) return null;
         if (player.getGameProfile() == null || player.getGameProfile().getId() == null) return null;
-        return new Mc1710Peer(player.getGameProfile().getId(), player.getCommandSenderName(),
+        return new Peer1710(player.getGameProfile().getId(), player.getCommandSenderName(),
                 player.playerNetServerHandler);
     }
 
@@ -94,7 +94,7 @@ public final class Mc1710Peer {
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof Mc1710Peer && id.equals(((Mc1710Peer) other).id);
+        return other instanceof Peer1710 && id.equals(((Peer1710) other).id);
     }
 
     @Override

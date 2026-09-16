@@ -58,7 +58,7 @@ import java.util.function.BiConsumer;
  * <p>FML does <b>not</b> fragment for us. {@code FrameMultiplexer} does it instead, once, for every
  * platform.</p>
  */
-public final class Mc1710NetworkChannel implements CgNetworkChannel {
+public final class NetworkChannel1710 implements CgNetworkChannel {
 
     /**
      * Twenty characters is the hard ceiling — {@code readStringFromBuffer(20)} in both custom-payload
@@ -66,13 +66,13 @@ public final class Mc1710NetworkChannel implements CgNetworkChannel {
      */
     private static final String CHANNEL = "crystalgui";
 
-    /** @see Mc1710NetworkChannel */
+    /** @see NetworkChannel1710 */
     private static final int MAX_FRAME_BYTES = 32_766;
 
     /** Logs every hop. Shares the probe's flag, because it is only interesting alongside it. */
     private static final boolean TRACE = Boolean.getBoolean("crystalgui.net.probe");
 
-    private static Mc1710NetworkChannel instance;
+    private static NetworkChannel1710 instance;
 
     private final FMLEventChannel channel;
     private volatile BiConsumer<Object, byte[]> inbound = (sender, frame) -> { };
@@ -80,7 +80,7 @@ public final class Mc1710NetworkChannel implements CgNetworkChannel {
     private int sentCount;
     private int receivedCount;
 
-    private Mc1710NetworkChannel() {
+    private NetworkChannel1710() {
         this.channel = NetworkRegistry.INSTANCE.newEventDrivenChannel(CHANNEL);
         // Subscribes this object's @SubscribeEvent methods to THIS CHANNEL's bus, not the global one --
         // a channel event only ever reaches handlers registered on that channel.
@@ -96,7 +96,7 @@ public final class Mc1710NetworkChannel implements CgNetworkChannel {
      */
     public static synchronized void register() {
         if (instance != null) return;
-        instance = new Mc1710NetworkChannel();
+        instance = new NetworkChannel1710();
         CgPlatform.provide(CgNetworkChannel.SERVICE, instance);
         if (TRACE) CrystalGuiCore.LOGGER.info("[net] channel '{}' registered", CHANNEL);
     }

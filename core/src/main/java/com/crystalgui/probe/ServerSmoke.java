@@ -1,9 +1,6 @@
-package com.crystalgui.mc.modern.net;
+package com.crystalgui.probe;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
@@ -13,7 +10,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.CodeSource;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
@@ -36,20 +32,39 @@ import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
-import net.minecraft.server.MinecraftServer;
-
 /**
- * Boots a dedicated server, asserts the server-side stack came up, and stops it. The 1.20.x twin of
- * {@code CgUiServerSmoke}.
+ * <b>Boots a dedicated server, asserts the server-side stack came up, and stops it.</b>
  *
- * <p><b>This is the only check in the build that can see its class of bug.</b> Every defect it exists
- * for is a <i>runtime</i> property -- "a client-only class is constructed on a server" -- so headless
- * tests cannot see it (they reach no loader), the GL harness cannot see it (a client by design), and no
- * import scan can answer a question about class loading. On 1.7.10 booting a server found three fatal
- * ones in a single run.</p>
+ * <pre>{@code
+ * // from the loader's server-STARTED event:
+ * if (ServerSmoke.enabled()) ServerSmoke.run(new MyServerSmokeHost());
+ * }</pre>
  *
- * <p>Run with {@code ./gradlew :runtime:mc:modern:forge:serverSmoke}. Exit 0 when every hard check passes, 1
- * otherwise; {@code WARN} lines are informational and never fail the run.</p>
+ * <p>Run it from <b>server-started</b>, not server-starting: that is late enough that a mod which
+ * failed to load has already taken the process down, so reaching this at all is most of the assertion.
+ * It always ends the process — cleanly on a pass, {@code halt(1)} on a failure.</p>
+ *
+ * <h3>Why this exists, and why no other check replaces it</h3>
+ *
+ * <p>Every defect it was built for is a <em>runtime</em> property — "a client-only class is constructed
+ * on a server" — so nothing static can see one. Headless tests assert by <i>absence</i> and reach no
+ * loader; the GL harness is a client with a real context by design; an import guard sees imports, and
+ * every offending line was a legal import in a module that legitimately has both halves.</p>
+ *
+ * <h3>Easy to get wrong</h3>
+ *
+ * <ul>
+ *   <li>{@link Host#clientPackage()} is <b>enumerated, never listed</b>. A hand-written list is a guard
+ *       that rots: the 1.7.10 one named a class that had been deleted — so it passed forever — while
+ *       three classes added after it was written were never checked at all.</li>
+ *   <li>Load state is read from the JVM's own {@code -Xlog:class+load} file when the build supplies one.
+ *       The reflective fallback cannot work under a module system that names the mod's module, and a
+ *       check that cannot run must say so rather than report green.</li>
+ *   <li>Nothing here may <em>load</em> a subject class. {@code Class.forName} would create the very
+ *       condition being detected, after which the check passes forever.</li>
+ * </ul>
+ *
+ * @see Host for the six things a loader has to answer
  */
 public final class ServerSmoke {
 
@@ -57,52 +72,83 @@ public final class ServerSmoke {
     public static final String PROPERTY = "crystalgui.server.smoke";
 
     /**
-     * Where to write the verdict, so the build can tell "failed" from <b>"never ran"</b>. On 1.7.10 a
-     * port clash meant the started event never fired, not one assertion ran, and Gradle reported
-     * BUILD SUCCESSFUL -- a check that is green when it did not run is worse than no check.
+     * Where the verdict goes, so the build can tell "failed" from "never ran". @see ProbeReport
+     *
+     * <p>This check is where that rule was learned: a port clash meant the started event never fired,
+     * not one assertion executed, and Gradle reported BUILD SUCCESSFUL. A check that is green when it
+     * did not run is worse than no check, because it is now also a claim.</p>
      */
     public static final String REPORT_PROPERTY = "crystalgui.server.smoke.report";
 
-    /** Package whose every class is client-only; enumerated rather than listed. @see #auditClientList */
-    private static final String CLIENT_PACKAGE = "com.crystalgui.mc.modern.client";
+    /** Directories to enumerate when the code source is not walkable. @see #classesIn */
+    public static final String CLASSDIR_PROPERTY = "crystalgui.server.smoke.classdir";
+
+    /** The JVM's own {@code -Xlog:class+load=info} output. @see #loadedFromJvmLog */
+    public static final String CLASSLOG_PROPERTY = "crystalgui.server.smoke.classlog";
 
     /**
-     * Classes that must never be loaded in a dedicated server process. Each is present on a dev server's
-     * classpath and absent from a real one, so a load here is a hard {@code NoClassDefFoundError} there.
+     * Subjects every host shares. Each is present on a dev server's merged classpath and absent from a
+     * real one, so a load here is a hard {@code NoClassDefFoundError} there.
      *
-     * <p>Everything in {@link #CLIENT_PACKAGE} is added at run time. The 1.7.10 list was hand-written and
-     * recorded its own decay -- three classes added after it was written were never checked, because a
-     * guard that fails to grow reports success.</p>
+     * <p><b>LWJGL is deliberately absent</b>, and that is a finding rather than an omission — see
+     * {@link #reportGlDivergence}.</p>
      */
-    private static final List<String> NEVER_LOADED_ON_A_SERVER = Arrays.asList(
-            // Client-side content that does not live in the client package.
-            "com.crystalgui.mc.example.MachineExampleClient",
-            // Naming this from a common path is the commonest spelling of the bug.
-            "net.minecraft.client.Minecraft",
+    private static final List<String> NEVER_LOADED_ANYWHERE = Collections.singletonList(
             // The entry point to every GL resource CrystalGUI owns; it registers CgUiLifecycle from a
             // static initialiser, so loading it means something asked a headless process to paint.
             "com.crystalgui.render.CgUiPaintContext");
 
+    /** Where {@code -Xlog:class+load=info} puts the class name on each line. */
+    private static final String LOG_MARKER = "[class,load] ";
+
+    /** Why {@link #loadedByAnyLoader} could not answer, so the WARN names a cause rather than a fact. */
+    private static volatile Throwable loadStateFailure;
+
     private ServerSmoke() {}
+
+    /**
+     * What only the running game can answer. <b>Implement it in the loader module</b> — this object's
+     * own class is the anchor the client package is enumerated from, so it has to live in the same
+     * container as the classes it is asking about.
+     */
+    public interface Host {
+
+        /** For the report banner, e.g. {@code "1.7.10"} or {@code "1.20.x"}. */
+        String label();
+
+        /** Whether this process really is a dedicated server; everything else proves nothing if not. */
+        boolean isDedicatedServer();
+
+        /** Whether the loader's connection lifecycle installed itself. */
+        boolean connectionsRegistered();
+
+        /** A package whose every class is client-only. Enumerated, so it cannot go stale. */
+        String clientPackage();
+
+        /** Client-only classes that live outside {@link #clientPackage()}. */
+        default List<String> alsoNeverLoaded() {
+            return Collections.emptyList();
+        }
+
+        /** Stops the server cleanly. Called only on a pass — a failure halts instead. */
+        void halt();
+    }
 
     public static boolean enabled() {
         return Boolean.getBoolean(PROPERTY);
     }
 
-    /**
-     * Runs every check, prints the report, and stops the server. Called from each loader's
-     * server-STARTED event -- late enough that a mod which failed to load has already taken the process
-     * down, so reaching this at all is most of the assertion.
-     */
-    public static void run(MinecraftServer server) {
+    /** Runs every check, prints the report, writes the verdict, and ends the process. */
+    public static void run(Host host) {
         List<String> lines = new ArrayList<>();
         List<String> failures = new ArrayList<>();
 
-        check(lines, failures, "the process is a dedicated server",
-                server != null && server.isDedicatedServer(),
+        check(lines, failures, "the process is a dedicated server", host.isDedicatedServer(),
                 "not a dedicated server -- this check proves nothing anywhere else");
 
-        // The one that was fatal on 1.7.10: preInit died and every dependent mod errored with it.
+        // The one that was fatal: the platform bundle built all nine services eagerly and died at the
+        // first, taking every dependent mod's preInit with it. Reaching this line is most of the
+        // assertion.
         boolean platform;
         String platformDetail = "";
         try {
@@ -114,8 +160,8 @@ public final class ServerSmoke {
         }
         check(lines, failures, "CrystalGraphics platform bundle registered", platform, platformDetail);
 
-        // An unavailable channel is a warn-and-return inside register(), so checking only the lifecycle
-        // flag below would report the symptom and hide the cause.
+        // An unavailable channel is a warn-and-return inside the lifecycle's register(), so checking only
+        // the flag below would report the symptom and hide the cause.
         boolean channel;
         try {
             channel = CgPlatform.get(CgNetworkChannel.SERVICE).isAvailable();
@@ -123,31 +169,32 @@ public final class ServerSmoke {
             channel = false;
         }
         check(lines, failures, "network channel available", channel,
-                "the loader's CgNetworkChannel provider did not register, or the SERVICE slot holds the no-op default");
+                "the loader's CgNetworkChannel provider did not register, or the SERVICE slot still "
+                        + "holds the no-op default");
 
         // Warn-and-return on failure rather than a throw, so a server with no networking boots happily
         // and looks fine.
-        check(lines, failures, "connection lifecycle installed", Connections.isRegistered(),
-                "Connections.register() stood down; see the [cgui-net] warning above");
+        check(lines, failures, "connection lifecycle installed", host.connectionsRegistered(),
+                "the loader's connection registration stood down; see the [cgui-net] warning above");
 
         // A connection binds only contributors registered BEFORE it opens, and no peer exists yet -- so
         // this is the last moment the set can still be wrong and the first at which it certainly is not.
         Set<String> contributors = Protocols.contributors();
         check(lines, failures, "protocol contributors bound " + contributors,
                 contributors.contains("workspace"),
-                "expected 'workspace'; WorkspaceHost.register() runs before Connections.register()");
+                "expected 'workspace'; the workspace host must register before the connection lifecycle");
 
         checkDescriptionRoundTrip(lines, failures);
-        checkNothingClientSideLoaded(lines, failures);
+        checkNothingClientSideLoaded(host, lines, failures);
         reportGlDivergence(lines);
 
-        String report = render(lines, failures);
+        String report = render(host, lines, failures);
         print(report);
-        writeReport(report, failures.isEmpty());
-        stop(server, failures.isEmpty());
+        ProbeReport.write(REPORT_PROPERTY, failures.isEmpty(), report);
+        stop(host, failures.isEmpty());
     }
 
-    // ── the checks ────────────────────────────────────────────────────────────────────────────────
+    // ── the checks ──────────────────────────────────────────────────────────────────────────────
 
     /**
      * A description round-trips with no GL anywhere. Content-addressed, so encoding twice and comparing
@@ -187,9 +234,12 @@ public final class ServerSmoke {
         check(lines, failures, "UI description round-trips headlessly", ok, detail);
     }
 
-    private static void checkNothingClientSideLoaded(List<String> lines, List<String> failures) {
-        List<String> subjects = new ArrayList<>(NEVER_LOADED_ON_A_SERVER);
-        subjects.addAll(auditClientList(lines));
+    private static void checkNothingClientSideLoaded(Host host, List<String> lines,
+                                                     List<String> failures) {
+        List<String> subjects = new ArrayList<>(NEVER_LOADED_ANYWHERE);
+        subjects.addAll(host.alsoNeverLoaded());
+        checkTheNamedOnesStillExist(host, subjects, lines, failures);
+        subjects.addAll(auditClientPackage(host, lines));
 
         Set<String> definedByTheJvm = loadedFromJvmLog();
 
@@ -198,7 +248,7 @@ public final class ServerSmoke {
         for (String name : subjects) {
             Boolean isLoaded = definedByTheJvm != null
                     ? Boolean.valueOf(definedByTheJvm.contains(name))
-                    : loadedByAnyLoader(name);
+                    : loadedByAnyLoader(host, name);
             if (isLoaded == null) undetermined.add(name);
             else if (isLoaded) loaded.add(name);
         }
@@ -210,9 +260,8 @@ public final class ServerSmoke {
         if (!undetermined.isEmpty()) {
             // Said out loud rather than counted as a pass: a check that cannot run and reports green is
             // worse than no check.
-            Throwable why = loadStateFailure;
             lines.add("WARN  could not determine load state for " + undetermined.size() + " class(es)"
-                    + " -- findLoadedClass was not reachable: " + why
+                    + " -- findLoadedClass was not reachable: " + loadStateFailure
                     + " (the PASS below therefore covers only the rest)");
         }
 
@@ -221,25 +270,49 @@ public final class ServerSmoke {
                         + (undetermined.isEmpty() ? "" : ", of those determinable") + ")",
                 loaded.isEmpty(),
                 loaded.isEmpty() ? "" : "LOADED: " + loaded
-                        + " -- something on a common path reached a client class; in production this is a "
-                        + "NoClassDefFoundError at that point, not here");
+                        + " -- something on a common path reached a client class; in production this is "
+                        + "a NoClassDefFoundError at that point, not here");
     }
 
     /**
-     * Every class in {@link #CLIENT_PACKAGE}, read off the code source without loading anything.
+     * <b>The hand-written names still name something.</b> A class that has been renamed or deleted can
+     * never be loaded, so it passes for ever — which is exactly how the 1.7.10 list rotted, and this is
+     * the half {@link Host#clientPackage()}'s enumeration cannot cover.
      *
-     * <p>Enumerating rather than listing is what stops the guard rotting: a class added to that package
-     * is covered the day it is written. A container we cannot read is a WARN and an empty list, never a
-     * silent pass.</p>
+     * <p>Asked as a <em>resource</em>, never {@code Class.forName}: looking one up by name would load
+     * it, creating the condition being detected. @see #loadedByAnyLoader</p>
      */
-    private static List<String> auditClientList(List<String> lines) {
-        List<String> found = classesIn(CLIENT_PACKAGE);
+    private static void checkTheNamedOnesStillExist(Host host, List<String> named, List<String> lines,
+                                                    List<String> failures) {
+        ClassLoader loader = host.getClass().getClassLoader();
+        List<String> missing = new ArrayList<>();
+        for (String name : named) {
+            String resource = name.replace('.', '/') + ".class";
+            boolean present = loader == null
+                    ? ClassLoader.getSystemResource(resource) != null
+                    : loader.getResource(resource) != null;
+            if (!present) missing.add(name);
+        }
+        check(lines, failures, "every explicitly named client-only class still exists (" + named.size()
+                        + " named)", missing.isEmpty(),
+                "GONE: " + missing + " -- a name nothing defines can never be loaded, so it has been "
+                        + "passing for nothing. Rename it here or drop it.");
+    }
+
+    /**
+     * Every class in the host's client package, read off the code source without loading anything.
+     *
+     * <p>A container that cannot be read is a WARN and an empty list, never a silent pass.</p>
+     */
+    private static List<String> auditClientPackage(Host host, List<String> lines) {
+        String pkg = host.clientPackage();
+        List<String> found = classesIn(host, pkg);
         if (found == null) {
-            lines.add("WARN  could not enumerate " + CLIENT_PACKAGE
+            lines.add("WARN  could not enumerate " + pkg
                     + " from the code source; only the explicit list was checked");
             return Collections.emptyList();
         }
-        lines.add("INFO  " + CLIENT_PACKAGE + " contributes " + found.size()
+        lines.add("INFO  " + pkg + " contributes " + found.size()
                 + " class(es) to the never-loaded set: " + new TreeSet<>(found));
         return found;
     }
@@ -247,16 +320,18 @@ public final class ServerSmoke {
     /**
      * @return the top-level class names in {@code pkg}, or {@code null} if no container could be read.
      *
-     * <p>The code source first, which covers a plain directory and a shipped jar. Under FML it is a
-     * {@code union:} URL and cannot be walked, so the build passes the directory instead -- otherwise
-     * this degrades to the hand-written list on the one loader it matters most on.</p>
+     * <p>The host's own code source first, which covers a plain directory and a shipped jar — the host
+     * lives beside the classes being enumerated, which this class does not. Under FML the location is a
+     * {@code union:} URL and cannot be walked, so the build passes directories in
+     * {@link #CLASSDIR_PROPERTY} instead; otherwise this degrades to the explicit list on the one loader
+     * it matters most on.</p>
      */
     @Nullable
-    private static List<String> classesIn(String pkg) {
-        List<String> fromCodeSource = scan(codeSourceRoot(), pkg);
+    private static List<String> classesIn(Host host, String pkg) {
+        List<String> fromCodeSource = scan(codeSourceRoot(host), pkg);
         if (fromCodeSource != null) return fromCodeSource;
 
-        String hint = System.getProperty("crystalgui.server.smoke.classdir", "");
+        String hint = System.getProperty(CLASSDIR_PROPERTY, "");
         if (hint.isEmpty()) return null;
 
         List<String> found = new ArrayList<>();
@@ -272,9 +347,9 @@ public final class ServerSmoke {
     }
 
     @Nullable
-    private static Path codeSourceRoot() {
+    private static Path codeSourceRoot(Host host) {
         try {
-            CodeSource source = ServerSmoke.class.getProtectionDomain().getCodeSource();
+            CodeSource source = host.getClass().getProtectionDomain().getCodeSource();
             if (source == null || source.getLocation() == null) return null;
             URI uri = source.getLocation().toURI();
             return "file".equals(uri.getScheme()) ? Paths.get(uri) : null;
@@ -325,21 +400,18 @@ public final class ServerSmoke {
         return fileName.endsWith(".class") && fileName.indexOf('$') < 0 && fileName.indexOf('/') < 0;
     }
 
-    /** Where {@code -Xlog:class+load=info} puts the class name on each line. */
-    private static final String LOG_MARKER = "[class,load] ";
-
     /**
      * Every class the JVM defined this run, read from its own {@code -Xlog:class+load} file.
      *
-     * <p>The reflective route cannot work here: {@code findLoadedClass} is protected, and the mod runs in
-     * FML's named module, which no static {@code --add-opens} can name because the module does not exist
-     * at JVM start. This needs no access to anything and is authoritative.</p>
+     * <p>Authoritative, and needs access to nothing. The reflective route below cannot work under a
+     * module system: {@code findLoadedClass} is protected, and a mod runs in a named module that no
+     * static {@code --add-opens} can name because it does not exist at JVM start.</p>
      *
-     * @return {@code null} when the log was not requested or is unreadable, so the caller can fall back.
+     * @return {@code null} when the log was not requested or is unreadable, so the caller can fall back
      */
     @Nullable
     private static Set<String> loadedFromJvmLog() {
-        String path = System.getProperty("crystalgui.server.smoke.classlog", "");
+        String path = System.getProperty(CLASSLOG_PROPERTY, "");
         if (path.isEmpty()) return null;
         Path file = Paths.get(path);
         if (!Files.isRegularFile(file)) return null;
@@ -363,18 +435,18 @@ public final class ServerSmoke {
     }
 
     /**
-     * Whether {@code name} has already been defined by this class's loader or any of its parents.
+     * Whether {@code name} has already been defined by the host's loader or any of its parents.
      *
      * <p>Deliberately not {@code Class.forName(name, false, loader)}: that would <b>load the class</b>,
-     * which is the very thing being asserted against -- the check would then always pass and would create
+     * which is the very thing being asserted against — the check would then always pass and would create
      * the condition it exists to detect. {@code null} means the question could not be asked at all.</p>
      */
     @Nullable
-    private static Boolean loadedByAnyLoader(String name) {
+    private static Boolean loadedByAnyLoader(Host host, String name) {
         try {
             Method find = ClassLoader.class.getDeclaredMethod("findLoadedClass", String.class);
             find.setAccessible(true);
-            for (ClassLoader loader = ServerSmoke.class.getClassLoader();
+            for (ClassLoader loader = host.getClass().getClassLoader();
                  loader != null; loader = loader.getParent()) {
                 if (find.invoke(loader, name) != null) return Boolean.TRUE;
             }
@@ -385,16 +457,9 @@ public final class ServerSmoke {
         }
     }
 
-    /** Why { #loadedByAnyLoader} could not answer, so the WARN names a cause rather than a fact. */
-    
-    private static volatile Throwable loadStateFailure;
-
     /**
      * Whether a GL backend was installed, which on a server it should not have been. <b>A WARN, never a
-     * failure</b> -- it reports a fact about the environment rather than a defect in the code.
-     *
-     * <p>1.7.10's dev server reports "not installed", matching production. ModDevGradle's is unmeasured,
-     * and this line is the only thing that would say so.</p>
+     * failure</b> — it reports a fact about the environment rather than a defect in the code.
      */
     private static void reportGlDivergence(List<String> lines) {
         try {
@@ -413,7 +478,7 @@ public final class ServerSmoke {
         }
     }
 
-    // ── reporting and shutdown ────────────────────────────────────────────────────────────────────
+    // ── reporting and shutdown ──────────────────────────────────────────────────────────────────
 
     private static void check(List<String> lines, List<String> failures,
                               String what, boolean ok, String detail) {
@@ -422,12 +487,14 @@ public final class ServerSmoke {
         if (!ok) failures.add(what);
     }
 
-    private static String render(List<String> lines, List<String> failures) {
+    private static String render(Host host, List<String> lines, List<String> failures) {
         String nl = System.lineSeparator();
         StringBuilder out = new StringBuilder();
-        out.append("=================== CrystalGUI 1.20.x dedicated-server smoke ===================").append(nl);
+        out.append("=========== CrystalGUI ").append(host.label())
+                .append(" dedicated-server smoke ===========").append(nl);
         for (String line : lines) out.append(line).append(nl);
-        out.append("--------------------------------------------------------------------------------").append(nl);
+        out.append("--------------------------------------------------------------------------------")
+                .append(nl);
         out.append(failures.isEmpty()
                 ? "RESULT: pass -- the server-side stack is up"
                 : "RESULT: FAIL -- " + failures.size() + " check(s): " + failures).append(nl);
@@ -445,38 +512,18 @@ public final class ServerSmoke {
         CrystalGuiCore.LOGGER.info(report);
     }
 
-    /** @see #REPORT_PROPERTY */
-    private static void writeReport(String report, boolean passed) {
-        String path = System.getProperty(REPORT_PROPERTY, "");
-        if (path.isEmpty()) return;
-        File file = new File(path);
-        File parent = file.getParentFile();
-        if (parent != null) parent.mkdirs();
-        try (Writer writer = new OutputStreamWriter(Files.newOutputStream(file.toPath()),
-                StandardCharsets.UTF_8)) {
-            // The verdict FIRST, on its own line, so the build reads one line rather than parsing a
-            // report -- and so a truncated write is a failure rather than a plausible pass.
-            writer.write((passed ? "PASS" : "FAIL") + System.lineSeparator());
-            writer.write(report);
-        } catch (IOException cannotWrite) {
-            // Said out loud, and fatal by omission: with no file the build refuses, which is the correct
-            // reading of "the check could not report".
-            System.err.println("[cgui-smoke] could not write the report to " + path + ": " + cannotWrite);
-        }
-    }
-
     /**
-     * Stops the server, with the exit code carrying the verdict.
+     * Ends the process, with the exit code carrying the verdict.
      *
-     * <p>On success a clean halt, so the world saves and the stopping event runs -- itself part of what
+     * <p>On success a clean halt, so the world saves and the stopping event runs — itself part of what
      * is being smoke-tested, since that is what closes every connection. On failure {@code Runtime.halt}
      * after flushing, because a clean shutdown exits 0 and the verdict has to reach Gradle;
      * {@code System.exit} would run shutdown hooks that can throw on a half-initialised server and mask
      * the code.</p>
      */
-    private static void stop(@Nullable MinecraftServer server, boolean passed) {
+    private static void stop(Host host, boolean passed) {
         if (passed) {
-            if (server != null) server.halt(false);
+            host.halt();
             return;
         }
         System.out.flush();

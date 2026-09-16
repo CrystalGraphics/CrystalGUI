@@ -40,7 +40,7 @@ public final class Connections {
         }
 
         server = new com.crystalgui.net.protocol.Connections("server", channel.maxFrameBytes(), false)
-                .onPeerClosed(WorkspaceHost::forget);
+                .onPeerClosed(WorkspaceHostModern::forget);
         client = new com.crystalgui.net.protocol.Connections("client", channel.maxFrameBytes(), true);
         channel.setInboundHandler(Connections::route);
 

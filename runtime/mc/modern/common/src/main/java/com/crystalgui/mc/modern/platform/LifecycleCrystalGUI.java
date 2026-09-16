@@ -9,15 +9,18 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
 
 import com.crystalgui.mc.modern.client.CgUiHud;
-import com.crystalgui.mc.modern.example.MachineExample;
-import com.crystalgui.mc.modern.example.MachineExampleClient;
+import com.crystalgui.mc.modern.example.MachineExampleModern;
+import com.crystalgui.mc.modern.example.MachineExampleClientModern;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.client.CgUiAutoTest;
 import com.crystalgui.mc.modern.client.ClientProbe;
+import com.crystalgui.mc.modern.client.CgUiScreen;
+import com.crystalgui.mc.modern.client.ConnectionProbeModern;
 import com.crystalgui.mc.modern.net.Connections;
-import com.crystalgui.mc.modern.net.ServerSmoke;
-import com.crystalgui.mc.modern.net.WorkspaceHost;
+import com.crystalgui.mc.modern.net.ServerSmokeModern;
+import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.net.window.WindowProtocol;
+import com.crystalgui.probe.ConnectionProbe;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
@@ -50,7 +53,7 @@ public final class LifecycleCrystalGUI {
         // Without it a client has no ClientWindows, and every requestOpen is refused locally.
         WindowProtocol.register();
         Connections.register();
-        MachineExample.registerCommon();
+        MachineExampleModern.registerCommon();
     }
 
     /**
@@ -59,7 +62,22 @@ public final class LifecycleCrystalGUI {
      * {@link CgUiKeybinds#all()} must be read AFTER this runs.
      */
     public static void bootstrapClient() {
-        MachineExampleClient.registerClient();
+        // FIRST: the keybinds and the example both reach the session, and a key pressed before it
+        // exists would throw rather than open anything.
+        CgUiScreen.install();
+        MachineExampleClientModern.registerClient();
+
+        // THE CONNECTION PROBE RIDES THE TICK HOOKS, and is registered from HERE rather than called
+        // from serverTick() -- that method runs on a dedicated server, and this probe is a client
+        // class. Registering in client init is what keeps it off a server entirely; serverSmoke's
+        // enumeration of the client package is what would catch it if that ever stopped being true.
+        if (ConnectionProbe.enabled()) {
+            onServerTick(ConnectionProbeModern::serverTick);
+            onClientTick(ConnectionProbeModern::clientTick);
+            // THE WATCHDOG, which is what makes this a build task rather than a window somebody has to
+            // close by hand. @see ConnectionProbe#arm()
+            ConnectionProbe.arm();
+        }
     }
 
     /**
@@ -96,8 +114,8 @@ public final class LifecycleCrystalGUI {
     // ── Server ──────────────────────────────────────────────────────────────────────────────────
 
     public static void serverStarting(MinecraftServer server) {
-        WorkspaceHost.setServer(server);
-        WorkspaceHost.register();
+        WorkspaceHostModern.setServer(server);
+        WorkspaceHostModern.register();
     }
 
     /**
@@ -105,17 +123,17 @@ public final class LifecycleCrystalGUI {
      * process down, which is why the smoke check runs here rather than at {@link #serverStarting}.
      */
     public static void serverStarted(MinecraftServer server) {
-        if (ServerSmoke.enabled()) ServerSmoke.run(server);
+        if (ServerSmokeModern.enabled()) ServerSmokeModern.run(server);
     }
 
     public static void serverStopping() {
         Connections.closeAll("server stopping");
-        WorkspaceHost.setServer(null);
+        WorkspaceHostModern.setServer(null);
     }
 
     public static void serverTick() {
         Connections.onServerTick();
-        WorkspaceHost.tick(SERVER_TICK_SECONDS);
+        WorkspaceHostModern.tick(SERVER_TICK_SECONDS);
         run(serverTickHooks);
     }
 

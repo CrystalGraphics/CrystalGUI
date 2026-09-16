@@ -290,8 +290,43 @@ public final class ClientUiSession<N extends Styleable, T> {
 
     /** The UI half of the vocabulary. RPC methods register themselves through {@link #onCall}. */
     private void registerUiMethods() {
-        router.onNotify(UiMethods.OPEN_WINDOW, payload -> acceptOpenWindow(read(payload)));
+        MessageRouter.NotificationHandler<T> open = payload -> acceptOpenWindow(read(payload));
+        router.onNotify(UiMethods.OPEN_WINDOW, open);
+        onRouter.add(new AbstractMap.SimpleEntry<>(UiMethods.OPEN_WINDOW, open));
         registerWindowMethods();
+    }
+
+    /**
+     * Everything this session put straight on the connection's router. @see #detach()
+     *
+     * <p>Empty in the bound shape, where registrations go through the mux instead.</p>
+     */
+    private final List<Map.Entry<String, MessageRouter.NotificationHandler<T>>> onRouter =
+            new ArrayList<>();
+
+    /**
+     * <b>Hands this session's methods back to the connection</b>, so something else may claim them.
+     *
+     * <pre>{@code
+     * session.detach();                    // gives up ui/openWindow and the rest
+     * ClientWindows.of(connection);        // ...which this can now take
+     * }</pre>
+     *
+     * <p>Only meaningful for a session riding a connection it does not own. It exists because
+     * {@code ui/openWindow} is claimed for the life of a connection otherwise, which made a single
+     * window and the multi-window host mutually exclusive on one wire — a diagnostic that opened one
+     * window could never then open the real desktop, and said so with an
+     * {@code IllegalStateException} from the router rather than anything a reader could act on.</p>
+     *
+     * <p>The session is finished afterwards: its handlers are gone, so nothing further arrives for it.
+     * It does not close the window server-side — {@link #closeFromClient} is that.</p>
+     */
+    public void detach() {
+        for (Map.Entry<String, MessageRouter.NotificationHandler<T>> entry : onRouter) {
+            router.offNotify(entry.getKey(), entry.getValue());
+        }
+        onRouter.clear();
+        root = null;
     }
 
     /**
@@ -514,8 +549,14 @@ public final class ClientUiSession<N extends Styleable, T> {
      * making conditional on which shape built the session.</p>
      */
     private void bindNotify(String method, MessageRouter.NotificationHandler<T> handler) {
-        if (mux != null) mux.onNotify(windowId, method, handler);
-        else router.onNotify(method, handler);
+        if (mux != null) {
+            mux.onNotify(windowId, method, handler);
+            return;
+        }
+        router.onNotify(method, handler);
+        // REMEMBERED so detach() can give it back. Only the direct path needs this: the mux shape
+        // hands its slots back through mux.release(windowId). @see #detach()
+        onRouter.add(new AbstractMap.SimpleEntry<>(method, handler));
     }
 
     /**

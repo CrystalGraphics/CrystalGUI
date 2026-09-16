@@ -590,6 +590,8 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
             @Override public Path installationDirectory() { return root; }
             @Override public Path localWorldDirectory() { return null; }
             @Override public float uiScale() { return 1f; }
+            @Override public int surfaceWidth() { return 1280; }
+            @Override public int surfaceHeight() { return 720; }
             @Override public String desktopId() { return "test"; }
             @Override public ProtocolConnection<Object> connection() { return null; }
             @Override public Locale locale() { return Locale.getDefault(); }

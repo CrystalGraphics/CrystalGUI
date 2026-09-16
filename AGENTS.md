@@ -76,6 +76,34 @@ philosophy, which outlives the milestone.
 > probes. **Every server-side defect found this week was found by running it**, and none of them was
 > reachable from `core/` or the harness — see [Running Minecraft](#running-minecraft-the-1710-loader-is-in-the-build).
 
+## A loader defines wiring and owns no logic
+
+**This is the rule for everything under `runtime/mc/`.** A loader module says how *this* Minecraft
+spells something; it decides nothing. The seams it answers, all in `core/`:
+
+| Seam | A loader answers |
+|---|---|
+| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection |
+| `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry |
+| `desktop.host.HostSession.PaintHost` | whether a screen is up and whose, and how to bracket a draw |
+| `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |
+| `fs.server.WorkspaceRoles` | is this actor the single-player owner, and is it a connected operator |
+| `probe.ServerSmoke.Host` | is this a dedicated server, which package is client-only, how to stop |
+| `ui.input.HostPointer` | *(nothing — it OWNS)* the scroll sign, and that a move carries no click time |
+
+**A decision made in one loader is a decision the other loader got wrong.** Nothing can see it: each
+copy is internally consistent, so no test fails and no guard fires. Four such decisions had already
+drifted across two loaders by the time anyone compared them.
+
+> **Naming: bare, unless the simple name collides with the seam it adapts — then an era SUFFIX.** J9
+> deliberately dropped the `1201` suffixes, so `CgUiScreen`, `CgUiHud` and `ClientProbe` are bare. An
+> adapter whose core counterpart shares its name cannot import it, and a fully-qualified name at a call
+> site is the thing to avoid — so `WorkspaceHostModern` adapts `fs.server.WorkspaceHost`,
+> `ServerSmokeModern` adapts `probe.ServerSmoke`, `HostModern`/`Host1710` answer `HostServices`, and
+> `MachineExample1710` wires `app.machine.MachineExample`. **Never a prefix** — not `Mc1710Host`, and
+> not `ModernHost`. One instance is left: `mc.modern.net.Connections` still shadows
+> `net.protocol.Connections` and qualifies it four times.
+
 ## Running Minecraft: the 1.7.10 loader IS in the build
 
 **For anything that crosses the loader seam — networking, the workspace over a wire, platform services,
@@ -92,8 +120,11 @@ by absence and reaches no loader; the GL harness is a client with a context by d
 ./gradlew :runtime:mc:1710:serverSmoke                     # boot a server, assert the stack came up, stop. ~48s
 ./gradlew :runtime:mc:1710:runObfClient                    # SRG names — production, and the only run that is
 ./gradlew :runtime:mc:1710:runClient -PcgJoin=localhost:25565   # join a server: TWO PROCESSES, ONE SOCKET
-./gradlew :runtime:mc:1710:runClient -PcgSessionProbe      # a real Server/ClientUiSession pair over the wire
-./gradlew :runtime:mc:1710:runClient -PcgNetProbe          # the raw transport, below the session layer
+./gradlew :runtime:mc:1710:runClient -PcgProbe             # THE connection probe: session, files, fan-out, loop
+./gradlew :runtime:mc:1710:runClient -PcgProbe -PcgJoin=localhost:25565   # ...the same checks over a real socket
+./gradlew :runtime:mc:1710:runClient -PcgProbe -PcgProbeRole=watcher      # ...and on a SECOND client, watcher first
+./gradlew :runtime:mc:1710:connectionProbe                 # the same probe, DRIVEN: loads a world, checks,
+                                                           # writes a verdict file, quits. 3-min timeout
 ```
 
 ```bash
@@ -103,7 +134,15 @@ by absence and reaches no loader; the GL harness is a client with a context by d
 ./gradlew :runtime:mc:modern:<loader>:serverSmoke            # boots, asserts, stops. Needs -PcgAcceptEula once
                                                   # per run dir: the build detects Mojang's EULA and
                                                   # refuses to accept it for you.
+./gradlew :runtime:mc:modern:<loader>:connectionProbe       # THE connection probe, driven. fabric needs
+                                                  # -PcgNoLanguage: its dev client cannot load the
+                                                  # language mod (the shipped jar is unaffected).
 ```
+
+> **A probe that never ran must not read as a pass.** Both driven tasks delete their verdict file
+> first and require it after, so a run that dies before it starts is a failure with a message rather
+> than BUILD SUCCESSFUL — which is what a `serverSmoke` port clash once produced. The verdict is line
+> one of the file; the rest is the checklist, and its first `--` is where the run stopped.
 
 ### The single jar, and driving four real clients
 
@@ -239,8 +278,8 @@ own), while CrystalGraphics is a submodule that is a composite `includeBuild`. C
 | `taffy/` | ✅ | **The layout engine, VENDORED.** Git submodule ([`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), branch `master`) — so `git clone --recursive`, like the other two. A fork of the published sources of `dev.vfyjxf:taffy:1.1.4` (MIT), carrying our own fixes to its measure path — see `taffy/MODIFICATIONS.md`, which is the statement of changes MIT requires, and `plan/engine-rewrite.md` D3. The package stays `dev.vfyjxf.taffy` because `runtime/mc/1710` relocates it when shipping, so 165 call sites needed no edit and a stock copy in another mod cannot win a classloader race. **Depends on nothing** since 2026-09-10: the seven fastutil types it used are reimplemented in `dev.vfyjxf.taffy.collection`, which took the merged jar from 31.20 MB to 8.44 — fastutil was 63% of it. `MODIFICATIONS.md` §2 has the two behaviours that are silent when wrong. |
 | `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`). 17 CrystalGUI scenes. The only way to run the UI. |
 | `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
-| `runtime/mc/1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :runtime:mc:1710:compileJava`), whatever older notes here said. Holds the real 1.7.10 host, and since W3 that is a HOST rather than a product: `CgUiScreen` (the viewport the desktop attaches to), `CgUiInput`, `CgUiHud`, `CgUiOverlayInput`, and `CgUiWorkspaceHost` answering the `HostServices`/`WorkspaceHost` seams. `Mc1710Workspace` and `CgUiWindowMount` were **deleted** there; anything still naming them is describing history. **Verified by `serverSmoke` and by running the client**; a green compile was never the claim. |
-| `runtime/mc/modern/` | ✅ | **In the build and running**, whatever older notes here said. `common` holds the host — `CgUiScreen`, `CgUiInput`, `CgUiHud`, `Connections`, `WorkspaceHost` and `LifecycleCrystalGUI`, which is **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only and forward into it. All three compile, boot a dedicated server and pass `./gradlew :runtime:mc:modern:<loader>:serverSmoke`. **`neoforge` is MC 1.20.4** — NeoForge published no 20.1.x series — so `common` is compiled against 1.20.1 and consumed by a 1.20.4 module; see `plan/platform-mc1201.md` §3.8.6. **All three boot a dedicated server and pass `serverSmoke`**; the desktop scene has been run on 1.20.1. Each loader also builds a **thin** jar — its own classes plus `common` relocated under `com.crystalgui.mc.<loader>.common` — which is what the root merge consumes; the fat per-loader jars still build on request and are on nobody's `assemble`. |
+| `runtime/mc/1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :runtime:mc:1710:compileJava`). The real 1.7.10 host, and since W3 a HOST rather than a product — and since `plan_host` a host that decides nothing: `CgUiScreen` is Minecraft's screen lifecycle mapped onto `HostSession`'s, `Host1710` answers `HostServices`, `CgUiHud` answers `HostSession.PaintHost`, `CgUiInput` converts LWJGL2's origin and notch size and leaves the conventions to `HostPointer`, and `CgUiServerSmoke` is five facts over `probe.ServerSmoke`. `Mc1710Workspace` and `CgUiWindowMount` were **deleted**; anything still naming them is describing history. **Verified by `serverSmoke` and by running the client**; a green compile was never the claim. |
+| `runtime/mc/modern/` | ✅ | **In the build and running.** `common` holds the host — `CgUiScreen`, `HostModern`, `CgUiInput`, `CgUiHud`, `Connections`, `WorkspaceHostModern` and `LifecycleCrystalGUI`, which is **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only and forward into it. Every one of those is wiring: what opens, when it is raised, which arm paints and who may write are `core`'s — see the invariant, and `plan/crystalgui/platform-loader-cleanup.md`. All three compile, boot a dedicated server and pass `./gradlew :runtime:mc:modern:<loader>:serverSmoke`. **`neoforge` is MC 1.20.4** — NeoForge published no 20.1.x series — so `common` is compiled against 1.20.1 and consumed by a 1.20.4 module; see `plan/platform-mc1201.md` §3.8.6. **All three boot a dedicated server and pass `serverSmoke`**; the desktop scene has been run on 1.20.1. Each loader also builds a **thin** jar — its own classes plus `common` relocated under `com.crystalgui.mc.<loader>.common` — which is what the root merge consumes; the fat per-loader jars still build on request and are on nobody's `assemble`. |
 | `runtime/mc/shared/` | ✅ | **Empty, and kept on purpose** — Java 8, merged once and never relocated, for anything every loader variant must share without naming Minecraft. `LoaderProbe`, `CrashVariant` and (since J11.0) the whole **variant selector** are CrystalGraphics': CrystalGUI requires CrystalGraphics on every loader, so a second copy bought nothing. The hosts register under their own heading, `CrashVariant.label(NAME)`, and `checkSingleJar` forbids `com/crystalgraphics/` so a copy cannot creep back in as a split package. `LoaderProbe` (which loader this process is) and `CrashVariant` (the crash-report line that says which variant ran) lived here and are **CrystalGraphics' now**: CrystalGUI requires CrystalGraphics on every loader, so a second copy bought nothing. The hosts register under their own heading, `CrashVariant.label(NAME)`, and `checkSingleJar` forbids `com/crystalgraphics/` so a copy cannot creep back in as a split package. |
 | `runtime/mc/spike/` | ✅ (gated) | **THE ERA SPIKE, and not shipping code** — one source tree built for several Minecraft versions through Stonecutter's comment directives, proving that a multi-version preprocessor runs under ModDevGradle *and* Loom on this build's Gradle 9.5.1. Five Gradle projects (`common`, `forge`, `fabric` × nodes `1.20.1`/`1.19.4`), which is why `./gradlew projects` lists `:runtime:mc:spike:*` and why configuration costs ~1.15 s more than it used to. **It builds no jar**: no thin jar, no relocation, no downgrade, no reobf/remap — deliberately, so that a failure in any of those could not be mistaken for a failure of the preprocessor. `./gradlew checkAllTargets` compiles every node; **`-PcgNoSpike` removes the whole tree** for an invocation. Read `runtime/mc/spike/README.md` before touching it — especially the rule that switching the active node rewrites the shared `src/` in place, so a commit taken mid-switch carries preprocessor noise. |
 
@@ -1669,6 +1708,19 @@ com.crystalgui.net             UITransport, InMemoryTransport, ServerUiSession, 
                                NOTE the three senses of "window": UIDocument is the ENGINE for one
                                surface, WindowFrame is the CHROME on a desktop, ServerWindow is the
                                NETWORKED UNIT. The protocol has meant the third since windowId existed.
+
+com.crystalgui.probe           WHAT A RUNNING GAME IS ASKED TO PROVE ABOUT ITSELF, and the only code in
+                               core/ whose consumer is a build task. ServerSmoke (a dedicated server
+                               came up and loaded no client-only class), ConnectionProbe (the whole
+                               stack over a REAL connection -- topology is a parameter, and a check
+                               that means nothing here is SKIPPED with its reason rather than silently
+                               passed), DesktopProbe (a scripted run through the compositor), AutoTest
+                               (open, photograph, quit -- the only one that also runs on a SHIPPED jar,
+                               which is what prodSmoke drives), ProbeReport (verdict on line 1; an
+                               ABSENT FILE IS A FAILURE). Each takes a `Host` a loader implements and
+                               decides everything else itself; they SHIP deliberately, one
+                               Boolean.getBoolean each when off. See the package note for why a test
+                               source set cannot hold them
 ```
 
 **Naming corrections vs. older notes:** `render/` is top-level (`com.crystalgui.render`), *not* nested

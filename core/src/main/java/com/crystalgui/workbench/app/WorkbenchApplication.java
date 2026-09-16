@@ -27,11 +27,13 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.app.LaunchContext;
+import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.data.UiDataKeys;
@@ -83,7 +85,7 @@ import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
  * ask - and a workspace that never connects simply leaves the workbench empty rather than hanging.</p>
  */
 public class WorkbenchApplication extends UIElement
-        implements Application, WindowChrome, DataProvider {
+        implements Application, WindowChrome, DataProvider, ServerWindowHost {
 
     /** {@code ua/workbench.css} names the tag. Was {@code crystaleditor}, when there was one product. */
     public static final Name NAME = Name.of("application");
@@ -359,6 +361,15 @@ public class WorkbenchApplication extends UIElement
 
     public Workbench workbench() {
         return workbench;
+    }
+
+    /**
+     * A server's windows go to this workbench first — an editor tab or a tool window where it names
+     * one, the desktop for everything else. @see Workbench#windowMount
+     */
+    @Override
+    public WindowMount windowMount(@Nullable WindowMount desktopMount) {
+        return workbench.windowMount(desktopMount);
     }
 
     public Workspace workspace() {

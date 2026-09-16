@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.input.HostPointer;
 
 import net.minecraft.client.Minecraft;
 
@@ -27,27 +28,12 @@ public final class CgUiInput {
     private CgUiInput() {}
 
     /**
-     * GLFW scrolls positive UP; a positive {@code MouseEvent.Scroll} means the wheel rolled DOWN. The
-     * only statement of that convention in the engine is {@code ScrollerView.setScrollTop(before + delta)}.
-     */
-    private static final float SCROLL_SIGN = -1f;
-
-    /**
-     * A platform wheel delta in the engine's convention.
-     *
-     * <pre>{@code
-     * overlay.offerMouse(x, y, -1, false, CgUiInput.wheel(event.getScrollDelta()));
-     * }</pre>
-     *
-     * <p>Shared rather than re-derived: the screen and the HUD overlay are two hosts, and one that
-     * takes the platform's sign at face value scrolls and zooms backwards.</p>
+     * A GLFW wheel delta in the engine's convention. GLFW already reports one unit per notch, so the
+     * sign is the whole conversion. @see HostPointer#scroll
      */
     public static float wheel(double platformDelta) {
-        return (float) platformDelta * SCROLL_SIGN;
+        return HostPointer.scroll(platformDelta);
     }
-
-    /** No button, and the value the engine reads as "this is a move". */
-    private static final int NO_BUTTON = -1;
 
     private static int lastX;
     private static int lastY;
@@ -71,10 +57,7 @@ public final class CgUiInput {
         return send(window, x, y, 0, 0, button, pressed, 0f, System.currentTimeMillis());
     }
 
-    /**
-     * A move carries no button and no timestamp — a click time on a move drifts the multi-click counter
-     * and turns a slow double-click into a triple.
-     */
+    /** A move carries no button, and {@link HostPointer#of} is what drops the click time with it. */
     public static void mouseMoved(UIDocument window) {
         int x = rawX();
         int y = rawY();
@@ -82,12 +65,13 @@ public final class CgUiInput {
         int dy = y - lastY;
         lastX = x;
         lastY = y;
-        send(window, x, y, dx, dy, NO_BUTTON, false, 0f, -1L);
+        send(window, x, y, dx, dy, HostPointer.NO_BUTTON, false, 0f, HostPointer.NO_CLICK_TIME);
     }
 
     /** @return whether the desktop consumed it */
     public static boolean scrolled(UIDocument window, double delta) {
-        return send(window, rawX(), rawY(), 0, 0, NO_BUTTON, false, wheel(delta), -1L);
+        return send(window, rawX(), rawY(), 0, 0, HostPointer.NO_BUTTON, false, wheel(delta),
+                HostPointer.NO_CLICK_TIME);
     }
 
     /**
@@ -111,6 +95,6 @@ public final class CgUiInput {
     private static boolean send(UIDocument window, int x, int y, int dx, int dy,
                                 int button, boolean pressed, float wheel, long millis) {
         return window.input().consumeMouseEvent(
-                new CgSystemInput.Mouse.Event(x, y, dx, dy, button, pressed, wheel, millis));
+                HostPointer.of(x, y, dx, dy, button, pressed, wheel, millis));
     }
 }

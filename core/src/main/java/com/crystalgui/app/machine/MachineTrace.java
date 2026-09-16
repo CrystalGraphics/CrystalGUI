@@ -17,7 +17,7 @@ import com.crystalgui.core.CrystalGuiCore;
  * problem. A script thread flipping a button's {@code setEnabled} reached {@code invalidateStyleMatch}
  * and threw {@code ArrayIndexOutOfBoundsException} from inside {@code HashMap.keysToArray} while the
  * UI thread was copying the dirty-match set — with nothing about the offending subsystem anywhere in
- * the stack. And an earlier version of {@code CgUiSessionProbe} drove both halves from the client
+ * the stack. And an earlier version of {@code ConnectionProbe} drove both halves from the client
  * tick and passed, because a single-player integrated server shares the process.</p>
  *
  * <p>So the rule this exists to make visible: <b>the server thread owns the server's tree and the
