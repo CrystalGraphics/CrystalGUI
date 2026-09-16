@@ -22,7 +22,11 @@ apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts"
 val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
 val crystalGraphicsMod = fileTree(crystalGraphicsBuild.projectDir.resolve("runtime/mc/modern/fabric/build/libs")) {
     include("crystalgraphics-mc1201-fabric-*.jar")
-    exclude("*-sources.jar", "*-all.jar", "*-dev.jar", "*-java*.jar")
+    // `-thin` is the MERGE's input (J1) -- one loader's own classes and nothing else -- and Loom loaded
+    // it as a second mod beside the full jar, where its entrypoint ran first and died on
+    // NoClassDefFoundError: com/crystalgraphics/mc/shared/VariantBootstrap. The class is in the full jar
+    // the whole time, which is what makes this read as a packaging fault rather than a selection one.
+    exclude("*-sources.jar", "*-all.jar", "*-dev.jar", "*-java*.jar", "*-thin.jar")
 }
 
 tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
