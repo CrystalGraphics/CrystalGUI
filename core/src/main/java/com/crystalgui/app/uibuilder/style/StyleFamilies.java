@@ -16,7 +16,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
  *
  * <pre>{@code
  * StyleFamilies.Family family = StyleFamilies.of("border-top-width");     // BORDER
- * List<StyleProperty<?>> offered = StyleFamilies.BORDER.properties();     // what its + lists
+ * List<StyleProperty<?>> found = StyleFamilies.search("radius");          // the eight corner longhands
  * }</pre>
  *
  * <p>Seven families, named for what a person is doing rather than for how the engine stores it — the split
@@ -53,15 +53,6 @@ public final class StyleFamilies {
         /** What the section's header says. */
         public String label() {
             return label;
-        }
-
-        /** Every registered property this family holds, in registration order. */
-        public List<StyleProperty<?>> properties() {
-            List<StyleProperty<?>> out = new ArrayList<>();
-            for (StyleProperty<?> property : StylePropertyRegistry.all()) {
-                if (of(property) == this) out.add(property);
-            }
-            return out;
         }
     }
 

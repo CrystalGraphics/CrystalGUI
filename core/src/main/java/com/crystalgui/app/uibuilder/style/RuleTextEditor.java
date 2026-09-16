@@ -44,13 +44,18 @@ public final class RuleTextEditor {
         editor.setLanguage(css.language()).setTokenizer(css.newTokenizer());
         select(editor, buffer, target.ruleOrder());
 
-        Popover popover = new Popover();
+        UIDocument window = anchor.document();
+        if (window == null) return;
+        // BUILT PER PRESS, so gone once hidden: a hidden popover stays parented, and this one holds an editor
+        // subscribed to the sheet's buffer.
+        Popover popover = new Popover().removeWhenHidden();
         popover.addClass(EDITOR_CLASS + "-popover");
         popover.append(editor);
+        // IN THE TOP LAYER, not beside the button: under the inspector every press in the editor would bubble
+        // back into the row. @see StyleChipReentryTest
+        window.topLayerNode().append(popover);
         popover.showFor(anchor, anchor);
-
-        UIDocument window = editor.document();
-        if (window != null) window.focus().requestPointerFocus(editor);
+        window.focus().requestPointerFocus(editor);
     }
 
     /** Puts the caret in the rule and scrolls to it. */

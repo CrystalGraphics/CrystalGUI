@@ -422,6 +422,41 @@ public class Popover extends UIElement {
     protected void onOpened() {}
 
     /** Closes and hands focus back to whatever held it beforehand. */
+    /**
+     * Declares this popover <b>single-use</b>: it leaves the tree once it has finished hiding.
+     *
+     * <pre>{@code
+     * Popover palette = new Popover().removeWhenHidden();
+     * palette.showFor(button, button);   // built afresh on every press, and gone after each
+     * }</pre>
+     *
+     * <p>For a popover built per opening. {@link #hide} keeps a popover parented so it can be shown again,
+     * so one built per press and never removed stays in the tree, hidden, for as long as its host lives.
+     * The same rule as {@code Dialog.removeWhenClosed}, and it waits for the close fade the same way.</p>
+     */
+    public Popover removeWhenHidden() {
+        removeWhenHidden = true;
+        return this;
+    }
+
+    /** @see #removeWhenHidden() */
+    private boolean removeWhenHidden;
+
+    /** Leaves the tree on the first frame this popover has no box, which is when its fade has landed. */
+    private void removeOnceItHasGone() {
+        UIDocument window = document();
+        if (window == null) {
+            removeSelf();
+            return;
+        }
+        window.animation().afterLayout(this, delta -> {
+            if (open) return false;
+            if (box() != null) return true;
+            removeSelf();
+            return false;
+        });
+    }
+
     public Popover hide() {
         if (!open) return this;
 
@@ -466,6 +501,7 @@ public class Popover extends UIElement {
         anchor = null;
 
         onClosed.emit();
+        if (removeWhenHidden) removeOnceItHasGone();
         return this;
     }
 

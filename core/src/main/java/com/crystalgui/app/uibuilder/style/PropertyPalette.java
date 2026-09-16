@@ -3,7 +3,6 @@ package com.crystalgui.app.uibuilder.style;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -15,6 +14,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.ui.dom.ChildList;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -24,13 +24,13 @@ import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 
 /**
- * The properties a section can add, as a list you can see rather than a list of names — what a family's
- * {@code +} opens.
+ * The properties a declaration list can add, as a list you can see rather than a list of names — what
+ * <i>Add property</i> opens.
  *
  * <pre>{@code
- * PropertyPalette.open(plusButton, StyleFamilies.Family.FILL,
- *         name -> target.declaring(name) != null,          // what is already declared, shown as such
- *         property -> fields.add(property.name, ""));      // picked
+ * PropertyPalette.open(addRow,
+ *         name -> fields.declared(name) != null,           // what is already declared, shown as such
+ *         property -> fields.add(property.name, value));   // picked
  * }</pre>
  *
  * <p>Every row carries a <b>live sample</b>: a small element with that very property applied at a
@@ -66,19 +66,18 @@ public final class PropertyPalette {
             "border-top-left-radius-x", "border-top-width", "border-color", "outline", "overflow",
             "transform", "backdrop-filter", "text-shadow", "cursor", "transition");
 
-    private final Popover popover = new Popover();
+    /** Built per opening, so it removes itself once hidden. */
+    private final Popover popover = new Popover().removeWhenHidden();
     private final TextField search = new TextField();
     private final UIElement rows = new UIElement();
 
-    /** The family listed until something is typed, or null for every property. */
-    @Nullable
-    private final StyleFamilies.Family family;
+    /** Kept by property, so a keystroke that narrows the search leaves the rows still listed alone. */
+    private final ChildList.Keyed<StyleProperty<?>, UIElement> shown = new ChildList.Keyed<>(rows, this::row);
+
     private final Predicate<String> declared;
     private final Consumer<StyleProperty<?>> pick;
 
-    private PropertyPalette(@Nullable StyleFamilies.Family family, Predicate<String> declared,
-                            Consumer<StyleProperty<?>> pick) {
-        this.family = family;
+    private PropertyPalette(Predicate<String> declared, Consumer<StyleProperty<?>> pick) {
         this.declared = declared;
         this.pick = pick;
 
@@ -108,27 +107,14 @@ public final class PropertyPalette {
     private final List<StyleProperty<?>> listed = new ArrayList<>();
 
     /**
-     * Opens the palette under {@code anchor}.
+     * Opens the palette under {@code anchor}, on the properties people reach for most; typing searches all.
      *
-     * @param family   the family whose properties are listed until something is typed
      * @param declared whether a property is already declared here — listed, and marked, since a person
      *                 looking for it wants to be told it is already on rather than shown nothing
      * @param pick     what a chosen property does
      */
-    public static void open(UIElement anchor, StyleFamilies.Family family, Predicate<String> declared,
-                            Consumer<StyleProperty<?>> pick) {
-        show(anchor, new PropertyPalette(family, declared, pick));
-    }
-
-    /**
-     * Opens over every property rather than one family — what an <i>Add property</i> at the end of a list
-     * means.
-     *
-     * <p>It opens on the ones people actually reach for, because a list of eighty-odd in registration order
-     * is not something anybody reads; typing searches all of them.</p>
-     */
-    public static void openAll(UIElement anchor, Predicate<String> declared, Consumer<StyleProperty<?>> pick) {
-        show(anchor, new PropertyPalette(null, declared, pick));
+    public static void open(UIElement anchor, Predicate<String> declared, Consumer<StyleProperty<?>> pick) {
+        show(anchor, new PropertyPalette(declared, pick));
     }
 
     private static void show(UIElement anchor, PropertyPalette palette) {
@@ -144,13 +130,12 @@ public final class PropertyPalette {
     }
 
     private void fill() {
-        rows.removeAll();
         listed.clear();
         listed.addAll(matching(search.getText()));
-        for (StyleProperty<?> property : listed) rows.append(row(property));
+        shown.show(listed);
     }
 
-    /** What is typed, else the family — and never the same property twice. */
+    /** What is typed, else the common ones — and never the same property twice. */
     private List<StyleProperty<?>> matching(String query) {
         Set<StyleProperty<?>> found = new LinkedHashSet<>(
                 query == null || query.isBlank() ? offered() : StyleFamilies.search(query));
@@ -158,9 +143,8 @@ public final class PropertyPalette {
         return out.size() > MAX_ROWS ? out.subList(0, MAX_ROWS) : out;
     }
 
-    /** What an unsearched palette lists: the family's own, or the ones people reach for. */
-    private List<StyleProperty<?>> offered() {
-        if (family != null && family != StyleFamilies.Family.OTHER) return family.properties();
+    /** What an unsearched palette lists: the ones people reach for. */
+    private static List<StyleProperty<?>> offered() {
         List<StyleProperty<?>> common = new ArrayList<>();
         for (String name : COMMON) {
             StyleProperty<?> property = StylePropertyRegistry.byName(name);
@@ -200,7 +184,7 @@ public final class PropertyPalette {
         if (demo == null) {
             sample.addClass(EMPTY_CLASS);
         } else {
-            LiveEdits.setInline(sample, cast(property), demo);
+            LiveEdits.setInline(sample, property, demo);
         }
         return sample;
     }
@@ -235,15 +219,5 @@ public final class PropertyPalette {
             // what the property does.
             return null;
         }
-    }
-
-    /** The section header a family's rows sit under, in the palette's own wording. */
-    public static String titleOf(StyleFamilies.Family family) {
-        return family.label().toLowerCase(Locale.ROOT) + " properties";
-    }
-
-    @SuppressWarnings("unchecked")
-    private static StyleProperty<Object> cast(StyleProperty<?> property) {
-        return (StyleProperty<Object>) property;
     }
 }

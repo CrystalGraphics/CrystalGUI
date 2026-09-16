@@ -1,6 +1,8 @@
 package com.crystalgui.app.uibuilder.style;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -16,6 +18,7 @@ import org.junit.Test;
 import com.crystalgui.app.uibuilder.BuilderInspectorSections;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.dispose.Disposable;
@@ -100,6 +103,9 @@ public class StylesTabTest extends UiDocumentTestBase {
         editor.selection().replaceWith(List.of(nodes));
         inspector.inspect(editor.view());
         frame();
+        // THE TAB IN FRONT, as a person looking at it has it: rows on a hidden page are not polled.
+        inspector.showTab(BuilderStyleSections.STYLE_TAB);
+        frame();
         frame();
     }
 
@@ -166,6 +172,46 @@ public class StylesTabTest extends UiDocumentTestBase {
         frame();
         frame();
         assertNull("and removing it takes the row away", control("style.opacity"));
+    }
+
+    /**
+     * <b>Editing a value or adding a declaration keeps every row that was already there.</b>
+     *
+     * <p>The list used to rebuild itself from a count of the sheet's punctuation, so an add replaced the row
+     * under the pointer, and a value holding a {@code *} or a {@code ;} rebuilt the row it was typed into.</p>
+     */
+    @Test
+    public void rowsAreKeptAcrossEditsAndAdds() {
+        editor.selection().selectStyleTarget(ruleTarget().key());
+        inspect(card);
+        ConfigControl opacity = control("style.opacity");
+        assertNotNull(opacity);
+
+        property(opacity).set(0.3d);
+        frame();
+        assertSame("a value edit keeps the row", opacity, control("style.opacity"));
+
+        StyleFields.on(null, ruleTarget(), card).add("color", "#FFFFFF");
+        frame();
+        assertNotNull("an add puts one row in", control("style.color"));
+        assertSame("and leaves the others alone", opacity, control("style.opacity"));
+    }
+
+    /** A rule's declaration that something stronger beats is drawn struck through, and follows it. */
+    @Test
+    public void aDeclarationThatLosesIsMarkedWhileItLoses() {
+        editor.selection().selectStyleTarget(ruleTarget().key());
+        inspect(card);
+        UIElement row = control("style.opacity").parentElement().parentElement();
+        assertFalse(row.hasClass(BuilderStyleSections.OVERRIDDEN_CLASS));
+
+        LiveEdits.setInline(card, StylePropertyRegistry.OPACITY, "0.9");
+        frame();
+        assertTrue("inline beats the rule", row.hasClass(BuilderStyleSections.OVERRIDDEN_CLASS));
+
+        LiveEdits.clearInline(card, StylePropertyRegistry.OPACITY);
+        frame();
+        assertFalse("and the rule wins again", row.hasClass(BuilderStyleSections.OVERRIDDEN_CLASS));
     }
 
     private StyleTarget ruleTarget() {

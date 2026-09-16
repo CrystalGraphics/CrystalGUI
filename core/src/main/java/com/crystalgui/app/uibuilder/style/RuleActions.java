@@ -7,9 +7,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.app.uibuilder.inspect.LiveEdits;
-import com.crystalgui.app.uibuilder.inspect.NodeFields;
-import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.style.sheet.source.CssEdits;
 import com.crystalgui.style.sheet.source.CssSourceModel;
 import com.crystalgui.text.TextBuffer;
@@ -17,22 +15,23 @@ import com.crystalgui.ui.dom.ClassNames;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
- * The three ways a rule comes into being: a new one for what is selected, an inline value promoted into
- * one, and a whole inline style extracted as a class.
+ * The three ways a rule comes into being: a new one for what is selected, the inline style promoted into
+ * one, and the inline style extracted as a class.
  *
  * <pre>{@code
- * String selector = RuleActions.selectorFor(node);        // ".card", "#save", "button"
- * RuleActions.newRule(sheet, selector);                   // an empty rule at the end
- * RuleActions.promote(sheet, document, node, OPACITY, selector);
- * RuleActions.extractClass(sheet, document, node, "card");
+ * String selector = RuleActions.selectorFor(node);                 // ".card", "#save", "button"
+ * StyleTarget rule = RuleActions.newRule(sheet, selector);         // an empty rule at the end, to select
+ * RuleActions.promote(sheet, document, node, selector);            // every inline value into it
+ * RuleActions.extractClass(sheet, document, node, "card");         // into .card, and the class onto the node
  * }</pre>
  *
- * <p>Each writes <b>one</b> text edit into the sheet, and each says up front what selector it would use —
- * an editor that invents a selector you did not see is an editor that quietly restyles other elements.</p>
+ * <p>Every write goes through {@link StyleFields}, so a rule gains declarations exactly as a row adds one. Each
+ * action is <b>one undo step</b> in each history it touches — the sheet's and, for what leaves the element,
+ * the document's — and says up front what selector it uses: an editor that invents a selector you did not see
+ * quietly restyles other elements.</p>
  *
- * <p>Promoting clears the inline value it moved, so what is on screen afterwards comes from the sheet
- * rather than from an inline copy that happens to agree: keeping both hides the moment the rule stops
- * matching, and the screen stays right from the wrong source.</p>
+ * <p>What moves is cleared off the element, so the screen then shows the sheet's value rather than an inline
+ * copy that happens to agree, which would hide the moment the rule stops matching.</p>
  */
 public final class RuleActions {
 
@@ -52,133 +51,84 @@ public final class RuleActions {
     }
 
     /**
-     * Adds an empty rule for {@code selector} at the end of {@code sheet}.
+     * Adds an empty rule for {@code selector} at the end of {@code sheet}, or finds the one it already has.
      *
-     * <p>It has no number until it declares something — the cascade never sees an empty rule — so it is
-     * reached by its selector until then. @see StyleTarget#key</p>
-     *
-     * @return whether it was written
+     * @return the rule as a target, to select — or null when the sheet cannot be written
      */
-    public static boolean newRule(@Nullable TextBuffer sheet, String selector) {
-        if (sheet == null || selector.isBlank()) return false;
-        CssSourceModel model = CssSourceModel.parse(sheet.toString());
-        sheet.edit(CssEdits.insertRule(model, selector, ""));
-        return true;
+    @Nullable
+    public static StyleTarget newRule(SheetDocuments.Sheet sheet, String selector) {
+        TextBuffer buffer = sheet.buffer();
+        if (buffer == null || selector.isBlank()) return null;
+        CssSourceModel model = CssSourceModel.parse(buffer.toString());
+        if (!hasRule(model, selector)) buffer.edit(CssEdits.insertRule(model, selector, ""));
+        return StyleTarget.rule(sheet, -1, selector);
     }
 
     /**
-     * Moves one inline declaration into a rule for {@code selector}, adding the rule when there is none.
-     *
-     * @return whether there was an inline value to move
-     */
-    public static boolean promote(@Nullable TextBuffer sheet, @Nullable UiBuilderDocument document,
-                                  UIElement node, StyleProperty<?> property, String selector) {
-        if (sheet == null || !LiveEdits.hasInline(node, property)) return false;
-        String value = writtenValue(node, property);
-        if (value == null) return false;
-
-        writeInto(sheet, selector, List.of(property.name + ": " + value + ";"));
-        clearInline(document, node, property);
-        return true;
-    }
-
-    /**
-     * Moves <b>every</b> inline declaration into a rule for {@code .className}, and puts that class on the
-     * node — the "this element is a kind of thing now" gesture.
+     * Moves every inline declaration into the rule for {@code selector}, adding the rule when there is none.
      *
      * @return how many declarations moved
      */
-    public static int extractClass(@Nullable TextBuffer sheet, @Nullable UiBuilderDocument document,
-                                   UIElement node, String className) {
-        if (sheet == null || className.isBlank()) return 0;
-        List<StyleProperty<?>> inline = inlineOf(node);
-        if (inline.isEmpty()) return 0;
-
-        List<String> declarations = new ArrayList<>();
-        for (StyleProperty<?> property : inline) {
-            String value = writtenValue(node, property);
-            if (value != null) declarations.add(property.name + ": " + value + ";");
-        }
-        writeInto(sheet, "." + className, declarations);
-
-        List<String> classes = new ArrayList<>(ClassNames.authored(node.classes()));
-        if (!classes.contains(className)) classes.add(className);
-        if (document != null) {
-            document.applyAll("Extract class", List.of(new BuilderEdit.SetClasses(node,
-                    ClassNames.authored(node.classes()), classes)));
-        } else {
-            node.addClass(className);
-        }
-        for (StyleProperty<?> property : inline) clearInline(document, node, property);
-        return declarations.size();
+    public static int promote(SheetDocuments.Sheet sheet, @Nullable UiBuilderDocument document, UIElement node,
+                              String selector) {
+        return move(sheet, document, node, selector, "Promote to rule", null);
     }
 
-    // ── Writing ─────────────────────────────────────────────────────────────
-
-    /** Adds to the rule for {@code selector} when the sheet already has one, else writes a new rule. */
-    private static void writeInto(TextBuffer sheet, String selector, List<String> declarations) {
-        CssSourceModel model = CssSourceModel.parse(sheet.toString());
-        CssSourceModel.Rule existing = ruleFor(model, selector);
-        if (existing == null) {
-            sheet.edit(CssEdits.insertRule(model, selector, String.join(" ", declarations)));
-            return;
-        }
-        for (String declaration : declarations) {
-            int colon = declaration.indexOf(':');
-            if (colon <= 0) continue;
-            String property = declaration.substring(0, colon).trim();
-            String value = declaration.substring(colon + 1).replace(";", "").trim();
-            // Re-read between writes: every edit moves the ranges of everything after it.
-            CssSourceModel current = CssSourceModel.parse(sheet.toString());
-            CssSourceModel.Rule rule = ruleFor(current, selector);
-            if (rule == null) return;
-            CssSourceModel.Declaration held = declarationOf(rule, property);
-            sheet.edit(held == null
-                    ? CssEdits.insertDeclaration(current, rule, property, value)
-                    : CssEdits.replaceValue(current, held, value));
-        }
+    /**
+     * Moves every inline declaration into {@code .className} and puts that class on the node — the "this
+     * element is a kind of thing now" gesture.
+     *
+     * @return how many declarations moved
+     */
+    public static int extractClass(SheetDocuments.Sheet sheet, @Nullable UiBuilderDocument document, UIElement node,
+                                   String className) {
+        if (className.isBlank()) return 0;
+        return move(sheet, document, node, "." + className, "Extract class", className);
     }
 
-    @Nullable
-    private static CssSourceModel.Rule ruleFor(CssSourceModel model, String selector) {
-        for (CssSourceModel.Rule rule : model.rules()) {
-            if (model.textOf(rule.selectorsRange()).trim().equals(selector)) return rule;
+    /** The whole move: declarations into the rule, the class onto the node, off the element — one step per history. */
+    private static int move(SheetDocuments.Sheet sheet, @Nullable UiBuilderDocument document, UIElement node,
+                            String selector, String label, @Nullable String className) {
+        TextBuffer buffer = sheet.buffer();
+        if (buffer == null) return 0;
+        StyleFields inline = StyleFields.on(document, StyleTarget.inline(), node);
+        List<StyleFields.Declared> moving = inline.declared();
+        if (moving.isEmpty()) return 0;
+
+        UndoStack sheetHistory = buffer.history();
+        UndoStack documentHistory = document == null ? null : document.history();
+        sheetHistory.beginTransaction(label);
+        if (documentHistory != null) documentHistory.beginTransaction(label);
+        try {
+            StyleTarget rule = newRule(sheet, selector);
+            StyleFields ruleFields = StyleFields.on(document, rule, node);
+            for (StyleFields.Declared declared : moving) ruleFields.value(declared.name()).set(declared.value());
+            if (className != null) name(document, node, className);
+            for (StyleFields.Declared declared : moving) inline.remove(declared.name());
+        } finally {
+            if (documentHistory != null) documentHistory.endTransaction();
+            sheetHistory.endTransaction();
         }
-        return null;
+        return moving.size();
     }
 
-    @Nullable
-    private static CssSourceModel.Declaration declarationOf(CssSourceModel.Rule rule, String property) {
-        for (CssSourceModel.Declaration declaration : rule.declarations()) {
-            if (declaration.property().equals(property)) return declaration;
-        }
-        return null;
-    }
-
-    /** What the node has inline, as the sheet would spell it. */
-    @Nullable
-    @SuppressWarnings("unchecked")
-    private static String writtenValue(UIElement node, StyleProperty<?> property) {
-        Object value = node.getStyle().getComputed(property);
-        return value == null ? null : ((StyleProperty<Object>) property).write(value);
-    }
-
-    private static List<StyleProperty<?>> inlineOf(UIElement node) {
-        List<StyleProperty<?>> inline = new ArrayList<>();
-        for (StyleProperty<?> property : node.getStyle().candidates.keySet()) {
-            if (LiveEdits.hasInline(node, property)) inline.add(property);
-        }
-        return inline;
-    }
-
-    /** Recorded in the document when there is one; a live pick just loses the inline value. */
-    private static void clearInline(@Nullable UiBuilderDocument document, UIElement node,
-                                    StyleProperty<?> property) {
+    /** Puts the class on the node — recorded in the document, or straight onto a live pick, which has none. */
+    private static void name(@Nullable UiBuilderDocument document, UIElement node, String className) {
+        List<String> before = ClassNames.authored(node.classes());
+        if (before.contains(className)) return;
         if (document == null) {
-            LiveEdits.clearInline(node, property);
+            node.addClass(className);
             return;
         }
-        BuilderEdit edit = NodeFields.on(document).inlineEdit(node, property, "");
-        if (edit != null) document.apply(edit);
+        List<String> after = new ArrayList<>(before);
+        after.add(className);
+        document.apply(new BuilderEdit.SetClasses(node, before, after));
+    }
+
+    private static boolean hasRule(CssSourceModel model, String selector) {
+        for (CssSourceModel.Rule rule : model.rules()) {
+            if (model.textOf(rule.selectorsRange()).trim().equals(selector)) return true;
+        }
+        return false;
     }
 }

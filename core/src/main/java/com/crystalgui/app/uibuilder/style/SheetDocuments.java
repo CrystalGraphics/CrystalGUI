@@ -75,8 +75,8 @@ public final class SheetDocuments {
         reveal = opener;
     }
 
-    /** Opens {@code sheet}'s file in an editor, if a host said how. The rule is what a reader wants; @see RuleTextEditor */
-    public static boolean goToSource(Sheet sheet, int ruleOrder) {
+    /** Opens {@code sheet}'s file in an editor, if a host said how. For the rule itself, @see RuleTextEditor */
+    public static boolean goToSource(Sheet sheet) {
         if (reveal == null || sheet.resource() == null) return false;
         reveal.accept(sheet.resource());
         return true;

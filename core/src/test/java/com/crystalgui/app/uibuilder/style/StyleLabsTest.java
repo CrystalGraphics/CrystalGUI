@@ -21,9 +21,8 @@ import com.crystalgui.ui.dom.UIElement;
 /**
  * <b>L5 S.7–S.16 — the composite values a lab edits, and the rules it makes.</b>
  *
- * <p>What is pinned here is the model under the labs: the layers a composite is made of, the preview that
- * shows a drag without writing the file, and the three ways a rule comes into being. The gizmos themselves
- * are geometry and are judged on screen.</p>
+ * <p>What is pinned here is the model under the labs: the layers a composite is made of and the three ways a
+ * rule comes into being. The gizmos themselves are geometry and are judged on screen.</p>
  */
 public class StyleLabsTest {
 
@@ -255,7 +254,7 @@ public class StyleLabsTest {
     public void aNewRuleIsNamedBeforeItIsWritten() {
         assertEquals("the class it already has", ".card", RuleActions.selectorFor(node));
 
-        assertTrue(RuleActions.newRule(sheet, ".card-body"));
+        assertNotNull(RuleActions.newRule(sheets.byId("menu.css"), ".card-body"));
         assertTrue("the rule is in the file", sheet.toString().contains(".card-body"));
         assertTrue("and the file still opens with its comment", sheet.toString().startsWith("/* keep me */"));
 
@@ -286,11 +285,10 @@ public class StyleLabsTest {
         inline.value("opacity").set("0.2");
         frame();
 
-        assertTrue(RuleActions.promote(sheet, null, node, StylePropertyRegistry.OPACITY, ".card"));
+        assertEquals(1, RuleActions.promote(sheets.byId("menu.css"), null, node, ".card"));
         frame();
         assertTrue("the rule holds it now", sheet.toString().contains("opacity: 0.2"));
-        assertTrue("and the element does not",
-                StyleTargets.of(node, sheets).chosen("").declarations().isEmpty());
+        assertTrue("and the element does not", StyleFields.on(null, StyleTarget.inline(), node).declared().isEmpty());
         assertEquals("so the screen shows the sheet's value", Float.valueOf(0.2f),
                 node.getStyle().getComputed(StylePropertyRegistry.OPACITY));
     }
@@ -302,13 +300,15 @@ public class StyleLabsTest {
         inline.value("color").set("#FFFFFF");
         frame();
 
-        assertEquals(2, RuleActions.extractClass(sheet, null, node, "chip"));
+        assertEquals(2, RuleActions.extractClass(sheets.byId("menu.css"), null, node, "chip"));
         frame();
         assertTrue("the rule was written", sheet.toString().contains(".chip"));
         assertTrue("with the values", sheet.toString().contains("opacity: 0.3"));
         assertTrue("and the element wears the class", node.hasClass("chip"));
-        assertTrue("with nothing left inline",
-                StyleTargets.of(node, sheets).chosen("").declarations().isEmpty());
+        assertTrue("with nothing left inline", StyleFields.on(null, StyleTarget.inline(), node).declared().isEmpty());
+
+        sheet.history().undo();
+        assertFalse("and it was ONE step in the sheet's history", sheet.toString().contains(".chip"));
     }
 
     // ── S.16: the row's edits are undoable where they were made ─────────────

@@ -244,6 +244,24 @@ public class Inspector extends UIElement implements DataProvider {
         return tabsByName.keySet();
     }
 
+    /**
+     * Brings the tab called {@code name} to the front.
+     *
+     * <pre>{@code
+     * inspector.showTab("Style");   // what "reveal in the Styles tab" does
+     * }</pre>
+     *
+     * <p>A tab that is not in front has no boxes, so what its rows follow is not polled until it is shown.</p>
+     *
+     * @return whether there was such a tab
+     */
+    public boolean showTab(String name) {
+        Tab tab = tabsByName.get(name);
+        if (tab == null) return false;
+        tabs.selectTab(tab);
+        return true;
+    }
+
 
     /**
      * Inspect whatever {@code source} is about, <b>on the next frame</b>.

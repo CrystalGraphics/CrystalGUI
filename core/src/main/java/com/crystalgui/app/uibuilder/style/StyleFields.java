@@ -1,7 +1,10 @@
 package com.crystalgui.app.uibuilder.style;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
@@ -13,15 +16,19 @@ import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.property.visual.color.ColorValue;
+import com.crystalgui.style.sheet.StyleRule;
+import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.source.CssEdits;
 import com.crystalgui.style.sheet.source.CssSourceModel;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.TextBuffer;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -50,6 +57,16 @@ import com.crystalgui.ui.dom.UIElement;
  * </ul>
  */
 public final class StyleFields {
+
+    /**
+     * One declaration as the target holds it — read from the sheet's text, or off the element for inline.
+     *
+     * @param property the registered property, or null for a shorthand, a custom property or a typo
+     * @param disabled a declaration commented out in the rule, which is how a switched-off row is kept
+     */
+    public record Declared(@Nullable StyleProperty<?> property, String name, String value, boolean important,
+                           boolean disabled) {
+    }
 
     /** The shorthand a sheet must use and an element cannot hold. @see #valueOf */
     static final String TEXT_STROKE = "text-stroke";
@@ -129,11 +146,7 @@ public final class StyleFields {
         }
         if (target.isInline()) return inlineValueOf(property);
         CssSourceModel model = model();
-        // No buffer: the engine's own sheet, or one inside a jar. Unwritable, so its snapshot cannot go stale.
-        if (model == null) {
-            StyleTarget.Declared declared = target.declaring(property);
-            return declared == null ? "" : declared.value();
-        }
+        if (model == null) return "";
         CssSourceModel.Rule rule = ruleOf(model);
         if (rule == null) return "";
         CssSourceModel.Declaration declaration = lastDeclarationOf(rule, property);
@@ -141,6 +154,122 @@ public final class StyleFields {
         String disabled = commentedValueOf(model, rule, property);
         return disabled == null ? "" : disabled;
     }
+
+    /**
+     * What the target declares right now, in source order — a rule's declarations and its switched-off ones,
+     * or the element's inline properties.
+     */
+    public List<Declared> declared() {
+        List<Declared> out = new ArrayList<>();
+        if (target.isInline()) {
+            for (Map.Entry<StyleProperty<?>, List<StyleSlot<?>>> entry : node.getStyle().candidates.entrySet()) {
+                for (StyleSlot<?> slot : entry.getValue()) {
+                    if (slot.origin() != StyleOrigin.INLINE) continue;
+                    StyleProperty<?> property = entry.getKey();
+                    out.add(new Declared(property, property.name, written(property, slot.value()), false, false));
+                    break;
+                }
+            }
+            return out;
+        }
+        CssSourceModel model = model();
+        CssSourceModel.Rule rule = model == null ? null : ruleOf(model);
+        if (rule == null) return out;
+        for (CssSourceModel.Declaration declaration : rule.declarations()) {
+            out.add(new Declared(propertyOf(declaration.property()), declaration.property(), declaration.value(),
+                    declaration.important(), false));
+        }
+        for (CssSourceModel.Comment comment : model.comments()) {
+            int at = comment.range().start();
+            if (at < rule.bodyRange().start() || at >= rule.bodyRange().end()) continue;
+            String inner = inner(comment.text());
+            if (inner == null) continue;
+            int colon = inner.indexOf(':');
+            String name = inner.substring(0, colon).trim();
+            String value = inner.substring(colon + 1).trim();
+            if (value.endsWith(";")) value = value.substring(0, value.length() - 1).trim();
+            if (name.isEmpty() || value.isEmpty() || name.indexOf(' ') >= 0) continue;
+            out.add(new Declared(propertyOf(name), name, value, false, true));
+        }
+        return out;
+    }
+
+    /** The declaration of {@code name}, or null when the target has none. */
+    @Nullable
+    public Declared declared(String name) {
+        for (Declared declared : declared()) {
+            if (declared.name().equals(name)) return declared;
+        }
+        return null;
+    }
+
+    /**
+     * {@link #declared()} as a property, for a list of rows that follows the target.
+     *
+     * <p>A rule's list is told when its sheet's text changes rather than polled; an inline list is polled,
+     * which costs a walk of the element's candidates.</p>
+     */
+    public Property<List<Declared>> declarations() {
+        Property<List<Declared>> declarations = Property.derived(this::declared);
+        TextBuffer buffer = target.isInline() ? null : target.buffer();
+        if (buffer == null) return declarations;
+        return declarations.announcedBy(refresh -> buffer.onChanged.connect(change -> refresh.run()));
+    }
+
+    /**
+     * Whether this target's declaration of {@code name} is the one the element uses — false is what a row
+     * draws struck through. Asked of the cascade, which already knows, so it is cheap enough to poll.
+     */
+    public boolean wins(String name) {
+        StyleProperty<?> property = longhandOf(name);
+        StyleSlot<?> winner = property == null ? null : node.getStyle().computeCandidateSlot(cast(property));
+        if (winner == null) return false;
+        StyleOrigin origin = winner.origin();
+        if (target.isInline()) return origin == StyleOrigin.INLINE;
+        // A WIDGET'S SLOT IS NOT A SHEET'S, though an inline one packs source order 0 and so decodes as sheet 0,
+        // rule 0. A sheet's declaration has the sheet's own origin, or is one of its marked !important.
+        if (origin == StyleOrigin.INLINE || origin == StyleOrigin.ANIMATION || origin == StyleOrigin.DEFAULT) {
+            return false;
+        }
+        UIDocument window = node.document();
+        StyleSheet sheet = target.liveSheet();
+        if (window == null || sheet == null) return false;
+        if (origin != sheet.getOrigin()) {
+            Declared declared = declared(name);
+            if (declared == null || !declared.important()) return false;
+        }
+        if (StyleEngine.sheetIndexOf(winner.sourceOrder()) != window.styles().getSheets().indexOf(sheet)) {
+            return false;
+        }
+        int order = target.ruleOrder();
+        return order < 0 || StyleEngine.ruleOrderOf(winner.sourceOrder()) == order;
+    }
+
+    /**
+     * The property a declaration of {@code name} sets: itself, or for a shorthand the first longhand it expands
+     * to, which is what decides whether the shorthand won.
+     */
+    @Nullable
+    private StyleProperty<?> longhandOf(String name) {
+        StyleProperty<?> property = propertyOf(name);
+        if (property != null) return property;
+        StyleProperty<?> known = LONGHANDS.get(name);
+        if (known != null) return known;
+        Declared declared = declared(name);
+        if (declared == null) return null;
+        try {
+            List<StyleRule> rules = StyleSheet.parse("x { " + name + ": " + declared.value() + "; }").getRules();
+            if (rules.isEmpty() || rules.get(0).declarations().isEmpty()) return null;
+            StyleProperty<?> first = rules.get(0).declarations().get(0).property();
+            LONGHANDS.put(name, first);
+            return first;
+        } catch (RuntimeException unparsed) {
+            return null;
+        }
+    }
+
+    /** A shorthand's name to the longhand it leads with, which is the same for every value. */
+    private static final Map<String, StyleProperty<?>> LONGHANDS = new ConcurrentHashMap<>();
 
     /** What the element itself carries, in the spelling a sheet would need to hold to mean the same thing. */
     private String inlineValueOf(String property) {
@@ -180,7 +309,12 @@ public final class StyleFields {
     @Nullable
     private CssSourceModel model() {
         TextBuffer buffer = target.buffer();
-        if (buffer == null) return null;
+        if (buffer == null) {
+            // THE ENGINE'S OWN SHEET, or one inside a jar: read-only, so parsed once from its own text.
+            StyleSheet live = target.liveSheet();
+            if (model == null && live != null && live.source() != null) model = CssSourceModel.parse(live.source());
+            return model;
+        }
         if (model == null || buffer.version() != modelVersion) {
             modelVersion = buffer.version();
             modelText = buffer.toString();

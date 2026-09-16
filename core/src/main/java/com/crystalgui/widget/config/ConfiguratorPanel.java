@@ -243,11 +243,41 @@ public class ConfiguratorPanel extends ScrollerView {
         return place(parent, id, new Configurator(label, control));
     }
 
+    /**
+     * A row for {@code descriptor}, bound to {@code value} and known to this panel, <b>not yet placed</b> —
+     * for a list that decides where its rows go itself.
+     *
+     * <pre>{@code
+     * ChildList.Keyed<String, Configurator> rows = new ChildList.Keyed<>(list, name -> panel.row(descriptorOf(name), valueOf(name)));
+     * rows.onRemoved((name, row) -> panel.forget(row));
+     * }</pre>
+     */
+    public <T> Configurator row(ConfigDescriptor descriptor, Property<T> value) {
+        return register(descriptor.id(), new Configurator(descriptor, ConfigControls.bound(descriptor, value)));
+    }
+
+    /** As {@link #row(ConfigDescriptor, Property)}, around a control the caller already has. @see #addRow */
+    public Configurator row(String label, String id, ConfigControl control) {
+        return register(id, new Configurator(label, control));
+    }
+
+    /**
+     * Drops a row taken out of the panel on its own, so {@link #control} stops answering with it. What
+     * {@link #clearRows} does for every row.
+     */
+    public void forget(Configurator row) {
+        controls.values().removeIf(control -> control == row.control());
+    }
+
     private Configurator place(UIElement parent, String id, Configurator row) {
+        parent.append(register(id, row));
+        return row;
+    }
+
+    private Configurator register(String id, Configurator row) {
         ConfigControl control = row.control();
         controls.put(id, control);
         control.changed.connect(value -> changed.emit(id, value));
-        parent.append(row);
         return row;
     }
 
