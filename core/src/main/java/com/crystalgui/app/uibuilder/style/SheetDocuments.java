@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -57,6 +58,28 @@ public final class SheetDocuments {
     @FunctionalInterface
     public interface SheetStore {
         Reply<DocumentReference> open(Resource resource);
+    }
+
+    /**
+     * How a sheet is put in front of a person — {@code workbench.editors()::open}, a tab on the file.
+     *
+     * <p>Static because <i>Go to source</i> is one gesture wherever it is pressed, and the button that
+     * offers it is several layers from whoever knows about tabs. A host that never sets one simply has no
+     * such button.</p>
+     */
+    @Nullable
+    private static Consumer<Resource> reveal;
+
+    /** @see #reveal */
+    public static void revealWith(@Nullable Consumer<Resource> opener) {
+        reveal = opener;
+    }
+
+    /** Opens {@code sheet}'s file in an editor, if a host said how. The rule is what a reader wants; @see RuleTextEditor */
+    public static boolean goToSource(Sheet sheet, int ruleOrder) {
+        if (reveal == null || sheet.resource() == null) return false;
+        reveal.accept(sheet.resource());
+        return true;
     }
 
     /** One installed sheet: what it is, where it came from, and whether it can be written to. */

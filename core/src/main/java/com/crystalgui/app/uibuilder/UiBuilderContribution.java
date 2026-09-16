@@ -68,6 +68,8 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                 "cgui");
         // The kind is registered ON the workbench, so it goes when the workbench does and needs no
         // handle of its own. @see WorkbenchExtension
+        // GO TO SOURCE needs a tab, which only the workbench can open; the style package names no workbench.
+        SheetDocuments.revealWith(resource -> workbench.editors().open(resource));
         Disposable commands = BuilderCommands.register();
         // THE ONE THING IN A PROCESS-WIDE REGISTRY, so it is what this handle has to be able to take
         // back. Counted: a second editor must not double the forms, and the first one closing must not

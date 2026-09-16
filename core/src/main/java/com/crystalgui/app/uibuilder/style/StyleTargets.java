@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.inspect.MatchedRules;
 import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.selector.Selector;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
@@ -60,6 +61,7 @@ public final class StyleTargets {
             StyleTarget target = ruleTarget(engineSheets.get(rule.sheetIndex()), rule, sheets);
             if (target != null) out.add(target);
         }
+        addWritableRules(node, sheets, out);
         return new StyleTargets(out);
     }
 
@@ -106,6 +108,48 @@ public final class StyleTargets {
         String label = entry != null ? entry.label() : engineLabel(sheet);
         return new StyleTarget(entry, label, rule.ruleOrder(), model.textOf(written.selectorsRange()).trim(),
                 declarationsOf(model, written, won));
+    }
+
+    /**
+     * Rules in the project's own sheets that match the element and the cascade never mentioned: one just
+     * written and still empty, or one whose every declaration is commented out.
+     *
+     * <p>They are written into exactly like any other — which is what makes <i>new rule</i> usable at all,
+     * since a rule with nothing in it has no number and so cannot be reached through the cascade.</p>
+     */
+    private static void addWritableRules(UIElement node, @Nullable SheetDocuments sheets, List<StyleTarget> out) {
+        if (sheets == null) return;
+        for (SheetDocuments.Sheet sheet : sheets.sheets()) {
+            if (!sheet.isEditable() || sheet.buffer() == null) continue;
+            CssSourceModel model = CssSourceModel.parse(sheet.buffer().toString());
+            for (CssSourceModel.Rule rule : model.rules()) {
+                String selector = model.textOf(rule.selectorsRange()).trim();
+                if (rule.sourceOrder() >= 0 && !rule.declarations().isEmpty()) continue;
+                if (!matches(selector, node) || holds(out, sheet.label(), selector)) continue;
+                out.add(new StyleTarget(sheet, sheet.label(), rule.sourceOrder(), selector,
+                        declarationsOf(model, rule, Map.of())));
+            }
+        }
+    }
+
+    /** Whether a selector as written reaches {@code node}; unparseable text reaches nothing. */
+    private static boolean matches(String selector, UIElement node) {
+        try {
+            Selector parsed = Selector.parse(selector);
+            return parsed != null && parsed.matches(node);
+        } catch (RuntimeException unparseable) {
+            return false;
+        }
+    }
+
+    private static boolean holds(List<StyleTarget> targets, String sheetLabel, String selector) {
+        for (StyleTarget target : targets) {
+            if (!target.isInline() && target.sheetLabel().equals(sheetLabel)
+                    && target.selector().equals(selector)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** A sheet the document does not name — the engine's own, or a theme's. */

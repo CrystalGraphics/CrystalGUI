@@ -976,3 +976,177 @@ smartguides {
 /* Edit as CSS: the sheet's own buffer, so this is the file rather than a copy of it. */
 .__rule-editor__ { width: 480px; height: 240px; }
 .__rule-editor__-popover { padding-left: 0px; padding-right: 0px; padding-top: 0px; padding-bottom: 0px; }
+
+/* ─────────────────────────── The labs ───────────────────────────
+ * A row shows what a value IS; the lab is where it is changed, at the size the work needs. */
+.__style-chip__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    height: var(--cfg-ctrl-h);
+    cursor: pointer;
+}
+/* The swatch is the declaration, applied: a gradient chip is the gradient. */
+.__style-chip-swatch__ {
+    width: 28px;
+    height: 14px;
+    flex-shrink: 0;
+    border-radius: 2px;
+    background: var(--bg-elevated, #3A3D42);
+}
+.__style-chip-text__ { color: var(--fg-secondary, #9DA0A8); text-overflow: ellipsis; }
+
+.__style-lab__ {
+    width: 320px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    gap: 7px;
+}
+.__lab-title__ { color: var(--fg, #DFE1E5); font-weight: bold; }
+.__lab-grounds__ { flex-direction: row; gap: 6px; height: 74px; }
+/* BOTH GROUNDS, always: a stroke that reads on one routinely vanishes on the other. */
+.__lab-ground__ {
+    width: 0px;
+    flex-grow: 1;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.__lab-ground__.__dark__ { background: #14161A; }
+.__lab-ground__.__light__ { background: #EDEEF2; }
+.__lab-specimen__ {
+    width: 74px;
+    height: 44px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: #FFFFFF14;
+}
+/* Something worth filtering behind the glass lab's specimen. */
+.__lab-shape__ { position: absolute; width: 56px; height: 56px; border-radius: 999px; }
+.__lab-shape__0 { left: -6px; top: 6px; background: #E0398A; }
+.__lab-shape__1 { left: 44px; top: -14px; background: #F08A24; }
+.__lab-shape__2 { left: 24px; top: 30px; background: #2BC7A8; }
+
+.__lab-content__ { gap: 5px; }
+.__lab-row__ { flex-direction: row; align-items: center; gap: 6px; }
+.__lab-keyword__ {
+    height: 16px;
+    min-height: 16px;
+    padding-left: 5px;
+    padding-right: 5px;
+    background: var(--bg-input, #2B2D30);
+    color: var(--fg-secondary, #9DA0A8);
+}
+.__lab-keyword__:hover { background: var(--bg-hover, #393B40); color: var(--fg, #DFE1E5); }
+.__lab-caption__ { color: var(--fg-hint, #7A7A7A); font-size: 9; white-space: normal; }
+/* What will be written, printed: a lab whose readout and write can differ is one you check by hand. */
+.__lab-css__ {
+    color: var(--fg-secondary, #9DA0A8);
+    font-family: monospace;
+    font-size: 9;
+    white-space: normal;
+}
+
+/* The gradient bar IS the gradient, and a stop is a handle on it. */
+.__gradient-bar__ { height: 26px; border-radius: 3px; position: relative; }
+.__gradient-stop__ {
+    position: absolute;
+    top: -3px;
+    width: 9px;
+    height: 32px;
+    border-radius: 2px;
+    background: #FFFFFF;
+    outline: 1px #00000088;
+    cursor: pointer;
+}
+.__gradient-stop__.__active__ { outline: 2px var(--accent, #3574F0); }
+
+.__angle-dial__ {
+    width: 34px;
+    height: 34px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    background: var(--bg-input, #2B2D30);
+    outline: 1px var(--border, #4A4D52);
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.__angle-needle__ { width: 2px; height: 14px; background: var(--accent, #3574F0); transform-origin-y: 100%; }
+
+/* The offset pad: the dot is where the shadow falls. */
+.__offset-pad__ {
+    width: 74px;
+    height: 74px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background: var(--bg-input, #2B2D30);
+    outline: 1px var(--border, #4A4D52);
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.__offset-dot__ { width: 9px; height: 9px; border-radius: 999px; background: var(--accent, #3574F0); }
+
+/* The corner box: four pucks on the shape they round. */
+.__corner-box__ {
+    width: 96px;
+    height: 72px;
+    position: relative;
+    background: var(--bg-elevated, #3A3D42);
+    outline: 1px var(--border, #4A4D52);
+}
+.__corner-puck__ {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    border-radius: 999px;
+    background: var(--accent, #3574F0);
+    cursor: pointer;
+}
+.__corner-puck__.__top-left__ { left: -5px; top: -5px; }
+.__corner-puck__.__top-right__ { right: -5px; top: -5px; }
+.__corner-puck__.__bottom-right__ { right: -5px; bottom: -5px; }
+.__corner-puck__.__bottom-left__ { left: -5px; bottom: -5px; }
+
+/* The stack: order is the value, so a row moves rather than sorts. */
+.__layer-stack__ { gap: 2px; }
+.__layer-row__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    padding-left: 3px;
+    padding-right: 3px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.__layer-row__:hover { background: var(--bg-hover, #393B40); }
+.__layer-row__.__active__ { background: var(--accent-soft, #2E436E); }
+.__layer-sample__ {
+    width: 20px;
+    height: 14px;
+    flex-shrink: 0;
+    border-radius: 2px;
+    background: var(--bg-elevated, #3A3D42);
+}
+.__layer-text__ {
+    width: 0px;
+    flex-grow: 1;
+    color: var(--fg-secondary, #9DA0A8);
+    font-size: 9;
+    text-overflow: ellipsis;
+}
+.__style-target-action__ {
+    height: 17px;
+    min-height: 17px;
+    padding-left: 5px;
+    padding-right: 5px;
+    background: var(--bg-input, #2B2D30);
+    color: var(--fg-secondary, #9DA0A8);
+}
+.__style-target-action__:hover { background: var(--bg-hover, #393B40); color: var(--fg, #DFE1E5); }

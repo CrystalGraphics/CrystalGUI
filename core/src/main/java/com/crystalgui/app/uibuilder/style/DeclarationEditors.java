@@ -13,6 +13,8 @@ import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.general.floats.FloatProperty;
 import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.ConfigControl;
 
 /**
  * The control a style property gets, resolved from the property itself.
@@ -36,14 +38,32 @@ import com.crystalgui.style.property.visual.color.ColorProperty;
  */
 public final class DeclarationEditors {
 
-    /** A descriptor and the property to bind it to — what {@code ConfigForm.prop} takes. */
-    public record Field(ConfigDescriptor descriptor, Property<?> value) {
+    /**
+     * A descriptor and the property to bind it to — what {@code ConfigForm.prop} takes — or a control the
+     * editor built itself, which is what a lab-backed row is.
+     */
+    public record Field(ConfigDescriptor descriptor, Property<?> value, @Nullable ConfigControl control) {
+
+        public Field(ConfigDescriptor descriptor, Property<?> value) {
+            this(descriptor, value, null);
+        }
+    }
+
+    /**
+     * Everything a bespoke editor needs: the declaration, and the target it is part of.
+     *
+     * @param fields what writes to the target — a lab that edits SEVERAL declarations at once (the corners)
+     *               writes through this rather than through {@code css}
+     * @param node   the element being styled, for a lab that measures it
+     */
+    public record Context(StyleProperty<?> property, String id, String label, Property<String> css,
+                          @Nullable StyleFields fields, @Nullable UIElement node) {
     }
 
     /** A bespoke editor for one property: the gradient bar, the corner box, the glass sliders. */
     @FunctionalInterface
     public interface Editor {
-        Field build(StyleProperty<?> property, String id, String label, Property<String> css);
+        Field build(Context context);
     }
 
     private static final Map<StyleProperty<?>, Editor> OVERRIDES = new HashMap<>();
@@ -77,13 +97,19 @@ public final class DeclarationEditors {
      * @param css the declaration's value, read and written as a sheet spells it — {@link StyleFields#value}
      */
     public static Field of(@Nullable StyleProperty<?> property, String id, String label, Property<String> css) {
+        return of(property, id, label, css, null, null);
+    }
+
+    /** As {@link #of(StyleProperty, String, String, Property)}, for a lab that needs the whole target. */
+    public static Field of(@Nullable StyleProperty<?> property, String id, String label, Property<String> css,
+                           @Nullable StyleFields fields, @Nullable UIElement node) {
         if (property == null) {
             // A name no property claims -- a custom property, or a typo somebody wrote. It is in the file, so
             // it is shown and editable; nothing can validate it.
             return new Field(ConfigDescriptor.text(id, label).placeholder("value"), css);
         }
         Editor editor = OVERRIDES.get(property);
-        if (editor != null) return editor.build(property, id, label, css);
+        if (editor != null) return editor.build(new Context(property, id, label, css, fields, node));
         return byType(property, id, label, css);
     }
 

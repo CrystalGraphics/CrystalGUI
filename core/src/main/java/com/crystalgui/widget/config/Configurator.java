@@ -1,6 +1,10 @@
 package com.crystalgui.widget.config;
 
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.ui.data.UiDataKeys;
+import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
@@ -40,13 +44,38 @@ import javax.annotation.Nullable;
  * <p>Measured off the reference, and it is the property that makes a stack of unlike controls read as a
  * form: every control starts on a common left edge regardless of how long its label is.</p>
  */
-public class Configurator extends UIElement {
+public class Configurator extends UIElement implements DataProvider {
 
     public static final Name NAME = Name.of("configurator");
 
     public static final String ROW_CLASS = "__configurator__";
     public static final String LABEL_CLASS = "__label__";
     public static final String INLINE_CLASS = "__inline__";
+
+    @Nullable
+    private UndoStack history;
+
+    /**
+     * The history this row's edits go into, so Ctrl+Z pressed in it reaches them.
+     *
+     * <pre>{@code
+     * form.prop(descriptor, value).editedIn(sheet.buffer().history());   // not the document's
+     * }</pre>
+     *
+     * <p>A command resolves outward from focus, so without this a row in a panel beside the editor answers
+     * with whatever the panel is describing — which is right until a row edits something else, as a rule's
+     * row does: the declaration is in the stylesheet's buffer and the undo belongs with it.</p>
+     */
+    public Configurator editedIn(@Nullable UndoStack history) {
+        this.history = history;
+        return this;
+    }
+
+    @Override
+    @Nullable
+    public Object getData(DataKey<?> key) {
+        return key == UiDataKeys.UNDO_STACK ? history : null;
+    }
 
     /** On a row holding an inline list, beside {@link #ROW_CLASS}. @see ConfigDescriptor#inlineList */
     public static final String LIST_ROW_CLASS = "__list-row__";

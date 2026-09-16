@@ -49,8 +49,16 @@ public final class StyleTarget {
     private final String selector;
     private final List<Declared> declarations;
 
+    private final boolean inline;
+
     StyleTarget(@Nullable SheetDocuments.Sheet sheet, String sheetLabel, int ruleOrder, String selector,
                 List<Declared> declarations) {
+        this(sheet, sheetLabel, ruleOrder, selector, declarations, false);
+    }
+
+    private StyleTarget(@Nullable SheetDocuments.Sheet sheet, String sheetLabel, int ruleOrder, String selector,
+                        List<Declared> declarations, boolean inline) {
+        this.inline = inline;
         this.sheet = sheet;
         this.sheetLabel = sheetLabel;
         this.ruleOrder = ruleOrder;
@@ -59,7 +67,7 @@ public final class StyleTarget {
     }
 
     static StyleTarget inline(List<Declared> declarations) {
-        return new StyleTarget(null, "", -1, "inline", declarations);
+        return new StyleTarget(null, "", -1, "inline", declarations, true);
     }
 
     /**
@@ -67,11 +75,19 @@ public final class StyleTarget {
      * a rule keeps its number while anything above it is only changed in place.
      */
     public String key() {
-        return isInline() ? INLINE_KEY : "rule:" + sheetLabel + ":" + ruleOrder;
+        if (isInline()) return INLINE_KEY;
+        // A RULE THE CASCADE SKIPPED HAS NO NUMBER -- an empty one just written, or one whose only
+        // declaration is commented out -- so it is named by its selector until it has something to say.
+        return "rule:" + sheetLabel + ":" + (ruleOrder >= 0 ? String.valueOf(ruleOrder) : selector);
     }
 
     public boolean isInline() {
-        return ruleOrder < 0;
+        return inline;
+    }
+
+    /** The selector a rule with no number is found by. @see #key */
+    public String selector() {
+        return selector;
     }
 
     /** The chip's text: {@code inline}, or the rule's selector as written. */

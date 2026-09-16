@@ -8,12 +8,12 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
-import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.MatchedRules;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.text.TextBuffer;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigForm;
 import com.crystalgui.widget.config.Configurator;
@@ -50,12 +50,16 @@ public final class BuilderStyleSections {
     public static final String DISABLED_CLASS = "__inactive__";
     public static final String OVERRIDDEN_CLASS = "__overridden__";
     public static final String ROW_ACTION_CLASS = "__style-row-action__";
+    public static final String TARGET_ACTION_CLASS = "__style-target-action__";
 
     private BuilderStyleSections() {
     }
 
     /** The sections, for the one registration the builder makes. */
     public static List<InspectorSection> all() {
+        // The labs belong to properties rather than to a panel, so they are registered with the sections
+        // that will ask for them rather than by whoever happens to open a builder first.
+        StyleLabs.register();
         return List.of(new TargetsSection(), new DeclarationsSection(), new CascadeSection());
     }
 
@@ -80,6 +84,27 @@ public final class BuilderStyleSections {
 
     private static StyleTargets targetsOf(DataContext context) {
         return StyleTargets.of(node(context), sheets(context));
+    }
+
+    /** The first sheet of the document a rule could be written into, or null when every one is read-only. */
+    @Nullable
+    private static TextBuffer firstEditableSheet(DataContext context) {
+        SheetDocuments sheets = sheets(context);
+        if (sheets == null) return null;
+        for (SheetDocuments.Sheet sheet : sheets.sheets()) {
+            if (sheet.isEditable()) return sheet.buffer();
+        }
+        return null;
+    }
+
+    /** What a new rule's target key names the sheet by. @see StyleTarget#key */
+    private static String sheetLabel(DataContext context) {
+        SheetDocuments sheets = sheets(context);
+        if (sheets == null) return "";
+        for (SheetDocuments.Sheet sheet : sheets.sheets()) {
+            if (sheet.isEditable()) return sheet.label();
+        }
+        return "";
     }
 
     private static StyleTarget chosen(DataContext context) {
@@ -132,8 +157,40 @@ public final class BuilderStyleSections {
             chips.addClass(TARGETS_CLASS);
             for (StyleTarget target : targets.targets()) chips.append(chip(target, writing, selection));
 
+            UIElement node = node(context);
+            TextBuffer sheet = firstEditableSheet(context);
+            if (node != null && sheet != null) {
+                String selector = RuleActions.selectorFor(node);
+                chips.append(action("+ " + selector, () -> {
+                    // NAMED BEFORE IT IS PRESSED: a rule written for a selector you did not see is a rule
+                    // that restyles elements you were not looking at. An empty rule has no number yet, so
+                    // it is picked by the selector it was written with.
+                    if (RuleActions.newRule(sheet, selector)) {
+                        selection.selectStyleTarget("rule:" + sheetLabel(context) + ":" + selector);
+                    }
+                }));
+                if (writing.isInline() && !writing.declarations().isEmpty()) {
+                    chips.append(action("Extract class", () -> RuleActions.extractClass(sheet,
+                            context.get(BuilderEditor.UI_DOCUMENT), node, classNameFor(node))));
+                }
+            }
+
             String reason = writing.readOnlyReason();
             if (reason != null) form.note(reason);
+        }
+
+        /** A button on the chip row: the rule actions, which are about targets rather than declarations. */
+        private static Button action(String label, Runnable done) {
+            Button button = new Button(label);
+            button.addClass(TARGET_ACTION_CLASS);
+            button.attachListener(done);
+            return button;
+        }
+
+        /** The class an extract would make: the node's id, else its kind, since it has no class yet. */
+        private static String classNameFor(UIElement node) {
+            String id = node.id();
+            return id != null && !id.isEmpty() ? id : node.name().local();
         }
 
         private static UIElement chip(StyleTarget target, StyleTarget writing, BuilderSelection selection) {
@@ -177,13 +234,40 @@ public final class BuilderStyleSections {
                 List<StyleTarget.Declared> declared = declaredIn(target, family);
                 if (declared.isEmpty() && family == StyleFamilies.Family.OTHER) continue;
                 form.custom(familyHead(family, target, fields));
-                for (StyleTarget.Declared declaration : declared) row(form, fields, declaration);
+                for (StyleTarget.Declared declaration : declared) row(form, fields, node, declaration);
             }
             if (target.isEditable() && !target.isInline()) {
+                UIElement actions = new UIElement();
+                actions.addClass("__lab-row__");
                 Button asCss = new Button("Edit as CSS");
                 asCss.addClass(ROW_ACTION_CLASS);
                 asCss.attachListener(() -> RuleTextEditor.open(asCss, target));
-                form.custom(asCss);
+                actions.append(asCss);
+
+                SheetDocuments.Sheet sheet = target.sheet();
+                if (sheet != null && sheet.resource() != null) {
+                    Button source = new Button("Go to source");
+                    source.addClass(ROW_ACTION_CLASS);
+                    source.attachListener(() -> SheetDocuments.goToSource(sheet, target.ruleOrder()));
+                    actions.append(source);
+                }
+                form.custom(actions);
+            }
+            if (target.isInline() && !target.declarations().isEmpty()) {
+                TextBuffer sheet = firstEditableSheet(context);
+                if (sheet != null) {
+                    Button promote = new Button("Promote to rule");
+                    promote.addClass(ROW_ACTION_CLASS);
+                    promote.attachListener(() -> {
+                        String selector = RuleActions.selectorFor(node);
+                        for (StyleTarget.Declared declared : target.declarations()) {
+                            if (declared.property() == null) continue;
+                            RuleActions.promote(sheet, context.get(BuilderEditor.UI_DOCUMENT), node,
+                                    declared.property(), selector);
+                        }
+                    });
+                    form.custom(promote);
+                }
             }
         }
 
@@ -221,7 +305,8 @@ public final class BuilderStyleSections {
             return written == null || written.isBlank() ? "initial" : written;
         }
 
-        private static void row(ConfigForm form, StyleFields fields, StyleTarget.Declared declared) {
+        private static void row(ConfigForm form, StyleFields fields, UIElement node,
+                                StyleTarget.Declared declared) {
             String id = "style." + declared.name();
             DeclarationEditors.Field field = declared.disabled()
                     // A commented-out declaration is TEXT until it is switched back on: its value is not in
@@ -229,9 +314,15 @@ public final class BuilderStyleSections {
                     ? new DeclarationEditors.Field(ConfigDescriptor.info(id, declared.name()),
                             Property.derived(declared::value))
                     : DeclarationEditors.of(declared.property(), id, declared.name(),
-                            fields.value(declared.name()));
+                            fields.value(declared.name()), fields, node);
 
-            Configurator row = form.prop(field.descriptor(), cast(field.value()));
+            Configurator row = field.control() == null
+                    ? form.prop(field.descriptor(), cast(field.value()))
+                    : form.control(id, declared.name(), field.control());
+            // CTRL+Z IN THE ROW REACHES THE FILE THE ROW WROTE TO: a rule's edit is in the sheet's buffer,
+            // which is a different history from the document's and the same one its editor tab uses.
+            TextBuffer buffer = fields.target().buffer();
+            if (buffer != null) row.editedIn(buffer.history());
             if (declared.disabled()) row.addClass(DISABLED_CLASS);
             if (!declared.won() && !declared.disabled()) row.addClass(OVERRIDDEN_CLASS);
             if (!fields.canWrite()) return;

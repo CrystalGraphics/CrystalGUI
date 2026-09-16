@@ -23,7 +23,6 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -53,6 +52,9 @@ public class StyleEditingTest {
 
     @Before
     public void openASheet() {
+        // The labs are registered process-wide by the sections, so a test asserting the type-driven
+        // defaults has to stand in the same world rather than in whichever one ran first.
+        StyleLabs.register();
         window = new UIDocument();
         node = new UIElement();
         node.addClass("card");
@@ -214,9 +216,10 @@ public class StyleEditingTest {
         assertEquals("an enum is a dropdown", ConfigDescriptor.Kind.SELECT, overflow.kind());
         assertTrue("of the CSS keywords, not the Java constants", overflow.options().contains("visible"));
 
-        ConfigDescriptor length = DeclarationEditors.of(StylePropertyRegistry.FONT_FAMILY, "f", "font-family",
+        // A PROPERTY WITH NO LAB AND NO TYPE RULE is still editable, as text its own parser validates.
+        ConfigDescriptor other = DeclarationEditors.of(StylePropertyRegistry.MASK, "m", "mask",
                 Property.of("")).descriptor();
-        assertNotNull("anything else is still editable, as validated text", length.validator());
+        assertNotNull("anything else is still editable, as validated text", other.validator());
         assertFalse("a value the property cannot parse is refused",
                 DeclarationEditors.parses(StylePropertyRegistry.OPACITY, "not-a-number"));
         assertTrue(DeclarationEditors.parses(StylePropertyRegistry.OPACITY, "0.4"));
