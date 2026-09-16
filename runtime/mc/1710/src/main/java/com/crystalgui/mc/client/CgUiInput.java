@@ -2,6 +2,7 @@ package com.crystalgui.mc.client;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.input.HostPointer;
 
 import cpw.mods.fml.client.registry.ClientRegistry;
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -59,15 +60,8 @@ public final class CgUiInput {
     /** LWJGL2's origin is bottom-left and CrystalGUI's is top-left, so every Y and dY flips. */
     private static final int NORMALIZE_TOP_LEFT_ORIGIN = -1;
 
-    /**
-     * Notches to units, <b>and the sign</b>.
-     *
-     * <p>A <em>positive</em> {@code MouseEvent.Scroll} means the wheel rolled <b>down</b> — the one
-     * statement of that in the engine is {@code ScrollerView}'s {@code setScrollTop(before + delta)}.
-     * {@code CanvasView} shipped zooming the wrong way by taking the sign at face value, and no test
-     * caught it because the test was written from the implementation.</p>
-     */
-    private static final float MOUSE_SCROLL_NORMALIZE = 1 / 120f * NORMALIZE_TOP_LEFT_ORIGIN;
+    /** LWJGL2 reports 120 raw units per notch. The SIGN is {@link HostPointer#scroll}'s. */
+    private static final float UNITS_PER_NOTCH = 120f;
 
     private static KeyBinding openEditor;
     private static KeyBinding openDesktop;
@@ -94,31 +88,24 @@ public final class CgUiInput {
      * One LWJGL2 mouse event into the window. Called once per event from
      * {@link CgUiScreen#handleMouseInput()}, with that event current.
      *
-     * <p><b>Public because a second host needs it.</b> These two methods encode four rules that are
-     * each one line and each invisible when wrong -- LWJGL2's bottom-left origin, the wheel's sign,
-     * the notch divisor, and that a move event carries no button and must not carry a click timestamp
-     * or the multi-click counter drifts. A host that re-derives them gets a pointer at the wrong Y, a
-     * canvas that zooms backwards, or a triple-click from a slow double. {@code CgUiScreen} is the
-     * second host; the answer is to share these, not to copy them.</p>
+     * <p>What is left here is what is genuinely LWJGL2's: its bottom-left origin and its 120 raw units
+     * per notch. The wheel's sign and the rule that a move carries no click timestamp are
+     * {@link HostPointer}'s, because they are the engine's conventions rather than this platform's --
+     * both were stated here and again on 1.20.x, and one of them had already shipped backwards.</p>
      *
      * @param displayHeight raw device height — <b>not</b> {@code GuiScreen.height}, which is the scaled
      *                      GUI size and would put the pointer off by the scale factor
      */
     public static void pumpMouse(UIDocument window, int displayHeight) {
-        int button = Mouse.getEventButton();
-        // A MOVE EVENT HAS NO BUTTON and must not carry a click timestamp, or the multi-click detail
-        // counter drifts and a slow double-click registers as a triple.
-        long millis = button == -1 ? -1 : Mouse.getEventNanoseconds() / NANOS_IN_MILLIS;
-
-        window.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+        window.input().consumeMouseEvent(HostPointer.of(
                 Mouse.getEventX(),
                 displayHeight - Mouse.getEventY(),
                 Mouse.getEventDX(),
                 Mouse.getEventDY() * NORMALIZE_TOP_LEFT_ORIGIN,
-                button,
+                Mouse.getEventButton(),
                 Mouse.getEventButtonState(),
-                Mouse.getEventDWheel() * MOUSE_SCROLL_NORMALIZE,
-                millis));
+                HostPointer.scroll(Mouse.getEventDWheel() / UNITS_PER_NOTCH),
+                Mouse.getEventNanoseconds() / NANOS_IN_MILLIS));
     }
 
     /**

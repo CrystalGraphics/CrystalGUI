@@ -1,9 +1,9 @@
 package com.crystalgui.mc;
 
-import com.crystalgui.mc.example.MachineExample;
+import com.crystalgui.mc.example.MachineExample1710;
 import com.crystalgui.mc.net.CgUiConnections;
 import com.crystalgui.mc.net.CgUiWorkspaceHost;
-import com.crystalgui.mc.net.Mc1710NetworkChannel;
+import com.crystalgui.mc.net.NetworkChannel1710;
 import com.crystalgui.net.window.WindowProtocol;
 
 /**
@@ -43,7 +43,7 @@ public class CommonProxy {
      * code without undoing the headless property above.</p>
      */
     public void init() {
-        Mc1710NetworkChannel.register();
+        NetworkChannel1710.register();
         // Phase 4 A4. Must follow the channel: it takes the channel's inbound handler, and a handler
         // installed onto an unavailable channel is silently discarded.
         // CONTRIBUTORS BEFORE CONNECTIONS. Nothing depends on it here -- no peer can exist at init, so
@@ -59,7 +59,7 @@ public class CommonProxy {
         // The worked example's SERVER half. After connections, because it opens a session per player
         // on the connection that class holds -- registered earlier it would simply find none.
         // Common code on purpose: it imports no screen, which is the property that lets it run on a
-        // dedicated server. @see com.crystalgui.mc.example.MachineExample
-        MachineExample.registerCommon();
+        // dedicated server. @see MachineExample1710
+        MachineExample1710.registerCommon();
     }
 }

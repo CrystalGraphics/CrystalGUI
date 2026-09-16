@@ -1,21 +1,21 @@
 package com.crystalgui.mc.modern.client;
 
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.input.HostPointer;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 
 /**
- * Pinned windows over somebody else's screen, and over no screen at all.
+ * Pinned windows over somebody else's screen, and over no screen at all — the 1.20.x half.
  *
- * <p>Every arbitration decision -- which UI gets a click, who owns the keyboard, when ownership is
- * released -- is {@link ScreenOverlay}'s, in {@code core/}. A loader hands over primitives and honours
- * the boolean. This class is only the 1.20.x half: turning "is a foreign screen up" into a
- * {@link DesktopPresentation}, and painting.</p>
+ * <p>Every arbitration decision — which UI gets a click, who owns the keyboard, when ownership is
+ * released — is {@link ScreenOverlay}'s, in {@code core/}, and which arm to paint is
+ * {@link HostSession}'s. What is left here is what only this Minecraft can answer: whether a screen is
+ * up and whose it is, where the pointer is, and how to bracket a draw.</p>
  *
  * <p><b>No mixin.</b> 1.7.10's Forge has no screen input event at all, which is why mc1710 needs one;
  * every version from 1.8 has a cancellable one.</p>
@@ -24,85 +24,69 @@ public final class CgUiHud {
 
     private CgUiHud() {}
 
-    private static boolean foreignScreenWasUp;
+    /** What only this Minecraft can answer about a paint. @see HostSession.PaintHost */
+    private static final HostSession.PaintHost HOST = new HostSession.PaintHost() {
 
-    /**
-     * What the desktop should be showing, and the one place a Minecraft condition becomes a
-     * presentation -- so the paint hooks and the input hooks cannot disagree.
-     *
-     * <p>The transition is noticed here rather than in a hook of its own: a screen that renders no world
-     * fires no world-render event, so a dedicated handler would miss the close and ownership would
-     * survive into the next screen.</p>
-     */
-    public static DesktopPresentation presentation() {
-        Desktop desktop = CgUiScreen.desktop();
-        if (desktop == null) return DesktopPresentation.NONE;
-
-        Minecraft mc = Minecraft.getInstance();
-        Screen current = mc == null ? null : mc.screen;
-
-        boolean foreignUp = current != null && !(current instanceof CgUiScreen);
-        if (foreignUp != foreignScreenWasUp) {
-            foreignScreenWasUp = foreignUp;
-            // Nullable: screenOverlay() answers null while the compositor has no document, which is its
-            // ordinary state until a window opens. Thrown from the HUD event it takes out the rest of
-            // Minecraft's overlay chain with it.
-            ScreenOverlay overlay = desktop.screenOverlay();
-            if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
+        @Override
+        public boolean ownScreenUp() {
+            Minecraft mc = Minecraft.getInstance();
+            return mc != null && mc.screen instanceof CgUiScreen;
         }
 
-        return desktop.presentation(current instanceof CgUiScreen, current != null);
+        @Override
+        public boolean anyScreenUp() {
+            Minecraft mc = Minecraft.getInstance();
+            return mc != null && mc.screen != null;
+        }
+
+        /**
+         * 1.20 posts no screen event for a move, so the pointer is offered once per frame from here —
+         * the per-frame drain mc1710 gets from pumping the event queue itself. Without it hover never
+         * updates and a drag runs on wherever the pointer was when a button last changed.
+         */
+        @Override
+        public void beforePaint() {
+            offerMove();
+        }
+
+        @Override
+        public void enter() {
+            CgUiHostGl.enter();
+        }
+
+        @Override
+        public void leave() {
+            CgUiHostGl.leave();
+        }
+    };
+
+    /** What the desktop should be showing. @see HostSession#presentation */
+    public static DesktopPresentation presentation() {
+        return HostSession.isInstalled()
+                ? HostSession.session().presentation(HOST) : DesktopPresentation.NONE;
     }
 
-    /** Paints whatever {@link #presentation()} says, bracketed by the GL discipline. */
-    /** The HUD arm: no screen is up. @see #paint(DesktopPresentation) */
+    /** The HUD arm: no screen is up. */
     public static void paintHud() {
         paint(DesktopPresentation.HUD);
     }
 
-    /** The arm for somebody else's screen. @see #paint(DesktopPresentation) */
+    /** The arm for somebody else's screen. */
     public static void paintOverScreen() {
         paint(DesktopPresentation.OVERLAY);
     }
 
-    /**
-     * Paints {@code arm}, and only when the compositor is actually in it.
-     *
-     * <p>One arm per hook. A frame with a screen open fires the HUD hook and the screen hook both, and
-     * painting from each draws the whole compositor twice -- style, layout and all.</p>
-     */
     private static void paint(DesktopPresentation arm) {
-        Desktop desktop = CgUiScreen.desktop();
-        if (desktop == null || !CgUiHostGl.contextIsLive()) return;
-
-        // Inside the guard: deciding what to present reads the compositor and can throw for the same
-        // reasons painting it can, and the catch below is what keeps that out of Minecraft's chain.
-        DesktopPresentation presentation;
-        try {
-            presentation = presentation();
-        } catch (RuntimeException | LinkageError failed) {
-            CrystalGuiCore.LOGGER.error("[cgui] could not decide a presentation; leaving HUD mode", failed);
-            desktop.exitHudMode();
-            return;
-        }
-        // DESKTOP is our own screen's job, NONE paints nothing, and the other arm's hook owns the rest.
-        if (presentation != arm) return;
-        // 1.20 posts no screen event for a move, so the pointer is offered once per frame from here --
-        // the per-frame drain mc1710 gets from pumping the event queue itself. Without it hover never
-        // updates and a drag runs on wherever the pointer was when a button last changed.
-        offerMove();
-        CgUiHostGl.enter();
-        try {
-            desktop.paint(presentation, CgUiScreen.frameDelta(), surfaceWidth(), surfaceHeight());
-        } catch (RuntimeException | LinkageError failed) {
-            // This runs inside Minecraft's own render loop every frame, and unlike a screen there is
-            // nothing the player can close to escape it. Drop the mode instead; the windows survive.
-            CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
-            desktop.exitHudMode();
-        } finally {
-            CgUiHostGl.leave();
-        }
+        // Whether there is anything to draw INTO is this loader's question, and it is asked before the
+        // session is: the engine initialises on the first WORLD render, and these hooks also fire over a
+        // title screen where there has never been one.
+        if (!HostSession.isInstalled() || !CgUiHostGl.contextIsLive()) return;
+        HostSession session = HostSession.session();
+        // The delta read ONCE and passed in -- reading it again inside would advance the clock twice.
+        session.paint(arm, session.frameDelta(), HOST);
     }
+
+    // ── Input, offered to the compositor ────────────────────────────────────────────────────────
 
     /** @return whether the desktop consumed it and the foreign screen must not see it */
     public static boolean offerMouse(int button, boolean pressed, float platformWheel) {
@@ -115,9 +99,6 @@ public final class CgUiHud {
         return overlay.offerMouse(pointerX(), pointerY(), button, pressed,
                 CgUiInput.wheel(platformWheel));
     }
-
-    /** No button, and the value the engine reads as "this is a move". */
-    private static final int NO_BUTTON = -1;
 
     /**
      * Whether the compositor may take pointer input at all -- only under a screen.
@@ -142,7 +123,7 @@ public final class CgUiHud {
         if (!pointerIsAvailable()) return;
         ScreenOverlay overlay = overlay();
         if (overlay == null) return;
-        overlay.offerMouse(pointerX(), pointerY(), NO_BUTTON, false, 0f);
+        overlay.offerMouse(pointerX(), pointerY(), HostPointer.NO_BUTTON, false, 0f);
     }
 
     /** @return whether the desktop consumed it */
@@ -169,15 +150,5 @@ public final class CgUiHud {
     private static int pointerY() {
         Minecraft mc = Minecraft.getInstance();
         return mc == null || mc.mouseHandler == null ? 0 : (int) mc.mouseHandler.ypos();
-    }
-
-    private static int surfaceWidth() {
-        Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.getWindow() == null ? 0 : mc.getWindow().getWidth();
-    }
-
-    private static int surfaceHeight() {
-        Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.getWindow() == null ? 0 : mc.getWindow().getHeight();
     }
 }

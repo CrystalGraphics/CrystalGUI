@@ -5,11 +5,11 @@ import java.nio.file.Path;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.storage.StorageLayout;
-import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.server.OperatorsMayWrite;
 import com.crystalgui.fs.server.WorkspaceActor;
-import com.crystalgui.fs.server.WorkspaceOperation;
 import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceHost;
+import com.crystalgui.fs.server.WorkspaceRoles;
 import com.crystalgui.fs.server.WorkspaceService;
 
 import com.mojang.authlib.GameProfile;
@@ -22,25 +22,24 @@ import net.minecraft.world.level.storage.LevelResource;
  * The server's workspace on MC 1.20.x: where it lives, who may write to it, and who is asking.
  *
  * <p>Everything else -- per-peer bindings, the change and presence fan-out, the poll cadence, the seed
- * -- is {@link com.crystalgui.fs.server.WorkspaceHost} in {@code core/}.</p>
+ * -- is {@link WorkspaceHost} in {@code core/}.</p>
  *
  * <p>The {@link MinecraftServer} is PUSHED by each loader's start/stop events rather than pulled through
  * an SPI: {@code ServerLifecycleHooks} is Forge's and Fabric captures it from an event, so a pull would
  * need a per-loader implementation to answer one field.</p>
  */
-public final class WorkspaceHost {
+public final class WorkspaceHostModern {
 
-    private static final String PROJECT_ID = "workspace";
     /**
      * The one project a server serves, until W3b makes {@code projects/} a listing rather than a
      * constant. The leaf keeps the name the directory already had, so the move is one segment deep.
      */
     private static final String PROJECT_DIR = "workspace";
 
-    private WorkspaceHost() {}
+    private WorkspaceHostModern() {}
 
     private static boolean registered;
-    private static com.crystalgui.fs.server.WorkspaceHost host;
+    private static WorkspaceHost host;
     private static volatile MinecraftServer currentServer;
 
     /** Called by each loader when its server starts and stops. */
@@ -51,7 +50,7 @@ public final class WorkspaceHost {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        host = new com.crystalgui.fs.server.WorkspaceHost(PROJECT_ID, "Workspace", new ModernHost());
+        host = new WorkspaceHost(WorkspaceHost.DEFAULT_PROJECT_ID, "Workspace", new Host());
         host.contribute();
     }
 
@@ -76,7 +75,7 @@ public final class WorkspaceHost {
         currentServer = null;
     }
 
-    private static final class ModernHost implements com.crystalgui.fs.server.WorkspaceHost.Host {
+    private static final class Host implements WorkspaceHost.Host {
 
         /**
          * <b>The world's own directory in single-player, the server's on a dedicated one</b> — the
@@ -99,7 +98,7 @@ public final class WorkspaceHost {
 
         @Override
         public WorkspacePermission permission() {
-            return new OperatorsMayWrite();
+            return new OperatorsMayWrite(new McRoles());
         }
 
         /**
@@ -129,29 +128,22 @@ public final class WorkspaceHost {
         }
     }
 
-    /** Everyone reads; operators write. In single-player the one player is an operator. */
-    private static final class OperatorsMayWrite implements WorkspacePermission {
+    /** The two facts a write decision needs that only Minecraft knows. @see OperatorsMayWrite */
+    private static final class McRoles implements WorkspaceRoles {
 
         @Override
-        public boolean allows(WorkspaceActor actor, WorkspaceProject project, CgPath path,
-                              WorkspaceOperation operation) {
-            if (operation == WorkspaceOperation.READ) return true;
+        public boolean isOwner(String actorId) {
+            MinecraftServer server = currentServer;
+            if (server == null) return false;
+            GameProfile owner = server.getSingleplayerProfile();
+            return owner != null && owner.getName() != null && owner.getName().equalsIgnoreCase(actorId);
+        }
 
+        @Override
+        public boolean isOperator(String actorId) {
             MinecraftServer server = currentServer;
             if (server == null || server.getPlayerList() == null) return false;
-
-            // The owner of a single-player world, whatever the cheats flag says: cheats gate COMMANDS
-            // and have nothing to say about editing files in your own save. On 1.7.10 the op check
-            // folded the flag in, so the host of a fresh world could list the workspace and not write
-            // to it -- a correct-looking refusal with no way to tell it from a real one.
-            GameProfile owner = server.getSingleplayerProfile();
-            if (owner != null && owner.getName() != null && owner.getName().equalsIgnoreCase(actor.id())) {
-                return true;
-            }
-
-            ServerPlayer player = server.getPlayerList().getPlayerByName(actor.id());
-            // Not connected any more. Refusing strands nobody: a player who has left has nothing in
-            // flight that a write would complete.
+            ServerPlayer player = server.getPlayerList().getPlayerByName(actorId);
             return player != null && server.getPlayerList().isOp(player.getGameProfile());
         }
     }

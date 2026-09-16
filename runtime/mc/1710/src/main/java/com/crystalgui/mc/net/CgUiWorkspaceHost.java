@@ -8,12 +8,11 @@ import java.nio.file.Path;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.server.OperatorsMayWrite;
 import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceHost;
-import com.crystalgui.fs.server.WorkspaceOperation;
 import com.crystalgui.fs.server.WorkspacePermission;
-import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.server.WorkspaceRoles;
 
 import com.mojang.authlib.GameProfile;
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -40,8 +39,13 @@ import net.minecraft.world.WorldServer;
  */
 public final class CgUiWorkspaceHost {
 
-    /** Matches the client's handle on the project. */
-    public static final String PROJECT_ID = "minecraft.workspace";
+    /**
+     * Matches the client's handle on the project — and is {@code core}'s constant, not this host's.
+     *
+     * <p>It was {@code "minecraft.workspace"} here and {@code "workspace"} on 1.20.x, which is two
+     * answers to a question a saved {@code Resource} keeps verbatim. @see WorkspaceHost#DEFAULT_PROJECT_ID
+     */
+    public static final String PROJECT_ID = WorkspaceHost.DEFAULT_PROJECT_ID;
 
     /**
      * The one project a server serves, until W3b makes {@code projects/} a listing rather than a
@@ -64,13 +68,13 @@ public final class CgUiWorkspaceHost {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        host = new WorkspaceHost(PROJECT_ID, "Workspace", new Mc1710Host());
+        host = new WorkspaceHost(PROJECT_ID, "Workspace", new Host1710());
         host.contribute();
         FMLCommonHandler.instance().bus().register(new Handler());
     }
 
     /** Where the workspace is, who a peer is, and what they may do. Nothing else is asked of a host. */
-    private static final class Mc1710Host implements WorkspaceHost.Host {
+    private static final class Host1710 implements WorkspaceHost.Host {
 
         /**
          * Null until a world loads, which is why {@code WorkspaceHost} asks per connection rather than
@@ -103,7 +107,7 @@ public final class CgUiWorkspaceHost {
 
         @Override
         public WorkspacePermission permission() {
-            return new OperatorsMayWrite();
+            return new OperatorsMayWrite(new McRoles());
         }
 
         /**
@@ -131,14 +135,14 @@ public final class CgUiWorkspaceHost {
         /**
          * A player's id, which is what a permission check and an audit line both need.
          *
-         * <p>Read off {@link Mc1710Peer}, which is stable for the connection's life — an entity is not.
+         * <p>Read off {@link Peer1710}, which is stable for the connection's life — an entity is not.
          * The name rather than the UUID because that is what {@link OperatorsMayWrite} matches against
          * the live player list and what a log line has to be readable as.</p>
          */
         @Override
         public WorkspaceActor actorFor(Object peer) {
-            if (peer instanceof Mc1710Peer) {
-                final String name = ((Mc1710Peer) peer).name();
+            if (peer instanceof Peer1710) {
+                final String name = ((Peer1710) peer).name();
                 return () -> name;
             }
             if (peer instanceof EntityPlayerMP) {
@@ -150,44 +154,28 @@ public final class CgUiWorkspaceHost {
         }
     }
 
-    /**
-     * <b>Everyone reads; operators write.</b>
-     *
-     * <p>{@code ALLOW_ALL} was correct when the workspace was one player's local disk and is wrong the
-     * moment the files are on somebody else's machine. This is the smallest policy that is actually
-     * defensible, and it deliberately does not invent a permission model: <b>it reuses Minecraft's
-     * own</b>.</p>
-     *
-     * <p>A read is allowed to any connected player because the workspace is the server's shared content,
-     * like a datapack. If that turns out to be wrong for somebody, the fix is a per-project permission
-     * rather than tightening this one — which is why the check takes the project it was given.</p>
-     */
-    private static final class OperatorsMayWrite implements WorkspacePermission {
+    /** The two facts a write decision needs that only Minecraft knows. @see OperatorsMayWrite */
+    private static final class McRoles implements WorkspaceRoles {
+
         @Override
-        public boolean allows(WorkspaceActor actor, WorkspaceProject project, CgPath path,
-                              WorkspaceOperation operation) {
-            if (operation == WorkspaceOperation.READ) return true;
+        public boolean isOwner(String actorId) {
+            MinecraftServer server = MinecraftServer.getServer();
+            // func_152596_g is "may use commands" and folds the world's allow-cheats flag into its
+            // single-player branch, which is why ownership is asked directly instead.
+            return server != null && server.isSinglePlayer()
+                    && actorId.equalsIgnoreCase(server.getServerOwner());
+        }
+
+        @Override
+        public boolean isOperator(String actorId) {
             MinecraftServer server = MinecraftServer.getServer();
             if (server == null || server.getConfigurationManager() == null) return false;
-            // THE OWNER OF A SINGLE-PLAYER WORLD, whatever the cheats flag says.
-            //
-            // func_152596_g is the "may use commands" check and it folds the world's allow-cheats flag
-            // into its single-player branch -- correct for commands and wrong here. Cheats gate
-            // COMMANDS; they have nothing to say about whether somebody may edit files in their own
-            // save directory. Found in game: a fresh world has cheats off, so the host of a local world
-            // could list the workspace and not write to it, and the refusal was a correct-looking
-            // NO_PERMISSIONS with no way to tell it from a real one.
-            if (server.isSinglePlayer() && actor.id().equalsIgnoreCase(server.getServerOwner())) {
-                return true;
-            }
             for (Object entry : server.getConfigurationManager().playerEntityList) {
                 EntityPlayerMP player = (EntityPlayerMP) entry;
-                if (!player.getCommandSenderName().equals(actor.id())) continue;
+                if (!player.getCommandSenderName().equals(actorId)) continue;
                 GameProfile profile = player.getGameProfile();
                 return server.getConfigurationManager().func_152596_g(profile);
             }
-            // Not connected any more. Refusing is the safe answer and cannot strand anyone: a player who
-            // has left has nothing in flight that a write would complete.
             return false;
         }
     }

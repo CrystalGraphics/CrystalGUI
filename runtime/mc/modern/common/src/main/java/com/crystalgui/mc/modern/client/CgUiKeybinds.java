@@ -47,6 +47,7 @@ public final class CgUiKeybinds {
      * the first hit leaves the other key's press queued and it fires on the next unrelated keystroke.
      */
     public static void tick() {
+        // CONSUMED EITHER WAY, so a press cannot sit queued and fire on the next unrelated keystroke.
         boolean editor = OPEN_EDITOR.consumeClick();
         boolean desktop = OPEN_DESKTOP.consumeClick();
         if (editor) CgUiScreen.openEditor();

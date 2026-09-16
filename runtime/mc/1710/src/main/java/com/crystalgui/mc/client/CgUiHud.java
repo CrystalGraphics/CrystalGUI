@@ -1,15 +1,20 @@
 package com.crystalgui.mc.client;
 
 import com.crystalgraphics.platform.gl.state.CgGlState;
-import com.crystalgui.desktop.host.ScreenOverlay;
-import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.core.window.DesktopPresentation;
+import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.host.HostSession;
+import com.crystalgui.desktop.host.ScreenOverlay;
+
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
+import javax.annotation.Nullable;
+
+import org.lwjgl.input.Mouse;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraftforge.client.event.GuiScreenEvent;
@@ -21,9 +26,9 @@ import net.minecraftforge.common.MinecraftForge;
  *
  * <h3>Two hooks, one decision</h3>
  *
- * <p>Neither hook decides anything. Each asks {@link UIDocument#presentation} what should be on screen and
- * paints if the answer is its own — which is the whole of the flicker fix. Before that, each path tested
- * a Minecraft condition for itself, and on the frame the desktop closed <b>both concluded it was the
+ * <p>Neither hook decides anything. Each names the arm it owns and {@link HostSession#paint} paints only
+ * if the compositor is in it — which is the whole of the flicker fix. Before that, each path tested a
+ * Minecraft condition for itself, and on the frame the desktop closed <b>both concluded it was the
  * other's turn</b>: {@code CgUiScreen} closes itself from inside its own {@code drawScreen}, after that
  * frame's overlay hook had already run and stood down.</p>
  *
@@ -59,11 +64,43 @@ public final class CgUiHud {
 
     private static boolean registered;
 
-    /** What the last frame saw, so a screen opening or closing is noticed exactly once. */
-    private static boolean foreignScreenWasUp;
-
     private CgUiHud() {
     }
+
+    /**
+     * What only this Minecraft can answer about a paint.
+     *
+     * <p>The bracket is an invalidate on both sides: cheap — it drops the shadow, it does not read the
+     * driver — and there is no earlier point that stays true, since Minecraft's own GUI pass runs
+     * between frames.</p>
+     *
+     * @see HostSession.PaintHost
+     */
+    static final HostSession.PaintHost HOST = new HostSession.PaintHost() {
+
+        @Override
+        public boolean ownScreenUp() {
+            return Minecraft.getMinecraft().currentScreen instanceof CgUiScreen;
+        }
+
+        @Override
+        public boolean anyScreenUp() {
+            return Minecraft.getMinecraft().currentScreen != null;
+        }
+
+        @Override
+        public void enter() {
+            CgGlState.invalidateAllIfPresent();
+        }
+
+        @Override
+        public void leave() {
+            // MINECRAFT GETS ITS FIXED-FUNCTION STATE BACK. It drew with alpha and blend on and lighting
+            // off and will assume the same next frame; CrystalGUI's endFrame restores what IT saved,
+            // which is not the same thing.
+            CgGlState.invalidateAllIfPresent();
+        }
+    };
 
     /** Idempotent, like every other handler registration in this package. */
     public static synchronized void register() {
@@ -75,67 +112,66 @@ public final class CgUiHud {
         // one is never called and never complains.
         CgUiHud.Handler handler = new CgUiHud.Handler();
         MinecraftForge.EVENT_BUS.register(handler);
-        // AND THE FML BUS for the render tick: TickEvent lives there, not on the Forge bus. A handler on
-        // the wrong one is never called and never complains, which is why both registrations are here
-        // rather than split between two call sites.
+        // AND THE FML BUS for the render tick: TickEvent lives there, not on the Forge bus.
         cpw.mods.fml.common.FMLCommonHandler.instance().bus().register(handler);
         CrystalGuiCore.LOGGER.info("[cgui] overlay hooks registered; pinned windows paint over the game "
                 + "and over other GUIs");
     }
 
-    /**
-     * What the desktop should be showing right now, or {@code null} if there is no desktop yet.
-     *
-     * <p>The one place a Minecraft condition is turned into a presentation, which is what keeps the two
-     * paint hooks and the input mixin agreeing with each other.</p>
-     */
+    /** What the desktop should be showing right now. @see HostSession#presentation */
     static DesktopPresentation presentation() {
-        GuiScreen current = Minecraft.getMinecraft().currentScreen;
-
-        // THE TRANSITION IS NOTICED HERE, not in a hook of its own, because this is the one thing every
-        // caller runs -- both paint hooks and the input mixin. A dedicated handler on
-        // RenderGameOverlayEvent was the first attempt and is wrong for the case that matters least
-        // often and breaks worst: a screen that sets skipRenderWorld (the main menu, the loading screen)
-        // renders no world, so that event never fires and the close is never seen. Ownership would then
-        // survive into the next screen.
-        Desktop desktop = CgUiScreen.desktop();
-        if (desktop == null) return DesktopPresentation.NONE;
-
-        boolean foreignUp = current != null && !(current instanceof CgUiScreen);
-        if (foreignUp != foreignScreenWasUp) {
-            foreignScreenWasUp = foreignUp;
-            // Nullable: screenOverlay() answers null while the compositor's node is not connected to a
-            // document, which is what a CLOSED UI leaves behind -- CgUiScreen.desktop() still hands back
-            // the Desktop. Thrown from the render tick it takes the whole game down, which is the crash
-            // this reads as. The missed transition is not owed to anybody: a fresh ScreenOverlay is
-            // built when a document appears, so there is no stale belief to correct.
-            ScreenOverlay overlay = desktop.screenOverlay();
-            if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
-        }
-
-        return desktop.presentation(current instanceof CgUiScreen, current != null);
+        return HostSession.isInstalled()
+                ? HostSession.session().presentation(HOST) : DesktopPresentation.NONE;
     }
-    /** Paints {@code presentation}, bracketed by the GL discipline. Shared by both hooks. */
-    private static void paint(DesktopPresentation presentation) {
+
+    /** Paints {@code arm}, and only if the compositor is in it. @see HostSession#paint */
+    private static void paint(DesktopPresentation arm) {
+        if (!HostSession.isInstalled()) return;
+        HostSession session = HostSession.session();
+        // The delta read ONCE and passed in -- reading it again inside would advance the clock twice.
+        session.paint(arm, session.frameDelta(), HOST);
+    }
+
+    // ── Input, offered to the compositor ────────────────────────────────────────────────────────
+    //
+    // 1.7.10 has no synthetic-input path of its own: CgUiOverlayInput DRAINS LWJGL's queue, which is
+    // right for real input and gives a probe nothing to push through. 1.20.x has had these two since
+    // its overlay landed; this is the same pair, so a scripted run exercises the same chain on both.
+
+    /** @return whether the desktop consumed it and a foreign screen must not see it */
+    public static boolean offerMouse(int button, boolean pressed, float wheel) {
+        ScreenOverlay overlay = overlay();
+        if (overlay == null) return false;
+        return overlay.offerMouse(pointerX(), pointerY(), button, pressed, wheel);
+    }
+
+    /** @return whether the desktop consumed it */
+    public static boolean offerKey(int keyCode, char typed, boolean pressed) {
+        ScreenOverlay overlay = overlay();
+        return overlay != null && overlay.offerKey(keyCode, typed, pressed);
+    }
+
+    @Nullable
+    private static ScreenOverlay overlay() {
         Desktop desktop = CgUiScreen.desktop();
-        if (desktop == null) return;
-        Minecraft mc = Minecraft.getMinecraft();
-        try {
-            CgGlState.invalidateAllIfPresent();
-            desktop.paint(presentation, CgUiScreen.frameDelta(), mc.displayWidth, mc.displayHeight);
-        } catch (RuntimeException | LinkageError e) {
-            // A FAULT HERE MUST NOT TAKE THE GAME DOWN. This runs inside Minecraft's own render loop on
-            // every frame, and unlike a screen there is nothing the player can close to escape it.
-            // Logged and the mode dropped, which puts them back in a working game with their windows
-            // intact on the desktop.
-            CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", e);
-            desktop.exitHudMode();
-        } finally {
-            // MINECRAFT GETS ITS FIXED-FUNCTION STATE BACK. It drew with alpha and blend on and lighting
-            // off and will assume the same next frame; CrystalGUI's endFrame restores what IT saved,
-            // which is not the same thing.
-            CgGlState.invalidateAllIfPresent();
-        }
+        if (desktop == null || CgUiScreen.window() == null) return null;
+        return desktop.screenOverlay();
+    }
+
+    /** Raw surface pixels, TOP-DOWN -- what ScreenOverlay documents it wants. */
+    private static int pointerX() {
+        return Mouse.getX();
+    }
+
+    /**
+     * LWJGL2's origin is bottom-left and the compositor's is top-left, so this flips.
+     *
+     * <p>The same conversion {@code CgUiInput.pumpMouse} makes on every real event, and the reason it
+     * reads the DISPLAY height rather than a screen's: {@code GuiScreen.height} is already divided by
+     * Minecraft's GUI scale.</p>
+     */
+    private static int pointerY() {
+        return Minecraft.getMinecraft().displayHeight - Mouse.getY();
     }
 
     public static final class Handler {
@@ -159,7 +195,6 @@ public final class CgUiHud {
         @SubscribeEvent
         public void onRenderOverlay(RenderGameOverlayEvent.Post event) {
             if (event.type != RenderGameOverlayEvent.ElementType.ALL) return;
-            if (presentation() != DesktopPresentation.HUD) return;
             paint(DesktopPresentation.HUD);
         }
 
@@ -175,9 +210,7 @@ public final class CgUiHud {
         @SubscribeEvent
         public void onDrawScreen(GuiScreenEvent.DrawScreenEvent.Post event) {
             if (event.gui instanceof CgUiScreen) return;
-            if (presentation() != DesktopPresentation.OVERLAY) return;
             paint(DesktopPresentation.OVERLAY);
         }
-
     }
 }

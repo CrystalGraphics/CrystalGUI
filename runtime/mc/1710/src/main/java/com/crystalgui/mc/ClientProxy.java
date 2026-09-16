@@ -3,14 +3,11 @@ package com.crystalgui.mc;
 import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.client.CgUiAutoTest;
 import com.crystalgui.mc.client.CgUiHud;
+import com.crystalgui.mc.client.CgUiConnectionProbe;
+import com.crystalgui.mc.client.CgUiDesktopProbe;
 import com.crystalgui.mc.client.CgUiInput;
-import com.crystalgui.mc.example.MachineExampleClient;
-import com.crystalgui.mc.net.CgUiEditorOpenProbe;
-import com.crystalgui.mc.net.CgUiNetProbe;
-import com.crystalgui.mc.net.CgUiTwoClientProbe;
-import com.crystalgui.mc.net.CgUiRemoteWorkspaceProbe;
-import com.crystalgui.mc.net.CgUiWireProbe;
-import com.crystalgui.mc.net.CgUiSessionProbe;
+import com.crystalgui.mc.client.CgUiScreen;
+import com.crystalgui.mc.example.MachineExampleClient1710;
 
 /**
  * The client half: register the key binding and the input pump.
@@ -27,6 +24,10 @@ public class ClientProxy extends CommonProxy {
     public void preInit() {
         super.preInit();
         
+        // FIRST: the key binding, the probes and the example all reach the session, and a key pressed
+        // before it exists would throw rather than open anything.
+        CgUiScreen.install();
+
         CgUiLifecycle.register();
         // THE POINTER IS THIS PLATFORM'S TO DRESS, and it is a property of the process rather than of
         CgUiInput.register();
@@ -34,21 +35,16 @@ public class ClientProxy extends CommonProxy {
         // nothing is pinned, which is every frame until somebody pins something.
         CgUiHud.register();
         CgUiAutoTest.register();
-        // Off unless -Dcrystalgui.net.probe=true. @see CgUiNetProbe
-        CgUiNetProbe.register();
-        // The layer above it: the same flag, a later start, its own multiplexers. @see CgUiSessionProbe
-        CgUiSessionProbe.register();
-        // The DEDICATED-server version: -PcgRemoteProbe, against runServer over a socket.
-        CgUiRemoteWorkspaceProbe.register();
-        CgUiWireProbe.register();
-        // The configuration a PLAYER runs and no other probe covers: the editor on screen, on the
-        // INTEGRATED server, which is the only place a client GUI can stop the ticking that answers it.
-        CgUiEditorOpenProbe.register();
-        // And the one a single client cannot show at all: two processes, one server, and a watcher
-        // hearing about somebody else's writes. Run it on both. @see CgUiTwoClientProbe
-        CgUiTwoClientProbe.register();
+        // EVERYTHING THAT NEEDS A REAL CONNECTION, in one probe. Off unless
+        // -Dcrystalgui.probe.connection=true. It was six classes -- session, net, wire, remote
+        // workspace, editor-open and two-client -- each hard-wiring one (topology, check-set) pair,
+        // and three of which existed mainly to refuse to run in the wrong topology. @see ConnectionProbe
+        CgUiConnectionProbe.register();
+        // The SCRIPTED DESKTOP RUN, which this era did not have. Off unless
+        // -Dcrystalgui.clientProbe=true. @see DesktopProbe
+        CgUiDesktopProbe.register();
         // The worked example's CLIENT half: F8, and the session it shows. Always on -- it is meant to
         // be opened and looked at, unlike the probes above, which are diagnostics behind a flag.
-        MachineExampleClient.registerClient();
+        MachineExampleClient1710.registerClient();
     }
 }

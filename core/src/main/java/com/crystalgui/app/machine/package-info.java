@@ -30,8 +30,9 @@
  *   <tr><td>4</td><td>{@link com.crystalgui.app.machine.MachineDemo}</td>
  *       <td>Both ends in one process, with the wire printed.
  *           {@code ./gradlew :core:runExample}</td></tr>
- *   <tr><td>5</td><td>{@code runtime/mc/1710/…/mc/example/MachineExample}
- *                     + {@code MachineExampleClient}</td>
+ *   <tr><td>5</td><td>{@link com.crystalgui.app.machine.MachineExample}, wired by
+ *                     {@code MachineExample1710} / {@code MachineExampleModern} and their client
+ *                     halves</td>
  *       <td>The same thing in game, on a real socket. Press <b>F8</b>.</td></tr>
  * </table>
  *
@@ -242,7 +243,7 @@
  *   <li>{@code docs/CGUI_SERVER_AND_SERIALIZATION.md} — the reference this example is the tutorial
  *       for: codecs, content addressing, the four-kind envelope, the wire.</li>
  *   <li>{@code docs/CGUI_WIDGETS.md} — every widget, and which ones can carry state over a wire.</li>
- *   <li>{@code runtime/mc/1710/…/mc/net/CgUiSessionProbe.java} — the same shape against a real Minecraft
+ *   <li>{@code com.crystalgui.probe.ConnectionProbe} — the same shape against a real Minecraft
  *       connection, with a ten-point checklist instead of a narrative.</li>
  * </ul>
  */

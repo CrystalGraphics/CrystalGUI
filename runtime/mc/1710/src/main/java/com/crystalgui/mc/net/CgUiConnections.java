@@ -73,17 +73,12 @@ public final class CgUiConnections {
      * Wires the lifecycle. Called from {@code CommonProxy.init()} — <b>both sides need it, and the
      * server needs it more.</b>
      *
-     * <p>Skipped while {@code crystalgui.net.probe} is set: {@link CgNetworkChannel} takes <em>one</em>
-     * inbound handler, so the raw transport probe and this cannot both own the channel. The probe is
-     * opt-in and diagnostic; production is this.</p>
+     * <p>It used to stand down for a raw-transport probe that owned the channel. That probe is gone: a
+     * multi-megabyte transfer over a real socket exercises framing harder than its four boundary sizes
+     * did, and the headless suite covers everything above {@link CgNetworkChannel}.</p>
      */
     public static synchronized void register() {
         if (registered) return;
-        if (Boolean.getBoolean("crystalgui.net.probe")) {
-            CrystalGuiCore.LOGGER.warn("[cgui-net] connection lifecycle NOT installed — the raw transport "
-                    + "probe owns the channel while -Dcrystalgui.net.probe is set");
-            return;
-        }
         CgNetworkChannel channel = CgPlatform.get(CgNetworkChannel.SERVICE);
         if (!channel.isAvailable()) {
             CrystalGuiCore.LOGGER.warn("[cgui-net] no network channel; connections will not be opened");
@@ -143,7 +138,7 @@ public final class CgUiConnections {
      *
      * <p>By UUID on the server: the channel hands over whichever entity the player is currently wearing,
      * and that is a different object after every respawn — so the translation happens here, at the one
-     * seam where an entity is turned into an identity. @see Mc1710Peer</p>
+     * seam where an entity is turned into an identity. @see Peer1710</p>
      */
     private static void route(@Nullable Object sender, byte[] frame) {
         if (sender == null) {
@@ -165,7 +160,7 @@ public final class CgUiConnections {
             if (!(event.player instanceof EntityPlayerMP)) return;
             CgNetworkChannel channel = CgPlatform.get(CgNetworkChannel.SERVICE);
             if (!channel.isAvailable() || server == null) return;
-            Mc1710Peer identity = Mc1710Peer.of((EntityPlayerMP) event.player);
+            Peer1710 identity = Peer1710.of((EntityPlayerMP) event.player);
             if (identity == null) return;   // no profile or no handler: nothing to talk to
             // RESOLVED AT SEND TIME, never captured. The entity a player is wearing is replaced on every
             // respawn, and capturing one here means sending to a body nobody is in -- which happens to
@@ -185,7 +180,7 @@ public final class CgUiConnections {
             // BY UUID, and this is the half that leaked. The logout event carries whichever entity the
             // player is wearing NOW, which after any death is not the one that joined -- so an
             // entity-keyed removal silently removed nothing and every per-peer map grew for the life of
-            // the server. @see Mc1710Peer
+            // the server. @see Peer1710
             UUID id = idOf(event.player);
             if (id == null || server == null) return;
             if (!server.close(id, "player left")) return;
