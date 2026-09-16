@@ -5,7 +5,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import com.crystalgui.net.wire.CgNetworkChannel;
-import net.fabricmc.api.ModInitializer;
+import com.crystalgraphics.mc.shared.VariantEntry;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -43,10 +43,11 @@ import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
  * <p>The engine is deliberately absent: CrystalGraphics loads as its own mod and owns the render,
  * reload and shutdown hooks.</p>
  */
-public final class CrystalGUIFabricCommon implements ModInitializer {
+public final class CrystalGUIFabricCommon implements VariantEntry {
 
+    /** @param context null — Fabric hands an entry point nothing; {@code FabricBootstrap} passes it on. */
     @Override
-    public void onInitialize() {
+    public void start(Object context) {
         // WHICH VARIANT, in the log rather than the crash report: Fabric Loader exposes no crash
         // callable, so unlike Forge and 1.7.10 there is nothing to register with. @see CrashVariant
         CrystalGuiCore.LOGGER.info("[cgui] {}: {}", CrashVariant.label(NAME),

@@ -42,6 +42,11 @@ dependencies {
     compileOnly("org.ow2.asm:asm-tree:${property("asmVersion")}")
 }
 
+// THE VARIANT SELECTOR IS NOT HERE, and that is the same rule `LoaderProbe` and `CrashVariant`
+// follow: CrystalGUI requires CrystalGraphics on every loader, so a second copy buys nothing. It is
+// `com.crystalgraphics.mc.shared` -- `Variants`, `VersionRange`, `VariantEntry`, `VariantBootstrap`
+// -- and all three mods built from these two repositories read the one copy.
+
 // A Java 8 toolchain would be ideal; the repository standardises on 21 and `release` is what actually
 // pins the API surface, so nothing here can reach a Java 9+ method by accident.
 tasks.withType<JavaCompile>().configureEach {

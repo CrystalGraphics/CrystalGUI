@@ -145,6 +145,13 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/forge/CrystalGUIForge.class",
             "com/crystalgui/mc/neoforge/CrystalGUINeoForge.class",
             "com/crystalgui/mc/fabric/CrystalGUIFabric.class",
+            // J11.0. The table decides which of those runs, and the three bootstrappers are what the
+            // loaders actually construct -- the classes above carry no annotation any more, so a jar
+            // missing one of these loads nothing at all on that loader and says nothing about why.
+            "META-INF/crystalgui/variants.json",
+            "com/crystalgui/mc/fabric/FabricBootstrap.class",
+            "com/crystalgui/mc/forge/ForgeBootstrap.class",
+            "com/crystalgui/mc/neoforge/NeoForgeBootstrap.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
             // Where every download comes from, beside core's DownloadLocations, which reads it.
@@ -278,6 +285,11 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/forge/lang/CrystalGuiLanguageForge.class",
             "com/crystalgui/mc/neoforge/lang/CrystalGuiLanguageNeoForge.class",
             "com/crystalgui/mc/fabric/lang/CrystalGuiLanguageFabric.class",
+            // J11.0: the table, and the three bootstrappers the loaders actually construct.
+            "META-INF/crystalgui_language/variants.json",
+            "com/crystalgui/mc/forge/lang/LanguageForgeBootstrap.class",
+            "com/crystalgui/mc/neoforge/lang/LanguageNeoForgeBootstrap.class",
+            "com/crystalgui/mc/fabric/lang/LanguageFabricBootstrap.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
             "assets/crystalgui/engines/8/index.txt",

@@ -202,6 +202,34 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
             .split(',').map { it.trim() }.filter { it.isNotEmpty() })
 }
 
+// ── J10 / E-A1 day 3: every era target, compiled by one task ─────────────────────────────────────
+//
+// The spike's exit condition includes "checkAllTargets compiles every target", and the reason it is
+// one task is the rule it enforces: a refactor is compiled against EVERY version before it is
+// committed, not just against whichever node the IDE happens to have active. A break line that only
+// holds for the active version is invisible until somebody else builds.
+//
+// The node list mirrors the `stonecutter { }` declaration in settings.gradle.kts and has to be
+// updated with it. Deriving it instead would mean configuring those projects eagerly, which is the
+// cost this task exists to keep measurable.
+//
+// Absent when `-PcgNoSpike` drops the tree, so the flag stays a clean switch.
+val cgSpikeNodes = listOf(
+    ":runtime:mc:spike:common:1.20.1",
+    ":runtime:mc:spike:common:1.19.4",
+    ":runtime:mc:spike:forge:1.20.1",
+    ":runtime:mc:spike:fabric:1.20.1",
+    ":runtime:mc:spike:fabric:1.19.4",
+)
+
+if (cgSpikeNodes.all { findProject(it) != null }) {
+    tasks.register("checkAllTargets") {
+        group = "verification"
+        description = "Compiles every era target the spike declares -- all versions, both loaders."
+        dependsOn(cgSpikeNodes.map { "$it:compileJava" })
+    }
+}
+
 tasks.register("assembleConsumerRuntime") {
     group = "crystalgui"
     description = "Builds every jar a consuming mod's dev run puts on its classpath."

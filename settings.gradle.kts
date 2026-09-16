@@ -49,6 +49,12 @@ pluginManagement {
     }
 }
 
+// J10 / E-A1: the multi-version preprocessor under test. A SETTINGS plugin -- the pins above are for
+// project plugins and cannot apply this one. Stonecutter requires Gradle 9.0+; this build is 9.5.1.
+plugins {
+    id("dev.kikugie.stonecutter") version "0.9.8"
+}
+
 rootProject.name = "CrystalGUI"
 
 // Included in another build means a consumer wants the engine and the loader it can actually run:
@@ -135,6 +141,40 @@ apply(from = "gradle/module_integration/composite.settings.gradle.kts")
 // and configuring them would impose a daemon requirement for a module it never builds.
 include(":runtime:mc:modern:common")
 include(":runtime:mc:modern:forge")
+
+// ── J10 / E-A1: the era spike ────────────────────────────────────────────────────────────────────
+//
+// A SECOND TREE beside the shipping modules, never in place of them: the question A1 asks is whether
+// a multi-version preprocessor runs under ModDevGradle and Loom in THIS build, and answering it must
+// not be able to break what already ships. Delete this block and the spike is gone.
+//
+// BRANCHED with a build script per loader, which is what Stonecutter's own multi-loader guide
+// recommends for a mod that depends on each loader's toolkit -- the flat shape would force
+// ModDevGradle and Loom through one script, and a failure there would say nothing about A1.
+//
+// `-PcgNoSpike` drops the whole tree, which is how day 3 measured what it COSTS: the same
+// configuration with and without it. It is also the fastest way to rule the spike out of any
+// failure that looks unrelated.
+val spikeDisabled = gradle.startParameter.projectProperties.containsKey("cgNoSpike")
+
+if (!embedded && !spikeDisabled) {
+    stonecutter {
+        create("runtime:mc:spike") {
+            // EVERY branch declares its own versions, and the tree declares none. A tree-level
+            // `versions(...)` is inherited by a branch that names none -- and it also creates a node
+            // ON THE TREE ITSELF (`:runtime:mc:spike:1.20.1`), which has no build script and builds
+            // nothing while still costing configuration.
+            //
+            // `common` carries the vanilla-facing code the loaders name, so it exists at BOTH
+            // versions: a loader node cannot borrow the shipping module, which is pinned to 1.20.1.
+            // Forge has one node only because E-A1 needed one Forge target, not because it is
+            // special -- adding 1.19.4 here is a line.
+            branch("common") { versions("1.20.1", "1.19.4") }
+            branch("forge") { versions("1.20.1") }
+            branch("fabric") { versions("1.20.1", "1.19.4") }
+        }
+    }
+}
 
 if (!embedded) {
     include(":runtime:mc:modern:neoforge")

@@ -92,7 +92,9 @@ dependencies {
     "compileOnly"(project(":core"))
 
     // compileOnly and NOT bundled: the merge adds :runtime:mc:shared once, under a package no variant
-    // relocates. EMPTY today -- `CrashVariant` is CrystalGraphics', reached through mc1201CompileDeps.
+    // relocates. EMPTY today -- the variant selector it briefly held is CrystalGraphics' (J11.0),
+    // reached through mc1201CompileDeps like CrashVariant, which adds it both compileOnly and
+    // runtimeOnly.
     "compileOnly"(project(":runtime:mc:shared"))
 
     // Taffy and JOML: :core has them compileOnly so they reach nobody transitively, and UIElement holds
@@ -185,6 +187,16 @@ tasks.named<ProcessResources>("processLangResources") {
     from(descriptors)
 }
 
+// A DEV RUN HAS TO SEE THE VARIANT TABLE (J11.0), because the bootstrapper its descriptor names reads
+// one -- so without this every dev client dies in the entry point rather than at prodSmoke time. Only
+// the table: the per-loader descriptors under this module's own resources are what a dev run uses,
+// and the merged ones are the shipped jar's.
+tasks.named<ProcessResources>("processResources") {
+    val descriptors = rootProject.tasks.named("generateMergedDescriptors")
+    dependsOn(descriptors)
+    from(descriptors) { include("META-INF/*/variants.json") }
+}
+
 /**
  * The language merge's input from this loader: its own `lang` classes plus :runtime:mc:modern:common's, relocated.
  *
@@ -257,6 +269,7 @@ tasks.named("check") { dependsOn(checkDescriptorsNameNoCommon) }
 tasks.matching { it.name.startsWith("run") || it.name.startsWith("prepare") }.configureEach {
     dependsOn(":core:classes", ":runtime:mc:modern:common:classes", ":language:classes")
 }
+
 
 // The engine band, for a DEV run only.
 //
