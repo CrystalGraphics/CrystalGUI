@@ -8,11 +8,13 @@ import org.junit.Test;
 
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
+import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.ChildList;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.control.ColorControl;
 import com.crystalgui.widget.config.control.SliderControl;
 
 /**
@@ -66,6 +68,54 @@ public class BoundControlsTest extends UiDocumentTestBase {
         ConfiguratorPanel panel = new ConfiguratorPanel();
         Configurator row = panel.form().prop(ConfigDescriptor.number("n", "N"), Property.of(1d).editedIn(history));
         assertSame(history, row.getData(UiDataKeys.UNDO_STACK));
+    }
+
+    /**
+     * <b>A colour dragged in the picker is one undo step</b>, back to the colour before the drag — with the
+     * history named on the row alone, as the Element tab names it.
+     */
+    @Test
+    public void aPickerDragIsOneUndoStep() {
+        // NO TIME WINDOW, as the builder's document has none: only the drag itself may merge the frames.
+        UndoStack history = new UndoStack().setMergeWindowMillis(0L);
+        int[] colour = {0xFF000000};
+        Property<Integer> value = Property.derived(() -> colour[0], next -> {
+            int was = colour[0];
+            colour[0] = next;
+            history.push(new SetColour(colour, was, next));
+        });
+        ConfiguratorPanel panel = new ConfiguratorPanel();
+        Configurator row = panel.form().prop(ConfigDescriptor.color("c", "Colour"), value).editedIn(history);
+        document.append(panel);
+        frame();
+        ColorControl control = (ColorControl) row.control();
+
+        control.picker().onDragging.emit(true);
+        control.picker().onColorChanged.emit(0xFF110000);
+        control.picker().onColorChanged.emit(0xFF220000);
+        control.picker().onColorChanged.emit(0xFF330000);
+        control.picker().onDragging.emit(false);
+
+        assertEquals("one step", 1, history.undoDepth());
+        history.undo();
+        assertEquals("back to where the drag began", 0xFF000000, colour[0]);
+    }
+
+    private record SetColour(int[] cell, int from, int to) implements Edit {
+        @Override
+        public void apply() {
+            cell[0] = to;
+        }
+
+        @Override
+        public void undo() {
+            cell[0] = from;
+        }
+
+        @Override
+        public Edit mergeWith(Edit next) {
+            return next instanceof SetColour later && later.cell == cell ? new SetColour(cell, from, later.to) : null;
+        }
     }
 
     /** Children kept by position survive a resize, so the one under the pointer is never replaced. */
