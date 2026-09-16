@@ -2,7 +2,7 @@ package com.crystalgui.mc.forge.lang;
 
 import com.crystalgui.mc.modern.lang.LanguageLifecycle;
 
-import net.minecraftforge.fml.common.Mod;
+import com.crystalgraphics.mc.shared.VariantEntry;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 
@@ -14,16 +14,17 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
  * Ordered after {@code crystalgui} by {@code mods.toml}, so {@code CgPlatform} and the command registry
  * are already up.</p>
  */
-@Mod(CrystalGuiLanguageForge.MODID)
-public final class CrystalGuiLanguageForge {
+public final class CrystalGuiLanguageForge implements VariantEntry {
 
     public static final String MODID = "crystalgui_language";
 
-    public CrystalGuiLanguageForge() {
+    /** @param context Forge's {@link FMLJavaModLoadingContext}, from {@code LanguageForgeBootstrap}. */
+    @Override
+    public void start(Object context) {
         // CLIENT ONLY, and structurally so: the script service registers against a live Minecraft
         // instance and a dedicated server has none. FMLClientSetupEvent fires on no server at all,
         // which is a stronger guarantee than a Dist check somebody has to remember to write.
-        FMLJavaModLoadingContext.get().getModEventBus().addListener(this::clientSetup);
+        ((FMLJavaModLoadingContext) context).getModEventBus().addListener(this::clientSetup);
     }
 
     private void clientSetup(FMLClientSetupEvent event) {

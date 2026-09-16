@@ -11,7 +11,7 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
-import net.neoforged.fml.common.Mod;
+import com.crystalgraphics.mc.shared.VariantEntry;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
@@ -37,12 +37,18 @@ import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
  * <p>The engine is deliberately absent: CrystalGraphics loads as its own mod and owns the render,
  * reload and shutdown hooks. What is left is CrystalGUI's own, and every event body is one forward
  * into {@link LifecycleCrystalGUI}.</p>
+ *
+ * <p><b>No {@code @Mod} here.</b> One jar carries a NeoForge variant per era and the scanner reads
+ * every class in it, so two variants bearing the same annotation are two mods of one id. The single
+ * annotated class is {@code NeoForgeBootstrap}, beside this one, which reads
+ * {@code variants.json} and constructs the row matching the running Minecraft version.</p>
  */
-@Mod(MODID)
-public final class CrystalGUINeoForge {
-    
-    
-    public CrystalGUINeoForge(IEventBus modBus) {
+public final class CrystalGUINeoForge implements VariantEntry {
+
+    /** @param context the {@code IEventBus} NeoForge handed {@code NeoForgeBootstrap}. */
+    @Override
+    public void start(Object context) {
+        IEventBus modBus = (IEventBus) context;
         // WHICH VARIANT, in the log rather than the crash report: NeoForge 20.4 exposes no crash
         // callable — CrashReportExtender is its own — so unlike Forge and 1.7.10 there is nothing to
         // register with, and `latest.log` is the file a report is attached with anyway. @see CrashVariant
