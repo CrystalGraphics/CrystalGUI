@@ -1,8 +1,7 @@
-package com.crystalgui;
+package com.crystalgui.mc.v1710;
 
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgui.text.syntax.LanguageRegistry;
-import com.crystalgui.mc.CommonProxy;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,8 +13,8 @@ import cpw.mods.fml.common.SidedProxy;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
-import com.crystalgui.mc.net.CgUiConnections;
-import com.crystalgui.mc.net.CgUiServerSmoke;
+import com.crystalgui.mc.v1710.net.CgUiConnections;
+import com.crystalgui.mc.v1710.net.CgUiServerSmoke;
 
 import java.util.List;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
@@ -60,8 +59,8 @@ public class CrystalGUI {
      * break a dedicated server at class load. @see CommonProxy</p>
      */
     @SidedProxy(
-        clientSide = "com.crystalgui.mc.ClientProxy",
-        serverSide = "com.crystalgui.mc.CommonProxy")
+        clientSide = "com.crystalgui.mc.v1710.ClientProxy",
+        serverSide = "com.crystalgui.mc.v1710.CommonProxy")
     public static CommonProxy proxy;
 
     @Mod.EventHandler

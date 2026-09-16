@@ -1,4 +1,4 @@
-package com.crystalgui.mixins;
+package com.crystalgui.mc.v1710.mixins;
 
 import com.crystalgraphics.mc.shared.LoaderProbe;
 import org.spongepowered.asm.lib.tree.ClassNode;
@@ -21,8 +21,8 @@ import java.util.Set;
  *
  * <pre>
  * {
- *   "package": "com.crystalgui.mixins",
- *   "plugin":  "com.crystalgui.mixins.CrystalGuiMixins",
+ *   "package": "com.crystalgui.mc.v1710.mixins",
+ *   "plugin":  "com.crystalgui.mc.v1710.mixins.CrystalGuiMixins",
  *   "client":  ["MixinGuiScreen"]
  * }
  * </pre>
@@ -59,7 +59,7 @@ public final class CrystalGuiMixins implements IMixinConfigPlugin {
     private static final Map<String, String> OWNERS = new HashMap<String, String>();
 
     static {
-        OWNERS.put("com.crystalgui.mixins", LoaderProbe.FML1710);
+        OWNERS.put("com.crystalgui.mc.v1710.mixins", LoaderProbe.FML1710);
     }
 
     /** The package this config declared, from {@link #onLoad}. */

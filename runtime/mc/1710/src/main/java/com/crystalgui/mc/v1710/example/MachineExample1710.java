@@ -1,4 +1,4 @@
-package com.crystalgui.mc.example;
+package com.crystalgui.mc.v1710.example;
 
 import com.crystalgui.app.machine.MachineExample;
 

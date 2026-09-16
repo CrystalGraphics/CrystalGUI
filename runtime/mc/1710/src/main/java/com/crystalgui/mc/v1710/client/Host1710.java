@@ -1,4 +1,4 @@
-package com.crystalgui.mc.client;
+package com.crystalgui.mc.v1710.client;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -7,7 +7,7 @@ import java.util.Locale;
 import javax.annotation.Nullable;
 
 import com.crystalgui.desktop.host.HostServices;
-import com.crystalgui.mc.net.CgUiConnections;
+import com.crystalgui.mc.v1710.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 import net.minecraft.client.Minecraft;

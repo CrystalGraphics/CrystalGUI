@@ -104,6 +104,25 @@ drifted across two loaders by the time anyone compared them.
 > not `ModernHost`. One instance is left: `mc.modern.net.Connections` still shadows
 > `net.protocol.Connections` and qualifies it four times.
 
+> **Packages: every loader tree owns a segment under `com.crystalgui.mc`, and none of them owns the
+> root.** `com.crystalgui.mc.v1710` (one per Minecraft version, so 1.12.2 becomes `.v1122` with no
+> collision), `com.crystalgui.mc.modern` (one per ERA, because three loaders share one `common`
+> module), and `com.crystalgui.mc.forge` / `.neoforge` / `.fabric` for the entry points.
+>
+> 1.7.10 was at `com.crystalgui.mc` itself until 2026-09-16, which made that package **both its own
+> and every other loader's parent** — and its `@Mod` class and generated `Tags` sat in
+> `com.crystalgui`, the engine's root, split across two jars. Nothing failed: the hazard is that any
+> relocation rule anchored at `com/crystalgui/mc/` rewrites 1.7.10 too, which J9 hit from the other
+> side and fixed by moving `modern` down rather than moving 1.7.10.
+>
+> **What a rename here does not reach**: `@SidedProxy`'s two class strings, `mixins.crystalgui.json`'s
+> `package`/`plugin`, `mixinsPackage`/`mixinPlugin`/`generateGradleTokenClass` in the module's
+> `gradle.properties` (all relative to `modGroup`, which stays `com.crystalgui` — it is the maven
+> group), `ServerSmoke.Host.clientPackage()`, and **the entry-class strings in
+> `cg-descriptors.gradle.kts`**. That last one is the merged jar's variant table and only `prodSmoke`
+> would catch it in the wild — but `checkSingleJar`'s `requiredEntries` names the same classes, so it
+> fails first and on a laptop. Keep those two lists in step.
+
 ## Running Minecraft: the 1.7.10 loader IS in the build
 
 **For anything that crosses the loader seam — networking, the workspace over a wire, platform services,

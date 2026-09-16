@@ -1,4 +1,4 @@
-package com.crystalgui.mc.client;
+package com.crystalgui.mc.v1710.client;
 
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;

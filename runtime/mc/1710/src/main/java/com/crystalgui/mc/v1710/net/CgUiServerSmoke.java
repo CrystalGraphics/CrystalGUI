@@ -1,4 +1,4 @@
-package com.crystalgui.mc.net;
+package com.crystalgui.mc.v1710.net;
 
 import java.util.Arrays;
 import java.util.List;
@@ -60,7 +60,7 @@ public final class CgUiServerSmoke {
 
         @Override
         public String clientPackage() {
-            return "com.crystalgui.mc.client";
+            return "com.crystalgui.mc.v1710.client";
         }
 
         @Override
@@ -68,8 +68,8 @@ public final class CgUiServerSmoke {
             return Arrays.asList(
                     // Client-side content outside that package. CommonProxy exists so both are
                     // unreachable from common code.
-                    "com.crystalgui.mc.ClientProxy",
-                    "com.crystalgui.mc.example.MachineExampleClient1710",
+                    "com.crystalgui.mc.v1710.ClientProxy",
+                    "com.crystalgui.mc.v1710.example.MachineExampleClient1710",
                     // Naming this from a common path is the commonest spelling of the bug.
                     "net.minecraft.client.Minecraft");
         }

@@ -1,8 +1,8 @@
-package com.crystalgui.mc.client;
+package com.crystalgui.mc.v1710.client;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.mc.net.CgUiConnections;
+import com.crystalgui.mc.v1710.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.probe.ConnectionProbe;
 

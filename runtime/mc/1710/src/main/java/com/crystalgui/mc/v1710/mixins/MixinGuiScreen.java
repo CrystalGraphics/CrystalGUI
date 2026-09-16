@@ -1,6 +1,6 @@
-package com.crystalgui.mixins;
+package com.crystalgui.mc.v1710.mixins;
 
-import com.crystalgui.mc.client.CgUiOverlayInput;
+import com.crystalgui.mc.v1710.client.CgUiOverlayInput;
 import net.minecraft.client.gui.GuiScreen;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
