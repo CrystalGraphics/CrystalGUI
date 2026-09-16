@@ -153,6 +153,13 @@ Consequences worth internalising:
 - `forProperty` returns `null` for a type with no codec, and callers must treat that as an **error
   naming the property**, never as "skip it". A silently dropped style is a UI that renders subtly
   wrong on one side only — the worst failure mode this layer has.
+- **A class the engine put on a node is not written to a document.** `Keys.DOCUMENT` encodes authored
+  classes only — a name spelled `__like_this__` (`Button`'s `__labelled__`, added by the widget to itself)
+  is the widget's own state, remade on the far side by the same constructor, and saving it as an author's
+  class means an edit through a class editor round-trips engine state into the file. `ClassNames.isEngine`
+  is the one spelling of that rule, asked here, by `NodeSelectors` and by the inspector's chips alike.
+  **The WIRE dialect is unchanged** and still carries every class, so a content hash computed before this
+  is still valid.
 - `calc()` values are rejected outright: a calc expression is a tree with no parser to rebuild it, and
   encoding its numeric fallback would ship a different layout than the author wrote.
 

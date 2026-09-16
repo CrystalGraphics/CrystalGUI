@@ -1103,6 +1103,44 @@ text, and its colour field binds `stored.map(ShaderColorFieldWidget::parseVec4, 
 - Geometry is `ua/inspector.css`. The one layout in Java is that a toolbar page, a cell and an anchor's
   lines are rows, at `DEFAULT` origin, as a `Button` is.
 
+A descriptor also says how a field READS, and these four are what a dense inspector row needs:
+
+```java
+ConfigDescriptor.text("id", "id").placeholder("none").description("Unique in the document.")
+ConfigDescriptor.array("sizes", "Sizes").inlineList(true).emptyText("No sizes")
+ConfigDescriptor.number("left", "Left").scrubRate(() -> 1d / zoom)   // units per pixel, asked per drag
+```
+
+- **`placeholder`** draws in an empty field — grey, and gone as soon as there is a value. `description` is
+  the row's hover text, on the label as well as the control.
+- **`inlineList`** lays an `ARRAY` out as rows in the field column rather than a folding group, with its
+  add and remove buttons at the first row's height; `emptyText` is what it says with nothing in it. A new
+  row starts blank and is committed only once typed into, so a list never gains an empty entry by being
+  opened.
+- **`scrubRate`** overrides the label-drag rate, and the `DoubleSupplier` form is asked at each step — what
+  a canvas that zooms needs, where a pixel is worth a different number of units every frame.
+
+### Chips for a list of names — `ClassChips`
+
+`com.crystalgui.widget.config.control` · tag `classchips`
+
+```java
+ClassChips chips = new ClassChips(ConfigDescriptor.of("classes", "classes", Kind.ARRAY), List.of("title"));
+chips.setSuggestions(() -> sheetClassNames());                    // what the prompt completes from
+chips.setFlagged(name -> !sheetClassNames().contains(name));      // drawn as a warning
+chips.setAccepts(name -> !ClassNames.isEngine(name));             // never added, typed or suggested
+chips.bind(fields.classes(node));
+```
+
+Chromium DevTools' `.cls` pane, with Unity UI Builder's removal: the prompt completes by prefix, several
+names separated by spaces go in at once, Enter or Tab takes the highlighted suggestion or else what was
+typed, a chip's cross removes it, and Backspace in an empty prompt takes the last chip. The value is the
+whole list in order, and a name already present is not added twice.
+
+`::part`-less by design — it is a config control, so its pieces are classes a theme reaches directly:
+`__chips__`, `__chip__`, `__chip-label__`, `__chip-remove__`, `__flagged__`, `__chip-prompt__`,
+`__chip-suggestions__`, `__chip-suggestion__`, `__active__`, `__chip-hint__`.
+
 ---
 
 ## 12e. Editing a tree — `TreeEditing` over `TreeEditModel`

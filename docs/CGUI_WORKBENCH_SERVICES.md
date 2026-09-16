@@ -1349,6 +1349,20 @@ on: a model knows its content and nothing about paths, tabs, saving or windows, 
 with no tab open and two split panes share one parse tree. `.editor` is optional — a kind that can be
 opened, analysed and saved with nothing to look at it is what a build artefact is.
 
+**A kind may name the tool windows its editor is worked in**, and they come up beside it without taking
+the keyboard:
+
+```java
+DocumentKind.of("crystalgui:cgui", "UI Document")
+        .files(DocumentKind.FilePatterns.extension("cgui"))
+        .revealsToolWindows(UiBuilderContribution.HIERARCHY_PANEL, InspectorExtension.TYPE)
+```
+
+Only when a person opens a document into a NEW tab — the Project panel, Go to File, a menu. Switching to a
+tab already open reveals nothing, because switching to a document is not opening one, and neither does a
+session restore, which brings the tool windows back exactly as they were left. An id no extension
+registered is skipped, so a kind may name a panel that is not installed in every application.
+
 At most one kind may call `.fallback()`, and that is the "File" kind: every text file nothing else
 claims, plus every resource in a registered scheme. Without it, opening an unrecognised extension
 answers "nothing knows how to open this", which is right for a graph format nobody registered and
@@ -1372,6 +1386,36 @@ fields. It is deleted; the shader package registers five sections instead, and `
 which is what sharing a tab should look like — returning an element each stacks two independently
 scrolling panels with two sets of group headers and a visible seam. It also keeps the engine owning the
 engine-shaped parts: the panel, its scrolling, its group collapse state, and when to clear it.
+
+### Editing the document from a section — `NodeFields`
+
+A section that edits an open document binds its controls to properties that write the document's own edits,
+never to the model directly — otherwise the change is outside the history, the tab never goes dirty, and
+nothing saves it. `NodeFields` (`app.uibuilder.inspect`) is that binding for a `.cgui`:
+
+```java
+NodeFields fields = NodeFields.of(ctx);        // null over a live pick: there is no document to write
+if (fields != null && fields.owns(node)) {
+    form.prop(ConfigDescriptor.text("id", "id"), fields.id(node));
+    NodeFields.Field hitTest = fields.attribute(node, Attribute.HIT_TEST);
+    form.prop(hitTest.descriptor(), hitTest.value());          // the control the type asks for
+    NodeFields.Field left = fields.style(node, LayoutProperties.LEFT, "Left");
+    form.prop(left.descriptor(), left.value());                // one inline declaration
+    form.prop(ConfigDescriptor.text("basis", "Basis"),                 // a field of your own
+            fields.bind(() -> basisOf(node), css -> fields.inlineEdit(node, LayoutProperties.FLEX_BASIS, css)));
+}
+```
+
+- **Ask `owns` first.** A live pick can select a node of another window while a document is open, and a
+  field bound to a node the document does not hold would write edits nothing applies.
+- Every property is recorded in the document's history and follows its announcements, so a scrub is one
+  undo step and an undo refreshes the control **without rebuilding the form** — which is what keeps the
+  control under the pointer alive mid-gesture.
+- `descriptorFor(id, label, type, hint)` is the one type-to-control mapping: a boolean is a checkbox, a
+  number with a range a slider, an enum a dropdown, a colour hint a colour field; **a type with no mapping
+  is a read-only row showing its wire form**, never a skipped one.
+- `style(...)` writes one inline declaration through `SetInlineStyle`, and a value set back to what the
+  node already computes drops the declaration rather than pinning it.
 
 ### `DockBannerProvider` — why this tab is not an ordinary one
 
