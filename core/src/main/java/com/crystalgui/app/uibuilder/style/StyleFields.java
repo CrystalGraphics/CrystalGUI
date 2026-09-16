@@ -112,7 +112,7 @@ public final class StyleFields {
         if (buffer == null || target.isInline()) return false;
         String text = buffer.toString();
         CssSourceModel model = CssSourceModel.parse(text);
-        CssSourceModel.Rule rule = model.ruleAt(target.ruleOrder());
+        CssSourceModel.Rule rule = ruleOf(model);
         if (rule == null) return false;
 
         if (!enabled) {
@@ -154,7 +154,7 @@ public final class StyleFields {
         if (buffer == null) return;
         String text = buffer.toString();
         CssSourceModel model = CssSourceModel.parse(text);
-        CssSourceModel.Rule rule = model.ruleAt(target.ruleOrder());
+        CssSourceModel.Rule rule = ruleOf(model);
         if (rule == null) return;   // the file changed under a stale pane; it will rebuild from the new text
 
         CssSourceModel.Declaration existing = lastDeclarationOf(rule, property);
@@ -182,6 +182,19 @@ public final class StyleFields {
         } else {
             LiveEdits.setInline(node, cast(styled), css);
         }
+    }
+
+    /**
+     * The rule being edited: by the number the cascade gave it, or — for one the cascade skipped, which has
+     * no number — by the selector it was written with.
+     */
+    @Nullable
+    private CssSourceModel.Rule ruleOf(CssSourceModel model) {
+        if (target.ruleOrder() >= 0) return model.ruleAt(target.ruleOrder());
+        for (CssSourceModel.Rule rule : model.rules()) {
+            if (model.textOf(rule.selectorsRange()).trim().equals(target.selector())) return rule;
+        }
+        return null;
     }
 
     /** The last one wins inside a rule, so it is the one an edit means. */
