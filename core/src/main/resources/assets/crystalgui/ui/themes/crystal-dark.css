@@ -274,4 +274,15 @@ theme {
     --kind-glyph-collection-selected: #E9BAFF;
     --kind-glyph-overlay-selected: #8CEFE8;
     --kind-glyph-addon-selected: #9EF2CB;
+
+    /* THE STYLE LABS' GROUNDS, fixed on purpose: a lab draws its specimen on a dark ground AND a light
+     * one, because a stroke or a shadow that reads on one vanishes on the other. A theme that inverts
+     * these has taken away the only thing the pair is for. The shapes are what a blur is judged against. */
+    --lab-ground-dark: #000000;
+    --lab-ground-light: #FFFFFF;
+    --lab-specimen-bg: #FFFFFF14;
+    --lab-shape-1: #E0398A;
+    --lab-shape-2: #F08A24;
+    --lab-shape-3: #2BC7A8;
+    --lab-stop-border: #00000088;
 }

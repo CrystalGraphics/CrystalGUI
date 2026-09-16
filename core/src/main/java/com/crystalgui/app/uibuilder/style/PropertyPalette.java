@@ -14,6 +14,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -48,18 +49,34 @@ public final class PropertyPalette {
     public static final String NAME_CLASS = "__palette-name__";
     public static final String DECLARED_CLASS = "__declared__";
 
+    /** On the sample of a property with nothing to draw: the column stays, the box does not. */
+    public static final String EMPTY_CLASS = "__empty__";
+
     /** How many rows a search lists. A palette is for finding, not for browsing everything at once. */
     private static final int MAX_ROWS = 40;
+
+    /**
+     * What an <i>Add property</i> opens on: the declarations a person writes by hand most often, in the
+     * order a form would ask for them. Everything else is one search away.
+     */
+    private static final List<String> COMMON = List.of(
+            "display", "position", "width", "height", "padding-top", "padding-left", "margin-top",
+            "margin-left", "gap", "flex-direction", "align-items", "justify-content", "flex-grow",
+            "color", "font-size", "font-weight", "text-align", "background", "background-color", "opacity",
+            "border-top-left-radius-x", "border-top-width", "border-color", "outline", "overflow",
+            "transform", "backdrop-filter", "text-shadow", "cursor", "transition");
 
     private final Popover popover = new Popover();
     private final TextField search = new TextField();
     private final UIElement rows = new UIElement();
 
+    /** The family listed until something is typed, or null for every property. */
+    @Nullable
     private final StyleFamilies.Family family;
     private final Predicate<String> declared;
     private final Consumer<StyleProperty<?>> pick;
 
-    private PropertyPalette(StyleFamilies.Family family, Predicate<String> declared,
+    private PropertyPalette(@Nullable StyleFamilies.Family family, Predicate<String> declared,
                             Consumer<StyleProperty<?>> pick) {
         this.family = family;
         this.declared = declared;
@@ -100,10 +117,29 @@ public final class PropertyPalette {
      */
     public static void open(UIElement anchor, StyleFamilies.Family family, Predicate<String> declared,
                             Consumer<StyleProperty<?>> pick) {
-        PropertyPalette palette = new PropertyPalette(family, declared, pick);
+        show(anchor, new PropertyPalette(family, declared, pick));
+    }
+
+    /**
+     * Opens over every property rather than one family — what an <i>Add property</i> at the end of a list
+     * means.
+     *
+     * <p>It opens on the ones people actually reach for, because a list of eighty-odd in registration order
+     * is not something anybody reads; typing searches all of them.</p>
+     */
+    public static void openAll(UIElement anchor, Predicate<String> declared, Consumer<StyleProperty<?>> pick) {
+        show(anchor, new PropertyPalette(null, declared, pick));
+    }
+
+    private static void show(UIElement anchor, PropertyPalette palette) {
         palette.fill();
+        // AWAY FROM THE ROW THAT OPENED IT: a popover attaches to the nearest ancestor that takes children,
+        // and a press inside it would then bubble back to that row. @see StyleLab#open
+        UIDocument window = anchor.document();
+        if (window != null && palette.popover.parentElement() == null) {
+            window.topLayerNode().append(palette.popover);
+        }
         palette.popover.showFor(anchor, anchor);
-        UIDocument window = palette.search.document();
         if (window != null) window.focus().requestPointerFocus(palette.search);
     }
 
@@ -117,9 +153,20 @@ public final class PropertyPalette {
     /** What is typed, else the family — and never the same property twice. */
     private List<StyleProperty<?>> matching(String query) {
         Set<StyleProperty<?>> found = new LinkedHashSet<>(
-                query == null || query.isBlank() ? family.properties() : StyleFamilies.search(query));
+                query == null || query.isBlank() ? offered() : StyleFamilies.search(query));
         List<StyleProperty<?>> out = new ArrayList<>(found);
         return out.size() > MAX_ROWS ? out.subList(0, MAX_ROWS) : out;
+    }
+
+    /** What an unsearched palette lists: the family's own, or the ones people reach for. */
+    private List<StyleProperty<?>> offered() {
+        if (family != null && family != StyleFamilies.Family.OTHER) return family.properties();
+        List<StyleProperty<?>> common = new ArrayList<>();
+        for (String name : COMMON) {
+            StyleProperty<?> property = StylePropertyRegistry.byName(name);
+            if (property != null) common.add(property);
+        }
+        return common;
     }
 
     private UIElement row(StyleProperty<?> property) {
@@ -150,7 +197,11 @@ public final class PropertyPalette {
         UIElement sample = new UIElement();
         sample.addClass(SAMPLE_CLASS);
         String demo = PropertySamples.valueFor(property);
-        if (demo != null) LiveEdits.setInline(sample, cast(property), demo);
+        if (demo == null) {
+            sample.addClass(EMPTY_CLASS);
+        } else {
+            LiveEdits.setInline(sample, cast(property), demo);
+        }
         return sample;
     }
 

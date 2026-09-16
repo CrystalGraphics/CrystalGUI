@@ -504,7 +504,10 @@
  * than the column and the value is what gets pushed out — clipped at the panel edge under ore.css while
  * looking correct under default.css. The track is the part with slack to give. */
 .__config-control__.__slider__ slider { width: 0; flex-grow: 1; flex-shrink: 1; }
-.__config-control__.__slider__ .__number__ { width: 34px; flex-grow: 0; flex-shrink: 0; }
+/* WIDE ENOUGH FOR THE UNIT, which a slider row now keeps: 34px fitted a bare number and clipped
+ * `13.1%` the moment one was shown. Five characters is the worst case a one-decimal value with a unit
+ * reaches in practice -- 13.1%, 96px. */
+.__config-control__.__slider__ .__number__ { width: 38px; flex-grow: 0; flex-shrink: 0; }
 
 /* ── Groups ─────────────────────────────────────────────────────────────────────────────────────
  * Indented, NOT bordered. A border per group turns a panel three levels deep into a stack of nested
@@ -533,6 +536,9 @@
     padding-right: var(--cfg-pad-x);
     margin-top: 2px;
     margin-bottom: 1px;
+    /* Softened, like every other control the theme draws: the band is the one filled shape in a form and a
+     * square one reads as a seam across the panel. Themeable through the same token the controls use. */
+    border-radius: var(--radius-control, 2px);
 }
 /* NEITHER wrap NOR ellipsis: one line, and the band gets wider. This clipped, on the reasoning that a
  * title too long for the band had nowhere to go — true when the panel did not scroll sideways. It does
@@ -616,6 +622,9 @@
     color: var(--cfg-label-text);
     padding-left: var(--cfg-pad-x);
     padding-right: var(--cfg-pad-x);
+    /* THE OTHER BAND. A group's head and a header row are two widgets that draw the same strip, so a
+     * radius on one of them alone is the mismatch a panel shows as "some are, some aren't". */
+    border-radius: var(--radius-control, 2px);
 }
 /* Same fix, same reason as the group head's title just above — a header IS full width, so there is no
  * label column to have already solved this the way an ordinary row's `.__label__` does. */

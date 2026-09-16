@@ -1,5 +1,6 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -201,6 +202,48 @@ public class DialogTest extends UiDocumentTestBase {
 
         assertFalse("a press on the close button must not begin dragging the dialog",
                 document.input().mode(Drag.class) != null);
+    }
+
+    /**
+     * <b>A dialog opened at a point is FITTED, not merely clamped.</b>
+     *
+     * <p>{@code WindowClamp} bounds the origin and says nothing about the far edge, because a window you
+     * DRAG may hang off the bottom as far as you like so long as its caption stays reachable. Opening a
+     * popup is the other case: a colour picker raised from a row near the bottom ran off the screen, and
+     * the part that was missing was the caption you would have grabbed to pull it back.</p>
+     */
+    @Test
+    public void placeAtBringsTheWholeDialogInside() {
+        dialog.show();
+        settle();
+        Box host = dialog.box().host();
+        assertNotNull("the dialog has a containing block", host);
+
+        dialog.placeAt(host.width() - 10f, host.height() - 10f);
+        settle();
+
+        Box box = dialog.box();
+        assertTrue("left edge inside: " + box.x(), box.x() >= 0f);
+        assertTrue("top edge inside: " + box.y(), box.y() >= 0f);
+        assertTrue("right edge inside: " + (box.x() + box.width()),
+                box.x() + box.width() <= host.width() + 0.5f);
+        assertTrue("bottom edge inside: " + (box.y() + box.height()),
+                box.y() + box.height() <= host.height() + 0.5f);
+    }
+
+    /** The other half of the same rule, so nobody "fixes" it: a MOVE may leave the far edge outside. */
+    @Test
+    public void moveToLetsADialogHangOffTheFarEdge() {
+        dialog.show();
+        settle();
+        Box host = dialog.box().host();
+
+        dialog.moveTo(host.width() - 10f, host.height() - CAPTION);
+        settle();
+
+        Box box = dialog.box();
+        assertTrue("a dragged window may hang off: " + (box.y() + box.height()),
+                box.y() + box.height() > host.height());
     }
 
     @Test

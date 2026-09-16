@@ -236,4 +236,15 @@ theme {
     --kind-glyph-collection-selected: #7B51AE;
     --kind-glyph-overlay-selected: #237F79;
     --kind-glyph-addon-selected: #357F5E;
+
+    /* THE STYLE LABS' GROUNDS. The pair is the point — a specimen is shown on dark AND light whichever
+     * theme is running — so these are the same two colours here, not the light theme's own surfaces. The
+     * specimen's wash and the stop's rim invert, since they sit on the theme's own chrome. */
+    --lab-ground-dark: #000000;
+    --lab-ground-light: #FFFFFF;
+    --lab-specimen-bg: #00000012;
+    --lab-shape-1: #E0398A;
+    --lab-shape-2: #F08A24;
+    --lab-shape-3: #2BC7A8;
+    --lab-stop-border: #00000055;
 }

@@ -143,10 +143,14 @@ public class ColorControl extends ValueControl<Integer> {
     }
 
     /** As {@code ShaderColorFieldWidget.placeAtPointer} — the pointer, not the swatch, and the world
-     * coordinate has to come back through the root transform, the one definition of {@code uiScale}. */
+     * coordinate has to come back through the root transform, the one definition of {@code uiScale}.
+     *
+     * <p>{@code placeAt}, not {@code moveTo}: a picker raised from a row near the bottom of the screen
+     * has to come back inside it rather than hang off, which is what opening a popup means and what a
+     * drag's caption clamp deliberately does not do. @see Dialog#placeAt */
     private static void placeAtPointer(UIDocument window, Dialog dialog, float worldX, float worldY) {
         var local = Transform2D.apply(new Matrix4f(window.boxes().rootTransform()).invert(), worldX, worldY);
-        dialog.moveTo(local.x() - 6f, local.y() - 6f);
+        dialog.placeAt(local.x() - 6f, local.y() - 6f);
     }
 
     /** The swatch, for a host that needs to reach the widget directly. */

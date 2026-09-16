@@ -181,6 +181,11 @@ canvasview:focus-visible,
 surface:focus-visible,
 buildersurface:focus-visible,
 scrollerview:focus-visible,
+/* A ConfiguratorPanel IS a ScrollerView and does not answer to that tag — the same per-class Name trap
+ * as `surface` just above. It is pane-sized three times over: the inspector's body, a preferences page
+ * and a lab's form, all of them CLICK_NOT_TABBABLE and so focusable by a click anywhere in them. Closing
+ * a colour selector over the inspector rang the whole panel. */
+configuratorpanel:focus-visible,
 listview:focus-visible,
 treeview:focus-visible,
 tableview:focus-visible {

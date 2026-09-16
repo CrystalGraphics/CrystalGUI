@@ -13,6 +13,7 @@ import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
 import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.style.SheetDocuments;
+import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.app.uibuilder.insert.BuilderInsert;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.storage.ConfigStorage;

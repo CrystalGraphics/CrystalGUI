@@ -895,11 +895,11 @@ smartguides {
     padding-top: 2px;
     padding-bottom: 2px;
     border-radius: 3px;
-    background: var(--bg-input, #2B2D30);
+    background: var(--configkit-field-bg, #2B2D30);
     color: var(--fg-secondary, #9DA0A8);
     cursor: pointer;
 }
-.__style-target__:hover { background: var(--bg-hover, #393B40); }
+.__style-target__:hover { background: var(--list-hover-bg, #393B40); }
 /* THE ONE BEING WRITTEN TO, in the accent every other "this is live" mark uses. */
 .__style-target__.__active__ {
     background: var(--accent, #3574F0);
@@ -909,27 +909,49 @@ smartguides {
 .__style-target__.__read-only__ { opacity: 0.75; }
 .__style-target-sheet__ { color: var(--fg-hint, #7A7A7A); font-size: 8; }
 
-/* A family's heading, with what it can add. */
-.__style-family__ {
+/* The rows below it are the detail, and read as it: one step down in brightness from their heading. */
+.__configurator__.__style-row__ > .__label__ { color: var(--fg-secondary, #9DA0A8); }
+/* A GLYPH IN A BOX, CENTRED, and nothing else. These are plain elements rather than Buttons: a Button
+ * brings the theme's own box with it -- a background, a radius, and 1px of padding at the top against 2px
+ * at the bottom -- and at sixteen pixels that asymmetry IS the box. Centring by flex, with no padding to
+ * argue with, is the whole rule. */
+.__style-row-action__ {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    color: var(--fg-hint, #7A7A7A);
+    cursor: pointer;
+    /* Held until the pointer is on the row: a column of x down the panel is the loudest thing on it. */
+    opacity: 0;
+    transition: opacity 90ms;
+}
+.__configurator__.__style-row__:hover .__style-row-action__ { opacity: 1; }
+.__style-row-action__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
+
+/* DevTools' blank line at the end of a rule: the one place anything is added from. */
+.__style-add-row__ {
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
     padding-left: 6px;
-    padding-right: 4px;
-    padding-top: 7px;
-    padding-bottom: 1px;
+    padding-top: 6px;
+    padding-bottom: 4px;
+    cursor: pointer;
 }
-.__style-family-label__ { color: var(--fg-hint, #7A7A7A); font-size: 8; }
-.__style-add__, .__style-row-action__ {
-    width: 15px;
-    height: 15px;
-    min-height: 15px;
-    flex-shrink: 0;
-    background: #00000000;
-    color: var(--fg-hint, #7A7A7A);
+.__style-add__ { color: var(--fg-hint, #7A7A7A); }
+/* IT IS A BUTTON, not a passage: pressing it selected its own words, which is what the blue fill was. */
+.__style-add-row__ text { selection-color: #00000000; }
+.__style-add-row__:hover .__style-add__ { color: var(--accent, #3574F0); }
+/* A single glyph is never elided: there is nothing left of it once it is. */
+.__style-add__::part(label), .__style-row-action__::part(label),
+.__style-target-action__::part(label) {
+    text-overflow: clip;
+    overflow: visible;
 }
 .__style-add__:hover, .__style-row-action__:hover {
-    background: var(--bg-hover, #393B40);
+    background: var(--list-hover-bg, #393B40);
     color: var(--fg, #DFE1E5);
 }
 /* A DECLARATION THAT LOST: struck through where it is written, as a browser's own pane draws it. */
@@ -941,7 +963,6 @@ smartguides {
 /* The palette: a property is found by seeing what it does. */
 .__property-palette__ {
     width: 250px;
-    max-height: 300px;
     padding-left: 4px;
     padding-right: 4px;
     padding-top: 4px;
@@ -949,6 +970,9 @@ smartguides {
     gap: 3px;
 }
 .__palette-search__ { height: 18px; min-height: 18px; flex-shrink: 0; }
+/* THE LIST SCROLLS, the popover does not grow: a content-sized popover with thirty rows in it runs off the
+ * bottom of the screen and takes the last rows with it. */
+.__property-palette__ scrollerview { max-height: 260px; }
 .__palette-row__ {
     flex-direction: row;
     align-items: center;
@@ -960,15 +984,17 @@ smartguides {
     border-radius: 3px;
     cursor: pointer;
 }
-.__palette-row__:hover { background: var(--bg-hover, #393B40); }
-/* The sample IS the property, applied: the chip is the ground it is applied to. */
+.__palette-row__:hover { background: var(--list-hover-bg, #393B40); }
+/* The sample IS the property, applied: the chip is the ground it is applied to. A property with nothing to
+ * show keeps the column and draws no box — a grid of empty grey rectangles reads as artwork that failed. */
 .__palette-sample__ {
     width: 22px;
     height: 14px;
     flex-shrink: 0;
     border-radius: 2px;
-    background: var(--bg-elevated, #3A3D42);
+    background: var(--configkit-band-bg, #3A3D42);
 }
+.__palette-sample__.__empty__ { background: #00000000; }
 .__palette-name__ { color: var(--fg, #DFE1E5); }
 /* Already declared here — listed, because being told it is already on beats finding nothing. */
 .__palette-row__.__declared__ .__palette-name__ { color: var(--fg-hint, #7A7A7A); }
@@ -983,71 +1009,204 @@ smartguides {
     flex-direction: row;
     align-items: center;
     gap: 5px;
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
     height: var(--cfg-ctrl-h);
+    overflow: hidden;
     cursor: pointer;
 }
-/* The swatch is the declaration, applied: a gradient chip is the gradient. */
+/* ONE COLUMN FOR EVERY PROPERTY NAME. The kit's label column is `min-width: auto`, so a label wider than
+ * the column cannot shrink and pushes its value right -- true of `text-stroke-width` and `text-stroke-color`
+ * and of nothing else in the panel, which is why two rows out of five sat ten pixels off. Config labels are
+ * short by nature; CSS property names are not, so the Style tab pins the column and lets a name that will
+ * not fit end in an ellipsis. */
+.__configurator__.__style-row__ > .__label__ {
+    flex-basis: 132px;
+    min-width: 0px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* A ROW WITH BUTTONS AFTER ITS CONTROL has less room than an ordinary one, and the control's own floor is
+ * what pushed the row past the panel. */
+.__configurator__.__style-row__ > .__inline__ > .__config-control__ {
+    min-width: 60px;
+    padding-right: 0px;
+}
+/* One gutter for every action, so + and x sit in a column. */
+.__configurator__.__style-row__ { padding-right: var(--cfg-pad-x); }
+/* The swatch is the declaration, applied: a gradient chip is the gradient, a colour chip is the colour.
+ *
+ * A FIXED COLUMN, pinned at both ends. Its content sizes it otherwise — a sample of text made it wider than
+ * a gradient's strip — and then every value in the family starts at a different x, which is the thing that
+ * makes a form look broken however well the rows are built. */
 .__style-chip-swatch__ {
     width: 28px;
-    height: 14px;
+    min-width: 28px;
+    max-width: 28px;
+    height: 16px;
     flex-shrink: 0;
+    flex-grow: 0;
     border-radius: 2px;
-    background: var(--bg-elevated, #3A3D42);
+    align-items: center;
+    justify-content: center;
+    /* A sample set at 34px would otherwise paint straight through the row below it. */
+    overflow: hidden;
+    background: var(--configkit-band-bg, #3A3D42);
 }
-.__style-chip-text__ { color: var(--fg-secondary, #9DA0A8); text-overflow: ellipsis; }
+/* The sample inside it is a specimen, not the value's own size -- and big enough to cast a shadow the
+ * swatch can show, which a 9px glyph is not. */
+.__style-chip-swatch__ text { font-size: 12; font-weight: bold; }
+/* A ROW WITH NO SWATCH STILL KEEPS ITS COLUMN, so the values down a family start on one edge rather than
+ * wherever their own chip happens to begin. */
+/* THE VALUE, SHORTENED TO THE ROW — a long declaration must not push the panel wider, which is what
+ * brought the horizontal scroller back. */
+.__style-chip-text__ {
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
+    flex-shrink: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--fg-secondary, #9DA0A8);
+}
 
 .__style-lab__ {
     width: 320px;
+    /* A LAB SCROLLS RATHER THAN OVERFLOWING. Its content ran to ~700px in a 377px window, and a panel
+     * whose rows are wider than it scrolls horizontally too -- which is what put the hit boxes somewhere
+     * other than the paint: a press then lands on whichever control has scrolled under the pointer. */
+    max-height: 460px;
+}
+/* ON THE CONTENT, not the dialog: padding on the root would inset the title bar with it, and the title
+ * bar is the thing you drag the lab by. A CHILD, for the reason `dialog > .__content__` records: the
+ * canvas on the stage names its own plane `__content__` too. */
+.__style-lab__ > .__content__ {
     padding-left: 8px;
     padding-right: 8px;
     padding-top: 8px;
     padding-bottom: 8px;
     gap: 7px;
 }
-.__lab-title__ { color: var(--fg, #DFE1E5); font-weight: bold; }
-.__lab-grounds__ { flex-direction: row; gap: 6px; height: 74px; }
-/* BOTH GROUNDS, always: a stroke that reads on one routinely vanishes on the other. */
-.__lab-ground__ {
-    width: 0px;
-    flex-grow: 1;
-    height: 100%;
-    align-items: center;
-    justify-content: center;
+/* ONE STAGE, and the ground is a choice rather than a plate. Two fixed grounds existed because a stroke
+ * that reads on one vanishes on the other; a picker answers that in half the width, and lets the specimen
+ * carry the element's real colour instead of one chosen to contrast with whichever plate it sat on. */
+.__lab-stage__ {
+    width: 100%;
+    height: 132px;
     border-radius: 4px;
     overflow: hidden;
+    outline: 1px var(--configkit-field-border, #4A4D52);
 }
-.__lab-ground__.__dark__ { background: #14161A; }
-.__lab-ground__.__light__ { background: #EDEEF2; }
+.__lab-stage__.__dark__ { background: var(--lab-ground-dark, #000000); }
+.__lab-stage__.__light__ { background: var(--lab-ground-light, #FFFFFF); }
+
+/* The two plates, as a segmented pair in the corner. An overlay, so panning the plane leaves it put. */
+.__lab-grounds__ {
+    position: absolute;
+    right: 6px;
+    top: 6px;
+    flex-direction: row;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 5px;
+    background: var(--lab-specimen-bg, #FFFFFF14);
+}
+.__lab-ground-pick__ { width: 22px; height: 12px; border-radius: 3px; }
+.__lab-ground-pick__.__light__ { background: var(--lab-ground-light, #FFFFFF); }
+.__lab-ground-pick__.__dark__ { background: var(--lab-ground-dark, #000000); }
+/* The chosen one is ringed rather than moved: a segmented control that reflows on every press is a
+ * target that walks away from the pointer. */
+.__lab-ground-pick__.__active__ { outline: 1px var(--accent, #3574F0); }
+
+/* A mid grey, because the same rule labels a near-black plate and a near-white one -- white at low
+ * alpha vanished on the light ground. Copied from the gallery's own text-lab canvas, which says so. */
+.__lab-zoom__ {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+    font-size: 9;
+    color: var(--fg-hint, #7A7A7A);
+}
+
+/* A MINIMUM, not a size. The specimen is a canvas NODE, so it self-sizes on an unbounded plane and a
+ * long line runs off the side to be panned to rather than wrapping or being clipped -- but a lab whose
+ * value needs no subject (a gradient, a transform) puts nothing inside it, and a box that self-sizes
+ * around nothing is nothing. Over the backdrop shapes, which are siblings on that same plane. */
 .__lab-specimen__ {
-    width: 74px;
-    height: 44px;
+    padding: 4px;
+    border-radius: 6px;
+    z-index: 1;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
-    background: #FFFFFF14;
 }
+/* THE PLATE IS FOR A SPECIMEN THAT IS THE VALUE -- a transform or a glass filter on a transparent box
+ * of nothing draws nothing, so those need a surface and a size to have one on. A specimen holding a
+ * line of text is its own subject, and a panel behind it is a grey rectangle around what you came to
+ * look at. */
+.__lab-specimen__.__bare__ {
+    min-width: 84px;
+    min-height: 56px;
+    background: var(--lab-specimen-bg, #FFFFFF14);
+}
+/* WHAT THE SPECIMEN ACTS ON. A shadow and a stroke are things text does, so a lab for one has to put
+ * some in the box -- an empty specimen draws nothing however the value is set, which is why the shadow
+ * lab's plates were blank. No colour here: the lab copies the element's own. */
+/* NEVER WRAPPED. The specimen is a node on an unbounded plane, so a line too long for the view runs off
+ * the side to be panned to -- which is the whole reason it is a canvas. Wrapping instead broke
+ * "Handgloves" across two lines and clipped the second. */
+.__lab-sample__ { font-size: 28; font-weight: bold; white-space: nowrap; }
+
 /* Something worth filtering behind the glass lab's specimen. */
 .__lab-shape__ { position: absolute; width: 56px; height: 56px; border-radius: 999px; }
-.__lab-shape__0 { left: -6px; top: 6px; background: #E0398A; }
-.__lab-shape__1 { left: 44px; top: -14px; background: #F08A24; }
-.__lab-shape__2 { left: 24px; top: 30px; background: #2BC7A8; }
+.__lab-shape__0 { left: -6px; top: 6px; background: var(--lab-shape-1, #E0398A); }
+.__lab-shape__1 { left: 44px; top: -14px; background: var(--lab-shape-2, #F08A24); }
+.__lab-shape__2 { left: 24px; top: 30px; background: var(--lab-shape-3, #2BC7A8); }
 
-.__lab-content__ { gap: 5px; }
-.__lab-row__ { flex-direction: row; align-items: center; gap: 6px; }
+.__lab-content__ {
+    gap: 5px;
+    width: 100%;
+    /* SIZED BY ITS CONTENT, capped: the popover is content-sized too, so a flex-grow child has nothing to
+     * grow into and collapsed to two pixels. The cap is what makes it scroll instead of running off. */
+    max-height: 300px;
+}
+/* THIS ENGINE'S flex-shrink DEFAULTS TO 0, so a row of buttons keeps its natural width and overflows
+ * instead of fitting. Wrapping is what a lab wants anyway: a keyword set reads as a block. */
+.__lab-row__ {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+}
+.__lab-row__ > * { flex-shrink: 1; }
+.__lab-row__ > slider { width: 0px; flex-grow: 1; min-width: 90px; }
+/* The kit's own rows, at the lab's width. */
+.__lab-content__ .__configurator__ > .__inline__ > .__config-control__ { min-width: 70px; }
 .__lab-keyword__ {
     height: 16px;
     min-height: 16px;
     padding-left: 5px;
     padding-right: 5px;
-    background: var(--bg-input, #2B2D30);
+    background: var(--configkit-field-bg, #2B2D30);
     color: var(--fg-secondary, #9DA0A8);
 }
-.__lab-keyword__:hover { background: var(--bg-hover, #393B40); color: var(--fg, #DFE1E5); }
-.__lab-caption__ { color: var(--fg-hint, #7A7A7A); font-size: 9; white-space: normal; }
+.__lab-keyword__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
+/* The footer: what was measured, then what will be written. A hairline above it, so the readout reads as
+ * a statement about the lab rather than another control in it. */
+.__lab-caption__ {
+    color: var(--fg-hint, #7A7A7A);
+    font-size: 9;
+    white-space: normal;
+    padding-top: 5px;
+    outline: linear-gradient(to bottom, var(--configkit-field-border, #4A4D52) 0%, transparent 1%);
+}
 /* What will be written, printed: a lab whose readout and write can differ is one you check by hand. */
 .__lab-css__ {
     color: var(--fg-secondary, #9DA0A8);
-    font-family: monospace;
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
     font-size: 9;
     white-space: normal;
 }
@@ -1060,8 +1219,8 @@ smartguides {
     width: 9px;
     height: 32px;
     border-radius: 2px;
-    background: #FFFFFF;
-    outline: 1px #00000088;
+    background: var(--lab-stop-bg, #FFFFFF);
+    outline: 1px var(--lab-stop-border, #00000088);
     cursor: pointer;
 }
 .__gradient-stop__.__active__ { outline: 2px var(--accent, #3574F0); }
@@ -1071,8 +1230,8 @@ smartguides {
     height: 34px;
     flex-shrink: 0;
     border-radius: 999px;
-    background: var(--bg-input, #2B2D30);
-    outline: 1px var(--border, #4A4D52);
+    background: var(--configkit-field-bg, #2B2D30);
+    outline: 1px var(--configkit-field-border, #4A4D52);
     align-items: center;
     justify-content: center;
     cursor: pointer;
@@ -1085,8 +1244,8 @@ smartguides {
     height: 74px;
     flex-shrink: 0;
     border-radius: 3px;
-    background: var(--bg-input, #2B2D30);
-    outline: 1px var(--border, #4A4D52);
+    background: var(--configkit-field-bg, #2B2D30);
+    outline: 1px var(--configkit-field-border, #4A4D52);
     align-items: center;
     justify-content: center;
     cursor: pointer;
@@ -1098,8 +1257,8 @@ smartguides {
     width: 96px;
     height: 72px;
     position: relative;
-    background: var(--bg-elevated, #3A3D42);
-    outline: 1px var(--border, #4A4D52);
+    background: var(--configkit-band-bg, #3A3D42);
+    outline: 1px var(--configkit-field-border, #4A4D52);
 }
 .__corner-puck__ {
     position: absolute;
@@ -1125,15 +1284,29 @@ smartguides {
     border-radius: 3px;
     cursor: pointer;
 }
-.__layer-row__:hover { background: var(--bg-hover, #393B40); }
+.__layer-row__:hover { background: var(--list-hover-bg, #393B40); }
+/* THE ROW ACTIONS ARE BUILT AND WERE INVISIBLE. `.__style-row-action__` opens at `opacity: 0` and is
+ * revealed by a selector naming an ancestor that carries BOTH `__configurator__` and `__style-row__` --
+ * an inspector declaration row, which a lab's layer row is not. So every stack had its reorder and
+ * remove controls, at zero opacity, holding the space they are drawn in. The selected row keeps them up
+ * as well as the hovered one: removing a layer is the reason to come here, and one you have to hunt for
+ * is one that is not there. */
+.__layer-row__:hover .__style-row-action__,
+.__layer-row__.__active__ .__style-row-action__ { opacity: 1; }
 .__layer-row__.__active__ { background: var(--accent-soft, #2E436E); }
 .__layer-sample__ {
-    width: 20px;
-    height: 14px;
+    width: 28px;
+    height: 18px;
     flex-shrink: 0;
     border-radius: 2px;
-    background: var(--bg-elevated, #3A3D42);
+    align-items: center;
+    justify-content: center;
+    /* A 16px blur would otherwise paint across the rows above and below, as the chip swatch says. */
+    overflow: hidden;
+    background: var(--configkit-band-bg, #3A3D42);
 }
+/* Bigger than a row label, because a shadow is cast BY the mark: a 9px glyph casts a 9px-wide one. */
+.__layer-sample-text__ { font-size: 13; font-weight: bold; color: var(--fg, #DFE1E5); }
 .__layer-text__ {
     width: 0px;
     flex-grow: 1;
@@ -1146,7 +1319,7 @@ smartguides {
     min-height: 17px;
     padding-left: 5px;
     padding-right: 5px;
-    background: var(--bg-input, #2B2D30);
+    background: var(--configkit-field-bg, #2B2D30);
     color: var(--fg-secondary, #9DA0A8);
 }
-.__style-target-action__:hover { background: var(--bg-hover, #393B40); color: var(--fg, #DFE1E5); }
+.__style-target-action__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }

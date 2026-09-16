@@ -763,7 +763,13 @@ dialog .__title-bar__ .__label__ {
     text-overflow: ellipsis;
 }
 
-dialog .__content__ {
+/* THE DIALOG'S OWN BODY, and the child combinator is what says so. Six widgets name a part
+ * `__content__` -- CanvasView, ConfiguratorGroup, QuickPick, ProblemsPanel, WindowFrame and this one
+ * -- so as a DESCENDANT selector this reached into any of them put inside a dialog and gave it the
+ * body's padding, `width: 100%` and edge. A canvas in a dialog came out with a border round its plane
+ * and its content width capped, which wrapped and clipped a line meant to run off an unbounded plane.
+ * The content is `appendStructural`ed straight onto the dialog, so `>` loses nothing. */
+dialog > .__content__ {
     flex-grow: 1;
     /* AND IT SHRINKS, which this engine makes opt-in: flex-shrink defaults to 0 here, unlike CSS. A
      * dialog with a max-height therefore capped its OWN box and left this one at its full content size

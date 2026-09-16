@@ -134,7 +134,9 @@ public final class StyleFamilies {
         }
         for (String name : List.of("color", "font-family", "font-size", "font-style", "font-weight", "line-height",
                 "text-align", "text-overflow", "white-space", "caret-color", "caret-width", "selection-color",
-                "paint-order")) {
+                // A SHADOW ON TEXT IS PART OF THE TYPE TREATMENT, judged with the weight and the stroke
+                // rather than with a blur on a panel.
+                "text-shadow", "paint-order")) {
             names.put(name, Family.TEXT);
         }
         for (String name : List.of("background", "background-color", "opacity", "overlay", "mask")) {
@@ -143,7 +145,7 @@ public final class StyleFamilies {
         for (String name : List.of("outline", "outline-color", "outline-width", "stroke-align")) {
             names.put(name, Family.BORDER);
         }
-        for (String name : List.of("backdrop-filter", "text-shadow", "cursor", "tooltip-delay")) {
+        for (String name : List.of("backdrop-filter", "cursor", "tooltip-delay")) {
             names.put(name, Family.EFFECTS);
         }
         for (String name : List.of("transition", "transform", "transform-origin-x", "transform-origin-y",

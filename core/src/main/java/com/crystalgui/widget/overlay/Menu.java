@@ -319,6 +319,12 @@ public class Menu extends Popover {
         return item;
     }
 
+    /** A submenu's parent menu is another level of the same act of choosing. @see Popover#continuesChain */
+    @Override
+    protected boolean continuesChain() {
+        return true;
+    }
+
     /**
      * Adds an item that opens {@code submenu} instead of dismissing this menu — ARIA's
      * {@code aria-haspopup} relationship.

@@ -7,6 +7,7 @@ import java.util.Locale;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -44,6 +45,9 @@ public final class GradientLab {
     /** What a gradient with nothing readable in it starts from. */
     private static final String DEFAULT = "linear-gradient(180deg, #6AA9FF, #C86AFF)";
 
+    /** The directions a dropdown offers; the dial writes an angle, which is what "custom" means here. */
+    private static final List<String> SIDES = List.of("custom", "top", "right", "bottom", "left");
+
     private final Property<String> css;
     private final StyleProperty<?> property;
     private final StyleLab lab;
@@ -78,7 +82,7 @@ public final class GradientLab {
     }
 
     private void build() {
-        lab.specimens();
+        lab.specimen();
         bar.addClass(BAR_CLASS);
         bar.setHitTest(true);
         lab.content().append(bar);
@@ -91,8 +95,6 @@ public final class GradientLab {
             event.preventDefault();
         }, false, true);
 
-        UIElement dialRow = new UIElement();
-        dialRow.addClass("__lab-row__");
         dial.addClass(DIAL_CLASS);
         needle.addClass(NEEDLE_CLASS);
         dial.append(needle);
@@ -100,41 +102,39 @@ public final class GradientLab {
             direction = CssValues.write(Math.round(degrees)) + "deg";
             write();
         }, this::write);
-        dialRow.append(dial);
+        lab.content().append(dial);
 
-        for (String side : List.of("to top", "to right", "to bottom", "to left")) {
-            Button keyword = new Button(side.substring(3));
-            keyword.addClass("__lab-keyword__");
-            keyword.attachListener(() -> {
-                direction = side;
-                write();
-            });
-            dialRow.append(keyword);
-        }
-        lab.content().append(dialRow);
+        lab.form().prop(ConfigDescriptor.select("lab.side", "Direction", SIDES),
+                Property.derived(this::side, chosen -> {
+                    direction = chosen.equals(SIDES.get(0)) ? direction : "to " + chosen;
+                    write();
+                }));
+        lab.form().prop(ConfigDescriptor.color("lab.stop", "Stop colour"),
+                Property.derived(() -> stops.isEmpty() ? 0xFFFFFFFF : stops.get(selected).argb(), argb -> {
+                    if (selected >= 0 && selected < stops.size()) {
+                        stops.set(selected, new Stop(stops.get(selected).position(), argb));
+                        write();
+                    }
+                }));
+        lab.form().prop(ConfigDescriptor.number("lab.at", "Stop at").range(0f, 100f).unit("%"),
+                Property.derived(() -> (double) (position(selected) * 100f), at -> {
+                    if (selected >= 0 && selected < stops.size()) {
+                        stops.set(selected, new Stop((float) (at / 100d), stops.get(selected).argb()));
+                        write();
+                    }
+                }));
 
-        UIElement colours = new UIElement();
-        colours.addClass("__lab-row__");
-        ColorSelector picker = new ColorSelector();
-        picker.setColor(stops.isEmpty() ? 0xFFFFFFFF : stops.get(0).argb());
-        picker.onColorChanged.connect(argb -> {
-            if (selected >= 0 && selected < stops.size()) {
-                stops.set(selected, new Stop(stops.get(selected).position(), argb));
-                write();
-            }
-        });
-        colours.append(picker);
         Button remove = new Button("Remove stop");
         remove.addClass("__lab-keyword__");
         remove.attachListener(() -> {
+            // TWO IS A GRADIENT'S FLOOR: below that the engine's own parser refuses the value.
             if (stops.size() > 2 && selected >= 0 && selected < stops.size()) {
                 stops.remove(selected);
                 selected = Math.max(0, selected - 1);
                 write();
             }
         });
-        colours.append(remove);
-        lab.content().append(colours);
+        lab.content().append(remove);
 
         lab.caption(() -> stops.size() + " stops, " + direction
                 + (stops.isEmpty() ? "" : " — selected stop at " + Math.round(position(selected) * 100) + "%"));
@@ -161,7 +161,7 @@ public final class GradientLab {
                 position = CssValues.number(terms.get(terms.size() - 1), Float.NaN) / 100f;
                 colour = String.join(" ", terms.subList(0, terms.size() - 1));
             }
-            Integer argb = ColorValue.parseColor(colour.trim());
+            Integer argb = ColorValue.parseCssColor(colour.trim());
             if (argb != null) stops.add(new Stop(position, argb));
         }
         if (stops.size() < 2) {
@@ -269,6 +269,12 @@ public final class GradientLab {
             refresh();
         }, false, true);
         return handle;
+    }
+
+    /** Which side the direction names, or {@code custom} for an angle. */
+    private String side() {
+        String head = direction.trim().toLowerCase(Locale.ROOT);
+        return head.startsWith("to ") && SIDES.contains(head.substring(3)) ? head.substring(3) : SIDES.get(0);
     }
 
     /** The direction as degrees, for the needle — a keyword is its own angle. */

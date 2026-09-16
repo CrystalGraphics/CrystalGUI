@@ -1709,10 +1709,16 @@ public final class CgUiPaintContext {
             return;
         }
         LayerFrame enclosing = layerStack.peek();
+        // A NULL REGION IS THE WHOLE TARGET, which is what beginLayerFbo says it means: the caller owns
+        // the buffer and every pixel of it is the layer -- a window snapshot, a backdrop capture. Those
+        // have no bucketed slack to keep a child out of, so targetWidth/Height IS the clip. Reading
+        // region() regardless threw straight out of the minimise animation, since photographing a
+        // window is exactly the path that opens a layer without one.
+        LayerRegion region = enclosing == null ? null : enclosing.region();
         clipX0 = 0f;
         clipY0 = 0f;
-        clipX1 = enclosing != null ? enclosing.region().width() : targetWidth();
-        clipY1 = enclosing != null ? enclosing.region().height() : targetHeight();
+        clipX1 = region != null ? region.width() : targetWidth();
+        clipY1 = region != null ? region.height() : targetHeight();
     }
 
     /** Acquires (creating on first use) the pooled layer FBO for a nesting depth and a wanted size. */

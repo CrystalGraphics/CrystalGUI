@@ -7,6 +7,7 @@ import java.util.Locale;
 import javax.annotation.Nullable;
 
 import com.crystalgui.style.CssParsingUtil;
+import com.crystalgui.style.property.StyleProperty;
 
 /**
  * Reading and writing the composite values a lab edits: the layers of a declaration, and one number in a
@@ -23,6 +24,9 @@ import com.crystalgui.style.CssParsingUtil;
  * engine's own parser does it.</p>
  */
 public final class CssValues {
+
+    /** The units {@link #readable} recognises after a number; the longest first, so `turn` beats nothing. */
+    private static final String[] UNITS = {"turn", "grad", "rad", "deg", "px", "em", "%"};
 
     private CssValues() {
     }
@@ -144,10 +148,107 @@ public final class CssValues {
         return write(value) + "px";
     }
 
-    /** {@code #RRGGBB}, or {@code #AARRGGBB} when there is transparency to state. */
+    /**
+     * A number as {@code property} itself will accept it: {@code 12px} where the property takes a length,
+     * and a bare {@code 12} where it does not.
+     *
+     * <pre>{@code
+     * CssValues.length(StylePropertyRegistry.FONT_SIZE, 34);          // 34   -- a plain float property
+     * CssValues.length(StylePropertyRegistry.TEXT_STROKE_WIDTH, 3);   // 3px  -- a LengthPercent
+     * }</pre>
+     *
+     * <p><b>Ask, never assume.</b> {@code font-size} is a plain float in this engine and its parser refuses
+     * {@code 34px} outright — so a lab that wrote pixels at it wrote nothing at all, and its slider snapped
+     * back to the value that was still there.</p>
+     */
+    public static String length(@Nullable StyleProperty<?> property, double value) {
+        String px = px(value);
+        return property == null || DeclarationEditors.parses(property, px) ? px : write(value);
+    }
+
+    /**
+     * A value as a person reads it, for a chip or a caption — <b>never</b> for what is written.
+     *
+     * <pre>{@code
+     * CssValues.readable("rotate(-0.0022845864rad)");   // rotate(-0.13deg)
+     * CssValues.readable("26.0px");                     // 26px
+     * }</pre>
+     *
+     * <p>An angle in radians is what the canvas's own gestures write and what the engine stores; nobody
+     * reads one. This only changes how it is shown — the declaration keeps whatever spelling the file has,
+     * because rewriting a value to display it is how an editor quietly reformats somebody's sheet.</p>
+     */
+    public static String readable(@Nullable String value) {
+        if (value == null || value.isBlank()) return "";
+        StringBuilder out = new StringBuilder();
+        int at = 0;
+        while (at < value.length()) {
+            char c = value.charAt(at);
+            if (c == '#') {
+                // A HEX COLOUR IS NOT A NUMBER, and scanning one as a run of digits mangles it: #00000000
+                // came out as #0 and #00FF00 as #0FF0, so every colour with a zero component was wrong.
+                int hex = at + 1;
+                while (hex < value.length() && isHex(value.charAt(hex))) hex++;
+                out.append(value, at, hex);
+                at = hex;
+                continue;
+            }
+            boolean starts = Character.isDigit(c)
+                    || ((c == '-' || c == '+' || c == '.') && at + 1 < value.length()
+                        && Character.isDigit(value.charAt(at + 1)));
+            if (!starts) {
+                out.append(c);
+                at++;
+                continue;
+            }
+            int end = at + 1;
+            while (end < value.length() && (Character.isDigit(value.charAt(end)) || value.charAt(end) == '.')) end++;
+            float amount = number(value.substring(at, end), 0f);
+            String unit = unitAt(value, end);
+            at = end + unit.length();
+            if (unit.equals("rad")) {
+                // NOBODY READS RADIANS, and the canvas's own rotate gesture writes them.
+                out.append(write(Math.round(Math.toDegrees(amount) * 100) / 100d)).append("deg");
+            } else {
+                out.append(write(amount)).append(unit);
+            }
+        }
+        return out.toString();
+    }
+
+    private static boolean isHex(char c) {
+        return Character.isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+
+    /**
+     * A dragged number, at as much precision as a stylesheet should carry.
+     *
+     * <pre>{@code
+     * CssValues.dragged(71.771236);   // 71.77
+     * }</pre>
+     *
+     * <p>A slider hands back whatever the pointer landed on, and written straight out that is
+     * {@code font-size: 71.771236px} in somebody's file. NOT rounded to whole numbers: a half-pixel
+     * stroke and a 1.5px blur are real values a lab exists to find, and an integer step cannot reach
+     * them. Applied where a gesture AUTHORS a value, never in {@link #px} — a preview scaled for a
+     * 28x16 chip is arithmetic, not authorship, and rounding it would skew the shape it is showing.</p>
+     */
+    public static double dragged(double value) {
+        return Math.round(value * 100d) / 100d;
+    }
+
+    /** The unit starting at {@code at}, or "" for a bare number. */
+    private static String unitAt(String value, int at) {
+        for (String unit : UNITS) {
+            if (value.startsWith(unit, at)) return unit;
+        }
+        return "";
+    }
+
+    /** {@code #RRGGBB}, or {@code #RRGGBBAA} when there is transparency to state — CSS puts alpha last. */
     public static String color(int argb) {
         return (argb >>> 24) == 0xFF
                 ? String.format("#%06X", argb & 0xFFFFFF)
-                : String.format("#%08X", argb);
+                : String.format("#%08X", ((argb & 0xFFFFFF) << 8) | (argb >>> 24));
     }
 }

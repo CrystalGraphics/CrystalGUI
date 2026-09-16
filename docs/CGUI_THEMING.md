@@ -385,6 +385,14 @@ editor scheme's.
 | `--kind-glyph-overlay-selected` | `#8CEFE8` | crystal-dark.css |
 | `--kind-glyph-text` | `#CAA875` | crystal-dark.css |
 | `--kind-glyph-text-selected` | `#FFDA98` | crystal-dark.css |
+| `--lab-ground-dark` | `#000000` | crystal-dark.css |
+| `--lab-ground-light` | `#FFFFFF` | crystal-dark.css |
+| `--lab-shape-1` | `#E0398A` | crystal-dark.css |
+| `--lab-shape-2` | `#F08A24` | crystal-dark.css |
+| `--lab-shape-3` | `#2BC7A8` | crystal-dark.css |
+| `--lab-specimen-bg` | `#FFFFFF14` | crystal-dark.css |
+| `--lab-stop-bg` | `var(--fg-on-accent)` | base.css |
+| `--lab-stop-border` | `#00000088` | crystal-dark.css |
 | `--label-fg` | `var(--fg)` | base.css |
 | `--link` | `#4A88C7` | crystal-dark.css |
 | `--list-hover-bg` | `var(--hover-bg)` | base.css |

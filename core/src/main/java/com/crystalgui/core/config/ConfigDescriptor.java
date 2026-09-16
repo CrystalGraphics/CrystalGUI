@@ -108,6 +108,9 @@ public final class ConfigDescriptor {
     private Range range;
     private int arity = 3;
     private boolean integral;
+
+    /** @see #step(float) */
+    private float step;
     private boolean hdr;
     private String unit;
     private String shortLabel;
@@ -311,6 +314,27 @@ public final class ConfigDescriptor {
     public ConfigDescriptor arity(int value) {
         this.arity = value;
         return this;
+    }
+
+    /**
+     * The increment a slider moves in — 0.1 for a stroke width, 1 for a font size.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("stroke", "Stroke").range(0f, 8f).step(0.1f);
+     * }</pre>
+     *
+     * <p>{@link #integral(boolean)} is this at a step of 1, and also refuses a typed fraction. A step
+     * alone quantises the GESTURE and leaves the field free, which is what a length wants: drag in
+     * tenths, type 3.75 when you mean it.</p>
+     */
+    public ConfigDescriptor step(float value) {
+        this.step = value;
+        return this;
+    }
+
+    /** The declared step, or 0 for none. @see #step(float) */
+    public float step() {
+        return step;
     }
 
     public ConfigDescriptor integral(boolean value) {

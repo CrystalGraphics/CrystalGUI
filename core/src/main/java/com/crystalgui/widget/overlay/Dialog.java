@@ -19,6 +19,9 @@ import com.crystalgui.ui.dom.UINode;
 import java.util.List;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import org.joml.Vector2f;
+
+import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
@@ -739,6 +742,57 @@ public class Dialog extends UIElement {
     }
 
     /**
+     * Opens the dialog at a point and <b>fits</b> it: shifted back inside its containing block, and
+     * flipped above the point when there is no room below.
+     *
+     * <pre>{@code
+     * dialog.show();
+     * dialog.placeAt(pointerX - 6f, pointerY - 6f);   // a picker under the swatch that was pressed
+     * }</pre>
+     *
+     * <p><b>Not {@link #moveTo}</b>, and the difference is the whole reason this exists. {@link WindowClamp}
+     * bounds the ORIGIN and says nothing about the far edge, because a window you DRAG may hang off the
+     * bottom as far as you like — what has to stay reachable is its caption. Opening a popup is the other
+     * case: a colour picker raised from a row near the bottom of the screen ran off it and could not be
+     * dragged back into view, because the part that was missing was the part you would have grabbed.</p>
+     *
+     * <p>Deferred until measured, exactly as {@link #centreIfUnplaced} is: a dialog that has just been
+     * shown has never been laid out, so neither its own size nor its container's is known yet, and
+     * fitting against zeroes fits nothing.</p>
+     *
+     * @see AnchoredPlacement the one definition of putting a popup beside a thing
+     */
+    public Dialog placeAt(float left, float top) {
+        placed = true;
+        pendingLeft = left;
+        pendingTop = top;
+        pendingFit = true;
+        fitIfPending();
+        return this;
+    }
+
+    /** Where {@link #placeAt} was asked for, until there is a measured box to fit against. */
+    private float pendingLeft, pendingTop;
+
+    private boolean pendingFit;
+
+    /** {@link #placeAt}, once both boxes can answer. @see #centreIfUnplaced for the same trap. */
+    private void fitIfPending() {
+        if (!pendingFit) return;
+        Box self = box();
+        Box container = self == null ? null : self.host();
+        if (container == null) return;
+        if (self.width() <= 0f || self.height() <= 0f) return;
+        if (container.width() <= 0f || container.height() <= 0f) return;
+        pendingFit = false;
+        Vector2f at = AnchoredPlacement.resolve(
+                new AnchoredPlacement.Rect(pendingLeft, pendingTop, 0f, 0f),
+                self.width(), self.height(), container.width(), container.height(),
+                AnchoredPlacement.Side.BOTTOM, 0f);
+        applyPosition(at.x(), at.y());
+    }
+
+    /**
      * Whether anything has said where this dialog goes.
      *
      * <p>Until something does it centres itself, which is what every toolkit does with a dialog nobody
@@ -935,6 +989,7 @@ public class Dialog extends UIElement {
                 clampTickerRunning = false;
                 return false;
             }
+            fitIfPending();
             centreIfUnplaced();
             applyPosition(posLeft, posTop);
             return true;
