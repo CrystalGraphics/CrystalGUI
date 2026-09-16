@@ -62,6 +62,15 @@ public final class SvgRasterCache {
     private static final int MARGIN = 1;
 
     /**
+     * How far past its half-width a stroke's coverage reaches, per unit of half-width: a square cap's corner, at
+     * {@code sqrt(2)}. The bounds already hold one half-width. @see #rasterise
+     */
+    private static final float CAP_REACH = 0.4143f;
+
+    /** A stroke's antialiased edge beyond its geometry, in device pixels, with a pixel to spare. */
+    private static final int STROKE_FRINGE = 2;
+
+    /**
      * Half floats: a cell's contribution is often a fiftieth of a level, and eight bits would round every
      * one of them to zero. Colour is premultiplied by construction — every cell adds {@code colour × area}.
      */
@@ -173,7 +182,12 @@ public final class SvgRasterCache {
      */
     private Entry rasterise(SvgDocument document, int op, float rasterScale, boolean flat, float halfWidth) {
         float[] bounds = document.bounds();
+        SvgDocument.DrawOp drawn = document.ops().get(op);
         int pad = MARGIN + (int) Math.ceil(halfWidth);
+        if (!drawn.fill()) {
+            float strokeHalf = halfWidth > 0f ? halfWidth : drawn.halfWidth() * rasterScale;
+            pad += (int) Math.ceil(strokeHalf * CAP_REACH) + STROKE_FRINGE;
+        }
         int width = (int) Math.ceil((bounds[2] - bounds[0]) * rasterScale) + 2 * pad;
         int height = (int) Math.ceil((bounds[3] - bounds[1]) * rasterScale) + 2 * pad;
         Entry entry = allocate(Math.max(1, width), Math.max(1, height));
@@ -183,7 +197,6 @@ public final class SvgRasterCache {
         entry.originX = cornerX - pad;
         entry.originY = cornerY - pad;
         float atlasX = entry.x + pad - cornerX, atlasY = entry.y + pad - cornerY;
-        SvgDocument.DrawOp drawn = document.ops().get(op);
         entry.baked = drawn.fill() && !flat && drawn.colours() != null;
 
         FrameProfile.count("svg-raster-builds", 1);
@@ -193,6 +206,10 @@ public final class SvgRasterCache {
         PoseStack pose = ctx.getPoseStack();
         pose.pushPose();
         pose.setIdentity();
+        // CLIPPED TO ITS OWN SLOT. Rasters are packed edge to edge, so anything reaching past the pad -- a cap, a
+        // feather -- lands in a neighbour and is drawn with it: a white line beside an unrelated icon, and only
+        // on the runs whose first draws happened to pack those two together.
+        ctx.pushScissor(entry.x, entry.y, entry.width, entry.height);
         try {
             if (drawn.fill()) {
                 ctx.withCurveMaterial(entry.baked ? accumulate() : coverage(), () ->
@@ -202,6 +219,7 @@ public final class SvgRasterCache {
                         document.accumulateStroke(ctx, op, atlasX, atlasY, rasterScale, halfWidth));
             }
         } finally {
+            ctx.popScissor();
             pose.popPose();
             ctx.resumeScissor(scissor);
             ctx.endLayerFbo();
