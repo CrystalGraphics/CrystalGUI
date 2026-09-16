@@ -24,6 +24,29 @@ apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts"
 // Removal condition: if ModDevGradle changes its settings plugin to use
 // DependencyResolutionManagement (exclusive, settings-owned) instead of per-project repos,
 // these declarations can be removed and the dependency resolution failure will confirm it.
+// ASM IS THE LOADER'S, AND A MOD MAY NOT UPGRADE IT.
+//
+// BootstrapLauncher puts NeoForge's own ASM on the MODULE PATH, at whatever version this NeoForge
+// shipped (9.8 for 20.4.251). `:language` asks for asm, asm-commons and asm-tree at `asmVersion`, and
+// Gradle's conflict resolution promotes those three on the run classpath while asm-util and
+// asm-analysis stay at the loader's -- so two jars offer the module `org.objectweb.asm` and the launch
+// dies in Configuration.resolveAndBind, before one line of ours runs:
+//
+//     Module org.apache.logging.log4j.slf4j reads more than one module named org.objectweb.asm
+//
+// Forgiving nowhere else: 1.7.10 has no modules, fabric's Knot is not modular, and MDG's legacyForge
+// does not use the module path this way -- which is why only this loader shows it.
+//
+// The run is pinned rather than the project: `asmVersion` is what the SHIPPED language jar carries and
+// what its `.map` layer is compiled against, and that is a separate decision from what a dev launch
+// borrows from its loader. @see CGUI_INVARIANTS.md § building
+configurations.matching { it.name == "runtimeClasspath" || it.name == "additionalRuntimeClasspath" }
+    .configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "org.ow2.asm") useVersion(property("mc1204.asm").toString())
+        }
+    }
+
 repositories {
     maven("https://maven.neoforged.net/mojang-meta/") { name = "NeoForge Mojang Meta" }
     maven("https://libraries.minecraft.net/") {
