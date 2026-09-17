@@ -237,9 +237,9 @@ final class CgUiBackdrop {
      * than one each. That is what makes glass on more than a single element a measurement rather than a
      * flat no.</p>
      *
-     * <p><b>The caveat, which is a default rather than a limitation:</b> because the capture is taken
-     * once, a consumer drawn later does not see a consumer drawn earlier. With one taskbar that is
-     * exact. Two overlapping glass surfaces would need a per-consumer grab, which costs a switch.</p>
+     * <p><b>Retaken only when something was painted over what a consumer samples</b> since the last grab
+     * ({@link CgUiPaintContext#notePainted}): a consumer then sees everything drawn before it, another glass
+     * surface included, and glass over ground nothing touched still shares the frame's one grab.</p>
      *
      * @param blurRadiusPx how far the blur reaches, in surface pixels. Zero hands back the capture
      *                     itself, so {@code blur 0} costs nothing beyond the grab every consumer shares
@@ -247,7 +247,7 @@ final class CgUiBackdrop {
      *         back to a solid colour rather than draw nothing
      */
     @Nullable
-    CgUiPaintContext.Backdrop forRect(float x, float y, float width, float height, float blurRadiusPx) {
+    CgUiPaintContext.Backdrop forRect(float x, float y, float width, float height, float blurRadiusPx, float reach) {
         if (!ctx.frameActive || width <= 0f || height <= 0f) return null;
 
         // SURFACE PIXELS, so from the TRANSFORM chain — the opposite of the rule for placing a popup
@@ -258,10 +258,14 @@ final class CgUiBackdrop {
         Matrix4f pose = ctx.poseStack.last().pose();
         Vector3f min = pose.transformPosition(new Vector3f(x, y, 0f));
         Vector3f max = pose.transformPosition(new Vector3f(x + width, y + height, 0f));
-        int px0 = Math.round(Math.min(min.x, max.x));
-        int py0 = Math.round(Math.min(min.y, max.y));
-        int px1 = Math.round(Math.max(min.x, max.x));
-        int py1 = Math.round(Math.max(min.y, max.y));
+        // AND IN SCREEN PIXELS, which a bounded layer's are not: its pixel (0,0) is its region's corner, so the
+        // pose inside one is relative to that. Glass inside a clipped, zoomed canvas sampled a patch offset by
+        // the layer's position and scaled by the layer's size against the screen's.
+        int[] origin = targetOrigin();
+        int px0 = Math.round(Math.min(min.x, max.x)) + origin[0];
+        int py0 = Math.round(Math.min(min.y, max.y)) + origin[1];
+        int px1 = Math.round(Math.max(min.x, max.x)) + origin[0];
+        int py1 = Math.round(Math.max(min.y, max.y)) + origin[1];
         int rw = Math.max(1, px1 - px0);
         int rh = Math.max(1, py1 - py0);
 
@@ -269,10 +273,19 @@ final class CgUiBackdrop {
         // is what every backdrop-filter implementation does and is invisible a few pixels in - but only
         // if there ARE a few pixels. Capturing the element's own rect exactly would clamp from the very
         // first tap and smear the edge inward.
-        int pad = (int) Math.ceil(blurRadiusPx) + 4;
+        // And by a lens's reach, which is in the element's units and so scaled by the pose.
+        float poseScale = (float) Math.hypot(pose.m00(), pose.m01());
+        int pad = (int) Math.ceil(blurRadiusPx + reach * poseScale) + 4;
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
-        int wantX0 = Math.max(0, px0 - pad), wantY0 = Math.max(0, py0 - pad);
-        int wantX1 = Math.min(w, px1 + pad), wantY1 = Math.min(h, py1 + pad);
+        // NEVER PAST THE CLIP, which is the web's backdrop root: what an ancestor clips away is not behind this
+        // element as far as it can see. A lens in a zoomed canvas reached hundreds of pixels past the stage and
+        // bent the whole editor around it into the glass.
+        int[] clip = visibleArea(origin);
+        int wantX0 = Math.max(Math.max(0, clip[0]), px0 - pad);
+        int wantY0 = Math.max(Math.max(0, clip[1]), py0 - pad);
+        int wantX1 = Math.min(Math.min(w, clip[2]), px1 + pad);
+        int wantY1 = Math.min(Math.min(h, clip[3]), py1 + pad);
+        if (wantX1 <= wantX0 || wantY1 <= wantY0) return null;
 
         if (reqFrame != ctx.frameId) {
             lastX0 = reqX0; lastY0 = reqY0; lastX1 = reqX1; lastY1 = reqY1;
@@ -301,7 +314,12 @@ final class CgUiBackdrop {
             loggedRadius = blurRadiusPx;
             logGeometry(blurRadiusPx, px0, py0, px1, py1, w, h, vTop, vBottom, blurred);
         }
-        return new CgUiPaintContext.Backdrop(sharp, blurred, u0, vBottom, u1, vTop);
+        // WHAT THIS ELEMENT MAY SAMPLE, as the same normalised rect: its padded, clipped rect, inset half a texel
+        // so a tap at the boundary never filters in the texels beyond it.
+        float halfU = 0.5f / w, halfV = 0.5f / h;
+        return new CgUiPaintContext.Backdrop(sharp, blurred, u0, vBottom, u1, vTop,
+                (wantX0 - capX0) / (float) w + halfU, 1f - (wantY1 - capY0) / (float) h + halfV,
+                (wantX1 - capX0) / (float) w - halfU, 1f - (wantY0 - capY0) / (float) h - halfV);
     }
 
     /**
@@ -356,11 +374,56 @@ final class CgUiBackdrop {
      * enclosing layer from outermost inward. That is the definition of "behind this element", and the
      * stack is at most a few deep because it is nesting depth rather than element count.</p>
      */
+    /**
+     * Where the bound target's pixel (0,0) is on the screen: the sum of every enclosing bounded layer's region
+     * origin, each of which is expressed in the target around it. A caller-owned target with no region adds
+     * nothing, as before.
+     */
+    private int[] targetOrigin() {
+        int x = 0, y = 0;
+        for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
+            LayerRegion region = it.next().region();
+            if (region != null) {
+                x += region.x();
+                y += region.y();
+            }
+        }
+        return new int[] {x, y};
+    }
+
+    /**
+     * What an element drawn now can see, in screen pixels: the live scissor, and every enclosing bounded layer's
+     * region. A layer is where a mask, an opacity or a rounded {@code overflow} applies, none of which is a
+     * scissor -- bounded by the scissor alone, glass at a rounded stage's edge sampled the dialog around it.
+     */
+    private int[] visibleArea(int[] origin) {
+        int[] clip = ctx.clipRect();
+        int x0 = clip[0] + origin[0], y0 = clip[1] + origin[1];
+        int x1 = clip[2] + origin[0], y1 = clip[3] + origin[1];
+        int ox = 0, oy = 0;
+        for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
+            LayerRegion region = it.next().region();
+            if (region == null) continue;
+            ox += region.x();
+            oy += region.y();
+            x0 = Math.max(x0, ox);
+            y0 = Math.max(y0, oy);
+            x1 = Math.min(x1, ox + region.width());
+            y1 = Math.min(y1, oy + region.height());
+        }
+        return new int[] {x0, y0, x1, y1};
+    }
+
     private boolean ensureCaptured(int needX0, int needY0, int needX1, int needY1) {
         int depth = ctx.layerStack.size();
         CgFrameBuffer innermost = ctx.layerStack.isEmpty() ? ctx.frameFbo : ctx.layerStack.peek().fbo();
+        // AND NOTHING PAINTED OVER IT SINCE. A capture is the picture at the moment it was taken, so a second
+        // consumer reusing it missed whatever was painted between the two -- an artboard's glass drawn after a
+        // row of images showed the artboard as it was before the images. Only paint over THIS consumer's area
+        // counts, so glass over untouched ground still shares one capture a frame.
         boolean sameTarget = captureFrame == ctx.frameId
-                && captureDepth == depth && captureTarget == innermost.getId();
+                && captureDepth == depth && captureTarget == innermost.getId()
+                && !ctx.paintedOver(needX0, needY0, needX1, needY1);
         if (sameTarget && needX0 >= capX0 && needY0 >= capY0
                 && needX1 <= capX0 + capW && needY1 <= capY0 + capH) {
             return true;
@@ -428,10 +491,23 @@ final class CgUiBackdrop {
             }
         });
 
-        // SNAPSHOT FIRST. beginLayerFbo below pushes onto the very stack being read.
+        // SNAPSHOT FIRST. beginLayerFbo below pushes onto the very stack being read. Each layer with where it sits
+        // on the screen and how much of its texture is its own: a pooled target is bucketed, and past its region
+        // it holds whatever the slot's last user left.
         List<CgFrameBuffer> enclosing = new ArrayList<>();
+        List<int[]> placed = new ArrayList<>();
+        int originX = 0, originY = 0;
         for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
-            enclosing.add(it.next().fbo());
+            CgUiPaintContext.LayerFrame frame = it.next();
+            LayerRegion region = frame.region();
+            if (region != null) {
+                originX += region.x();
+                originY += region.y();
+            }
+            enclosing.add(frame.fbo());
+            placed.add(new int[] {originX, originY,
+                    region == null ? frame.fbo().getWidth() : region.width(),
+                    region == null ? frame.fbo().getHeight() : region.height()});
         }
 
         // KEEP the scene blit above -- see ctx.beginLayerFbo(fbo, clear).
@@ -444,9 +520,11 @@ final class CgUiBackdrop {
             // an OPAQUE BLACK one erases it completely. Those two produce an identical-looking flat
             // panel downstream, and only the alpha channel tells them apart.
             withoutScissor(() -> {
-                drawOver((CgTexture2D) ctx.frameFbo.getColorTexture(0), fx0, fy0, fw, fh, w, h);
-                for (CgFrameBuffer layer : enclosing) {
-                    drawOver((CgTexture2D) layer.getColorTexture(0), fx0, fy0, fw, fh, w, h);
+                drawOver((CgTexture2D) ctx.frameFbo.getColorTexture(0), 0, 0, w, h, fx0, fy0, fw, fh);
+                for (int i = 0; i < enclosing.size(); i++) {
+                    int[] at = placed.get(i);
+                    drawOver((CgTexture2D) enclosing.get(i).getColorTexture(0), at[0], at[1], at[2], at[3],
+                            fx0, fy0, fw, fh);
                 }
             });
         } finally {
@@ -454,6 +532,7 @@ final class CgUiBackdrop {
         }
 
         captureFrame = ctx.frameId;
+        ctx.clearPainted();
         captureDepth = depth;
         captureTarget = innermost.getId();
         blurFrame = -1L;   // the capture moved, so whatever was blurred describes somewhere else
@@ -493,23 +572,27 @@ final class CgUiBackdrop {
     }
 
     /**
-     * Composites the region {@code (rx, ry, rw, rh)} of a SCREEN-SIZED {@code tex} into the bound
-     * target's top-left corner, premultiplied.
+     * Composites what of {@code tex} covers the screen rect {@code (cx, cy, cw, ch)} into the same place in the
+     * bound capture, whose top-left corner is that rect's, premultiplied.
      *
-     * <p>{@code w}/{@code h} are the source's dimensions, which is what the region has to be normalised
-     * against - the sources here are the resolve target and the layer pool's FBOs, all screen-sized,
-     * while the destination is a region-sized corner of the capture.</p>
+     * @param ox where the texture's pixel (0,0) is on the screen
+     * @param lw how much of the texture, from that corner, holds the layer — its region, not the bucket
      */
-    private void drawOver(@Nullable CgTexture2D tex, int rx, int ry, int rw, int rh, int w, int h) {
+    private void drawOver(@Nullable CgTexture2D tex, int ox, int oy, int lw, int lh, int cx, int cy, int cw, int ch) {
         if (tex == null) return;
-        float u0 = rx / (float) w, u1 = (rx + rw) / (float) w;
-        float vTop = 1f - ry / (float) h, vBottom = 1f - (ry + rh) / (float) h;
+        int x0 = Math.max(cx, ox), y0 = Math.max(cy, oy);
+        int x1 = Math.min(cx + cw, ox + lw), y1 = Math.min(cy + ch, oy + lh);
+        if (x1 <= x0 || y1 <= y0) return;
+        int rw = x1 - x0, rh = y1 - y0;
+        float tw = tex.getWidth(), th = tex.getHeight();
+        float u0 = (x0 - ox) / tw, u1 = (x1 - ox) / tw;
+        float vTop = 1f - (y0 - oy) / th, vBottom = 1f - (y1 - oy) / th;
         // Declared, not bound by hand. @see CgUiPaintContext#blitLayer
         ctx.layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, tex));
         ctx.withMaterial(ctx.layerBlitMaterial, () -> {
             ctx.poseStack.pushPose();
             ctx.poseStack.setIdentity();
-            ctx.quad().at(0, 0).size(rw, rh).uv(u0, vTop, u1, vBottom).color(0xFFFFFFFF).submit();
+            ctx.quad().at(x0 - cx, y0 - cy).size(rw, rh).uv(u0, vTop, u1, vBottom).color(0xFFFFFFFF).submit();
             ctx.flush();
             // AND AGAIN AFTER THE FLUSH, because submit() only QUEUES. The material's render state is
             // uploaded by the bind, and the reading that matters is the one in force when the geometry

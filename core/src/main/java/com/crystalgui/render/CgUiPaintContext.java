@@ -597,6 +597,9 @@ public final class CgUiPaintContext {
     public void beginFrame(int screenWidth, int screenHeight) {
         frameId++;
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
+        layerOriginX = 0;
+        layerOriginY = 0;
+        clearPainted();
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
 
@@ -924,6 +927,46 @@ public final class CgUiPaintContext {
      */
     public long textDegradedDrawCount() {
         return textRenderer.getDegradedDrawCount();
+    }
+
+    /** Where the bound target's pixel (0,0) is on the screen: every enclosing bounded layer's origin, summed. */
+    int layerOriginX, layerOriginY;
+
+    /**
+     * The screen area boxes have painted since the backdrop last captured, as one bounding rect -- what lets a
+     * later glass element reuse that capture rather than take its own. A rect and not a flag, because a flag is
+     * set by nearly every box in a frame and would recapture for every consumer.
+     */
+    private float paintedX0 = Float.MAX_VALUE, paintedY0 = Float.MAX_VALUE;
+    private float paintedX1 = -Float.MAX_VALUE, paintedY1 = -Float.MAX_VALUE;
+
+    /**
+     * Records that a box painted over {@code (left, top)..(right, bottom)} of its own space, drawn through
+     * {@code pose} into the bound target. Four corners and a min/max; no allocation.
+     */
+    public void notePainted(Matrix4f pose, float left, float top, float right, float bottom) {
+        float m00 = pose.m00(), m10 = pose.m10(), m30 = pose.m30() + layerOriginX;
+        float m01 = pose.m01(), m11 = pose.m11(), m31 = pose.m31() + layerOriginY;
+        float ax = m00 * left + m10 * top + m30, ay = m01 * left + m11 * top + m31;
+        float bx = m00 * right + m10 * top + m30, by = m01 * right + m11 * top + m31;
+        float cx = m00 * right + m10 * bottom + m30, cy = m01 * right + m11 * bottom + m31;
+        float dx = m00 * left + m10 * bottom + m30, dy = m01 * left + m11 * bottom + m31;
+        paintedX0 = Math.min(paintedX0, Math.min(Math.min(ax, bx), Math.min(cx, dx)));
+        paintedY0 = Math.min(paintedY0, Math.min(Math.min(ay, by), Math.min(cy, dy)));
+        paintedX1 = Math.max(paintedX1, Math.max(Math.max(ax, bx), Math.max(cx, dx)));
+        paintedY1 = Math.max(paintedY1, Math.max(Math.max(ay, by), Math.max(cy, dy)));
+    }
+
+    /** Whether anything noted since {@link #clearPainted} overlaps the screen rect {@code (x0, y0)..(x1, y1)}. */
+    boolean paintedOver(int x0, int y0, int x1, int y1) {
+        return paintedX1 > x0 && paintedX0 < x1 && paintedY1 > y0 && paintedY0 < y1;
+    }
+
+    void clearPainted() {
+        paintedX0 = Float.MAX_VALUE;
+        paintedY0 = Float.MAX_VALUE;
+        paintedX1 = -Float.MAX_VALUE;
+        paintedY1 = -Float.MAX_VALUE;
     }
 
     public CgTextRenderer text() {
@@ -1700,6 +1743,13 @@ public final class CgUiPaintContext {
      * its buffer — a pooled target is bucketed, so its slack is space the enclosing composite will never read, and a
      * child sized into it would be allocating for pixels that cannot reach the screen.
      */
+    /** The live clip in the bound target's pixels, {@code x0, y0, x1, y1}, outward-rounded. @see CgUiBackdrop */
+    int[] clipRect() {
+        resolveClip();
+        return new int[] {(int) Math.floor(clipX0), (int) Math.floor(clipY0),
+                (int) Math.ceil(clipX1), (int) Math.ceil(clipY1)};
+    }
+
     private void resolveClip() {
         if (scissorStack.hasScissor()) {
             clipX0 = scissorStack.currentX();
@@ -2004,6 +2054,10 @@ public final class CgUiPaintContext {
         flush();
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
         int[] savedScissor = scissorStack.suspend();
+        if (region != null) {
+            layerOriginX += region.x();
+            layerOriginY += region.y();
+        }
         layerStack.push(new LayerFrame(fbo, CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT),
                 new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH, savedScissor, region));
 
@@ -2057,6 +2111,10 @@ public final class CgUiPaintContext {
         // finished content and is still bound. A zero here is a draw fault and nothing downstream can
         // be blamed for it.
         LayerFrame frame = layerStack.pop();
+        if (frame.region() != null) {
+            layerOriginX -= frame.region().x();
+            layerOriginY -= frame.region().y();
+        }
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
         fd.projMatrix.set(frame.savedProjMatrix());
         fd.viewportW = frame.savedViewportW();
@@ -2136,10 +2194,14 @@ public final class CgUiPaintContext {
     /**
      * A rect's backdrop, cropped to it: the sharp crop and the blurred one.
      *
-     * <p>Both are the size of the element's own rect, so a consumer samples them at plain {@code uv}.</p>
+     * <p>{@code u0..v1} is the element's own rect in both textures. {@code cu0..cv1} is what the element may
+     * sample: its rect padded by the blur's and the lens's reach, and never past the clip it is drawn in. A
+     * refraction samples past the element's edge — clamped to the element it repeated the edge's own pixels
+     * across the bezel, and unbounded it bent in whatever the clip was hiding.</p>
      */
     public record Backdrop(CgTexture2D sharp, CgTexture2D blurred,
-                           float u0, float v0, float u1, float v1) {}
+                           float u0, float v0, float u1, float v1,
+                           float cu0, float cv0, float cu1, float cv1) {}
 
     /**
      * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code backdrop-filter}.
@@ -2154,7 +2216,18 @@ public final class CgUiPaintContext {
      */
     @Nullable
     public Backdrop backdropFor(float x, float y, float width, float height, float blurRadiusPx) {
-        return backdrop.forRect(x, y, width, height, blurRadiusPx);
+        return backdropFor(x, y, width, height, blurRadiusPx, 0f);
+    }
+
+    /**
+     * As {@link #backdropFor(float, float, float, float, float)}, capturing {@code reach} further around the rect
+     * for a consumer that samples outside it — a lens bending what is beyond its edge.
+     *
+     * @param reach how far past the rect a tap may land, in the rect's own units
+     */
+    @Nullable
+    public Backdrop backdropFor(float x, float y, float width, float height, float blurRadiusPx, float reach) {
+        return backdrop.forRect(x, y, width, height, blurRadiusPx, reach);
     }
 
     public void blitLayer(CgFrameBuffer fbo, float opacity) {

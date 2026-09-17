@@ -88,6 +88,10 @@ public final class BoxPainter {
         PoseStack pose = ctx.getPoseStack();
         pose.pushPose();
         pose.last().pose().set(base).mul(box.localToWorld());
+        // WHAT THIS BOX PAINTS, for the backdrop: a glass element drawn later recaptures only if this lands on
+        // what it samples. Noted before and after, since a capture taken by a child in between clears it -- but
+        // a glass box only after: noted before its own draw, it found itself painted over and recaptured always.
+        if (style.get(StylePropertyRegistry.BACKDROP_FILTER) == null) notePainted(box, ctx, pose.last().pose());
         try {
             Radii radii = radiiOf(style, box.width(), box.height());
             boolean clips = box.clips();
@@ -142,6 +146,9 @@ public final class BoxPainter {
             // are the difference between two frames, and there is none.
             RetainedLayer keep = box.retainable() ? ctx.retain(box, region, box.subtreeRevision()) : null;
             if (keep != null && keep.isFresh()) {
+                // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
+                ctx.notePainted(IDENTITY, region.x(), region.y(), region.x() + region.width(),
+                        region.y() + region.height());
                 ctx.blitLayer(keep.fbo(), opacity, region);
                 return;
             }
@@ -179,9 +186,21 @@ public final class BoxPainter {
             if (keep != null) keep.painted();
             ctx.blitLayer(subtreeFbo, opacity, region);
         } finally {
+            PAINTED.set(base).mul(box.localToWorld());
+            notePainted(box, ctx, PAINTED);
             pose.popPose();
         }
     }
+
+    /** @see CgUiPaintContext#notePainted -- the box's own ink, as the tree composed it. */
+    private static void notePainted(Box box, CgUiPaintContext ctx, Matrix4f pose) {
+        ctx.notePainted(pose, box.localInkL, box.localInkT, box.localInkR, box.localInkB);
+    }
+
+    /** {@link #notePainted}'s scratch. Read immediately: the frame thread paints one box at a time. */
+    private static final Matrix4f PAINTED = new Matrix4f();
+    /** A region already in the target's pixels. */
+    private static final Matrix4f IDENTITY = new Matrix4f();
 
     /**
      * Whether {@code opacity} can be multiplied into this box's own draw rather than flattening it

@@ -43,6 +43,8 @@ Properties {
     // for every consumer on the frame, so each one crops itself rather than owning a texture.
     // (u0, vBottom, u1, vTop) -- v is inverted because GL framebuffers are bottom-left origin.
     _BackdropRect ("u0,v0,u1,v1", vec4) = (0.0, 0.0, 1.0, 1.0)
+    // WHAT IT MAY SAMPLE, (u0, vBottom, u1, vTop): its rect padded by the lens's reach and bounded by its clip.
+    _CaptureRect  ("u0,v0,u1,v1", vec4) = (0.0, 0.0, 1.0, 1.0)
 
     _CornerRadiusX ("Corner Radii X (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
     _CornerRadiusY ("Corner Radii Y (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
@@ -143,10 +145,22 @@ Pass {
         return c;
     }
 
-    /** Element uv -> backdrop uv. The y flip lives here, so callers work in element space. */
+    /**
+     * Element uv -> backdrop uv. The y flip lives here, so callers work in element space.
+     *
+     * <p>MIRRORED AT THE SAMPLEABLE RECT, NOT CLAMPED TO THE ELEMENT: a refracted tap lands past the element's
+     * edge, and clamping it to the element repeated the edge's own pixels across the bezel -- text crossing the
+     * rim came out as a smear of its last column. Past the clip it folds back, as Chromium extends a backdrop
+     * with a mirror tile mode, so a strong lens bends in what is near rather than a stretched edge. ONE fold, then
+     * held: a bezel wider than the whole clip folded the backdrop over and over into stripes.</p>
+     */
     vec2 cg_backdropUv(vec2 uv) {
-        return vec2(mix(_BackdropRect.x, _BackdropRect.z, clamp(uv.x, 0.0, 1.0)),
-                    mix(_BackdropRect.w, _BackdropRect.y, clamp(uv.y, 0.0, 1.0)));
+        vec2 b = vec2(mix(_BackdropRect.x, _BackdropRect.z, uv.x),
+                      mix(_BackdropRect.w, _BackdropRect.y, uv.y));
+        vec2 lo = _CaptureRect.xy;
+        vec2 size = max(_CaptureRect.zw - lo, vec2(1e-6));
+        vec2 t = clamp((b - lo) / size, -1.0, 2.0);
+        return lo + (1.0 - abs(mod(t, 2.0) - 1.0)) * size;
     }
 
     /**
@@ -186,8 +200,11 @@ Pass {
         float coverage = clamp(0.5 - dist / (max(fwidth(dist), 1e-4) * ramp), 0.0, 1.0);
 
         // How far inside the bezel this pixel is: 0 at the boundary, 1 where the glass goes flat.
+        // NO BEZEL IS NO RIM: the sharp band belongs to a lens, and a pane without one is frosted to its edge.
+        // Floored at 1 it kept a pixel of sharp backdrop inside every frosted edge -- in element units, so
+        // twenty sharp pixels at 20x zoom.
         float bezel = max(1.0, _Bezel);
-        float edge  = clamp(-dist / bezel, 0.0, 1.0);
+        float edge  = _Bezel > 0.0 ? clamp(-dist / bezel, 0.0, 1.0) : 1.0;
 
         vec2 disp = vec2(0.0, 0.0);
         vec2 grad = vec2(0.0, 0.0);
