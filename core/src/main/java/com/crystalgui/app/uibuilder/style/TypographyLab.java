@@ -10,6 +10,7 @@ import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.color.ColorValue;
+import com.crystalgui.style.property.visual.text.FontWeight;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.PropertyWatch;
@@ -27,7 +28,8 @@ import com.crystalgui.widget.text.UIText;
  */
 public final class TypographyLab {
 
-    static final List<String> WEIGHTS = List.of("normal", "bold", "300", "500", "700", "900");
+    /** What the engine can draw: a face and its synthetic bold. A number on the 100-900 scale reads as one of them. */
+    static final List<String> WEIGHTS = List.of("normal", "bold");
     static final List<String> STYLES = List.of("normal", "italic");
     static final List<String> ORDERS = List.of("normal", "stroke");
 
@@ -57,8 +59,16 @@ public final class TypographyLab {
         PropertyWatch.follow(line, text, line::setText);
         lab.specimen(line);
 
+        // WHAT THE ELEMENT DRAWS WHEN NOTHING IS DECLARED, not the sample's own look: a sample is set bold, so an
+        // undeclared weight showed bold and choosing bold changed nothing.
         for (String name : List.of("font-size", "font-weight", "font-style", "font-family", "paint-order")) {
-            LiveEdits.follow(line, StyleFields.propertyOf(name), fields.value(name));
+            StyleProperty<?> property = StyleFields.propertyOf(name);
+            Property<String> declared = fields.value(name);
+            Property<String> element = computed(node, property);
+            LiveEdits.follow(line, property, Property.derived(() -> {
+                String css = declared.get();
+                return css == null || css.isBlank() ? element.get() : css;
+            }));
         }
         Property<String> stroke = fields.value(StyleFields.TEXT_STROKE);
         LiveEdits.follow(line, StylePropertyRegistry.TEXT_STROKE_WIDTH, stroke.map(TypographyLab::width));
@@ -73,7 +83,8 @@ public final class TypographyLab {
         lab.form().prop(ConfigDescriptor.number("lab.size", "Size").range(6f, 96f).unit("px").integral(true),
                 fields.value("font-size").map(css -> (double) CssValues.number(css, 0f),
                         size -> CssValues.length(StylePropertyRegistry.FONT_SIZE, CssValues.dragged(size))));
-        lab.form().prop(ConfigDescriptor.select("lab.weight", "Weight", WEIGHTS), keyword(fields, "font-weight", WEIGHTS));
+        lab.form().prop(ConfigDescriptor.select("lab.weight", "Weight", WEIGHTS),
+                fields.value("font-weight").map(TypographyLab::weight, chosen -> chosen));
         lab.form().prop(ConfigDescriptor.select("lab.style", "Style", STYLES), keyword(fields, "font-style", STYLES));
         lab.form().prop(ConfigDescriptor.select("lab.face", "Face", faceNames()), fields.value("font-family").map(
                 css -> faceNames().get(Math.max(0, FACES.indexOf(css.trim()))),
@@ -122,6 +133,19 @@ public final class TypographyLab {
             }
             return options.get(0);
         }, chosen -> chosen);
+    }
+
+    /** A {@code font-weight} as the option it draws as: {@code 600} and above is bold, as {@link FontWeight} rules. */
+    static String weight(String css) {
+        String trimmed = css.trim();
+        if (!trimmed.isEmpty() && Character.isDigit(trimmed.charAt(0))) {
+            try {
+                return FontWeight.ofNumeric(Integer.parseInt(trimmed)).isBold() ? "bold" : "normal";
+            } catch (NumberFormatException ignored) {
+                return "normal";
+            }
+        }
+        return "bold".equalsIgnoreCase(trimmed) ? "bold" : "normal";
     }
 
     /** What {@code node} computes for {@code property}, as CSS — for what the lab shows but does not edit. */
