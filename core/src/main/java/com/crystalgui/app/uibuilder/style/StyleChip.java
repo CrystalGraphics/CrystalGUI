@@ -48,6 +48,8 @@ public class StyleChip extends ValueControl<String> {
     public static final String TEXT_CLASS = "__style-chip-text__";
     /** Where the value is set: a long declaration wraps within it, never cut short. */
     public static final String VALUE_CLASS = "__style-chip-value__";
+    /** On a line carrying on a function opened on the line above: indented under it. */
+    public static final String CONTINUED_CLASS = "__style-chip-continued__";
 
     /** Changed when the lab writes: one act, like a color picked. */
     public static final Event<StyleChip, String> CHANGED =
@@ -268,22 +270,19 @@ public class StyleChip extends ValueControl<String> {
     }
 
     /** The value as the row says it: a bare number carries the unit the engine reads it as. */
-    /**
-     * The value as its lines: one a layer, each but the last ending in its comma, as DevTools breaks a list — and never
-     * wrapped further, so the widest layer is how narrow the column may be.
-     */
+    /** The value as the lines it reads in. @see CssValues#lines */
     private void showLines() {
-        List<String> layers = display == null && !value.isEmpty() ? CssValues.layerStack(value) : List.of();
-        if (layers.size() < 2) {
+        List<CssValues.Line> broken = display == null && !value.isEmpty() ? CssValues.lines(value) : List.of();
+        if (broken.size() < 2) {
             lines.resize(1);
+            lines.get(0).removeClass(CONTINUED_CLASS);
             lines.get(0).setText(value.isEmpty() ? "—" : display != null ? display.apply(value) : shown(CssValues.readable(value)));
             return;
         }
-        lines.resize(layers.size());
-        for (int i = 0; i < layers.size(); i++) {
-            String body = CssValues.readable(CssValues.bodyOf(layers.get(i)));
-            String line = CssValues.isOff(layers.get(i)) ? "/* " + body + " */" : body;
-            lines.get(i).setText(i < layers.size() - 1 ? line + "," : line);
+        lines.resize(broken.size());
+        for (int i = 0; i < broken.size(); i++) {
+            lines.get(i).setText(broken.get(i).text());
+            lines.get(i).toggleClass(CONTINUED_CLASS, broken.get(i).continued());
         }
     }
 

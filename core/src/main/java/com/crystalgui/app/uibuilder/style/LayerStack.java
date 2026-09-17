@@ -17,6 +17,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.ChildList;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.Name;
@@ -99,6 +100,9 @@ public final class LayerStack extends ValueControl<List<String>> {
 
     private boolean hideable;
 
+    /** False for a list whose order is not the value's to set by hand — a gradient's stops, ordered by position. */
+    private boolean reorderable = true;
+
     private final StyleProperty<?> property;
     private final Property<Integer> selected;
     private final UIElement header = new UIElement();
@@ -143,16 +147,18 @@ public final class LayerStack extends ValueControl<List<String>> {
 
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(MOVE_TO_TOP, "Move to Top")
-                .enabledWhereData(data -> layer(data) > 0)
+                .enabledWhereData(data -> layer(data) > 0 && data.get(STACK).reorderable)
                 .runWithData(data -> data.get(STACK).moveTo(layer(data), 0)));
         registry.register(Command.of(MOVE_UP, "Move Up")
-                .enabledWhereData(data -> layer(data) > 0)
+                .enabledWhereData(data -> layer(data) > 0 && data.get(STACK).reorderable)
                 .runWithData(data -> data.get(STACK).move(layer(data), -1)));
         registry.register(Command.of(MOVE_DOWN, "Move Down")
-                .enabledWhereData(data -> layer(data) >= 0 && layer(data) < data.get(STACK).size() - 1)
+                .enabledWhereData(data -> layer(data) >= 0 && layer(data) < data.get(STACK).size() - 1
+                        && data.get(STACK).reorderable)
                 .runWithData(data -> data.get(STACK).move(layer(data), 1)));
         registry.register(Command.of(MOVE_TO_BOTTOM, "Move to Bottom")
-                .enabledWhereData(data -> layer(data) >= 0 && layer(data) < data.get(STACK).size() - 1)
+                .enabledWhereData(data -> layer(data) >= 0 && layer(data) < data.get(STACK).size() - 1
+                        && data.get(STACK).reorderable)
                 .runWithData(data -> data.get(STACK).moveTo(layer(data), data.get(STACK).size() - 1)));
         registry.register(Command.of(VISIBLE, "Visible")
                 .enabledWhereData(data -> layer(data) >= 0 && data.get(STACK).hideable)
@@ -187,6 +193,12 @@ public final class LayerStack extends ValueControl<List<String>> {
     }
 
     /** Whether a layer may be switched off rather than deleted: a value somewhere writable holds the comment. */
+    /** Whether rows carry the up and down arrows and the menu offers moving them. True by default. */
+    public LayerStack reorderable(boolean reorderable) {
+        this.reorderable = reorderable;
+        return this;
+    }
+
     public LayerStack hideable(boolean hideable) {
         this.hideable = hideable;
         writeToWidgets(getValue());
@@ -270,13 +282,16 @@ public final class LayerStack extends ValueControl<List<String>> {
         for (int i = 0; i < rows.size(); i++) rows.get(i).toggleClass(ACTIVE_CLASS, i == at);
     }
 
-    /** Scrolls the picked row into the list's view once it is laid out: a move can carry it past the third. */
+    /**
+     * Scrolls the picked row into the list's view once it is laid out: a move can carry it past the third. The list's
+     * own view only — picking a stop elsewhere scrolled the whole lab down to its row.
+     */
     private void revealSelection() {
         UIDocument window = document();
         if (window == null) return;
         window.animation().afterLayout(this, delta -> {
             int at = selected.get() == null ? 0 : selected.get();
-            if (at >= 0 && at < rows.size() && rows.get(at).box() != null) rows.get(at).box().scrollIntoView();
+            if (at >= 0 && at < rows.size() && rows.get(at).box() != null) rows.get(at).box().scrollIntoView(Box.Reach.NEAREST);
             return false;
         });
     }
@@ -330,8 +345,10 @@ public final class LayerStack extends ValueControl<List<String>> {
         }, false, true);
         row.append(row.eye);
 
-        row.append(action("↑", () -> move(index, -1)));
-        row.append(action("↓", () -> move(index, 1)));
+        if (reorderable) {
+            row.append(action("↑", () -> move(index, -1)));
+            row.append(action("↓", () -> move(index, 1)));
+        }
         row.append(action("×", () -> remove(index)));
         return row;
     }

@@ -74,9 +74,12 @@ public record Gradient(String direction, List<Stop> stops) {
     @Override
     public String toString() {
         StringBuilder out = new StringBuilder("linear-gradient(").append(direction);
-        for (Stop stop : stops) {
+        for (int i = 0; i < stops.size(); i++) {
+            Stop stop = stops.get(i);
             out.append(", ").append(CssValues.color(stop.argb()));
-            if (!Float.isNaN(stop.position())) {
+            // AN END AT ITS END SAYS NOTHING: CSS puts the first stop at 0% and the last at 100% unless told otherwise.
+            boolean implied = i == 0 && stop.position() == 0f || i == stops.size() - 1 && stop.position() == 1f;
+            if (!Float.isNaN(stop.position()) && !implied) {
                 // A TENTH OF A PERCENT: a drag lands on 17.596, and nobody authors three places of one.
                 out.append(' ').append(CssValues.write(Math.round(stop.position() * 1000d) / 10d)).append('%');
             }
@@ -99,6 +102,11 @@ public record Gradient(String direction, List<Stop> stops) {
             case "to right" -> 90f;
             case "to bottom" -> 180f;
             case "to left" -> 270f;
+            // A CORNER'S ANGLE DEPENDS ON THE BOX; on a square one it is the diagonal, which is what the dial shows.
+            case "to top right", "to right top" -> 45f;
+            case "to bottom right", "to right bottom" -> 135f;
+            case "to bottom left", "to left bottom" -> 225f;
+            case "to top left", "to left top" -> 315f;
             default -> head.endsWith("turn") ? CssValues.number(head, 0.5f) * 360f : CssValues.number(head, 180f);
         };
     }
@@ -114,11 +122,57 @@ public record Gradient(String direction, List<Stop> stops) {
         return new Gradient(direction, next);
     }
 
+    /**
+     * Moves stop {@code index} to {@code position}, keeping the stops in order: a stop dragged past its neighbour
+     * passes it, where CSS would clamp it there. @see #indexAfterMove
+     */
+    public Gradient withStopMoved(int index, float position) {
+        if (index < 0 || index >= stops.size()) return this;
+        List<Stop> next = new ArrayList<>(stops);
+        Stop moved = next.remove(index).withPosition(position);
+        next.add(indexAfterMove(index, position), moved);
+        return new Gradient(direction, next);
+    }
+
+    /** Where stop {@code index} lands after {@link #withStopMoved}: past every other stop before {@code position}. */
+    public int indexAfterMove(int index, float position) {
+        int at = 0;
+        for (int i = 0; i < stops.size(); i++) {
+            if (i == index) continue;
+            // A TIE KEEPS ITS SIDE, so resting on a neighbour does not swap the two back and forth.
+            if (position(i) < position || position(i) == position && i < index) at++;
+        }
+        return at;
+    }
+
     /** Adds a stop at {@code where} in the color the ramp already shows there, so adding changes nothing. */
     public Gradient withStopAt(float where) {
         List<Stop> next = new ArrayList<>(stops);
         next.add(indexAt(where), new Stop(where, colorAt(where)));
         return new Gradient(direction, next);
+    }
+
+    /** The same ramp run the other way: each stop mirrored to where it would be read from the far end. */
+    public Gradient reversed() {
+        List<Stop> next = new ArrayList<>(stops.size());
+        for (int i = stops.size() - 1; i >= 0; i--) {
+            next.add(new Stop(1f - position(i), stops.get(i).argb()));
+        }
+        return new Gradient(direction, next);
+    }
+
+    /** Adds a stop in the middle of the widest gap between two stops, in the color the ramp shows there. */
+    public Gradient withStopInWidestGap() {
+        float widest = -1f;
+        float middle = 0.5f;
+        for (int i = 0; i < stops.size() - 1; i++) {
+            float gap = position(i + 1) - position(i);
+            if (gap > widest) {
+                widest = gap;
+                middle = position(i) + gap / 2f;
+            }
+        }
+        return withStopAt(middle);
     }
 
     /** Removes a stop, never below the two a gradient needs to parse. */

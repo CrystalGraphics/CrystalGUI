@@ -84,7 +84,9 @@ public final class StyleGizmos {
             Drag.start(dial, down.getPosition().x(), down.getPosition().y(), new Drag.Listener() {
                 @Override
                 public void onDragUpdate(float x, float y, float startX, float startY, float dx, float dy) {
-                    aimed.accept(angleAt(dial, x, y));
+                    // IN THE DIAL'S OWN SPACE already: a drag reports local coordinates, and converting them again as
+                    // surface ones aimed at a point nowhere near the pointer.
+                    aimed.accept(angleOf(dial, x, y));
                 }
 
                 @Override
@@ -104,10 +106,15 @@ public final class StyleGizmos {
     /** Degrees clockwise from up, of the pointer about {@code element}'s centre. */
     public static float angleAt(UIElement element, float surfaceX, float surfaceY) {
         Vector2f local = element.toLocal(surfaceX, surfaceY);
+        return angleOf(element, local.x, local.y);
+    }
+
+    /** As {@link #angleAt}, for a point already in {@code element}'s own space. */
+    private static float angleOf(UIElement element, float localX, float localY) {
         float width = element.box() == null ? 1f : element.box().width();
         float height = element.box() == null ? 1f : element.box().height();
-        float dx = local.x - width / 2f;
-        float dy = local.y - height / 2f;
+        float dx = localX - width / 2f;
+        float dy = localY - height / 2f;
         // atan2 measured from UP and growing clockwise: y grows downward here, so the sign works out
         // without a flip -- the same convention CgUiGradient reads an angle in.
         float degrees = (float) Math.toDegrees(Math.atan2(dx, -dy));
