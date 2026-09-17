@@ -185,13 +185,22 @@ public class StylePropertyRegistry {
     // has no business inside a text cursor. UIText ignores this and always measures from the font,
     // which `normal` now agrees with by default.
     public static final StyleProperty<Float> LINE_HEIGHT =
-            create(new LineHeightProperty("line-height", LineHeightValue.NORMAL)).setInheritable(true);
+            create(new LineHeightProperty("line-height", LineHeightValue.NORMAL)).setInheritable(true)
+                    // THE KEYWORD, not the sentinel: the default writer spelled `normal` as NaN, which no sheet
+                    // parses, and an editor adding the property at its initial value wrote exactly that.
+                    .setWriter(value -> LineHeightValue.isNormal((Float) value) ? "normal"
+                            : StylePropertyRegistry.plainNumber((Float) value));
     // Not standard CSS — browsers derive caret width and expose only `caret-color`. Needed here
     // because nothing else can express it, and inheritable to match how `caret-color` behaves.
     //
     // There is deliberately no `caret-color`: the caret already paints with `color`, which is a real
     // inheritable property, so it is styleable today. A separate one would need to mean "same as
     // `color` unless set", and with no `currentColor` mechanism that could only be a sentinel value.
+    /** {@code 1.5} rather than {@code 1.5f}'s {@code 1.5}, and {@code 2} rather than {@code 2.0}. */
+    static String plainNumber(float value) {
+        return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
+    }
+
     public static final StyleProperty<Float> CARET_WIDTH = create("caret-width", 1f).setInheritable(true);
     // CSS spells this `::selection { background-color }`; there are no pseudo-elements here, so it is
     // a plain inheritable property instead. Fill only — text inside a selection keeps its `color`.
@@ -361,18 +370,6 @@ public class StylePropertyRegistry {
     public static final StyleProperty<Integer> TEXT_STROKE_COLOR =
             create(new ColorProperty("text-stroke-color", 0))
                     .setInheritable(true).setAuthoredThrough(TextStrokeShorthand.NAME);
-    /**
-     * Overrides {@code color} for the glyph fill alone, leaving {@code color} to drive everything
-     * else that inherits it. {@code -webkit-text-fill-color}'s job, unprefixed.
-     *
-     * <p>Initially transparent, and <b>the value cannot tell you whether anyone set it</b>: hollow
-     * text is {@code text-fill-color: #00000000}, which is the same integer. So the reader asks
-     * {@code ComputedStyle.isSet} instead, exactly as {@code BoxPainter} does for
-     * {@code background-color}. Reading the value here made hollow text unreachable and looked, from
-     * the outside, like the property doing nothing at all.</p>
-     */
-    public static final StyleProperty<Integer> TEXT_FILL_COLOR =
-            create(new ColorProperty("text-fill-color", 0)).setInheritable(true);
     /**
      * CSS {@code paint-order}, the single-keyword forms. Inherited. @see PaintOrder
      *

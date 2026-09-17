@@ -161,7 +161,7 @@ public class TextStrokeStyleTest {
     /**
      * <b>A fully transparent stroke colour is indistinguishable from an unset one BY VALUE.</b>
      *
-     * <p>{@code text-stroke-color} and {@code text-fill-color} both take {@code 0} as their initial,
+     * <p>{@code text-stroke-color} takes {@code 0} as its initial,
      * and {@code #00000000} parses to exactly {@code 0} — so "did the author write this?" cannot be
      * answered by comparing against the initial, and {@code UIText} asks
      * {@code ComputedStyle.isSet} instead. What makes that work is the declaration surviving the

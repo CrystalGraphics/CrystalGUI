@@ -458,14 +458,14 @@ nudge, applied *after* the wrap width is read so it can never affect geometry; p
 per-axis against this element's own box). Wraps at the font's own metrics and does **not** honour
 `line-height` yet.
 
-**It also draws text outlines** — `text-stroke`, `text-fill-color`, `stroke-align` and
+**It also draws text outlines** — `text-stroke`, `stroke-align` and
 `paint-order`. `text-stroke` is the only spelling for the width and colour; the two longhands behind
 it are not writable by name (see `CGUI_STYLE_RENDER_PIPELINE.md` §8d for why they still exist):
 
 ```css
 text { text-stroke: 2px #0B5D8F; }                        /* outline outside the letterform */
 text { text-stroke: 1px #0B5D8F; stroke-align: inset; }   /* an inline, inside it */
-text { text-stroke: 2px #FFF; text-fill-color: transparent; }   /* hollow */
+text { text-stroke: 2px #FFF; color: transparent; }   /* hollow: the stroke names its own colour */
 ```
 
 Three limits worth knowing before reaching for it: the stored distance field caps the width at

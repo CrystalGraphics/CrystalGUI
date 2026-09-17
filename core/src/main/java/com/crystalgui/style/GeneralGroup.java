@@ -187,16 +187,6 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    /** {@code 0} means unset; the glyph fill then takes {@link #color()}. */
-    public int textFillColor() {
-        return getValueSave(StylePropertyRegistry.TEXT_FILL_COLOR);
-    }
-
-    public GeneralGroup textFillColor(int argb) {
-        set(StylePropertyRegistry.TEXT_FILL_COLOR, argb);
-        return this;
-    }
-
     public PaintOrder paintOrder() {
         return getValueSave(StylePropertyRegistry.PAINT_ORDER);
     }

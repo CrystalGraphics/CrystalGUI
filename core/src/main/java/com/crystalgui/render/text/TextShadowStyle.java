@@ -32,8 +32,7 @@ import com.crystalgui.ui.box.InkOverflow;
  * property computing correctly and doing nothing.</p>
  *
  * <p>Easy to get wrong: pass the element's {@code color}, which is what {@code currentcolor} means in a
- * shadow, not {@code text-fill-color}. A placeholder that dims its text passes the dimmed colour, as its
- * stroke does.</p>
+ * shadow. A placeholder that dims its text passes the dimmed colour, as its stroke does.</p>
  */
 public final class TextShadowStyle {
 
