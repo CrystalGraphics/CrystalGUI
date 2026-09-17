@@ -17,8 +17,8 @@ import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.Configurator;
 
-/** The corners lab shows the rows its mode edits, and reads its radii back as the shorthand a person writes. */
-public class CornersLabTest extends UiDocumentTestBase {
+/** The border lab shows the rows its mode edits, and reads its radii back as the shorthand a person writes. */
+public class BorderLabTest extends UiDocumentTestBase {
 
     private StyleFields open(UIElement node) {
         UIElement anchor = new UIElement().layout(l -> l.width(40).height(16));
@@ -28,7 +28,7 @@ public class CornersLabTest extends UiDocumentTestBase {
         document.update(W, H);
         frame();
         StyleFields fields = StyleFields.on(null, StyleTarget.inline(), node);
-        CornersLab.open(anchor, fields);
+        BorderLab.open(anchor, fields);
         for (int i = 0; i < 4; i++) frame();
         return fields;
     }
@@ -82,9 +82,9 @@ public class CornersLabTest extends UiDocumentTestBase {
 
     @Test
     public void theShorthandSaysWhatDiffers() {
-        assertEquals("8px", CornersLab.shorthand(new double[] {8, 8, 8, 8, 8, 8, 8, 8}));
-        assertEquals("8px 0px", CornersLab.shorthand(new double[] {8, 8, 0, 0, 8, 8, 0, 0}));
-        assertEquals("8px / 4px", CornersLab.shorthand(new double[] {8, 4, 8, 4, 8, 4, 8, 4}));
+        assertEquals("8px", BorderLab.shorthand(new double[] {8, 8, 8, 8, 8, 8, 8, 8}));
+        assertEquals("8px 0px", BorderLab.shorthand(new double[] {8, 8, 0, 0, 8, 8, 0, 0}));
+        assertEquals("8px / 4px", BorderLab.shorthand(new double[] {8, 4, 8, 4, 8, 4, 8, 4}));
     }
 
     @Test
@@ -93,6 +93,44 @@ public class CornersLabTest extends UiDocumentTestBase {
                 Arrays.toString(StyleFields.radiusLonghands("1px 2px 3px")));
         assertEquals("[4px, 2px, 4px, 2px, 4px, 2px, 4px, 2px]",
                 Arrays.toString(StyleFields.radiusLonghands("4px / 2px")));
+    }
+
+    @Test
+    public void anElementsFourBorderWidthsAreOneRow() {
+        UIElement node = new UIElement();
+        document.append(node);
+        StyleFields fields = StyleFields.on(null, StyleTarget.inline(), node);
+        fields.value(StyleFields.BORDER_WIDTH).set("2px 4px");
+        long rows = fields.declared().stream().filter(d -> d.name().endsWith("width")).count();
+        assertEquals("one row for the widths", 1, rows);
+        assertEquals("2px 4px", fields.valueOf(StyleFields.BORDER_WIDTH));
+        assertEquals("the longhand holds its side", "4px",
+                CssValues.readable(fields.valueOf("border-right-width")));
+    }
+
+    @Test
+    public void anOutlinesWidthAndColorAreOneRow() {
+        UIElement node = new UIElement();
+        document.append(node);
+        StyleFields fields = StyleFields.on(null, StyleTarget.inline(), node);
+        fields.value(StyleFields.OUTLINE).set("3px #30FFEB");
+        long rows = fields.declared().stream().filter(d -> d.name().startsWith("outline")).count();
+        assertEquals("one row for the outline", 1, rows);
+        assertEquals("3px", CssValues.readable(fields.valueOf("outline-width")));
+        document.update(W, H);
+        assertTrue("and it wins, rather than being judged by the drawable nothing set", fields.wins(StyleFields.OUTLINE));
+    }
+
+    @Test
+    public void theLabHasAHandlePerSide() {
+        open(new UIElement());
+        int sides = 0;
+        for (UIElement each : document.topLayerNode().composedSubtree()) {
+            if (each.hasClass(CornerBox.SIDE_CLASS)) sides++;
+        }
+        assertEquals(4, sides);
+        assertTrue(shown("lab.border"));
+        assertFalse(shown("lab.border.0"));
     }
 
     @Test

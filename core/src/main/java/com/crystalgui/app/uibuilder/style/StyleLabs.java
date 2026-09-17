@@ -9,7 +9,6 @@ import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -52,16 +51,16 @@ public final class StyleLabs {
                     anchor -> GradientLab.open(anchor, context.property(), context.css())));
         }
 
-        for (StyleProperty<?> radius : List.of(
-                BorderRadiusProperties.TOP_LEFT_X, BorderRadiusProperties.TOP_LEFT_Y,
-                BorderRadiusProperties.TOP_RIGHT_X, BorderRadiusProperties.TOP_RIGHT_Y,
-                BorderRadiusProperties.BOTTOM_RIGHT_X, BorderRadiusProperties.BOTTOM_RIGHT_Y,
-                BorderRadiusProperties.BOTTOM_LEFT_X, BorderRadiusProperties.BOTTOM_LEFT_Y)) {
-            DeclarationEditors.register(radius, context -> chip(context, anchor -> {
-                // EVERY CORNER AT ONCE, whichever longhand's row was pressed: the lab is about the shape,
-                // and a lab that edited one of eight numbers would be the row it was opened from.
-                if (context.fields() != null) CornersLab.open(anchor, context.fields());
-            }));
+        // THE WHOLE EDGE AT ONCE, whichever row was pressed -- a corner, a side's width, the outline, by its shorthand or
+        // a longhand a rule wrote: the lab is about the shape, and a lab that edited one of eight numbers would be the
+        // row it was opened from. Every group but the text's stroke, which is the typography lab's.
+        for (StyleFields.Group group : StyleFields.GROUPS) {
+            if (StyleFields.TEXT_STROKE.equals(group.name())) continue;
+            DeclarationEditors.register(group.name(), BORDER_LAB_ROW);
+            for (String longhand : group.longhands()) {
+                StyleProperty<?> property = StyleFields.propertyOf(longhand);
+                if (property != null) DeclarationEditors.register(property, BORDER_LAB_ROW);
+            }
         }
 
         DeclarationEditors.register(StylePropertyRegistry.TEXT_SHADOW, context -> chip(context,
@@ -90,10 +89,12 @@ public final class StyleLabs {
         DeclarationEditors.register(StylePropertyRegistry.CARET_WIDTH,
                 context -> DeclarationEditors.number(context, "px"));
         DeclarationEditors.register(StyleFields.TEXT_STROKE, context -> chip(context, typography(context)));
-        DeclarationEditors.register(StyleFields.BORDER_RADIUS, context -> chip(context, anchor -> {
-            if (context.fields() != null) CornersLab.open(anchor, context.fields());
-        }));
     }
+
+    /** A row that opens the border lab on the element its fields edit. */
+    private static final DeclarationEditors.Editor BORDER_LAB_ROW = context -> chip(context, anchor -> {
+        if (context.fields() != null) BorderLab.open(anchor, context.fields());
+    });
 
     /** Whether the row's layers may be switched off rather than deleted: any writable declaration, rule or inline. */
     private static boolean canHide(DeclarationEditors.Context context) {
@@ -125,7 +126,12 @@ public final class StyleLabs {
         // Glass over the swatch's flat band filters nothing: it needs something behind it.
         if (property == StylePropertyRegistry.BACKDROP_FILTER) chip.painter(GlassLab::paintSample);
         if (StyleFields.TEXT_STROKE.equals(name)) chip.painter((c, css) -> strokeSample(c, css, context.node()));
-        if (StyleFields.BORDER_RADIUS.equals(name)) chip.painter(StyleLabs::radiusSample);
+        // THE EDGE ROWS DRAW THE ELEMENT'S EDGE, one sample for all of them with the row's own part lit. @see BorderSample
+        BorderSample.Part part = borderPart(name);
+        if (part != null) {
+            chip.painter((c, css) -> { });
+            BorderSample.follow(chip, context.node(), part);
+        }
         if (property == StylePropertyRegistry.TEXT_DECORATION_LINE) {
             chip.painter((c, css) -> onSample(c, StylePropertyRegistry.TEXT_DECORATION_LINE, css));
         }
@@ -133,6 +139,23 @@ public final class StyleLabs {
         chip.onOpen(() -> lab.accept(chip));
         chip.bind(context.css());
         return new DeclarationEditors.Field(descriptor, context.css(), chip);
+    }
+
+    /** The part of the element's edge a row is about, or null for a row that is not an edge's. */
+    @Nullable
+    private static BorderSample.Part borderPart(String name) {
+        if (StyleFields.BORDER_RADIUS.equals(name) || StyleFields.RADIUS_LONGHANDS.contains(name)) {
+            return BorderSample.Part.RADIUS;
+        }
+        StyleFields.Group group = StyleFields.groupOf(name);
+        if (StyleFields.BORDER_WIDTH.equals(name) || group != null && StyleFields.BORDER_WIDTH.equals(group.name())) {
+            return BorderSample.Part.BORDER;
+        }
+        if (StyleFields.OUTLINE_OFFSET.equals(name) || group != null && StyleFields.OUTLINE_OFFSET.equals(group.name())) {
+            return BorderSample.Part.OFFSET;
+        }
+        return group != null && StyleFields.OUTLINE.equals(group.name()) || StyleFields.OUTLINE.equals(name)
+                ? BorderSample.Part.OUTLINE : null;
     }
 
     /** Whether a swatch of this property says anything: a width applied to a small box does not. */
@@ -168,16 +191,6 @@ public final class StyleLabs {
         if (sample == null) return;
         if (css.isBlank()) LiveEdits.clearInline(sample, property);
         else LiveEdits.setInline(sample, property, css);
-    }
-
-    /** The swatch rounded as the declaration says: the shorthand, expanded onto the swatch's own corners. */
-    private static void radiusSample(StyleChip chip, String css) {
-        String[] corners = css.isBlank() ? null : StyleFields.radiusLonghands(css);
-        for (int i = 0; i < 8; i++) {
-            StyleProperty<?> longhand = StyleFields.propertyOf(StyleFields.RADIUS_LONGHANDS.get(i));
-            if (corners == null) LiveEdits.clearInline(chip.swatch(), longhand);
-            else LiveEdits.setInline(chip.swatch(), longhand, corners[i]);
-        }
     }
 
     /** The sample outlined in the element's accent, with the order this declaration says. */

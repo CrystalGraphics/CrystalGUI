@@ -233,7 +233,7 @@ final class DeclarationList extends UIElement {
      * is not an edit, so an inline pick of it recorded nothing and no row appeared.
      */
     private static final Map<String, String> STARTERS = Map.of(StyleFields.TEXT_STROKE, "1px #000000",
-            StyleFields.BORDER_RADIUS, "4px");
+            StyleFields.BORDER_RADIUS, "4px", StyleFields.BORDER_WIDTH, "1px", StyleFields.OUTLINE_OFFSET, "2px", StyleFields.OUTLINE, "1px #FFFFFF");
 
     /** A name's initial value as a sheet writes it; a shorthand's is its starter, else its longhands' initials. */
     private static String initialOf(String name) {

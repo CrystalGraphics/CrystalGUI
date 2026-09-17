@@ -198,7 +198,10 @@ public final class StyleFamilies {
             "text-decoration-color",
             "line-height", "caret-color", "caret-width", "selection-color",
             "background", "background-color", "opacity", "overlay", "mask",
-            "outline", "outline-width", "outline-color",
+            // THE SHAPE, THEN EVERY ROW DRAWN AS A SAMPLE, THEN THE COLORS: the corners first, the border and outline
+            // chips in one run, and the colors that paint them after.
+            "border-radius", "border-width", "outline", "outline-offset",
+            "border-color", "border-top-color", "border-bottom-color",
             "backdrop-filter", "cursor", "tooltip-delay",
             "transform", "transition");
 

@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder.style;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -53,8 +54,9 @@ import com.crystalgui.ui.dom.UIElement;
  *   <li>A rule is found by its NUMBER, never by re-matching a selector — the number the cascade gave the
  *       slot that put the value on screen.</li>
  *   <li>Writing a property the rule does not declare yet <b>adds</b> it; writing an empty value removes it.</li>
- *   <li>{@code text-stroke} is one field on both targets. A sheet holds only the shorthand and an element
- *       only its two longhands, so an inline target reads and writes the pair behind that one name.</li>
+ *   <li>A {@link Group} is one field on both targets -- {@code border-radius}, {@code border-width},
+ *       {@code outline-offset}, {@code outline}, {@code text-stroke}. A sheet holds the shorthand and an element its
+ *       longhands, so an inline target reads and writes them behind that one name, in one edit.</li>
  * </ul>
  */
 public final class StyleFields {
@@ -74,6 +76,9 @@ public final class StyleFields {
     private static final String STROKE_WIDTH = "text-stroke-width";
     private static final String STROKE_COLOR = "text-stroke-color";
 
+    /** A width and a color as one declaration -- or, spelled with a function, the drawable ring the engine also takes. */
+    static final String OUTLINE = "outline";
+
     /**
      * The corners as one declaration. A sheet may write the shorthand or its eight longhands, and an element holds the
      * longhands; the Styles tab shows and edits them as the shorthand either way, one row where there were eight.
@@ -85,6 +90,110 @@ public final class StyleFields {
             "border-top-left-radius-x", "border-top-left-radius-y", "border-top-right-radius-x",
             "border-top-right-radius-y", "border-bottom-right-radius-x", "border-bottom-right-radius-y",
             "border-bottom-left-radius-x", "border-bottom-left-radius-y");
+
+    /** The four border widths as one declaration, which a sheet may also write. */
+    static final String BORDER_WIDTH = "border-width";
+    /** The outline's four offsets as one declaration, which a sheet may also write. */
+    static final String OUTLINE_OFFSET = "outline-offset";
+
+    /** How a group's longhands are spelled as its shorthand. */
+    enum Spelling {
+        /** {@code border-radius}: eight radii, a slash before the vertical ones when they differ. */
+        CORNERS,
+        /** {@code border-width}, {@code outline-offset}: four sides, top, right, bottom, left, collapsed as CSS allows. */
+        SIDES,
+        /**
+         * {@code text-stroke}, {@code outline}: a width and a color, whichever term parses as a color being the color. An
+         * {@code outline} spelled with a function is its drawable, a third longhand that takes the place of both.
+         */
+        STROKE
+    }
+
+    /**
+     * Longhands the Styles tab shows and edits as the shorthand a sheet writes: one row, one Add property entry, one
+     * undo step.
+     *
+     * <pre>{@code
+     * StyleFields.groupOf("border-top-width");   // the border-width group
+     * StyleFields.group("outline").unpack("2px #FFFFFF");   // [2px, #FFFFFF, ""]
+     * }</pre>
+     */
+    record Group(String name, List<String> longhands, Spelling spelling) {
+
+        /** The values as the shorthand is written, "" when none is set. @see #radiusShorthand */
+        String pack(String[] values) {
+            switch (spelling) {
+                case CORNERS -> {
+                    return radiusShorthand(values);
+                }
+                case STROKE -> {
+                    // THE DRAWABLE FIRST, as the engine gives it precedence over the stroke.
+                    if (values.length > 2 && values[2] != null && !values[2].isEmpty()) return values[2];
+                    return ((values[0] == null ? "" : values[0]) + " " + (values[1] == null ? "" : values[1])).trim();
+                }
+                default -> {
+                    boolean any = false;
+                    for (String value : values) any |= value != null && !value.isEmpty();
+                    if (!any) return "";
+                    String[] sides = new String[4];
+                    for (int i = 0; i < 4; i++) {
+                        sides[i] = values[i] == null || values[i].isEmpty() ? "0px" : CssValues.readable(values[i]);
+                    }
+                    return side(sides);
+                }
+            }
+        }
+
+        /** The shorthand as its longhands' values, "" for one it does not set, or null when malformed. */
+        @Nullable
+        String[] unpack(String css) {
+            return switch (spelling) {
+                case CORNERS -> radiusLonghands(css);
+                case SIDES -> corners(CssComments.strip(css));
+                case STROKE -> {
+                    String[] out = new String[longhands.size()];
+                    Arrays.fill(out, "");
+                    // A FUNCTION IS THE DRAWABLE, as OutlineShorthand reads it.
+                    if (out.length > 2 && css.indexOf('(') >= 0) {
+                        out[2] = css.trim();
+                        yield out;
+                    }
+                    for (String term : CssValues.terms(css)) {
+                        if (ColorValue.parseCssColor(term) != null) out[1] = term;
+                        else out[0] = term;
+                    }
+                    yield out;
+                }
+            };
+        }
+    }
+
+    static final List<Group> GROUPS = List.of(
+            new Group(BORDER_RADIUS, RADIUS_LONGHANDS, Spelling.CORNERS),
+            new Group(BORDER_WIDTH, List.of("border-top-width", "border-right-width", "border-bottom-width",
+                    "border-left-width"), Spelling.SIDES),
+            new Group(OUTLINE_OFFSET, List.of("outline-offset-top", "outline-offset-right", "outline-offset-bottom",
+                    "outline-offset-left"), Spelling.SIDES),
+            new Group(OUTLINE, List.of("outline-width", "outline-color", OUTLINE), Spelling.STROKE),
+            new Group(TEXT_STROKE, List.of(STROKE_WIDTH, STROKE_COLOR), Spelling.STROKE));
+
+    /** The group a longhand belongs to, or null. */
+    @Nullable
+    static Group groupOf(String longhand) {
+        for (Group group : GROUPS) {
+            if (group.longhands().contains(longhand)) return group;
+        }
+        return null;
+    }
+
+    /** The group a shorthand names, or null. */
+    @Nullable
+    static Group group(String name) {
+        for (Group group : GROUPS) {
+            if (group.name().equals(name)) return group;
+        }
+        return null;
+    }
 
     private final StyleTarget target;
     private final UIElement node;
@@ -152,15 +261,11 @@ public final class StyleFields {
      * and spring to it, while the element on the canvas showed the new one.</p>
      */
     public String valueOf(String property) {
-        if (target.isInline() && BORDER_RADIUS.equals(property)) {
-            String[] corners = new String[8];
-            for (int i = 0; i < 8; i++) corners[i] = inlineValueOf(RADIUS_LONGHANDS.get(i));
-            return radiusShorthand(corners);
-        }
-        if (target.isInline() && TEXT_STROKE.equals(property)) {
-            String width = inlineValueOf(STROKE_WIDTH);
-            String color = inlineValueOf(STROKE_COLOR);
-            return (width + " " + color).trim();
+        Group grouped = group(property);
+        if (target.isInline() && grouped != null) {
+            String[] values = new String[grouped.longhands().size()];
+            for (int i = 0; i < values.length; i++) values[i] = inlineValueOf(grouped.longhands().get(i));
+            return grouped.pack(values);
         }
         if (target.isInline()) return inlineValueOf(property);
         CssSourceModel model = model();
@@ -180,23 +285,17 @@ public final class StyleFields {
     public List<Declared> declared() {
         List<Declared> out = new ArrayList<>();
         if (target.isInline()) {
-            boolean stroke = false;
-            boolean radius = false;
+            List<Group> shown = new ArrayList<>();
             for (Map.Entry<StyleProperty<?>, List<StyleSlot<?>>> entry : node.getStyle().candidates.entrySet()) {
                 for (StyleSlot<?> slot : entry.getValue()) {
                     if (slot.origin() != StyleOrigin.INLINE) continue;
                     StyleProperty<?> property = entry.getKey();
-                    // THE STROKE IS ONE DECLARATION on either target: the element holds two longhands a sheet
-                    // may not even write, and a row each showed names the palette does not offer.
-                    if (property.name.equals(STROKE_WIDTH) || property.name.equals(STROKE_COLOR)) {
-                        if (!stroke) out.add(new Declared(null, TEXT_STROKE, valueOf(TEXT_STROKE), false, false));
-                        stroke = true;
-                        break;
-                    }
-                    // THE CORNERS TOO: eight longhands, one shape.
-                    if (RADIUS_LONGHANDS.contains(property.name)) {
-                        if (!radius) out.add(new Declared(null, BORDER_RADIUS, valueOf(BORDER_RADIUS), false, false));
-                        radius = true;
+                    // SEVERAL LONGHANDS, ONE DECLARATION: the corners, the widths, the offsets, the stroke, the
+                    // outline. A row each showed names the palette does not offer, and some a sheet may not write.
+                    Group group = groupOf(property.name);
+                    if (group != null) {
+                        if (!shown.contains(group)) out.add(new Declared(null, group.name(), valueOf(group.name()), false, false));
+                        if (!shown.contains(group)) shown.add(group);
                         break;
                     }
                     out.add(new Declared(property, property.name, inlineValueOf(property.name), false, false));
@@ -204,21 +303,16 @@ public final class StyleFields {
                 }
             }
             // SWITCHED OFF WHERE THEY STAND: a text with no value under it.
-            boolean hiddenStroke = false;
-            boolean hiddenRadius = false;
+            List<Group> hiddenGroups = new ArrayList<>();
             for (StyleProperty<?> property : node.getStyle().inlineTextProperties()) {
                 if (LiveEdits.hasInline(node, property)) continue;
-                if (property.name.equals(STROKE_WIDTH) || property.name.equals(STROKE_COLOR)) {
-                    // One row for the pair, hidden once neither half is live.
-                    if (!stroke && !hiddenStroke) out.add(new Declared(null, TEXT_STROKE, valueOf(TEXT_STROKE), false, true));
-                    hiddenStroke = true;
-                    continue;
-                }
-                if (RADIUS_LONGHANDS.contains(property.name)) {
-                    if (!radius && !hiddenRadius) {
-                        out.add(new Declared(null, BORDER_RADIUS, hiddenRadiusValue(), false, true));
+                // One row for the group, hidden once none of it is live.
+                Group group = groupOf(property.name);
+                if (group != null) {
+                    if (!shown.contains(group) && !hiddenGroups.contains(group)) {
+                        out.add(new Declared(null, group.name(), hiddenValue(group), false, true));
+                        hiddenGroups.add(group);
                     }
-                    hiddenRadius = true;
                     continue;
                 }
                 String text = node.getStyle().inlineText(property);
@@ -305,6 +399,15 @@ public final class StyleFields {
      */
     @Nullable
     private StyleProperty<?> longhandOf(String name) {
+        // A GROUP BY WHICHEVER LONGHAND THE CASCADE HOLDS: `outline` is also the drawable's own name, so reading it by
+        // name alone judged a width-and-color outline by a drawable nothing set -- lost, and struck through.
+        Group group = group(name);
+        if (group != null) {
+            for (String longhand : group.longhands()) {
+                StyleProperty<?> candidate = propertyOf(longhand);
+                if (candidate != null && node.getStyle().computeCandidateSlot(cast(candidate)) != null) return candidate;
+            }
+        }
         StyleProperty<?> property = propertyOf(name);
         if (property != null) return property;
         StyleProperty<?> known = LONGHANDS.get(name);
@@ -389,7 +492,7 @@ public final class StyleFields {
      */
     public void add(String property, String value) {
         if (!canWrite()) return;
-        if (!target.isInline() || TEXT_STROKE.equals(property) || BORDER_RADIUS.equals(property)) {
+        if (!target.isInline() || group(property) != null) {
             write(property, value);
             return;
         }
@@ -449,10 +552,9 @@ public final class StyleFields {
     private boolean setInlineEnabled(String property, boolean enabled) {
         if (!canWrite()) return false;
         JsonElement was = NodeFields.inlineStyleOf(node);
-        if (TEXT_STROKE.equals(property) || BORDER_RADIUS.equals(property)) {
-            // THE STROKE AND THE CORNERS ARE SEVERAL LONGHANDS inline, so each is switched where it stands and the
-            // row is one.
-            for (String longhand : TEXT_STROKE.equals(property) ? List.of(STROKE_WIDTH, STROKE_COLOR) : RADIUS_LONGHANDS) {
+        if (group(property) != null) {
+            // A GROUP IS SEVERAL LONGHANDS inline, so each is switched where it stands and the row is one.
+            for (String longhand : group(property).longhands()) {
                 String value = CssValues.bodyOf(inlineValueOf(longhand));
                 if (!value.isEmpty()) LiveEdits.setInline(node, propertyOf(longhand), CssValues.switched(value, enabled));
             }
@@ -467,30 +569,31 @@ public final class StyleFields {
     }
 
     /**
-     * The corners, expanded onto the element's eight longhands as ONE edit: eight writes were eight undo steps for a
-     * value typed once. Blank takes all eight off.
+     * A group's shorthand, expanded onto the element's longhands as ONE edit: eight writes were eight undo steps for a
+     * value typed once. Blank takes them all off.
      */
-    private void writeRadiusInline(String css) {
-        String[] corners = css.isEmpty() ? new String[8] : radiusLonghands(css);
-        if (corners == null) return;
+    private void writeGroupInline(Group group, String css) {
+        int count = group.longhands().size();
+        String[] values = css.isEmpty() ? new String[count] : group.unpack(css);
+        if (values == null) return;
         JsonElement was = NodeFields.inlineStyleOf(node);
-        for (int i = 0; i < 8; i++) {
-            StyleProperty<?> longhand = propertyOf(RADIUS_LONGHANDS.get(i));
-            if (corners[i] == null || corners[i].isEmpty()) LiveEdits.clearInline(node, longhand);
-            else LiveEdits.setInline(node, longhand, corners[i]);
+        for (int i = 0; i < count; i++) {
+            StyleProperty<?> longhand = propertyOf(group.longhands().get(i));
+            if (values[i] == null || values[i].isEmpty()) LiveEdits.clearInline(node, longhand);
+            else LiveEdits.setInline(node, longhand, values[i]);
         }
         JsonElement after = NodeFields.inlineStyleOf(node);
         if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
     }
 
-    /** The shorthand as a hidden row reads it: the commented longhands' values. */
-    private String hiddenRadiusValue() {
-        String[] corners = new String[8];
-        for (int i = 0; i < 8; i++) {
-            String text = node.getStyle().inlineText(propertyOf(RADIUS_LONGHANDS.get(i)));
-            corners[i] = text == null ? "" : CssValues.bodyOf(text);
+    /** A group as a hidden row reads it: the commented longhands' values. */
+    private String hiddenValue(Group group) {
+        String[] values = new String[group.longhands().size()];
+        for (int i = 0; i < values.length; i++) {
+            String text = node.getStyle().inlineText(propertyOf(group.longhands().get(i)));
+            values[i] = text == null ? "" : CssValues.bodyOf(text);
         }
-        return radiusShorthand(corners);
+        return group.pack(values);
     }
 
     /**
@@ -586,20 +689,9 @@ public final class StyleFields {
     }
 
     private void writeInline(String property, String css) {
-        if (BORDER_RADIUS.equals(property)) {
-            writeRadiusInline(css);
-            return;
-        }
-        if (TEXT_STROKE.equals(property)) {
-            // THE COLOR IS WHICHEVER TERM PARSES AS ONE, the width the other: both orders are CSS.
-            String width = "";
-            String color = "";
-            for (String term : CssValues.terms(css)) {
-                if (ColorValue.parseCssColor(term) != null) color = term;
-                else width = term;
-            }
-            writeInline(STROKE_WIDTH, width);
-            writeInline(STROKE_COLOR, css.isEmpty() ? "" : color);
+        Group grouped = group(property);
+        if (grouped != null) {
+            writeGroupInline(grouped, css);
             return;
         }
         StyleProperty<?> styled = propertyOf(property);

@@ -316,6 +316,15 @@ public final class StyleLab {
         return this;
     }
 
+    /**
+     * Puts {@code element} above the rows, outside their scroll, where the stage stands in other labs -- for a gizmo
+     * that is the lab's specimen, which has to stay in view while the rows under it are scrolled.
+     */
+    public StyleLab header(UIElement element) {
+        dialog.getContent().insertAt(dialog.getContent().indexOf(panel), element);
+        return this;
+    }
+
     /** Tags this lab's window with {@code styleClass}, so a sheet can reach its own layout. */
     public StyleLab addClass(String styleClass) {
         dialog.addClass(styleClass);
@@ -340,6 +349,29 @@ public final class StyleLab {
     public StyleLab readout(String name, Property<String> css) {
         dialog.edits = css;
         PropertyWatch.follow(readout, css, value -> readout.setText(name + ": " + readable(value)));
+        return this;
+    }
+
+    /**
+     * Prints several declarations as a rule body holds them, only those set, followed while the lab is open -- for a lab
+     * that edits more than one. Run together and wrapped at the lab's width: a line each took eight lines for a border.
+     *
+     * <pre>{@code
+     * lab.readout(Map.of("border-radius", radius, "border-width", widths));
+     * }</pre>
+     */
+    public StyleLab readout(Map<String, Property<String>> declarations) {
+        if (!declarations.isEmpty()) dialog.edits = declarations.values().iterator().next();
+        PropertyWatch.follow(readout, Property.derived(() -> {
+            StringBuilder out = new StringBuilder();
+            declarations.forEach((name, css) -> {
+                String value = css.get();
+                if (value == null || value.isBlank()) return;
+                if (out.length() > 0) out.append(' ');
+                out.append(name).append(": ").append(readable(value)).append(';');
+            });
+            return out.length() == 0 ? "—" : out.toString();
+        }), readout::setText);
         return this;
     }
 
