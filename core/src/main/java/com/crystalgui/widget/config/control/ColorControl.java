@@ -10,6 +10,10 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.widget.overlay.Dialog;
+import com.crystalgui.render.texture.CgUiColorField;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.widget.text.UIText;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
 import org.joml.Matrix4f;
@@ -49,6 +53,8 @@ public class ColorControl extends ValueControl<Integer> {
     public static final String COLOR_BAR_CLASS = "__color-bar__";
     public static final String ALPHA_BAR_CLASS = "__alpha-bar__";
     public static final String ALPHA_FILL_CLASS = "__alpha-fill__";
+    /** The colour as hex beside the swatch — hidden by the kit, shown where a panel wants compact rows. */
+    public static final String HEX_CLASS = "__color-hex__";
     /** The no-argument constructor the registry's factory needs, over a NEUTRAL
      * descriptor -- an unlabelled control of this kind, which is a real thing rather than a
      * placeholder. Nothing decodes one: the kit is {@code localOnly}, and the registration
@@ -73,6 +79,11 @@ public class ColorControl extends ValueControl<Integer> {
     private final UIElement swatch = new UIElement();
     private final UIElement colorBar = new UIElement();
     private final UIElement alphaFill = new UIElement();
+    private final UIText hex = new UIText("");
+
+    /** What the hex says for a value of exactly zero, or null to spell it. @see #zeroLabel */
+    @Nullable
+    private String zeroLabel;
     private final Dialog dialog = new Dialog("Color");
     private final ColorSelector picker = new ColorSelector();
 
@@ -112,36 +123,64 @@ public class ColorControl extends ValueControl<Integer> {
 
         swatch.onMouseDown.attachListener((el, event) -> {
             event.stopPropagation();
-            if (dialog.isOpen()) {
-                dialog.close();
-                return;
-            }
-            picker.setInitialColor(getValue() == null ? DEFAULT_COLOR : getValue());
-            dialog.show();
-            UIDocument window = swatch.document();
-            if (window == null) return;
-            // Promoted BY HAND: Dialog.show() is modeless, and the spec promotes only showModal() —
-            // see ShaderColorFieldWidget's own note on why showModal() (inert whole document) and a
-            // bare Popover (not draggable) are both wrong for this.
-            window.promote(dialog);
-            placeAtPointer(window, dialog, event.getPosition().x(), event.getPosition().y());
+            togglePicker(event.getPosition().x(), event.getPosition().y());
+        }, false, false);
+        hex.addClass(HEX_CLASS);
+        hex.setHitTest(true);
+        hex.onMouseDown.attachListener((el, event) -> {
+            event.stopPropagation();
+            togglePicker(event.getPosition().x(), event.getPosition().y());
         }, false, false);
 
         append(swatch);
+        append(hex);
+        // THE CHECKERBOARD ONCE ON SCREEN: it is a drawable, and a control a server describes never joins a document.
+        onConnected(() -> paint(getValue()));
     }
 
-    /** The colour opaque, the alpha as a proportional width — reading a translucent colour against
-     * whatever sits behind the row is not something an eye can do reliably. Deliberately NOT
-     * {@code ColorSelector}'s checkerboard-composite swatch: this is a closed-state summary read at a
-     * glance in a dense panel, and a real alpha bar is a faster read there than a checkerboard is. */
+    private void togglePicker(float worldX, float worldY) {
+        if (dialog.isOpen()) {
+            dialog.close();
+            return;
+        }
+        picker.setInitialColor(getValue() == null ? DEFAULT_COLOR : getValue());
+        dialog.show();
+        UIDocument window = swatch.document();
+        if (window == null) return;
+        // Promoted BY HAND: Dialog.show() is modeless, and the spec promotes only showModal() —
+        // see ShaderColorFieldWidget's own note on why showModal() (inert whole document) and a
+        // bare Popover (not draggable) are both wrong for this.
+        window.promote(dialog);
+        placeAtPointer(window, dialog, worldX, worldY);
+    }
+
+    /**
+     * The colour over a checkerboard, so a translucent one looks translucent, with the alpha again as a proportional
+     * strip beneath — the strip is the faster read at a glance, the checkerboard the truer one.
+     */
     private void paint(@Nullable Integer value) {
         int argb = value == null ? DEFAULT_COLOR : value;
-        // background-COLOR, not a drawable: paint() runs from the constructor, and building one there
-        // reaches a CrystalGraphics texture type outside a paint body -- which a dedicated server has
-        // no class for.
-        colorBar.generalStyle(g -> g.backgroundColor(argb | 0xFF000000));
+        if (document() != null) {
+            // THE OPAQUE FILL REMOVED, not zeroed: a background-colour that is SET at all is drawn instead of the
+            // background, so a zero drew nothing where the checkerboard should be.
+            colorBar.getStyle().removeCandidates(StylePropertyRegistry.BACKGROUND_COLOR, slot -> true);
+            StyleGroup.inlinePipeline(colorBar.getStyle().getGeneralGroup(), g -> g.background(new CgUiColorField()
+                    .setMode(CgUiColorField.Mode.GRADIENT)
+                    .setGradient(argb, argb)));
+        } else {
+            // background-COLOR, not a drawable, off screen: building one reaches a CrystalGraphics texture type,
+            // which a dedicated server has no class for.
+            colorBar.generalStyle(g -> g.backgroundColor(argb | 0xFF000000));
+        }
         float alpha = ((argb >>> 24) & 0xFF) / 255f;
         alphaFill.layout(l -> l.widthPercent(alpha * 100f));
+        // EIGHT DIGITS ONLY WITH TRANSPARENCY TO STATE, as a sheet's colour writer spells it.
+        int a = (argb >>> 24) & 0xFF;
+        if (argb == 0 && zeroLabel != null) {
+            hex.setText(zeroLabel);
+        } else {
+            hex.setText(a == 0xFF ? String.format("#%06X", argb & 0xFFFFFF) : String.format("#%06X%02X", argb & 0xFFFFFF, a));
+        }
     }
 
     @Override
@@ -159,6 +198,19 @@ public class ColorControl extends ValueControl<Integer> {
     private static void placeAtPointer(UIDocument window, Dialog dialog, float worldX, float worldY) {
         var local = Transform2D.apply(new Matrix4f(window.boxes().rootTransform()).invert(), worldX, worldY);
         dialog.placeAt(local.x() - 6f, local.y() - 6f);
+    }
+
+    /**
+     * What the hex reads for a value of zero, for a property where zero is not a colour but "inherit one".
+     *
+     * <pre>{@code
+     * control.zeroLabel("currentColor");   // caret-color: 0 is the text's own colour
+     * }</pre>
+     */
+    public ColorControl zeroLabel(@Nullable String label) {
+        zeroLabel = label;
+        paint(getValue());
+        return this;
     }
 
     /** The swatch, for a host that needs to reach the widget directly. */

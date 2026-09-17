@@ -143,6 +143,23 @@ public class Popover extends UIElement {
     @Nullable
     private UIElement focusBeforeOpen;
 
+    /** Whether closing hands focus back. @see #restoresFocus */
+    private boolean restoresFocus = true;
+
+    /**
+     * Whether closing hands focus back to what held it when this opened. On by default, which is what a menu
+     * wants. Off for a popup that never takes focus — a field's suggestion list — where the "restore" lands on the
+     * field the person just clicked away from.
+     *
+     * <pre>{@code
+     * Popover suggestions = new Popover().restoresFocus(false);   // closing on blur must not refocus the field
+     * }</pre>
+     */
+    public Popover restoresFocus(boolean restore) {
+        restoresFocus = restore;
+        return this;
+    }
+
     private boolean placementTickerRunning;
 
     /**
@@ -476,7 +493,7 @@ public class Popover extends UIElement {
         if (window != null) {
             window.dismiss().popAutoPopover(this);
             window.dismiss().popCloseWatcher(this);
-            if (focusBeforeOpen != null && focusBeforeOpen.document() == window) {
+            if (restoresFocus && focusBeforeOpen != null && focusBeforeOpen.document() == window) {
                 // Hand back the focus RING exactly as it was, rather than deciding afresh.
                 //
                 // requestFocus is PROGRAMMATIC and therefore always rings. Using it unconditionally meant

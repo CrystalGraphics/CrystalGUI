@@ -148,6 +148,21 @@ public final class FontFamilyCache {
      * <p>Cached under {@link #resolve}'s key — {@code UIText} memoises its shaped paragraph on reference
      * equality, so a group rebuilt per call would re-shape every frame.</p>
      */
+    /**
+     * The families installed on this machine, by name — what a {@code font-family} may name besides a resource path.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.text("font", "Font").suggestions(FontFamilyCache::installedFamilies);
+     * }</pre>
+     *
+     * <p>Empty when system fonts are off ({@code -Dcrystalgui.font.systemFonts=false}). The first call scans the
+     * font directories; later ones read the index.</p>
+     */
+    public static List<String> installedFamilies() {
+        CgSystemFonts fonts = systemFonts;
+        return fonts == null ? List.of() : fonts.families();
+    }
+
     public static CgFontFamilyGroup resolveGroup(List<String> stack, int targetPx) {
         CgFontFamily regular = resolve(stack, targetPx);
         return GROUP_CACHE.computeIfAbsent(key(stack, targetPx), ignored -> group(stack, targetPx, regular));
