@@ -13,7 +13,7 @@ import com.crystalgui.widget.text.UIText;
  * The transform lab: the ops in the order they compose, the picked one edited where it can be seen.
  *
  * <pre>{@code
- * TransformLab.open(chip, StylePropertyRegistry.TRANSFORM, css);
+ * TransformLab.open(chip, StylePropertyRegistry.TRANSFORM, css, fields.canWrite());
  * }</pre>
  *
  * <p><b>Order is the semantics.</b> {@code translate(10px) scale(2)} and {@code scale(2) translate(10px)} put
@@ -23,10 +23,6 @@ import com.crystalgui.widget.text.UIText;
 public final class TransformLab {
 
     private TransformLab() {
-    }
-
-    public static void open(UIElement anchor, StyleProperty<?> property, Property<String> css) {
-        open(anchor, property, css, false);
     }
 
     /** @param hideable whether an op may be switched off rather than deleted, which a writable value can */

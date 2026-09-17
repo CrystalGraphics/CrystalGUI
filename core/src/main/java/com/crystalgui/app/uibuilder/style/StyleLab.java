@@ -347,9 +347,7 @@ public final class StyleLab {
      * stack breaks between its layers rather than inside a length.
      */
     public StyleLab readout(String name, Property<String> css) {
-        dialog.edits = css;
-        PropertyWatch.follow(readout, css, value -> readout.setText(name + ": " + readable(value)));
-        return this;
+        return readout(Map.of(name, css));
     }
 
     /**
@@ -357,18 +355,25 @@ public final class StyleLab {
      * that edits more than one. Run together and wrapped at the lab's width: a line each took eight lines for a border.
      *
      * <pre>{@code
-     * lab.readout(Map.of("border-radius", radius, "border-width", widths));
+     * lab.readout(new LinkedHashMap<>(Map.of("border-radius", radius, "border-width", widths)));
      * }</pre>
+     *
+     * <p><b>Iterated in the map's own order</b>, so a lab that cares hands over a {@code LinkedHashMap}.</p>
      */
     public StyleLab readout(Map<String, Property<String>> declarations) {
-        if (!declarations.isEmpty()) dialog.edits = declarations.values().iterator().next();
+        if (declarations.isEmpty()) return this;
+        dialog.edits = declarations.values().iterator().next();
+        // A DECLARATION A LAB IS ABOUT IS PRINTED BLANK OR NOT, where one of several is printed only when it is set:
+        // a lab's own value reads as "—" rather than vanishing, and a rule body does not carry empty declarations.
+        boolean several = declarations.size() > 1;
         PropertyWatch.follow(readout, Property.derived(() -> {
             StringBuilder out = new StringBuilder();
             declarations.forEach((name, css) -> {
                 String value = css.get();
-                if (value == null || value.isBlank()) return;
+                if (several && (value == null || value.isBlank())) return;
                 if (out.length() > 0) out.append(' ');
-                out.append(name).append(": ").append(readable(value)).append(';');
+                out.append(name).append(": ").append(readable(value));
+                if (several) out.append(';');
             });
             return out.length() == 0 ? "—" : out.toString();
         }), readout::setText);

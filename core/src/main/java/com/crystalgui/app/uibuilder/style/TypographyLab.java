@@ -1,6 +1,10 @@
 package com.crystalgui.app.uibuilder.style;
 
+import java.util.EnumSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -37,11 +41,10 @@ public final class TypographyLab {
     static final List<String> ALIGNS = List.of("outset", "center", "inset");
 
     /**
-     * How a stroke width is spelled. <b>{@code em} is written as a percentage</b>: {@code TextStrokeStyle}
-     * resolves the width against the font size, so {@code 15%} is 0.15em, while a literal {@code em} does not
-     * parse there. The gallery's text lab spells it the same way.
+     * How a stroke width is spelled: pixels, or a share of the font size. <b>{@code em} is written as a
+     * percentage</b> -- {@code TextStrokeStyle} resolves the width against the font size, so {@code 15%} is
+     * 0.15em, while a literal {@code em} does not parse there. The gallery's text lab spells it the same way.
      */
-    /** The second is a share of the font size, written and shown as the percentage the number field reads. */
     static final List<String> UNITS = List.of("px", "%");
 
     /** The faces that ship: a stack the cache cannot load throws where it is measured, not where it is set. */
@@ -49,6 +52,19 @@ public final class TypographyLab {
             "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf",
             "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
             "crystalgui:ui/fonts/Minecraft.otf");
+
+    /** The size slider's reach, in px — the Style tab's font-size row slides over the same. */
+    static final float MIN_SIZE = 6f;
+    static final float MAX_SIZE = 96f;
+
+    /** What the line-height row offers: the keyword, then the multipliers a type scale reaches for. */
+    static final List<String> LINE_HEIGHTS = List.of("normal", "1", "1.2", "1.4", "1.5", "2");
+
+    /** The mask's options, in the order a reader meets the lines: under, through, over. */
+    static final List<String> DECORATIONS = List.of("Underline", "Strike through", "Overline");
+
+    private static final List<TextDecorationLine> DECORATION_LINES =
+            List.of(TextDecorationLine.UNDERLINE, TextDecorationLine.LINE_THROUGH, TextDecorationLine.OVERLINE);
 
     /** The narrow band every face can carry, for when there is no specimen to ask. */
     private static final float STROKE_CAP_EM = 0.125f;
@@ -154,8 +170,8 @@ public final class TypographyLab {
     }
 
     /** The lines a {@code text-decoration-line} declaration names; empty for {@code none} or blank. */
-    static java.util.EnumSet<TextDecorationLine> lines(String css) {
-        java.util.EnumSet<TextDecorationLine> out = java.util.EnumSet.noneOf(TextDecorationLine.class);
+    static EnumSet<TextDecorationLine> lines(String css) {
+        EnumSet<TextDecorationLine> out = EnumSet.noneOf(TextDecorationLine.class);
         for (String term : CssValues.terms(css == null ? "" : css)) {
             for (TextDecorationLine line : TextDecorationLine.values()) {
                 if (keywordOf(line).equalsIgnoreCase(term)) out.add(line);
@@ -191,23 +207,10 @@ public final class TypographyLab {
         return face >= 0 ? FACES.get(face) : trimmed;
     }
 
-    /** The size slider's reach, in px — the Style tab's font-size row slides over the same. */
-    static final float MIN_SIZE = 6f;
-    static final float MAX_SIZE = 96f;
-
-    /** What the line-height row offers: the keyword, then the multipliers a type scale reaches for. */
-    static final List<String> LINE_HEIGHTS = List.of("normal", "1", "1.2", "1.4", "1.5", "2");
-
-    /** The mask's options, in the order a reader meets the lines: under, through, over. */
-    static final List<String> DECORATIONS = List.of("Underline", "Strike through", "Overline");
-
-    private static final List<TextDecorationLine> DECORATION_LINES =
-            List.of(TextDecorationLine.UNDERLINE, TextDecorationLine.LINE_THROUGH, TextDecorationLine.OVERLINE);
-
     /** The mask's selection for a declaration. */
-    static java.util.Set<String> decorationNames(String css) {
-        java.util.Set<String> out = new java.util.LinkedHashSet<>();
-        java.util.EnumSet<TextDecorationLine> on = lines(css);
+    static Set<String> decorationNames(String css) {
+        Set<String> out = new LinkedHashSet<>();
+        EnumSet<TextDecorationLine> on = lines(css);
         for (int i = 0; i < DECORATION_LINES.size(); i++) {
             if (on.contains(DECORATION_LINES.get(i))) out.add(DECORATIONS.get(i));
         }
@@ -215,7 +218,7 @@ public final class TypographyLab {
     }
 
     /** The declaration for a mask's selection, {@code none} when nothing is ticked. */
-    static String decorationCss(@Nullable java.util.Set<String> names) {
+    static String decorationCss(@Nullable Set<String> names) {
         StringBuilder out = new StringBuilder();
         for (int i = 0; i < DECORATION_LINES.size(); i++) {
             if (names == null || !names.contains(DECORATIONS.get(i))) continue;
@@ -226,7 +229,7 @@ public final class TypographyLab {
     }
 
     private static String keywordOf(TextDecorationLine line) {
-        return line.name().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+        return line.name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
     /** A keyword declaration, matched without regard to case and reading as the first option when unset. */

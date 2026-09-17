@@ -67,7 +67,12 @@ public final class GradientBar extends ValueControl<Gradient> {
     private final UIElement ramp = new UIElement();
     private final UIElement fill = new UIElement();
     private final UIElement track = new UIElement();
-    private final ChildList<UIElement> handles = new ChildList<>(track, this::handle);
+    private final ChildList<Handle> handles = new ChildList<>(track, this::handle);
+
+    /** One stop's handle: the pointer at the position it marks, and the swatch of its color under it. */
+    private static final class Handle extends UIElement {
+        final UIElement swatch = new UIElement();
+    }
 
     /** @param property what the ramp draws the gradient with — {@code background} or {@code overlay} */
     public GradientBar(String id, StyleProperty<?> property, Property<Integer> selected) {
@@ -107,7 +112,8 @@ public final class GradientBar extends ValueControl<Gradient> {
             int key = down.getKeyCode();
             int at = picked();
             if (key == CgKeyCodes.KEY_LEFT || key == CgKeyCodes.KEY_RIGHT) {
-                float step = (CgModifiers.hasCtrl(CgPlatform.input().getCurrentModifiers()) ? 0.001f : 0.01f) * (key == CgKeyCodes.KEY_LEFT ? -1 : 1);
+                boolean fine = CgModifiers.hasCtrl(CgPlatform.input().getCurrentModifiers());
+                float step = (fine ? 0.001f : 0.01f) * (key == CgKeyCodes.KEY_LEFT ? -1 : 1);
                 Gradient now = gradient();
                 float moved = Math.max(0f, Math.min(1f, Math.round((now.position(at) + step) * 1000f) / 1000f));
                 commitAndShow(now.withStopMoved(at, moved));
@@ -133,9 +139,9 @@ public final class GradientBar extends ValueControl<Gradient> {
         LiveEdits.setInline(fill, property, gradient.withDirection("90deg").toString());
         handles.resize(gradient.stops().size());
         for (int i = 0; i < gradient.stops().size(); i++) {
-            UIElement handle = handles.get(i);
+            Handle handle = handles.get(i);
             LiveEdits.setInline(handle, LayoutProperties.LEFT, CssValues.write(gradient.position(i) * 100f) + "%");
-            StyleChip.paintColor(handle.children().get(1), gradient.stops().get(i).argb());
+            StyleChip.paintColor(handle.swatch, gradient.stops().get(i).argb());
         }
         paintSelection();
     }
@@ -150,15 +156,14 @@ public final class GradientBar extends ValueControl<Gradient> {
         return Math.max(0, Math.min(selected.get() == null ? 0 : selected.get(), size - 1));
     }
 
-    private UIElement handle(int index) {
-        UIElement handle = new UIElement();
+    private Handle handle(int index) {
+        Handle handle = new Handle();
         handle.addClass(STOP_CLASS);
         UIElement pointer = new UIElement();
         pointer.addClass(POINTER_CLASS);
-        UIElement swatch = new UIElement();
-        swatch.addClass(SWATCH_CLASS);
+        handle.swatch.addClass(SWATCH_CLASS);
         handle.append(pointer);
-        handle.append(swatch);
+        handle.append(handle.swatch);
         float[] from = new float[1];
         boolean[] off = new boolean[1];
         // WHERE THE DRAGGED STOP IS NOW: passing a neighbour reorders the stops, so it leaves this handle's index.

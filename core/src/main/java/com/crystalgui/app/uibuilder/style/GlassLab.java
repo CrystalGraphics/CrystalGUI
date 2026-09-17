@@ -145,28 +145,23 @@ public final class GlassLab {
     }
 
     /**
-     * Draws a {@code backdrop-filter} row's swatch: two of the lab's shapes reaching in from opposite corners, and a
-     * pane over the middle carrying the glass {@link #fitted} to the swatch -- so each shape is seen both plain and
-     * through the glass. Built once, restyled per value.
+     * Gives a {@code backdrop-filter} row's swatch the lab's scene in small: two of the lab's shapes reaching in from
+     * opposite corners, and a pane over the middle carrying the glass {@link #fitted} to the swatch -- so each shape is
+     * seen both plain and through the glass.
      */
-    static void paintSample(StyleChip chip, String css) {
-        UIElement swatch = chip.swatch();
-        UIElement pane = null;
-        for (UIElement child : swatch.children()) {
-            if (child.hasClass(SAMPLE_PANE_CLASS)) pane = child;
-        }
-        if (pane == null) {
-            UIElement scene = new UIElement();
-            scene.addClass(SAMPLE_SCENE_CLASS);
+    static void sample(StyleChip chip) {
+        UIElement pane = new UIElement().addClass(SAMPLE_PANE_CLASS);
+        chip.painter(swatch -> {
+            UIElement scene = new UIElement().addClass(SAMPLE_SCENE_CLASS);
             for (int i = 0; i < 2; i++) {
                 scene.append(new UIElement().addClass(SAMPLE_SHAPE_CLASS).addClass(SAMPLE_SHAPE_CLASS + i));
             }
             swatch.append(scene);
-            pane = new UIElement().addClass(SAMPLE_PANE_CLASS);
             swatch.append(pane);
-        }
-        if (css.isBlank()) LiveEdits.clearInline(pane, StylePropertyRegistry.BACKDROP_FILTER);
-        else LiveEdits.setInline(pane, StylePropertyRegistry.BACKDROP_FILTER, fitted(css));
+        }, (c, css) -> {
+            if (css.isBlank()) LiveEdits.clearInline(pane, StylePropertyRegistry.BACKDROP_FILTER);
+            else LiveEdits.setInline(pane, StylePropertyRegistry.BACKDROP_FILTER, fitted(css));
+        });
     }
 
     /** {@code css} with every length scaled to a swatch, so its blur and bezel keep their share of the box. */

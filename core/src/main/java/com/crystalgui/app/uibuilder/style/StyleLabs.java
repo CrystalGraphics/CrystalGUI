@@ -34,6 +34,13 @@ public final class StyleLabs {
 
     private static boolean registered;
 
+    /** The properties whose swatch needs something to apply the value TO -- a face, a stroke, a shadow's glyphs. */
+    private static final List<StyleProperty<?>> SAMPLED = List.of(
+            StylePropertyRegistry.FONT_FAMILY, StylePropertyRegistry.FONT_WEIGHT, StylePropertyRegistry.FONT_STYLE,
+            StylePropertyRegistry.PAINT_ORDER, StylePropertyRegistry.TEXT_DECORATION_LINE,
+            // A SHADOW IS CAST BY GLYPHS: on an empty box it paints nothing at all.
+            StylePropertyRegistry.TEXT_SHADOW);
+
     /** The properties a text sample carries from the element, so a chip's "Ag" is set in the element's own type. */
     private static final List<StyleProperty<?>> FACE = List.of(
             StylePropertyRegistry.FONT_FAMILY, StylePropertyRegistry.FONT_WEIGHT, StylePropertyRegistry.FONT_STYLE);
@@ -111,11 +118,12 @@ public final class StyleLabs {
     /** A row that draws its own value and opens {@code lab} — anchored on the chip itself — when pressed. */
     private static DeclarationEditors.Field chip(DeclarationEditors.Context context, Consumer<StyleChip> lab) {
         StyleProperty<?> property = context.property();
-        String name = property == null ? context.label() : property.name;
-        ConfigDescriptor descriptor = ConfigDescriptor.text(context.id(), context.label())
+        String name = context.name();
+        ConfigDescriptor descriptor = ConfigDescriptor.text(context.id(), name)
                 .tooltip(name + " — press to open the lab");
         StyleChip chip = new StyleChip(descriptor, drawable(property) ? property : null);
-        if (sampled(name)) {
+        // THE SHORTHAND HAS NO PROPERTY, and List.of refuses to be asked about null.
+        if (property != null && SAMPLED.contains(property) || StyleFields.TEXT_STROKE.equals(name)) {
             chip.sample("Ag");
             followFace(chip, property, context.node());
         }
@@ -124,14 +132,11 @@ public final class StyleLabs {
         if (property == StylePropertyRegistry.FONT_FAMILY) chip.display(TypographyLab::shortName);
         if (property == StylePropertyRegistry.PAINT_ORDER) chip.painter(StyleLabs::paintOrderSample);
         // Glass over the swatch's flat band filters nothing: it needs something behind it.
-        if (property == StylePropertyRegistry.BACKDROP_FILTER) chip.painter(GlassLab::paintSample);
+        if (property == StylePropertyRegistry.BACKDROP_FILTER) GlassLab.sample(chip);
         if (StyleFields.TEXT_STROKE.equals(name)) chip.painter((c, css) -> strokeSample(c, css, context.node()));
         // THE EDGE ROWS DRAW THE ELEMENT'S EDGE, one sample for all of them with the row's own part lit. @see BorderSample
         BorderSample.Part part = borderPart(name);
-        if (part != null) {
-            chip.painter((c, css) -> { });
-            BorderSample.follow(chip, context.node(), part);
-        }
+        if (part != null) BorderSample.follow(chip, context.node(), part);
         if (property == StylePropertyRegistry.TEXT_DECORATION_LINE) {
             chip.painter((c, css) -> onSample(c, StylePropertyRegistry.TEXT_DECORATION_LINE, css));
         }
@@ -144,32 +149,18 @@ public final class StyleLabs {
     /** The part of the element's edge a row is about, or null for a row that is not an edge's. */
     @Nullable
     private static BorderSample.Part borderPart(String name) {
-        if (StyleFields.BORDER_RADIUS.equals(name) || StyleFields.RADIUS_LONGHANDS.contains(name)) {
-            return BorderSample.Part.RADIUS;
-        }
+        // BY THE SHORTHAND, so a longhand a rule wrote and the shorthand a row shows answer alike.
         StyleFields.Group group = StyleFields.groupOf(name);
-        if (StyleFields.BORDER_WIDTH.equals(name) || group != null && StyleFields.BORDER_WIDTH.equals(group.name())) {
-            return BorderSample.Part.BORDER;
-        }
-        if (StyleFields.OUTLINE_OFFSET.equals(name) || group != null && StyleFields.OUTLINE_OFFSET.equals(group.name())) {
-            return BorderSample.Part.OFFSET;
-        }
-        return group != null && StyleFields.OUTLINE.equals(group.name()) || StyleFields.OUTLINE.equals(name)
-                ? BorderSample.Part.OUTLINE : null;
+        String shorthand = group == null ? name : group.name();
+        if (StyleFields.BORDER_RADIUS.equals(shorthand)) return BorderSample.Part.RADIUS;
+        if (StyleFields.BORDER_WIDTH.equals(shorthand)) return BorderSample.Part.BORDER;
+        if (StyleFields.OUTLINE_OFFSET.equals(shorthand)) return BorderSample.Part.OFFSET;
+        return StyleFields.OUTLINE.equals(shorthand) ? BorderSample.Part.OUTLINE : null;
     }
 
     /** Whether a swatch of this property says anything: a width applied to a small box does not. */
     private static boolean drawable(@Nullable StyleProperty<?> property) {
         return property != null && property != StylePropertyRegistry.TEXT_STROKE_WIDTH;
-    }
-
-    /** Whether the swatch needs something to apply the property TO — a face, a weight, a stroke. */
-    private static boolean sampled(String name) {
-        return name.equals("font-family") || name.equals("font-weight") || name.equals("font-style")
-                || name.equals("paint-order") || name.equals(StyleFields.TEXT_STROKE)
-                || name.equals("text-decoration-line")
-                // A SHADOW IS CAST BY GLYPHS: on an empty box it paints nothing at all.
-                || name.equals("text-shadow");
     }
 
     /**
