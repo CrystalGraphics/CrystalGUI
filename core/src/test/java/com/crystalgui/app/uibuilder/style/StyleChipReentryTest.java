@@ -51,7 +51,7 @@ public class StyleChipReentryTest extends UiDocumentTestBase {
 
     @Test
     public void pressingInsideTheLabDoesNotReopenIt() {
-        Button keyword = keyword("Remove stop");
+        Button keyword = keyword("Remove");
         assertNotNull("the lab is up", keyword);
 
         float[] at = centre(keyword.box());
@@ -65,7 +65,7 @@ public class StyleChipReentryTest extends UiDocumentTestBase {
     /** The lab is not inside the chip: a popover lives in the top layer, or it inherits the chip's everything. */
     @Test
     public void theLabIsNotAChildOfTheChip() {
-        Button keyword = keyword("Remove stop");
+        Button keyword = keyword("Remove");
         assertNotNull(keyword);
         for (UIElement each : chip.composedSubtree()) {
             assertTrue("the lab is in the chip's subtree: " + each, each != keyword);

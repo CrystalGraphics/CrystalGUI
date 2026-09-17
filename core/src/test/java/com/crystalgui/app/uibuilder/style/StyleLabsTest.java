@@ -182,6 +182,25 @@ public class StyleLabsTest {
      * lands in the box is a corner of a blur. Scaling the offsets and the blur together keeps the
      * direction, the softness and the color, which is all a picture that size is being asked.</p>
      */
+    /** A shadow's spread and {@code inset} survive an edit, and a plain shadow keeps Level 3's spelling. */
+    @Test
+    public void aShadowKeepsItsSpreadAndInset() {
+        ShadowLab.Shadow full = ShadowLab.Shadow.parse("#FF0000 1px 2px 3px 4px inset");
+        assertEquals(4f, full.spread(), 1e-6);
+        assertTrue(full.inset());
+        assertEquals("1px 2px 3px 4px #FF0000 inset", full.withBlur(3).toString());
+        assertEquals("no spread written where there is none", "0px 1px 2px #000000",
+                ShadowLab.Shadow.parse("0 1px 2px #000000").toString());
+    }
+
+    /** A gradient stop is written to a tenth of a percent, whatever a drag landed on. */
+    @Test
+    public void aGradientStopIsWrittenToATenth() {
+        Gradient ramp = Gradient.parse("linear-gradient(90deg, #FF0000, #0000FF)");
+        assertEquals("linear-gradient(90deg, #FF0000 17.6%, #0000FF)",
+                ramp.withStop(0, ramp.stops().get(0).withPosition(0.17596f)).toString());
+    }
+
     @Test
     public void aShadowTooBigForItsChipIsDrawnToScale() {
         assertEquals("one that already fits is left alone", "0px 1px 2px #000000",
@@ -324,5 +343,23 @@ public class StyleLabsTest {
         sheet.history().undo();
         assertTrue("the sheet's history is where that edit lives", sheet.toString().contains("opacity: 0.5"));
         assertFalse(sheet.toString().contains("opacity: 0.9"));
+    }
+
+    @Test
+    public void aLayerStackEditIsAStepInTheSheetsHistory() {
+        StyleFields fields = StyleFields.on(null, rule(), node);
+        Property<String> css = fields.value("text-shadow");
+        css.set("0px 1px 2px #000000");
+        LayerStack stack = new LayerStack("t", StylePropertyRegistry.TEXT_SHADOW, Property.of(0));
+        window.append(stack);
+        stack.bind(css.map(CssValues::layers, CssValues::join));
+        frame();
+        stack.add("0px 0px 4px #FF0000");
+        frame();
+        assertTrue(sheet.toString().contains("#FF0000"));
+        sheet.history().undo();
+        frame();
+        assertFalse("the add was its own step", sheet.toString().contains("#FF0000"));
+        assertTrue(sheet.toString().contains("text-shadow"));
     }
 }

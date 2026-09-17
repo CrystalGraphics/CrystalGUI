@@ -15,8 +15,12 @@ import com.crystalgui.widget.config.PropertyWatch;
 import com.crystalgui.widget.config.ValueControl;
 
 /**
- * A gradient drawn as itself, with a handle on each stop: drag a handle along the bar to move its stop,
- * press one to pick it, double-click the bar to add one.
+ * A gradient's stops laid left to right, with a handle on each: drag a handle along the bar to move its stop, drag
+ * it off the bar to remove it, press one to pick it, double-click the bar to add one.
+ *
+ * <p><b>Always left to right</b>, whatever the gradient's own direction: the bar is where stops are placed, and a
+ * handle at 20% has to sit over the color at 20%. Drawn at the gradient's angle, a 313deg ramp ran the other way
+ * under its own handles.</p>
  *
  * <pre>{@code
  * Property<Integer> selected = Property.of(0);
@@ -31,6 +35,11 @@ public final class GradientBar extends ValueControl<Gradient> {
     public static final String BAR_CLASS = "__gradient-bar__";
     public static final String STOP_CLASS = "__gradient-stop__";
     public static final String ACTIVE_CLASS = "__active__";
+    /** On a handle dragged far enough off the bar that letting go removes its stop. */
+    public static final String REMOVING_CLASS = "__removing__";
+
+    /** How far below the bar a handle is dragged before letting go removes its stop, in px. */
+    private static final float REMOVE_DISTANCE = 28f;
 
     private final StyleProperty<?> property;
     private final Property<Integer> selected;
@@ -49,7 +58,7 @@ public final class GradientBar extends ValueControl<Gradient> {
             if (!(event instanceof MouseEvent.Down down) || down.getDetail() < 2 || down.isDefaultPrevented()) return;
             float where = StyleGizmos.fractionAt(this, down.getPosition().x(), down.getPosition().y());
             Gradient now = gradient();
-            commit(now.withStopAt(where));
+            commitAndShow(now.withStopAt(where));
             selected.set(now.indexAt(where));
             event.preventDefault();
         }, false, true);
@@ -64,11 +73,13 @@ public final class GradientBar extends ValueControl<Gradient> {
     @Override
     protected void writeToWidgets(@Nullable Gradient value) {
         Gradient gradient = value == null ? Gradient.DEFAULT : value;
-        LiveEdits.setInline(this, property, gradient.toString());
+        LiveEdits.setInline(this, property, gradient.withDirection("90deg").toString());
         handles.resize(gradient.stops().size());
         for (int i = 0; i < gradient.stops().size(); i++) {
-            LiveEdits.setInline(handles.get(i), LayoutProperties.LEFT,
-                    CssValues.write(gradient.position(i) * 100f) + "%");
+            UIElement handle = handles.get(i);
+            LiveEdits.setInline(handle, LayoutProperties.LEFT, CssValues.write(gradient.position(i) * 100f) + "%");
+            // THE STOP'S OWN COLOR on its handle, so a stop is found by the color it is rather than by position.
+            StyleChip.paintColor(handle, gradient.stops().get(i).argb());
         }
         paintSelection();
     }
@@ -82,18 +93,30 @@ public final class GradientBar extends ValueControl<Gradient> {
         UIElement handle = new UIElement();
         handle.addClass(STOP_CLASS);
         float[] from = new float[1];
+        boolean[] off = new boolean[1];
         StyleGizmos.drag(handle, () -> {
             from[0] = gradient().position(index);
+            off[0] = false;
             selected.set(index);
             beginInteraction();
         }, (dx, dy) -> {
             float width = box() == null ? 1f : Math.max(1f, box().width());
             float moved = Math.max(0f, Math.min(1f, from[0] + dx / width));
+            // DRAGGED OFF THE BAR, as a gradient editor's stop is: it goes on release, and coming back cancels it.
+            off[0] = Math.abs(dy) > REMOVE_DISTANCE && gradient().stops().size() > 2;
+            handle.toggleClass(REMOVING_CLASS, off[0]);
             Gradient now = gradient();
             if (index < now.stops().size()) {
-                commit(now.withStop(index, now.stops().get(index).withPosition(moved)));
+                commitAndShow(now.withStop(index, now.stops().get(index).withPosition(moved)));
             }
-        }, this::endInteraction);
+        }, () -> {
+            handle.removeClass(REMOVING_CLASS);
+            if (off[0]) {
+                commitAndShow(gradient().withoutStop(index));
+                selected.set(Math.max(0, index - 1));
+            }
+            endInteraction();
+        });
         return handle;
     }
 

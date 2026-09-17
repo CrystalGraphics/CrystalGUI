@@ -33,12 +33,12 @@ public class LabFollowsTheValueTest extends UiDocumentTestBase {
         for (int i = 0; i < 4; i++) frame();
         SliderControl blur = blurRow();
         assertNotNull("the lab has a blur row", blur);
-        assertEquals("2.00px", blur.number().field().getText());
+        assertEquals("2.0px", blur.number().field().getText());
 
         css.set("0 1px 9px #000000");   // what an undo does
         frame();
 
-        assertEquals("the row SHOWS the value as it is now", "9.00px", blur.number().field().getText());
+        assertEquals("the row SHOWS the value as it is now", "9.0px", blur.number().field().getText());
     }
 
     private SliderControl blurRow() {

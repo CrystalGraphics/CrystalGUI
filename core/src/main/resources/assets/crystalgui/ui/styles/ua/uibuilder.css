@@ -1215,19 +1215,35 @@ smartguides {
 }
 
 /* The gradient bar IS the gradient, and a stop is a handle on it. */
-.__gradient-bar__ { height: 26px; border-radius: 3px; position: relative; }
+/* INSET BY HALF A HANDLE each side, so a stop at 0% or 100% is whole rather than cut by the lab's edge. */
+.__gradient-bar__ {
+    height: 22px;
+    margin-left: 7px;
+    margin-right: 7px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    border-radius: 3px;
+    position: relative;
+    flex-shrink: 0;
+}
+/* CENTRED ON ITS POSITION, filled with its stop's color and ringed white, as every gradient editor draws one. */
 .__gradient-stop__ {
     position: absolute;
-    top: -3px;
-    width: 9px;
-    height: 32px;
-    border-radius: 2px;
-    background: var(--lab-stop-bg, #FFFFFF);
-    outline: 1px var(--lab-stop-border, #00000088);
+    top: -4px;
+    width: 12px;
+    height: 30px;
+    margin-left: -6px;
+    border-radius: 3px;
+    outline: 2px var(--lab-stop-border, #FFFFFF);
     cursor: pointer;
 }
 .__gradient-stop__.__active__ { outline: 2px var(--accent, #3574F0); }
+/* Far enough off the bar that letting go removes it. */
+.__gradient-stop__.__removing__ { opacity: 0.35; }
 
+/* A ROW'S CONTROL: the dial, then the degrees. */
+.__angle-field__ { flex-direction: row; align-items: center; gap: 8px; width: 100%; }
+.__angle-field__ > numbercontrol, .__angle-field__ > .__config-control__ { width: 0px; flex-grow: 1; }
 .__angle-dial__ {
     width: 34px;
     height: 34px;
@@ -1241,18 +1257,26 @@ smartguides {
 }
 .__angle-needle__ { width: 2px; height: 14px; background: var(--accent, #3574F0); transform-origin-y: 100%; }
 
-/* The offset pad: the dot is where the shadow falls. */
+/* A ROW'S CONTROL: the pad, then X and Y beside it. */
+.__offset-field__ { flex-direction: row; align-items: center; gap: 8px; width: 100%; }
+.__offset-field__ > .__vector__ { width: 0px; flex-grow: 1; }
+/* The offset pad: the dot is where the shadow falls, the crosshair is no offset at all. */
 .__offset-pad__ {
-    width: 74px;
-    height: 74px;
+    width: 38px;
+    height: 38px;
     flex-shrink: 0;
+    position: relative;
     border-radius: 3px;
+    overflow: hidden;
     background: var(--configkit-field-bg, #2B2D30);
     outline: 1px var(--configkit-field-border, #4A4D52);
     align-items: center;
     justify-content: center;
     cursor: pointer;
 }
+.__offset-axis__ { position: absolute; background: var(--configkit-field-border, #4A4D52); }
+.__offset-axis__.__horizontal__ { left: 0px; top: 18px; width: 100%; height: 1px; }
+.__offset-axis__.__vertical__ { top: 0px; left: 18px; width: 1px; height: 100%; }
 .__offset-dot__ { width: 9px; height: 9px; border-radius: 999px; background: var(--accent, #3574F0); }
 
 /* The corner box: four pucks on the shape they round. */
@@ -1276,51 +1300,112 @@ smartguides {
 .__corner-puck__.__bottom-right__ { right: -5px; bottom: -5px; }
 .__corner-puck__.__bottom-left__ { left: -5px; bottom: -5px; }
 
-/* The stack: order is the value, so a row moves rather than sorts. */
-.__layer-stack__ { gap: 2px; }
+/* THE STACK: one inset box, as a list in a property panel is, holding a header and its rows. Order is the value,
+ * so a row moves rather than sorts. */
+/* INSET ON THE RIGHT AS A FORM ROW'S CONTROL IS, so the box's edge lines up with the fields' and clears the lab's
+ * bar. Padding on a full-width stack rather than a margin on the box: a margin beside `width: 100%` overflows, and
+ * without the width the box took its longest row's. */
+.__layer-stack__ {
+    width: 100%;
+    flex-shrink: 0;
+    padding-right: var(--cfg-pad-x);
+}
+.__layer-box__ {
+    width: 100%;
+    padding: 3px;
+    gap: 2px;
+    border-radius: var(--radius-control, 4px);
+    background: var(--configkit-field-bg, #2B2D30);
+    outline: 1px var(--border-field, #393B40);
+}
+.__layer-header__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    height: 18px;
+    padding-left: 4px;
+}
+.__layer-stack__ .__layer-title__ { font-size: 9; color: var(--fg-secondary, #9DA0A8); }
+.__layer-stack__ .__layer-count__ { font-size: 9; color: var(--fg-hint, #7A7A7A); flex-grow: 1; }
+/* GHOST, as a header's actions are: a filled button above the rows read as one more row. */
+.__layer-add__ {
+    height: 16px;
+    min-height: 16px;
+    padding-left: 5px;
+    padding-right: 5px;
+    border-radius: 3px;
+    background: #00000000;
+    color: var(--fg-secondary, #9DA0A8);
+}
+.__layer-add__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
+.__layer-stack__ .__layer-add__ text { font-size: 9; }
+/* THREE ROWS, THEN IT SCROLLS: a row is 24px. The right padding keeps the bar off the rows' remove buttons. */
+.__layer-list__ {
+    width: 100%;
+    max-height: 72px;
+    padding-right: 5px;
+}
 .__layer-row__ {
     flex-direction: row;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
+    height: 24px;
+    flex-shrink: 0;
     padding-left: 3px;
     padding-right: 3px;
     border-radius: 3px;
     cursor: pointer;
 }
 .__layer-row__:hover { background: var(--list-hover-bg, #393B40); }
-/* THE ROW ACTIONS ARE BUILT AND WERE INVISIBLE. `.__style-row-action__` opens at `opacity: 0` and is
- * revealed by a selector naming an ancestor that carries BOTH `__configurator__` and `__style-row__` --
- * an inspector declaration row, which a lab's layer row is not. So every stack had its reorder and
- * remove controls, at zero opacity, holding the space they are drawn in. The selected row keeps them up
- * as well as the hovered one: removing a layer is the reason to come here, and one you have to hunt for
- * is one that is not there. */
-.__layer-row__:hover .__style-row-action__,
-.__layer-row__.__active__ .__style-row-action__ { opacity: 1; }
-.__layer-row__.__active__ { background: var(--accent-soft, #2E436E); }
+/* SELECTED IS A LIFT, not the accent: a saturated slab behind one row was the loudest thing in the lab. */
+.__layer-row__.__active__ { background: var(--list-selected-inactive-bg, #43454A); }
 .__layer-sample__ {
-    width: 28px;
+    width: 30px;
     height: 18px;
     flex-shrink: 0;
-    border-radius: 2px;
+    border-radius: 3px;
     align-items: center;
     justify-content: center;
     /* A 16px blur would otherwise paint across the rows above and below, as the chip swatch says. */
     overflow: hidden;
     background: var(--configkit-band-bg, #3A3D42);
+    outline: 1px #FFFFFF14;
+}
+.__layer-row__.__active__ .__layer-sample__ { outline: 1px var(--accent, #3574F0); }
+/* WHAT A LAYER IS APPLIED TO when nothing else is given: a plate inside the frame, so a translate or a rotate moves
+ * the plate and the frame clips it, where applied to the frame itself it carried the frame out of the row. */
+.__layer-sample-plate__ {
+    width: 14px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--fg-hint, #7A7A7A);
 }
 /* Bigger than a row label, because a shadow is cast BY the mark: a 9px glyph casts a 9px-wide one.
  * UNDER THE STACK, which is a config control: the kit's `.__config-control__ text` (specificity 11) reaches
  * its rows and would otherwise set these at the form's size. */
-.__layer-stack__ .__layer-sample-text__ { font-size: 13; font-weight: bold; color: var(--fg, #DFE1E5); }
+.__layer-stack__ .__layer-sample-text__ { font-size: 12; font-weight: bold; color: var(--fg, #DFE1E5); }
 .__layer-stack__ .__layer-text__ { font-size: 9; }
-.__layer-stack__ .__style-row-action__ { height: 16px; min-height: 16px; }
-.__layer-stack__ .__style-row-action__:hover { background: var(--list-hover-bg, #393B40); }
 .__layer-text__ {
     width: 0px;
     flex-grow: 1;
     color: var(--fg-secondary, #9DA0A8);
     text-overflow: ellipsis;
 }
+.__layer-row__.__active__ .__layer-text__ { color: var(--fg, #DFE1E5); }
+/* Borderless glyphs held until the row is pointed at or picked: three filled boxes per row was a toolbar. */
+.__layer-action__ {
+    width: 16px;
+    height: 16px;
+    min-height: 16px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    background: #00000000;
+    color: var(--fg-hint, #7A7A7A);
+    opacity: 0;
+}
+.__layer-row__:hover .__layer-action__,
+.__layer-row__.__active__ .__layer-action__ { opacity: 1; }
+.__layer-action__:hover { background: #FFFFFF14; color: var(--fg, #DFE1E5); }
 .__style-target-action__ {
     height: 17px;
     min-height: 17px;

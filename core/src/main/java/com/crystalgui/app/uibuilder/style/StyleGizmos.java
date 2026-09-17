@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import org.joml.Vector2f;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
@@ -20,9 +21,9 @@ import com.crystalgui.ui.service.Drag;
  * <p>A gizmo is a {@code ValueControl}, and these are what it calls from its constructor: the press reads
  * the value the drag starts from, every frame commits, and the release closes the undo step.</p>
  *
- * <p>Both are in <b>local</b> pixels, so a lab inside a zoomed canvas still moves a value by what the
- * pointer moved on screen — {@link Drag#pixelsPerLocalUnit} sampled once at the press, as the box model's
- * scrub does.</p>
+ * <p>Both are in the handle's <b>local</b> pixels, the space a gizmo draws in: a dot, a stop or a puck moved by
+ * them stays under the pointer at any {@code uiScale} or zoom. Converted to physical pixels, as a field's scrub
+ * rate is, they ran twice as far as the pointer at a scale of 2.</p>
  */
 public final class StyleGizmos {
 
@@ -43,13 +44,13 @@ public final class StyleGizmos {
         // A gesture needs the press, and a plain element is scenery with hit-testing off by default.
         handle.setHitTest(true);
         handle.onMouseDown.attachListener((element, event) -> {
-            if (!(event instanceof MouseEvent.Down down)) return;
-            float perUnit = Drag.pixelsPerLocalUnit(handle);
+            // THE PRIMARY BUTTON ONLY: a right press on a gizmo is its reset, never a drag.
+            if (!(event instanceof MouseEvent.Down down) || down.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             press.run();
             Drag.start(handle, down.getPosition().x(), down.getPosition().y(), new Drag.Listener() {
                 @Override
                 public void onDragUpdate(float x, float y, float startX, float startY, float dx, float dy) {
-                    move.accept(dx * perUnit, dy * perUnit);
+                    move.accept(dx, dy);
                 }
 
                 @Override
@@ -77,7 +78,7 @@ public final class StyleGizmos {
         dial.addClass(HANDLE_CLASS);
         dial.setHitTest(true);
         dial.onMouseDown.attachListener((element, event) -> {
-            if (!(event instanceof MouseEvent.Down down)) return;
+            if (!(event instanceof MouseEvent.Down down) || down.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             press.run();
             aimed.accept(angleAt(dial, down.getPosition().x(), down.getPosition().y()));
             Drag.start(dial, down.getPosition().x(), down.getPosition().y(), new Drag.Listener() {

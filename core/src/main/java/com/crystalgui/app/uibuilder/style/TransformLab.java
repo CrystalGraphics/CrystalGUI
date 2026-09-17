@@ -7,7 +7,6 @@ import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.PropertyWatch;
-import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -56,22 +55,16 @@ public final class TransformLab {
         row.append(numbers);
         lab.content().append(row);
 
-        LayerStack stack = new LayerStack("lab.ops", property, selected);
-        stack.bind(ops);
-        UIElement adds = new UIElement();
-        adds.addClass(StyleLab.ROW_CLASS);
+        LayerStack stack = new LayerStack("lab.ops", property, selected).titled("Transforms");
         for (String added : List.of("translate(0px, 0px)", "rotate(0deg)", "scale(1, 1)", "skew(0deg, 0deg)")) {
-            Button button = new Button("+ " + CssValues.functionName(added));
-            button.addClass(StyleLab.KEYWORD_CLASS);
-            button.attachListener(() -> {
+            stack.adding("+ " + CssValues.functionName(added), () -> {
                 List<String> list = new ArrayList<>(ops.get());
                 list.add(added);
                 ops.set(list);
                 selected.set(list.size() - 1);
             });
-            adds.append(button);
         }
-        lab.content().append(adds);
+        stack.bind(ops);
         lab.content().append(stack);
 
         lab.caption(Property.derived(() -> {
