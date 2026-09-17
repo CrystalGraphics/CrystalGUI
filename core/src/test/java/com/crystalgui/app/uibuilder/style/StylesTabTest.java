@@ -224,28 +224,37 @@ public class StylesTabTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>A long value wraps, as DevTools wraps one</b>: its row grows down while the name stays on the first line, nothing
-     * runs past the panel, and the stroke an element holds as two longhands is one row.
+     * <b>A layered value is a line a layer, as DevTools breaks one</b>: its widest line is the floor, a panel narrower
+     * than that scrolls sideways rather than breaking a shadow, and the stroke an element holds as two longhands is one
+     * row.
      */
     @Test
-    public void aLongValueWrapsAndTheStrokeIsOneRow() {
+    public void aLayeredValueIsALineALayerAndScrollsBelowItsWidestLine() {
         LiveEdits.setInline(card, StylePropertyRegistry.TEXT_SHADOW,
                 "#CF0600FF 1px -14px 24.49px, #00AA00FF 0px 4px 12.25px, #0000FFFF 3px 3px 9px, #FFFFFFFF 0px 0px 2px");
         LiveEdits.setInline(card, StylePropertyRegistry.TEXT_STROKE_WIDTH, "2px");
         LiveEdits.setInline(card, StylePropertyRegistry.TEXT_STROKE_COLOR, "#8F0FE3");
+        inspector.layout(l -> l.width(150f).minWidth(150f).maxWidth(150f));
+        document.update(W, H);
         inspect(card);
 
         assertNotNull("one stroke row", control("style.text-stroke"));
         assertNull("and no longhand rows", control("style.text-stroke-width"));
 
-        UIElement clip = null;
+        UIElement lines = null;
         for (UIElement each : control("style.text-shadow").composedSubtree()) {
-            if (each.hasClass(StyleChip.VALUE_CLASS)) clip = each;
+            if (each.hasClass(StyleChip.VALUE_CLASS)) lines = each;
         }
-        assertNotNull(clip);
-        assertTrue("the value is set on more than one line", clip.box().height() > 30f);
-        assertEquals("and none of it runs past its column", 0f, clip.box().maxScrollLeft(), 0.5f);
-        assertEquals("the stroke's row is still one line", 20f, control("style.text-stroke").parentElement().parentElement().box().height(), 0.5f);
+        assertNotNull(lines);
+        assertEquals("a line a layer", 4, lines.children().size());
+        float widest = 0f;
+        for (UIElement line : lines.children()) widest = Math.max(widest, line.box().width());
+        assertTrue("no narrower than its widest line", lines.box().width() >= widest - 0.5f);
+        float scrolls = 0f;
+        for (UIElement each : inspector.composedSubtree()) {
+            if (each.box() != null) scrolls = Math.max(scrolls, each.box().maxScrollLeft());
+        }
+        assertTrue("so the narrow panel scrolls sideways", scrolls > 0f);
     }
 
     /**

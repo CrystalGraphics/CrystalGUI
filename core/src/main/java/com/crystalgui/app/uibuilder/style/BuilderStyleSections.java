@@ -50,6 +50,8 @@ public final class BuilderStyleSections {
     public static final String ROW_EYE_CLASS = "__style-row-eye__";
     /** On an eye whose declaration is switched off. */
     public static final String OFF_CLASS = "__off__";
+    /** On a row whose value is a {@link StyleChip}: sized by its lines, which a narrower panel scrolls to reach. */
+    public static final String CHIP_ROW_CLASS = "__chip-row__";
     /** On a row that starts with its eye, which takes the place of the name's left inset. */
     public static final String EYED_ROW_CLASS = "__eyed__";
     /** On a row whose declaration is switched off: greyed whole, its editor inert. */
