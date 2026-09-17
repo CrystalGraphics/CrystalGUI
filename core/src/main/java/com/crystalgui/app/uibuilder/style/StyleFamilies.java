@@ -136,13 +136,13 @@ public final class StyleFamilies {
                 "text-align", "text-overflow", "white-space", "caret-color", "caret-width", "selection-color",
                 // A SHADOW ON TEXT IS PART OF THE TYPE TREATMENT, judged with the weight and the stroke
                 // rather than with a blur on a panel.
-                "text-shadow", "paint-order")) {
+                "text-shadow", "paint-order", "stroke-align")) {
             names.put(name, Family.TEXT);
         }
         for (String name : List.of("background", "background-color", "opacity", "overlay", "mask")) {
             names.put(name, Family.FILL);
         }
-        for (String name : List.of("outline", "outline-color", "outline-width", "stroke-align")) {
+        for (String name : List.of("outline", "outline-color", "outline-width")) {
             names.put(name, Family.BORDER);
         }
         for (String name : List.of("backdrop-filter", "cursor", "tooltip-delay")) {
@@ -161,7 +161,7 @@ public final class StyleFamilies {
         prefixes.put("grid-", Family.LAYOUT);
         prefixes.put("margin-", Family.LAYOUT);
         prefixes.put("padding-", Family.LAYOUT);
-        prefixes.put("border-", Family.BORDER);          // widths, colours and the eight radius longhands
+        prefixes.put("border-", Family.BORDER);          // widths, colors and the eight radius longhands
         prefixes.put("outline-", Family.BORDER);
         prefixes.put("text-decoration", Family.TEXT);
         prefixes.put("text-stroke", Family.TEXT);
@@ -172,6 +172,35 @@ public final class StyleFamilies {
         prefixes.put("mask-", Family.FILL);
         return prefixes;
     }
+
+    /**
+     * Where {@code name} sits among its family's rows: always for {@link Family#TEXT}, whose sample rows must run
+     * unbroken, and for every family of an inline style, which has no source order. Lower first; a name not listed
+     * goes after, alphabetically.
+     */
+    public static int rank(String name) {
+        int at = ORDER.indexOf(name);
+        return at >= 0 ? at : ORDER.size();
+    }
+
+    /** The order a person reads a family in: what it is, then how big, then how it looks. */
+    private static final List<String> ORDER = List.of(
+            "display", "position", "top", "right", "bottom", "left", "z-index", "flex-direction", "flex-wrap",
+            "align-items", "align-content", "align-self", "justify-content", "justify-items", "justify-self",
+            "gap", "row-gap", "column-gap", "flex", "flex-grow", "flex-shrink", "flex-basis", "overflow",
+            "width", "height", "min-width", "min-height", "max-width", "max-height", "aspect-ratio",
+            // COLOR, THEN SIZE, then every row drawn as a sample in one unbroken run, then how the text is laid
+            // out, the decoration's color, and what editing it looks like.
+            "color", "font-size",
+            "font-family", "font-weight", "font-style", "text-stroke", "text-decoration-line",
+            "text-shadow", "paint-order",
+            "stroke-align", "line-height", "text-align", "white-space", "text-overflow", "text-offset-x", "text-offset-y",
+            "text-decoration-color",
+            "caret-color", "caret-width", "selection-color",
+            "background", "background-color", "opacity", "overlay", "mask",
+            "outline", "outline-width", "outline-color",
+            "backdrop-filter", "cursor", "tooltip-delay",
+            "transform", "transition");
 
     /** The families in the order a tab shows them. */
     public static List<Family> inOrder() {

@@ -13,7 +13,7 @@ import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.text.UIText;
 
 /**
- * The shadow lab: the stack of shadows, and the picked one's offset on a pad, its blur and its colour.
+ * The shadow lab: the stack of shadows, and the picked one's offset on a pad, its blur and its color.
  *
  * <pre>{@code
  * ShadowLab.open(chip, StylePropertyRegistry.TEXT_SHADOW, css);
@@ -32,11 +32,11 @@ public final class ShadowLab {
     private ShadowLab() {
     }
 
-    /** One shadow as its parts, read with the colour wherever it sits. */
+    /** One shadow as its parts, read with the color wherever it sits. */
     record Shadow(float x, float y, float blur, int argb) {
 
         /**
-         * CSS writes {@code 0 1px 2px #000} and this engine's writer {@code #000 0px 1px 2px}, so the colour is
+         * CSS writes {@code 0 1px 2px #000} and this engine's writer {@code #000 0px 1px 2px}, so the color is
          * whichever term parses as one and the lengths are the rest in order.
          */
         static Shadow parse(String layer) {
@@ -45,7 +45,7 @@ public final class ShadowLab {
                 if (ColorValue.parseCssColor(term) == null) lengths.add(term);
             }
             return new Shadow(CssValues.number(lengths, 0, 0f), CssValues.number(lengths, 1, 0f),
-                    CssValues.number(lengths, 2, 0f), colourOf(layer));
+                    CssValues.number(lengths, 2, 0f), colorOf(layer));
         }
 
         double[] offset() {
@@ -86,7 +86,7 @@ public final class ShadowLab {
                 .bind(shadow.map(Shadow::offset, at -> shadow.get().withOffset(at))));
         lab.form().prop(ConfigDescriptor.number("lab.blur", "Blur").range(0f, 40f).unit("px").decimals(2),
                 shadow.map(s -> (double) s.blur(), blur -> shadow.get().withBlur(blur)));
-        lab.form().prop(ConfigDescriptor.color("lab.colour", "Colour"),
+        lab.form().prop(ConfigDescriptor.color("lab.color", "Color"),
                 shadow.map(Shadow::argb, argb -> shadow.get().withArgb(argb)));
 
         LayerStack stack = new LayerStack("lab.layers", property, selected);
@@ -129,7 +129,7 @@ public final class ShadowLab {
 
     /**
      * One shadow, scaled to fit a chip: the offsets and the blur shrink together, so the direction, the
-     * softness and the colour all survive a 28x16 box. <b>Display only</b> — the real value is printed beside it.
+     * softness and the color all survive a 28x16 box. <b>Display only</b> — the real value is printed beside it.
      */
     static String fittedLayer(String layer) {
         Shadow shadow = Shadow.parse(layer);
@@ -146,16 +146,16 @@ public final class ShadowLab {
     }
 
     /**
-     * A layer's colour, wherever it sits among the lengths, or opaque black.
+     * A layer's color, wherever it sits among the lengths, or opaque black.
      *
-     * <p><b>{@code parseCssColor}, never {@code parseColor}</b>: a colour property also takes a decimal ARGB
+     * <p><b>{@code parseCssColor}, never {@code parseColor}</b>: a color property also takes a decimal ARGB
      * literal, so {@code parseColor("0")} is transparent black — and the {@code 0} in {@code 0 1px 2px #000}
      * is an offset.</p>
      */
-    static int colourOf(String layer) {
+    static int colorOf(String layer) {
         for (String term : CssValues.terms(layer)) {
-            Integer colour = ColorValue.parseCssColor(term);
-            if (colour != null) return colour;
+            Integer color = ColorValue.parseCssColor(term);
+            if (color != null) return color;
         }
         return 0xFF000000;
     }

@@ -21,7 +21,7 @@ import com.crystalgui.style.property.visual.color.ColorValue;
  */
 public record Gradient(String direction, List<Stop> stops) {
 
-    /** One stop: its position as a fraction, or NaN to be spread evenly as CSS does, and its colour. */
+    /** One stop: its position as a fraction, or NaN to be spread evenly as CSS does, and its color. */
     public record Stop(float position, int argb) {
 
         public Stop withPosition(float next) {
@@ -53,12 +53,12 @@ public record Gradient(String direction, List<Stop> stops) {
         for (String part : parts) {
             List<String> terms = CssValues.terms(part);
             float position = Float.NaN;
-            String colour = part;
+            String color = part;
             if (terms.size() > 1 && terms.get(terms.size() - 1).endsWith("%")) {
                 position = CssValues.number(terms.get(terms.size() - 1), Float.NaN) / 100f;
-                colour = String.join(" ", terms.subList(0, terms.size() - 1));
+                color = String.join(" ", terms.subList(0, terms.size() - 1));
             }
-            Integer argb = ColorValue.parseCssColor(colour.trim());
+            Integer argb = ColorValue.parseCssColor(color.trim());
             if (argb != null) stops.add(new Stop(position, argb));
         }
         return new Gradient(direction, stops.size() < 2 ? DEFAULT.stops() : stops);
@@ -113,10 +113,10 @@ public record Gradient(String direction, List<Stop> stops) {
         return new Gradient(direction, next);
     }
 
-    /** Adds a stop at {@code where} in the colour the ramp already shows there, so adding changes nothing. */
+    /** Adds a stop at {@code where} in the color the ramp already shows there, so adding changes nothing. */
     public Gradient withStopAt(float where) {
         List<Stop> next = new ArrayList<>(stops);
-        next.add(indexAt(where), new Stop(where, colourAt(where)));
+        next.add(indexAt(where), new Stop(where, colorAt(where)));
         return new Gradient(direction, next);
     }
 
@@ -136,7 +136,7 @@ public record Gradient(String direction, List<Stop> stops) {
         return stops.size();
     }
 
-    private int colourAt(float where) {
+    private int colorAt(float where) {
         for (int i = 0; i < stops.size() - 1; i++) {
             float from = position(i);
             float to = position(i + 1);

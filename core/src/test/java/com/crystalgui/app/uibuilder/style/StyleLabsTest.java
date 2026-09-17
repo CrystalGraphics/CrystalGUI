@@ -80,11 +80,12 @@ public class StyleLabsTest {
         assertEquals("and a turn as its own", 0.25f, CssValues.number("0.25turn", 0f), 1e-6);
         assertEquals("written back without a trailing zero", "12", CssValues.write(12.0));
 
-        // A HEX COLOUR IS NOT A NUMBER: readable() scanned its digits as one, so every colour with a zero
+        // A HEX COLOR IS NOT A NUMBER: readable() scanned its digits as one, so every color with a zero
         // component was shown mangled -- #00000000 as #0, and a plain green as #0FF0.
         assertEquals("#00000000", CssValues.readable("#00000000"));
         assertEquals("#00FF00", CssValues.readable("#00FF00"));
-        assertEquals("#478B18FF 0px 0px 12px", CssValues.readable("#478B18FF 0.0px 0px 12.0px"));
+        assertEquals("an opaque alpha is dropped", "#478B18 0px 0px 12px", CssValues.readable("#478B18FF 0.0px 0px 12.0px"));
+        assertEquals("a pixel to a tenth", "#CF0600 1px -14px 24.5px", CssValues.readable("#CF0600FF 1px -14px 24.49px"));
         assertEquals("a number inside a word is part of the word", "url(img2.png)", CssValues.readable("url(img2.png)"));
     }
 
@@ -105,7 +106,7 @@ public class StyleLabsTest {
     /**
      * <b>What a row SHOWS is not what it writes.</b>
      *
-     * <p>The canvas's own rotate gesture stores radians, and a colour is an int — both of which the panel
+     * <p>The canvas's own rotate gesture stores radians, and a color is an int — both of which the panel
      * showed raw: {@code rotate(-0.0022845864rad)} and {@code -1535686}.</p>
      */
     @Test
@@ -113,9 +114,9 @@ public class StyleLabsTest {
         assertEquals("rotate(-0.13deg)", CssValues.readable("rotate(-0.0022845864rad)"));
         assertEquals("26px", CssValues.readable("26.0px"));
         assertEquals("translate(4px, 12px)", CssValues.readable("translate(4.0px, 12.0px)"));
-        assertEquals("a colour is left alone", "#FF8800", CssValues.readable("#FF8800"));
+        assertEquals("a color is left alone", "#FF8800", CssValues.readable("#FF8800"));
 
-        // AND A COLOUR IS WRITTEN AS A COLOUR: the default writer answered the signed int it is stored as.
+        // AND A COLOR IS WRITTEN AS A COLOR: the default writer answered the signed int it is stored as.
         assertEquals("#E9A016", StylePropertyRegistry.COLOR.write(0xFFE9A016));
         assertEquals("alpha last, as CSS spells it", "#E9A01680", StylePropertyRegistry.COLOR.write(0x80E9A016));
         assertEquals("and it reads back as what it was", Integer.valueOf(0x80E9A016),
@@ -123,14 +124,14 @@ public class StyleLabsTest {
     }
 
     /**
-     * <b>A shadow is read wherever its colour sits.</b>
+     * <b>A shadow is read wherever its color sits.</b>
      *
      * <p>CSS writes {@code 0 1px 2px #000}; this engine's own writer answers {@code #000 0px 1px 2px}. A lab
-     * that reads by position takes the colour for an offset — and then shows different numbers from the
+     * that reads by position takes the color for an offset — and then shows different numbers from the
      * value it had just written itself.</p>
      */
     @Test
-    public void aShadowReadsWithItsColourAtEitherEnd() {
+    public void aShadowReadsWithItsColorAtEitherEnd() {
         assertEquals("#AF9B00FF 0px 0px 12.919px", StylePropertyRegistry.TEXT_SHADOW.write(
                 StylePropertyRegistry.TEXT_SHADOW.valueParser.parse("0px 0px 12.919px #AF9B00").compute()));
     }
@@ -155,21 +156,21 @@ public class StyleLabsTest {
     }
 
     /**
-     * <b>A shadow's leading zero is an offset, not a transparent colour.</b>
+     * <b>A shadow's leading zero is an offset, not a transparent color.</b>
      *
-     * <p>{@code ColorValue.parseColor} takes a decimal ARGB literal as well as a CSS colour, so it reads
-     * {@code 0} as transparent black - which is right for a colour property and wrong for any grammar
+     * <p>{@code ColorValue.parseColor} takes a decimal ARGB literal as well as a CSS color, so it reads
+     * {@code 0} as transparent black - which is right for a color property and wrong for any grammar
      * where a bare number is a length. The lab read the X offset of {@code 0 1px 2px #000000} as its
-     * colour: every shadow it added was invisible, and the picker opened at zero alpha, so choosing a
-     * colour moved the value and nothing on screen.</p>
+     * color: every shadow it added was invisible, and the picker opened at zero alpha, so choosing a
+     * color moved the value and nothing on screen.</p>
      */
     @Test
-    public void aShadowsLeadingZeroIsAnOffsetAndNotAColour() {
-        assertEquals("the colour is the colour", 0xFF000000, ShadowLab.colourOf(ShadowLab.DEFAULT));
-        assertEquals("wherever it sits", 0xFFAF9B00, ShadowLab.colourOf("#AF9B00 0px 0px 12px"));
-        assertEquals("and alpha survives", 0x80FF0000, ShadowLab.colourOf("0 0 4px #FF000080"));
+    public void aShadowsLeadingZeroIsAnOffsetAndNotAColor() {
+        assertEquals("the color is the color", 0xFF000000, ShadowLab.colorOf(ShadowLab.DEFAULT));
+        assertEquals("wherever it sits", 0xFFAF9B00, ShadowLab.colorOf("#AF9B00 0px 0px 12px"));
+        assertEquals("and alpha survives", 0x80FF0000, ShadowLab.colorOf("0 0 4px #FF000080"));
 
-        assertNull("CSS has no integer colour", ColorValue.parseCssColor("0"));
+        assertNull("CSS has no integer color", ColorValue.parseCssColor("0"));
         assertEquals("which is exactly what the other parser would have answered",
                 Integer.valueOf(0), ColorValue.parseColor("0"));
     }
@@ -179,7 +180,7 @@ public class StyleLabsTest {
      *
      * <p>A swatch is 28x16; a shadow offset -14px with a 16px blur reaches 30px, so at its own scale what
      * lands in the box is a corner of a blur. Scaling the offsets and the blur together keeps the
-     * direction, the softness and the colour, which is all a picture that size is being asked.</p>
+     * direction, the softness and the color, which is all a picture that size is being asked.</p>
      */
     @Test
     public void aShadowTooBigForItsChipIsDrawnToScale() {
@@ -187,7 +188,7 @@ public class StyleLabsTest {
                 ShadowLab.fittedLayer("0 1px 2px #000000"));
 
         // EVERY layer, and the stack kept: handed the whole comma list as one shadow, a five-layer stack
-        // drew as its first colour alone -- which is what the inspector's own chip was showing.
+        // drew as its first color alone -- which is what the inspector's own chip was showing.
         assertEquals("0px 1px 2px #FF0000, 0px 1px 2px #00FF00",
                 ShadowLab.fitted("0 1px 2px #FF0000, 0 1px 2px #00FF00"));
 
@@ -196,7 +197,7 @@ public class StyleLabsTest {
         float y = CssValues.number(terms, 1, 0f);
         float blur = CssValues.number(terms, 2, 0f);
 
-        assertEquals("the colour is kept", 0xFFFF0000, ShadowLab.colourOf(fitted));
+        assertEquals("the color is kept", 0xFFFF0000, ShadowLab.colorOf(fitted));
         assertTrue("the direction is kept", y < 0f);
         assertTrue("it now fits", Math.abs(y) + blur <= 7.01f);
         assertEquals("and the proportions with it", 16f / 14f, blur / Math.abs(y), 1e-3);
@@ -240,7 +241,7 @@ public class StyleLabsTest {
         assertEquals("and with no size to be relative to, it cannot be em at all",
                 "2.9px", TypographyLab.spell(px, 0f, true));
         // A ZERO WIDTH STILL REMEMBERS ITS UNIT, so dialling a stroke down to nothing and back up does
-        // not come back in pixels. It is the same reason the colour is no longer cleared at zero.
+        // not come back in pixels. It is the same reason the color is no longer cleared at zero.
         assertEquals("0%", TypographyLab.spell(0f, size, true));
         assertEquals("0px", TypographyLab.spell(0f, size, false));
 

@@ -15,6 +15,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
+
 import com.crystalgui.app.uibuilder.BuilderInspectorSections;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
@@ -213,13 +215,86 @@ public class StylesTabTest extends UiDocumentTestBase {
         }
         assertNotNull(list);
 
-        list.pick(StylePropertyRegistry.OPACITY);
+        list.pick("opacity");
         frame();
         assertTrue("the rule still says 0.5", sheet.toString().contains("opacity: 0.5"));
 
-        list.pick(StylePropertyRegistry.COLOR);
+        list.pick("color");
         frame();
         assertTrue("and a new one is still added", sheet.toString().contains("color:"));
+    }
+
+    /**
+     * <b>A long value scrolls sideways under the wheel</b>, and the stroke an element holds as two longhands is one
+     * row.
+     */
+    @Test
+    public void aLongValueScrollsAndTheStrokeIsOneRow() {
+        LiveEdits.setInline(card, StylePropertyRegistry.TEXT_SHADOW,
+                "#CF0600FF 1px -14px 24.49px, #00AA00FF 0px 4px 12.25px, #0000FFFF 3px 3px 9px, #FFFFFFFF 0px 0px 2px");
+        LiveEdits.setInline(card, StylePropertyRegistry.TEXT_STROKE_WIDTH, "2px");
+        LiveEdits.setInline(card, StylePropertyRegistry.TEXT_STROKE_COLOR, "#8F0FE3");
+        inspect(card);
+
+        assertNotNull("one stroke row", control("style.text-stroke"));
+        assertNull("and no longhand rows", control("style.text-stroke-width"));
+
+        UIElement clip = null;
+        for (UIElement each : control("style.text-shadow").composedSubtree()) {
+            if (each.hasClass(StyleChip.VALUE_CLASS)) clip = each;
+        }
+        assertNotNull(clip);
+        assertTrue("the value is longer than its row", clip.box().maxScrollLeft() > 0f);
+        int[] at = centreOf(clip);
+        move(at[0], at[1]);
+        frame();
+        // AT THE VALUE: the fixture's wheel() is sent from the origin, which moves the pointer off the row.
+        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(at[0], at[1], 0, 0, -1, false, 2f, 1_000_000L));
+        frame();
+        assertTrue("and the wheel moved it", clip.scrollLeft() > 0f);
+    }
+
+    /**
+     * <b>A shorthand is offered by the name a sheet writes</b>: the stroke is picked as {@code text-stroke} and lands as
+     * its one row, never as longhands a rule would refuse.
+     */
+    @Test
+    public void theStrokeIsPickedByItsShorthand() {
+        assertEquals("text-stroke", PropertyPalette.written(StylePropertyRegistry.TEXT_STROKE_WIDTH));
+        String kind = PropertyPalette.kind("text-stroke");
+        assertTrue("its longhands' kinds: " + kind, kind.contains("length") && kind.contains("color"));
+
+        DeclarationList list = null;
+        for (UIElement each : inspector.composedSubtree()) {
+            if (each instanceof DeclarationList found) list = found;
+        }
+        assertNotNull(list);
+        list.pick("text-stroke");
+        frame();
+        frame();
+        assertNotNull("one stroke row", control("style.text-stroke"));
+    }
+
+    /**
+     * <b>A property added from the palette is added visibly</b>: a color at the element's own color, not the
+     * transparent initial that hides the caret, and {@code line-height} as {@code normal}, not the
+     * {@code NaN} its sentinel wrote.
+     */
+    @Test
+    public void anAddedPropertyChangesNothingItShouldNot() {
+        assertEquals("normal", StylePropertyRegistry.LINE_HEIGHT.write(StylePropertyRegistry.LINE_HEIGHT.initialValue));
+
+        LiveEdits.setInline(card, StylePropertyRegistry.COLOR, "#12AB34");
+        frame();
+        DeclarationList list = null;
+        for (UIElement each : inspector.composedSubtree()) {
+            if (each instanceof DeclarationList found) list = found;
+        }
+        assertNotNull(list);
+        list.pick("caret-color");
+        frame();
+        assertEquals("the caret starts at the text's color", Integer.valueOf(0xFF12AB34),
+                card.getStyle().getComputed(StylePropertyRegistry.CARET_COLOR));
     }
 
     /** A rule's declaration that something stronger beats is drawn struck through, and follows it. */

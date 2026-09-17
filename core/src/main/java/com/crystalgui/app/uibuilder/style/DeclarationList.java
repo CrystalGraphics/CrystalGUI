@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder.style;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -8,6 +9,8 @@ import java.util.Map;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.ui.dom.ChildList;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.Configurator;
@@ -63,6 +66,14 @@ final class DeclarationList extends UIElement {
                     StyleFamilies.of(declaration.property(), declaration.name()), family -> new ArrayList<>());
             // A NAME DECLARED TWICE is one row: the last one wins in a rule, and it is the one an edit means.
             if (!keys.contains(key)) keys.add(key);
+        }
+        // AN INLINE STYLE HAS NO SOURCE ORDER, so its rows take the family's reading order; a rule keeps the order
+        // its file has, as DevTools shows a rule -- except TEXT, whose sample rows would otherwise be broken up by
+        // whatever the file declared between them.
+        for (Map.Entry<StyleFamilies.Family, List<RowKey>> family : byFamily.entrySet()) {
+            if (!fields.target().isInline() && family.getKey() != StyleFamilies.Family.TEXT) continue;
+            family.getValue().sort(Comparator.comparingInt((RowKey key) -> StyleFamilies.rank(key.name()))
+                    .thenComparing(RowKey::name));
         }
         // ONLY THE FAMILIES THAT HOLD SOMETHING: a heading per empty family is scaffolding, not content.
         List<StyleFamilies.Family> shown = new ArrayList<>();
@@ -150,15 +161,25 @@ final class DeclarationList extends UIElement {
         return row;
     }
 
-    /** What a palette pick does: adds the property, or shows the row of one already declared. */
-    void pick(StyleProperty<?> property) {
+    /** What a palette pick does: adds the declaration, or shows the row of one already declared. */
+    void pick(String name) {
         // ALREADY DECLARED: shown, not added -- adding writes the initial value over the one set.
-        if (fields.declared(property.name) != null) {
-            reveal(property.name);
+        if (fields.declared(name) != null) {
+            reveal(name);
             return;
         }
+        // A COLOR STARTS AT THE ELEMENT'S OWN: most color properties' initial is transparent, and declaring
+        // `caret-color: #00000000` hides the caret and `selection-color` a selection.
+        StyleProperty<?> property = StyleFields.propertyOf(name);
+        if (property instanceof ColorProperty && node != null) {
+            Integer color = node.getStyle().computed().get(StylePropertyRegistry.COLOR);
+            if (color != null) {
+                fields.add(name, CssValues.color(color));
+                return;
+            }
+        }
         // AT ITS INITIAL VALUE, so the row appears holding something the sheet can parse.
-        fields.add(property.name, initialOf(property));
+        fields.add(name, initialOf(name));
     }
 
     /** Opens {@code name}'s section, scrolls its row into view and puts focus in its control. */
@@ -173,6 +194,23 @@ final class DeclarationList extends UIElement {
         if (group != null) group.setCollapsed(false);
         if (row.box() != null) row.box().scrollIntoView();
         if (document() != null && row.control() != null) document().focus().requestFocus(row.control());
+    }
+
+    /**
+     * What a shorthand starts at when its longhands' initials would change nothing: a stroke of no width in no color
+     * is not an edit, so an inline pick of it recorded nothing and no row appeared.
+     */
+    private static final Map<String, String> STARTERS = Map.of(StyleFields.TEXT_STROKE, "1px #000000");
+
+    /** A name's initial value as a sheet writes it; a shorthand's is its starter, else its longhands' initials. */
+    private static String initialOf(String name) {
+        StyleProperty<?> property = StyleFields.propertyOf(name);
+        if (property != null) return initialOf(property);
+        String starter = STARTERS.get(name);
+        if (starter != null) return starter;
+        List<String> parts = new ArrayList<>();
+        for (StyleProperty<?> longhand : PropertyPalette.longhandsOf(name)) parts.add(initialOf(longhand));
+        return parts.isEmpty() ? "initial" : String.join(" ", parts);
     }
 
     private static String initialOf(StyleProperty<?> property) {
