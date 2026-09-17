@@ -224,15 +224,17 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
     static String written(StyleProperty<?> property) {
         // THE CORNERS AS THE SHORTHAND, as the Styles tab shows them: a sheet may write either, and eight entries for
         // one shape buried the one a person means.
-        if (StyleFields.RADIUS_LONGHANDS.contains(property.name)) return StyleFields.BORDER_RADIUS;
+        StyleFields.Group group = StyleFields.groupOf(property.name);
+        if (group != null) return group.name();
         return property.getAuthoredThrough() == null ? property.name : property.getAuthoredThrough();
     }
 
     /** The longhands a shorthand sets, in registry order; empty for a name the registry holds itself. */
     static List<StyleProperty<?>> longhandsOf(String shorthand) {
         List<StyleProperty<?>> out = new ArrayList<>();
-        if (StyleFields.BORDER_RADIUS.equals(shorthand)) {
-            for (String longhand : StyleFields.RADIUS_LONGHANDS) out.add(StyleFields.propertyOf(longhand));
+        StyleFields.Group group = StyleFields.group(shorthand);
+        if (group != null) {
+            for (String longhand : group.longhands()) out.add(StyleFields.propertyOf(longhand));
             return out;
         }
         for (StyleProperty<?> property : StylePropertyRegistry.all()) {

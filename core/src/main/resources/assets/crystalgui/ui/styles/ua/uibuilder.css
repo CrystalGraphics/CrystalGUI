@@ -1060,6 +1060,17 @@ smartguides {
     overflow: hidden;
     background: var(--configkit-band-bg, #3A3D42);
 }
+/* AN EDGE ROW'S ELEMENT: the element in small inside the swatch, with room round it for its outline. Every color on
+ * it is written from the element's own style. @see BorderSample */
+.__border-sample-box__ {
+    position: absolute;
+    left: 5px;
+    top: 4px;
+    width: 18px;
+    height: 8px;
+    background: var(--configkit-field-bg, #2B2D30);
+}
+.__border-sample-box__.__lit__ { background: var(--configkit-field-border, #4A4D52); }
 /* A GLASS SWATCH IS A SCENE: glass over the swatch's flat band has nothing to filter. The lab's in small -- two shapes
  * on the dark plate reaching in from opposite corners, each seen plain at the swatch's edge and through the pane. */
 .__glass-sample-scene__ {
@@ -1459,6 +1470,23 @@ smartguides {
     cursor: pointer;
 }
 .__corner-puck__:hover { border-color: var(--accent-hover, #4A82F2); }
+/* A SIDE'S HANDLE, at the inner edge of its border and centred along it: a short bar across the side, hollow as the
+ * corners' are. Only the offset from its own side is written from Java; the centring is here. */
+.__side-puck__ {
+    position: absolute;
+    border-radius: 999px;
+    background: none;
+    border-width: 1.5px;
+    border-color: var(--accent, #3574F0);
+    cursor: pointer;
+}
+.__side-puck__:hover { border-color: var(--accent-hover, #4A82F2); }
+.__side-puck__.__top__, .__side-puck__.__bottom__ { left: 50%; width: 16px; height: 6px; margin-left: -8px; }
+.__side-puck__.__top__ { margin-top: -3px; }
+.__side-puck__.__bottom__ { margin-bottom: -3px; }
+.__side-puck__.__left__, .__side-puck__.__right__ { top: 50%; width: 6px; height: 16px; margin-top: -8px; }
+.__side-puck__.__left__ { margin-left: -3px; }
+.__side-puck__.__right__ { margin-right: -3px; }
 /* Photoshop's chain, as the transform bar's: dim while each corner goes alone, the accent while they go together. */
 .__corner-link__ {
     width: 20px;
