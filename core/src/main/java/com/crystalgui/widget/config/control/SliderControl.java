@@ -105,7 +105,8 @@ public class SliderControl extends ValueControl<Double> {
     }
 
     private static Track track(ConfigDescriptor descriptor) {
-        ConfigDescriptor.Range range = descriptor.range();
+        // THE SOFT RANGE is the track: a gesture's span. The number beside it still takes what the range allows.
+        ConfigDescriptor.Range range = descriptor.softRange();
         // A DECLARED STEP FIRST: `integral` is the same thing at 1.
         float step = descriptor.step() > 0f ? descriptor.step() : descriptor.integral() ? 1f : 0f;
         return range == null ? new Track(0f, 1f, step) : new Track(range.min(), range.max(), step);

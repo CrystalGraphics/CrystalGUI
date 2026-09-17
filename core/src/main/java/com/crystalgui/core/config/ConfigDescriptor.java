@@ -119,6 +119,8 @@ public final class ConfigDescriptor {
     private List<String> options = Collections.emptyList();
     private Range range;
     private Supplier<Range> rangeSource;
+    private Range softRange;
+    private Supplier<Range> softRangeSource;
     private int arity = 3;
     private boolean integral;
 
@@ -246,6 +248,16 @@ public final class ConfigDescriptor {
         return rangeSource != null ? rangeSource.get() : range;
     }
 
+    /**
+     * Where a gesture stops -- a slider's track, a scrub -- when that is short of {@link #range()}; the range itself when
+     * no soft range is stated. @see #softRange(float, float)
+     */
+    @Nullable
+    public Range softRange() {
+        if (softRangeSource != null) return softRangeSource.get();
+        return softRange != null ? softRange : range();
+    }
+
     /** Whether this number has a range at all, which is what makes it a slider rather than a field. */
     public boolean ranged() {
         return range != null || rangeSource != null;
@@ -253,7 +265,7 @@ public final class ConfigDescriptor {
 
     /** Whether the range, unit or step is asked for rather than fixed — a control then keeps asking. */
     public boolean live() {
-        return rangeSource != null || unitSource != null || stepSource != null;
+        return rangeSource != null || softRangeSource != null || unitSource != null || stepSource != null;
     }
 
     /** Components for {@link Kind#VECTOR}; the side length for {@link Kind#MATRIX}. */
@@ -350,6 +362,26 @@ public final class ConfigDescriptor {
      */
     public ConfigDescriptor range(Supplier<Range> source) {
         this.rangeSource = source;
+        return this;
+    }
+
+    /**
+     * A narrower range for gestures, Blender's soft limits: the slider's track and a scrub stop here, while a typed number
+     * is held only to {@link #range}. For a value that means something past what can be seen now.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.number("radius", "Radius").range(0f, 9999f).softRange(0f, 45f)   // a pill at 45, 999 typed
+     * }</pre>
+     */
+    public ConfigDescriptor softRange(float min, float max) {
+        this.softRange = new Range(min, max);
+        this.softRangeSource = null;
+        return this;
+    }
+
+    /** A soft range asked for while the control is on screen, for a limit that follows another value. */
+    public ConfigDescriptor softRange(Supplier<Range> source) {
+        this.softRangeSource = source;
         return this;
     }
 
@@ -638,6 +670,8 @@ public final class ConfigDescriptor {
         ConfigDescriptor part = number(partId, partLabel);
         part.range = range;
         part.rangeSource = rangeSource;
+        part.softRange = softRange;
+        part.softRangeSource = softRangeSource;
         part.integral = integral;
         part.step = step;
         part.stepSource = stepSource;
