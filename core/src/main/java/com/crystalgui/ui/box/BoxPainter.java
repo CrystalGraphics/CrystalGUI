@@ -641,6 +641,22 @@ public final class BoxPainter {
         RADII.ryBR = resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_Y), height);
         RADII.rxBL = resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_X), width);
         RADII.ryBL = resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_Y), height);
+        // OVERLAPPING CURVES, CSS Backgrounds 3 section 5.5: where two radii on one side add up past it, EVERY radius
+        // is scaled by the one factor that makes them fit. The shader capped each axis at half the box on its own,
+        // which drew `border-radius: 999px` on a wide box as an ellipse where CSS draws a pill.
+        float f = fit(1f, width, RADII.rxTL + RADII.rxTR);
+        f = fit(f, width, RADII.rxBL + RADII.rxBR);
+        f = fit(f, height, RADII.ryTL + RADII.ryBL);
+        f = fit(f, height, RADII.ryTR + RADII.ryBR);
+        if (f < 1f) {
+            RADII.rxTL *= f; RADII.ryTL *= f; RADII.rxTR *= f; RADII.ryTR *= f;
+            RADII.rxBR *= f; RADII.ryBR *= f; RADII.rxBL *= f; RADII.ryBL *= f;
+        }
         return RADII;
+    }
+
+    /** {@code f} lowered to what fits radii summing to {@code sum} on a side of {@code length}. */
+    static float fit(float f, float length, float sum) {
+        return sum > 0f && length >= 0f && sum > length ? Math.min(f, length / sum) : f;
     }
 }
