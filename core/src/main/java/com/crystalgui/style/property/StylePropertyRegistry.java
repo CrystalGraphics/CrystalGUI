@@ -13,6 +13,7 @@ import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.Resize;
+import com.crystalgui.style.property.visual.OverscrollBehavior;
 import com.crystalgui.style.property.visual.ScrollBehavior;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.text.PaintOrder;
@@ -438,6 +439,9 @@ public class StylePropertyRegistry {
     // CSS `scroll-behavior`. Purely a paint/animation concern, so no Taffy listener.
     public static final StyleProperty<ScrollBehavior> SCROLL_BEHAVIOR =
             create("scroll-behavior", ScrollBehavior.class, ScrollBehavior.AUTO);
+    // CSS `overscroll-behavior`: whether a scroll view at its end chains the wheel outward. Read by ScrollerView.
+    public static final StyleProperty<OverscrollBehavior> OVERSCROLL_BEHAVIOR =
+            create("overscroll-behavior", OverscrollBehavior.class, OverscrollBehavior.AUTO);
     /** Seconds for a smooth scroll to substantially settle. CSS has no knob for this; browsers hard-code
      * their own curve, and this is ours — exposed so a theme can tune the feel. */
     public static final StyleProperty<Float> SCROLL_DURATION = create("scroll-duration", 0.18f);

@@ -9,7 +9,9 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.OverscrollBehavior;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
@@ -311,18 +313,35 @@ public class ScrollerView extends UIElement {
             // looks broken — you'd have to know to hold shift. Browsers do the same.
             if (!horizontal && maxScrollTop() <= 0f && maxScrollLeft() > 0f) horizontal = true;
 
+            // THE GESTURE BELONGS TO ONE VIEW. A view further out holding it lets this one pass the wheel on
+            // untouched; this one holding it keeps it even at the end. @see Input#wheelLatch
+            UIDocument window = document();
+            UIElement latched = window == null ? null : window.input().wheelLatch();
+            if (latched != null && latched != this && isComposedAncestor(latched)) return;
+
             float before = horizontal ? getTargetScrollLeft() : getTargetScrollTop();
             if (horizontal) scrollAimingAt(before + delta, scrollTop());
             else scrollAimingAt(scrollLeft(), before + delta);
             float after = horizontal ? getTargetScrollLeft() : getTargetScrollTop();
 
-            // Only claim the wheel if it actually moved us; at either end it should pass to an outer
-            // scroller, which is the scroll-chaining browsers do.
-            if (after != before) {
+            // Claimed when it moved us, when the gesture is already ours, or when this view contains its
+            // overscroll; otherwise it chains to an outer scroller, as browsers do between gestures.
+            boolean scrollable = (horizontal ? maxScrollLeft() : maxScrollTop()) > 0f;
+            OverscrollBehavior overscroll = getStyle().computed().get(StylePropertyRegistry.OVERSCROLL_BEHAVIOR);
+            boolean contains = scrollable && overscroll != null && overscroll != OverscrollBehavior.AUTO;
+            if (after != before || latched == this || contains) {
+                if (window != null && (after != before || latched == this)) window.input().latchWheel(this);
                 event.preventDefault();
                 event.stopPropagation();
             }
         }, false, true);
+    }
+
+    private boolean isComposedAncestor(UIElement candidate) {
+        for (UIElement at = composedParent(); at != null; at = at.composedParent()) {
+            if (at == candidate) return true;
+        }
+        return false;
     }
 
     private Scroller newBar(Scroller.Orientation orientation, String partName) {

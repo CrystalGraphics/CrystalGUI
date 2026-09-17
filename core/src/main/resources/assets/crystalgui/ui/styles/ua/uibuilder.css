@@ -1344,6 +1344,8 @@ smartguides {
     width: 100%;
     max-height: 72px;
     padding-right: 5px;
+    /* A spin past the last layer stays here: the lab around it moving mid-list read as the list jumping. */
+    overscroll-behavior: contain;
 }
 .__layer-row__ {
     flex-direction: row;
