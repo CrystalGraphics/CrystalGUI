@@ -255,7 +255,8 @@ public final class CgUiRect implements CgUiDrawable {
         private CgUiPaintContext ctx;
         private float x, y, width, height;
         private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
-        private float borderWidth;
+        /** Per side, CSS order for a box: left, top, right, bottom. */
+        private float borderLeft, borderTop, borderRight, borderBottom;
         private int borderColorArgb, borderTopColorArgb, borderBottomColorArgb;
         private Kind kind;
         private int fillColorArgb;
@@ -273,7 +274,7 @@ public final class CgUiRect implements CgUiDrawable {
             x = 0f; y = 0f; width = 0f; height = 0f;
             rxTL = 0f; ryTL = 0f; rxTR = 0f; ryTR = 0f;
             rxBR = 0f; ryBR = 0f; rxBL = 0f; ryBL = 0f;
-            borderWidth = 0f;
+            borderLeft = 0f; borderTop = 0f; borderRight = 0f; borderBottom = 0f;
             borderColorArgb = 0xFF000000;
             borderTopColorArgb = 0xFF000000;
             borderBottomColorArgb = 0xFF000000;
@@ -317,11 +318,31 @@ public final class CgUiRect implements CgUiDrawable {
 
         /** @see CgUiRect#withBorder(float, int, int, int) for what the top/bottom pair is for. */
         public Draw border(float width, int uniformColorArgb, int topColorArgb, int bottomColorArgb) {
-            this.borderWidth = width;
+            borderSides(width, width, width, width);
             this.borderColorArgb = uniformColorArgb;
             this.borderTopColorArgb = topColorArgb;
             this.borderBottomColorArgb = bottomColorArgb;
             return this;
+        }
+
+        /**
+         * A width per side, after {@link #border}: CSS draws each side of a box at its own width, and the inner edge
+         * is the box inset by them with each corner's inner radius reduced by the two sides that meet there.
+         *
+         * <pre>{@code
+         * ctx.rect().size(w, h).radius(8f, 8f).border(1f, edge).borderSides(1f, 4f, 1f, 1f).submit();
+         * }</pre>
+         */
+        public Draw borderSides(float left, float top, float right, float bottom) {
+            this.borderLeft = left;
+            this.borderTop = top;
+            this.borderRight = right;
+            this.borderBottom = bottom;
+            return this;
+        }
+
+        private boolean bordered() {
+            return borderLeft > 0f || borderTop > 0f || borderRight > 0f || borderBottom > 0f;
         }
 
         // Each fill setter CLEARS THE OTHERS. On the immutable value these three were alternatives in a
@@ -384,7 +405,7 @@ public final class CgUiRect implements CgUiDrawable {
 
         /** Whether the frame's own batch can express this rect: no radius, no border. */
         private boolean isPlain() {
-            return borderWidth <= 0f
+            return !bordered()
                     && rxTL == 0f && ryTL == 0f && rxTR == 0f && ryTR == 0f
                     && rxBR == 0f && ryBR == 0f && rxBL == 0f && ryBL == 0f;
         }
@@ -425,7 +446,7 @@ public final class CgUiRect implements CgUiDrawable {
         private void drawShaped(int quadTint, int shaderFillArgb) {
             this.quadTint = quadTint;
             this.shaderFillArgb = shaderFillArgb;
-            MATERIAL.toggleKeyword("WITH_BORDER", borderWidth > 0f);
+            MATERIAL.toggleKeyword("WITH_BORDER", bordered());
             // Only ever true when the 4-arg border was given a top or bottom that actually differs from
             // the uniform colour -- the 2-arg overload passes all three equal, which keeps every existing
             // caller (the outline ring, the mask border, every uniform-border widget) on the exact same
@@ -447,7 +468,7 @@ public final class CgUiRect implements CgUiDrawable {
         public void accept(CgShaderBindings b) {
             b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
             b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
-            b.set1f("_BorderWidth", borderWidth);
+            b.vec4("_BorderWidths", borderLeft, borderTop, borderRight, borderBottom);
             b.colorARGB("_BorderColor", borderColorArgb);
             b.colorARGB("_BorderColorTop", borderTopColorArgb);
             b.colorARGB("_BorderColorBottom", borderBottomColorArgb);

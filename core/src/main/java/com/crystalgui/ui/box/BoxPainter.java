@@ -314,7 +314,7 @@ public final class BoxPainter {
         // background-color defaults to white (a no-op tint), so whether one was AUTHORED cannot be
         // read off the value; the snapshot says whether anything set it.
         boolean explicitBackgroundColor = style.isSet(StylePropertyRegistry.BACKGROUND_COLOR);
-        float borderWidth = box.border().left;
+        float borderWidth = borderSides(box);
         boolean wrap = !radii.isZero() || borderWidth > 0f;
 
         // A drawable that clips ITSELF (glass) takes the radii and is not wrapped -- wrapped, it would
@@ -360,6 +360,7 @@ public final class BoxPainter {
             ctx.setColor(WHITE);
             shaped(ctx, radii).size(width, height)
                     .border(borderWidth, borderColor, borderTop, borderBottom)
+                    .borderSides(SIDES[0], SIDES[1], SIDES[2], SIDES[3])
                     .fillColor(fillArgb)
                     .submit();
             return true;
@@ -389,9 +390,26 @@ public final class BoxPainter {
         }
         shaped(ctx, radii).size(width, height)
                 .border(borderWidth, borderColor, borderTop, borderBottom)
+                .borderSides(SIDES[0], SIDES[1], SIDES[2], SIDES[3])
                 .fill(((CgUiRect) d).getFill())
                 .submit();
     }
+
+    /**
+     * The box's four border widths into {@link #SIDES}, answering the widest: a border is drawn when any side has one.
+     * Each side at its own width -- the stroke took the left width for all four, so a box with only a top border drew
+     * none, and one with a thick top drew it thin.
+     */
+    private static float borderSides(Box box) {
+        SIDES[0] = box.border().left;
+        SIDES[1] = box.border().top;
+        SIDES[2] = box.border().right;
+        SIDES[3] = box.border().bottom;
+        return Math.max(Math.max(SIDES[0], SIDES[1]), Math.max(SIDES[2], SIDES[3]));
+    }
+
+    /** {@link #borderSides}' answer, L,T,R,B. Read immediately: the frame thread paints one box at a time. */
+    private static final float[] SIDES = new float[4];
 
     private static int edgeColor(int edge, int fallback) {
         return (edge >>> 24) == 0 ? fallback : edge;
@@ -401,7 +419,7 @@ public final class BoxPainter {
 
     /** The default {@code overflow: hidden} mask: the box's own rounded shape with the border band at alpha 0. */
     private static void paintMask(Box box, ComputedStyle style, CgUiPaintContext ctx) {
-        float borderWidth = box.border().left;
+        float borderWidth = borderSides(box);
         CgUiDrawable maskDrawable = style.get(StylePropertyRegistry.MASK);
         CgUiDrawable source = maskDrawable != CgUiDrawable.EMPTY ? maskDrawable : style.get(StylePropertyRegistry.BACKGROUND);
         originBox(box, style.get(StylePropertyRegistry.MASK_ORIGIN), ORIGIN_BOX);
@@ -440,7 +458,7 @@ public final class BoxPainter {
         // `background: #00000000` must clip the same way.
         if (revealsNothing(d)) mask.fillColor(WHITE);
         else mask.fill(((CgUiRect) d).getFill());
-        if (borderWidth > 0f) mask.border(borderWidth, 0x00000000);
+        if (borderWidth > 0f) mask.border(borderWidth, 0x00000000).borderSides(SIDES[0], SIDES[1], SIDES[2], SIDES[3]);
         mask.submit();
     }
 
