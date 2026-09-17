@@ -186,7 +186,7 @@ public class StyleEditingTest {
      *
      * <p>The row set is deliberately not rebuilt when a value changes, so one of these lives across many
      * edits. Answering from the cascade snapshot it was built with meant every edit read back the value it
-     * had just replaced: the colour field sprang to the old colour, a slider rubber-banded, and a lab's
+     * had just replaced: the color field sprang to the old color, a slider rubber-banded, and a lab's
      * specimen never moved — while the element on the canvas, restyled from the real sheet, showed the new
      * value. Every test here rebuilt the fields after writing, which is how it got through.</p>
      */
@@ -240,7 +240,7 @@ public class StyleEditingTest {
         assertEquals("#FFFFFF", inline.valueOf("text-stroke-color"));
         assertEquals("and reads back as the shorthand", 3f,
                 CssValues.number(TypographyLab.width(inline.valueOf("text-stroke")), 0f), 1e-6);
-        assertEquals("#FFFFFF", TypographyLab.colour(inline.valueOf("text-stroke")));
+        assertEquals("#FFFFFF", TypographyLab.color(inline.valueOf("text-stroke")));
 
         StyleFields rule = StyleFields.on(null, ruleTarget(StyleTargets.of(node, sheets)), node);
         rule.value("text-stroke").set("3px #FFFFFF");
@@ -308,7 +308,7 @@ public class StyleEditingTest {
 
     @Test
     public void theEditorFollowsTheTypeAndRefusesWhatTheParserCannotRead() {
-        assertEquals("a colour is a swatch", ConfigDescriptor.Kind.COLOR,
+        assertEquals("a color is a swatch", ConfigDescriptor.Kind.COLOR,
                 DeclarationEditors.of(StylePropertyRegistry.COLOR, "c", "color", Property.of("")).descriptor().kind());
         assertEquals("a bounded number is a slider", ConfigDescriptor.Kind.NUMBER,
                 DeclarationEditors.of(StylePropertyRegistry.OPACITY, "o", "opacity", Property.of("")).descriptor().kind());

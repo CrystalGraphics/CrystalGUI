@@ -46,7 +46,7 @@ public final class GradientLab {
 
         lab.form().prop(ConfigDescriptor.select("lab.side", "Direction", SIDES), gradient.map(GradientLab::side,
                 chosen -> SIDES.get(0).equals(chosen) ? gradient.get() : gradient.get().withDirection("to " + chosen)));
-        lab.form().prop(ConfigDescriptor.color("lab.stop", "Stop colour"),
+        lab.form().prop(ConfigDescriptor.color("lab.stop", "Stop color"),
                 stop.map(Gradient.Stop::argb, argb -> stop.get().withArgb(argb)));
         lab.form().prop(ConfigDescriptor.number("lab.at", "Stop at").range(0f, 100f).unit("%"),
                 gradient.map(ramp -> (double) (ramp.position(clamp(selected.get(), ramp.stops().size())) * 100f),

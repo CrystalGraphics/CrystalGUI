@@ -17,8 +17,8 @@ import com.crystalgui.ui.dom.UIElement;
  * GlassLab.open(chip, StylePropertyRegistry.BACKDROP_FILTER, css);
  * }</pre>
  *
- * <p>The gallery's glass page as an editor. Every function is invisible against a flat colour, so the
- * specimen sits over coloured shapes. The functions are the engine's grammar ({@code BackdropFilterValue});
+ * <p>The gallery's glass page as an editor. Every function is invisible against a flat color, so the
+ * specimen sits over colored shapes. The functions are the engine's grammar ({@code BackdropFilterValue});
  * one the lab has no slider for is kept exactly as written.</p>
  */
 public final class GlassLab {

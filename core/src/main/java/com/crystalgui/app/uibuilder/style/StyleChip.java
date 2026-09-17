@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import java.util.function.BiConsumer;
 import java.util.function.UnaryOperator;
 
 import javax.annotation.Nullable;
@@ -43,8 +44,13 @@ public class StyleChip extends ValueControl<String> {
     public static final String CHIP_CLASS = "__style-chip__";
     public static final String SWATCH_CLASS = "__style-chip-swatch__";
     public static final String TEXT_CLASS = "__style-chip-text__";
+    /** The clip the value scrolls in: a long declaration is read by wheeling it sideways, never cut short. */
+    public static final String VALUE_CLASS = "__style-chip-value__";
 
-    /** Changed when the lab writes: one act, like a colour picked. */
+    /** How far one wheel notch moves a long value, the same as a scroll view's. */
+    private static final float WHEEL_PIXELS_PER_NOTCH = 40f;
+
+    /** Changed when the lab writes: one act, like a color picked. */
     public static final Event<StyleChip, String> CHANGED =
             ConfigControlContracts.changed(StateTypes.STRING, "", RatePolicy.IMMEDIATE);
 
@@ -52,6 +58,7 @@ public class StyleChip extends ValueControl<String> {
             StyleChip.class, "stylechip", StateTypes.STRING, "", CHANGED);
 
     private final UIElement swatch = new UIElement();
+    private final UIElement valueClip = new UIElement();
     private final UIText text = new UIText("");
 
     /** What the swatch holds for a property whose effect needs something to be applied TO — a face, a stroke. */
@@ -67,6 +74,14 @@ public class StyleChip extends ValueControl<String> {
     /** How the value is drawn in a swatch this size, or null to apply it as written. @see #preview */
     @Nullable
     private UnaryOperator<String> preview;
+
+    /** How the value is spelled beside the swatch, or null for {@link CssValues#readable}. @see #display */
+    @Nullable
+    private UnaryOperator<String> display;
+
+    /** What draws the swatch instead of applying the property to it. @see #painter */
+    @Nullable
+    private BiConsumer<StyleChip, String> painter;
 
     private String value = "";
 
@@ -84,9 +99,26 @@ public class StyleChip extends ValueControl<String> {
         addClass(CHIP_CLASS);
         swatch.addClass(SWATCH_CLASS);
         text.addClass(TEXT_CLASS);
+        valueClip.addClass(VALUE_CLASS);
+        valueClip.append(text);
         append(swatch);
-        append(text);
+        append(valueClip);
         setHitTest(true);
+        // SIDEWAYS ON THE PLAIN WHEEL, as a strip that can only scroll one way does; at either end the wheel
+        // goes on to the panel, so a row under the pointer never traps a scroll through the list.
+        // ON THE CHIP, which is what the pointer hits: the clip and its text take no hits of their own.
+        onMouseScroll.attachListener((element, event) -> {
+            var box = valueClip.box();
+            if (box == null || box.maxScrollLeft() <= 0f) return;
+            // THE BOX DIRECTLY, not the eased scrollTo: whether it moved decides whether the panel gets the wheel,
+            // and an ease has not moved anything by the time that is asked.
+            float before = box.scrollLeft();
+            box.setScroll(before + event.getScroll() * WHEEL_PIXELS_PER_NOTCH, 0f);
+            if (box.scrollLeft() != before) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }, false, true);
         onMouseDown.attachListener((element, event) -> {
             if (open != null) open.run();
             event.preventDefault();
@@ -135,12 +167,46 @@ public class StyleChip extends ValueControl<String> {
      *
      * <p>Display only, and the row prints the real value beside it. A swatch is 28x16 and a shadow is
      * routinely larger than that in every direction, so drawn at its own scale it is a corner of a blur
-     * with the shape, the softness and most of the colour outside the box.</p>
+     * with the shape, the softness and most of the color outside the box.</p>
      */
     public StyleChip preview(UnaryOperator<String> preview) {
         this.preview = preview;
         writeToWidgets(value);
         return this;
+    }
+
+    /**
+     * How the value is spelled beside the swatch, when the CSS is not what a person calls it.
+     *
+     * <pre>{@code
+     * chip.display(TypographyLab::shortName);   // crystalgui:ui/fonts/Minecraft.otf reads as Minecraft
+     * }</pre>
+     */
+    public StyleChip display(UnaryOperator<String> display) {
+        this.display = display;
+        writeToWidgets(value);
+        return this;
+    }
+
+    /**
+     * Draws the swatch itself, for a value that applying one property to a box cannot show.
+     *
+     * <pre>{@code
+     * chip.sample("Ag").painter((c, css) -> LiveEdits.setInline(c.sampleText(), PAINT_ORDER, css));
+     * }</pre>
+     *
+     * <p>Called with the value on every change, including blank. Replaces applying the chip's property.</p>
+     */
+    public StyleChip painter(BiConsumer<StyleChip, String> painter) {
+        this.painter = painter;
+        writeToWidgets(value);
+        return this;
+    }
+
+    /** The text in the swatch, or null before {@link #sample} gave it one. */
+    @Nullable
+    public UIText sampleText() {
+        return sample;
     }
 
     /** What a press does — the lab this row belongs to. */
@@ -158,11 +224,15 @@ public class StyleChip extends ValueControl<String> {
     protected void writeToWidgets(@Nullable String next) {
         value = next == null ? "" : next;
         // SHOWN readable, WRITTEN as it is: the file keeps whatever spelling it has.
-        text.setText(value.isEmpty() ? "—" : shown(CssValues.readable(value)));
+        text.setText(value.isEmpty() ? "—" : display != null ? display.apply(value) : shown(CssValues.readable(value)));
         // NO SWATCH AND NO COLUMN where there is nothing to see: a size or a width applied to a 28x16 box
         // says nothing, and a reserved-but-empty column indents a value past rows that have no swatch at all.
         // `hidden` takes the space with it, which is the point.
-        swatch.set(Attribute.HIDDEN, property == null);
+        swatch.set(Attribute.HIDDEN, property == null && painter == null);
+        if (painter != null) {
+            painter.accept(this, value);
+            return;
+        }
         if (property == null) return;
         if (value.isEmpty()) {
             LiveEdits.clearInline(swatch, property);
@@ -171,24 +241,24 @@ public class StyleChip extends ValueControl<String> {
         }
         // THE SWATCH IS THE VALUE, applied: a gradient chip draws the gradient, a radius chip is rounded.
         //
-        // A COLOUR IS THE EXCEPTION, and it has to be: applying `text-stroke-color` to an empty box paints
-        // nothing at all, which is what made that chip an unexplainable grey rectangle. A colour is shown as
-        // a patch OF that colour, which is what every picker in the application does.
+        // A COLOR IS THE EXCEPTION, and it has to be: applying `text-stroke-color` to an empty box paints
+        // nothing at all, which is what made that chip an unexplainable grey rectangle. A color is shown as
+        // a patch OF that color, which is what every picker in the application does.
         if (property instanceof ColorProperty) {
-            // OVER A CHECKERBOARD, which is the only way a transparent colour reads as transparent rather
-            // than as a swatch that failed to draw. `#972D8E00` is a colour somebody picked, and flat
+            // OVER A CHECKERBOARD, which is the only way a transparent color reads as transparent rather
+            // than as a swatch that failed to draw. `#972D8E00` is a color somebody picked, and flat
             // against the panel it is indistinguishable from no swatch at all -- so a picker that was
-            // working looked broken. `CgUiColorField` is what the colour picker's own swatches use.
+            // working looked broken. `CgUiColorField` is what the color picker's own swatches use.
             //
-            // A DRAWABLE rather than the CSS text, and the BACKGROUND rather than the background COLOUR:
-            // the swatch's own band is a `background`, and a colour set underneath it composites with it
+            // A DRAWABLE rather than the CSS text, and the BACKGROUND rather than the background COLOR:
+            // the swatch's own band is a `background`, and a color set underneath it composites with it
             // -- #E8913A under the band came out #27180A.
             Integer argb = ColorValue.parseColor(value);
             if (argb == null) {
                 LiveEdits.setInline(swatch, StylePropertyRegistry.BACKGROUND, value);
                 return;
             }
-            paintColour(swatch, argb);
+            paintColor(swatch, argb);
         } else {
             LiveEdits.setInline(swatch, property, preview == null ? value : preview.apply(value));
         }
@@ -196,13 +266,13 @@ public class StyleChip extends ValueControl<String> {
 
     /**
      * Paints {@code element} as a patch of {@code argb}, over the checkerboard that makes a transparent
-     * colour read as transparent rather than as a patch that failed to draw.
+     * color read as transparent rather than as a patch that failed to draw.
      *
      * <pre>{@code
-     * StyleChip.paintColour(swatch, 0x80FF0000);   // half-transparent red, and it looks it
+     * StyleChip.paintColor(swatch, 0x80FF0000);   // half-transparent red, and it looks it
      * }</pre>
      */
-    public static void paintColour(UIElement element, int argb) {
+    public static void paintColor(UIElement element, int argb) {
         StyleGroup.inlinePipeline(element.getStyle().getGeneralGroup(),
                 group -> group.background(new CgUiColorField()
                         .setMode(CgUiColorField.Mode.GRADIENT)

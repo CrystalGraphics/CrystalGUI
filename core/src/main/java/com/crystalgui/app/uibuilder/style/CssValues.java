@@ -186,11 +186,13 @@ public final class CssValues {
         while (at < value.length()) {
             char c = value.charAt(at);
             if (c == '#') {
-                // A HEX COLOUR IS NOT A NUMBER, and scanning one as a run of digits mangles it: #00000000
-                // came out as #0 and #00FF00 as #0FF0, so every colour with a zero component was wrong.
+                // A HEX COLOR IS NOT A NUMBER, and scanning one as a run of digits mangles it: #00000000
+                // came out as #0 and #00FF00 as #0FF0, so every color with a zero component was wrong.
                 int hex = at + 1;
                 while (hex < value.length() && isHex(value.charAt(hex))) hex++;
-                out.append(value, at, hex);
+                // AN OPAQUE ALPHA SAYS NOTHING: #CF0600FF reads as #CF0600.
+                boolean opaque = hex - at == 9 && value.regionMatches(true, hex - 2, "FF", 0, 2);
+                out.append(value, at, opaque ? hex - 2 : hex);
                 at = hex;
                 continue;
             }
@@ -213,6 +215,9 @@ public final class CssValues {
             if (unit.equals("rad")) {
                 // NOBODY READS RADIANS, and the canvas's own rotate gesture writes them.
                 out.append(write(Math.round(Math.toDegrees(amount) * 100) / 100d)).append("deg");
+            } else if (unit.equals("px") || unit.equals("em")) {
+                // A TENTH OF A PIXEL is finer than anyone reads; a drag writes hundredths.
+                out.append(write(Math.round(amount * 10d) / 10d)).append(unit);
             } else {
                 out.append(write(amount)).append(unit);
             }
@@ -249,7 +254,7 @@ public final class CssValues {
         return "";
     }
 
-    /** {@code #RRGGBB}, or {@code #RRGGBBAA} when there is transparency to state — the colour writer's own spelling. */
+    /** {@code #RRGGBB}, or {@code #RRGGBBAA} when there is transparency to state — the color writer's own spelling. */
     public static String color(int argb) {
         return StylePropertyRegistry.COLOR.write(argb);
     }

@@ -141,8 +141,8 @@ public final class StyleFields {
     public String valueOf(String property) {
         if (target.isInline() && TEXT_STROKE.equals(property)) {
             String width = inlineValueOf(STROKE_WIDTH);
-            String colour = inlineValueOf(STROKE_COLOR);
-            return (width + " " + colour).trim();
+            String color = inlineValueOf(STROKE_COLOR);
+            return (width + " " + color).trim();
         }
         if (target.isInline()) return inlineValueOf(property);
         CssSourceModel model = model();
@@ -162,10 +162,18 @@ public final class StyleFields {
     public List<Declared> declared() {
         List<Declared> out = new ArrayList<>();
         if (target.isInline()) {
+            boolean stroke = false;
             for (Map.Entry<StyleProperty<?>, List<StyleSlot<?>>> entry : node.getStyle().candidates.entrySet()) {
                 for (StyleSlot<?> slot : entry.getValue()) {
                     if (slot.origin() != StyleOrigin.INLINE) continue;
                     StyleProperty<?> property = entry.getKey();
+                    // THE STROKE IS ONE DECLARATION on either target: the element holds two longhands a sheet
+                    // may not even write, and a row each showed names the palette does not offer.
+                    if (property.name.equals(STROKE_WIDTH) || property.name.equals(STROKE_COLOR)) {
+                        if (!stroke) out.add(new Declared(null, TEXT_STROKE, valueOf(TEXT_STROKE), false, false));
+                        stroke = true;
+                        break;
+                    }
                     out.add(new Declared(property, property.name, written(property, slot.value()), false, false));
                     break;
                 }
@@ -422,15 +430,15 @@ public final class StyleFields {
 
     private void writeInline(String property, String css) {
         if (TEXT_STROKE.equals(property)) {
-            // THE COLOUR IS WHICHEVER TERM PARSES AS ONE, the width the other: both orders are CSS.
+            // THE COLOR IS WHICHEVER TERM PARSES AS ONE, the width the other: both orders are CSS.
             String width = "";
-            String colour = "";
+            String color = "";
             for (String term : CssValues.terms(css)) {
-                if (ColorValue.parseCssColor(term) != null) colour = term;
+                if (ColorValue.parseCssColor(term) != null) color = term;
                 else width = term;
             }
             writeInline(STROKE_WIDTH, width);
-            writeInline(STROKE_COLOR, css.isEmpty() ? "" : colour);
+            writeInline(STROKE_COLOR, css.isEmpty() ? "" : color);
             return;
         }
         StyleProperty<?> styled = propertyOf(property);

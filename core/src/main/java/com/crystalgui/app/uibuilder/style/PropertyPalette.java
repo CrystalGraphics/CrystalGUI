@@ -2,11 +2,13 @@ package com.crystalgui.app.uibuilder.style;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -42,7 +44,7 @@ import com.crystalgui.widget.text.UIText;
  * <pre>{@code
  * PropertyPalette.open(addRow,
  *         name -> fields.declared(name) != null,           // already declared here, drawn dimmed
- *         property -> fields.add(property.name, value));   // picked
+ *         name -> fields.add(name, value));                // picked
  * }</pre>
  *
  * <ul>
@@ -50,12 +52,15 @@ import com.crystalgui.widget.text.UIText;
  *       closed. Recent is this process's last {@value #RECENT_LIMIT} picks, newest first.</li>
  *   <li>Typing flattens to one list, each result trailed by its family; {@code bg}, {@code radius}, a family's
  *       own name and the other spellings {@link StyleFamilies#search} knows find their properties.</li>
- *   <li>Every row ends in the kind of value it takes — {@code colour}, {@code length}, {@code keyword}.</li>
+ *   <li>Every row ends in the kind of value it takes — {@code color}, {@code length}, {@code keyword}.</li>
+ *   <li>What is offered is what a sheet can WRITE: a longhand spelled only through a shorthand is offered as the
+ *       shorthand — {@code text-stroke}, never {@code text-stroke-width} — so a pick is always a name a rule
+ *       accepts.</li>
  *   <li>The footer says what the highlighted property is: its family, its initial value, and whether it is
  *       already declared here.</li>
  * </ul>
  */
-public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, StyleProperty<?>> {
+public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, String> {
 
     public static final Name NAME = Name.of("propertypalette");
 
@@ -82,8 +87,8 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Style
             "padding-top", "margin-top", "color", "font-size", "font-weight", "background-color", "opacity",
             "border-top-left-radius-x", "border-color", "outline", "transform", "transition");
 
-    /** A folder, or one property. */
-    public record Row(String label, @Nullable StyleProperty<?> property, List<Row> children) {
+    /** A folder, or one declaration by the name a sheet writes. */
+    public record Row(String label, @Nullable String name, List<Row> children) {
     }
 
     private final Predicate<String> declared;
@@ -116,30 +121,30 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Style
 
             @Override
             public boolean isCategory(Row node) {
-                return node.property() == null;
+                return node.name() == null;
             }
 
             @Override
             @Nullable
-            public StyleProperty<?> payload(Row node) {
-                return node.property();
+            public String payload(Row node) {
+                return node.name();
             }
 
             @Override
             public List<String> categorySegments(Row node) {
-                return node.property() == null ? List.of() : List.of(StyleFamilies.of(node.property()).label());
+                return node.name() == null ? List.of() : List.of(StyleFamilies.of(node.name()).label());
             }
 
             @Override
             @Nullable
             public String hint(Row node) {
-                return node.property() == null ? null : kind(node.property());
+                return node.name() == null ? null : kind(node.name());
             }
 
             @Override
             @Nullable
             public String rowClass(Row node) {
-                return node.property() != null && declared.test(node.property().name) ? DECLARED_CLASS : null;
+                return node.name() != null && declared.test(node.name()) ? DECLARED_CLASS : null;
             }
         });
         searchBox().setPlaceholder("Search properties");
@@ -152,13 +157,13 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Style
      *
      * @param declared whether a property is already declared here — still listed, and dimmed, since a person
      *                 looking for it wants to be told it is on rather than shown nothing
-     * @param pick     what a chosen property does
+     * @param pick     what a chosen declaration name does
      */
-    public static PropertyPalette open(UIElement anchor, Predicate<String> declared, Consumer<StyleProperty<?>> pick) {
+    public static PropertyPalette open(UIElement anchor, Predicate<String> declared, Consumer<String> pick) {
         PropertyPalette palette = new PropertyPalette(declared);
-        palette.onChosen.connect(property -> {
-            remember(property);
-            pick.accept(property);
+        palette.onChosen.connect(name -> {
+            remember(name);
+            pick.accept(name);
         });
         // AWAY FROM THE ROW THAT OPENED IT: a popover attaches to the nearest ancestor that takes children, and a
         // press inside it would then bubble back to that row. @see StyleLab#open
@@ -176,28 +181,21 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Style
         return palette;
     }
 
-    /** Common first, then every family that has something registered in it. */
+    /** Recent and Common first, then every family that has something a sheet can write in it. */
     private List<Row> browsing() {
         Map<StyleFamilies.Family, List<Row>> byFamily = new EnumMap<>(StyleFamilies.Family.class);
-        List<StyleProperty<?>> all = new ArrayList<>(StylePropertyRegistry.all());
-        all.sort(Comparator.comparing(property -> property.name));
-        for (StyleProperty<?> property : all) {
-            if (!writable(property)) continue;
-            byFamily.computeIfAbsent(StyleFamilies.of(property), ignored -> new ArrayList<>()).add(leaf(property));
+        for (String name : offered()) {
+            byFamily.computeIfAbsent(StyleFamilies.of(name), ignored -> new ArrayList<>()).add(leaf(name));
         }
         List<Row> rows = new ArrayList<>();
         List<Row> recent = new ArrayList<>();
         synchronized (RECENT) {
-            for (String name : RECENT) {
-                StyleProperty<?> property = StylePropertyRegistry.byName(name);
-                if (property != null) recent.add(leaf(property));
-            }
+            for (String name : RECENT) recent.add(leaf(name));
         }
         if (!recent.isEmpty()) rows.add(new Row(RECENT_FOLDER, null, recent));
         List<Row> common = new ArrayList<>();
         for (String name : COMMON) {
-            StyleProperty<?> property = StylePropertyRegistry.byName(name);
-            if (property != null) common.add(leaf(property));
+            if (StylePropertyRegistry.byName(name) != null) common.add(leaf(name));
         }
         rows.add(new Row(COMMON_FOLDER, null, common));
         for (StyleFamilies.Family family : StyleFamilies.inOrder()) {
@@ -208,19 +206,49 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Style
     }
 
     private static List<Row> found(String query) {
-        List<Row> rows = new ArrayList<>();
-        for (StyleProperty<?> property : StyleFamilies.search(query)) {
-            if (writable(property)) rows.add(leaf(property));
-        }
+        Set<String> names = new LinkedHashSet<>();
+        for (StyleProperty<?> property : StyleFamilies.search(query)) names.add(written(property));
+        List<Row> rows = new ArrayList<>(names.size());
+        for (String name : names) rows.add(leaf(name));
         return rows;
     }
 
-    private static void remember(StyleProperty<?> property) {
+    /** Every name a sheet can write, alphabetically: each writable property, and each shorthand a longhand names. */
+    private static List<String> offered() {
+        Set<String> names = new TreeSet<>();
+        for (StyleProperty<?> property : StylePropertyRegistry.all()) names.add(written(property));
+        return List.copyOf(names);
+    }
+
+    /** The name a sheet writes {@code property} under: its own, or the shorthand it may only be written through. */
+    static String written(StyleProperty<?> property) {
+        return property.getAuthoredThrough() == null ? property.name : property.getAuthoredThrough();
+    }
+
+    /** The longhands a shorthand sets, in registry order; empty for a name the registry holds itself. */
+    static List<StyleProperty<?>> longhandsOf(String shorthand) {
+        List<StyleProperty<?>> out = new ArrayList<>();
+        for (StyleProperty<?> property : StylePropertyRegistry.all()) {
+            if (shorthand.equals(property.getAuthoredThrough())) out.add(property);
+        }
+        return out;
+    }
+
+    private static void remember(String name) {
         synchronized (RECENT) {
-            RECENT.remove(property.name);
-            RECENT.addFirst(property.name);
+            RECENT.remove(name);
+            RECENT.addFirst(name);
             while (RECENT.size() > RECENT_LIMIT) RECENT.removeLast();
         }
+    }
+
+    /** The kind of value a declaration of {@code name} takes; a shorthand's is its longhands', in order. */
+    static String kind(String name) {
+        StyleProperty<?> property = StylePropertyRegistry.byName(name);
+        if (property != null) return kind(property);
+        Set<String> kinds = new LinkedHashSet<>();
+        for (StyleProperty<?> longhand : longhandsOf(name)) kinds.add(kind(longhand));
+        return kinds.isEmpty() ? "value" : String.join(" ", kinds);
     }
 
     /**
@@ -241,7 +269,7 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Style
             case "tooltip-delay", "scroll-duration": return "time";
             default: break;
         }
-        if (property instanceof ColorProperty) return "colour";
+        if (property instanceof ColorProperty) return "color";
         Class<?> type = property.type;
         if (type == Boolean.class) return "on/off";
         if (type.isEnum()) return "keyword";
@@ -259,31 +287,33 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Style
         return "value";
     }
 
-    /** A longhand a sheet may not write — {@code text-stroke-width} is spelled {@code text-stroke} — is not offered. */
-    private static boolean writable(StyleProperty<?> property) {
-        return property.getAuthoredThrough() == null;
-    }
-
-    private static Row leaf(StyleProperty<?> property) {
-        return new Row(property.name, property, List.of());
+    private static Row leaf(String name) {
+        return new Row(name, name, List.of());
     }
 
     private void describeHighlighted() {
-        StyleProperty<?> property = null;
+        String name = null;
         for (Integer index : treeView().getSelectedIndices()) {
             TreeRow<Row> row = treeView().rowAt(index);
-            if (row != null) property = row.item().property();
+            if (row != null) name = row.item().name();
             break;
         }
-        footer.setText(property == null ? HINTS : describe(property, declared.test(property.name)));
+        footer.setText(name == null ? HINTS : describe(name, declared.test(name)));
     }
 
-    /** {@code Layout · initial flex · declared here}. */
-    static String describe(StyleProperty<?> property, boolean declaredHere) {
-        StringBuilder out = new StringBuilder(StyleFamilies.of(property).label());
-        String initial = property.initialValue == null ? null : StyleFields.cast(property).write(property.initialValue);
-        if (initial != null && !initial.isBlank()) out.append(" · initial ").append(initial);
-        if (property.isInheritable()) out.append(" · inherited");
+    /** {@code Layout · initial flex · declared here}, or for a shorthand the longhands it sets. */
+    static String describe(String name, boolean declaredHere) {
+        StringBuilder out = new StringBuilder(StyleFamilies.of(name).label());
+        StyleProperty<?> property = StylePropertyRegistry.byName(name);
+        if (property == null) {
+            List<String> sets = new ArrayList<>();
+            for (StyleProperty<?> longhand : longhandsOf(name)) sets.add(longhand.name);
+            if (!sets.isEmpty()) out.append(" · sets ").append(String.join(", ", sets));
+        } else {
+            String initial = property.initialValue == null ? null : StyleFields.cast(property).write(property.initialValue);
+            if (initial != null && !initial.isBlank()) out.append(" · initial ").append(initial);
+            if (property.isInheritable()) out.append(" · inherited");
+        }
         if (declaredHere) out.append(" · declared here");
         return out.toString();
     }

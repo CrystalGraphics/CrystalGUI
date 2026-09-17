@@ -10,11 +10,13 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.general.floats.FloatProperty;
 import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControl;
+import com.crystalgui.widget.config.control.ColorControl;
 
 /**
  * The control a style property gets, resolved from the property itself.
@@ -27,13 +29,13 @@ import com.crystalgui.widget.config.ConfigControl;
  * }</pre>
  *
  * <p>By TYPE, with per-property overrides — the same shape as the Element tab's {@code descriptorFor}. A
- * colour is a swatch, a bounded number a slider, an enum a dropdown, a flag a checkbox; <b>anything else is
+ * color is a swatch, a bounded number a slider, an enum a dropdown, a flag a checkbox; <b>anything else is
  * a text row that validates through the property's own parser</b>, so a value the engine cannot read is
  * refused at the field instead of being written into a sheet. Nothing is ever skipped: a property
  * registered this morning is editable this afternoon, at worst as text.</p>
  *
  * <p>Values here are CSS <b>text</b> in and out — what a sheet holds and what an inline style holds. A
- * control that wants a number or a colour is given a mapped view, and a value it produces that the property
+ * control that wants a number or a color is given a mapped view, and a value it produces that the property
  * cannot parse is never written.</p>
  */
 public final class DeclarationEditors {
@@ -56,7 +58,7 @@ public final class DeclarationEditors {
      *               writes through this rather than through {@code css}
      * @param node   the element being styled, for a lab that measures it
      */
-    public record Context(StyleProperty<?> property, String id, String label, Property<String> css,
+    public record Context(@Nullable StyleProperty<?> property, String id, String label, Property<String> css,
                           @Nullable StyleFields fields, @Nullable UIElement node) {
     }
 
@@ -67,6 +69,9 @@ public final class DeclarationEditors {
     }
 
     private static final Map<StyleProperty<?>, Editor> OVERRIDES = new HashMap<>();
+
+    /** Editors for a name no property claims: a shorthand a sheet writes, such as {@code text-stroke}. */
+    private static final Map<String, Editor> NAMED = new HashMap<>();
 
     private DeclarationEditors() {
     }
@@ -79,6 +84,32 @@ public final class DeclarationEditors {
      */
     public static void register(StyleProperty<?> property, Editor editor) {
         OVERRIDES.put(property, editor);
+    }
+
+    /**
+     * Gives a declaration NAME with no registered property an editor — a shorthand the sheet spells and the
+     * registry does not hold. Its context's {@code property} is null; its {@code label} is the name.
+     *
+     * <pre>{@code
+     * DeclarationEditors.register("text-stroke", context -> strokeChip(context));
+     * }</pre>
+     */
+    public static void register(String name, Editor editor) {
+        NAMED.put(name, editor);
+    }
+
+    /**
+     * A number field in {@code unit}, bound to a declaration that spells a bare number — what a size row is.
+     *
+     * <pre>{@code
+     * DeclarationEditors.register(FONT_SIZE, context -> DeclarationEditors.number(context, "px"));
+     * }</pre>
+     */
+    public static Field number(Context context, String unit) {
+        StyleProperty<?> property = context.property();
+        ConfigDescriptor descriptor = ConfigDescriptor.number(context.id(), context.label()).unit(unit)
+                .tooltip(property == null ? context.label() : property.name);
+        return new Field(descriptor, property == null ? context.css() : numeric(property, context.css()));
     }
 
     /** Forgets a registered editor, back to the type-driven default. */
@@ -104,6 +135,8 @@ public final class DeclarationEditors {
     public static Field of(@Nullable StyleProperty<?> property, String id, String label, Property<String> css,
                            @Nullable StyleFields fields, @Nullable UIElement node) {
         if (property == null) {
+            Editor named = NAMED.get(label);
+            if (named != null) return named.build(new Context(null, id, label, css, fields, node));
             // A name no property claims -- a custom property, or a typo somebody wrote. It is in the file, so
             // it is shown and editable; nothing can validate it.
             return new Field(ConfigDescriptor.text(id, label).placeholder("value"), css);
@@ -118,9 +151,16 @@ public final class DeclarationEditors {
         String tooltip = property.name + (property.getAuthoredThrough() == null ? ""
                 : " — written as " + property.getAuthoredThrough());
 
-        if (property instanceof ColorProperty colour) {
-            return new Field(ConfigDescriptor.color(id, label).tooltip(tooltip),
-                    css.map(text -> parsed(colour, text, 0), value -> hex(value)));
+        if (property instanceof ColorProperty color) {
+            ConfigDescriptor descriptor = ConfigDescriptor.color(id, label).tooltip(tooltip);
+            Property<Integer> argb = css.map(text -> parsed(color, text, 0), value -> hex(value));
+            ColorControl control = new ColorControl(descriptor, null);
+            // ZERO IS "THE TEXT'S OWN COLOR" for these two, which a transparent swatch misreports.
+            if (property == StylePropertyRegistry.CARET_COLOR || property == StylePropertyRegistry.TEXT_DECORATION_COLOR) {
+                control.zeroLabel("currentColor");
+            }
+            control.bind(argb);
+            return new Field(descriptor, argb, control);
         }
         if (property.type == Boolean.class) {
             return new Field(ConfigDescriptor.bool(id, label).tooltip(tooltip),
@@ -146,8 +186,10 @@ public final class DeclarationEditors {
         }
         // Lengths, drawables, transforms, gradients, fonts: text until a lab is built for them, and
         // validated so an unparseable value never reaches a sheet.
+        // SHOWN AS A PERSON READS IT, `52px` rather than the writer's `52.0px`, which is also valid to write back.
         return new Field(ConfigDescriptor.text(id, label).tooltip(tooltip).placeholder("value")
-                .validator(text -> text == null || text.isBlank() || parses(property, text)), css);
+                .validator(text -> text == null || text.isBlank() || parses(property, text)),
+                css.map(CssValues::readable, typed -> typed));
     }
 
     /** A number property as a number, refusing anything its own parser will not read. */
@@ -208,7 +250,7 @@ public final class DeclarationEditors {
         return ((StyleProperty<Object>) property).write(value);
     }
 
-    /** A colour as a sheet spells it. Eight digits only when there is transparency to state. */
+    /** A color as a sheet spells it. Eight digits only when there is transparency to state. */
     private static String hex(@Nullable Integer argb) {
         return argb == null ? "" : CssValues.color(argb);
     }

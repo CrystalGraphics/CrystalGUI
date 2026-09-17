@@ -76,6 +76,12 @@ public final class StyleLab {
     /** Between the row and the lab, so the value being edited is still readable beside it. */
     private static final float LAB_GAP = 8f;
 
+    /**
+     * The plate every lab's specimen stands on, {@link #DARK_CLASS} or {@link #LIGHT_CLASS}. One for the process: a
+     * person judging values against white judges the next lab against white too, and an open lab follows a switch.
+     */
+    private static final Property<String> GROUND = Property.of(DARK_CLASS);
+
     /** The lab each window has open, so opening one closes the last. @see #open() */
     private static final Map<UIDocument, StyleLab> OPEN = new WeakHashMap<>();
 
@@ -160,7 +166,7 @@ public final class StyleLab {
         return this;
     }
 
-    /** Puts coloured shapes behind the specimen, which is what a blur or a refraction needs to be visible. */
+    /** Puts colored shapes behind the specimen, which is what a blur or a refraction needs to be visible. */
     public StyleLab backdrop() {
         for (int i = 0; i < 3; i++) {
             UIElement shape = new UIElement();
@@ -188,7 +194,6 @@ public final class StyleLab {
     private void buildStage() {
         stage.addClass(STAGE_CLASS);
         stage.addClass(GROUND_CLASS);
-        stage.addClass(DARK_CLASS);
         stage.setZoomRange(0.25f, 32f);
 
         specimen.addClass(SPECIMEN_CLASS);
@@ -199,6 +204,8 @@ public final class StyleLab {
         grounds.append(pick(LIGHT_CLASS));
         grounds.append(pick(DARK_CLASS));
         stage.addOverlay(grounds);
+        ground(GROUND.get());
+        PropertyWatch.follow(stage, GROUND, this::ground);
 
         zoomLabel.addClass(ZOOM_CLASS);
         stage.addOverlay(zoomLabel);
@@ -208,7 +215,7 @@ public final class StyleLab {
         // RIGHT-CLICK IS HOME, as the gallery's text-lab canvas does it.
         stage.onMouseDown.attachListener((element, event) -> {
             if (event.getButtonId() == CgMouseCodes.RIGHT_BUTTON) {
-                stage.setZoom(1f).setPan(0f, 0f);
+                home();
                 event.preventDefault();
             }
         }, false, true);
@@ -218,17 +225,26 @@ public final class StyleLab {
         UIElement pick = new UIElement();
         pick.addClass(PICK_CLASS);
         pick.addClass(tone);
-        if (DARK_CLASS.equals(tone)) pick.addClass(ACTIVE_CLASS);
         pick.setHitTest(true);
         pick.onMouseDown.attachListener((element, event) -> {
-            ground(tone);
+            GROUND.set(tone);
             event.preventDefault();
         }, false, true);
         picks.add(pick);
         return pick;
     }
 
-    /** Switches the plate the specimen stands on. A class carries it, so the colours stay in the sheet. */
+    /** The specimen at actual size in the middle of the stage; false while there is nothing measured to centre. */
+    private boolean home() {
+        var bounds = stage.contentBounds();
+        var view = stage.box();
+        if (bounds == null || view == null || view.width() <= 0f || bounds.width() <= 0f) return false;
+        stage.setZoom(1f);
+        stage.centerOnWorld(bounds.centerX(), bounds.centerY());
+        return true;
+    }
+
+    /** Switches the plate the specimen stands on. A class carries it, so the colors stay in the sheet. */
     private void ground(String tone) {
         stage.removeClass(DARK_CLASS);
         stage.removeClass(LIGHT_CLASS);
@@ -253,6 +269,9 @@ public final class StyleLab {
         // PROMOTED BY HAND: only showModal() promotes, and a lab is modeless so the element stays reachable.
         window.promote(dialog);
         dialog.placeBeside(anchor, AnchoredPlacement.Side.RIGHT, LAB_GAP);
+        // CENTRED ONCE MEASURED: the specimen was placed at the stage's corner, leaving most of the plate empty
+        // under a line of text in its top-left.
+        window.animation().afterLayout(stage, delta -> !home());
         return this;
     }
 
