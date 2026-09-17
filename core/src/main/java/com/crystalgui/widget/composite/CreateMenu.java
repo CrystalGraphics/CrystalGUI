@@ -50,6 +50,12 @@ public class CreateMenu<N, T> extends Popover {
     /** This widget's kind. A subclass with its own look declares its own and passes it up. */
     public static final Name NAME = Name.of("createmenu");
 
+    /**
+     * The quick-input look — the Insert menu's: title, search, folders, a footer. A subclass wanting it adds this
+     * class rather than restating the sheet under its own tag.
+     */
+    public static final String QUICK_INPUT_CLASS = "__quick-input__";
+
     public static final String TITLE_BAR_CLASS = "__title-bar__";
     public static final String TITLE_CLASS = "__title__";
 

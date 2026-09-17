@@ -197,6 +197,31 @@ public class StylesTabTest extends UiDocumentTestBase {
         assertSame("and leaves the others alone", opacity, control("style.opacity"));
     }
 
+    /**
+     * <b>Picking a property that is already declared shows its row and leaves its value alone.</b>
+     *
+     * <p>A pick adds the property at its initial value, so picking a declared one wrote that initial value over
+     * the one the rule held.</p>
+     */
+    @Test
+    public void pickingADeclaredPropertyKeepsItsValue() {
+        editor.selection().selectStyleTarget(ruleTarget().key());
+        inspect(card);
+        DeclarationList list = null;
+        for (UIElement each : inspector.composedSubtree()) {
+            if (each instanceof DeclarationList found) list = found;
+        }
+        assertNotNull(list);
+
+        list.pick(StylePropertyRegistry.OPACITY);
+        frame();
+        assertTrue("the rule still says 0.5", sheet.toString().contains("opacity: 0.5"));
+
+        list.pick(StylePropertyRegistry.COLOR);
+        frame();
+        assertTrue("and a new one is still added", sheet.toString().contains("color:"));
+    }
+
     /** A rule's declaration that something stronger beats is drawn struck through, and follows it. */
     @Test
     public void aDeclarationThatLosesIsMarkedWhileItLoses() {

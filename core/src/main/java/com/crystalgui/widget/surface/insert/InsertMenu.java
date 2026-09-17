@@ -82,6 +82,7 @@ public final class InsertMenu extends CreateMenu<InsertMenu.Row, Insertable> {
     public InsertMenu(SurfaceContext ctx) {
         super(NAME, "Insert");
         this.ctx = ctx;
+        addClass(QUICK_INPUT_CLASS);
         header.addClass(HEADER_CLASS);
         footer.addClass(FOOTER_CLASS);
         footer.setHitTest(false);
