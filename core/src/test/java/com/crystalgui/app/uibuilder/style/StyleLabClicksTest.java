@@ -68,7 +68,7 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
     /** The button has a box where it is drawn, and a press there is a press on it. */
     @Test
     public void aPressOnAKeywordReachesIt() {
-        Button keyword = keyword("Remove");
+        Button keyword = keyword("Reverse");
         assertNotNull("the lab built its keyword buttons", keyword);
 
         Box box = keyword.box();
@@ -79,7 +79,7 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         click(centre[0], centre[1]);
         frame();
 
-        assertEquals("the press changed the value", "linear-gradient(180deg, #8A8AFF 50%, #C86AFF)", css.get());
+        assertEquals("the press changed the value", "linear-gradient(180deg, #C86AFF, #8A8AFF 50%, #6AA9FF)", css.get());
     }
 
     /**

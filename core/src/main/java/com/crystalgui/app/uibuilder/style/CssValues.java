@@ -33,6 +33,92 @@ public final class CssValues {
     private CssValues() {
     }
 
+    /** A single function call longer than this opens onto an argument a line. */
+    private static final int BREAK_CALL_AT = 40;
+
+    /** One line of a value as it is read, and whether it continues a function opened on the line above. */
+    public record Line(String text, boolean continued) {
+    }
+
+    /**
+     * A value broken into the lines it reads in, as DevTools and Prettier break CSS: never wrapped further, so the widest
+     * line is how narrow a column showing it may be.
+     *
+     * <pre>{@code
+     * CssValues.lines("#000 0 1px 2px, #F00 0 0 4px");      // "#000 0 1px 2px,"  "#F00 0 0 4px"
+     * CssValues.lines("translate(1px, 2px) scale(2)");      // "translate(1px, 2px)"  "scale(2)"
+     * CssValues.lines("linear-gradient(90deg, #F00, #0F0 40%, #00F)");
+     *     // "linear-gradient("  then "90deg,"  "#F00,"  "#0F0 40%,"  "#00F)", each continued
+     * }</pre>
+     *
+     * <ul>
+     *   <li><b>A comma list</b> is a layer a line, each but the last ending in its comma.</li>
+     *   <li><b>A run of functions</b> — {@code transform}, {@code backdrop-filter} — is a function a line.</li>
+     *   <li><b>One long call</b> opens on its name alone, then an argument a line, closing on the last: the name and its
+     *       first argument together were the widest line, and so the narrowest the column could go.</li>
+     * </ul>
+     *
+     * <p>A switched-off layer or function reads as the comment it is kept in. Every text is {@link #readable}.</p>
+     */
+    public static List<Line> lines(@Nullable String value) {
+        if (value == null || value.isBlank()) return List.of();
+        List<String> layers = layerStack(value);
+        if (layers.size() >= 2) {
+            List<Line> out = new ArrayList<>(layers.size());
+            for (int i = 0; i < layers.size(); i++) {
+                out.add(new Line(shownEntry(layers.get(i)) + (i < layers.size() - 1 ? "," : ""), false));
+            }
+            return out;
+        }
+        List<String> functions = functionStack(value);
+        if (functions.size() >= 2 && allCalls(functions)) {
+            List<Line> out = new ArrayList<>(functions.size());
+            for (String function : functions) out.add(new Line(shownEntry(function), false));
+            return out;
+        }
+        String readable = readable(value);
+        List<String> arguments = readable.length() > BREAK_CALL_AT ? callArguments(readable) : List.of();
+        if (arguments.size() < 2) return List.of(new Line(readable, false));
+        String name = readable.substring(0, readable.indexOf('(') + 1);
+        List<Line> out = new ArrayList<>(arguments.size() + 1);
+        out.add(new Line(name, false));
+        for (int i = 0; i < arguments.size(); i++) {
+            out.add(new Line(arguments.get(i) + (i < arguments.size() - 1 ? "," : ")"), true));
+        }
+        return out;
+    }
+
+    private static String shownEntry(String entry) {
+        String body = readable(bodyOf(entry));
+        return isOff(entry) ? "/* " + body + " */" : body;
+    }
+
+    /** Whether every entry is a call: {@code rgba(0, 0, 0, .5) 0 1px} is a shadow, not two functions. */
+    private static boolean allCalls(List<String> entries) {
+        for (String entry : entries) {
+            String body = bodyOf(entry);
+            if (body.indexOf('(') <= 0 || !body.endsWith(")")) return false;
+        }
+        return true;
+    }
+
+    /** The top-level arguments of {@code text} when it is exactly one call, else empty. */
+    private static List<String> callArguments(String text) {
+        int open = text.indexOf('(');
+        if (open <= 0 || !text.endsWith(")")) return List.of();
+        int depth = 0;
+        for (int i = open; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '(') depth++;
+            if (c == ')' && --depth == 0 && i != text.length() - 1) return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (String part : CssParsingUtil.splitTopLevelCommas(text.substring(open + 1, text.length() - 1))) {
+            if (!part.isBlank()) out.add(part.trim());
+        }
+        return out;
+    }
+
     /** A declaration's live layers: what {@code background}, {@code text-shadow} and {@code overlay} hold. */
     public static List<String> layers(@Nullable String css) {
         if (css != null) css = CssComments.strip(css);

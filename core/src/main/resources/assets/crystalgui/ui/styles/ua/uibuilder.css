@@ -940,7 +940,8 @@ smartguides {
 /* THE EYE TAKES THE NAME'S INSET: it sits at the row's edge, a short gap before the name, and the name column gives
  * back the eye's width so the values stay where they were. */
 .__configurator__.__style-row__.__eyed__ > .__style-row-eye__ { margin-left: 0px; margin-right: -2px; }
-.__configurator__.__style-row__.__eyed__ > .__label__ { padding-left: 0px; flex-basis: 120px; }
+/* The column less the eye before it: 12px under a plain row's share, cap and floor alike. */
+.__configurator__.__style-row__.__eyed__ > .__label__ { padding-left: 0px; flex-basis: 34%; max-width: 120px; min-width: 64px; }
 /* A HIDDEN DECLARATION, greyed whole: name and editor together, the eye left bright to bring it back. */
 /* A HIDDEN DECLARATION, greyed whole: a veil in the panel's colour over its editor, and its name in the disabled grey.
  * NOT OPACITY: that made the name and the editor a layer each, and an editor holding a chip nested the chip's own
@@ -1005,8 +1006,12 @@ smartguides {
 .__configurator__.__style-row__ > .__label__ {
     /* The rows are the detail under their heading, one step down in brightness. */
     color: var(--fg-secondary, #9DA0A8);
-    flex-basis: 132px;
-    min-width: 0px;
+    /* A SHARE OF THE PANEL, capped at the full column: every row still agrees on where values start, and a narrow
+     * panel gives up the column's empty space before it scrolls sideways. A flat 132px scrolled a 280px panel with
+     * seventy pixels of nothing after "background". */
+    flex-basis: 38%;
+    max-width: 132px;
+    min-width: 76px;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -1066,14 +1071,16 @@ smartguides {
     flex-direction: column;
     padding-top: 2.5px;
     padding-bottom: 2.5px;
-    /* ROOM FOR THE PANEL'S BAR: scrolled to the end, the last character sat under it. */
-    padding-right: 10px;
+    /* NO ROOM KEPT FOR THE PANEL'S BAR: the row's remove button and its own inset come after the value, and 10px
+     * here was only width the column claimed and nothing drew in. */
 }
 .__style-chip-text__ {
     flex-shrink: 0;
     white-space: nowrap;
     color: var(--fg-secondary, #9DA0A8);
 }
+/* An argument of a function opened on the line above, indented under its name. */
+.__style-chip-text__.__style-chip-continued__ { margin-left: 12px; }
 /* A COLOUR ROW IS A CHIP, like every other value with something to show: the swatch in the chip's column and the
  * hex beside it. The swatch keeps the kit's alpha strip under the colour, which is drawn over a checkerboard. */
 .__configurator__.__style-row__ .__config-control__.__color__ {
@@ -1252,39 +1259,54 @@ smartguides {
 }
 
 /* The gradient bar IS the gradient, and a stop is a handle on it. */
-/* INSET BY HALF A HANDLE each side, so a stop at 0% or 100% is whole rather than cut by the lab's edge. */
+/* THE RAMP AND ITS TRACK, inset by half a swatch each side so a stop at 0% or 100% is whole. */
 .__gradient-bar__ {
-    height: 22px;
     margin-left: 7px;
     margin-right: 7px;
     margin-top: 4px;
-    margin-bottom: 4px;
-    border-radius: 3px;
-    position: relative;
+    margin-bottom: 2px;
     flex-shrink: 0;
 }
-/* CENTRED ON ITS POSITION, filled with its stop's color and ringed white, as every gradient editor draws one. */
+/* Over a checkerboard, drawn in Java: a transparent stop reads as transparent rather than as the panel. */
+.__gradient-ramp__ { height: 22px; border-radius: 3px; position: relative; cursor: pointer; }
+.__gradient-fill__ { position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; border-radius: 3px; }
+.__gradient-track__ { height: 20px; position: relative; cursor: pointer; }
+/* BESIDE THE RAMP, pointing up at where the stop sits, as Photoshop's and DevTools' stops do. */
 .__gradient-stop__ {
     position: absolute;
-    top: -4px;
+    top: 0px;
     width: 12px;
-    height: 30px;
     margin-left: -6px;
-    border-radius: 3px;
-    outline: 2px var(--lab-stop-border, #FFFFFF);
+    align-items: center;
     cursor: pointer;
 }
-.__gradient-stop__.__active__ { outline: 2px var(--accent, #3574F0); }
-/* Far enough off the bar that letting go removes it. */
+.__gradient-stop-pointer__ {
+    width: 8px;
+    height: 5px;
+    overlay: shape("triangle-up");
+    overlay-size: contain;
+    color: var(--fg-secondary, #9DA0A8);
+}
+.__gradient-stop-swatch__ {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    outline: 1px var(--border-strong, #5A5D63);
+}
+.__gradient-stop__.__active__ .__gradient-stop-pointer__ { color: var(--accent, #3574F0); }
+.__gradient-stop__.__active__ .__gradient-stop-swatch__ { outline: 2px var(--accent, #3574F0); }
+/* Far enough off the track that letting go removes it. */
 .__gradient-stop__.__removing__ { opacity: 0.35; }
 
 /* A ROW'S CONTROL: the dial, then the degrees. */
-.__angle-field__ { flex-direction: row; align-items: center; gap: 8px; width: 100%; }
-.__angle-field__ > numbercontrol, .__angle-field__ > .__config-control__ { width: 0px; flex-grow: 1; }
+/* Right-aligned: the degrees field is sized to its number, and the dial and directions sit beside it. */
+.__angle-field__ { flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; }
+.__angle-field__ > numbercontrol, .__angle-field__ > .__config-control__ { width: 44px; flex-grow: 0; flex-shrink: 0; }
 .__angle-dial__ {
-    width: 34px;
-    height: 34px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
+    position: relative;
     border-radius: 999px;
     background: var(--configkit-field-bg, #2B2D30);
     outline: 1px var(--configkit-field-border, #4A4D52);
@@ -1292,7 +1314,33 @@ smartguides {
     justify-content: center;
     cursor: pointer;
 }
-.__angle-needle__ { width: 2px; height: 14px; background: var(--accent, #3574F0); transform-origin-y: 100%; }
+/* THE NEEDLE'S FOOT ON THE CENTRE, and it turns about its foot: centred whole, it swung about a point 7px below. */
+.__angle-needle__ {
+    position: absolute;
+    left: 11px;
+    top: 3px;
+    width: 2px;
+    height: 9px;
+    background: var(--accent, #3574F0);
+    transform-origin-y: 100%;
+}
+/* The eight directions around an empty middle, each an arrow turned to the way it points. */
+/* As tall as the dial beside it, so the row is no taller than a field. */
+.__angle-presets__ { flex-direction: row; flex-wrap: wrap; width: 24px; flex-shrink: 0; }
+.__angle-preset__ {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    padding: 1px;
+    overlay: shape("triangle-up");
+    overlay-size: contain;
+    overlay-origin: content-box;
+    color: var(--fg-hint, #7A7A7A);
+    cursor: pointer;
+}
+.__angle-preset-gap__ { width: 8px; height: 8px; }
+.__angle-preset__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
+.__angle-preset__.__active__ { color: var(--accent, #3574F0); }
 
 /* A ROW'S CONTROL: the pad, then X and Y beside it. */
 .__offset-field__ { flex-direction: row; align-items: center; gap: 8px; width: 100%; }
@@ -1347,6 +1395,7 @@ smartguides {
     flex-shrink: 0;
     padding-right: var(--cfg-pad-x);
 }
+.__layer-stack__.__gradient-stops__ { margin-top: 6px; margin-bottom: 6px; }
 .__layer-box__ {
     width: 100%;
     padding: 3px;

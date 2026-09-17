@@ -658,8 +658,25 @@ public final class Box {
         return overflow != null && overflow != Overflow.VISIBLE;
     }
 
+    /** How far up the tree a reveal may scroll — the web's {@code scrollIntoView({container})}. */
+    public enum Reach {
+        /** Every clipping ancestor, so the box ends up on screen. */
+        ALL,
+        /**
+         * Only the nearest clipping ancestor: a list keeping its picked row in view, where scrolling the panel around
+         * the list too would move what the pointer is over.
+         */
+        NEAREST
+    }
+
+    /** {@link #scrollIntoView(Reach)} over every clipping ancestor. */
+    public void scrollIntoView() {
+        scrollIntoView(Reach.ALL);
+    }
+
     /**
-     * Scrolls every clipping ancestor just far enough to reveal this box.
+     * Scrolls clipping ancestors just far enough to reveal this box: all of them, or with {@link Reach#NEAREST} only
+     * the first.
      *
      * <p>Instant, never eased: this is what a Tab press and a programmatic focus do, and easing it
      * would leave focus somewhere the user cannot see for the length of the animation.</p>
@@ -668,7 +685,7 @@ public final class Box {
      * this box relative to EVERY ancestor above it by the same amount, and none of them move, so one
      * running offset is exact and no re-composition is needed part way.</p>
      */
-    public void scrollIntoView() {
+    public void scrollIntoView(Reach reach) {
         // COMPOSE FIRST, for the same reason `BoxTree.hitTest` does: the walk below reads
         // `worldX()/worldY()`, and a scroll is layout-free -- it marks the transforms dirty and
         // returns. So a reveal issued between a scroll and the next frame measured against the
@@ -678,6 +695,7 @@ public final class Box {
         float shiftX = 0f, shiftY = 0f;
         for (Box ancestor = host(); ancestor != null; ancestor = ancestor.host()) {
             if (!ancestor.clips()) continue;
+            if (reach == Reach.NEAREST && ancestor != nearestClipping()) break;
             FloatRect b = ancestor.border();
             float viewLeft = ancestor.worldX() + b.left;
             float viewTop = ancestor.worldY() + b.top;
@@ -701,6 +719,13 @@ public final class Box {
             shiftX -= ancestor.scrollLeft() - beforeX;
             shiftY -= ancestor.scrollTop() - beforeY;
         }
+    }
+
+    private @Nullable Box nearestClipping() {
+        for (Box ancestor = host(); ancestor != null; ancestor = ancestor.host()) {
+            if (ancestor.clips()) return ancestor;
+        }
+        return null;
     }
 
     /** Says the layout under this box must be recomputed. The node's style calls it; so may a skin. */
