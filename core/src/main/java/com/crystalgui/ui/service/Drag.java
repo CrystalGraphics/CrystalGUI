@@ -7,6 +7,7 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
+import com.crystalgui.ui.input.DragScrub;
 import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -137,6 +138,64 @@ public final class Drag implements InputMode {
         float spanInLocalUnits = handle.toLocal(probe, 0f).x() - originX;
         if (!Float.isFinite(spanInLocalUnits) || Math.abs(spanInLocalUnits) < 1e-4f) return 1f;
         return probe / spanInLocalUnits;
+    }
+
+    /**
+     * Makes {@code handle} scrub a number: press it and slide, right or up to increase, Escape to put it back.
+     *
+     * <pre>{@code
+     * Drag.scrub(label, field, target);   // a field's label: NumberControl's and TextControl's
+     * }</pre>
+     *
+     * <ul>
+     *   <li><b>A press that does not travel is still a click</b>: below the gesture's threshold nothing is written, and
+     *       {@code focus} takes focus on the press either way, so the label stays a way into the box.</li>
+     *   <li><b>Focus on the press</b>, pointer-style: commands resolve outward from focus, and a drag that left focus
+     *       untouched made an edit Ctrl+Z could not reach.</li>
+     *   <li><b>Deltas in physical pixels</b>, sampled through the handle's transform, so the rate holds at any
+     *       {@code uiScale} or zoom.</li>
+     *   <li>{@code began} and {@code ended} bracket only a drag past its threshold, and {@code ended} runs on release
+     *       and Escape alike, or the host's merge run never closes.</li>
+     * </ul>
+     */
+    public static void scrub(UIElement handle, UIElement focus, DragScrub.Target target) {
+        handle.setHitTest(true);
+        handle.onMouseDown.attachListener((element, event) -> {
+            float rawX = event.getPosition().x(), rawY = event.getPosition().y();
+            // A synthesized activation press carries the cursor's position, nowhere near this handle.
+            if (!handle.containsSurfacePoint(rawX, rawY)) return;
+            UIDocument window = handle.document();
+            if (window == null) return;
+            window.focus().requestPointerFocus(focus);
+            if (!target.scrubbable()) return;
+
+            DragScrub.Gesture scrub = new DragScrub.Gesture(target.spec());
+            scrub.begin(target.start());
+            float perUnit = pixelsPerLocalUnit(handle);
+            start(handle, rawX, rawY, new Listener() {
+                @Override
+                public void onDragUpdate(float mouseX, float mouseY, float startX, float startY, float dx, float dy) {
+                    boolean wasLive = scrub.isLive();
+                    if (!scrub.update(dx * perUnit, dy * perUnit)) return;
+                    if (!wasLive) target.began();
+                    target.apply(scrub.value());
+                }
+
+                @Override
+                public void onDragEnd(float mouseX, float mouseY) {
+                    if (scrub.isLive()) target.ended();
+                }
+
+                @Override
+                public void onDragCancel() {
+                    // THE PRESS VALUE, not the anchor: a modifier mid-drag moves the anchor, and Escape means as it was.
+                    if (!scrub.isLive()) return;
+                    target.apply(scrub.start(0));
+                    target.ended();
+                }
+            });
+            event.stopPropagation();
+        }, false, true);
     }
 
     public static Drag start(UIElement source, float surfaceX, float surfaceY, Listener listener) {
