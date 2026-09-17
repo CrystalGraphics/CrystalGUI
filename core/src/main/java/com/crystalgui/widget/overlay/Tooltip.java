@@ -328,7 +328,16 @@ public class Tooltip extends UIElement {
         // Listeners are attached exactly once, here, against a tooltip that is created in the same
         // breath. The earlier UIElement.setTooltip could be called repeatedly — and a
         // set(text)/set(null)/set(text) cycle silently attached a second pair every time.
-        anchor.onMouseEnter.attachListener((el, event) -> tooltip.showAfterDelay(anchor), false, false);
+        anchor.onMouseEnter.attachListener((el, event) -> {
+            // ENTERED BY A CLICK, NOT BY THE HAND: a press that rebuilt what is under a still pointer -- a Hide that
+            // became a Show -- counts as pressed here, and the tip waits for the pointer to leave, as a browser's does.
+            UIDocument window = anchor.document();
+            if (window != null && !window.input().pointerMovedSincePress()) {
+                tooltip.pressedSinceEnter = true;
+                return;
+            }
+            tooltip.showAfterDelay(anchor);
+        }, false, false);
         anchor.onMouseLeave.attachListener((el, event) -> {
             tooltip.pressedSinceEnter = false;
             tooltip.hide();
@@ -443,7 +452,21 @@ public class Tooltip extends UIElement {
      * would only notice the next time the mouse moved.</p>
      */
     public Tooltip addRegion(UIElement region, @Nullable String text) {
+        return addRegion(region, text, region);
+    }
+
+    /**
+     * As {@link #addRegion(UIElement, String)}, placed against {@code placedAgainst} rather than the region —
+     * for regions that are one statement split across several elements.
+     *
+     * <pre>{@code
+     * hint.addRegion(label, text, row);   // the name and its value say one thing, as one pill under the row
+     * hint.addRegion(value, text, row);   // rather than a pill that jumps as the pointer crosses between them
+     * }</pre>
+     */
+    public Tooltip addRegion(UIElement region, @Nullable String text, UIElement placedAgainst) {
         Objects.requireNonNull(region, "region");
+        Objects.requireNonNull(placedAgainst, "placedAgainst");
         // REPLACED, NEVER STACKED, and empty REMOVES.
         //
         // Both follow from the callers being pooled. A dock tab re-anchors its icon region every time the
@@ -461,7 +484,7 @@ public class Tooltip extends UIElement {
             return this;
         }
         if (regions == null) regions = new ArrayList<>(2);
-        regions.add(new Region(region, text));
+        regions.add(new Region(region, text, placedAgainst));
         return this;
     }
 
@@ -518,10 +541,12 @@ public class Tooltip extends UIElement {
     private static final class Region {
         private final UIElement element;
         private final String text;
+        private final UIElement placedAgainst;
 
-        private Region(UIElement element, String text) {
+        private Region(UIElement element, String text, UIElement placedAgainst) {
             this.element = element;
             this.text = text;
+            this.placedAgainst = placedAgainst;
         }
     }
 
@@ -776,7 +801,7 @@ public class Tooltip extends UIElement {
         // Re-read every frame rather than latched at show time, for the same reason the placement is:
         // the pointer moves from label to icon without ever leaving the anchor, and the ticker calls
         // resolveRegion() immediately before this.
-        UIElement against = activeRegion == null ? anchor : activeRegion.element;
+        UIElement against = activeRegion == null ? anchor : activeRegion.placedAgainst;
         AnchoredPlacement.place(this, against, side, gap);
     }
 
