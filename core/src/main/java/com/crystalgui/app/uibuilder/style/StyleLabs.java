@@ -90,6 +90,9 @@ public final class StyleLabs {
         DeclarationEditors.register(StylePropertyRegistry.CARET_WIDTH,
                 context -> DeclarationEditors.number(context, "px"));
         DeclarationEditors.register(StyleFields.TEXT_STROKE, context -> chip(context, typography(context)));
+        DeclarationEditors.register(StyleFields.BORDER_RADIUS, context -> chip(context, anchor -> {
+            if (context.fields() != null) CornersLab.open(anchor, context.fields());
+        }));
     }
 
     /** Whether the row's layers may be switched off rather than deleted: any writable declaration, rule or inline. */
@@ -122,6 +125,7 @@ public final class StyleLabs {
         // Glass over the swatch's flat band filters nothing: it needs something behind it.
         if (property == StylePropertyRegistry.BACKDROP_FILTER) chip.painter(GlassLab::paintSample);
         if (StyleFields.TEXT_STROKE.equals(name)) chip.painter((c, css) -> strokeSample(c, css, context.node()));
+        if (StyleFields.BORDER_RADIUS.equals(name)) chip.painter(StyleLabs::radiusSample);
         if (property == StylePropertyRegistry.TEXT_DECORATION_LINE) {
             chip.painter((c, css) -> onSample(c, StylePropertyRegistry.TEXT_DECORATION_LINE, css));
         }
@@ -164,6 +168,16 @@ public final class StyleLabs {
         if (sample == null) return;
         if (css.isBlank()) LiveEdits.clearInline(sample, property);
         else LiveEdits.setInline(sample, property, css);
+    }
+
+    /** The swatch rounded as the declaration says: the shorthand, expanded onto the swatch's own corners. */
+    private static void radiusSample(StyleChip chip, String css) {
+        String[] corners = css.isBlank() ? null : StyleFields.radiusLonghands(css);
+        for (int i = 0; i < 8; i++) {
+            StyleProperty<?> longhand = StyleFields.propertyOf(StyleFields.RADIUS_LONGHANDS.get(i));
+            if (corners == null) LiveEdits.clearInline(chip.swatch(), longhand);
+            else LiveEdits.setInline(chip.swatch(), longhand, corners[i]);
+        }
     }
 
     /** The sample outlined in the element's accent, with the order this declaration says. */

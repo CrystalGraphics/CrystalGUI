@@ -16,6 +16,7 @@ import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.undo.UndoStack;
+import com.crystalgui.style.CssComments;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
@@ -72,6 +73,18 @@ public final class StyleFields {
     static final String TEXT_STROKE = "text-stroke";
     private static final String STROKE_WIDTH = "text-stroke-width";
     private static final String STROKE_COLOR = "text-stroke-color";
+
+    /**
+     * The corners as one declaration. A sheet may write the shorthand or its eight longhands, and an element holds the
+     * longhands; the Styles tab shows and edits them as the shorthand either way, one row where there were eight.
+     */
+    static final String BORDER_RADIUS = "border-radius";
+
+    /** The longhands in the order CSS states them: top-left, top-right, bottom-right, bottom-left, each x then y. */
+    static final List<String> RADIUS_LONGHANDS = List.of(
+            "border-top-left-radius-x", "border-top-left-radius-y", "border-top-right-radius-x",
+            "border-top-right-radius-y", "border-bottom-right-radius-x", "border-bottom-right-radius-y",
+            "border-bottom-left-radius-x", "border-bottom-left-radius-y");
 
     private final StyleTarget target;
     private final UIElement node;
@@ -139,6 +152,11 @@ public final class StyleFields {
      * and spring to it, while the element on the canvas showed the new one.</p>
      */
     public String valueOf(String property) {
+        if (target.isInline() && BORDER_RADIUS.equals(property)) {
+            String[] corners = new String[8];
+            for (int i = 0; i < 8; i++) corners[i] = inlineValueOf(RADIUS_LONGHANDS.get(i));
+            return radiusShorthand(corners);
+        }
         if (target.isInline() && TEXT_STROKE.equals(property)) {
             String width = inlineValueOf(STROKE_WIDTH);
             String color = inlineValueOf(STROKE_COLOR);
@@ -163,6 +181,7 @@ public final class StyleFields {
         List<Declared> out = new ArrayList<>();
         if (target.isInline()) {
             boolean stroke = false;
+            boolean radius = false;
             for (Map.Entry<StyleProperty<?>, List<StyleSlot<?>>> entry : node.getStyle().candidates.entrySet()) {
                 for (StyleSlot<?> slot : entry.getValue()) {
                     if (slot.origin() != StyleOrigin.INLINE) continue;
@@ -174,18 +193,32 @@ public final class StyleFields {
                         stroke = true;
                         break;
                     }
+                    // THE CORNERS TOO: eight longhands, one shape.
+                    if (RADIUS_LONGHANDS.contains(property.name)) {
+                        if (!radius) out.add(new Declared(null, BORDER_RADIUS, valueOf(BORDER_RADIUS), false, false));
+                        radius = true;
+                        break;
+                    }
                     out.add(new Declared(property, property.name, inlineValueOf(property.name), false, false));
                     break;
                 }
             }
             // SWITCHED OFF WHERE THEY STAND: a text with no value under it.
             boolean hiddenStroke = false;
+            boolean hiddenRadius = false;
             for (StyleProperty<?> property : node.getStyle().inlineTextProperties()) {
                 if (LiveEdits.hasInline(node, property)) continue;
                 if (property.name.equals(STROKE_WIDTH) || property.name.equals(STROKE_COLOR)) {
                     // One row for the pair, hidden once neither half is live.
                     if (!stroke && !hiddenStroke) out.add(new Declared(null, TEXT_STROKE, valueOf(TEXT_STROKE), false, true));
                     hiddenStroke = true;
+                    continue;
+                }
+                if (RADIUS_LONGHANDS.contains(property.name)) {
+                    if (!radius && !hiddenRadius) {
+                        out.add(new Declared(null, BORDER_RADIUS, hiddenRadiusValue(), false, true));
+                    }
+                    hiddenRadius = true;
                     continue;
                 }
                 String text = node.getStyle().inlineText(property);
@@ -356,7 +389,7 @@ public final class StyleFields {
      */
     public void add(String property, String value) {
         if (!canWrite()) return;
-        if (!target.isInline() || TEXT_STROKE.equals(property)) {
+        if (!target.isInline() || TEXT_STROKE.equals(property) || BORDER_RADIUS.equals(property)) {
             write(property, value);
             return;
         }
@@ -416,9 +449,10 @@ public final class StyleFields {
     private boolean setInlineEnabled(String property, boolean enabled) {
         if (!canWrite()) return false;
         JsonElement was = NodeFields.inlineStyleOf(node);
-        if (TEXT_STROKE.equals(property)) {
-            // THE STROKE IS TWO LONGHANDS inline, so each is switched where it stands and the row is one.
-            for (String longhand : List.of(STROKE_WIDTH, STROKE_COLOR)) {
+        if (TEXT_STROKE.equals(property) || BORDER_RADIUS.equals(property)) {
+            // THE STROKE AND THE CORNERS ARE SEVERAL LONGHANDS inline, so each is switched where it stands and the
+            // row is one.
+            for (String longhand : TEXT_STROKE.equals(property) ? List.of(STROKE_WIDTH, STROKE_COLOR) : RADIUS_LONGHANDS) {
                 String value = CssValues.bodyOf(inlineValueOf(longhand));
                 if (!value.isEmpty()) LiveEdits.setInline(node, propertyOf(longhand), CssValues.switched(value, enabled));
             }
@@ -430,6 +464,95 @@ public final class StyleFields {
         JsonElement after = NodeFields.inlineStyleOf(node);
         if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
         return !after.equals(was);
+    }
+
+    /**
+     * The corners, expanded onto the element's eight longhands as ONE edit: eight writes were eight undo steps for a
+     * value typed once. Blank takes all eight off.
+     */
+    private void writeRadiusInline(String css) {
+        String[] corners = css.isEmpty() ? new String[8] : radiusLonghands(css);
+        if (corners == null) return;
+        JsonElement was = NodeFields.inlineStyleOf(node);
+        for (int i = 0; i < 8; i++) {
+            StyleProperty<?> longhand = propertyOf(RADIUS_LONGHANDS.get(i));
+            if (corners[i] == null || corners[i].isEmpty()) LiveEdits.clearInline(node, longhand);
+            else LiveEdits.setInline(node, longhand, corners[i]);
+        }
+        JsonElement after = NodeFields.inlineStyleOf(node);
+        if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
+    }
+
+    /** The shorthand as a hidden row reads it: the commented longhands' values. */
+    private String hiddenRadiusValue() {
+        String[] corners = new String[8];
+        for (int i = 0; i < 8; i++) {
+            String text = node.getStyle().inlineText(propertyOf(RADIUS_LONGHANDS.get(i)));
+            corners[i] = text == null ? "" : CssValues.bodyOf(text);
+        }
+        return radiusShorthand(corners);
+    }
+
+    /**
+     * Eight corner values as {@code border-radius} is written: each side's four collapsed as CSS allows, and the
+     * vertical radii after a slash only when they differ. "" when no corner is set; an unset corner reads as 0.
+     */
+    static String radiusShorthand(String[] corners) {
+        boolean any = false;
+        for (String corner : corners) any |= corner != null && !corner.isEmpty();
+        if (!any) return "";
+        String[] xs = new String[4], ys = new String[4];
+        // READABLE, so an element's stored `6.0px` compares and reads as the `6px` a sheet would hold.
+        for (int i = 0; i < 4; i++) {
+            xs[i] = corners[i * 2] == null || corners[i * 2].isEmpty() ? "0px" : CssValues.readable(corners[i * 2]);
+            ys[i] = corners[i * 2 + 1] == null || corners[i * 2 + 1].isEmpty() ? "0px" : CssValues.readable(corners[i * 2 + 1]);
+        }
+        String horizontal = side(xs);
+        String vertical = side(ys);
+        return horizontal.equals(vertical) ? horizontal : horizontal + " / " + vertical;
+    }
+
+    /** Four corners as few values as CSS reads back to the same four. */
+    private static String side(String[] c) {
+        if (c[0].equals(c[1]) && c[1].equals(c[2]) && c[2].equals(c[3])) return c[0];
+        if (c[0].equals(c[2]) && c[1].equals(c[3])) return c[0] + " " + c[1];
+        if (c[1].equals(c[3])) return c[0] + " " + c[1] + " " + c[2];
+        return String.join(" ", c);
+    }
+
+    /**
+     * {@code border-radius} expanded to its eight longhands' values, in {@link #RADIUS_LONGHANDS} order, as the engine's
+     * own shorthand does: one to four values, then optionally a slash and one to four more. Null when malformed.
+     */
+    @Nullable
+    static String[] radiusLonghands(String css) {
+        String[] halves = CssComments.strip(css).split("/", 2);
+        String[] xs = corners(halves[0]);
+        String[] ys = halves.length == 2 ? corners(halves[1]) : xs;
+        if (xs == null || ys == null) return null;
+        String[] out = new String[8];
+        for (int i = 0; i < 4; i++) {
+            out[i * 2] = xs[i];
+            out[i * 2 + 1] = ys[i];
+        }
+        return out;
+    }
+
+    @Nullable
+    private static String[] corners(String list) {
+        String[] t = list.trim().split("\\s+");
+        return switch (t.length) {
+            case 1 -> new String[] {t[0], t[0], t[0], t[0]};
+            case 2 -> new String[] {t[0], t[1], t[0], t[1]};
+            case 3 -> new String[] {t[0], t[1], t[2], t[1]};
+            case 4 -> new String[] {t[0], t[1], t[2], t[3]};
+            default -> null;
+        };
+    }
+
+    /** The element this edits. */
+    public UIElement node() {
+        return node;
     }
 
     /** The registered property a name means, or null — a custom property, or a typo the sheet holds. */
@@ -463,6 +586,10 @@ public final class StyleFields {
     }
 
     private void writeInline(String property, String css) {
+        if (BORDER_RADIUS.equals(property)) {
+            writeRadiusInline(css);
+            return;
+        }
         if (TEXT_STROKE.equals(property)) {
             // THE COLOR IS WHICHEVER TERM PARSES AS ONE, the width the other: both orders are CSS.
             String width = "";
