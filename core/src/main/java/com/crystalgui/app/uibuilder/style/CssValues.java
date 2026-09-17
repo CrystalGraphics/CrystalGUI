@@ -189,10 +189,16 @@ public final class CssValues {
         return String.join(" ", out);
     }
 
-    /** Whether a stack entry is switched off. */
+    /**
+     * Whether a stack entry is switched off — <b>one comment and nothing else</b>.
+     *
+     * <p>A value that merely BEGINS and ENDS with a comment is a stack whose first and last entries are both off,
+     * and reading that as one switched-off thing struck the outer markers and stranded the two inside it:
+     * {@code /*}{@code  a *}{@code / b /}{@code * c *}{@code /} came back as {@code a *}{@code / b /}{@code * c}.</p>
+     */
     public static boolean isOff(String layer) {
         String trimmed = layer.trim();
-        return trimmed.startsWith("/*") && trimmed.endsWith("*/");
+        return trimmed.startsWith("/*") && trimmed.endsWith("*/") && trimmed.indexOf("*/") == trimmed.length() - 2;
     }
 
     /** A stack entry without its switch: the layer itself. */

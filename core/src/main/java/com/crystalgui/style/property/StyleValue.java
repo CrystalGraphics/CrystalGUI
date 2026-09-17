@@ -1,6 +1,7 @@
 package com.crystalgui.style.property;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.style.CssComments;
 
 import javax.annotation.Nullable;
 import java.util.Objects;
@@ -25,7 +26,11 @@ public abstract class StyleValue<T> {
     public T compute() {
         if (!computed) {
             try {
-                computedValue = doCompute(rawValue);
+                // A COMMENT IS WHITESPACE TO A TOKENIZER, and CSS drops them before a value is ever parsed, so a
+                // value may carry one. A sheet's own parser already stripped them; this is for a value set
+                // directly, where the text reaches the parser as written -- the UI builder switches one layer of
+                // a stack off by commenting it INSIDE the value, and inline there is no sheet to strip it.
+                computedValue = doCompute(CssComments.has(rawValue) ? CssComments.strip(rawValue) : rawValue);
             } catch (Exception e) {
                 CrystalGuiCore.LOGGER.warn("Failed to parse style value '{}': {}", rawValue, e.getMessage());
                 computedValue = null;
