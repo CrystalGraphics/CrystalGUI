@@ -312,4 +312,13 @@ public class DragScrubTest {
         pad.update(12, 30, 0);
         assertArrayEquals("letting go puts it under the pointer", new double[] {17, 35}, pad.point(), 1e-9);
     }
+
+    @Test
+    public void aQuantityIsANumberWithItsUnitAndNeverAKeyword() {
+        assertEquals(new DragScrub.Quantity(72, "px"), DragScrub.quantity("72px"));
+        assertEquals(new DragScrub.Quantity(1.5, ""), DragScrub.quantity(" 1.5 "));
+        assertEquals(new DragScrub.Quantity(-50, "%"), DragScrub.quantity("-50%"));
+        assertEquals(null, DragScrub.quantity("auto"));
+        assertEquals("75px", DragScrub.quantity("72px").written(75.0));
+    }
 }

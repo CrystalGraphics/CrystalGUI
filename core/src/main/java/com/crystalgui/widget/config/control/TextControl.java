@@ -24,6 +24,8 @@ import com.crystalgui.ui.dom.ChildList;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.input.DragScrub;
+import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.scroll.ScrollerView;
@@ -106,6 +108,66 @@ public class TextControl extends ValueControl<String> {
     private final List<String> listed = new ArrayList<>();
     private int active = -1;
 
+    /**
+     * The label beside the field scrubs the number it holds — {@code 72px}, {@code 1.5}, {@code 50%} — keeping the
+     * unit, and does nothing while it holds a keyword like {@code auto}. What a CSS length is: a number or a word, and
+     * only the number moves. @see Drag#scrub
+     */
+    @Override
+    public boolean adoptLabel(UIElement label) {
+        scrubHandle = label;
+        showScrubbable();
+        DragScrub.Quantity[] pressed = new DragScrub.Quantity[1];
+        Drag.scrub(label, field, new DragScrub.Target() {
+            @Override
+            public boolean scrubbable() {
+                pressed[0] = isEnabled() ? DragScrub.quantity(field.getText()) : null;
+                return pressed[0] != null;
+            }
+
+            @Override
+            public double start() {
+                return pressed[0].value();
+            }
+
+            @Override
+            public DragScrub.Spec spec() {
+                return pressed[0].spec();
+            }
+
+            @Override
+            public void apply(double value) {
+                String text = pressed[0].written(value);
+                setValue(text);
+                commit(text);
+            }
+
+            @Override
+            public void began() {
+                addClass(NumberControl.SCRUBBING_CLASS);
+                beginInteraction();
+            }
+
+            @Override
+            public void ended() {
+                removeClass(NumberControl.SCRUBBING_CLASS);
+                endInteraction();
+            }
+        });
+        return true;
+    }
+
+    /** The label that scrubs this field, once {@link #adoptLabel} was offered one. */
+    @Nullable
+    private UIElement scrubHandle;
+
+    /** The scrub cursor while the field holds a number, and not over a keyword or a name it cannot move. */
+    private void showScrubbable() {
+        if (scrubHandle != null) {
+            scrubHandle.toggleClass(NumberControl.SCRUB_HANDLE_CLASS, DragScrub.quantity(field.getText()) != null);
+        }
+    }
+
     public TextControl(ConfigDescriptor descriptor, String defaultValue) {
         super(NAME, descriptor, defaultValue);
         this.validator = descriptor.validator();
@@ -124,6 +186,7 @@ public class TextControl extends ValueControl<String> {
                 invalidateStyleMatch();
             }
             if (ok) commit(text);
+            showScrubbable();
         });
 
         suggestionSource = descriptor.suggestions();
@@ -314,6 +377,7 @@ public class TextControl extends ValueControl<String> {
     @Override
     protected void writeToWidgets(@Nullable String value) {
         field.setText(value == null ? "" : value);
+        showScrubbable();
         if (invalid) {
             invalid = false;
             invalidateStyleMatch();

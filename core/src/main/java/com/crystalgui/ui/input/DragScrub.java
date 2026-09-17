@@ -4,6 +4,14 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.service.CgInputService;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.annotation.Nullable;
+
 /**
  * The arithmetic of dragging a number: pointer movement in, a new value out.
  *
@@ -239,8 +247,8 @@ public final class DragScrub {
      */
     private static double round(double value, int decimals) {
         if (!Double.isFinite(value)) return value;
-        return java.math.BigDecimal.valueOf(value)
-                .setScale(decimals, java.math.RoundingMode.HALF_UP)
+        return BigDecimal.valueOf(value)
+                .setScale(decimals, RoundingMode.HALF_UP)
                 .doubleValue();
     }
 
@@ -393,6 +401,61 @@ public final class DragScrub {
         /** What was pressed on, which is what Escape puts back. */
         public double start(int axis) {
             return start[axis];
+        }
+    }
+
+    /**
+     * What a scrubbed handle reads, writes and brackets. Driven by {@code Drag.scrub}.
+     */
+    public interface Target {
+        /** Whether a press may scrub right now: enabled, and holding a number. */
+        boolean scrubbable();
+
+        /** The number at the press. */
+        double start();
+
+        /** How the drag prices a pixel, asked per press. */
+        Spec spec();
+
+        /** Shows {@code value} and reports it. */
+        void apply(double value);
+
+        /** Once the drag passes its threshold. */
+        void began();
+
+        /** On release or Escape, after {@link #began}. */
+        void ended();
+    }
+
+    /**
+     * A number and the unit written after it — {@code 72px}, {@code 1.5}, {@code 50%} — or null for anything else, a
+     * keyword like {@code auto} included: what in a CSS length a scrub may move.
+     */
+    @Nullable
+    public static Quantity quantity(@Nullable String text) {
+        if (text == null) return null;
+        Matcher match = QUANTITY.matcher(text.trim());
+        return match.matches() ? new Quantity(Double.parseDouble(match.group(1)), match.group(2)) : null;
+    }
+
+    private static final Pattern QUANTITY = Pattern.compile("(-?\\d*\\.?\\d+)([a-zA-Z%]*)");
+
+    /** A number with its unit. @see #quantity */
+    public record Quantity(double value, String unit) {
+
+        /** How a drag prices this unit: pixels as {@link Spec#PIXELS}, a percentage or angle a unit, else a hundredth. */
+        public Spec spec() {
+            return switch (unit.toLowerCase(Locale.ROOT)) {
+                case "px" -> Spec.PIXELS;
+                case "%", "deg" -> Spec.FLOAT.withRate(0.5d).withStep(1d);
+                default -> Spec.FLOAT.withRate(0.01d).withStep(0.01d);
+            };
+        }
+
+        /** {@code value} with this unit after it, and no trailing {@code .0}. */
+        public String written(double value) {
+            String number = BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+            return ("-0".equals(number) ? "0" : number) + unit;
         }
     }
 }

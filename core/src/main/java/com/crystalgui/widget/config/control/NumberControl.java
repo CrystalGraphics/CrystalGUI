@@ -7,7 +7,6 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
@@ -78,8 +77,6 @@ public class NumberControl extends ValueControl<Double> {
     /** Decimal places shown, or -1 for up to four. @see ConfigDescriptor#decimals */
     private final int decimals;
 
-    /** The live scrub. Made per press, since its spec may follow another value: a slider's span. */
-    private DragScrub.Gesture scrub = new DragScrub.Gesture(DragScrub.Spec.FLOAT);
 
     /** The no-argument constructor the registry's factory needs, over a NEUTRAL
      * descriptor -- an unlabelled control of this kind, which is a real thing rather than a
@@ -88,9 +85,6 @@ public class NumberControl extends ValueControl<Double> {
     public NumberControl() {
         this(ConfigDescriptor.number("", ""), 0d);
     }
-
-    /** Physical pixels per local unit of the handle, sampled once when the drag begins. @see #scrubWith */
-    private float scrubPixelsPerUnit = 1f;
 
     public NumberControl(ConfigDescriptor descriptor, double defaultValue) {
         super(NAME, descriptor, defaultValue);
@@ -158,115 +152,43 @@ public class NumberControl extends ValueControl<Double> {
      */
     public NumberControl scrubWith(UIElement handle) {
         handle.addClass(SCRUB_HANDLE_CLASS);
-        // The handle is usually a label, and a label is usually scenery with hit-testing off. It cannot
-        // be both: a gesture needs the press.
-        handle.setHitTest(true);
+        Drag.scrub(handle, field, new DragScrub.Target() {
+            @Override
+            public boolean scrubbable() {
+                return isEnabled();
+            }
 
-        handle.onMouseDown.attachListener((element, event) -> {
-            if (!isEnabled()) return;
-            float rawX = event.getPosition().x(), rawY = event.getPosition().y();
-            // A synthesized activation press (Space/Enter on a focused element) carries the cursor's
-            // position, which is nowhere near this handle. Slider and ColorSelector discard those the
-            // same way; honouring one here would jump the value by however far the pointer happens to be.
-            if (!handle.containsSurfacePoint(rawX, rawY)) return;
+            @Override
+            public double start() {
+                Double held = getValue();
+                return held == null ? 0d : held;
+            }
 
-            UIDocument window = document();
-            if (window == null) return;
+            @Override
+            public DragScrub.Spec spec() {
+                return scrubSpec();
+            }
 
-            // Focus on PRESS, not only on a sub-threshold click.
-            //
-            // Pressing a control is what focuses it everywhere else, and here it is load-bearing rather
-            // than cosmetic: commands resolve outward from the focused element, so a gesture that changes
-            // a value while leaving focus untouched produces an edit that Ctrl+Z cannot reach — the
-            // command has no scope to walk up from. `UndoScope.nearest(null)` is null, and the undo entry
-            // sits on a stack nothing can find.
-            //
-            // It presented as "undo does not work on scrub", but the edit was always recorded correctly;
-            // whether Ctrl+Z found it depended entirely on what had been clicked BEFORE the drag. Select a
-            // node first and it worked, which is why deleting-then-undoing looked fine.
-            //
-            // requestPointerFocus, never requestFocus: the latter rings :focus-visible, and a focus ring
-            // appearing because you dragged a number is the exact noise that pseudo-class exists to remove.
-            focusField(window);
+            @Override
+            public void apply(double value) {
+                // setValue repaints the box, which a scrub is not typing into; commit tells the host.
+                setValue(value);
+                commit(value);
+            }
 
-            scrub = new DragScrub.Gesture(scrubSpec());
-            scrub.begin(currentValue());
-            scrubPixelsPerUnit = Drag.pixelsPerLocalUnit(handle);
+            @Override
+            public void began() {
+                addClass(SCRUBBING_CLASS);
+                beginInteraction();
+            }
 
-            Drag.start(handle, rawX, rawY,
-                    new Drag.Listener() {
-                        @Override
-                        public void onDragUpdate(float mouseX, float mouseY, float startX, float startY,
-                                                 float deltaX, float deltaY) {
-                            scrubUpdate(deltaX * scrubPixelsPerUnit, deltaY * scrubPixelsPerUnit);
-                        }
-
-                        @Override
-                        public void onDragEnd(float mouseX, float mouseY) {
-                            // Focus already happened on press, for both outcomes — so a click and a drag
-                            // leave the control in the same state rather than only the click focusing it.
-                            endScrub();
-                        }
-
-                        @Override
-                        public void onDragCancel() {
-                            // Escape mid-drag. UIDragController routes it here before anything else sees
-                            // the key, so putting the value back is the whole of the work — and it is
-                            // worth having: a scrub is the one gesture where you can be well past what
-                            // you wanted before you notice.
-                            // The PRESS value, not the anchor: a modifier mid-drag moves the anchor, and
-                            // Escape means "as it was", not "as it was when I last pressed Shift".
-                            if (scrub.isLive()) applyScrubValue(scrub.start(0));
-                            endScrub();
-                        }
-                    });
-            event.stopPropagation();
-        }, false, true);
+            @Override
+            public void ended() {
+                removeClass(SCRUBBING_CLASS);
+                endInteraction();
+            }
+        });
         return this;
-    }
-
-    private void scrubUpdate(float dxPixels, float dyPixels) {
-        boolean wasLive = scrub.isLive();
-        if (!scrub.update(dxPixels, dyPixels)) return;
-        if (!wasLive) {
-            addClass(SCRUBBING_CLASS);
-            // Opened only once the gesture is real, so a click that never scrubbed does not bracket an
-            // empty run for the host to record nothing into.
-            beginInteraction();
-        }
-        applyScrubValue(scrub.value());
-    }
-
-    /**
-     * Writes a scrubbed value and reports it.
-     *
-     * <p>Two steps because they are two different things: {@link #setValue} updates the text and the
-     * stored value <em>silently</em> (a scrub is not typing, so the box has to be repainted for it), and
-     * {@link #commit} is what tells the host. Calling only {@code commit} leaves the field showing the
-     * value the drag started on for its whole duration.</p>
-     */
-    private void applyScrubValue(double value) {
-        setValue(value);
-        commit(value);
-    }
-
-    private void endScrub() {
-        removeClass(SCRUBBING_CLASS);
-        // Unconditional, and reached from both end and cancel: a host that opened a merge run and never
-        // hears it close folds the NEXT unrelated edit into this gesture's undo step.
-        endInteraction();
-    }
-
-    private void focusField(UIDocument window) {
-        // Pointer-driven, so requestPointerFocus rather than requestFocus — the latter rings
-        // :focus-visible, and a focus ring appearing because you clicked is the exact noise that
-        // pseudo-class exists to remove.
-        window.focus().requestPointerFocus(field);
-    }
-
-    private double currentValue() {
-        Double held = getValue();
-        return held == null ? 0d : held;
     }
 
     private DragScrub.Spec scrubSpec() {
