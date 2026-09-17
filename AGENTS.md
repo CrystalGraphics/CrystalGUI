@@ -475,7 +475,7 @@ entry is visible rather than merely absent: `backdrop-filter`, `background`, `ba
 `mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
 `outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-size`,
 `overlay-origin`, `overlay-position`, `paint-order`, `resize`, `scroll-behavior`, `scroll-duration`,
-`selection-color`, `stroke-align`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-fill-color`, `text-offset-x`, `text-offset-y`,
+`selection-color`, `stroke-align`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
 `text-overflow`, `text-shadow`, `text-stroke-color`, `text-stroke-width`, `tooltip-delay`, `transform`, `transform-origin-x`, `transform-origin-y`,
 `transition`, `white-space`, `z-index` — plus the whole layout set from `LayoutProperties`.
 

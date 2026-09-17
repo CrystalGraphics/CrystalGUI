@@ -156,6 +156,9 @@ public final class UIText extends UIElement implements Measurable {
     private CgFontFamily shapedFamily;
     private Map<String, HighlightStyle> shapedHighlights = Collections.emptyMap();
     private Set<TextDecorationLine> shapedDecorations = Collections.emptySet();
+
+    /** The decoration colour the retained paragraph's spans were built with. */
+    private int shapedDecorationColor;
     private boolean shapedBold;
     private boolean shapedItalic;
 
@@ -336,7 +339,7 @@ public final class UIText extends UIElement implements Measurable {
             return;
         }
         // ANYTHING ELSE IS READ AT PAINT TIME, so the picture changed and the box did not. Colour,
-        // the whole text-stroke family, the fill, paint-order, the shadow, the decorations and the
+        // the whole text-stroke family, paint-order, the shadow, the decorations and the
         // offsets all land here -- and a kept layer would otherwise hold the old paint until some
         // unrelated event forced a frame. A repaint rather than an allowlist: this reports false from
         // paintsDynamically, so anything missed is invisible until someone recolours a label inside a
@@ -404,6 +407,9 @@ public final class UIText extends UIElement implements Measurable {
         CgFontFamily family = resolveFamily();
         Map<String, HighlightStyle> styles = resolveHighlightStyles();
         Set<TextDecorationLine> decorations = ownDecorations();
+        // THE LINE COLOR IS BAKED INTO THE SPANS too, so a new color needs a new paragraph: a repaint alone drew
+        // the old one.
+        int decorationColor = ownDecorationColor();
         var general = getStyle().getGeneralGroup();
         boolean bold = general.fontWeight().isBold();
         boolean italic = general.fontStyle().isItalic();
@@ -413,6 +419,7 @@ public final class UIText extends UIElement implements Measurable {
                 || family != shapedFamily
                 || !styles.equals(shapedHighlights)
                 || !decorations.equals(shapedDecorations)
+                || decorationColor != shapedDecorationColor
                 || bold != shapedBold
                 || italic != shapedItalic) {
             paragraph = shape(currentText, family, styles);
@@ -420,6 +427,7 @@ public final class UIText extends UIElement implements Measurable {
             shapedFamily = family;
             shapedHighlights = styles;
             shapedDecorations = decorations;
+            shapedDecorationColor = decorationColor;
             shapedBold = bold;
             shapedItalic = italic;
         }
@@ -550,7 +558,7 @@ public final class UIText extends UIElement implements Measurable {
             switch (line) {
                 case UNDERLINE -> out.add(CgTextDecoration.UNDERLINE);
                 case LINE_THROUGH -> out.add(CgTextDecoration.STRIKETHROUGH);
-                default -> { }
+                case OVERLINE -> out.add(CgTextDecoration.OVERLINE);
             }
         }
         return out;
@@ -659,21 +667,10 @@ public final class UIText extends UIElement implements Measurable {
         long degradedBefore = ctx.textDegradedDrawCount();
 
         int color = general.color();
-        // `text-fill-color` overrides the glyph fill ALONE: `color` still drives the caret, the
-        // selection and anything inheriting from here, which is the whole reason the two are
-        // separate properties rather than one.
-        //
-        // ASKED WHETHER IT WAS SET, never what its value is. Unset has to mean "use `color`" and
-        // `#00000000` has to mean "draw no fill at all", and as an int those are the SAME NUMBER --
-        // transparent black is zero. Testing the value made hollow text impossible and looked like the
-        // property being ignored. The same question BoxPainter asks of `background-color`, and for the
-        // same reason it records: whether something was authored cannot be read off the value.
         ComputedStyle computed = computedStyle();
-        int fill = computed.isSet(StylePropertyRegistry.TEXT_FILL_COLOR)
-                ? general.textFillColor() : color;
         CgTextRenderer.Draw draw = ctx.text().draw().layout(layout).family(family)
                 .at(contentX, contentY)
-                .color(fill)
+                .color(color)
                 .pose(ctx.getPoseStack());
         TextStrokeStyle.applyTo(draw, family, general, computed, color);
         // The shadows ride the same draw, keyed ahead of the text: one call when they share its atlas.

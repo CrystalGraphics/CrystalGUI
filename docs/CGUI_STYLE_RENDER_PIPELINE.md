@@ -774,7 +774,6 @@ text-stroke: 0.04em;           /* width only -- the colour falls back to the tex
 text-stroke: 4%;               /* the SAME width: a percentage is of the font size, so 4% == 0.04em */
 text-stroke: #0B5D8F;          /* colour only -- the width is left alone */
 text-stroke: none;             /* width 0; the colour is untouched */
-text-fill-color: transparent;  /* the glyph's interior, independent of `color` */
 stroke-align: outset | center | inset;   /* initial: outset */
 paint-order: normal | stroke;  /* initial: normal -- the FILL paints over the stroke */
 ```
@@ -845,7 +844,7 @@ shader must be told that reduced number, not the nominal `pxRange`, or every gly
 crisper than intended (it was, by 20%, until it was measured).
 
 **A transparent colour is not an absent one, and by value they are identical.** `text-stroke-color`
-and `text-fill-color` both have `0` as their initial, and `#00000000` parses to exactly `0`. So
+has `0` as its initial, and `#00000000` parses to exactly `0`. So
 "did the author write this?" cannot be answered by comparing against the initial — `UIText` asks
 `ComputedStyle.isSet`, which reads the candidate maps. Get this wrong and a deliberately transparent
 outline silently becomes an inherited-colour one. Pinned by `TextStrokeStyleTest`.
