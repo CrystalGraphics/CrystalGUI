@@ -54,11 +54,13 @@ public final class DeclarationEditors {
     /**
      * Everything a bespoke editor needs: the declaration, and the target it is part of.
      *
+     * @param name   the declaration as the sheet spells it, which is also what the row is labelled -- the property's
+     *               own name, or the shorthand for a row no property claims
      * @param fields what writes to the target — a lab that edits SEVERAL declarations at once (the corners)
      *               writes through this rather than through {@code css}
      * @param node   the element being styled, for a lab that measures it
      */
-    public record Context(@Nullable StyleProperty<?> property, String id, String label, Property<String> css,
+    public record Context(@Nullable StyleProperty<?> property, String id, String name, Property<String> css,
                           @Nullable StyleFields fields, @Nullable UIElement node) {
     }
 
@@ -88,7 +90,7 @@ public final class DeclarationEditors {
 
     /**
      * Gives a declaration NAME with no registered property an editor — a shorthand the sheet spells and the
-     * registry does not hold. Its context's {@code property} is null; its {@code label} is the name.
+     * registry does not hold. Its context's {@code property} is null and its {@code name} is this one.
      *
      * <pre>{@code
      * DeclarationEditors.register("text-stroke", context -> strokeChip(context));
@@ -107,8 +109,8 @@ public final class DeclarationEditors {
      */
     public static Field number(Context context, String unit) {
         StyleProperty<?> property = context.property();
-        ConfigDescriptor descriptor = ConfigDescriptor.number(context.id(), context.label()).unit(unit)
-                .tooltip(property == null ? context.label() : property.name);
+        ConfigDescriptor descriptor = ConfigDescriptor.number(context.id(), context.name()).unit(unit)
+                .tooltip(context.name());
         return new Field(descriptor, property == null ? context.css() : numeric(property, context.css()));
     }
 
@@ -124,38 +126,28 @@ public final class DeclarationEditors {
         return new Field(plain.descriptor().range(min, max).integral(true), plain.value());
     }
 
-    /** Forgets a registered editor, back to the type-driven default. */
-    public static void unregister(StyleProperty<?> property) {
-        OVERRIDES.remove(property);
-    }
-
-    /** Whether {@code property} has an editor of its own. */
-    public static boolean hasEditor(StyleProperty<?> property) {
-        return OVERRIDES.containsKey(property);
-    }
-
     /**
      * The field for a declaration of {@code property}, bound to its CSS text.
      *
      * @param css the declaration's value, read and written as a sheet spells it — {@link StyleFields#value}
      */
-    public static Field of(@Nullable StyleProperty<?> property, String id, String label, Property<String> css) {
-        return of(property, id, label, css, null, null);
+    public static Field of(@Nullable StyleProperty<?> property, String id, String name, Property<String> css) {
+        return of(property, id, name, css, null, null);
     }
 
     /** As {@link #of(StyleProperty, String, String, Property)}, for a lab that needs the whole target. */
-    public static Field of(@Nullable StyleProperty<?> property, String id, String label, Property<String> css,
+    public static Field of(@Nullable StyleProperty<?> property, String id, String name, Property<String> css,
                            @Nullable StyleFields fields, @Nullable UIElement node) {
         if (property == null) {
-            Editor named = NAMED.get(label);
-            if (named != null) return named.build(new Context(null, id, label, css, fields, node));
+            Editor named = NAMED.get(name);
+            if (named != null) return named.build(new Context(null, id, name, css, fields, node));
             // A name no property claims -- a custom property, or a typo somebody wrote. It is in the file, so
             // it is shown and editable; nothing can validate it.
-            return new Field(ConfigDescriptor.text(id, label).placeholder("value"), css);
+            return new Field(ConfigDescriptor.text(id, name).placeholder("value"), css);
         }
         Editor editor = OVERRIDES.get(property);
-        if (editor != null) return editor.build(new Context(property, id, label, css, fields, node));
-        return byType(property, id, label, css);
+        if (editor != null) return editor.build(new Context(property, id, name, css, fields, node));
+        return byType(property, id, name, css);
     }
 
     /** The field a property gets when nothing bespoke is registered for it. */

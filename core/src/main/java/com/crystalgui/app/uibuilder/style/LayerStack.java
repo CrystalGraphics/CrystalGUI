@@ -192,13 +192,13 @@ public final class LayerStack extends ValueControl<List<String>> {
         return now == null ? 0 : now.size();
     }
 
-    /** Whether a layer may be switched off rather than deleted: a value somewhere writable holds the comment. */
     /** Whether rows carry the up and down arrows and the menu offers moving them. True by default. */
     public LayerStack reorderable(boolean reorderable) {
         this.reorderable = reorderable;
         return this;
     }
 
+    /** Whether a layer may be switched off rather than deleted: a value somewhere writable holds the comment. */
     public LayerStack hideable(boolean hideable) {
         this.hideable = hideable;
         writeToWidgets(getValue());

@@ -49,7 +49,9 @@ final class BorderSample {
     /** Draws {@code node}'s edge in {@code chip}'s swatch with {@code focus} lit, and keeps it drawn as the element changes. */
     static void follow(StyleChip chip, @Nullable UIElement node, Part focus) {
         UIElement box = new UIElement().addClass(BOX_CLASS);
-        chip.swatch().append(box);
+        chip.painter(swatch -> swatch.append(box), (chipped, css) -> paint(box, node, focus));
+        // AND WHEN THE ELEMENT MOVES: every part of the edge is read from the element, so a row is repainted by an
+        // edit to any of the others as well as by its own.
         PropertyWatch.follow(chip, Property.derived(() -> Edge.signature(node)), signature -> paint(box, node, focus));
     }
 

@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder.style;
 
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 
 import javax.annotation.Nullable;
@@ -192,6 +193,23 @@ public class StyleChip extends ValueControl<String> {
         return this;
     }
 
+    /**
+     * As {@link #painter(BiConsumer)}, with {@code build} run over the swatch once first -- for a swatch holding a
+     * specimen of its own rather than being one.
+     *
+     * <pre>{@code
+     * chip.painter(swatch -> swatch.append(pane),
+     *         (c, css) -> LiveEdits.setInline(pane, BACKDROP_FILTER, css));
+     * }</pre>
+     *
+     * <p>The pair {@code LayerStack.sample} takes, for the same reason: a painter is called on every change, so
+     * building in one means finding what the last call left behind.</p>
+     */
+    public StyleChip painter(Consumer<UIElement> build, BiConsumer<StyleChip, String> paint) {
+        build.accept(swatch);
+        return painter(paint);
+    }
+
     /** The swatch, for a {@link #painter} that builds its own specimen in it. */
     public UIElement swatch() {
         return swatch;
@@ -274,7 +292,6 @@ public class StyleChip extends ValueControl<String> {
                         .setCornerRadius(2f, 2f)));
     }
 
-    /** The value as the row says it: a bare number carries the unit the engine reads it as. */
     /** The value as the lines it reads in. @see CssValues#lines */
     private void showLines() {
         List<CssValues.Line> broken = display == null && !value.isEmpty() ? CssValues.lines(value) : List.of();
