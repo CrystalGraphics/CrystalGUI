@@ -112,26 +112,35 @@ public class TransformLabTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>The origin is edited here too</b>: it is a declaration of its own, and a point the ops turn about is not a
-     * thing anybody pictures from {@code transform-origin-x: 50%}. Placed as a fraction of the box, which is what the
-     * canvas's own free transform writes.
+     * <b>The pivot is edited here too</b>: it is a declaration of its own, and the point every op turns about is not
+     * a thing anybody pictures from {@code transform-origin-x: 50%}. It is a mark ON the specimen, and a percentage
+     * of the box when written -- which is what the canvas's own free transform writes.
      */
     @Test
-    public void theOriginIsPlacedAsAFractionOfTheBox() {
+    public void thePivotIsAMarkOnTheSpecimenAndAPercentageOfTheBox() {
         UIElement node = new UIElement().layout(l -> l.width(80).height(40));
         document.append(node);
         LiveEdits.setInline(node, StylePropertyRegistry.TRANSFORM_ORIGIN_X, "25%");
         StyleFields fields = StyleFields.on(null, StyleTarget.inline(), node);
         open("rotate(0deg)", node, fields);
 
-        assertArrayEquals("a quarter along, and halfway down by default",
-                new double[] {0.25d, 0.5d}, (double[]) read("lab.origin"), 0.01d);
+        assertNotNull("the pivot is drawn on the specimen", pivot());
+        assertEquals("a quarter along", 25d, (Double) read("lab.origin.x"), 0.05d);
+        assertEquals("and halfway down by default", 50d, (Double) read("lab.origin.y"), 0.05d);
 
-        write("lab.origin", new double[] {0d, 1d});
+        write("lab.origin.y", 100d);
         frame();
-        // AS A READER SEES IT: what lands is the property's own spelling of the percentage, `0.0%`.
-        assertEquals("0%", CssValues.readable(fields.valueOf("transform-origin-x")));
+        // AS A READER SEES IT: what lands is the property's own spelling of the percentage, `100.0%`.
         assertEquals("100%", CssValues.readable(fields.valueOf("transform-origin-y")));
+        assertEquals("the other axis is left alone", "25%",
+                CssValues.readable(fields.valueOf("transform-origin-x")));
+    }
+
+    private UIElement pivot() {
+        for (UIElement each : document.composedSubtree()) {
+            if (each.hasClass(TransformLab.PIVOT_CLASS)) return each;
+        }
+        return null;
     }
 
     /** An origin row is the transform lab's row, so the two are never edited two different ways. */

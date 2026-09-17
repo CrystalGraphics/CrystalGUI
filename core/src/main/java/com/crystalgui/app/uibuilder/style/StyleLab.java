@@ -279,6 +279,22 @@ public final class StyleLab {
     }
 
     /**
+     * Puts {@code marker} on the specimen itself, for a value that is a POINT ON the thing rather than something
+     * done to it — a transform's pivot.
+     *
+     * <pre>{@code
+     * lab.onSpecimen(pin);   // positioned by the caller, in percentages of the specimen's own box
+     * }</pre>
+     *
+     * <p>Inside the specimen, so it carries the transform with it and lands on the point the specimen visibly turns
+     * about — which is the image of the origin under the whole transform, and the one place a mark means anything.</p>
+     */
+    public StyleLab onSpecimen(UIElement marker) {
+        specimen.append(marker);
+        return this;
+    }
+
+    /**
      * Shows another declaration on the specimen beside the one the lab is about — the origin a transform turns
      * about, which is the difference between a spin and an orbit.
      *

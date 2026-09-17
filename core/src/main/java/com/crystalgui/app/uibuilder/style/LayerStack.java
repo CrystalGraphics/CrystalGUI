@@ -3,7 +3,7 @@ package com.crystalgui.app.uibuilder.style;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
-import java.util.function.Consumer;
+import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
@@ -112,7 +112,7 @@ public final class LayerStack extends ValueControl<List<String>> {
     private final ChildList<Row> rows = new ChildList<>(list, this::row);
 
     @Nullable
-    private Consumer<UIElement> sampleBuilder;
+    private Function<UIElement, UIElement> sampleBuilder;
 
     @Nullable
     private BiConsumer<UIElement, String> samplePainter;
@@ -234,15 +234,19 @@ public final class LayerStack extends ValueControl<List<String>> {
         return this;
     }
 
-    /**
+     /**
      * How a row's sample is drawn, when applying the layer to an empty box says nothing.
      *
      * <pre>{@code
-     * stack.sample(patch -> patch.append(new UIText("Ag")),                  // once, when the row is made
-     *         (patch, layer) -> LiveEdits.setInline(patch, TEXT_SHADOW, fitted(layer)));   // on every change
+     * stack.sample(patch -> patch.append(new UIText("Ag")),                    // once, and it ANSWERS the specimen
+     *         (specimen, layer) -> LiveEdits.setInline(specimen, TEXT_SHADOW, fitted(layer)));   // on every change
      * }</pre>
+     *
+     * <p><b>The painter is given what the builder answered</b>, not the patch: a value applied to the patch cannot be
+     * clipped by it — an element's own transform is not clipped by its own {@code overflow} — so a rotated sample
+     * escaped the row and drew over its neighbours.</p>
      */
-    public LayerStack sample(Consumer<UIElement> build, BiConsumer<UIElement, String> paint) {
+    public LayerStack sample(Function<UIElement, UIElement> build, BiConsumer<UIElement, String> paint) {
         this.sampleBuilder = build;
         this.samplePainter = paint;
         return this;
@@ -261,8 +265,8 @@ public final class LayerStack extends ValueControl<List<String>> {
             Row row = rows.get(i);
             // THE LAYER ITSELF, switched off or not: a hidden layer's row still shows what it would be.
             String layer = CssValues.bodyOf(shown.get(i));
-            if (samplePainter != null) {
-                samplePainter.accept(row.sample, layer);
+            if (samplePainter != null && row.specimen != null) {
+                samplePainter.accept(row.specimen, layer);
             } else {
                 LiveEdits.setInline(row.plate, property, layer);
             }
@@ -301,6 +305,9 @@ public final class LayerStack extends ValueControl<List<String>> {
         final int index;
         final UIElement sample = new UIElement();
         final UIElement plate = new UIElement();
+        /** What {@link #sample(Function, BiConsumer)}'s builder made inside the patch, and what the painter is given. */
+        @Nullable
+        UIElement specimen;
         final UIText text = new UIText("");
         final UIElement eye = new UIElement();
 
@@ -324,7 +331,7 @@ public final class LayerStack extends ValueControl<List<String>> {
 
         row.sample.addClass(SAMPLE_CLASS);
         if (sampleBuilder != null) {
-            sampleBuilder.accept(row.sample);
+            row.specimen = sampleBuilder.apply(row.sample);
         } else {
             row.plate.addClass(PLATE_CLASS);
             row.sample.append(row.plate);

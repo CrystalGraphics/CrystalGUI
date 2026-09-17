@@ -52,7 +52,8 @@ public final class GradientLab {
         // never moved by hand.
         LayerStack stops = new LayerStack("lab.stops", property, selected).titled("Stops").reorderable(false);
         stops.addClass(STOPS_CLASS);
-        stops.sample(patch -> { }, (patch, text) -> StyleChip.paintColor(patch, argbOf(text)));
+        // THE PATCH ITSELF IS THE SPECIMEN: a stop is a colour, and a colour is the whole swatch.
+        stops.sample(patch -> patch, (patch, text) -> StyleChip.paintColor(patch, argbOf(text)));
         stops.adding("+ Add", () -> gradient.set(gradient.get().withStopInWidestGap()));
         stops.adding(REVERSE, () -> {
             gradient.set(gradient.get().reversed());

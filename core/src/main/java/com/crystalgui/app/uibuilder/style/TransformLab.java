@@ -8,7 +8,9 @@ import javax.annotation.Nullable;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.style.CssAngle;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.dom.Attribute;
@@ -41,8 +43,19 @@ public final class TransformLab {
     /** On the transform lab's window. */
     public static final String LAB_CLASS = "__transform-lab__";
 
-    /** Asymmetric both ways, so a turn, a flip and a shear are each legible on it. */
-    private static final String MARK = "F";
+    /** Asymmetric both ways, so a turn, a flip and a shear are each legible on it. The row chips draw the same one. */
+    static final String MARK = "F";
+
+    /** The pivot on the specimen: a zero-sized anchor at the point, and the ring and cross drawn around it. */
+    public static final String PIVOT_CLASS = "__lab-pivot__";
+    public static final String PIVOT_MARK_CLASS = "__lab-pivot-mark__";
+    public static final String PIVOT_BAR_CLASS = "__lab-pivot-bar__";
+
+    /** How near a ninth of the box a dragged pivot lands on it: the corners and the middle are what anyone wants. */
+    private static final double SNAP = 0.04d;
+
+    /** How far outside the box a pivot may be DRAGGED. Typed, it goes as far as {@link #ORIGIN_MAX}. */
+    private static final double DRAG_REACH = 0.5d;
 
     private static final String TRANSLATE = "translate";
     private static final String ROTATE = "rotate";
@@ -66,9 +79,9 @@ public final class TransformLab {
     /** How far an origin may be typed: outside the box is legal CSS and occasionally what somebody means. */
     private static final float ORIGIN_MAX = 999f;
 
-    /** What a row's sample holds a translate and a scale to, so the mark stays inside a 28x16 patch. */
-    private static final double SAMPLE_SHIFT = 5d;
-    private static final double SAMPLE_SCALE = 1.8d;
+    /** What a sample holds a translate and a scale to, so a 28x16 patch shows the mark and not a corner of it. */
+    private static final double SAMPLE_SHIFT = 4d;
+    private static final double SAMPLE_SCALE = 1.5d;
 
     private TransformLab() {
     }
@@ -109,8 +122,14 @@ public final class TransformLab {
 
         // THE STACK FIRST: it chooses which op the rows under it edit, as the shadow lab's does.
         LayerStack stack = new LayerStack("lab.ops", property, selected).titled("Transforms").hideable(hideable);
-        stack.sample(patch -> patch.append(new UIText(MARK).addClass(LayerStack.SAMPLE_TEXT_CLASS)),
-                (patch, layer) -> LiveEdits.setInline(patch, property, fitted(layer)));
+        // THE MARK CARRIES IT, not the patch: a patch cannot clip its own transform, and a rotated one drew over
+        // the rows either side of it.
+        stack.sample(patch -> {
+            UIText glyph = new UIText(MARK);
+            glyph.addClass(LayerStack.SAMPLE_TEXT_CLASS);
+            patch.append(glyph);
+            return glyph;
+        }, (glyph, layer) -> LiveEdits.setInline(glyph, property, fitted(layer)));
         for (String added : ADDED) {
             stack.adding("+ " + CssValues.functionName(added), () -> {
                 List<String> list = new ArrayList<>(ops.get());
@@ -124,7 +143,7 @@ public final class TransformLab {
 
         Property<Boolean> uniform = Property.of(true);
         Rows rows = rows(lab.form(), property, op, uniform);
-        if (fields != null) origin(lab, fields, node);
+        if (fields != null) pivot(lab, fields, node);
 
         // OPENED AS THE OP IS, and re-read when another is picked: a scale whose axes agree opens linked.
         PropertyWatch.follow(lab.content(), selected, index -> {
@@ -175,7 +194,7 @@ public final class TransformLab {
 
     private static Rows rows(PanelForm form, StyleProperty<?> property, Property<String> op, Property<Boolean> uniform) {
         // A PIXEL OF HAND IS A PIXEL OF OFFSET, on the pad the shadow lab's offsets use.
-        Configurator offset = form.control("lab.translate", "Offset", new OffsetPad("lab.translate")
+        Configurator offset = form.control("lab.translate", "Translate", new OffsetPad("lab.translate")
                 .bind(op.map(TransformLab::translation, at -> is(op, TRANSLATE)
                         ? CssValues.function(TRANSLATE, length(op.get(), 0, at[0]), length(op.get(), 1, at[1]))
                         : op.get())));
@@ -207,17 +226,21 @@ public final class TransformLab {
     }
 
     /**
-     * The point every op turns and grows about, as {@code transform-origin-x} and {@code -y}: nine cells for the
-     * corners, edges and centre, and the pair of numbers they are the round values of.
+     * The pivot: {@code transform-origin-x} and {@code -y}, <b>dragged on the specimen</b> where it can be seen, and
+     * typed as the two percentages it is.
      *
-     * <p>Written as a percentage of the box, which is what the canvas's own free transform writes and what keeps an
-     * origin meaning the same thing as the element resizes.</p>
+     * <p>A mark on the thing rather than a picker beside it, because a point on a box is the one value a grid of nine
+     * cells cannot explain — the mark sits where the specimen visibly turns, and dragging it near a corner, an edge's
+     * middle or the centre snaps it there, which is what the nine cells were for.</p>
+     *
+     * <p>Written as a percentage of the box, which is what the canvas's own free transform writes and what keeps a
+     * pivot meaning the same thing as the element resizes.</p>
      */
-    private static void origin(StyleLab lab, StyleFields fields, @Nullable UIElement node) {
-        PanelForm form = lab.form().group("Origin", false);
+    private static void pivot(StyleLab lab, StyleFields fields, @Nullable UIElement node) {
+        PanelForm form = lab.form().group("Pivot", false);
         Property<String> x = fields.value(ORIGIN_X);
         Property<String> y = fields.value(ORIGIN_Y);
-        // ON THE SPECIMEN TOO, or the picker moves a point nothing on the stage turns about.
+        // ON THE SPECIMEN TOO, or the mark moves a point nothing on the stage turns about.
         lab.also(StylePropertyRegistry.TRANSFORM_ORIGIN_X, x).also(StylePropertyRegistry.TRANSFORM_ORIGIN_Y, y);
 
         // ONE EDIT, not one per declaration: the pair is placed by one gesture. @see StyleLab
@@ -227,12 +250,63 @@ public final class TransformLab {
                     x.set(percent(next[0]));
                     y.set(percent(next[1]));
                 }).editedIn(fields.history());
-        form.prop(ConfigDescriptor.anchor("lab.origin", "Origin"), at);
-        form.prop(originField("lab.origin.x", "X"), axis(at, 0));
-        form.prop(originField("lab.origin.y", "Y"), axis(at, 1));
+
+        lab.onSpecimen(pin(at, fields));
+        form.prop(pivotField("lab.origin.x", "X"), axis(at, 0));
+        form.prop(pivotField("lab.origin.y", "Y"), axis(at, 1));
     }
 
-    private static ConfigDescriptor originField(String id, String label) {
+    /**
+     * The pivot's mark: a ring with a cross through it, at {@code at} of the specimen's own box, dragged to move it.
+     *
+     * <p>A zero-sized anchor holding the drawing, so nothing has to match a negative margin to its size — and the
+     * whole thing is INSIDE the specimen, so it carries the transform and lands on the point the mark visibly turns
+     * about.</p>
+     */
+    private static UIElement pin(Property<double[]> at, StyleFields fields) {
+        UIElement pin = new UIElement();
+        pin.addClass(PIVOT_CLASS);
+        for (String axis : new String[] {"__horizontal__", "__vertical__"}) {
+            pin.append(new UIElement().addClass(PIVOT_BAR_CLASS).addClass(axis));
+        }
+        UIElement mark = new UIElement();
+        mark.addClass(PIVOT_MARK_CLASS);
+        pin.append(mark);
+        PropertyWatch.follow(pin, at, where -> {
+            LiveEdits.setInline(pin, LayoutProperties.LEFT, percent(where[0]));
+            LiveEdits.setInline(pin, LayoutProperties.TOP, percent(where[1]));
+        });
+
+        double[] from = new double[2];
+        StyleGizmos.drag(mark, () -> {
+            double[] now = at.get();
+            from[0] = now[0];
+            from[1] = now[1];
+            // ONE UNDO STEP FOR THE DRAG, not one a frame: the run is closed on every exit path below.
+            UndoStack history = fields.history();
+            if (history != null) history.beginMergeRun();
+        }, (dx, dy) -> {
+            UIElement box = pin.parentElement();
+            if (box == null || box.box() == null || box.box().width() <= 0f || box.box().height() <= 0f) return;
+            at.set(new double[] {dragged(from[0] + dx / box.box().width()),
+                    dragged(from[1] + dy / box.box().height())});
+        }, () -> {
+            UndoStack history = fields.history();
+            if (history != null) history.endMergeRun();
+        });
+        return pin;
+    }
+
+    /** A dragged fraction: held to reach, and snapped to the corners, the edges' middles and the centre. */
+    private static double dragged(double fraction) {
+        double held = Math.max(-DRAG_REACH, Math.min(1d + DRAG_REACH, fraction));
+        for (double ninth : new double[] {0d, 0.5d, 1d}) {
+            if (Math.abs(held - ninth) < SNAP) return ninth;
+        }
+        return Math.round(held * 1000d) / 1000d;
+    }
+
+    private static ConfigDescriptor pivotField(String id, String label) {
         return ConfigDescriptor.number(id, label).range(-ORIGIN_MAX, ORIGIN_MAX).softRange(0f, 100f)
                 .unit("%").decimals(1);
     }
@@ -397,6 +471,13 @@ public final class TransformLab {
             return scaled(clamp(factor(op, 0), SAMPLE_SCALE), clamp(factor(op, 1), SAMPLE_SCALE));
         }
         return op;
+    }
+
+    /** A whole {@code transform} as a swatch can show it, every op {@link #fitted}. <b>Display only.</b> */
+    static String fittedValue(String css) {
+        List<String> out = new ArrayList<>();
+        for (String function : CssValues.functions(css)) out.add(fitted(function));
+        return CssValues.joinFunctions(out);
     }
 
     private static double clamp(double value, double reach) {
