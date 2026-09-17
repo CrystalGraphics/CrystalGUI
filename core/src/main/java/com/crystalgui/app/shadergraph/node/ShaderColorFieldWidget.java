@@ -25,7 +25,7 @@ import java.util.Locale;
  *
  * <h3>Since P6.1.8 step 7: the picker is {@link ColorControl}, not a hand-rolled swatch</h3>
  * <p>This class used to build its own swatch, its own promoted-{@code Dialog} toggle logic, and its own
- * pointer-anchored placement — all of which {@link ColorControl} now does, because the inspector's
+ * placement — all of which {@link ColorControl} now does, because the inspector's
  * colour row needed exactly the same thing. What is left here is only what is genuinely GLSL's: parsing
  * and formatting {@code vec4(...)}.</p>
  *

@@ -6,9 +6,9 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.composite.ColorSelector;
+import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.render.texture.CgUiColorField;
 import com.crystalgui.style.StyleGroup;
@@ -16,7 +16,6 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
-import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
 import com.crystalgui.ui.dom.Name;
@@ -76,6 +75,7 @@ public class ColorControl extends ValueControl<Integer> {
 
     private static final int DEFAULT_COLOR = 0xFF000000;
 
+
     private final UIElement swatch = new UIElement();
     private final UIElement colorBar = new UIElement();
     private final UIElement alphaFill = new UIElement();
@@ -123,13 +123,13 @@ public class ColorControl extends ValueControl<Integer> {
 
         swatch.onMouseDown.attachListener((el, event) -> {
             event.stopPropagation();
-            togglePicker(event.getPosition().x(), event.getPosition().y());
+            togglePicker();
         }, false, false);
         hex.addClass(HEX_CLASS);
         hex.setHitTest(true);
         hex.onMouseDown.attachListener((el, event) -> {
             event.stopPropagation();
-            togglePicker(event.getPosition().x(), event.getPosition().y());
+            togglePicker();
         }, false, false);
 
         append(swatch);
@@ -138,7 +138,7 @@ public class ColorControl extends ValueControl<Integer> {
         onConnected(() -> paint(getValue()));
     }
 
-    private void togglePicker(float worldX, float worldY) {
+    private void togglePicker() {
         if (dialog.isOpen()) {
             dialog.close();
             return;
@@ -151,7 +151,10 @@ public class ColorControl extends ValueControl<Integer> {
         // see ShaderColorFieldWidget's own note on why showModal() (inert whole document) and a
         // bare Popover (not draggable) are both wrong for this.
         window.promote(dialog);
-        placeAtPointer(window, dialog, worldX, worldY);
+        // BESIDE THE FIELD, as a select's list opens under its box: a picker at the pointer landed wherever the swatch
+        // or the hex happened to be pressed, over the rows around it.
+        // No gap: one showed the top edge of the next row's field between the two.
+        dialog.placeBeside(this, AnchoredPlacement.Side.BOTTOM, 0f);
     }
 
     /**
@@ -187,17 +190,6 @@ public class ColorControl extends ValueControl<Integer> {
     protected void writeToWidgets(@Nullable Integer value) {
         paint(value);
         picker.setColor(value == null ? DEFAULT_COLOR : value);
-    }
-
-    /** As {@code ShaderColorFieldWidget.placeAtPointer} — the pointer, not the swatch, and the world
-     * coordinate has to come back through the root transform, the one definition of {@code uiScale}.
-     *
-     * <p>{@code placeAt}, not {@code moveTo}: a picker raised from a row near the bottom of the screen
-     * has to come back inside it rather than hang off, which is what opening a popup means and what a
-     * drag's caption clamp deliberately does not do. @see Dialog#placeAt */
-    private static void placeAtPointer(UIDocument window, Dialog dialog, float worldX, float worldY) {
-        var local = Transform2D.apply(new Matrix4f(window.boxes().rootTransform()).invert(), worldX, worldY);
-        dialog.placeAt(local.x() - 6f, local.y() - 6f);
     }
 
     /**
