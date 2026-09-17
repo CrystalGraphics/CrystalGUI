@@ -195,7 +195,8 @@ public class NumberControl extends ValueControl<Double> {
         // A LENGTH IN PIXELS scrubs as one with nothing declared: a whole pixel every three or so, a tenth with Ctrl.
         DragScrub.Spec spec = ("px".equals(descriptor().unit()) ? DragScrub.Spec.PIXELS : DragScrub.Spec.FLOAT)
                 .withIntegral(integral);
-        ConfigDescriptor.Range range = descriptor().range();
+        // THE SOFT RANGE: a gesture stops where the value stops showing; typing is held only to the range. @see #clamp
+        ConfigDescriptor.Range range = descriptor().softRange();
         if (range != null) spec = spec.withRange(range.min(), range.max());
         // ASKED PER DRAG, since a rate may follow another value -- a slider's span. @see ConfigDescriptor#scrubRate
         double scrubRate = descriptor().scrubRate();
