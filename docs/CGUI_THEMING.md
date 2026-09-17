@@ -392,6 +392,8 @@ editor scheme's.
 | `--lab-shape-1` | `#E0398A` | crystal-dark.css |
 | `--lab-shape-2` | `#F08A24` | crystal-dark.css |
 | `--lab-shape-3` | `#2BC7A8` | crystal-dark.css |
+| `--lab-shape-4` | `#3C5BF0` | crystal-dark.css |
+| `--lab-shape-5` | `#8B3CF0` | crystal-dark.css |
 | `--lab-specimen-bg` | `#FFFFFF14` | crystal-dark.css |
 | `--lab-stop-bg` | `var(--fg-on-accent)` | base.css |
 | `--lab-stop-border` | `#00000088` | crystal-dark.css |

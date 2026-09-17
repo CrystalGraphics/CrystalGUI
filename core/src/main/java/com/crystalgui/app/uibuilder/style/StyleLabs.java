@@ -119,6 +119,8 @@ public final class StyleLabs {
         if (property == StylePropertyRegistry.TEXT_SHADOW) chip.preview(ShadowLab::fitted);
         if (property == StylePropertyRegistry.FONT_FAMILY) chip.display(TypographyLab::shortName);
         if (property == StylePropertyRegistry.PAINT_ORDER) chip.painter(StyleLabs::paintOrderSample);
+        // Glass over the swatch's flat band filters nothing: it needs something behind it.
+        if (property == StylePropertyRegistry.BACKDROP_FILTER) chip.painter(GlassLab::paintSample);
         if (StyleFields.TEXT_STROKE.equals(name)) chip.painter((c, css) -> strokeSample(c, css, context.node()));
         if (property == StylePropertyRegistry.TEXT_DECORATION_LINE) {
             chip.painter((c, css) -> onSample(c, StylePropertyRegistry.TEXT_DECORATION_LINE, css));
