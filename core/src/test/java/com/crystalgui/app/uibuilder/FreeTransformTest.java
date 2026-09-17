@@ -44,6 +44,7 @@ import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.layout.ContextToolbar;
 import com.crystalgui.ui.dom.UINode;
+import com.crystalgui.ui.input.DragScrub;
 import com.crystalgui.widget.config.Configurator;
 import com.crystalgui.widget.config.control.NumberControl;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -1018,8 +1019,11 @@ public class FreeTransformTest extends UiDocumentTestBase {
         document.update(W, H);
         NumberControl pivotX = editor.options().fieldFor(Kind.PIVOT);
 
-        assertEquals("sixty pixels is sixty percent, from zero", 60d, scrubBy(pivotX, 0d, 60), 0.5d);
-        assertEquals("and the same sixty from halfway", 110d, scrubBy(pivotX, 50d, 60), 0.5d);
+        // THE TRAVEL SPENT REACHING THE THRESHOLD IS NOT PRICED, so sixty pixels is worth sixty less those five --
+        // and the point here is that it is the same amount from either end, not what the amount is.
+        double worth = 60 - DragScrub.DEFAULT_THRESHOLD_PX;
+        assertEquals("sixty pixels of hand, from zero", worth, scrubBy(pivotX, 0d, 60), 0.5d);
+        assertEquals("and the same sixty from halfway", 50d + worth, scrubBy(pivotX, 50d, 60), 0.5d);
     }
 
     /** Drags a field's label right by {@code pixels}, from {@code from}, and answers where it landed. */
