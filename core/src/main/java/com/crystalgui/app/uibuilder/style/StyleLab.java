@@ -73,6 +73,8 @@ public final class StyleLab {
     public static final String BARE_CLASS = "__bare__";
     /** What a lab puts INSIDE a specimen when the property needs something to act on. */
     public static final String SAMPLE_CLASS = "__lab-sample__";
+    /** On the copy of the specimen showing where it started. @see #ghost */
+    public static final String GHOST_CLASS = "__lab-ghost__";
     public static final String CONTENT_CLASS = "__lab-content__";
     public static final String CAPTION_CLASS = "__lab-caption__";
     public static final String CSS_CLASS = "__lab-css__";
@@ -246,9 +248,48 @@ public final class StyleLab {
         return this;
     }
 
+    /**
+     * Puts a copy of the specimen where it would be with nothing applied, behind it — for a lab whose value MOVES
+     * what it is on.
+     *
+     * <pre>{@code
+     * lab.specimen(new UIText("F")).ghost(new UIText("F"));   // the same mark, where it started
+     * }</pre>
+     *
+     * <p>A translate on a plate in an empty stage is a plate in an empty stage, and a rotate leaves a rectangle
+     * looking like a rectangle. The distance and the turn are the difference between the two, which is how a
+     * design tool shows a moved object. Under the specimen by z-index rather than by order, so it does not depend
+     * on which was added first.</p>
+     */
+    public StyleLab ghost(UIElement sample) {
+        UIElement ghost = new UIElement();
+        ghost.addClass(SPECIMEN_CLASS);
+        ghost.addClass(GHOST_CLASS);
+        sample.addClass(SAMPLE_CLASS);
+        ghost.append(sample);
+        stage.addNode(ghost, SPECIMEN_AT, SPECIMEN_AT);
+        return this;
+    }
+
     /** Shows {@code css} as {@code property} on the specimen. @see LiveEdits#follow */
     public StyleLab preview(StyleProperty<?> property, Property<String> css) {
         dialog.edits = css;
+        LiveEdits.follow(specimen, property, css);
+        return this;
+    }
+
+    /**
+     * Shows another declaration on the specimen beside the one the lab is about — the origin a transform turns
+     * about, which is the difference between a spin and an orbit.
+     *
+     * <pre>{@code
+     * lab.also(TRANSFORM_ORIGIN_X, originX).preview(TRANSFORM, css);
+     * }</pre>
+     *
+     * <p>Unlike {@link #preview} it does not name the lab's history: the declaration the lab is <em>about</em> is
+     * the one Ctrl+Z inside it means.</p>
+     */
+    public StyleLab also(StyleProperty<?> property, Property<String> css) {
         LiveEdits.follow(specimen, property, css);
         return this;
     }

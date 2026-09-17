@@ -7,6 +7,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.config.ConfigDescriptor;
+import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.dom.UIElement;
@@ -20,7 +21,8 @@ import com.crystalgui.ui.dom.UIElement;
  *
  * <p>Six so far, and they are the ones a text field is worst at: a <b>gradient</b> (a ramp with stops),
  * <b>corners</b> (eight longhands nobody tracks as numbers), a <b>shadow</b> (a direction and a softness),
- * a <b>transform</b> (an ordered chain where the order is the meaning), <b>glass</b> (six functions that are
+ * a <b>transform</b> (an ordered chain where the order is the meaning, and the point it turns about),
+ * <b>glass</b> (six functions that are
  * invisible against a flat color) and <b>type</b> (a treatment judged by reading it). Everything else keeps
  * the type-driven control {@link DeclarationEditors} resolves, which is the floor this sits on rather than a
  * fallback it replaces.</p>
@@ -73,8 +75,11 @@ public final class StyleLabs {
         DeclarationEditors.register(StylePropertyRegistry.TEXT_SHADOW, context -> chip(context,
                 anchor -> ShadowLab.open(anchor, context.property(), context.css(), context.node(), canHide(context))));
 
-        DeclarationEditors.register(StylePropertyRegistry.TRANSFORM, context -> chip(context,
-                anchor -> TransformLab.open(anchor, context.property(), context.css(), canHide(context))));
+        // THE ORIGIN OPENS THE SAME LAB, as a border longhand opens the border lab: it is the point every op turns
+        // and grows about, and a percentage in a text field is not a point anybody can picture.
+        DeclarationEditors.register(StylePropertyRegistry.TRANSFORM, TRANSFORM_LAB_ROW);
+        DeclarationEditors.register(StylePropertyRegistry.TRANSFORM_ORIGIN_X, TRANSFORM_LAB_ROW);
+        DeclarationEditors.register(StylePropertyRegistry.TRANSFORM_ORIGIN_Y, TRANSFORM_LAB_ROW);
 
         DeclarationEditors.register(StylePropertyRegistry.BACKDROP_FILTER, context -> chip(context,
                 anchor -> GlassLab.open(anchor, context.property(), context.css())));
@@ -97,6 +102,17 @@ public final class StyleLabs {
                 context -> DeclarationEditors.number(context, "px"));
         DeclarationEditors.register(StyleFields.TEXT_STROKE, context -> chip(context, typography(context)));
     }
+
+    /**
+     * A row that opens the transform lab. Opened from an origin row it still edits the transform, which is the
+     * declaration the lab is about -- so it reads that one rather than the row's own.
+     */
+    private static final DeclarationEditors.Editor TRANSFORM_LAB_ROW = context -> chip(context, anchor -> {
+        StyleFields fields = context.fields();
+        Property<String> transform = context.property() == StylePropertyRegistry.TRANSFORM || fields == null
+                ? context.css() : fields.value(StylePropertyRegistry.TRANSFORM.name);
+        TransformLab.open(anchor, StylePropertyRegistry.TRANSFORM, transform, canHide(context), context.node(), fields);
+    });
 
     /** A row that opens the border lab on the element its fields edit. */
     private static final DeclarationEditors.Editor BORDER_LAB_ROW = context -> chip(context, anchor -> {
@@ -158,9 +174,14 @@ public final class StyleLabs {
         return StyleFields.OUTLINE.equals(shorthand) ? BorderSample.Part.OUTLINE : null;
     }
 
+    /** What a swatch cannot show: a length or a point applied to a 28x16 box draws the box. */
+    private static final List<StyleProperty<?>> NO_SWATCH = List.of(
+            StylePropertyRegistry.TEXT_STROKE_WIDTH,
+            StylePropertyRegistry.TRANSFORM_ORIGIN_X, StylePropertyRegistry.TRANSFORM_ORIGIN_Y);
+
     /** Whether a swatch of this property says anything: a width applied to a small box does not. */
     private static boolean drawable(@Nullable StyleProperty<?> property) {
-        return property != null && property != StylePropertyRegistry.TEXT_STROKE_WIDTH;
+        return property != null && !NO_SWATCH.contains(property);
     }
 
     /**
