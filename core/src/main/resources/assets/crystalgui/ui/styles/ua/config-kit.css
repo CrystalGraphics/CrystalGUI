@@ -1220,9 +1220,10 @@ colorselector .__side__ dropdown {
     /* 35px clipped the mode label ("RGB", "HSV") down to "RGB ..." against the chevron — the label and
      * the chevron were fighting over the same few pixels. A few px wider gives the label room without
      * the box reading as oversized next to the hex field it lines up with. */
-    width: 45px;
-    /* Same defence as `.__channel-row__`'s slider/textfield — see that comment. */
-    min-width: 0;
+    /* SIZED BY ITS LABEL, at least the hex field's width: a fixed 45px left the label 30 of them once padding and the
+     * chevron were paid, and "RGB 0-255" ended in an ellipsis however small the text was set. */
+    width: auto;
+    min-width: 45px;
     height: 9px;
     min-height: 9px;
     padding-left: 3px;
