@@ -40,7 +40,8 @@ Properties {
     _BorderColorBottom ("Border Color Bottom", color) = (0.0, 0.0, 0.0, 1.0)
     _CornerRadiusX ("Corner Radii X (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
     _CornerRadiusY ("Corner Radii Y (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
-    _BorderWidth  ("Border Width", float)     = 0.0
+    // Per side, L,T,R,B: CSS draws each side of a box at its own width.
+    _BorderWidths ("Border Widths L,T,R,B", vec4) = (0.0, 0.0, 0.0, 0.0)
     _BoxSize      ("Box Size (px)", vec2)     = (0.0, 0.0)
     _LayerOpacity ("Layer Opacity", float)    = 1.0
     // WITH_9SLICE_FILL only -- mirrors CgUiSprite's own border/UV-breakpoint fields exactly, so the
@@ -220,7 +221,16 @@ Pass {
         fillColor *= i.color;
 
 #ifdef WITH_BORDER
-        float innerCoverage = sdf_coverage(dist + _BorderWidth, ramp);
+        // THE INNER EDGE IS ITS OWN ROUNDED BOX, as CSS Backgrounds 3 section 5.3 draws it: the outer box inset by
+        // each side's width, each corner's inner radius its outer one less the two sides meeting there. Offsetting
+        // the outer distance by one width could only draw four equal sides.
+        vec4 w = _BorderWidths;
+        vec2 innerHalf = max(halfSize - vec2(w.x + w.z, w.y + w.w) * 0.5, vec2(0.0));
+        vec2 innerShift = vec2(w.x - w.z, w.y - w.w) * 0.5;
+        vec4 innerRx = max(_CornerRadiusX - vec4(w.x, w.z, w.z, w.x), vec4(0.0));
+        vec4 innerRy = max(_CornerRadiusY - vec4(w.y, w.y, w.w, w.w), vec4(0.0));
+        float innerDist = sdf_rounded_box(localPos - innerShift, innerHalf, innerRx, innerRy);
+        float innerCoverage = sdf_coverage(innerDist, ramp);
 #ifdef SPLIT_BORDER
         // Which of the FOUR edges this boundary pixel belongs to, not just which half of the box: a
         // naive `localPos.y < 0` split colours the whole stroke by vertical half, which cuts the LEFT
