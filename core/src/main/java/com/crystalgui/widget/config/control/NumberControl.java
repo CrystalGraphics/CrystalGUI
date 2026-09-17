@@ -7,7 +7,6 @@ import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.core.config.ConfigDescriptor;
@@ -79,20 +78,8 @@ public class NumberControl extends ValueControl<Double> {
     /** Decimal places shown, or -1 for up to four. @see ConfigDescriptor#decimals */
     private final int decimals;
 
-    /** The value the live scrub began on. Every frame is computed from this, never from the running
-     * value — {@link DragScrub} documents both bugs that live in the alternative. */
-    private double scrubAnchor;
-
-    /** Where the press was, kept apart from {@link #scrubAnchor} because that one MOVES. @see #scrubUpdate */
-    private double scrubStart;
-
-    /** The modifiers {@link #scrubAnchor} was taken under, and the travel it was taken at. @see #scrubUpdate */
-    private int scrubModifiers;
-    private float scrubAnchoredAtX;
-    private float scrubAnchoredAtY;
-
-    /** False until the pointer has moved far enough for this press to be a scrub rather than a click. */
-    private boolean scrubbing;
+    /** The live scrub. Made per press, since its spec may follow another value: a slider's span. */
+    private DragScrub.Gesture scrub = new DragScrub.Gesture(DragScrub.Spec.FLOAT);
 
     /** The no-argument constructor the registry's factory needs, over a NEUTRAL
      * descriptor -- an unlabelled control of this kind, which is a real thing rather than a
@@ -202,12 +189,8 @@ public class NumberControl extends ValueControl<Double> {
             // appearing because you dragged a number is the exact noise that pseudo-class exists to remove.
             focusField(window);
 
-            scrubbing = false;
-            scrubAnchor = currentValue();
-            scrubStart = scrubAnchor;
-            scrubModifiers = modifiersNow();
-            scrubAnchoredAtX = 0f;
-            scrubAnchoredAtY = 0f;
+            scrub = new DragScrub.Gesture(scrubSpec());
+            scrub.begin(currentValue());
             scrubPixelsPerUnit = Drag.pixelsPerLocalUnit(handle);
 
             Drag.start(handle, rawX, rawY,
@@ -233,7 +216,7 @@ public class NumberControl extends ValueControl<Double> {
                             // you wanted before you notice.
                             // The PRESS value, not the anchor: a modifier mid-drag moves the anchor, and
                             // Escape means "as it was", not "as it was when I last pressed Shift".
-                            if (scrubbing) applyScrubValue(scrubStart);
+                            if (scrub.isLive()) applyScrubValue(scrub.start(0));
                             endScrub();
                         }
                     });
@@ -243,31 +226,15 @@ public class NumberControl extends ValueControl<Double> {
     }
 
     private void scrubUpdate(float dxPixels, float dyPixels) {
-        if (!scrubbing) {
-            if (!DragScrub.passesThreshold(dxPixels, dyPixels, DragScrub.DEFAULT_THRESHOLD_PX)) return;
-            scrubbing = true;
+        boolean wasLive = scrub.isLive();
+        if (!scrub.update(dxPixels, dyPixels)) return;
+        if (!wasLive) {
             addClass(SCRUBBING_CLASS);
             // Opened only once the gesture is real, so a click that never scrubbed does not bracket an
             // empty run for the host to record nothing into.
             beginInteraction();
         }
-        int modifiers = modifiersNow();
-        // A MODIFIER PRESSED MID-DRAG RE-ANCHORS, and does not re-price what is already travelled.
-        //
-        // The value is the anchor plus the WHOLE delta at the current rate, so Shift arriving after two
-        // pixels of travel turned those two pixels into twenty — the number jumped by however far the
-        // hand had already come, which is exactly as far as you had to drag to notice it. Re-anchoring
-        // leaves the value where it is and prices only what comes next; Blender re-bases the same way
-        // when precision starts mid-gesture. The anchor model's two properties survive it: out and back
-        // still returns exactly, and replaying one frame is still idempotent.
-        if (modifiers != scrubModifiers) {
-            scrubAnchor = currentValue();
-            scrubAnchoredAtX = dxPixels;
-            scrubAnchoredAtY = dyPixels;
-            scrubModifiers = modifiers;
-        }
-        applyScrubValue(DragScrub.value(scrubAnchor, dxPixels - scrubAnchoredAtX,
-                dyPixels - scrubAnchoredAtY, modifiers, scrubSpec()));
+        applyScrubValue(scrub.value());
     }
 
     /**
@@ -284,7 +251,6 @@ public class NumberControl extends ValueControl<Double> {
     }
 
     private void endScrub() {
-        scrubbing = false;
         removeClass(SCRUBBING_CLASS);
         // Unconditional, and reached from both end and cancel: a host that opened a merge run and never
         // hears it close folds the NEXT unrelated edit into this gesture's undo step.
@@ -298,24 +264,22 @@ public class NumberControl extends ValueControl<Double> {
         window.focus().requestPointerFocus(field);
     }
 
-    /** What is held down now, and nothing when there is no platform to ask — a headless tree still clicks. */
-    private static int modifiersNow() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
-    }
-
     private double currentValue() {
         Double held = getValue();
         return held == null ? 0d : held;
     }
 
     private DragScrub.Spec scrubSpec() {
-        DragScrub.Spec spec = integral ? DragScrub.Spec.INTEGRAL : DragScrub.Spec.FLOAT;
+        // A LENGTH IN PIXELS scrubs as one with nothing declared: a whole pixel every three or so, a tenth with Ctrl.
+        DragScrub.Spec spec = ("px".equals(descriptor().unit()) ? DragScrub.Spec.PIXELS : DragScrub.Spec.FLOAT)
+                .withIntegral(integral);
         ConfigDescriptor.Range range = descriptor().range();
         if (range != null) spec = spec.withRange(range.min(), range.max());
         // ASKED PER DRAG, since a rate may follow another value -- a slider's span. @see ConfigDescriptor#scrubRate
         double scrubRate = descriptor().scrubRate();
-        return Double.isNaN(scrubRate) ? spec : spec.withRate(scrubRate);
+        if (!Double.isNaN(scrubRate)) spec = spec.withRate(scrubRate);
+        // A step quantises the gesture: that is what one is for. @see ConfigDescriptor#step
+        return descriptor().step() > 0f ? spec.withStep(descriptor().step()) : spec;
     }
 
 

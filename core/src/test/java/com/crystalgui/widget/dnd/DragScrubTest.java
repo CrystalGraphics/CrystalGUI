@@ -1,5 +1,11 @@
 package com.crystalgui.widget.dnd;
 
+import static org.junit.Assert.assertTrue;
+
+import static org.junit.Assert.assertFalse;
+
+import static org.junit.Assert.assertArrayEquals;
+
 import com.crystalgui.ui.service.Drag;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.ui.input.DragScrub;
@@ -259,5 +265,51 @@ public class DragScrubTest {
         assertTrue(DragScrub.passesThreshold(0f, -t, t));
         // Diagonal movement counts toward it, or a 45-degree drag needs 1.4x the travel of a straight one.
         assertTrue(DragScrub.passesThreshold(t * 0.8f, t * 0.8f, t));
+    }
+
+    @Test
+    public void aStepLandsASlowRateOnWholeUnitsAndCtrlOnTenths() {
+        DragScrub.Spec pixels = DragScrub.Spec.FLOAT.withRate(0.3).withStep(1);
+        assertEquals(1d, DragScrub.axisValue(0, 3, 0, pixels), 1e-9);
+        assertEquals(0d, DragScrub.axisValue(0, 1, 0, pixels), 1e-9);
+        assertEquals(0.1d, DragScrub.axisValue(0, 3, CgModifiers.CTRL, pixels), 1e-9);
+    }
+
+    @Test
+    public void aGestureDoesNotPriceTheTravelSpentReachingItsThreshold() {
+        DragScrub.Gesture scrub = new DragScrub.Gesture(DragScrub.Spec.FLOAT);
+        scrub.begin(10);
+        assertFalse(scrub.update(2, 0, 0));
+        assertTrue(scrub.update(5, 0, 0));
+        assertEquals(10d, scrub.value(), 1e-9);
+        assertTrue(scrub.update(8, 0, 0));
+        assertEquals(13d, scrub.value(), 1e-9);
+    }
+
+    @Test
+    public void ctrlMidDragPricesOnlyTheTravelStillToCome() {
+        DragScrub.Gesture pad = new DragScrub.Gesture(DragScrub.Spec.FLOAT).threshold(0f).shiftLocksAxis();
+        pad.begin(0, 0);
+        pad.update(20, 0, 0);
+        assertEquals(20d, pad.point()[0], 1e-9);
+        pad.update(20, 0, CgModifiers.CTRL);
+        assertEquals("no jump when Ctrl arrives", 20d, pad.point()[0], 1e-9);
+        pad.update(30, 0, CgModifiers.CTRL);
+        assertEquals("and a tenth as far after it", 21d, pad.point()[0], 1e-9);
+        pad.update(30, 0, 0);
+        pad.update(40, 0, 0);
+        assertEquals("nor when it goes", 31d, pad.point()[0], 1e-9);
+    }
+
+    @Test
+    public void shiftLocksTheAxisFirstMovedAlongAndKeepsItAcrossTheDiagonal() {
+        DragScrub.Gesture pad = new DragScrub.Gesture(DragScrub.Spec.FLOAT).threshold(0f).shiftLocksAxis();
+        pad.begin(5, 5);
+        pad.update(10, 2, CgModifiers.SHIFT);
+        assertArrayEquals(new double[] {15, 5}, pad.point(), 1e-9);
+        pad.update(12, 30, CgModifiers.SHIFT);
+        assertArrayEquals("still horizontal past the diagonal", new double[] {17, 5}, pad.point(), 1e-9);
+        pad.update(12, 30, 0);
+        assertArrayEquals("letting go puts it under the pointer", new double[] {17, 35}, pad.point(), 1e-9);
     }
 }
