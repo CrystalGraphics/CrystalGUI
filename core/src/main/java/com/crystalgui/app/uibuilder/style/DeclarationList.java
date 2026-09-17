@@ -144,12 +144,35 @@ final class DeclarationList extends UIElement {
         label.setHitTest(false);
         row.append(label);
         row.onMouseDown.attachListener((element, event) -> {
-            PropertyPalette.open(row, name -> fields.declared(name) != null,
-                    // AT ITS INITIAL VALUE, so the row appears holding something the sheet can parse.
-                    property -> fields.add(property.name, initialOf(property)));
+            PropertyPalette.open(row, name -> fields.declared(name) != null, this::pick);
             event.preventDefault();
         }, false, true);
         return row;
+    }
+
+    /** What a palette pick does: adds the property, or shows the row of one already declared. */
+    void pick(StyleProperty<?> property) {
+        // ALREADY DECLARED: shown, not added -- adding writes the initial value over the one set.
+        if (fields.declared(property.name) != null) {
+            reveal(property.name);
+            return;
+        }
+        // AT ITS INITIAL VALUE, so the row appears holding something the sheet can parse.
+        fields.add(property.name, initialOf(property));
+    }
+
+    /** Opens {@code name}'s section, scrolls its row into view and puts focus in its control. */
+    private void reveal(String name) {
+        StyleFields.Declared declared = fields.declared(name);
+        if (declared == null) return;
+        StyleFamilies.Family family = StyleFamilies.of(declared.property(), name);
+        ChildList.Keyed<RowKey, Configurator> section = rows.get(family);
+        Configurator row = section == null ? null : section.get(new RowKey(name, declared.disabled()));
+        if (row == null) return;
+        ConfiguratorGroup group = families.get(family);
+        if (group != null) group.setCollapsed(false);
+        if (row.box() != null) row.box().scrollIntoView();
+        if (document() != null && row.control() != null) document().focus().requestFocus(row.control());
     }
 
     private static String initialOf(StyleProperty<?> property) {

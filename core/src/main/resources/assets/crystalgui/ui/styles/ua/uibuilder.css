@@ -953,44 +953,8 @@ smartguides {
     color: var(--fg-disabled, #5A5D63);
 }
 
-/* The palette: a property is found by seeing what it does. */
-.__property-palette__ {
-    width: 250px;
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 4px;
-    padding-bottom: 4px;
-    gap: 3px;
-}
-.__palette-search__ { height: 18px; min-height: 18px; flex-shrink: 0; }
-/* THE LIST SCROLLS, the popover does not grow: a content-sized popover with thirty rows in it runs off the
- * bottom of the screen and takes the last rows with it. */
-.__property-palette__ scrollerview { max-height: 260px; }
-.__palette-row__ {
-    flex-direction: row;
-    align-items: center;
-    gap: 7px;
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    border-radius: 3px;
-    cursor: pointer;
-}
-.__palette-row__:hover { background: var(--list-hover-bg, #393B40); }
-/* The sample IS the property, applied: the chip is the ground it is applied to. A property with nothing to
- * show keeps the column and draws no box — a grid of empty grey rectangles reads as artwork that failed. */
-.__palette-sample__ {
-    width: 22px;
-    height: 14px;
-    flex-shrink: 0;
-    border-radius: 2px;
-    background: var(--configkit-band-bg, #3A3D42);
-}
-.__palette-sample__.__empty__ { background: #00000000; }
-.__palette-name__ { color: var(--fg, #DFE1E5); }
-/* Already declared here — listed, because being told it is already on beats finding nothing. */
-.__palette-row__.__declared__ .__palette-name__ { color: var(--fg-hint, #7A7A7A); }
+/* Add property: the quick-input look, plus a property this target already declares, dimmed. */
+.__quick-input__ .__entry__.__declared__ .__label__ { color: var(--insertmenu-hint-fg, #7A7A7A); }
 
 /* Edit as CSS: the sheet's own buffer, so this is the file rather than a copy of it. */
 .__rule-editor__ { width: 480px; height: 240px; }

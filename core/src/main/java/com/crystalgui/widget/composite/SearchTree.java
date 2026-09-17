@@ -78,6 +78,9 @@ public class SearchTree<N, T> extends UIElement {
     /** The mark between two segments — a drawn shape, since a font with no glyph for it draws a blank. */
     public static final String CATEGORY_SEPARATOR_CLASS = "__category-separator__";
 
+    /** The dim note at a row's end — what kind of thing it is, beside whatever trail a search adds. */
+    public static final String ENTRY_HINT_CLASS = "__entry-hint__";
+
     /** The {@code ::highlight(...)} name the matched characters are registered under, so the tint is a theme's. */
     public static final String MATCH_HIGHLIGHT = "search-match";
 
@@ -126,6 +129,18 @@ public class SearchTree<N, T> extends UIElement {
         /** One class the icon wears, so a theme tints it — a kind's role — or null. */
         @Nullable
         default String iconClass(N node) {
+            return null;
+        }
+
+        /** A short dim note at the row's end — {@code colour}, {@code length} — shown browsing and searching, or null. */
+        @Nullable
+        default String hint(N node) {
+            return null;
+        }
+
+        /** One class the whole row wears — a state a theme draws, such as "already added" — or null. */
+        @Nullable
+        default String rowClass(N node) {
             return null;
         }
     }
@@ -407,6 +422,8 @@ public class SearchTree<N, T> extends UIElement {
             if (category) template.addClass(CATEGORY_CLASS);
             entry.label.setText(rows.label(item));
             entry.setIcon(category ? null : rows.icon(item), category ? null : rows.iconClass(item));
+            entry.setRowClass(rows.rowClass(item));
+            entry.setHint(category ? null : rows.hint(item));
 
             // Suffix and match tint are recomputed per bind, because rows are recycled; matched against the
             // DRAWN string so the tint stays aligned with what is on screen.
@@ -454,7 +471,11 @@ public class SearchTree<N, T> extends UIElement {
 
         @Nullable
         private String iconTint;
+
+        @Nullable
+        private String rowClass;
         private final UIElement category = new UIElement();
+        private final UIText hint = new UIText("");
         private final UIText[] categorySegments = new UIText[MAX_CATEGORY_SEGMENTS];
         private final UIElement[] categorySeparators = new UIElement[MAX_CATEGORY_SEGMENTS - 1];
 
@@ -485,10 +506,29 @@ public class SearchTree<N, T> extends UIElement {
                 category.append(segment);
             }
 
+            hint.addClass(ENTRY_HINT_CLASS);
+            hint.setHitTest(false);
+            show(hint, false);
+
             append(twisty);
             append(icon);
             append(label);
+            // THE TRAIL LAST, so a search's categories line up at the edge whatever the hint beside them says.
+            append(hint);
             append(category);
+        }
+
+        void setHint(@Nullable String text) {
+            show(hint, text != null);
+            hint.setText(text == null ? "" : text);
+        }
+
+        /** Wears {@code name} in place of whatever the previous occupant of this recycled row wore. */
+        void setRowClass(@Nullable String name) {
+            if (Objects.equals(name, rowClass)) return;
+            if (rowClass != null) removeClass(rowClass);
+            if (name != null) addClass(name);
+            rowClass = name;
         }
 
         /** Draws {@code name} tinted by {@code tint}, or hides the icon for null. */

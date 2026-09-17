@@ -802,12 +802,12 @@ searchfield::part(clear) {
 }
 nodecreationmenu .__empty__ { padding: 4px; }
 
-/* ── InsertMenu ─────────────────────────────────────────────────────────────────────────────────
- * The surface's Add menu: title, a consumer's placement band, search, the offers, and a footer that
- * describes the highlighted one. A quick-input family member, so it reads like the command palette
- * rather than like the graph's own node menu. Definite size for the same reason as that menu: the tree
- * is virtualised and has no intrinsic height. */
-insertmenu {
+/* ── Quick input ────────────────────────────────────────────────────────────────────────────────
+ * The look a CreateMenu opts into with `__quick-input__` — the surface's Insert menu and the Styles tab's Add
+ * property: title, an optional band, search, folders, and a footer describing the highlighted row. It reads
+ * like the command palette rather than like the graph's own node menu. Definite size for the same reason as
+ * that menu: the tree is virtualised and has no intrinsic height. */
+.__quick-input__ {
     width: 280px;
     height: 340px;
     min-width: 200px;
@@ -821,7 +821,7 @@ insertmenu {
     border-radius: 6px;
     color: var(--insertmenu-target-fg, #DFE1E5);
 }
-insertmenu .__title-bar__ {
+.__quick-input__ .__title-bar__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
@@ -830,13 +830,13 @@ insertmenu .__title-bar__ {
     padding-right: 10px;
     cursor: grab;
 }
-insertmenu .__title__ {
+.__quick-input__ .__title__ {
     font-weight: bold;
     color: var(--insertmenu-title-fg, #9DA0A8);
 }
 /* The consumer's line, a band raised between two hairlines: context the list below is about, not a
  * row of it. */
-insertmenu .__insert-header__ {
+.__quick-input__ .__insert-header__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
@@ -849,11 +849,11 @@ insertmenu .__insert-header__ {
     border-bottom-width: 1px;
     border-color: var(--insertmenu-divider, #393B40);
 }
-insertmenu searchtree {
+.__quick-input__ searchtree {
     padding: 6px;
     gap: 4px;
 }
-insertmenu .__search__ {
+.__quick-input__ .__search__ {
     height: 22px;
     flex-shrink: 0;
     padding-left: 6px;
@@ -863,11 +863,11 @@ insertmenu .__search__ {
     background: var(--insertmenu-field-bg, #131416);
     outline-color: var(--insertmenu-field-border, #393B40);
 }
-insertmenu .__search__.__focused__ {
+.__quick-input__ .__search__.__focused__ {
     outline-color: var(--insertmenu-field-focus-border, #3574F0);
 }
 /* NO height and NO padding-left: both are the view's, written from Java. See nodecreationmenu above. */
-insertmenu .__entry__ {
+.__quick-input__ .__entry__ {
     width: 100%;
     flex-direction: row;
     justify-content: flex-start;
@@ -878,28 +878,28 @@ insertmenu .__entry__ {
     overflow: hidden;
     cursor: pointer;
 }
-insertmenu .__entry__:hover { background: var(--insertmenu-hover-bg, #2E3033); }
-insertmenu .__entry__.__selected__ { background: var(--insertmenu-selected-bg, #04395E); }
+.__quick-input__ .__entry__:hover { background: var(--insertmenu-hover-bg, #2E3033); }
+.__quick-input__ .__entry__.__selected__ { background: var(--insertmenu-selected-bg, #04395E); }
 /* The Library's twisty: two shapes rather than one rotated, the tree's colours, and its own hover. */
-insertmenu .__twisty__ {
+.__quick-input__ .__twisty__ {
     width: 12px;
     height: 12px;
     flex-shrink: 0;
     color: var(--tree-twisty-fg, #FFFFFF);
 }
-insertmenu .__twisty__:hover { color: var(--tree-twisty-hover-fg, #FFFFFF); }
-insertmenu .__collapsed__ > .__twisty__ { overlay: shape("chevron-right"); }
-insertmenu .__expanded__ > .__twisty__ { overlay: shape("chevron-down"); }
-insertmenu .__leaf__ > .__twisty__ { overlay: none; }
+.__quick-input__ .__twisty__:hover { color: var(--tree-twisty-hover-fg, #FFFFFF); }
+.__quick-input__ .__collapsed__ > .__twisty__ { overlay: shape("chevron-right"); }
+.__quick-input__ .__expanded__ > .__twisty__ { overlay: shape("chevron-down"); }
+.__quick-input__ .__leaf__ > .__twisty__ { overlay: none; }
 /* The kind's own mark, tinted by its role class where a consumer gives one. */
-insertmenu .__entry-icon__ {
+.__quick-input__ .__entry-icon__ {
     width: 14px;
     height: 14px;
     flex-shrink: 0;
     overlay-size: contain;
     color: var(--insertmenu-icon-fg, #9DA0A8);
 }
-insertmenu .__entry__ .__label__ {
+.__quick-input__ .__entry__ .__label__ {
     flex-grow: 1;
     flex-shrink: 1;
     width: 0;
@@ -908,24 +908,25 @@ insertmenu .__entry__ .__label__ {
     text-overflow: ellipsis;
 }
 /* A heading over the offers, as the Library's folders are: the tree's own colour, bold. */
-insertmenu .__entry__.__category__ .__label__ {
+.__quick-input__ .__entry__.__category__ .__label__ {
     font-weight: bold;
     color: var(--tree-fg, #FFFFFF);
 }
-insertmenu .__entry__ .__entry-category__ {
+.__quick-input__ .__entry__ .__entry-category__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 1;
+    margin-left: 8px;
     overflow: hidden;
 }
-insertmenu .__entry__ .__category-segment__ {
+.__quick-input__ .__entry__ .__category-segment__ {
     flex-shrink: 1;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
     color: var(--insertmenu-hint-fg, #7A7A7A);
 }
-insertmenu .__entry__ .__category-separator__ {
+.__quick-input__ .__entry__ .__category-separator__ {
     width: 8px;
     height: 8px;
     flex-shrink: 0;
@@ -934,11 +935,19 @@ insertmenu .__entry__ .__category-separator__ {
     overlay: shape("triangle-right");
     color: var(--insertmenu-hint-fg, #7A7A7A);
 }
-insertmenu .__empty__ {
+/* What kind of thing a row is, at its end: quieter than a search's trail, and never squeezed out by the label. */
+.__quick-input__ .__entry__ .__entry-hint__ {
+    flex-shrink: 0;
+    margin-left: 6px;
+    font-size: 9px;
+    white-space: nowrap;
+    color: var(--insertmenu-hint-fg, #7A7A7A);
+}
+.__quick-input__ .__empty__ {
     padding: 8px;
     color: var(--insertmenu-hint-fg, #7A7A7A);
 }
-insertmenu .__insert-footer__ {
+.__quick-input__ .__insert-footer__ {
     flex-shrink: 0;
     height: 22px;
     padding-left: 10px;

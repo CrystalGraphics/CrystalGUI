@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder.style;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -98,7 +99,15 @@ public final class StyleFamilies {
                 contains.add(property);
             }
         }
+        // THE CLOSEST NAME FIRST: `bg` is background before background-color, as the shorter completion is.
+        starts.sort(Comparator.comparingInt((StyleProperty<?> property) -> property.name.length()));
         starts.addAll(contains);
+        // A SECTION'S NAME FINDS THE SECTION, after everything the name itself matched: `text` is the Text family.
+        for (StyleProperty<?> property : StylePropertyRegistry.all()) {
+            if (of(property).label().toLowerCase(Locale.ROOT).startsWith(needle) && !starts.contains(property)) {
+                starts.add(property);
+            }
+        }
         return List.copyOf(starts);
     }
 
