@@ -135,8 +135,12 @@ public final class ShadowLab {
         // THE STACK FIRST: it chooses which shadow the rows under it edit.
         LayerStack stack = new LayerStack("lab.layers", property, selected).titled("Shadows").hideable(hideable);
         // THE SHADOW ITSELF, on an "Ag" of its own and scaled to the patch: a 16px blur is bigger than the row.
-        stack.sample(patch -> patch.append(new UIText("Ag").addClass(LayerStack.SAMPLE_TEXT_CLASS)),
-                (patch, layer) -> LiveEdits.setInline(patch, property, fittedLayer(layer)));
+        stack.sample(patch -> {
+            UIText ag = new UIText("Ag");
+            ag.addClass(LayerStack.SAMPLE_TEXT_CLASS);
+            patch.append(ag);
+            return ag;
+        }, (glyphs, layer) -> LiveEdits.setInline(glyphs, property, fittedLayer(layer)));
         stack.adding("+ Add", () -> stack.add(DEFAULT));
         stack.bind(layers);
         lab.content().append(stack);

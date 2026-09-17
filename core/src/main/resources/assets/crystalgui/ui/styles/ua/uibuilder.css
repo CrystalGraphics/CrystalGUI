@@ -1323,6 +1323,40 @@ smartguides {
     opacity: 0.3;
     outline: 1px var(--configkit-field-border, #4A4D52);
 }
+/* THE PIVOT, on the specimen: Photoshop's reference point -- a ring with a cross through it, at the point every
+ * op turns and grows about. A zero-sized anchor carries the position, so the drawing round it never has to match
+ * a negative margin to its own size. */
+.__lab-pivot__ {
+    position: absolute;
+    width: 0px;
+    height: 0px;
+    z-index: 2;
+}
+.__lab-pivot-mark__ {
+    position: absolute;
+    left: -5px;
+    top: -5px;
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    /* HOLLOW, so what it sits on shows through -- the border lab's handles are the same shape for the same reason. */
+    background: none;
+    border-width: 1.5px;
+    border-color: var(--accent, #3574F0);
+    cursor: move;
+}
+.__lab-pivot-mark__:hover { border-color: var(--accent-hover, #4A82F2); }
+/* THE CROSS, reaching past the ring: at ten pixels a ring alone reads as a dot, and a dot is not a point. */
+.__lab-pivot-bar__ { position: absolute; background: var(--accent, #3574F0); }
+.__lab-pivot-bar__.__horizontal__ { left: -9px; top: -0.5px; width: 18px; height: 1px; }
+.__lab-pivot-bar__.__vertical__ { left: -0.5px; top: -9px; width: 1px; height: 18px; }
+
+/* NOTHING LEAVES A SWATCH. A transform is the one value that moves what it is drawn on, and unclipped it drew a
+ * rotated plate across the panel and over the rows either side of it. `clip` and not `hidden`: a swatch is not a
+ * scroll container, and this engine's `hidden` is. The value is applied to what is INSIDE the swatch, since an
+ * element's own transform is not clipped by its own overflow. */
+.__style-chip-swatch__ { overflow: clip; }
+.__layer-sample__ { overflow: clip; }
 /* The preset the value currently is. */
 .__lab-keyword__.__active__ { background: var(--accent-soft, #2E436E); color: var(--fg, #DFE1E5); }
 /* The footer: what was measured, then what will be written. A hairline above it, so the readout reads as

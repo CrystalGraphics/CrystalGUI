@@ -145,6 +145,12 @@ public final class StyleLabs {
         }
         // A shadow is bigger than the swatch it is drawn in, so the swatch gets it to scale.
         if (property == StylePropertyRegistry.TEXT_SHADOW) chip.preview(ShadowLab::fitted);
+        // A TRANSFORM ON AN EMPTY BOX IS A BOX, and an unfitted one is a box the size of the panel: the swatch gets
+        // the lab's own mark, the value fitted to it, and a clip so a rotate stays in the row it belongs to.
+        if (property == StylePropertyRegistry.TRANSFORM) {
+            chip.sample(TransformLab.MARK);
+            chip.painter((c, css) -> onSample(c, StylePropertyRegistry.TRANSFORM, TransformLab.fittedValue(css)));
+        }
         if (property == StylePropertyRegistry.FONT_FAMILY) chip.display(TypographyLab::shortName);
         if (property == StylePropertyRegistry.PAINT_ORDER) chip.painter(StyleLabs::paintOrderSample);
         // Glass over the swatch's flat band filters nothing: it needs something behind it.
