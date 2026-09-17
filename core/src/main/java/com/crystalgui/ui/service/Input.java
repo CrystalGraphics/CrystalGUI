@@ -318,10 +318,16 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         hoverValid = false;
     }
 
-    /** The hover diff, the boundary events, the move and the wheel — once, from this frame's layout. */
-    public void endFrame() {
+    /**
+     * The hover diff, the boundary events, the move and the wheel — once, from this frame's layout.
+     *
+     * @return whether the hovered element changed, which leaves {@code :hover} and anything an enter or leave
+     *         listener wrote unstyled until the cascade runs again
+     */
+    public boolean endFrame() {
         UIElement current = hoverTarget();
         UIElement last = lastFrameHover;
+        boolean changed = last != current;
         if (last == current) {
             if (current != null) send(current, new MouseEvent.Move(current, pointer));
         } else {
@@ -344,6 +350,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         }
         presentCursor(current);
         lastFrameHover = current;
+        return changed;
     }
 
     /**

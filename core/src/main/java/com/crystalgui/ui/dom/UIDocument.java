@@ -453,8 +453,8 @@ public final class UIDocument extends UIElement {
      * A whole frame with nothing drawn: the hover is invalidated, motion advances, the cascade
      * settles, layout runs once, and the pointer is diffed against the layout that just ran.
      *
-     * <p>Paint sits between {@link #layout} and the input diff for a host that draws; the order here
-     * is what makes hover correct on a frame where a reflow moved something under a still pointer.</p>
+     * <p>When that diff moves the hover, style and layout run once more, so a reflow under a still pointer
+     * paints {@code :hover} on the right element in the same frame. The host paints after this returns.</p>
      */
     public void frame(float deltaSeconds, float width, float height) {
         // A FRAME STARTS HERE AND ENDS IN THE PAINT CONTEXT, because the host drives the two halves
@@ -478,7 +478,16 @@ public final class UIDocument extends UIElement {
         timed = FrameProfile.begin();
         settleAfterLayout(width, height, deltaSeconds);
         FrameProfile.end(timed, "frame:afterLayout");
-        input().endFrame();
+        if (input().endFrame()) {
+            // THE HOVER MOVED AFTER THE CASCADE RAN, so `:hover` would paint on the element the pointer just
+            // left for one frame. A reflow under a still pointer does exactly that: a virtualised list recycles
+            // the row element under it, and the highlight jumps to wherever that element went, then back.
+            // One more pass on the frames the hover changed, at zero delta as settling does.
+            timed = FrameProfile.begin();
+            calculateStyle(0f);
+            layout(width, height);
+            FrameProfile.end(timed, "frame:hover");
+        }
     }
 
     /**
