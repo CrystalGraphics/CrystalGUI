@@ -1060,6 +1060,27 @@ smartguides {
     overflow: hidden;
     background: var(--configkit-band-bg, #3A3D42);
 }
+/* A GLASS SWATCH IS A SCENE: glass over the swatch's flat band has nothing to filter. The lab's in small -- two shapes
+ * on the dark plate reaching in from opposite corners, each seen plain at the swatch's edge and through the pane. */
+.__glass-sample-scene__ {
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 100%;
+    height: 100%;
+    background: var(--lab-ground-dark, #000000);
+}
+.__glass-sample-shape__ { position: absolute; border-radius: 999px; }
+.__glass-sample-shape__0 { left: -3px; top: -5px; width: 16px; height: 16px; background: var(--lab-shape-1, #E0398A); }
+.__glass-sample-shape__1 { left: 13px; top: 4px; width: 18px; height: 18px; background: var(--lab-shape-4, #3C5BF0); }
+.__glass-sample-pane__ {
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    right: 5px;
+    bottom: 2px;
+    border-radius: 3px;
+}
 /* The sample inside it is a specimen, not the value's own size -- and big enough to cast a shadow the
  * swatch can show, which a 9px glyph is not. */
 /* NOT BOLD: the sample is set in the element's own weight, which is what a weight chip is there to show. */
@@ -1207,11 +1228,36 @@ smartguides {
  * "Handgloves" across two lines and clipped the second. */
 .__lab-sample__ { font-size: 28; font-weight: bold; white-space: nowrap; }
 
-/* Something worth filtering behind the glass lab's specimen. */
-.__lab-shape__ { position: absolute; width: 56px; height: 56px; border-radius: 999px; }
-.__lab-shape__0 { left: -6px; top: 6px; background: var(--lab-shape-1, #E0398A); }
-.__lab-shape__1 { left: 44px; top: -14px; background: var(--lab-shape-2, #F08A24); }
-.__lab-shape__2 { left: 24px; top: 30px; background: var(--lab-shape-3, #2BC7A8); }
+/* Something worth filtering behind the glass lab's specimen: the gallery's glass stage, scaled to the lab. The
+ * shapes are larger than the card, so it always has an edge of colour to cross, and drift as one. */
+/* SIZED TO ITS SHAPES, not a zero box they overflow: the drift moves this box, and what a moving box paints is
+ * judged from its bounds. */
+.__lab-shapes__ { position: absolute; left: -72px; top: -52px; width: 336px; height: 196px; }
+.__lab-shape__ { position: absolute; border-radius: 999px; }
+.__lab-shape__0 { left: 0px; top: 8px; width: 96px; height: 96px; background: var(--lab-shape-1, #E0398A); }
+.__lab-shape__1 { left: 68px; top: 52px; width: 120px; height: 120px; background: var(--lab-shape-4, #3C5BF0); }
+.__lab-shape__2 { left: 160px; top: 0px; width: 104px; height: 104px; background: var(--lab-shape-2, #F08A24); }
+.__lab-shape__3 { left: 216px; top: 76px; width: 120px; height: 120px; background: var(--lab-shape-3, #2BC7A8); }
+.__lab-shape__4 { left: 112px; top: 96px; width: 88px; height: 88px; background: var(--lab-shape-5, #8B3CF0); }
+/* STRAIGHT EDGES, which a circle has none of: a refraction is legible where it bends one. */
+.__lab-backdrop-text__ {
+    position: absolute;
+    left: -60px;
+    top: 22px;
+    font-size: 22;
+    font-weight: bold;
+    white-space: nowrap;
+    color: var(--lab-ground-light, #FFFFFF);
+}
+.__lab-backdrop-sub__ {
+    position: absolute;
+    left: -58px;
+    top: 50px;
+    font-size: 8;
+    white-space: nowrap;
+    color: var(--lab-ground-light, #FFFFFF);
+}
+.__lab-specimen__.__bare__.__gizmo-handle__ { cursor: move; }
 
 .__lab-content__ {
     gap: 5px;
@@ -1232,15 +1278,27 @@ smartguides {
 .__lab-row__ > * { flex-shrink: 1; }
 /* The kit's own rows, at the lab's width. */
 .__lab-content__ .__configurator__ > .__inline__ > .__config-control__ { min-width: 70px; }
+/* A PILL: a choice among several, set apart from the square fields below it by its shape. A flat fill and no
+ * hairline -- a 1px outline on a fully rounded box drew as a thick dark ring. */
 .__lab-keyword__ {
-    height: 16px;
-    min-height: 16px;
-    padding-left: 5px;
-    padding-right: 5px;
+    height: 20px;
+    min-height: 20px;
+    padding-left: 8px;
+    padding-right: 8px;
+    border-radius: 10px;
     background: var(--configkit-field-bg, #2B2D30);
     color: var(--fg-secondary, #9DA0A8);
 }
 .__lab-keyword__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
+.__lab-row__.__glass-presets__ { gap: 3px; margin-bottom: 1px; }
+/* BETWEEN the stage and the first header, measured: 4px above (this gap and the panel's 1px inset), 3px below
+ * (the row's margin and the group's own inset -- the panel's scrolled rows take no gap). The gap is taken back and returned
+ * above the readout. Not a negative margin: on the row it lifted it past the panel's clip, and on the stage it
+ * collapsed the content-sized lab. */
+.__style-lab__.__glass-lab__ > .__content__ { gap: 3px; }
+.__style-lab__.__glass-lab__ > .__content__ > .__lab-css__ { margin-top: 4px; }
+/* The preset the value currently is. */
+.__lab-keyword__.__active__ { background: var(--accent-soft, #2E436E); color: var(--fg, #DFE1E5); }
 /* The footer: what was measured, then what will be written. A hairline above it, so the readout reads as
  * a statement about the lab rather than another control in it. */
 .__lab-caption__ {

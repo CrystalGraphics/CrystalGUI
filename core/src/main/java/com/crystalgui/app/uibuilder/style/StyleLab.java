@@ -16,6 +16,8 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
+import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.UIElement;
@@ -75,6 +77,14 @@ public final class StyleLab {
     public static final String CAPTION_CLASS = "__lab-caption__";
     public static final String CSS_CLASS = "__lab-css__";
     public static final String SHAPE_CLASS = "__lab-shape__";
+    /** The drifting shapes behind a glass specimen, moved as one. */
+    public static final String SHAPES_CLASS = "__lab-shapes__";
+    /** Straight-edged detail behind a glass specimen, which is what shows a bend: a word and a line under it. */
+    public static final String BACKDROP_TEXT_CLASS = "__lab-backdrop-text__";
+    public static final String BACKDROP_SUB_CLASS = "__lab-backdrop-sub__";
+
+    /** Where the specimen is first placed on the stage. */
+    private static final float SPECIMEN_AT = 12f;
     /** A button in a lab's own row: add a layer, a preset. */
     public static final String KEYWORD_CLASS = "__lab-keyword__";
     /** A horizontal run of gizmos or buttons. */
@@ -126,7 +136,6 @@ public final class StyleLab {
         panel.addClass(CONTENT_CLASS);
         dialog.getContent().append(panel);
         caption.addClass(CAPTION_CLASS);
-        dialog.getContent().append(caption);
         readout.addClass(CSS_CLASS);
         dialog.getContent().append(readout);
         specimen();
@@ -242,20 +251,73 @@ public final class StyleLab {
         return this;
     }
 
-    /** Puts colored shapes behind the specimen, which is what a blur or a refraction needs to be visible. */
+    /**
+     * Puts something worth filtering behind the specimen and lets it be dragged over it — the gallery's glass page
+     * in small: large colored shapes that DRIFT, for a blur and a saturation to act on, and text, whose straight
+     * edges are what a refraction visibly bends. A still backdrop hides the one thing that tells a live capture
+     * from a texture.
+     */
     public StyleLab backdrop() {
-        for (int i = 0; i < 3; i++) {
+        UIElement shapes = new UIElement();
+        shapes.addClass(SHAPES_CLASS);
+        for (int i = 0; i < 5; i++) {
             UIElement shape = new UIElement();
             shape.addClass(SHAPE_CLASS);
             shape.addClass(SHAPE_CLASS + i);
-            // APPENDED, never addNode: addNode writes left/top inline, which beats the offsets in the sheet.
-            stage.content().append(shape);
+            shapes.append(shape);
         }
+        // APPENDED, never addNode: addNode writes left/top inline, which beats the offsets in the sheet.
+        stage.content().append(shapes);
+        UIText word = new UIText("REFRACT");
+        word.addClass(BACKDROP_TEXT_CLASS);
+        stage.content().append(word);
+        UIText line = new UIText("a straight edge is what makes a lens legible");
+        line.addClass(BACKDROP_SUB_CLASS);
+        stage.content().append(line);
+
+        // A COMPOSITOR OVERRIDE, as the gallery's: layout-free, owned by the shapes, gone with the lab.
+        float[] phase = new float[1];
+        shapes.onConnected(() -> {
+            UIDocument window = shapes.document();
+            if (window == null) return;
+            window.animation().every(shapes, delta -> {
+                phase[0] += delta;
+                Box box = shapes.box();
+                if (box != null) {
+                    box.setTransform(Transform.translate((float) Math.sin(phase[0] * 0.23) * 12f,
+                            (float) Math.cos(phase[0] * 0.17) * 8f));
+                }
+                return true;
+            });
+        });
+
+        // THE GLASS MOVES, the backdrop does not: dragging it over an edge is how a bezel's bend is seen.
+        float[] at = {SPECIMEN_AT, SPECIMEN_AT};
+        float[] from = new float[2];
+        StyleGizmos.drag(specimen, () -> {
+            from[0] = at[0];
+            from[1] = at[1];
+        }, (dx, dy) -> {
+            at[0] = from[0] + dx;
+            at[1] = from[1] + dy;
+            stage.moveNode(specimen, at[0], at[1]);
+        }, () -> { });
+        return this;
+    }
+
+    /** Tags this lab's window with {@code styleClass}, so a sheet can reach its own layout. */
+    public StyleLab addClass(String styleClass) {
+        dialog.addClass(styleClass);
         return this;
     }
 
     /** What the caption says, followed while the lab is open. */
     public StyleLab caption(Property<String> text) {
+        // ONLY A LAB WITH SOMETHING TO SAY HAS ONE: an empty caption still took a line, its padding and a gap
+        // above the readout, which is height the rows scrolled for.
+        if (caption.parentElement() == null) {
+            dialog.getContent().insertAt(dialog.getContent().indexOf(readout), caption);
+        }
         PropertyWatch.follow(caption, text, caption::setText);
         return this;
     }
@@ -272,12 +334,16 @@ public final class StyleLab {
 
     private static String readable(@Nullable String value) {
         if (value == null || value.isBlank()) return "—";
-        StringBuilder out = new StringBuilder();
-        for (CssValues.Line line : CssValues.lines(value)) {
-            if (out.length() > 0) out.append(line.continued() ? "\n      " : "\n    ");
-            out.append(line.text());
+        // A LAYER A LINE AND NOTHING FURTHER: the lab is a fixed width and the readout wraps within it, so a run
+        // of functions or a long call flows. A line a function made the glass lab's footer fourteen lines tall.
+        List<String> layers = CssValues.layerStack(value);
+        if (layers.size() < 2) return CssValues.readable(value);
+        List<String> shown = new ArrayList<>(layers.size());
+        for (String layer : layers) {
+            String readable = CssValues.readable(CssValues.bodyOf(layer));
+            shown.add(CssValues.isOff(layer) ? "/* " + readable + " */" : readable);
         }
-        return out.toString();
+        return String.join(",\n    ", shown);
     }
 
     private void buildStage() {
@@ -286,7 +352,7 @@ public final class StyleLab {
         stage.setZoomRange(0.25f, 32f);
 
         specimen.addClass(SPECIMEN_CLASS);
-        stage.addNode(specimen, 12f, 12f);
+        stage.addNode(specimen, SPECIMEN_AT, SPECIMEN_AT);
 
         UIElement grounds = new UIElement();
         grounds.addClass(PICKS_CLASS);

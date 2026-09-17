@@ -192,6 +192,11 @@ public class StyleChip extends ValueControl<String> {
         return this;
     }
 
+    /** The swatch, for a {@link #painter} that builds its own specimen in it. */
+    public UIElement swatch() {
+        return swatch;
+    }
+
     /** The text in the swatch, or null before {@link #sample} gave it one. */
     @Nullable
     public UIText sampleText() {
