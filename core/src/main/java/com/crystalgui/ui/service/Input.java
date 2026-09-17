@@ -28,6 +28,7 @@ import com.crystalgui.render.CgUiPaintContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.LongSupplier;
 import javax.annotation.Nullable;
 import org.joml.Vector2f;
 
@@ -175,6 +176,18 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private @Nullable UIElement keyboardPressTarget;
     private @Nullable UIElement capture;
     private float scrollDelta;
+
+    /** Idle wheel time that ends a latched gesture, in ms — Firefox's {@code mousewheel.transaction.timeout}. */
+    public static final long WHEEL_LATCH_TIMEOUT_MS = 1500L;
+
+    /** Wheel-idle time after which a pointer move ends the latch — Firefox's {@code ignoremovedelay}. */
+    public static final long WHEEL_LATCH_MOVE_DELAY_MS = 100L;
+
+    private @Nullable UIElement wheelLatch;
+    private long lastWheelMillis;
+
+    /** The latch's clock. Not the event's: a 1.7.10 host stamps a wheel with -1 so multi-click timing cannot drift. */
+    private LongSupplier wheelClock = System::currentTimeMillis;
 
     private @Nullable Chords chords;
 
@@ -489,6 +502,43 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return pointer;
     }
 
+    // ── The wheel latch ──────────────────────────────────────────────────────
+
+    /**
+     * The scroll view the current wheel gesture belongs to, or null between gestures.
+     *
+     * <pre>{@code
+     * UIElement latched = window.input().wheelLatch();
+     * if (latched == this) claimEvenAtTheEnd();                   // the gesture is ours: nothing chains past us
+     * else if (moved) window.input().latchWheel(this);            // the first view that moves takes the gesture
+     * }</pre>
+     *
+     * <p>How browsers keep one spin of the wheel on one scroller: Firefox's wheel transaction, Chromium's scroll
+     * latching. Without it the notch after an inner list reached its end scrolled the page around it, mid-spin.
+     * The gesture ends after {@link #WHEEL_LATCH_TIMEOUT_MS} without a wheel event, or when the pointer moves once
+     * the wheel has been still for {@link #WHEEL_LATCH_MOVE_DELAY_MS}; the next spin chains as before.</p>
+     */
+    @Nullable
+    public UIElement wheelLatch() {
+        UIElement latched = wheelLatch;
+        if (latched == null) return null;
+        if (latched.document() == null || wheelClock.getAsLong() - lastWheelMillis > WHEEL_LATCH_TIMEOUT_MS) {
+            wheelLatch = null;
+            return null;
+        }
+        return latched;
+    }
+
+    /** Gives the current wheel gesture to {@code scroller}. @see #wheelLatch */
+    public void latchWheel(@Nullable UIElement scroller) {
+        wheelLatch = scroller;
+    }
+
+    /** Where the latch reads the time from, in ms. For a test that steps it. */
+    public void useWheelClock(LongSupplier millis) {
+        this.wheelClock = millis;
+    }
+
     /**
      * Whether the button release being dispatched ended a drag that travelled — a drop, not a click.
      *
@@ -693,9 +743,17 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     @Override
     public boolean consumeMouseEvent(Mouse.Event event) {
         releaseEndedDrag = false;
-        if (event.x() != position.x || event.y() != position.y) hoverValid = false;
+        boolean moved = event.x() != position.x || event.y() != position.y;
+        if (moved) hoverValid = false;
         position.set(event.x(), event.y());
         scrollDelta += event.wheelDelta();
+        if (event.wheelDelta() != 0f) {
+            // READ BEFORE STAMPING, or a spin after a long pause would find a fresh stamp and keep the old latch.
+            wheelLatch();
+            lastWheelMillis = wheelClock.getAsLong();
+        } else if (moved && wheelLatch != null && wheelClock.getAsLong() - lastWheelMillis > WHEEL_LATCH_MOVE_DELAY_MS) {
+            wheelLatch = null;
+        }
 
         for (InputMode mode : modes()) {
             if (mode.pointerMoved(position.x, position.y)) break;
