@@ -107,6 +107,8 @@ final class DeclarationList extends UIElement {
                 ? panel.row(field.descriptor(), cast(field.value()))
                 : panel.row(key.name(), id, field.control());
         row.addClass(BuilderStyleSections.STYLE_ROW_CLASS);
+        // A VALUE SIZED BY WHAT IT SAYS: a chip's lines are its floor, where a field shrinks to its column.
+        row.toggleClass(BuilderStyleSections.CHIP_ROW_CLASS, field.control() instanceof StyleChip);
         if (key.disabled()) {
             row.addClass(BuilderStyleSections.HIDDEN_CLASS);
             // THE WHOLE VALUE COLUMN, whatever the row built into it: a plain field took typing that went nowhere.

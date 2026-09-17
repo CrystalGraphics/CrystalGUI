@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.UnaryOperator;
 
@@ -18,6 +19,7 @@ import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.ChildList;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControlContracts;
@@ -56,7 +58,12 @@ public class StyleChip extends ValueControl<String> {
 
     private final UIElement swatch = new UIElement();
     private final UIElement valueBox = new UIElement();
-    private final UIText text = new UIText("");
+    /** The value, a line a layer: a stack of shadows reads one shadow to a line, however wide the panel. */
+    private final ChildList<UIText> lines = new ChildList<>(valueBox, index -> {
+        UIText line = new UIText("");
+        line.addClass(TEXT_CLASS);
+        return line;
+    });
 
     /** What the swatch holds for a property whose effect needs something to be applied TO — a face, a stroke. */
     @Nullable
@@ -95,9 +102,7 @@ public class StyleChip extends ValueControl<String> {
         this.property = property;
         addClass(CHIP_CLASS);
         swatch.addClass(SWATCH_CLASS);
-        text.addClass(TEXT_CLASS);
         valueBox.addClass(VALUE_CLASS);
-        valueBox.append(text);
         append(swatch);
         append(valueBox);
         setHitTest(true);
@@ -206,7 +211,7 @@ public class StyleChip extends ValueControl<String> {
     protected void writeToWidgets(@Nullable String next) {
         value = next == null ? "" : next;
         // SHOWN readable, WRITTEN as it is: the file keeps whatever spelling it has.
-        text.setText(value.isEmpty() ? "—" : display != null ? display.apply(value) : shown(CssValues.readable(value)));
+        showLines();
         // NO SWATCH AND NO COLUMN where there is nothing to see: a size or a width applied to a 28x16 box
         // says nothing, and a reserved-but-empty column indents a value past rows that have no swatch at all.
         // `hidden` takes the space with it, which is the point.
@@ -263,6 +268,25 @@ public class StyleChip extends ValueControl<String> {
     }
 
     /** The value as the row says it: a bare number carries the unit the engine reads it as. */
+    /**
+     * The value as its lines: one a layer, each but the last ending in its comma, as DevTools breaks a list — and never
+     * wrapped further, so the widest layer is how narrow the column may be.
+     */
+    private void showLines() {
+        List<String> layers = display == null && !value.isEmpty() ? CssValues.layerStack(value) : List.of();
+        if (layers.size() < 2) {
+            lines.resize(1);
+            lines.get(0).setText(value.isEmpty() ? "—" : display != null ? display.apply(value) : shown(CssValues.readable(value)));
+            return;
+        }
+        lines.resize(layers.size());
+        for (int i = 0; i < layers.size(); i++) {
+            String body = CssValues.readable(CssValues.bodyOf(layers.get(i)));
+            String line = CssValues.isOff(layers.get(i)) ? "/* " + body + " */" : body;
+            lines.get(i).setText(i < layers.size() - 1 ? line + "," : line);
+        }
+    }
+
     private String shown(String readable) {
         if (unit == null || readable.isEmpty()) return readable;
         for (int i = 0; i < readable.length(); i++) {

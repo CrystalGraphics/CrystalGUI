@@ -992,7 +992,6 @@ smartguides {
     flex-grow: 1;
     min-width: 0px;
     min-height: var(--cfg-ctrl-h);
-    overflow: hidden;
     cursor: pointer;
 }
 /* PRESSABLE, AND IT SAYS SO: the swatch takes a rim and the value brightens, as a link does. */
@@ -1028,7 +1027,15 @@ smartguides {
 .__configurator__.__style-row__ > .__style-row-action__ { margin-top: 1px; }
 .__style-chip__ > .__style-chip-swatch__ { margin-top: 1px; }
 /* THE VALUE SHRINKS TO ITS COLUMN, so a long one ends in its own ellipsis rather than under the row's buttons. */
-.__configurator__.__style-row__ > .__inline__ { min-width: 0px; }
+/* A VALUE IS NEVER SQUEEZED: a field's column stops at what its widest keyword and a slider's track need, and the
+ * name at its own column, so a panel narrower than a row scrolls sideways rather than cutting "flex-start" short or
+ * taking the slider's track away. */
+.__configurator__.__style-row__ > .__inline__ { min-width: 110px; }
+.__configurator__.__style-row__ > .__label__ { flex-shrink: 0; }
+/* A CHIP'S VALUE IS AS WIDE AS ITS LONGEST LINE, AND THAT IS ITS FLOOR: the column and the chip are sized by their
+ * content and never shrink. */
+.__configurator__.__style-row__.__chip-row__ > .__inline__,
+.__configurator__.__style-row__.__chip-row__ .__style-chip__ { width: auto; flex-shrink: 0; }
 /* The swatch is the declaration, applied: a gradient chip is the gradient, a colour chip is the colour.
  *
  * A FIXED COLUMN, pinned at both ends. Its content sizes it otherwise — a sample of text made it wider than
@@ -1052,20 +1059,19 @@ smartguides {
  * swatch can show, which a 9px glyph is not. */
 /* NOT BOLD: the sample is set in the element's own weight, which is what a weight chip is there to show. */
 .__style-chip-swatch__ text { font-size: 12; }
-/* THE VALUE IN FULL, wrapped to the column: it neither pushes the panel wider nor ends in an ellipsis. */
+/* A LINE A LAYER, AND NO NARROWER THAN THE LONGEST: the column is the floor, and a panel narrower than it scrolls
+ * sideways rather than breaking a shadow inside its hex. 2.5px above and below centres a 13px line in the 18px control. */
 .__style-chip-value__ {
-    width: 0px;
     flex-grow: 1;
-    min-width: 0px;
-    flex-direction: row;
+    flex-direction: column;
+    padding-top: 2.5px;
+    padding-bottom: 2.5px;
+    /* ROOM FOR THE PANEL'S BAR: scrolled to the end, the last character sat under it. */
+    padding-right: 10px;
 }
-/* 2.5px above and below: a 13px line centred in the 18px control, which is where it sat before it could wrap. */
 .__style-chip-text__ {
-    width: 0px;
-    flex-grow: 1;
-    margin-top: 2.5px;
-    margin-bottom: 2.5px;
-    white-space: normal;
+    flex-shrink: 0;
+    white-space: nowrap;
     color: var(--fg-secondary, #9DA0A8);
 }
 /* A COLOUR ROW IS A CHIP, like every other value with something to show: the swatch in the chip's column and the
