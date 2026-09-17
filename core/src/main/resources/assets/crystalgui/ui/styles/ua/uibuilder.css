@@ -1308,6 +1308,21 @@ smartguides {
  * collapsed the content-sized lab. */
 .__style-lab__.__glass-lab__ > .__content__ { gap: 3px; }
 .__style-lab__.__glass-lab__ > .__content__ > .__lab-css__ { margin-top: 4px; }
+
+/* THE TRANSFORM LAB'S SPECIMEN IS A PLATE WITH A MARK ON IT. The plate is what a translate moves and a scale
+ * grows; the mark is what says which way up it ended, since a rotate and a flip both leave a rectangle. */
+.__style-lab__.__transform-lab__ .__lab-specimen__ {
+    min-width: 84px;
+    min-height: 56px;
+    background: var(--lab-specimen-bg, #FFFFFF14);
+}
+/* WHERE IT STARTED: an outline of the same box, under the specimen's own z-index. Faint, because it is a
+ * reference and not a second thing on the stage. */
+.__style-lab__.__transform-lab__ .__lab-ghost__ {
+    background: none;
+    opacity: 0.3;
+    outline: 1px var(--configkit-field-border, #4A4D52);
+}
 /* The preset the value currently is. */
 .__lab-keyword__.__active__ { background: var(--accent-soft, #2E436E); color: var(--fg, #DFE1E5); }
 /* The footer: what was measured, then what will be written. A hairline above it, so the readout reads as
