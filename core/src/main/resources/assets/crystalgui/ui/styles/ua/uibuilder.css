@@ -1481,6 +1481,22 @@ smartguides {
 .__offset-axis__.__horizontal__ { left: 0px; top: 18px; width: 100%; height: 1px; }
 .__offset-axis__.__vertical__ { top: 0px; left: 18px; width: 1px; height: 100%; }
 .__offset-dot__ { width: 9px; height: 9px; border-radius: 999px; background: var(--accent, #3574F0); }
+/* A PAD THAT IS THE BOX: the dot sits at a fraction of it rather than an offset from its middle, and the nine
+ * places anyone means are cells in front of it -- at the pad's own size, since the two are one control and read
+ * as a pair. @see OffsetPad.Space#BOX */
+.__offset-field__.__box__ > .__config-control__.__anchor__ {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    padding: 4px;
+    gap: 3px;
+    border-radius: 3px;
+    background: var(--configkit-field-bg, #2B2D30);
+    outline: 1px var(--configkit-field-border, #4A4D52);
+}
+.__offset-field__.__box__ > .__config-control__.__anchor__ > .__anchor-line__ { gap: 3px; }
+.__offset-field__.__box__ .__anchor-cell__ { width: 8px; height: 8px; border-radius: 1px; }
+.__offset-pad__.__box__ .__offset-dot__ { position: absolute; margin-left: -4.5px; margin-top: -4.5px; }
 
 /* THE CORNER BOX, centred: the shape it rounds, a handle inside each corner as far in as the corner is round, and
  * the chain between them in the middle. A border rather than an outline, which drew as a thick ring on a round box. */

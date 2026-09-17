@@ -6,6 +6,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.List;
+
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
@@ -125,10 +127,10 @@ public class TransformLabTest extends UiDocumentTestBase {
         open("rotate(0deg)", node, fields);
 
         assertNotNull("the pivot is drawn on the specimen", pivot());
-        assertEquals("a quarter along", 25d, (Double) read("lab.origin.x"), 0.05d);
-        assertEquals("and halfway down by default", 50d, (Double) read("lab.origin.y"), 0.05d);
+        assertArrayEquals("a quarter along, and halfway down by default",
+                new double[] {0.25d, 0.5d}, (double[]) read("lab.pivot"), 0.01d);
 
-        write("lab.origin.y", 100d);
+        write("lab.pivot", new double[] {0.25d, 1d});
         frame();
         // AS A READER SEES IT: what lands is the property's own spelling of the percentage, `100.0%`.
         assertEquals("100%", CssValues.readable(fields.valueOf("transform-origin-y")));
@@ -153,6 +155,28 @@ public class TransformLabTest extends UiDocumentTestBase {
                     DeclarationEditors.of(origin, "style." + origin.name, origin.name, Property.of("50%"));
             assertTrue(origin.name + " is a lab row", field.control() instanceof StyleChip);
         }
+    }
+
+    /**
+     * <b>Switching one op off leaves the value whole.</b> A stack whose first and last entries are both commented
+     * out begins with {@code /*} and ends with {@code *}{@code /}, which read as ONE comment around the whole
+     * declaration: striking those outer markers stranded the two inside it, and what was written back --
+     * {@code translate(0px, 0px) *}{@code / scale(2) /}{@code * rotate(0deg)} -- was not a transform at all.
+     */
+    @Test
+    public void anOpSwitchedOffAtEitherEndKeepsTheValueWhole() {
+        String both = "/* translate(0px, 0px) */ scale(2) /* rotate(0deg) */";
+        assertFalse("a value that merely begins and ends with a comment is not itself off", CssValues.isOff(both));
+
+        List<String> ops = CssValues.functionStack(both);
+        assertEquals("three ops, two of them off", 3, ops.size());
+        assertEquals("scale(2)", ops.get(1));
+        assertTrue(CssValues.isOff(ops.get(0)) && CssValues.isOff(ops.get(2)));
+        assertEquals("and it writes back as it was read", both, CssValues.joinFunctionStack(ops));
+
+        // AND THE ENGINE STILL READS IT: a comment is whitespace to a tokenizer, so what is left is scale(2).
+        assertNotNull("the declaration is still a transform",
+                StylePropertyRegistry.TRANSFORM.valueParser.parse(both).compute());
     }
 
     private ConfigControl control(String id) {
