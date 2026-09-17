@@ -184,6 +184,9 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     public static final long WHEEL_LATCH_MOVE_DELAY_MS = 100L;
 
     private @Nullable UIElement wheelLatch;
+
+    /** False from a button press until the pointer next moves. @see #pointerMovedSincePress */
+    private boolean movedSincePress = true;
     private long lastWheelMillis;
 
     /** The latch's clock. Not the event's: a 1.7.10 host stamps a wheel with -1 so multi-click timing cannot drift. */
@@ -502,6 +505,21 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return pointer;
     }
 
+    /**
+     * Whether the pointer has moved since the last button press.
+     *
+     * <pre>{@code
+     * if (!window.input().pointerMovedSincePress()) return;   // entered by a rebuild under a still pointer
+     * }</pre>
+     *
+     * <p>What tells an {@code Enter} the hand caused from one a click caused: a press that rebuilds the element
+     * under a pointer that has not moved gives it a fresh enter, and a browser shows no tooltip for that until the
+     * pointer moves off and back.</p>
+     */
+    public boolean pointerMovedSincePress() {
+        return movedSincePress;
+    }
+
     // ── The wheel latch ──────────────────────────────────────────────────────
 
     /**
@@ -745,6 +763,8 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         releaseEndedDrag = false;
         boolean moved = event.x() != position.x || event.y() != position.y;
         if (moved) hoverValid = false;
+        if (moved) movedSincePress = true;
+        if (event.button() >= 0 && event.state()) movedSincePress = false;
         position.set(event.x(), event.y());
         scrollDelta += event.wheelDelta();
         if (event.wheelDelta() != 0f) {

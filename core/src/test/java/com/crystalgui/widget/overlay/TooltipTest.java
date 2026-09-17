@@ -192,6 +192,38 @@ public class TooltipTest extends UiDocumentTestBase {
         assertTrue("leaving and returning does", tip.isShown());
     }
 
+    /**
+     * A press that swaps what is under a still pointer shows no tip for the new element: its enter came from the
+     * click, not the hand. A browser's tooltip waits the same way, until the pointer moves off and back.
+     */
+    @Test
+    public void anElementAClickPutsUnderAStillPointerShowsNoTipUntilThePointerReturns() {
+        UIElement before = new UIElement().layout(l -> l.width(100).height(40).marginLeft(50).marginTop(50));
+        newRoot().append(before);
+        attach();
+        before.setHitTest(true);
+        int[] at = centreOf(before);
+        move(at[0], at[1]);
+        settle();
+
+        press(at[0], at[1]);
+        release(at[0], at[1]);
+        root.remove(before);
+        UIElement after = new UIElement().layout(l -> l.width(100).height(40).marginLeft(50).marginTop(50));
+        after.setHitTest(true);
+        root.append(after);
+        Tooltip tip = Tooltip.attach(after, "show");
+        settle();
+        settle();
+        assertFalse("the click's own rebuild is not a hover", tip.isShown());
+
+        move(1, 1);
+        settle();
+        move(at[0], at[1]);
+        settle();
+        assertTrue("coming back is", tip.isShown());
+    }
+
     /** Near the bottom there is no room below, so it flips above — the useful subset of the web's
      * {@code position-try-fallbacks}. */
     @Test
