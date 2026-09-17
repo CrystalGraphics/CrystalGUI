@@ -160,7 +160,7 @@ public final class Widgets implements NodeKinds {
         // matching by accident and ToolWindowFrame matching nothing at all.
         UIElementRegistry.register(SymbolIcon.NAME, SymbolIcon::new, NodeContract.INERT,
                 KindInfo.named("Symbol Icon").glyph(GlyphRole.TEXT).inCategory(DISPLAY)
-                        .synonyms("icon", "image", "glyph").describedAs("A small icon drawn in the text colour.")
+                        .synonyms("icon", "image", "glyph").describedAs("A small icon drawn in the text color.")
                         .preview(WidgetSamples.symbolIcon()));
 
         // ── text ─────────────────────────────────────────────────────────────
@@ -345,7 +345,7 @@ public final class Widgets implements NodeKinds {
                         .preview(WidgetSamples.classChipsField()));
         UIElementRegistry.register(ColorControl.NAME, ColorControl::new, NodeContract.INERT,
                 KindInfo.named("Color Field").glyphOf(ColorSelector.NAME).inCategory(FORMS)
-                        .synonyms("colour", "swatch").describedAs("A labelled colour field.")
+                        .synonyms("colour", "swatch").describedAs("A labelled color field.")
                         .preview(WidgetSamples.colorField()));
         UIElementRegistry.register(HeaderControl.NAME, HeaderControl::new, NodeContract.INERT,
                 KindInfo.named("Form Header").glyph(GlyphRole.TEXT).inCategory(FORMS).describedAs("A heading between form fields.").preview(WidgetSamples.formHeader()));
@@ -399,7 +399,7 @@ public final class Widgets implements NodeKinds {
         // inherits its supertype's and would match every `scrollerview` or `popover` rule there is.
         UIElementRegistry.register(TextEditor.NAME, TextEditor::new, NodeContract.INERT,
                 KindInfo.named("Text Editor").inCategory(TEXT)
-                        .synonyms("code", "source", "multiline").describedAs("A code editor with syntax colouring.")
+                        .synonyms("code", "source", "multiline").describedAs("A code editor with syntax coloring.")
                         .preview(WidgetSamples.textEditor()));
         UIElementRegistry.register(CompletionPopup.NAME, CompletionPopup::new, NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.register(DocumentationPopup.NAME, DocumentationPopup::new, NodeContract.INERT, KindInfo.hidden());
@@ -415,7 +415,7 @@ public final class Widgets implements NodeKinds {
                         .preview(WidgetSamples.searchField()));
         UIElementRegistry.register(ColorSelector.NAME, ColorSelector::new, ColorSelector.CONTRACT,
                 KindInfo.named("Color Selector").glyph(GlyphRole.COLLECTION).inCategory(CONTROLS)
-                        .synonyms("colour", "picker", "hue").describedAs("Picks a colour from a field, hue and alpha.")
+                        .synonyms("colour", "picker", "hue").describedAs("Picks a color from a field, hue and alpha.")
                         .preview(WidgetSamples.colorSelector()));
         UIElementRegistry.register(RadarChart.NAME, RadarChart::new, RadarChart.CONTRACT,
                 KindInfo.named("Radar Chart").glyph(GlyphRole.COLLECTION).inCategory(DISPLAY)

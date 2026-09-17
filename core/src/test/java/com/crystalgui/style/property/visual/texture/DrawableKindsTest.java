@@ -88,6 +88,6 @@ public class DrawableKindsTest {
     @Test
     public void theFunctionNameIsCaseInsensitiveAndItsArgumentsAreNot() {
         assertEquals("gradient", DrawableKinds.matching("LINEAR-GRADIENT(#000000FF, #FFFFFFFF)").id());
-        assertEquals("colour", DrawableKinds.matching("#AABBCCDD").id());
+        assertEquals("color", DrawableKinds.matching("#AABBCCDD").id());
     }
 }

@@ -90,7 +90,7 @@ public class RadarChart extends UIElement {
             State.of("colors", StateTypes.intArrayUnder("argb"),
                     RadarChart::axisColors, RadarChart::setAxisColors, new int[0])
                     .described(State.Hint.COLOR)
-                    .describedAs("One colour per axis.");
+                    .describedAs("One color per axis.");
 
     /** What each axis's point says on hover. An empty entry says nothing. */
     public static final State<RadarChart, List<String>> DETAILS =
@@ -114,7 +114,7 @@ public class RadarChart extends UIElement {
             State.of("gradient", StateTypes.enumOf(AxisGradient.class),
                     RadarChart::getAxisGradient, RadarChart::setAxisGradient, AxisGradient.NONE)
                     .omittedWhen(AxisGradient.NONE)
-                    .describedAs("Whether each wedge is one colour or blends into the next axis's.");
+                    .describedAs("Whether each wedge is one color or blends into the next axis's.");
 
     /**
      * LABELS BEFORE EVERYTHING PER-AXIS, which is why a contract applies slots in declaration order.

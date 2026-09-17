@@ -51,7 +51,7 @@ Queue = "Overlay"
 
 Properties {
     // The line colour, PREMULTIPLIED (rgb already scaled by a), matching gui_gradient's stops.
-    _Color         ("Line colour (premultiplied)",  vec4)  = (1.0, 1.0, 1.0, 1.0)
+    _Color         ("Line color (premultiplied)",  vec4)  = (1.0, 1.0, 1.0, 1.0)
     // Cell size in the same pixels _BoxSize is in. Separate axes, so a grid may be non-square.
     _Cell          ("Cell size (px)",               vec2)  = (16.0, 16.0)
     // Line thickness in those same pixels. The shader converts to cell fractions itself, which is
