@@ -689,7 +689,7 @@ public final class StyleEngine {
                     CrystalGuiCore.LOGGER.warn(
                             "'{}' is valid on ::highlight({}) per CSS but is NOT IMPLEMENTED here yet, so it"
                                     + " was ignored. It needs per-range geometry from the text layout, which"
-                                    + " CgStyleSpan cannot express. Recolour or underline the range instead.",
+                                    + " CgStyleSpan cannot express. Recolor or underline the range instead.",
                             decl.property().name, name);
                 } else {
                     CrystalGuiCore.LOGGER.warn(

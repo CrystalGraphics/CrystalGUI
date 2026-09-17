@@ -202,7 +202,7 @@ public final class MachineDemo {
                 + ServerWindows.of(serverEnd).windowCount());
 
         System.out.println();
-        System.out.println("Nothing above sent a pixel, a colour or a layout. The client drew a tree "
+        System.out.println("Nothing above sent a pixel, a color or a layout. The client drew a tree "
                 + "it did not build,\nfrom widget classes it already had, styled by a sheet named "
                 + "rather than sent.");
     }

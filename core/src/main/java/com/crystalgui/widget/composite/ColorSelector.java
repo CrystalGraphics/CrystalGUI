@@ -81,12 +81,12 @@ public class ColorSelector extends UIElement {
             State.of("original", StateTypes.INT,
                     ColorSelector::getOriginalColor, ColorSelector::setInitialColor, 0xFFFFFFFF)
                     .described(State.Hint.COLOR)
-                    .describedAs("The colour the picker opened with, kept beside the new one to compare.");
+                    .describedAs("The color the picker opened with, kept beside the new one to compare.");
 
     public static final State<ColorSelector, Integer> COLOR =
             State.of("color", StateTypes.INT, ColorSelector::getColor, ColorSelector::setColor, 0xFFFFFFFF)
                     .described(State.Hint.COLOR)
-                    .describedAs("The picked colour.");
+                    .describedAs("The picked color.");
 
     /**
      * The colour moved. {@code plan/engine-rewrite.md} M1: a ColorSelector could not report at all, so a
@@ -424,8 +424,8 @@ public class ColorSelector extends UIElement {
         // Unity labels both, and the left one has to be labelled: a swatch that resets the picker when
         // clicked is not guessable from a coloured rectangle, and finding it by accident means losing
         // the edit you were making.
-        Tooltip.attach(originalSwatch, "The original colour. Click to reset the picker to it.");
-        Tooltip.attach(newSwatch, "The new colour.");
+        Tooltip.attach(originalSwatch, "The original color. Click to reset the picker to it.");
+        Tooltip.attach(newSwatch, "The new color.");
         swatches.append(originalSwatch);
         swatches.append(newSwatch);
         left.append(swatches);

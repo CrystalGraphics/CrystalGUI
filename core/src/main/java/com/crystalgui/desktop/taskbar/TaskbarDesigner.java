@@ -234,7 +234,7 @@ public final class TaskbarDesigner {
         glassSlider(form, "Luminosity", 0f, 1f, 2, glass::getLuminosity, glass::setLuminosity);
 
         form.header("Tint");
-        form.note("The colour laid over the blur. ALPHA IS THE ONE THAT MATTERS \u2014 it is how "
+        form.note("The color laid over the blur. ALPHA IS THE ONE THAT MATTERS \u2014 it is how "
                 + "much of the tint sits over the backdrop, and the easiest thing here to overdo.");
         form.prop(ConfigDescriptor.color("tint", "Tint"), Property.derived(glass::getTintArgb, argb -> {
             glass.setTintArgb(argb);

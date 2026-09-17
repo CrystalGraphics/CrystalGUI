@@ -75,7 +75,7 @@ public final class DrawableKinds {
         // THE BUILT-INS, in the order they were tried before — order is only visible where two kinds
         // could match one text, which none of these can, but keeping it makes this list and the one it
         // replaced diffable.
-        register(new Kind("colour", "Colour",
+        register(new Kind("color", "Color",
                 css -> css.startsWith("#") || css.startsWith("rgb(") || css.startsWith("rgba("),
                 DrawableKinds::parseColour));
         register(Kind.function("image", "Image", "image", TextureValue::parseImage));

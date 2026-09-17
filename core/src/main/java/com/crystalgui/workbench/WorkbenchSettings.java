@@ -143,7 +143,7 @@ public final class WorkbenchSettings {
         // Code user should be able to have it back in one click; that IS the second axis working.
         return Setting.select("appearance.editorScheme", "Editor color scheme",
                         displayNames(ThemeRegistry.schemes()), "Islands Dark")
-                .description("Colours inside the editor: syntax, selection, gutter, guides. "
+                .description("Colors inside the editor: syntax, selection, gutter, guides. "
                         + "Independent of the UI theme.");
     }
 
