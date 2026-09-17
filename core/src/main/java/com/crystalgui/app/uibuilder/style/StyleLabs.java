@@ -65,7 +65,7 @@ public final class StyleLabs {
         }
 
         DeclarationEditors.register(StylePropertyRegistry.TEXT_SHADOW, context -> chip(context,
-                anchor -> ShadowLab.open(anchor, context.property(), context.css())));
+                anchor -> ShadowLab.open(anchor, context.property(), context.css(), context.node())));
 
         DeclarationEditors.register(StylePropertyRegistry.TRANSFORM, context -> chip(context,
                 anchor -> TransformLab.open(anchor, context.property(), context.css())));

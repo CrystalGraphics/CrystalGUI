@@ -1,5 +1,17 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.core.command.CommandRegistry;
+
+import com.crystalgui.core.command.CommandContext;
+
+import static org.junit.Assert.assertSame;
+
+import com.crystalgui.ui.data.UiDataKeys;
+
+import com.crystalgui.core.data.DataContext;
+
+import com.crystalgui.core.undo.UndoStack;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -56,7 +68,7 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
     /** The button has a box where it is drawn, and a press there is a press on it. */
     @Test
     public void aPressOnAKeywordReachesIt() {
-        Button keyword = keyword("Remove stop");
+        Button keyword = keyword("Remove");
         assertNotNull("the lab built its keyword buttons", keyword);
 
         Box box = keyword.box();
@@ -101,7 +113,7 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         TypographyLab.open(node, fields, node);
         for (int i = 0; i < 6; i++) frame();
 
-        Dialog lab = labTitled("Type");
+        Dialog lab = labTitled("Typography");
         assertNotNull("the lab is up", lab);
         assertTrue(lab.isOpen());
 
@@ -161,17 +173,27 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
 
         CanvasView stage = first(lab, CanvasView.class);
         assertNotNull("the preview is a canvas", stage);
-        assertTrue("which opens on the dark plate", stage.hasClass(StyleLab.DARK_CLASS));
+        assertTrue("which opens on the dark plate, having no text color to contrast with",
+                stage.hasClass(StyleLab.DARK_CLASS));
 
         UIElement light = null;
         for (UIElement each : lab.composedSubtree()) {
             if (each.hasClass(StyleLab.PICK_CLASS) && each.hasClass(StyleLab.LIGHT_CLASS)) light = each;
         }
-        assertNotNull("with a pick per plate", light);
+        assertNotNull(light);
         clickCentre(light.box());
         for (int i = 0; i < 4; i++) frame();
-        assertTrue("the pick changed the ground", stage.hasClass(StyleLab.LIGHT_CLASS));
-        assertFalse("and took the other one off", stage.hasClass(StyleLab.DARK_CLASS));
+        assertTrue("a pick is kept", stage.hasClass(StyleLab.LIGHT_CLASS));
+
+        UIElement dark = null;
+        for (UIElement each : lab.composedSubtree()) {
+            if (each.hasClass(StyleLab.PICK_CLASS) && each.hasClass(StyleLab.DARK_CLASS)) dark = each;
+        }
+        assertNotNull("with a pick per plate", dark);
+        clickCentre(dark.box());
+        for (int i = 0; i < 4; i++) frame();
+        assertTrue("the pick changed the ground", stage.hasClass(StyleLab.DARK_CLASS));
+        assertFalse("and took the other one off", stage.hasClass(StyleLab.LIGHT_CLASS));
 
         stage.setZoom(4f).setPan(30f, 40f);
         frame();
@@ -181,8 +203,18 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         release(at[0], at[1], CgMouseCodes.RIGHT_BUTTON);
         for (int i = 0; i < 4; i++) frame();
         assertEquals("right-click is home", 1f, stage.getZoom(), 1e-6);
-        assertEquals(0f, stage.getPanX(), 1e-6);
-        assertEquals(0f, stage.getPanY(), 1e-6);
+        UIElement specimen = null;
+        for (UIElement each : lab.composedSubtree()) {
+            if (each.hasClass(StyleLab.SPECIMEN_CLASS)) specimen = each;
+        }
+        assertNotNull(specimen);
+        float[] middle = worldCentre(stage.box());
+        float[] shown = worldCentre(specimen.box());
+        assertEquals("with the specimen in the middle", middle[0], shown[0], 1.5f);
+        assertEquals(middle[1], shown[1], 1.5f);
+
+        // THE PICK IS EVERY LAB'S, so forget it: a later lab in this process would open on it.
+        StyleLab.forgetGroundPick();
     }
 
     /**
@@ -318,5 +350,69 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
             if (each instanceof Button button && text.equals(button.getText())) return button;
         }
         return null;
+    }
+
+    /** The stack repaints for its own edit: a removed row goes, where it used to stay until something else moved. */
+    @Test
+    public void removingTheSelectedLayerTakesItsRowAway() {
+        Property<String> shadows = Property.of("#000000FF 0px 1px 2px, #FFFFFFFF 0px 2px 4px");
+        ShadowLab.open(anchor, StylePropertyRegistry.TEXT_SHADOW, shadows);
+        for (int i = 0; i < 6; i++) frame();
+        Dialog lab = labTitled("Shadow");
+        Button remove = null;
+        for (UIElement each : lab.composedSubtree()) {
+            if (each instanceof Button button && "×".equals(button.getText()) && button.box() != null) {
+                remove = button;
+                break;
+            }
+        }
+        assertNotNull(remove);
+        clickCentre(remove.box());
+        for (int i = 0; i < 6; i++) frame();
+
+        int rows = 0;
+        for (UIElement each : lab.composedSubtree()) {
+            if (each.hasClass(LayerStack.ROW_CLASS) && each.box() != null) rows++;
+        }
+        assertEquals("#FFFFFFFF 0px 2px 4px", shadows.get());
+        assertEquals("and the row went with it", 1, rows);
+    }
+
+    /** Ctrl+Z after a stack button or a gizmo: the press leaves the lab focused, and the lab answers the history. */
+    @Test
+    public void aPressInTheLabPutsItsHistoryInReach() {
+        UndoStack history = new UndoStack();
+        Property<String> shadows = Property.of("#000000FF 0px 1px 2px").editedIn(history);
+        ShadowLab.open(anchor, StylePropertyRegistry.TEXT_SHADOW, shadows);
+        for (int i = 0; i < 6; i++) frame();
+        Button add = keyword("+ Add");
+        assertNotNull(add);
+
+        clickCentre(add.box());
+        frame();
+
+        assertSame(history, DataContext.from(document.focus().focused()).get(UiDataKeys.UNDO_STACK));
+    }
+
+    /** A row's menu acts on that row: its commands resolve the stack and the layer from the row itself. */
+    @Test
+    public void aRowsMenuCommandsActOnThatRow() {
+        Property<String> shadows = Property.of("#000000FF 0px 1px 2px, #FFFFFFFF 0px 2px 4px, #FF0000FF 0px 3px 6px");
+        ShadowLab.open(anchor, StylePropertyRegistry.TEXT_SHADOW, shadows);
+        for (int i = 0; i < 6; i++) frame();
+        List<UIElement> rows = new ArrayList<>();
+        for (UIElement each : labTitled("Shadow").composedSubtree()) {
+            if (each.hasClass(LayerStack.ROW_CLASS)) rows.add(each);
+        }
+        CommandRegistry commands = CommandRegistry.global();
+
+        assertFalse("the top row cannot go higher", commands.get(LayerStack.MOVE_TO_TOP).isEnabled(CommandContext.of(rows.get(0))));
+        assertTrue(commands.run(LayerStack.MOVE_TO_TOP, CommandContext.of(rows.get(2))));
+        frame();
+        assertEquals("#FF0000FF 0px 3px 6px", CssValues.layers(shadows.get()).get(0));
+
+        assertTrue(commands.run(LayerStack.DUPLICATE, CommandContext.of(rows.get(1))));
+        frame();
+        assertEquals(4, CssValues.layers(shadows.get()).size());
     }
 }

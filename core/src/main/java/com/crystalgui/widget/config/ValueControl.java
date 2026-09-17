@@ -180,6 +180,23 @@ public abstract class ValueControl<T> extends ConfigControl {
         emitChanged(kept);
     }
 
+    /**
+     * {@link #commit}s and shows what the property kept — for a control whose widgets do not already show the edit.
+     *
+     * <pre>{@code
+     * pad.onDrag(at -> commitAndShow(at));      // the dot moves as it is dragged
+     * field.onTyped(text -> commit(parse(text))); // the field already shows what was typed
+     * }</pre>
+     *
+     * <p>A control never repaints for its own commit, which is right for a text field and wrong for a gizmo or a
+     * list: a dragged dot, a removed row or a needle aimed by a typed number shows nothing until something else
+     * changes the value.</p>
+     */
+    protected final void commitAndShow(@Nullable T next) {
+        commit(next);
+        show(source.get());
+    }
+
     /** Writes {@code value} into the underlying widgets. Never emits — {@link #commit} is the way out. */
     protected abstract void writeToWidgets(@Nullable T value);
 

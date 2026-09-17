@@ -5,14 +5,21 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Supplier;
+
+import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.config.ConfiguratorPanel;
@@ -77,10 +84,15 @@ public final class StyleLab {
     private static final float LAB_GAP = 8f;
 
     /**
-     * The plate every lab's specimen stands on, {@link #DARK_CLASS} or {@link #LIGHT_CLASS}. One for the process: a
-     * person judging values against white judges the next lab against white too, and an open lab follows a switch.
+     * The plate a person picked for every lab, {@link #DARK_CLASS} or {@link #LIGHT_CLASS}, or "" before anyone has —
+     * which means each lab contrasts with its text. One for the process: a person judging values against white
+     * judges the next lab against white too, and an open lab follows a switch.
      */
-    private static final Property<String> GROUND = Property.of(DARK_CLASS);
+    private static final Property<String> GROUND = Property.of("");
+
+    /** The text color a lab left to itself contrasts its plate with, or null for the dark plate. @see #contrastWith */
+    @Nullable
+    private Supplier<Integer> contrast;
 
     /** The lab each window has open, so opening one closes the last. @see #open() */
     private static final Map<UIDocument, StyleLab> OPEN = new WeakHashMap<>();
@@ -91,7 +103,7 @@ public final class StyleLab {
      * A DIALOG, not a popover: a popover light-dismisses, and a lab is tuned while looking at the element it
      * changes. It stays until closed and brings a title bar to drag it by.
      */
-    private final Dialog dialog;
+    private final LabDialog dialog;
 
     private final CanvasView stage = new CanvasView();
     private final UIElement specimen = new UIElement();
@@ -104,7 +116,7 @@ public final class StyleLab {
 
     private StyleLab(UIElement anchor, String title) {
         this.anchor = anchor;
-        dialog = new Dialog(title);
+        dialog = new LabDialog(title);
         dialog.addClass(LAB_CLASS);
         // GONE WITH IT, so a lab left open cannot outlive the element it edits.
         dialog.removeWhenClosed();
@@ -120,9 +132,72 @@ public final class StyleLab {
         specimen();
     }
 
+    /**
+     * The lab's window, and where Ctrl+Z inside it finds its history: the declaration's. A press on a gizmo, a
+     * stack button or the plate focuses nothing else, so without this the walk started at no element and every
+     * edit made there was out of Ctrl+Z's reach.
+     */
+    private static final class LabDialog extends Dialog implements DataProvider {
+
+        @Nullable
+        private Property<String> edits;
+
+        LabDialog(String title) {
+            super(title);
+            // ACTIVATED BY A PRESS ANYWHERE IN IT, as a window is: a press on a control that takes focus still gives
+            // it focus, and one on anything else leaves the lab holding it rather than nothing.
+            setFocusPolicy(FocusPolicy.CLICK);
+        }
+
+        @Override
+        @Nullable
+        public Object getData(DataKey<?> key) {
+            return key == UiDataKeys.UNDO_STACK && edits != null ? edits.history() : null;
+        }
+    }
+
     /** A lab anchored to the row's chip, titled {@code title}. */
     public static StyleLab over(UIElement anchor, String title) {
         return new StyleLab(anchor, title);
+    }
+
+    /**
+     * The color the specimen's text is drawn in, so a plate nobody picked is the one it reads against: dark for
+     * light text, light for dark. A pick overrides it for every lab.
+     *
+     * <pre>{@code
+     * lab.contrastWith(() -> node.getStyle().computed().get(StylePropertyRegistry.COLOR));
+     * }</pre>
+     *
+     * <p>Asked every frame the lab is open, so recoloring the text flips a plate left to itself.</p>
+     */
+    public StyleLab contrastWith(Supplier<Integer> textColor) {
+        contrast = textColor;
+        return this;
+    }
+
+    /** Forgets a pick, so every lab contrasts with its text again. For a test that picked one. */
+    static void forgetGroundPick() {
+        GROUND.set("");
+    }
+
+    /** The plate shown: the pick, else the one that contrasts with the text, else dark. */
+    private String groundShown() {
+        String picked = GROUND.get();
+        if (!picked.isEmpty()) return picked;
+        Integer argb = contrast == null ? null : contrast.get();
+        if (argb == null) return DARK_CLASS;
+        // RELATIVE LUMINANCE, WCAG's: light text reads on the dark plate, dark text on the light one.
+        return luminance(argb) > 0.5 ? DARK_CLASS : LIGHT_CLASS;
+    }
+
+    private static double luminance(int argb) {
+        return 0.2126 * linear((argb >> 16) & 0xFF) + 0.7152 * linear((argb >> 8) & 0xFF) + 0.0722 * linear(argb & 0xFF);
+    }
+
+    private static double linear(int channel) {
+        double c = channel / 255d;
+        return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
     }
 
     /**
@@ -162,6 +237,7 @@ public final class StyleLab {
 
     /** Shows {@code css} as {@code property} on the specimen. @see LiveEdits#follow */
     public StyleLab preview(StyleProperty<?> property, Property<String> css) {
+        dialog.edits = css;
         LiveEdits.follow(specimen, property, css);
         return this;
     }
@@ -184,11 +260,22 @@ public final class StyleLab {
         return this;
     }
 
-    /** Prints {@code css} as the declaration the sheet holds, followed while the lab is open. */
+    /**
+     * Prints {@code css} as the declaration reads, followed while the lab is open: one layer to a line, so a long
+     * stack breaks between its layers rather than inside a length.
+     */
     public StyleLab readout(String name, Property<String> css) {
-        PropertyWatch.follow(readout, css,
-                value -> readout.setText(name + ": " + (value == null || value.isBlank() ? "—" : value)));
+        dialog.edits = css;
+        PropertyWatch.follow(readout, css, value -> readout.setText(name + ": " + readable(value)));
         return this;
+    }
+
+    private static String readable(@Nullable String value) {
+        if (value == null || value.isBlank()) return "—";
+        List<String> layers = CssValues.layers(value);
+        List<String> shown = new ArrayList<>(layers.size());
+        for (String layer : layers) shown.add(CssValues.readable(layer));
+        return shown.isEmpty() ? CssValues.readable(value) : String.join(",\n    ", shown);
     }
 
     private void buildStage() {
@@ -204,8 +291,7 @@ public final class StyleLab {
         grounds.append(pick(LIGHT_CLASS));
         grounds.append(pick(DARK_CLASS));
         stage.addOverlay(grounds);
-        ground(GROUND.get());
-        PropertyWatch.follow(stage, GROUND, this::ground);
+        PropertyWatch.follow(stage, Property.derived(this::groundShown), this::ground);
 
         zoomLabel.addClass(ZOOM_CLASS);
         stage.addOverlay(zoomLabel);

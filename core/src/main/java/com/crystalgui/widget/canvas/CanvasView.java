@@ -377,8 +377,11 @@ public class CanvasView extends UIElement {
     /** Puts a world point at the centre of the viewport, at the current zoom. */
     public CanvasView centerOnWorld(float worldX, float worldY) {
         Box cache = box();
-        float targetX = cache.x() + cache.width() * 0.5f;
-        float targetY = cache.y() + cache.height() * 0.5f;
+        // THE VIEW'S OWN MIDDLE, in the view's own space -- the space the content origin and the pan are in. Adding
+        // box.x() mixed in the view's offset within its PARENT, so a canvas inset by its container's padding
+        // centred that far off.
+        float targetX = cache.width() * 0.5f;
+        float targetY = cache.height() * 0.5f;
         return setView(targetX - contentOriginX() - zoom * worldX,
                 targetY - contentOriginY() - zoom * worldY, zoom);
     }

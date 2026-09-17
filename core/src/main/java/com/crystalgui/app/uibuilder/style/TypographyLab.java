@@ -57,9 +57,11 @@ public final class TypographyLab {
     }
 
     public static void open(UIElement anchor, StyleFields fields, @Nullable UIElement node) {
-        StyleLab lab = StyleLab.over(anchor, "Type");
+        StyleLab lab = StyleLab.over(anchor, "Typography");
         Property<String> text = Property.of("Handgloves");
         UIText line = new UIText("");
+        // THE PLATE READS AGAINST THE TEXT: the color the specimen is actually drawn in.
+        lab.contrastWith(() -> line.getStyle().computed().get(StylePropertyRegistry.COLOR));
         PropertyWatch.follow(line, text, line::setText);
         lab.specimen(line);
 

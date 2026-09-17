@@ -7,6 +7,7 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.Configurator;
 import com.crystalgui.widget.control.Button;
 
 /**
@@ -16,14 +17,17 @@ import com.crystalgui.widget.control.Button;
  * GradientLab.open(chip, StylePropertyRegistry.BACKGROUND, css);
  * }</pre>
  *
- * <p>A gradient is edited on the thing it makes: the bar is the value, a stop is a handle on it, and the angle
- * is a dial pointing the way the ramp runs. A value that is not a linear gradient opens on
+ * <p>A gradient is edited on the thing it makes: the bar is the ramp laid left to right, a stop is a handle on it,
+ * and the angle is a dial pointing the way the ramp runs. A value that is not a linear gradient opens on
  * {@link Gradient#DEFAULT} and is only replaced once something is changed.</p>
  */
 public final class GradientLab {
 
     /** The directions a dropdown offers; the dial writes an angle, which is what "custom" means here. */
     private static final List<String> SIDES = List.of("custom", "top", "right", "bottom", "left");
+
+    /** The button that takes the selected stop off, at the end of its row. */
+    static final String REMOVE = "Remove";
 
     private GradientLab() {
     }
@@ -40,31 +44,35 @@ public final class GradientLab {
                 next -> gradient.get().withStop(clamp(selected.get(), gradient.get().stops().size()), next));
 
         lab.content().append(new GradientBar("lab.ramp", property, selected).bind(gradient));
-        lab.content().append(new AngleDial("lab.angle").bind(gradient.map(
-                ramp -> (double) ramp.angle(),
-                degrees -> gradient.get().withDirection(CssValues.write(degrees) + "deg"))));
 
         lab.form().prop(ConfigDescriptor.select("lab.side", "Direction", SIDES), gradient.map(GradientLab::side,
                 chosen -> SIDES.get(0).equals(chosen) ? gradient.get() : gradient.get().withDirection("to " + chosen)));
+        lab.form().control("lab.angle", "Angle", new AngleDial("lab.angle").bind(gradient.map(
+                ramp -> (double) ramp.angle(),
+                degrees -> gradient.get().withDirection(CssValues.write(degrees) + "deg"))));
+
+        lab.form().separator();
         lab.form().prop(ConfigDescriptor.color("lab.stop", "Stop color"),
                 stop.map(Gradient.Stop::argb, argb -> stop.get().withArgb(argb)));
-        lab.form().prop(ConfigDescriptor.number("lab.at", "Stop at").range(0f, 100f).unit("%"),
+        Configurator at = lab.form().prop(ConfigDescriptor.number("lab.at", "Stop at").range(0f, 100f).unit("%")
+                        .decimals(1),
                 gradient.map(ramp -> (double) (ramp.position(clamp(selected.get(), ramp.stops().size())) * 100f),
-                        at -> gradient.get().withStop(clamp(selected.get(), gradient.get().stops().size()),
-                                stop.get().withPosition((float) (at / 100d)))));
+                        percent -> gradient.get().withStop(clamp(selected.get(), gradient.get().stops().size()),
+                                stop.get().withPosition((float) (Math.round(percent * 10d) / 1000d)))));
 
-        Button remove = new Button("Remove stop");
+        // ON THE STOP'S OWN ROW, not a bar across the lab: it acts on the stop the row above is editing.
+        Button remove = new Button(REMOVE);
         remove.addClass(StyleLab.KEYWORD_CLASS);
         remove.attachListener(() -> {
-            int at = clamp(selected.get(), gradient.get().stops().size());
-            gradient.set(gradient.get().withoutStop(at));
-            selected.set(Math.max(0, at - 1));
+            int index = clamp(selected.get(), gradient.get().stops().size());
+            gradient.set(gradient.get().withoutStop(index));
+            selected.set(Math.max(0, index - 1));
         });
-        lab.content().append(remove);
+        at.append(remove);
 
-        lab.caption(gradient.map(ramp -> ramp.stops().size() + " stops, " + ramp.direction()
-                + " — selected stop at " + Math.round(ramp.position(clamp(selected.get(), ramp.stops().size())) * 100)
-                + "%"));
+        // WHAT THE READOUT CANNOT SAY: how the bar is worked.
+        lab.caption(gradient.map(ramp -> ramp.stops().size() + " stops — double-click the bar to add one, "
+                + "drag one off it to remove it"));
         lab.readout(property.name, css);
         lab.open();
     }

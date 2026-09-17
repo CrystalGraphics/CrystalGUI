@@ -77,7 +77,8 @@ public record Gradient(String direction, List<Stop> stops) {
         for (Stop stop : stops) {
             out.append(", ").append(CssValues.color(stop.argb()));
             if (!Float.isNaN(stop.position())) {
-                out.append(' ').append(CssValues.write(stop.position() * 100)).append('%');
+                // A TENTH OF A PERCENT: a drag lands on 17.596, and nobody authors three places of one.
+                out.append(' ').append(CssValues.write(Math.round(stop.position() * 1000d) / 10d)).append('%');
             }
         }
         return out.append(')').toString();
