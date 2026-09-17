@@ -121,8 +121,8 @@ public class DrawablePartsTest extends UiDocumentTestBase {
         AttributeSet copied = new StyleAttributes(source).copyAttributes();
 
         assertTrue("copyable at all, which it was not before: " + idsOf(copied),
-                idsOf(copied).contains("background/colour"));
+                idsOf(copied).contains("background/color"));
         assertTrue("and filed as the colour it is: " + copied.groups(),
-                copied.groups().contains("Colour"));
+                copied.groups().contains("Color"));
     }
 }
