@@ -1290,7 +1290,7 @@ smartguides {
     color: var(--fg-secondary, #9DA0A8);
 }
 .__lab-keyword__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
-.__lab-row__.__glass-presets__ { gap: 3px; margin-bottom: 1px; }
+.__lab-row__.__lab-presets__ { gap: 3px; margin-bottom: 1px; }
 /* BETWEEN the stage and the first header, measured: 4px above (this gap and the panel's 1px inset), 3px below
  * (the row's margin and the group's own inset -- the panel's scrolled rows take no gap). The gap is taken back and returned
  * above the readout. Not a negative margin: on the row it lifted it past the panel's clip, and on the stage it
@@ -1422,26 +1422,60 @@ smartguides {
 .__offset-axis__.__vertical__ { top: 0px; left: 18px; width: 1px; height: 100%; }
 .__offset-dot__ { width: 9px; height: 9px; border-radius: 999px; background: var(--accent, #3574F0); }
 
-/* The corner box: four pucks on the shape they round. */
+/* THE CORNER BOX, centred: the shape it rounds, a handle inside each corner as far in as the corner is round, and
+ * the chain between them in the middle. A border rather than an outline, which drew as a thick ring on a round box. */
+.__corner-stage__ {
+    flex-direction: row;
+    justify-content: center;
+    width: 100%;
+    padding-top: 6px;
+    padding-bottom: 8px;
+    flex-shrink: 0;
+}
 .__corner-box__ {
-    width: 96px;
-    height: 72px;
+    width: 168px;
+    height: 100px;
+    flex-shrink: 0;
     position: relative;
+    align-items: center;
+    justify-content: center;
     background: var(--configkit-band-bg, #3A3D42);
-    outline: 1px var(--configkit-field-border, #4A4D52);
+    border-width: 1px;
+    border-color: var(--configkit-field-border, #4A4D52);
 }
 .__corner-puck__ {
     position: absolute;
-    width: 11px;
-    height: 11px;
+    width: 10px;
+    height: 10px;
+    margin-left: -5px;
+    margin-top: -5px;
+    margin-right: -5px;
+    margin-bottom: -5px;
     border-radius: 999px;
-    background: var(--accent, #3574F0);
+    /* HOLLOW, so the curve it sits on shows through. A border, not an outline: an outline on a round box drew thick. */
+    background: none;
+    border-width: 1.5px;
+    border-color: var(--accent, #3574F0);
     cursor: pointer;
 }
-.__corner-puck__.__top-left__ { left: -5px; top: -5px; }
-.__corner-puck__.__top-right__ { right: -5px; top: -5px; }
-.__corner-puck__.__bottom-right__ { right: -5px; bottom: -5px; }
-.__corner-puck__.__bottom-left__ { left: -5px; bottom: -5px; }
+.__corner-puck__:hover { border-color: var(--accent-hover, #4A82F2); }
+/* Photoshop's chain, as the transform bar's: dim while each corner goes alone, the accent while they go together. */
+.__corner-link__ {
+    width: 20px;
+    height: 20px;
+    min-width: 0px;
+    min-height: 0px;
+    padding: 3px;
+    border-radius: 4px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:general/action/link-2");
+    overlay-origin: content-box;
+    overlay-size: contain;
+    color: var(--tree-dimmed-fg, #9DA0A8);
+}
+.__corner-link__:hover { background-color: var(--panel-header-icon-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
+.__corner-link__.__active__ { color: var(--accent, #3574F0); }
 
 /* THE STACK: one inset box, as a list in a property panel is, holding a header and its rows. Order is the value,
  * so a row moves rather than sorts. */

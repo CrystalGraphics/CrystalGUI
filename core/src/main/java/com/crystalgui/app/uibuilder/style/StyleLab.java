@@ -89,6 +89,8 @@ public final class StyleLab {
     public static final String KEYWORD_CLASS = "__lab-keyword__";
     /** A horizontal run of gizmos or buttons. */
     public static final String ROW_CLASS = "__lab-row__";
+    /** A row of preset pills, tighter than a row of gizmos. */
+    public static final String PRESETS_CLASS = "__lab-presets__";
 
     /** Between the row and the lab, so the value being edited is still readable beside it. */
     private static final float LAB_GAP = 8f;
@@ -302,6 +304,15 @@ public final class StyleLab {
             at[1] = from[1] + dy;
             stage.moveNode(specimen, at[0], at[1]);
         }, () -> { });
+        return this;
+    }
+
+    /**
+     * Leaves the stage out, for a lab whose own gizmo already draws the value -- a corner box is the shape it rounds,
+     * and a second copy of it on a plate only took the height the rows needed.
+     */
+    public StyleLab withoutStage() {
+        dialog.getContent().remove(stage);
         return this;
     }
 

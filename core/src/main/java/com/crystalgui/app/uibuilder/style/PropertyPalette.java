@@ -85,7 +85,7 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
     private static final List<String> COMMON = List.of(
             "display", "flex-direction", "align-items", "justify-content", "gap", "width", "height",
             "padding-top", "margin-top", "color", "font-size", "font-weight", "background-color", "opacity",
-            "border-top-left-radius-x", "border-color", "outline", "transform", "transition");
+            "border-radius", "border-color", "outline", "transform", "transition");
 
     /** A folder, or one declaration by the name a sheet writes. */
     public record Row(String label, @Nullable String name, List<Row> children) {
@@ -222,12 +222,19 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
 
     /** The name a sheet writes {@code property} under: its own, or the shorthand it may only be written through. */
     static String written(StyleProperty<?> property) {
+        // THE CORNERS AS THE SHORTHAND, as the Styles tab shows them: a sheet may write either, and eight entries for
+        // one shape buried the one a person means.
+        if (StyleFields.RADIUS_LONGHANDS.contains(property.name)) return StyleFields.BORDER_RADIUS;
         return property.getAuthoredThrough() == null ? property.name : property.getAuthoredThrough();
     }
 
     /** The longhands a shorthand sets, in registry order; empty for a name the registry holds itself. */
     static List<StyleProperty<?>> longhandsOf(String shorthand) {
         List<StyleProperty<?>> out = new ArrayList<>();
+        if (StyleFields.BORDER_RADIUS.equals(shorthand)) {
+            for (String longhand : StyleFields.RADIUS_LONGHANDS) out.add(StyleFields.propertyOf(longhand));
+            return out;
+        }
         for (StyleProperty<?> property : StylePropertyRegistry.all()) {
             if (shorthand.equals(property.getAuthoredThrough())) out.add(property);
         }

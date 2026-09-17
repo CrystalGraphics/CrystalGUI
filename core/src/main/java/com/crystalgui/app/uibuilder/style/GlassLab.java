@@ -41,9 +41,6 @@ public final class GlassLab {
     /** How much of a length a 28x16 swatch keeps: a 24px blur or a 16px bezel is larger than the swatch itself. */
     private static final float SAMPLE_SCALE = 0.25f;
 
-    /** The row of presets, tighter than a row of gizmos. */
-    public static final String PRESETS_CLASS = "__glass-presets__";
-
     /** What an empty or {@code none} value opens on. */
     private static final String DEFAULT = "blur(12px) saturate(1.2)";
 
@@ -122,7 +119,7 @@ public final class GlassLab {
 
         UIElement presets = new UIElement();
         presets.addClass(StyleLab.ROW_CLASS);
-        presets.addClass(PRESETS_CLASS);
+        presets.addClass(StyleLab.PRESETS_CLASS);
         for (Preset preset : PRESETS) {
             Button button = new Button(preset.label());
             button.addClass(StyleLab.KEYWORD_CLASS);
