@@ -54,7 +54,7 @@ public final class TransformLab {
     /** How near a ninth of the box a dragged pivot lands on it: the corners and the middle are what anyone wants. */
     private static final double SNAP = 0.04d;
 
-    /** How far outside the box a pivot may be DRAGGED. Typed, it goes as far as {@link #ORIGIN_MAX}. */
+    /** How far outside the box the mark on the specimen may be dragged. */
     private static final double DRAG_REACH = 0.5d;
 
     private static final String TRANSLATE = "translate";
@@ -75,9 +75,6 @@ public final class TransformLab {
 
     private static final String ORIGIN_X = "transform-origin-x";
     private static final String ORIGIN_Y = "transform-origin-y";
-
-    /** How far an origin may be typed: outside the box is legal CSS and occasionally what somebody means. */
-    private static final float ORIGIN_MAX = 999f;
 
     /** What a sample holds a translate and a scale to, so a 28x16 patch shows the mark and not a corner of it. */
     private static final double SAMPLE_SHIFT = 4d;
@@ -237,7 +234,6 @@ public final class TransformLab {
      * pivot meaning the same thing as the element resizes.</p>
      */
     private static void pivot(StyleLab lab, StyleFields fields, @Nullable UIElement node) {
-        PanelForm form = lab.form().group("Pivot", false);
         Property<String> x = fields.value(ORIGIN_X);
         Property<String> y = fields.value(ORIGIN_Y);
         // ON THE SPECIMEN TOO, or the mark moves a point nothing on the stage turns about.
@@ -252,8 +248,9 @@ public final class TransformLab {
                 }).editedIn(fields.history());
 
         lab.onSpecimen(pin(at, fields));
-        form.prop(pivotField("lab.origin.x", "X"), axis(at, 0));
-        form.prop(pivotField("lab.origin.y", "Y"), axis(at, 1));
+        // ONE ROW, under a rule: the nine places, the pad, and the two percentages. @see OffsetPad.Space#BOX
+        lab.form().separator();
+        lab.form().control("lab.pivot", "Pivot", new OffsetPad("lab.pivot", OffsetPad.Space.BOX).bind(at));
     }
 
     /**
@@ -304,20 +301,6 @@ public final class TransformLab {
             if (Math.abs(held - ninth) < SNAP) return ninth;
         }
         return Math.round(held * 1000d) / 1000d;
-    }
-
-    private static ConfigDescriptor pivotField(String id, String label) {
-        return ConfigDescriptor.number(id, label).range(-ORIGIN_MAX, ORIGIN_MAX).softRange(0f, 100f)
-                .unit("%").decimals(1);
-    }
-
-    /** One axis of the origin, as the percentage the field shows. */
-    private static Property<Double> axis(Property<double[]> origin, int axis) {
-        return origin.map(at -> at[axis] * 100d, value -> {
-            double[] next = origin.get().clone();
-            next[axis] = (value == null ? 0d : value) / 100d;
-            return next;
-        });
     }
 
     /**
