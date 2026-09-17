@@ -303,10 +303,8 @@
 .__config-control__.__boolean__ checkbox:hover::part(mark) { background: var(--configkit-check-hover-bg, #3A3A3A); }
 
 /* ── Colour ─────────────────────────────────────────────────────────────────────────────────────
- * A colour bar with its alpha as a strip beneath — deliberately its own summary rendering, not
- * ColorSelector's checkerboard-composite swatch. A row you read at a glance wants a real proportional
- * alpha bar; the picker it opens is a session you look closely at, and gets the checkerboard there
- * instead. The swatch itself, not `.__config-control__`, carries the height: ColorControl wraps nothing
+ * The colour over a checkerboard, so a translucent one looks it, with its alpha as a proportional strip
+ * beneath -- the strip is the faster read at a glance, the checkerboard the truer one. The swatch itself, not `.__config-control__`, carries the height: ColorControl wraps nothing
  * else, so the control's own box auto-sizes to it, the same way every other composite here sizes to its
  * parts rather than being told a number directly. */
 .__config-control__.__color__ .__swatch__ {
@@ -335,6 +333,8 @@
     height: 3px;
     background: var(--configkit-alpha-fill, #FFFFFF);
 }
+/* The hex beside the swatch is a compact row's, and a panel that wants one shows it. */
+.__config-control__.__color__ .__color-hex__ { display: none; }
 
 /* ── Mask ───────────────────────────────────────────────────────────────────────────────────────
  * The closed-state button is a real `button`, so it already lands on the kit height via the tag
@@ -344,6 +344,28 @@
     width: 100%;
     justify-content: space-between;
 }
+/* THE SELECT'S ARROW: without it a mask read as a text field, and it opens a list just as a select does. */
+.__config-control__.__mask__ .__toggle__::part(post-icon) {
+    width: 8px;
+    height: 8px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    overlay: shape("chevron-down");
+}
+/* A FIELD THAT SUGGESTS carries the same arrow, over its right edge, and a press on it opens the list. */
+.__config-control__.__suggests__ { position: relative; }
+.__config-control__.__suggests__ .__suggest-arrow__ {
+    position: absolute;
+    right: 8px;
+    top: 0px;
+    width: 8px;
+    height: 100%;
+    overlay: shape("chevron-down");
+    overlay-size: contain;
+    cursor: pointer;
+}
+/* Text stops short of the arrow rather than running under it. */
+.__config-control__.__suggests__ textfield { padding-right: 20px; }
 .__config-control__.__mask__ .__mask-panel__ .__mask-row__ {
     width: 100%;
     padding: 2px;
@@ -447,6 +469,18 @@
 }
 .__chip-suggestions__ .__chip-suggestion__:hover,
 .__chip-suggestions__ .__chip-suggestion__.__active__ { background: var(--accent-soft, #2E436E); }
+/* A TEXT FIELD'S LIST SCROLLS rather than growing off the screen: an installed-font list runs to hundreds. */
+.__chip-suggestions__ scrollerview { max-height: 240px; }
+.__chip-suggestions__ .__suggestion-separator__ {
+    height: 1px;
+    margin-top: 4px;
+    margin-bottom: 4px;
+    margin-left: 6px;
+    margin-right: 6px;
+    /* THE HINT COLOR, not the divider token: against the list's own raised surface a divider-grey line all but
+     * vanished. */
+    background: var(--fg-hint, #7A7A7A);
+}
 
 /* ── Matrix ─────────────────────────────────────────────────────────────────────────────────────
  * A grid: one row per `.__matrix-row__`, cells stretching evenly across it. Unlabelled by design —

@@ -92,6 +92,10 @@ public class MaskControl extends ValueControl<Set<String>> {
     public static final String ROW_CLASS = "__mask-row__";
 
     private final List<String> options;
+
+    /** What an empty selection reads as. @see ConfigDescriptor#emptyText */
+    @Nullable
+    private final String emptyText;
     private final Button toggle;
     private final Popover panel = new Popover();
     private final Map<String, Checkbox> boxes = new LinkedHashMap<>();
@@ -99,6 +103,7 @@ public class MaskControl extends ValueControl<Set<String>> {
     public MaskControl(ConfigDescriptor descriptor, @Nullable Set<String> defaultValue) {
         super(NAME, descriptor, defaultValue == null ? Set.of() : Set.copyOf(defaultValue));
         this.options = descriptor.options();
+        this.emptyText = descriptor.emptyText();
         addClass("__mask__");
         toggle = new Button("");
         toggle.addClass(TOGGLE_CLASS);
@@ -152,11 +157,15 @@ public class MaskControl extends ValueControl<Set<String>> {
     private void applySummary(Set<String> selected) {
         String summary;
         if (selected.isEmpty()) {
-            summary = "Nothing";
+            summary = emptyText != null ? emptyText : "Nothing";
         } else if (!options.isEmpty() && selected.size() == options.size()) {
             summary = "Everything";
         } else {
-            summary = String.join(", ", selected);
+            List<String> ordered = new ArrayList<>();
+            for (String option : options) {
+                if (selected.contains(option)) ordered.add(option);
+            }
+            summary = String.join(", ", ordered);
         }
         toggle.setText(summary);
     }

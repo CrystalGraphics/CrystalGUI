@@ -1,6 +1,7 @@
 package com.crystalgui.core.config;
 
 import javax.annotation.Nullable;
+import java.util.Collection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -137,6 +138,7 @@ public final class ConfigDescriptor {
     private boolean inlineList;
     private String emptyText;
     private String placeholder;
+    private Supplier<? extends List<? extends Collection<String>>> suggestions;
     private Predicate<String> validator;
     private ConfigDescriptor element;
     private final List<ConfigDescriptor> children = new ArrayList<>();
@@ -566,6 +568,42 @@ public final class ConfigDescriptor {
     public ConfigDescriptor description(@Nullable String value) {
         this.description = value;
         return this;
+    }
+
+    /**
+     * For {@link Kind#TEXT}: values offered under the field as it is typed in — HTML's {@code <datalist>}. Any text
+     * is still accepted; a suggestion is a shortcut, never a restriction.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.text("tag", "Tag").suggestions(() -> knownTags());
+     * }</pre>
+     *
+     * <p>Asked afresh as the list opens and on each keystroke, so it may change while the row lives.</p>
+     */
+    public ConfigDescriptor suggestions(@Nullable Supplier<? extends Collection<String>> source) {
+        this.suggestions = source == null ? null : () -> List.of(source.get());
+        return this;
+    }
+
+    /**
+     * As {@link #suggestions(Supplier)}, in groups the list draws a divider between — what is bundled, then what is
+     * installed.
+     *
+     * <pre>{@code
+     * ConfigDescriptor.text("font", "Font").suggestionGroups(() -> List.of(bundledFaces(), installedFamilies()));
+     * }</pre>
+     *
+     * <p>An empty group draws nothing, divider included.</p>
+     */
+    public ConfigDescriptor suggestionGroups(@Nullable Supplier<? extends List<? extends Collection<String>>> source) {
+        this.suggestions = source;
+        return this;
+    }
+
+    /** The suggestion groups, in order, or null for a field that suggests nothing. */
+    @Nullable
+    public Supplier<? extends List<? extends Collection<String>>> suggestions() {
+        return suggestions;
     }
 
     public ConfigDescriptor validator(Predicate<String> value) {
