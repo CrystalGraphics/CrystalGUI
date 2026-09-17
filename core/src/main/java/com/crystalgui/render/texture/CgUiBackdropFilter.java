@@ -177,7 +177,11 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         // thing NOT to bring back without a test that can see one level in isolation: the mapping was
         // rederived three times, each version was defensible on paper, and every one of them produced a
         // panel that darkened as the radius grew. A separable blur has one number and no mapping.
-        CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius);
+        // A LENS SAMPLES PAST ITS EDGE: at most about twice the bezel with the steepest slope and ior the grammar
+        // allows, plus chromatic's spread. What is out there has to have been captured to be bent in.
+        boolean refracts = ior > 1.001f && bezel > 0f;
+        float reach = refracts ? bezel * 2.2f * (1f + 0.2f * chromatic) : 0f;
+        CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius, reach);
         if (backdrop == null || backdrop.sharp() == null || backdrop.blurred() == null) {
             // The context's scratch, so a glass panel with nothing behind it does not allocate a rect
             // per frame to say so. @see #setFallbackColor
@@ -190,8 +194,8 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
 
         // Each of these compiles its layer out entirely rather than branching past it, which is what
         // makes plain frosted glass and the full liquid surface one material instead of three.
-        MATERIAL.toggleKeyword("WITH_REFRACTION", ior > 1.001f && bezel > 0f);
-        MATERIAL.toggleKeyword("WITH_CHROMATIC", ior > 1.001f && bezel > 0f && chromatic > 0f);
+        MATERIAL.toggleKeyword("WITH_REFRACTION", refracts);
+        MATERIAL.toggleKeyword("WITH_CHROMATIC", refracts && chromatic > 0f);
         MATERIAL.toggleKeyword("WITH_SPECULAR", specular > 0f);
         MATERIAL.toggleKeyword("WITH_NOISE", noise > 0f);
 
@@ -216,6 +220,8 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         b.vec2("_BoxSize", drawWidth, drawHeight);
         b.vec4("_BackdropRect", drawBackdrop.u0(), drawBackdrop.v0(),
                 drawBackdrop.u1(), drawBackdrop.v1());
+        b.vec4("_CaptureRect", drawBackdrop.cu0(), drawBackdrop.cv0(),
+                drawBackdrop.cu1(), drawBackdrop.cv1());
         b.colorARGB("_Tint", tintArgb);
         b.set1f("_Saturation", saturation);
         b.set1f("_Luminosity", luminosity);
