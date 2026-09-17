@@ -44,9 +44,16 @@ public final class BuilderStyleSections {
     public static final String ADD_CLASS = "__style-add__";
     public static final String ADD_ROW_CLASS = "__style-add-row__";
     public static final String LIST_CLASS = "__style-declarations__";
-    public static final String DISABLED_CLASS = "__inactive__";
     public static final String OVERRIDDEN_CLASS = "__overridden__";
     public static final String ROW_ACTION_CLASS = "__style-row-action__";
+    /** On a row's eye, beside {@link #ROW_ACTION_CLASS}: switches the declaration off and on. */
+    public static final String ROW_EYE_CLASS = "__style-row-eye__";
+    /** On an eye whose declaration is switched off. */
+    public static final String OFF_CLASS = "__off__";
+    /** On a row that starts with its eye, which takes the place of the name's left inset. */
+    public static final String EYED_ROW_CLASS = "__eyed__";
+    /** On a row whose declaration is switched off: greyed whole, its editor inert. */
+    public static final String HIDDEN_CLASS = "__hidden-declaration__";
     public static final String STYLE_ROW_CLASS = "__style-row__";
     /** A text button in the tab — a rule action — as opposed to a row's one-glyph {@link #ROW_ACTION_CLASS}. */
     public static final String TARGET_ACTION_CLASS = "__style-target-action__";

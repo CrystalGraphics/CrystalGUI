@@ -26,17 +26,22 @@ public final class TransformLab {
     }
 
     public static void open(UIElement anchor, StyleProperty<?> property, Property<String> css) {
+        open(anchor, property, css, false);
+    }
+
+    /** @param hideable whether an op may be switched off rather than deleted, which a writable value can */
+    public static void open(UIElement anchor, StyleProperty<?> property, Property<String> css, boolean hideable) {
         StyleLab lab = StyleLab.over(anchor, "Transform");
         lab.specimen().preview(property, css);
 
         Property<Integer> selected = Property.of(0);
-        Property<List<String>> ops = css.map(CssValues::functions, CssValues::joinFunctions);
+        Property<List<String>> ops = css.map(CssValues::functionStack, CssValues::joinFunctionStack);
         Property<String> op = Property.derived(
-                () -> at(ops.get(), selected.get()),
+                () -> CssValues.bodyOf(at(ops.get(), selected.get())),
                 next -> {
                     List<String> list = new ArrayList<>(ops.get());
                     int index = selected.get() == null ? 0 : selected.get();
-                    if (index >= 0 && index < list.size()) list.set(index, next);
+                    if (index >= 0 && index < list.size()) list.set(index, CssValues.withBody(list.get(index), next));
                     ops.set(list);
                 }).editedIn(css.history());
 
@@ -55,7 +60,7 @@ public final class TransformLab {
         row.append(numbers);
         lab.content().append(row);
 
-        LayerStack stack = new LayerStack("lab.ops", property, selected).titled("Transforms");
+        LayerStack stack = new LayerStack("lab.ops", property, selected).titled("Transforms").hideable(hideable);
         for (String added : List.of("translate(0px, 0px)", "rotate(0deg)", "scale(1, 1)", "skew(0deg, 0deg)")) {
             stack.adding("+ " + CssValues.functionName(added), () -> {
                 List<String> list = new ArrayList<>(ops.get());

@@ -28,6 +28,16 @@ public final class ElementStyle {
     public final GeneralGroup generalGroup;
 
     public final Map<StyleProperty<?>, List<StyleSlot<?>>> candidates = new HashMap<>();
+
+    /**
+     * An inline declaration as it was WRITTEN, for the ones its parsed value cannot say: switched off entirely
+     * ({@code /* #FFF *}{@code /}), or holding a switched-off layer. Kept with the inline value it was written
+     * for, so a later write by anything else retires it rather than being overwritten by it on save.
+     */
+    private @Nullable Map<StyleProperty<?>, InlineText> inlineTexts;
+
+    private record InlineText(String css, @Nullable Object value) {
+    }
     /** The DISPLAYED winner per property — what {@link #getComputed} returns. Includes an
      * ANIMATION-origin candidate when one is active (so paint shows the interpolated value). */
     private final Map<StyleProperty<?>, StyleSlot<?>> computedSlots = new HashMap<>();
@@ -167,6 +177,61 @@ public final class ElementStyle {
     @SuppressWarnings("unchecked")
     private static <T> StyleSlot<T> reorigin(StyleSlot<?> slot) {
         return StyleSlot.of((StyleProperty<T>) slot.property(), StyleOrigin.DEFAULT, slot.specificity(), slot.sourceOrder(), (T) slot.value());
+    }
+
+    /**
+     * Records {@code css} as how {@code property} is written inline, for the value the element holds inline now —
+     * or forgets it, for null.
+     *
+     * <pre>{@code
+     * style.replaceOrPutCandidate(SHADOW, inlineSlot(live));   // what the cascade uses: the layers still on
+     * style.setInlineText(SHADOW, "#000 0 1px 2px /* , #F00 0 0 4px *}{@code /");   // what the file keeps
+     * }</pre>
+     */
+    public void setInlineText(StyleProperty<?> property, @Nullable String css) {
+        if (css == null) {
+            if (inlineTexts != null) inlineTexts.remove(property);
+            return;
+        }
+        if (inlineTexts == null) inlineTexts = new HashMap<>();
+        inlineTexts.put(property, new InlineText(css, inlineValue(property)));
+    }
+
+    /** How {@code property} is written inline when its value cannot say it, or null. @see #setInlineText */
+    @Nullable
+    public String inlineText(StyleProperty<?> property) {
+        InlineText text = inlineTexts == null ? null : inlineTexts.get(property);
+        if (text == null) return null;
+        if (!Objects.equals(text.value(), inlineValue(property))) {
+            inlineTexts.remove(property);
+            return null;
+        }
+        return text.css();
+    }
+
+    /** Every property with a written inline text still standing. @see #inlineText */
+    public List<StyleProperty<?>> inlineTextProperties() {
+        List<StyleProperty<?>> out = new ArrayList<>();
+        if (inlineTexts == null) return out;
+        for (StyleProperty<?> property : new ArrayList<>(inlineTexts.keySet())) {
+            if (inlineText(property) != null) out.add(property);
+        }
+        return out;
+    }
+
+    /** Forgets every written inline text — with the inline candidates, when a style is replaced whole. */
+    public void clearInlineTexts() {
+        inlineTexts = null;
+    }
+
+    @Nullable
+    private Object inlineValue(StyleProperty<?> property) {
+        List<StyleSlot<?>> slots = candidates.get(property);
+        if (slots == null) return null;
+        for (StyleSlot<?> slot : slots) {
+            if (slot.origin() == StyleOrigin.INLINE) return slot.value();
+        }
+        return null;
     }
 
     public boolean containsCandidate(StyleProperty<?> property, Predicate<StyleSlot<?>> predicate) {

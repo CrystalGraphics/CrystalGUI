@@ -65,10 +65,10 @@ public final class StyleLabs {
         }
 
         DeclarationEditors.register(StylePropertyRegistry.TEXT_SHADOW, context -> chip(context,
-                anchor -> ShadowLab.open(anchor, context.property(), context.css(), context.node())));
+                anchor -> ShadowLab.open(anchor, context.property(), context.css(), context.node(), canHide(context))));
 
         DeclarationEditors.register(StylePropertyRegistry.TRANSFORM, context -> chip(context,
-                anchor -> TransformLab.open(anchor, context.property(), context.css())));
+                anchor -> TransformLab.open(anchor, context.property(), context.css(), canHide(context))));
 
         DeclarationEditors.register(StylePropertyRegistry.BACKDROP_FILTER, context -> chip(context,
                 anchor -> GlassLab.open(anchor, context.property(), context.css())));
@@ -84,11 +84,18 @@ public final class StyleLabs {
         }
         DeclarationEditors.register(StylePropertyRegistry.TEXT_DECORATION_LINE,
                 context -> chip(context, typography(context)));
+        // A SLIDER AND ITS FIELD, as the Typography lab's size row is.
         DeclarationEditors.register(StylePropertyRegistry.FONT_SIZE,
-                context -> DeclarationEditors.number(context, "px"));
+                context -> DeclarationEditors.number(context, "px", TypographyLab.MIN_SIZE, TypographyLab.MAX_SIZE));
         DeclarationEditors.register(StylePropertyRegistry.CARET_WIDTH,
                 context -> DeclarationEditors.number(context, "px"));
         DeclarationEditors.register(StyleFields.TEXT_STROKE, context -> chip(context, typography(context)));
+    }
+
+    /** Whether the row's layers may be switched off rather than deleted: any writable declaration, rule or inline. */
+    private static boolean canHide(DeclarationEditors.Context context) {
+        StyleFields fields = context.fields();
+        return fields != null && fields.canWrite();
     }
 
     private static Consumer<StyleChip> typography(DeclarationEditors.Context context) {

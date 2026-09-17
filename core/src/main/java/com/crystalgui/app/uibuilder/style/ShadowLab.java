@@ -106,11 +106,15 @@ public final class ShadowLab {
     }
 
     public static void open(UIElement anchor, StyleProperty<?> property, Property<String> css) {
-        open(anchor, property, css, null);
+        open(anchor, property, css, null, false);
     }
 
-    /** @param node the element the shadow is on, whose face and color the specimen takes, or null for the lab's own */
-    public static void open(UIElement anchor, StyleProperty<?> property, Property<String> css, @Nullable UIElement node) {
+    /**
+     * @param node     the element the shadow is on, whose face and color the specimen takes, or null for the lab's own
+     * @param hideable whether a shadow may be switched off rather than deleted, which a writable value can
+     */
+    public static void open(UIElement anchor, StyleProperty<?> property, Property<String> css, @Nullable UIElement node,
+                            boolean hideable) {
         StyleLab lab = StyleLab.over(anchor, "Shadow");
         // TEXT, because a shadow is cast by glyphs; the property inherits, so the specimen's reaches the sample.
         UIText specimen = new UIText("Ag");
@@ -122,14 +126,14 @@ public final class ShadowLab {
         lab.contrastWith(() -> specimen.getStyle().computed().get(StylePropertyRegistry.COLOR));
 
         Property<Integer> selected = Property.of(0);
-        Property<List<String>> layers = css.map(ShadowLab::layersOf, CssValues::join);
+        Property<List<String>> layers = css.map(ShadowLab::layersOf, CssValues::joinLayerStack);
         Property<Shadow> shadow = Property.derived(
-                () -> Shadow.parse(at(layers.get(), selected.get())),
+                () -> Shadow.parse(CssValues.bodyOf(at(layers.get(), selected.get()))),
                 next -> layers.set(replaced(layers.get(), selected.get(), next.toString())))
                 .editedIn(css.history());
 
         // THE STACK FIRST: it chooses which shadow the rows under it edit.
-        LayerStack stack = new LayerStack("lab.layers", property, selected).titled("Shadows");
+        LayerStack stack = new LayerStack("lab.layers", property, selected).titled("Shadows").hideable(hideable);
         // THE SHADOW ITSELF, on an "Ag" of its own and scaled to the patch: a 16px blur is bigger than the row.
         stack.sample(patch -> patch.append(new UIText("Ag").addClass(LayerStack.SAMPLE_TEXT_CLASS)),
                 (patch, layer) -> LiveEdits.setInline(patch, property, fittedLayer(layer)));
@@ -160,7 +164,7 @@ public final class ShadowLab {
 
     /** The declaration's layers, or one default shadow to start from when it has none. */
     private static List<String> layersOf(String css) {
-        List<String> layers = CssValues.layers(css);
+        List<String> layers = CssValues.layerStack(css);
         return layers.isEmpty() ? List.of(DEFAULT) : layers;
     }
 
@@ -170,7 +174,9 @@ public final class ShadowLab {
 
     private static List<String> replaced(List<String> layers, Integer index, String layer) {
         List<String> next = new ArrayList<>(layers);
-        next.set(Math.max(0, Math.min(index == null ? 0 : index, next.size() - 1)), layer);
+        int at = Math.max(0, Math.min(index == null ? 0 : index, next.size() - 1));
+        // THE SWITCH STAYS: editing a hidden shadow edits it where it is kept.
+        next.set(at, CssValues.withBody(next.get(at), layer));
         return next;
     }
 

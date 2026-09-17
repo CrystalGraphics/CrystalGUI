@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
@@ -38,8 +39,13 @@ import com.crystalgui.widget.text.UIText;
  * }</pre>
  *
  * <p>One inset box: a header naming the list with its count and add buttons, then the rows, which scroll past
- * three. A right-click on a row opens its menu — Move to Top, Move Up, Move Down, Move to Bottom, Duplicate,
- * Remove — as commands resolving the row through {@link #STACK} and {@link #LAYER}.</p>
+ * three. A right-click on a row opens its menu — Move to Top, Move Up, Move Down, Move to Bottom, Visible,
+ * Duplicate, Remove — as commands resolving the row through {@link #STACK} and {@link #LAYER}.</p>
+ *
+ * <p><b>{@link #hideable}</b> gives each row an eye that switches its layer off without deleting it: the layer is
+ * kept as a comment in the declaration ({@link CssValues#layerStack}). Bind a stack that can hide to a value read
+ * with {@code layerStack} or {@code functionStack}. A rule keeps the comment in its text, an element in its inline
+ * style's written text.</p>
  *
  * <p><b>Order is the value.</b> {@code translate} then {@code scale} is not the reverse, and the first shadow
  * is the one on top, so moving a row is an edit. Pressing a row sets {@code selected}, which is what a lab's
@@ -78,12 +84,20 @@ public final class LayerStack extends ValueControl<List<String>> {
     public static final String MOVE_DOWN = "uibuilder.layers.moveDown";
     public static final String MOVE_TO_BOTTOM = "uibuilder.layers.moveToBottom";
     public static final String DUPLICATE = "uibuilder.layers.duplicate";
+    public static final String VISIBLE = "uibuilder.layers.visible";
+    /** On a row whose layer is switched off, and on its eye. */
+    public static final String OFF_CLASS = "__off__";
+    /** On a row's eye. */
+    public static final String EYE_CLASS = "__layer-eye__";
     public static final String REMOVE = "uibuilder.layers.remove";
 
     private static final ContextMenu ROW_MENU = ContextMenu.builder()
             .item(MOVE_TO_TOP).item(MOVE_UP).item(MOVE_DOWN).item(MOVE_TO_BOTTOM)
             .separator()
+            .item(VISIBLE)
             .item(DUPLICATE).item(REMOVE);
+
+    private boolean hideable;
 
     private final StyleProperty<?> property;
     private final Property<Integer> selected;
@@ -140,6 +154,10 @@ public final class LayerStack extends ValueControl<List<String>> {
         registry.register(Command.of(MOVE_TO_BOTTOM, "Move to Bottom")
                 .enabledWhereData(data -> layer(data) >= 0 && layer(data) < data.get(STACK).size() - 1)
                 .runWithData(data -> data.get(STACK).moveTo(layer(data), data.get(STACK).size() - 1)));
+        registry.register(Command.of(VISIBLE, "Visible")
+                .enabledWhereData(data -> layer(data) >= 0 && data.get(STACK).hideable)
+                .toggledWhereData(data -> layer(data) >= 0 && !data.get(STACK).isOff(layer(data)))
+                .runWithData(data -> data.get(STACK).toggleVisible(layer(data))));
         registry.register(Command.of(DUPLICATE, "Duplicate")
                 .enabledWhereData(data -> layer(data) >= 0)
                 .runWithData(data -> data.get(STACK).duplicate(layer(data))));
@@ -166,6 +184,27 @@ public final class LayerStack extends ValueControl<List<String>> {
     public int size() {
         List<String> now = getValue();
         return now == null ? 0 : now.size();
+    }
+
+    /** Whether a layer may be switched off rather than deleted: a value somewhere writable holds the comment. */
+    public LayerStack hideable(boolean hideable) {
+        this.hideable = hideable;
+        writeToWidgets(getValue());
+        return this;
+    }
+
+    /** Whether the layer at {@code index} is switched off. */
+    public boolean isOff(int index) {
+        List<String> now = getValue();
+        return now != null && index >= 0 && index < now.size() && CssValues.isOff(now.get(index));
+    }
+
+    /** Switches a layer off, or back on — what its eye does. */
+    public void toggleVisible(int index) {
+        List<String> next = layers();
+        if (!hideable || index < 0 || index >= next.size()) return;
+        next.set(index, CssValues.switched(next.get(index), CssValues.isOff(next.get(index))));
+        commitAndShow(next);
     }
 
     /** What the header calls the list: {@code Shadows}, {@code Transforms}. */
@@ -208,13 +247,19 @@ public final class LayerStack extends ValueControl<List<String>> {
         rows.resize(shown.size());
         for (int i = 0; i < shown.size(); i++) {
             Row row = rows.get(i);
+            // THE LAYER ITSELF, switched off or not: a hidden layer's row still shows what it would be.
+            String layer = CssValues.bodyOf(shown.get(i));
             if (samplePainter != null) {
-                samplePainter.accept(row.sample, shown.get(i));
+                samplePainter.accept(row.sample, layer);
             } else {
-                LiveEdits.setInline(row.plate, property, shown.get(i));
+                LiveEdits.setInline(row.plate, property, layer);
             }
             // AS A PERSON READS IT: #CF0600 rather than the writer's #CF0600FF, 24.5px rather than 24.49px.
-            row.text.setText(CssValues.readable(shown.get(i)));
+            row.text.setText(CssValues.readable(layer));
+            boolean off = CssValues.isOff(shown.get(i));
+            row.toggleClass(OFF_CLASS, off);
+            row.eye.toggleClass(OFF_CLASS, off);
+            row.eye.setDisplayed(hideable);
         }
         count.setText(String.valueOf(shown.size()));
         paintSelection();
@@ -242,6 +287,7 @@ public final class LayerStack extends ValueControl<List<String>> {
         final UIElement sample = new UIElement();
         final UIElement plate = new UIElement();
         final UIText text = new UIText("");
+        final UIElement eye = new UIElement();
 
         Row(int index) {
             this.index = index;
@@ -272,6 +318,17 @@ public final class LayerStack extends ValueControl<List<String>> {
 
         row.text.addClass(TEXT_CLASS);
         row.append(row.text);
+
+        // THE EYE, as a design tool's layer row has one: hides without deleting, and stays up while hidden.
+        row.eye.addClass(EYE_CLASS);
+        row.eye.setHitTest(true);
+        row.eye.onMouseDown.attachListener((element, event) -> {
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            toggleVisible(index);
+            event.preventDefault();
+            event.stopPropagation();
+        }, false, true);
+        row.append(row.eye);
 
         row.append(action("↑", () -> move(index, -1)));
         row.append(action("↓", () -> move(index, 1)));

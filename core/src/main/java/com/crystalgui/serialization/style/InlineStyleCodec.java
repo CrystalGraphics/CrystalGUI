@@ -3,16 +3,18 @@ package com.crystalgui.serialization.style;
 import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.CodecException;
 import com.crystalgui.serialization.DynamicOps;
+import com.crystalgui.style.CssComments;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
 import com.crystalgui.style.Styleable;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
+
+import javax.annotation.Nullable;
 
 /**
  * An element's <b>author-set</b> styles, as a {@code property-name → value} map.
@@ -34,6 +36,12 @@ import java.util.Map;
  *
  * <p>The upshot is that a typical widget serializes <em>no</em> styles at all, and only what an
  * author explicitly set on it travels.</p>
+ *
+ * <h3>A switched-off declaration travels as the comment it is</h3>
+ * <p>{@code "color": "/* #FFF8CB *}{@code /"} is a declaration switched off where it stands, and
+ * {@code "text-shadow": "#000 0 1px 2px /* , #F00 0 0 4px *}{@code /"} one holding a switched-off layer: the element's
+ * {@link com.crystalgui.style.ElementStyle#inlineText written text} is sent in place of its value, and decoding
+ * applies what is left once the comments are stripped.</p>
  */
 public final class InlineStyleCodec {
 
@@ -47,19 +55,19 @@ public final class InlineStyleCodec {
         // stores candidates in a HashMap, whose iteration order varies between JVM runs — and these
         // descriptions are content-addressed, so an unstable order would produce an unstable hash
         // and silently defeat the client's cache.
-        List<StyleSlot<?>> inline = new ArrayList<>();
+        Map<String, T> byName = new TreeMap<>();
         for (var entry : element.getStyle().candidates.entrySet()) {
             for (StyleSlot<?> slot : entry.getValue()) {
-                if (slot.origin() == StyleOrigin.INLINE) inline.add(slot);
+                if (slot.origin() == StyleOrigin.INLINE) byName.put(slot.property().name, encodeSlot(ops, slot));
             }
         }
-        if (inline.isEmpty()) return null;
-        inline.sort((a, b) -> a.property().name.compareTo(b.property().name));
+        for (StyleProperty<?> property : element.getStyle().inlineTextProperties()) {
+            byName.put(property.name, ops.createString(element.getStyle().inlineText(property)));
+        }
+        if (byName.isEmpty()) return null;
 
         Map<T, T> out = new LinkedHashMap<>();
-        for (StyleSlot<?> slot : inline) {
-            out.put(ops.createString(slot.property().name), encodeSlot(ops, slot));
-        }
+        for (Map.Entry<String, T> entry : byName.entrySet()) out.put(ops.createString(entry.getKey()), entry.getValue());
         return ops.createMap(out);
     }
 
@@ -71,7 +79,6 @@ public final class InlineStyleCodec {
         return StyleValueCodecs.forProperty(property).encode(ops, slot.value());
     }
 
-    /** Applies a previously encoded style map to {@code element}, at INLINE origin. */
     /**
      * Makes the element's inline style <b>exactly</b> the encoded map, dropping anything else it holds.
      *
@@ -87,6 +94,7 @@ public final class InlineStyleCodec {
      */
     public static <T> void replaceInto(DynamicOps<T> ops, T encoded, Styleable element) {
         element.getStyle().removeCandidates(slot -> slot.origin() == StyleOrigin.INLINE);
+        element.getStyle().clearInlineTexts();
         decodeInto(ops, encoded, element);
     }
 
@@ -103,8 +111,33 @@ public final class InlineStyleCodec {
                 throw new CodecException("Style property '" + name + "' has no value codec — "
                         + "the sender should not have been able to encode it");
             }
+            String written = writtenText(ops, entry.getValue());
+            if (written != null && CssComments.has(written)) {
+                // SWITCHED OFF WHERE IT STANDS: what is left of it is applied, and the text is kept for the save.
+                String live = CssComments.strip(written).trim();
+                element.getStyle().removeCandidates(property, slot -> slot.origin() == StyleOrigin.INLINE);
+                if (!live.isEmpty()) {
+                    element.getStyle().replaceOrPutCandidate(property,
+                            StyleSlot.of(property, StyleOrigin.INLINE, 0, 0L, codec.decode(ops, ops.createString(live))));
+                }
+                element.getStyle().setInlineText(property, written);
+                continue;
+            }
             element.getStyle().replaceOrPutCandidate(property,
                     StyleSlot.of(property, StyleOrigin.INLINE, 0, 0L, codec.decode(ops, entry.getValue())));
+            // A PLAIN VALUE RETIRES THE WRITTEN TEXT: one equal to what the text was written for would keep it, and the
+            // next save would put back a comment this description no longer holds.
+            element.getStyle().setInlineText(property, null);
+        }
+    }
+
+    /** The value as a string when it is one; a codec may write a value some other way. */
+    @Nullable
+    private static <T> String writtenText(DynamicOps<T> ops, T value) {
+        try {
+            return ops.getStringValue(value);
+        } catch (RuntimeException notAString) {
+            return null;
         }
     }
 }

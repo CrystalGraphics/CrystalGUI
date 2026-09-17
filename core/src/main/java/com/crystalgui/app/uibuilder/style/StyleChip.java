@@ -44,11 +44,8 @@ public class StyleChip extends ValueControl<String> {
     public static final String CHIP_CLASS = "__style-chip__";
     public static final String SWATCH_CLASS = "__style-chip-swatch__";
     public static final String TEXT_CLASS = "__style-chip-text__";
-    /** The clip the value scrolls in: a long declaration is read by wheeling it sideways, never cut short. */
+    /** Where the value is set: a long declaration wraps within it, never cut short. */
     public static final String VALUE_CLASS = "__style-chip-value__";
-
-    /** How far one wheel notch moves a long value, the same as a scroll view's. */
-    private static final float WHEEL_PIXELS_PER_NOTCH = 40f;
 
     /** Changed when the lab writes: one act, like a color picked. */
     public static final Event<StyleChip, String> CHANGED =
@@ -58,7 +55,7 @@ public class StyleChip extends ValueControl<String> {
             StyleChip.class, "stylechip", StateTypes.STRING, "", CHANGED);
 
     private final UIElement swatch = new UIElement();
-    private final UIElement valueClip = new UIElement();
+    private final UIElement valueBox = new UIElement();
     private final UIText text = new UIText("");
 
     /** What the swatch holds for a property whose effect needs something to be applied TO — a face, a stroke. */
@@ -99,26 +96,11 @@ public class StyleChip extends ValueControl<String> {
         addClass(CHIP_CLASS);
         swatch.addClass(SWATCH_CLASS);
         text.addClass(TEXT_CLASS);
-        valueClip.addClass(VALUE_CLASS);
-        valueClip.append(text);
+        valueBox.addClass(VALUE_CLASS);
+        valueBox.append(text);
         append(swatch);
-        append(valueClip);
+        append(valueBox);
         setHitTest(true);
-        // SIDEWAYS ON THE PLAIN WHEEL, as a strip that can only scroll one way does; at either end the wheel
-        // goes on to the panel, so a row under the pointer never traps a scroll through the list.
-        // ON THE CHIP, which is what the pointer hits: the clip and its text take no hits of their own.
-        onMouseScroll.attachListener((element, event) -> {
-            var box = valueClip.box();
-            if (box == null || box.maxScrollLeft() <= 0f) return;
-            // THE BOX DIRECTLY, not the eased scrollTo: whether it moved decides whether the panel gets the wheel,
-            // and an ease has not moved anything by the time that is asked.
-            float before = box.scrollLeft();
-            box.setScroll(before + event.getScroll() * WHEEL_PIXELS_PER_NOTCH, 0f);
-            if (box.scrollLeft() != before) {
-                event.preventDefault();
-                event.stopPropagation();
-            }
-        }, false, true);
         onMouseDown.attachListener((element, event) -> {
             if (open != null) open.run();
             event.preventDefault();

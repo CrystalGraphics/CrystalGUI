@@ -128,6 +128,10 @@ theme {
     /* THE GLOW under the entries: the accent at 20%, which the gradient fades to nothing either side.
      * A pin because it is the accent WITH an alpha, which no system role carries and var() cannot add. */
     --taskbar-glow: #3574F033;
+    /* A HIDDEN DECLARATION'S VEIL: the panel, and the recessed field, at 60% over what they cover -- what opacity 0.4
+     * looked like, as one flat draw rather than a layer. Pins, for the same reason as the glow: an alpha. */
+    --hidden-veil: #191A1C99;
+    --hidden-veil-recessed: #13141699;
     /* THE SAME TONE on the hover preview and the switcher: they are the bar's material, and the wash is
      * part of it. The same ALPHA too -- what differs is the AXIS, which is the sheet's to say: a panel
      * runs it down from the top edge as a header tint rather than across the middle. @see ua/desktop.css.

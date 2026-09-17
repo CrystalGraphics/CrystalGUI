@@ -922,12 +922,32 @@ smartguides {
     border-radius: 3px;
     color: var(--fg-hint, #7A7A7A);
     cursor: pointer;
-    /* Held until the pointer is on the row: a column of x down the panel is the loudest thing on it. */
+    /* Held until the pointer is on the row: a column of x down the panel is the loudest thing on it. NO FADE: an eye
+     * rebuilds its row under the pointer, and the new row's buttons faded in from nothing. */
     opacity: 0;
-    transition: opacity 90ms;
 }
 .__configurator__.__style-row__:hover .__style-row-action__ { opacity: 1; }
 .__style-row-action__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
+/* THE EYE: hides a declaration without deleting it. Held up while hidden, so a switched-off row is found by its
+ * slashed eye rather than by hovering every row. */
+.__style-row-eye__ {
+    padding: 2px;
+    overlay: icon("crystalgui:general/show");
+    overlay-size: contain;
+    overlay-origin: content-box;
+}
+.__style-row-eye__.__off__ { overlay: icon("crystalgui:general/hide"); opacity: 1; }
+/* THE EYE TAKES THE NAME'S INSET: it sits at the row's edge, a short gap before the name, and the name column gives
+ * back the eye's width so the values stay where they were. */
+.__configurator__.__style-row__.__eyed__ > .__style-row-eye__ { margin-left: 0px; margin-right: -2px; }
+.__configurator__.__style-row__.__eyed__ > .__label__ { padding-left: 0px; flex-basis: 120px; }
+/* A HIDDEN DECLARATION, greyed whole: name and editor together, the eye left bright to bring it back. */
+/* A HIDDEN DECLARATION, greyed whole: a veil in the panel's colour over its editor, and its name in the disabled grey.
+ * NOT OPACITY: that made the name and the editor a layer each, and an editor holding a chip nested the chip's own
+ * layer inside, so the row redrew as composited layers on every hover and eye click. */
+/* WITH `__style-row__`: the Style tab's own label colour below has the same weight and comes later, and won. */
+.__configurator__.__style-row__.__hidden-declaration__ > .__label__ { color: var(--fg-disabled, #5A5D63); }
+.__configurator__.__hidden-declaration__ > .__inline__ { overlay: var(--hidden-veil, #191A1C99); }
 
 /* DevTools' blank line at the end of a rule: the one place anything is added from. */
 .__style-add-row__ {
@@ -962,14 +982,16 @@ smartguides {
 
 /* ─────────────────────────── The labs ───────────────────────────
  * A row shows what a value IS; the lab is where it is changed, at the size the work needs. */
+/* A LONG VALUE WRAPS, as DevTools' Styles pane wraps one: the chip grows down and the row with it, the swatch staying
+ * on the first line. One line's height is the floor, so a short value is the row it always was. */
 .__style-chip__ {
     flex-direction: row;
-    align-items: center;
+    align-items: flex-start;
     gap: 5px;
     width: 0px;
     flex-grow: 1;
     min-width: 0px;
-    height: var(--cfg-ctrl-h);
+    min-height: var(--cfg-ctrl-h);
     overflow: hidden;
     cursor: pointer;
 }
@@ -998,6 +1020,15 @@ smartguides {
 }
 /* One gutter for every action, so + and x sit in a column. */
 .__configurator__.__style-row__ { padding-right: var(--cfg-pad-x); }
+/* TOP-ALIGNED, so a value that wraps grows the row downward with the name and its buttons on the first line. The
+ * margins put each part where centring put it in a one-line row: the 16px buttons and swatch 1px into the 18px
+ * control, a 13px line 2.5px. */
+.__configurator__.__style-row__ { align-items: flex-start; }
+.__configurator__.__style-row__ > .__label__ { margin-top: 2.5px; }
+.__configurator__.__style-row__ > .__style-row-action__ { margin-top: 1px; }
+.__style-chip__ > .__style-chip-swatch__ { margin-top: 1px; }
+/* THE VALUE SHRINKS TO ITS COLUMN, so a long one ends in its own ellipsis rather than under the row's buttons. */
+.__configurator__.__style-row__ > .__inline__ { min-width: 0px; }
 /* The swatch is the declaration, applied: a gradient chip is the gradient, a colour chip is the colour.
  *
  * A FIXED COLUMN, pinned at both ends. Its content sizes it otherwise — a sample of text made it wider than
@@ -1021,20 +1052,20 @@ smartguides {
  * swatch can show, which a 9px glyph is not. */
 /* NOT BOLD: the sample is set in the element's own weight, which is what a weight chip is there to show. */
 .__style-chip-swatch__ text { font-size: 12; }
-/* THE VALUE IN FULL, in a clip the wheel scrolls sideways: a long declaration neither pushes the panel wider,
- * which brought the panel's own horizontal scroller back, nor ends in an ellipsis hiding the part you want. */
+/* THE VALUE IN FULL, wrapped to the column: it neither pushes the panel wider nor ends in an ellipsis. */
 .__style-chip-value__ {
     width: 0px;
     flex-grow: 1;
     min-width: 0px;
-    height: 100%;
     flex-direction: row;
-    align-items: center;
-    overflow: hidden;
 }
+/* 2.5px above and below: a 13px line centred in the 18px control, which is where it sat before it could wrap. */
 .__style-chip-text__ {
-    flex-shrink: 0;
-    white-space: nowrap;
+    width: 0px;
+    flex-grow: 1;
+    margin-top: 2.5px;
+    margin-bottom: 2.5px;
+    white-space: normal;
     color: var(--fg-secondary, #9DA0A8);
 }
 /* A COLOUR ROW IS A CHIP, like every other value with something to show: the swatch in the chip's column and the
@@ -1371,7 +1402,7 @@ smartguides {
     /* A 16px blur would otherwise paint across the rows above and below, as the chip swatch says. */
     overflow: hidden;
     background: var(--configkit-band-bg, #3A3D42);
-    outline: 1px #FFFFFF14;
+    outline: 1px var(--lab-specimen-bg, #FFFFFF14);
 }
 .__layer-row__.__active__ .__layer-sample__ { outline: 1px var(--accent, #3574F0); }
 /* WHAT A LAYER IS APPLIED TO when nothing else is given: a plate inside the frame, so a translate or a rotate moves
@@ -1394,6 +1425,28 @@ smartguides {
     text-overflow: ellipsis;
 }
 .__layer-row__.__active__ .__layer-text__ { color: var(--fg, #DFE1E5); }
+/* A HIDDEN LAYER stays in its place, quieter, with its eye held up and slashed. */
+/* Veiled rather than faded, as a hidden declaration is: the sample is a clipped layer already, and opacity nests one. */
+.__layer-row__.__off__ .__layer-sample__ { overlay: var(--hidden-veil-recessed, #13141699); }
+.__layer-row__.__off__ .__layer-text__ { color: var(--fg-disabled, #5A5D63); }
+.__layer-eye__ {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    padding: 2px;
+    border-radius: 3px;
+    color: var(--fg-hint, #7A7A7A);
+    overlay: icon("crystalgui:general/show");
+    overlay-size: contain;
+    overlay-origin: content-box;
+    cursor: pointer;
+    opacity: 0;
+}
+.__layer-row__:hover .__layer-eye__,
+.__layer-row__.__active__ .__layer-eye__,
+.__layer-eye__.__off__ { opacity: 1; }
+.__layer-eye__.__off__ { overlay: icon("crystalgui:general/hide"); }
+.__layer-eye__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 /* Borderless glyphs held until the row is pointed at or picked: three filled boxes per row was a toolbar. */
 .__layer-action__ {
     width: 16px;
@@ -1407,7 +1460,7 @@ smartguides {
 }
 .__layer-row__:hover .__layer-action__,
 .__layer-row__.__active__ .__layer-action__ { opacity: 1; }
-.__layer-action__:hover { background: #FFFFFF14; color: var(--fg, #DFE1E5); }
+.__layer-action__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__style-target-action__ {
     height: 17px;
     min-height: 17px;

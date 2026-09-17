@@ -345,6 +345,8 @@ editor scheme's.
 | `--graph-text` | `var(--fg-secondary)` | base.css |
 | `--graph-text-bright` | `var(--fg)` | base.css |
 | `--graph-title-bg` | `#56565676` | crystal-dark.css |
+| `--hidden-veil` | `#191A1C99` | crystal-dark.css |
+| `--hidden-veil-recessed` | `#13141699` | crystal-dark.css |
 | `--hover-bg` | `#2E3033` | crystal-dark.css |
 | `--info` | `#3794FF` | crystal-dark.css |
 | `--info-icon` | `#548AF7` | crystal-dark.css |

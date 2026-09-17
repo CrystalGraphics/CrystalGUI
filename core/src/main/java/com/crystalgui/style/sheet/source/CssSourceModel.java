@@ -113,7 +113,7 @@ public final class CssSourceModel {
             List<Selector> parsedSelectors = selectors == null
                     ? List.of() : selectorsIn(source, masked, selectors);
             List<Declaration> parsedDeclarations = ruleMatcher.end(2) > ruleMatcher.start(2)
-                    ? declarationsIn(source, masked, ruleMatcher.start(2), ruleMatcher.end(2))
+                    ? declarationsIn(source, masked, comments, ruleMatcher.start(2), ruleMatcher.end(2))
                     : List.of();
 
             // THE CASCADE'S OWN SKIPS, mirrored so the numbering lines up. StyleSheet.parse drops a rule
@@ -167,12 +167,14 @@ public final class CssSourceModel {
         return found;
     }
 
-    private static List<Declaration> declarationsIn(String source, String masked, int from, int to) {
+    private static List<Declaration> declarationsIn(String source, String masked, List<Comment> comments,
+                                                    int from, int to) {
         List<Declaration> found = new ArrayList<>();
         Matcher declaration = DECLARATION.matcher(masked).region(from, to);
         while (declaration.find()) {
             TextRange property = range(declaration.start(1), declaration.end(1));
-            TextRange value = trim(masked, declaration.start(2), declaration.end(2));
+            TextRange value = withTouchingComments(source, comments,
+                    trim(masked, declaration.start(2), declaration.end(2)), declaration.start(2), declaration.end(2));
             if (property == null || value == null) continue;
             String rawValue = slice(source, value);
             boolean important = IMPORTANT.matcher(rawValue).find();
@@ -180,6 +182,44 @@ public final class CssSourceModel {
                     TextRange.of(declaration.start(), declaration.end()), property, value));
         }
         return found;
+    }
+
+    /**
+     * The value widened over a comment touching either end on the same line — {@code a, b /* , c *}{@code /}, a
+     * switched-off layer. Trimmed against the masked text the comment is blanks, so the value stopped short of it
+     * and a write-back left the old comment behind. A comment on a line of its own is a switched-off
+     * declaration, not part of this one, and stays out.
+     */
+    @Nullable
+    private static TextRange withTouchingComments(String source, List<Comment> comments, @Nullable TextRange value,
+                                                  int groupStart, int groupEnd) {
+        if (value == null) return null;
+        int start = value.start();
+        int end = value.end();
+        boolean grew = true;
+        while (grew) {
+            grew = false;
+            for (Comment comment : comments) {
+                TextRange at = comment.range();
+                if (at.start() < groupStart || at.end() > groupEnd) continue;
+                if (at.start() >= end && sameLineGap(source, end, at.start())) {
+                    end = at.end();
+                    grew = true;
+                } else if (at.end() <= start && sameLineGap(source, at.end(), start)) {
+                    start = at.start();
+                    grew = true;
+                }
+            }
+        }
+        return TextRange.of(start, end);
+    }
+
+    private static boolean sameLineGap(String source, int from, int to) {
+        for (int i = from; i < to; i++) {
+            char c = source.charAt(i);
+            if (c != ' ' && c != '\t') return false;
+        }
+        return true;
     }
 
     /** The range with surrounding whitespace removed, or null when there is nothing but whitespace. */

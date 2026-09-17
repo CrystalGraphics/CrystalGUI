@@ -84,7 +84,7 @@ public final class TypographyLab {
 
         lab.form().prop(ConfigDescriptor.text("lab.text", "Text"),
                 text.map(shown -> shown, typed -> typed == null || typed.isBlank() ? "Handgloves" : typed));
-        lab.form().prop(ConfigDescriptor.number("lab.size", "Size").range(6f, 96f).unit("px").integral(true),
+        lab.form().prop(ConfigDescriptor.number("lab.size", "Size").range(MIN_SIZE, MAX_SIZE).unit("px").integral(true),
                 fields.value("font-size").map(css -> (double) CssValues.number(css, 0f),
                         size -> CssValues.length(StylePropertyRegistry.FONT_SIZE, CssValues.dragged(size))));
         lab.form().prop(ConfigDescriptor.color("lab.color", "Color"), color(fields, node, "color"));
@@ -190,6 +190,10 @@ public final class TypographyLab {
         int face = faceNames().indexOf(trimmed);
         return face >= 0 ? FACES.get(face) : trimmed;
     }
+
+    /** The size slider's reach, in px — the Style tab's font-size row slides over the same. */
+    static final float MIN_SIZE = 6f;
+    static final float MAX_SIZE = 96f;
 
     /** What the line-height row offers: the keyword, then the multipliers a type scale reaches for. */
     static final List<String> LINE_HEIGHTS = List.of("normal", "1", "1.2", "1.4", "1.5", "2");

@@ -15,7 +15,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgraphics.platform.input.CgSystemInput;
 
 import com.crystalgui.app.uibuilder.BuilderInspectorSections;
 import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
@@ -225,11 +224,11 @@ public class StylesTabTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>A long value scrolls sideways under the wheel</b>, and the stroke an element holds as two longhands is one
-     * row.
+     * <b>A long value wraps, as DevTools wraps one</b>: its row grows down while the name stays on the first line, nothing
+     * runs past the panel, and the stroke an element holds as two longhands is one row.
      */
     @Test
-    public void aLongValueScrollsAndTheStrokeIsOneRow() {
+    public void aLongValueWrapsAndTheStrokeIsOneRow() {
         LiveEdits.setInline(card, StylePropertyRegistry.TEXT_SHADOW,
                 "#CF0600FF 1px -14px 24.49px, #00AA00FF 0px 4px 12.25px, #0000FFFF 3px 3px 9px, #FFFFFFFF 0px 0px 2px");
         LiveEdits.setInline(card, StylePropertyRegistry.TEXT_STROKE_WIDTH, "2px");
@@ -244,14 +243,9 @@ public class StylesTabTest extends UiDocumentTestBase {
             if (each.hasClass(StyleChip.VALUE_CLASS)) clip = each;
         }
         assertNotNull(clip);
-        assertTrue("the value is longer than its row", clip.box().maxScrollLeft() > 0f);
-        int[] at = centreOf(clip);
-        move(at[0], at[1]);
-        frame();
-        // AT THE VALUE: the fixture's wheel() is sent from the origin, which moves the pointer off the row.
-        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(at[0], at[1], 0, 0, -1, false, 2f, 1_000_000L));
-        frame();
-        assertTrue("and the wheel moved it", clip.scrollLeft() > 0f);
+        assertTrue("the value is set on more than one line", clip.box().height() > 30f);
+        assertEquals("and none of it runs past its column", 0f, clip.box().maxScrollLeft(), 0.5f);
+        assertEquals("the stroke's row is still one line", 20f, control("style.text-stroke").parentElement().parentElement().box().height(), 0.5f);
     }
 
     /**

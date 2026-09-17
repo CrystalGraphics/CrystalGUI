@@ -6,6 +6,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.property.Property;
+import com.crystalgui.style.CssComments;
 import com.crystalgui.style.ElementStyle;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.Styleable;
@@ -53,7 +54,16 @@ public final class LiveEdits {
         ElementStyle style = element.getStyle();
         if (style == null) return false;
 
-        StyleValue<T> parsed = property.valueParser.parse(rawValue);
+        // A VALUE AS WRITTEN, which may hold a switched-off layer or be switched off whole: the cascade gets what is
+        // left once the comments are stripped, and the style keeps the text for the save.
+        String live = CssComments.strip(rawValue).trim();
+        if (live.isEmpty()) {
+            if (!CssComments.has(rawValue)) return false;
+            style.removeCandidates(property, slot -> slot.origin() == StyleOrigin.INLINE);
+            style.setInlineText(property, rawValue.trim());
+            return true;
+        }
+        StyleValue<T> parsed = property.valueParser.parse(live);
         T value = parsed == null ? null : parsed.compute();
         if (value == null) {
             // StyleValue already logs WHY; this says which edit it cost, which the pane can show.
@@ -62,6 +72,7 @@ public final class LiveEdits {
         }
         style.replaceOrPutCandidate(property,
                 StyleSlot.of(property, StyleOrigin.INLINE, SPECIFICITY, 0L, value));
+        style.setInlineText(property, CssComments.has(rawValue) ? rawValue.trim() : null);
         return true;
     }
 
@@ -92,6 +103,7 @@ public final class LiveEdits {
         ElementStyle style = element.getStyle();
         if (style == null) return;
         style.removeCandidates(property, slot -> slot.origin() == StyleOrigin.INLINE);
+        style.setInlineText(property, null);
     }
 
     /**
@@ -108,6 +120,8 @@ public final class LiveEdits {
     public static <T> boolean dropIfRedundant(@Nullable Styleable element, StyleProperty<T> property) {
         if (!hasInline(element, property)) return false;
         ElementStyle style = element.getStyle();
+        // A VALUE HOLDING A SWITCHED-OFF LAYER is not a copy of what the sheets say, whatever its live layers are.
+        if (style.inlineText(property) != null) return false;
         T inline = style.getComputed(property);
         clearInline(element, property);
         if (Objects.equals(inline, style.computed().get(property))) return true;

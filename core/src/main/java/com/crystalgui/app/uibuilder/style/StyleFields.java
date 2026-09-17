@@ -174,9 +174,22 @@ public final class StyleFields {
                         stroke = true;
                         break;
                     }
-                    out.add(new Declared(property, property.name, written(property, slot.value()), false, false));
+                    out.add(new Declared(property, property.name, inlineValueOf(property.name), false, false));
                     break;
                 }
+            }
+            // SWITCHED OFF WHERE THEY STAND: a text with no value under it.
+            boolean hiddenStroke = false;
+            for (StyleProperty<?> property : node.getStyle().inlineTextProperties()) {
+                if (LiveEdits.hasInline(node, property)) continue;
+                if (property.name.equals(STROKE_WIDTH) || property.name.equals(STROKE_COLOR)) {
+                    // One row for the pair, hidden once neither half is live.
+                    if (!stroke && !hiddenStroke) out.add(new Declared(null, TEXT_STROKE, valueOf(TEXT_STROKE), false, true));
+                    hiddenStroke = true;
+                    continue;
+                }
+                String text = node.getStyle().inlineText(property);
+                out.add(new Declared(property, property.name, CssValues.bodyOf(text), false, true));
             }
             return out;
         }
@@ -283,6 +296,8 @@ public final class StyleFields {
     private String inlineValueOf(String property) {
         StyleProperty<?> styled = propertyOf(property);
         if (styled == null) return "";
+        String text = node.getStyle().inlineText(styled);
+        if (text != null) return CssValues.isOff(text) ? CssValues.bodyOf(text) : text;
         List<StyleSlot<?>> slots = node.getStyle().candidates.get(styled);
         if (slots == null) return "";
         for (StyleSlot<?> slot : slots) {
@@ -361,15 +376,15 @@ public final class StyleFields {
     }
 
     /**
-     * Comments a declaration out, or brings it back — DevTools' checkbox.
+     * Comments a declaration out, or brings it back — the row's eye.
      *
-     * <p>Rules only: a comment is a thing a stylesheet can hold and an inline style cannot, so an inline row
-     * offers removal instead.</p>
+     * <p>In a rule it becomes a comment in the rule body; inline it is kept where it stands as a commented value,
+     * {@code "color": "/* #FFF *}{@code /"}, which the element's style holds and the file carries.</p>
      *
      * @return whether anything changed
      */
     public boolean setEnabled(String property, boolean enabled) {
-        if (target.isInline()) return false;
+        if (target.isInline()) return setInlineEnabled(property, enabled);
         CssSourceModel model = model();
         TextBuffer buffer = target.buffer();
         if (model == null || buffer == null) return false;
@@ -396,6 +411,25 @@ public final class StyleFields {
             return true;
         }
         return false;
+    }
+
+    private boolean setInlineEnabled(String property, boolean enabled) {
+        if (!canWrite()) return false;
+        JsonElement was = NodeFields.inlineStyleOf(node);
+        if (TEXT_STROKE.equals(property)) {
+            // THE STROKE IS TWO LONGHANDS inline, so each is switched where it stands and the row is one.
+            for (String longhand : List.of(STROKE_WIDTH, STROKE_COLOR)) {
+                String value = CssValues.bodyOf(inlineValueOf(longhand));
+                if (!value.isEmpty()) LiveEdits.setInline(node, propertyOf(longhand), CssValues.switched(value, enabled));
+            }
+        } else {
+            StyleProperty<?> styled = propertyOf(property);
+            String value = styled == null ? "" : CssValues.bodyOf(valueOf(property));
+            if (value.isEmpty() || !LiveEdits.setInline(node, styled, CssValues.switched(value, enabled))) return false;
+        }
+        JsonElement after = NodeFields.inlineStyleOf(node);
+        if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
+        return !after.equals(was);
     }
 
     /** The registered property a name means, or null — a custom property, or a typo the sheet holds. */
