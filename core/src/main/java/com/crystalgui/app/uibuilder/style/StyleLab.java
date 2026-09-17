@@ -272,9 +272,12 @@ public final class StyleLab {
 
     private static String readable(@Nullable String value) {
         if (value == null || value.isBlank()) return "—";
-        List<String> layers = CssValues.layers(value);
+        List<String> layers = CssValues.layerStack(value);
         List<String> shown = new ArrayList<>(layers.size());
-        for (String layer : layers) shown.add(CssValues.readable(layer));
+        for (String layer : layers) {
+            String readable = CssValues.readable(CssValues.bodyOf(layer));
+            shown.add(CssValues.isOff(layer) ? "/* " + readable + " */" : readable);
+        }
         return shown.isEmpty() ? CssValues.readable(value) : String.join(",\n    ", shown);
     }
 

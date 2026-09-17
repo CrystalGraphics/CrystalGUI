@@ -147,6 +147,10 @@ inline slots and encodes each.
 
 Consequences worth internalising:
 
+- **A declaration switched off inline travels as the comment it is**: `"color": "/* #FFF8CB */"`, or a value holding a
+  switched-off layer, `"text-shadow": "#000 0 1px 2px /* , #F00 0 0 4px */"`. `ElementStyle.inlineText` keeps the written
+  text beside the live value, and decoding applies what is left once the comments are stripped. Any other write to the
+  property retires the text.
 - A widget's own `DEFAULT`-origin baseline styling **never goes over the wire** — the client's copy of
   the same widget class produces it locally.
 - Stylesheet-origin values never travel either; the *sheet* travels (§6), not its computed results.

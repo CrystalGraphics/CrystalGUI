@@ -6,13 +6,13 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.ui.dom.ChildList;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.config.Configurator;
 import com.crystalgui.widget.config.ConfiguratorGroup;
 import com.crystalgui.widget.config.ConfiguratorPanel;
@@ -96,10 +96,11 @@ final class DeclarationList extends UIElement {
         String id = "style." + key.name();
         StyleFields.Declared declared = fields.declared(key.name());
         StyleProperty<?> property = declared == null ? null : declared.property();
+        // A SWITCHED-OFF DECLARATION KEEPS ITS EDITOR, greyed and inert: it reads as the row it will be again. Read
+        // through its own key, so a live declaration of the same name does not show in its place.
         DeclarationEditors.Field field = key.disabled()
-                // A SWITCHED-OFF DECLARATION IS TEXT until it is on again: its value is not in the cascade.
-                ? new DeclarationEditors.Field(ConfigDescriptor.info(id, key.name()),
-                        Property.derived(() -> valueOf(key)))
+                ? DeclarationEditors.of(property, id, key.name(), Property.derived(() -> valueOf(key), ignored -> { }),
+                        fields, node)
                 : DeclarationEditors.of(property, id, key.name(), fields.value(key.name()), fields, node);
 
         Configurator row = field.control() == null
@@ -107,16 +108,45 @@ final class DeclarationList extends UIElement {
                 : panel.row(key.name(), id, field.control());
         row.addClass(BuilderStyleSections.STYLE_ROW_CLASS);
         if (key.disabled()) {
-            row.addClass(BuilderStyleSections.DISABLED_CLASS);
+            row.addClass(BuilderStyleSections.HIDDEN_CLASS);
+            // THE WHOLE VALUE COLUMN, whatever the row built into it: a plain field took typing that went nowhere.
+            for (UIElement part : row.children()) {
+                if (part.hasClass(Configurator.INLINE_CLASS)) part.setInert(true);
+            }
         } else {
             PropertyWatch.follow(row, Property.derived(() -> fields.wins(key.name())),
                     won -> row.toggleClass(BuilderStyleSections.OVERRIDDEN_CLASS, !won));
         }
         if (!fields.canWrite()) return row;
-        if (!fields.target().isInline()) {
-            row.append(action(key.disabled() ? "☐" : "☑", () -> fields.setEnabled(key.name(), key.disabled())));
+        // THE EYE FIRST, before the name, as DevTools' checkbox is: switched off it stays up, so a hidden declaration
+        // is found down the row's left edge.
+        UIElement eye = action("", () -> fields.setEnabled(key.name(), key.disabled()));
+        eye.addClass(BuilderStyleSections.ROW_EYE_CLASS);
+        eye.toggleClass(BuilderStyleSections.OFF_CLASS, key.disabled());
+        row.insertAt(0, eye);
+        row.addClass(BuilderStyleSections.EYED_ROW_CLASS);
+        UIElement remove = action("×", () -> fields.remove(key.name()));
+        row.append(remove);
+        // THE ROW'S HINT OVER ITS NAME AND VALUE ONLY, and the buttons saying what they do: regions of the one tooltip,
+        // with nothing to say anywhere else -- the strip under a button read as the row. A second tooltip on a
+        // button would show stacked on the row's. @see Tooltip#addRegion
+        String eyeText = key.disabled() ? "Show" : "Hide";
+        Tooltip hint = row.hint();
+        if (hint != null) {
+            String text = hint.getBaseText();
+            for (UIElement part : row.children()) {
+                if (part.hasClass(Configurator.LABEL_CLASS) || part.hasClass(Configurator.INLINE_CLASS)) {
+                    // ONE PILL for the two: placed against the row, so crossing from name to value does not move it.
+                    hint.addRegion(part, text, row);
+                }
+            }
+            hint.addRegion(eye, eyeText);
+            hint.addRegion(remove, "Remove");
+            hint.setText("");
+        } else {
+            Tooltip.attach(eye, eyeText);
+            Tooltip.attach(remove, "Remove");
         }
-        row.append(action("×", () -> fields.remove(key.name())));
         return row;
     }
 

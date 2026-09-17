@@ -415,4 +415,22 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         frame();
         assertEquals(4, CssValues.layers(shadows.get()).size());
     }
+
+    /** The eye hides a layer without deleting it, and a sheet reading the value never sees it. */
+    @Test
+    public void theEyeHidesALayerWithoutDeletingIt() {
+        Property<String> shadows = Property.of("#000000FF 0px 1px 2px, #FFFFFFFF 0px 2px 4px");
+        ShadowLab.open(anchor, StylePropertyRegistry.TEXT_SHADOW, shadows, null, true);
+        for (int i = 0; i < 6; i++) frame();
+        List<UIElement> rows = new ArrayList<>();
+        for (UIElement each : labTitled("Shadow").composedSubtree()) {
+            if (each.hasClass(LayerStack.ROW_CLASS)) rows.add(each);
+        }
+
+        assertTrue(CommandRegistry.global().run(LayerStack.VISIBLE, CommandContext.of(rows.get(1))));
+        frame();
+        assertEquals("both are still in the stack", 2, CssValues.layerStack(shadows.get()).size());
+        assertEquals("and only one is live", List.of("#000000FF 0px 1px 2px"), CssValues.layers(shadows.get()));
+        assertTrue(rows.get(1).hasClass(LayerStack.OFF_CLASS));
+    }
 }

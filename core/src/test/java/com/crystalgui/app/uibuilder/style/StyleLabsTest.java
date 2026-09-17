@@ -1,5 +1,15 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.serialization.style.InlineStyleCodec;
+
+import com.crystalgui.serialization.JsonOps;
+
+import com.crystalgui.app.uibuilder.inspect.NodeFields;
+
+import com.google.gson.JsonElement;
+
+import com.crystalgui.style.sheet.source.CssSourceModel;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -361,5 +371,86 @@ public class StyleLabsTest {
         frame();
         assertFalse("the add was its own step", sheet.toString().contains("#FF0000"));
         assertTrue(sheet.toString().contains("text-shadow"));
+    }
+
+    @Test
+    public void aSwitchedOffLayerIsKeptAsACommentTheSheetIgnores() {
+        List<String> stack = CssValues.layerStack("#000000 0px 1px 2px /* , #FF0000 0px 0px 4px */, #0000FF 1px 1px 1px");
+        assertEquals(List.of("#000000 0px 1px 2px", "/* #FF0000 0px 0px 4px */", "#0000FF 1px 1px 1px"), stack);
+        assertEquals("round trip", stack, CssValues.layerStack(CssValues.joinLayerStack(stack)));
+
+        List<String> firstOff = List.of("/* a */", "b", "/* c */");
+        assertEquals("the live list is what is left", List.of("b"), CssValues.layers(CssValues.joinLayerStack(firstOff)));
+        assertEquals(firstOff, CssValues.layerStack(CssValues.joinLayerStack(firstOff)));
+
+        assertEquals("none /* a, b */", CssValues.joinLayerStack(List.of("/* a */", "/* b */")));
+        assertEquals(List.of("/* a */", "/* b */"), CssValues.layerStack("none /* a, b */"));
+
+        List<String> ops = List.of("translate(4px, 2px)", "/* rotate(14deg) */", "scale(2, 2)");
+        assertEquals(ops, CssValues.functionStack(CssValues.joinFunctionStack(ops)));
+    }
+
+    @Test
+    public void aCommentTouchingAValueIsPartOfIt() {
+        CssSourceModel model = CssSourceModel.parse(".a {\n    text-shadow: a, b /* , c */;\n    /* color: red; */\n}\n");
+        assertEquals("a, b /* , c */", model.rules().get(0).declarations().get(0).value());
+    }
+
+    /** Inline, a switched-off declaration stays where it stands, as a commented value the file carries. */
+    @Test
+    public void anInlineDeclarationSwitchesOffWhereItStands() {
+        StyleFields inline = StyleFields.on(null, StyleTargets.of(node, sheets).chosen(""), node);
+        inline.value("opacity").set("0.2");
+        frame();
+
+        assertTrue(inline.setEnabled("opacity", false));
+        frame();
+        assertEquals("the rule's value shows again", Float.valueOf(0.5f),
+                node.getStyle().getComputed(StylePropertyRegistry.OPACITY));
+        JsonElement saved = NodeFields.inlineStyleOf(node);
+        assertEquals("/* 0.2 */", saved.getAsJsonObject().get("opacity").getAsString());
+        StyleFields.Declared hidden = inline.declared("opacity");
+        assertTrue("the row is still there, switched off", hidden != null && hidden.disabled());
+
+        UIElement reopened = new UIElement();
+        InlineStyleCodec.replaceInto(JsonOps.INSTANCE, saved, reopened);
+        assertEquals("and survives a save", saved, NodeFields.inlineStyleOf(reopened));
+
+        assertTrue(inline.setEnabled("opacity", true));
+        frame();
+        assertEquals(Float.valueOf(0.2f), node.getStyle().getComputed(StylePropertyRegistry.OPACITY));
+    }
+
+    @Test
+    public void anInlineValueKeepsItsSwitchedOffLayer() {
+        StyleFields inline = StyleFields.on(null, StyleTargets.of(node, sheets).chosen(""), node);
+        String written = "#000000 0px 1px 2px /* , #FF0000 0px 0px 4px */";
+        inline.value("text-shadow").set(written);
+        frame();
+        assertEquals(written, inline.value("text-shadow").get());
+        assertEquals(written, NodeFields.inlineStyleOf(node).getAsJsonObject().get("text-shadow").getAsString());
+        assertNotNull("the live layer applies", node.getStyle().getComputed(StylePropertyRegistry.TEXT_SHADOW));
+    }
+
+    /** The stroke is two longhands inline, switched off together and shown as the one row it is. */
+    @Test
+    public void anInlineStrokeSwitchesOffAsOneRow() {
+        StyleFields inline = StyleFields.on(null, StyleTargets.of(node, sheets).chosen(""), node);
+        inline.value("text-stroke").set("2px #FF0000");
+        frame();
+
+        assertTrue(inline.setEnabled("text-stroke", false));
+        frame();
+        JsonElement saved = NodeFields.inlineStyleOf(node);
+        assertTrue("the width kept where it stands, commented",
+                CssValues.isOff(saved.getAsJsonObject().get("text-stroke-width").getAsString()));
+        assertTrue("and the color", CssValues.isOff(saved.getAsJsonObject().get("text-stroke-color").getAsString()));
+        StyleFields.Declared hidden = inline.declared("text-stroke");
+        assertTrue("one row, switched off", hidden != null && hidden.disabled());
+
+        assertTrue(inline.setEnabled("text-stroke", true));
+        frame();
+        StyleFields.Declared shown = inline.declared("text-stroke");
+        assertTrue("and back on", shown != null && !shown.disabled());
     }
 }

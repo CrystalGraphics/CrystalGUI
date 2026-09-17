@@ -6,6 +6,7 @@ import java.util.Locale;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.style.CssComments;
 import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -32,8 +33,9 @@ public final class CssValues {
     private CssValues() {
     }
 
-    /** A declaration's layers: what {@code background}, {@code text-shadow} and {@code overlay} hold. */
+    /** A declaration's live layers: what {@code background}, {@code text-shadow} and {@code overlay} hold. */
     public static List<String> layers(@Nullable String css) {
+        if (css != null) css = CssComments.strip(css);
         if (css == null || css.isBlank() || css.trim().equalsIgnoreCase("none")) return List.of();
         List<String> parts = new ArrayList<>();
         for (String part : CssParsingUtil.splitTopLevelCommas(css.trim())) {
@@ -41,6 +43,105 @@ public final class CssValues {
             if (!trimmed.isEmpty()) parts.add(trimmed);
         }
         return parts;
+    }
+
+    /**
+     * Every layer of a comma list, a switched-off one as the comment it is kept in — what a layer stack edits.
+     *
+     * <pre>{@code
+     * CssValues.layerStack("#000 0 1px 2px /* , #F00 0 0 4px *}{@code /");   // [#000 0 1px 2px, /* #F00 0 0 4px *}{@code /]
+     * CssValues.joinLayerStack(layers);                                       // back, with the comma in the comment
+     * }</pre>
+     *
+     * <p>A switched-off layer is a comment in the declaration, as a switched-off declaration is one in the rule: the
+     * sheet, or an element's inline style, keeps it and the cascade never sees it.</p>
+     */
+    public static List<String> layerStack(@Nullable String css) {
+        return stack(css, true);
+    }
+
+    /** {@link #layerStack} back into a declaration: {@code none} ahead of a comment when every layer is off. */
+    public static String joinLayerStack(List<String> layers) {
+        List<String> leading = new ArrayList<>();
+        StringBuilder out = new StringBuilder();
+        boolean wroteOn = false;
+        for (String layer : layers) {
+            // COMMAS INSIDE THE COMMENT, so what is left when the sheet strips it is still a list.
+            if (isOff(layer)) {
+                if (wroteOn) out.append(" /* , ").append(bodyOf(layer)).append(" */");
+                else leading.add(bodyOf(layer));
+                continue;
+            }
+            if (wroteOn) out.append(", ");
+            else if (!leading.isEmpty()) out.append("/* ").append(String.join(", ", leading)).append(", */ ");
+            out.append(layer);
+            wroteOn = true;
+        }
+        if (wroteOn) return out.toString();
+        return leading.isEmpty() ? "none" : "none /* " + String.join(", ", leading) + " */";
+    }
+
+    /** {@link #layerStack} for a {@code transform}: its functions, a switched-off one in a comment. */
+    public static List<String> functionStack(@Nullable String css) {
+        return stack(css, false);
+    }
+
+    /** {@link #functionStack} back into a {@code transform}. */
+    public static String joinFunctionStack(List<String> functions) {
+        List<String> on = new ArrayList<>();
+        List<String> out = new ArrayList<>();
+        for (String function : functions) {
+            out.add(function);
+            if (!isOff(function)) on.add(function);
+        }
+        if (functions.isEmpty()) return "none";
+        if (on.isEmpty()) {
+            List<String> bodies = new ArrayList<>();
+            for (String function : functions) bodies.add(bodyOf(function));
+            return "none /* " + String.join(" ", bodies) + " */";
+        }
+        return String.join(" ", out);
+    }
+
+    /** Whether a stack entry is switched off. */
+    public static boolean isOff(String layer) {
+        String trimmed = layer.trim();
+        return trimmed.startsWith("/*") && trimmed.endsWith("*/");
+    }
+
+    /** A stack entry without its switch: the layer itself. */
+    public static String bodyOf(String layer) {
+        if (!isOff(layer)) return layer.trim();
+        String trimmed = layer.trim();
+        return trimmed.substring(2, trimmed.length() - 2).trim();
+    }
+
+    /** {@code layer} switched on or off. */
+    public static String switched(String layer, boolean on) {
+        return on ? bodyOf(layer) : "/* " + bodyOf(layer) + " */";
+    }
+
+    /** {@code body} in place of what {@code layer} held, keeping whether it is on. */
+    public static String withBody(String layer, String body) {
+        return switched(body, !isOff(layer));
+    }
+
+    private static List<String> stack(@Nullable String css, boolean commas) {
+        if (css == null || css.isBlank()) return List.of();
+        List<String> out = new ArrayList<>();
+        String text = css.trim();
+        int at = 0;
+        while (at < text.length()) {
+            int open = text.indexOf("/*", at);
+            int close = open < 0 ? -1 : text.indexOf("*/", open + 2);
+            String live = text.substring(at, open < 0 || close < 0 ? text.length() : open);
+            for (String layer : commas ? layers(live) : functions(live)) out.add(layer);
+            if (open < 0 || close < 0) break;
+            String kept = text.substring(open + 2, close);
+            for (String layer : commas ? layers(kept) : functions(kept)) out.add("/* " + layer + " */");
+            at = close + 2;
+        }
+        return out;
     }
 
     /** Layers back into a declaration, first on top — {@code none} for an empty stack. */
@@ -55,6 +156,7 @@ public final class CssValues {
      * scans for the bracket depth rather than splitting on anything.</p>
      */
     public static List<String> functions(@Nullable String css) {
+        if (css != null) css = CssComments.strip(css);
         if (css == null || css.isBlank() || css.trim().equalsIgnoreCase("none")) return List.of();
         List<String> out = new ArrayList<>();
         StringBuilder current = new StringBuilder();

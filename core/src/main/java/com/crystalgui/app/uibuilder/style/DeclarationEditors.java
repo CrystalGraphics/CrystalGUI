@@ -112,6 +112,18 @@ public final class DeclarationEditors {
         return new Field(descriptor, property == null ? context.css() : numeric(property, context.css()));
     }
 
+    /**
+     * {@link #number(Context, String)} over a range, which the kit draws as a slider beside its field.
+     *
+     * <pre>{@code
+     * DeclarationEditors.register(FONT_SIZE, context -> DeclarationEditors.number(context, "px", 6f, 96f));
+     * }</pre>
+     */
+    public static Field number(Context context, String unit, float min, float max) {
+        Field plain = number(context, unit);
+        return new Field(plain.descriptor().range(min, max).integral(true), plain.value());
+    }
+
     /** Forgets a registered editor, back to the type-driven default. */
     public static void unregister(StyleProperty<?> property) {
         OVERRIDES.remove(property);
