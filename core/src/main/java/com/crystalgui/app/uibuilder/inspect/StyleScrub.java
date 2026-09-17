@@ -9,7 +9,6 @@ import javax.annotation.Nullable;
 
 import com.google.gson.JsonElement;
 
-import com.crystalgraphics.platform.CgPlatform;
 
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
@@ -47,9 +46,6 @@ import com.crystalgui.widget.config.control.NumberControl;
  */
 public final class StyleScrub {
 
-    /** Units per pixel, in whole units: an edge wants a pixel's precision rather than reach. */
-    public static final double RATE = 0.3;
-
     private final UIElement handle;
     private final UIElement node;
     private final StyleProperty<?> property;
@@ -61,15 +57,12 @@ public final class StyleScrub {
     private DoubleFunction<String> css = value -> Math.round(value) + "px";
     private BooleanSupplier allowed = () -> true;
     private boolean signed;
-    private double rate = RATE;
+    /** An edge wants a pixel's precision rather than reach, and is written in whole pixels. */
+    private DragScrub.Spec spec = DragScrub.Spec.PIXELS.withIntegral(true);
     private Runnable onStep = () -> { };
 
     private boolean live;
-    private boolean passedThreshold;
-    private double anchor;
-    private int modifiers;
-    private float anchoredAtX;
-    private float anchoredAtY;
+    private DragScrub.Gesture scrub = new DragScrub.Gesture(spec);
     private float pixelsPerUnit = 1f;
 
     @Nullable
@@ -104,9 +97,9 @@ public final class StyleScrub {
         return this;
     }
 
-    /** Units per pixel before modifiers, in whole units. {@link #RATE} by default. */
+    /** Units per pixel before modifiers, in whole units. {@link DragScrub.Spec#PIXELS}'s by default. */
     public StyleScrub rate(double unitsPerPixel) {
-        this.rate = unitsPerPixel;
+        this.spec = spec.withRate(unitsPerPixel);
         return this;
     }
 
@@ -144,11 +137,8 @@ public final class StyleScrub {
         double start = measured.getAsDouble();
         if (Double.isNaN(start)) return false;
         live = true;
-        passedThreshold = false;
-        anchor = start;
-        modifiers = modifiersNow();
-        anchoredAtX = 0f;
-        anchoredAtY = 0f;
+        scrub = new DragScrub.Gesture(signed ? spec : spec.withRange(0d, Double.POSITIVE_INFINITY));
+        scrub.begin(start);
         pixelsPerUnit = Drag.pixelsPerLocalUnit(handle);
         before = NodeFields.inlineStyleOf(node);
         Drag.start(handle, surfaceX, surfaceY, new Drag.Listener() {
@@ -172,40 +162,20 @@ public final class StyleScrub {
 
     /** Whether a drag has passed its threshold and is writing values. */
     public boolean isScrubbing() {
-        return live && passedThreshold;
+        return live && scrub.isLive();
     }
 
     private void update(float dxPixels, float dyPixels) {
-        if (!live) return;
-        if (!passedThreshold) {
-            if (!DragScrub.passesThreshold(dxPixels, dyPixels, DragScrub.DEFAULT_THRESHOLD_PX)) return;
-            passedThreshold = true;
-            // FROM HERE, not from the press: pricing the travel spent reaching the threshold made the first step leap.
-            anchoredAtX = dxPixels;
-            anchoredAtY = dyPixels;
-        }
-        // A modifier pressed mid-drag re-anchors, so it prices only the travel still to come. @see NumberControl
-        int now = modifiersNow();
-        if (now != modifiers) {
-            double at = measured.getAsDouble();
-            if (!Double.isNaN(at)) anchor = at;
-            anchoredAtX = dxPixels;
-            anchoredAtY = dyPixels;
-            modifiers = now;
-        }
-        DragScrub.Spec spec = DragScrub.Spec.INTEGRAL.withRate(rate);
-        if (!signed) spec = spec.withRange(0d, Double.POSITIVE_INFINITY);
-        double value = DragScrub.value(anchor, dxPixels - anchoredAtX, dyPixels - anchoredAtY, now, spec);
-        LiveEdits.setInline(node, cast(property), css.apply(value));
+        if (!live || !scrub.update(dxPixels, dyPixels)) return;
+        LiveEdits.setInline(node, cast(property), css.apply(scrub.value()));
         onStep.run();
     }
 
     /** Records the drag as one step, or puts the style back when it was cancelled or never moved. */
     private void end(boolean keep) {
         JsonElement was = before;
-        boolean moved = passedThreshold;
+        boolean moved = scrub.isLive();
         live = false;
-        passedThreshold = false;
         before = null;
         if (was == null) return;
         if (!keep || !moved) {
@@ -215,12 +185,6 @@ public final class StyleScrub {
         LiveEdits.dropIfRedundant(node, property);
         JsonElement after = NodeFields.inlineStyleOf(node);
         if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
-    }
-
-    /** What is held down now; none when there is no platform to ask, as in a headless tree. */
-    private static int modifiersNow() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
     }
 
     @SuppressWarnings("unchecked")
