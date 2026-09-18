@@ -14,7 +14,6 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.core.cursor.Cursor;
-import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.ui.service.CursorDecoration;
 import com.crystalgui.ui.service.RotationCursor;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -104,22 +103,17 @@ public final class TransformBox extends UIElement {
      */
     private static final float GRAB = 9f;
 
-    private static final float PIVOT_SIZE = 9f;
-
-    /** Half-width of every line the box draws — its edges, and the pivot's mark. One logical pixel. */
+    /** Half-width of every line the box draws — its edges. One logical pixel. */
     private static final float HAIRLINE = 0.5f;
-
-    /** The pivot's under-pass, wider, so the mark reads on a pale element as well as a dark one. */
-    private static final float PIVOT_HALO = 1.1f;
 
     /**
      * How close a press has to be to the pivot, and it is NOT {@link #PIVOT_SIZE}.
      *
-     * <p>That is the crosshair's whole span, so using it as a radius claimed a circle twice the width of
+     * <p>{@link PivotMark#SIZE} is the crosshair's whole span, so using it as a radius claimed a circle twice the width of
      * the mark: the pivot cursor appeared over empty box and the crosshair could be grabbed from nowhere
      * near it. Half the span is the mark's own reach.</p>
      */
-    private static final float PIVOT_GRAB = PIVOT_SIZE * 0.5f;
+    private static final float PIVOT_GRAB = PivotMark.SIZE * 0.5f;
 
     private final BuilderContext ctx;
 
@@ -975,45 +969,10 @@ public final class TransformBox extends UIElement {
 
         Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
         if (pivot != null) {
-            paintPivot(paint, pivot,
+            PivotMark.paint(paint, pivot.x, pivot.y,
                     getStyle().computed().get(StylePropertyRegistry.OUTLINE_COLOR),
                     getStyle().computed().get(StylePropertyRegistry.TEXT_DECORATION_COLOR));
         }
-    }
-
-    /**
-     * The pivot — a ring with four arms, each pass drawn over a wider halo.
-     *
-     * <p><b>Two colours, and neither is the chrome's.</b> In the chrome colour it was invisible on
-     * anything selected-blue, which is most of what a builder points at, and a mark that disappears into
-     * the element it belongs to cannot say where the transform turns. The halo is what carries it over a
-     * pale element as well as a dark one, which no single colour does: After Effects' anchor point and
-     * Blender's 3D cursor are both two-tone for the same reason. The ring is Photoshop's shape, and it is
-     * what tells the mark apart from a snap guide's cross.</p>
-     *
-     * <p>{@code outline-color} and {@code text-decoration-color} are BORROWED — this overlay draws
-     * neither an outline nor text, and the sheet has to have somewhere to say them. @see ua/uibuilder.css</p>
-     */
-    private static void paintPivot(CgUiPaintContext paint, Vector2f at, int mark, int halo) {
-        pivotPass(paint, at, halo, PIVOT_HALO);
-        pivotPass(paint, at, mark, HAIRLINE);
-    }
-
-    /** One pass of the mark: the ring, then the four arms outside it. @see #paintPivot */
-    private static void pivotPass(CgUiPaintContext paint, Vector2f at, int colour, float width) {
-        float arm = PIVOT_SIZE * 0.5f;
-        float radius = PIVOT_SIZE * 0.28f;
-        paint.rect()
-                .at(at.x - radius, at.y - radius)
-                .size(radius * 2f, radius * 2f)
-                .radius(radius, radius)
-                .border(width * 2f, colour)
-                .fillColor(0)
-                .submit();
-        stroke(paint, at.x - arm, at.y, at.x - radius, at.y, colour, width);
-        stroke(paint, at.x + radius, at.y, at.x + arm, at.y, colour, width);
-        stroke(paint, at.x, at.y - arm, at.x, at.y - radius, colour, width);
-        stroke(paint, at.x, at.y + radius, at.x, at.y + arm, colour, width);
     }
 
     /**

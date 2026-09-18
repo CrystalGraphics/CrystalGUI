@@ -50,7 +50,7 @@ public final class OffsetPad extends ValueControl<double[]> {
         /**
          * The element's own box, 0 at its top left and 1 at its bottom right: a transform's pivot. The value is a pair
          * of FRACTIONS, shown as the percentages a sheet writes, and <b>the nine places anyone means are cells beside
-         * the pad</b> — a drag snaps to those same nine unless Ctrl is down, and stops at the box's own edges.
+         * the pad</b> — a drag snaps to those same nine unless Ctrl is down, and reaches half a box past either edge.
          */
         BOX
     }
@@ -77,15 +77,12 @@ public final class OffsetPad extends ValueControl<double[]> {
     private static final double SNAP = 0.04d;
 
     /**
-     * A pad that IS the box maps onto the box, so a drag on it stops at the edges — unlike the offset pad, whose
-     * space is unbounded and whose dot stops while its value does not.
-     *
-     * <p>A pivot outside the element is legal CSS and occasionally the point: a hinge past the edge, a hand
-     * swinging about a centre somewhere else. It is typed, or dragged on the mark on the specimen, where there is
-     * room to see where it went — the pad has none, and a dot frozen at the edge while the number climbs says
-     * nothing about where the pivot is.</p>
+     * How far past the box a drag on the pad may take the point. A pivot outside the element is legal CSS and
+     * sometimes the point — a hinge past the edge, a hand swinging about a centre somewhere else — so the pad
+     * reaches half a box either way rather than stopping at its own edges. The dot stops there; the value does
+     * not, which is what the offset pad does with its own unbounded space.
      */
-    private static final double[] BOX_RANGE = {0d, 1d};
+    private static final double[] BOX_RANGE = {-0.5d, 1.5d};
 
     private final Space space;
     private final UIElement pad = new UIElement();
@@ -175,9 +172,8 @@ public final class OffsetPad extends ValueControl<double[]> {
             begin();
         }, (dx, dy) -> {
             if (pad.box() == null || pad.box().width() <= 0f || pad.box().height() <= 0f) return;
-            boolean fine = CgModifiers.hasCtrl(CgPlatform.input().getCurrentModifiers());
-            commitAndShow(new double[] {placed(from[0] + dx / pad.box().width(), fine),
-                    placed(from[1] + dy / pad.box().height(), fine)});
+            commitAndShow(new double[] {onBox(from[0] + dx / pad.box().width()),
+                    onBox(from[1] + dy / pad.box().height())});
         }, this::end);
     }
 
@@ -195,10 +191,20 @@ public final class OffsetPad extends ValueControl<double[]> {
         endInteraction();
     }
 
-    /** A dragged fraction: held to the box, and snapped to the nine unless Ctrl is down. @see #BOX_RANGE */
-    private static double placed(double fraction, boolean fine) {
+    /**
+     * A fraction of a box as a drag lands it: held to {@link #BOX_RANGE}, and snapped to the nine places the cells
+     * offer unless Ctrl is down.
+     *
+     * <pre>{@code
+     * at.set(new double[] {OffsetPad.onBox(from[0] + dx / w), OffsetPad.onBox(from[1] + dy / h)});
+     * }</pre>
+     *
+     * <p><b>Public because a pad is not the only thing a point is dragged on</b> — the transform lab drags the same
+     * pivot on its specimen, and two copies of a snap are two snaps that drift apart.</p>
+     */
+    public static double onBox(double fraction) {
         double held = Math.max(BOX_RANGE[0], Math.min(BOX_RANGE[1], fraction));
-        if (!fine) {
+        if (!CgModifiers.hasCtrl(CgPlatform.input().getCurrentModifiers())) {
             for (double ninth : new double[] {0d, 0.5d, 1d}) {
                 if (Math.abs(held - ninth) < SNAP) return ninth;
             }

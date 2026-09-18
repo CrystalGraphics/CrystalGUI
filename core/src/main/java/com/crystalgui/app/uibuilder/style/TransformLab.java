@@ -5,7 +5,10 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.app.uibuilder.canvas.transform.PivotMark;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
+import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.undo.UndoStack;
@@ -37,6 +40,9 @@ import com.crystalgui.widget.text.UIText;
  * <p>The specimen is a mark on a plate with a <b>ghost of where it started</b> behind it: a translate on an empty plate
  * moves a plate on an empty stage, and a rotate and a flip leave a rectangle looking like a rectangle. An {@code F} is
  * asymmetric on both axes, which is why every graphics text draws one.</p>
+ *
+ * <p>The <b>pivot</b> every op turns and grows about is edited here too — {@code transform-origin}, which means
+ * nothing on its own — as the canvas's own mark on the box, and as the nine places and two percentages of a row.</p>
  */
 public final class TransformLab {
 
@@ -46,16 +52,9 @@ public final class TransformLab {
     /** Asymmetric both ways, so a turn, a flip and a shear are each legible on it. The row chips draw the same one. */
     static final String MARK = "F";
 
-    /** The pivot on the specimen: a zero-sized anchor at the point, and the ring and cross drawn around it. */
+    /** The pivot on the box: a zero-sized anchor at the point, and the mark drawn around it. */
     public static final String PIVOT_CLASS = "__lab-pivot__";
     public static final String PIVOT_MARK_CLASS = "__lab-pivot-mark__";
-    public static final String PIVOT_BAR_CLASS = "__lab-pivot-bar__";
-
-    /** How near a ninth of the box a dragged pivot lands on it: the corners and the middle are what anyone wants. */
-    private static final double SNAP = 0.04d;
-
-    /** How far outside the box the mark on the specimen may be dragged. */
-    private static final double DRAG_REACH = 0.5d;
 
     private static final String TRANSLATE = "translate";
     private static final String ROTATE = "rotate";
@@ -65,13 +64,29 @@ public final class TransformLab {
     /** What each kind is added as -- identity, so adding one changes nothing until it is dragged. */
     private static final String[] ADDED = {"translate(0px, 0px)", "rotate(0deg)", "scale(1)", "skew(0deg, 0deg)"};
 
-    /** How far a factor is dragged, and how far one may be typed: a scale has no CSS limit. */
-    private static final float SCALE_REACH = 4f;
-    private static final float SCALE_MAX = 999f;
+    /**
+     * How far a factor is dragged and typed, as the PERCENTAGE its fields show: CSS writes a scale as a bare
+     * multiplier, and nobody reads 1.24 as a quarter bigger. The free transform bar says 111.45% for the same
+     * quantity.
+     */
+    private static final float SCALE_REACH = 400f;
+    private static final float SCALE_MAX = 10000f;
 
-    /** How far a shear is dragged, and the right angle it cannot reach: at 90° the box collapses to a line. */
-    private static final float SKEW_REACH = 45f;
-    private static final float SKEW_MAX = 89f;
+    /**
+     * What a scrub is worth, across this lab: a WHOLE unit — a percent, a degree — every three pixels. The rate
+     * alone moved a third of one per pixel, so a degree field crept 0.3 at a time; the step is what makes the
+     * gesture land on units. A typed value keeps its decimals.
+     */
+    private static final double SCRUB_RATE = 1d / 3d;
+    private static final float SCRUB_STEP = 1f;
+
+    /**
+     * As near the right angle as a tenth of a degree gets, because 90° is not a large shear but the asymptote: a
+     * shear is {@code tan(angle)} ({@code Transform.shear}), which is undefined there — the matrix goes singular
+     * and the element has no area left to draw. Every angle short of it is a real shear, so the field stops at the
+     * last one it can print rather than at some rounder number.
+     */
+    private static final float SKEW_MAX = 89.9f;
 
     private static final String ORIGIN_X = "transform-origin-x";
     private static final String ORIGIN_Y = "transform-origin-y";
@@ -89,22 +104,17 @@ public final class TransformLab {
     }
 
     /**
-     * @param node   the element being transformed, whose color and face the mark takes, or null for the lab's own
-     * @param fields what the target is styled by, for the origin the ops turn about -- which is a declaration of its
-     *               own and edited here because it means nothing without one. Null leaves the group out
+     * @param node   the element being transformed, for the one question the lab has to ask it: how long a pivot
+     *               written in pixels is as a fraction of the box. Null reads such a pivot as the middle
+     * @param fields what the target is styled by, for the pivot the ops turn about -- which is a declaration of its
+     *               own and edited here because it means nothing without one. Null leaves the row out
      */
     public static void open(UIElement anchor, StyleProperty<?> property, Property<String> css, boolean hideable,
                             @Nullable UIElement node, @Nullable StyleFields fields) {
         StyleLab lab = StyleLab.over(anchor, "Transform").addClass(LAB_CLASS);
-        UIText mark = new UIText(MARK);
-        lab.specimen(mark).ghost(new UIText(MARK)).preview(property, css);
-        if (node != null) {
-            // THE ELEMENT'S OWN MARK: a transform is judged against the thing being transformed.
-            for (StyleProperty<?> own : List.of(StylePropertyRegistry.COLOR, StylePropertyRegistry.FONT_FAMILY)) {
-                LiveEdits.follow(mark, own, TypographyLab.computed(node, own));
-            }
-        }
-        lab.contrastWith(() -> mark.getStyle().computed().get(StylePropertyRegistry.COLOR));
+        // THE LAB'S OWN MARK, not the element's colour and face: a transform is geometry, and the element's white
+        // text on the white plate was a specimen you could not see at all. The sheet colours it per plate.
+        lab.specimen(new UIText(MARK)).ghost(new UIText(MARK)).preview(property, css);
 
         Property<Integer> selected = Property.of(0);
         Property<List<String>> ops = css.map(CssValues::functionStack, CssValues::joinFunctionStack);
@@ -138,21 +148,20 @@ public final class TransformLab {
         stack.bind(ops);
         lab.content().append(stack);
 
-        Property<Boolean> uniform = Property.of(true);
-        Rows rows = rows(lab.form(), property, op, uniform);
+        // W AND H, which is what a scale's two factors are: the free transform bar names them the same.
+        LinkedPair factors = new LinkedPair("lab.scale", factorField("lab.scale.x", "W"),
+                factorField("lab.scale.y", "H"));
+        Rows rows = rows(lab.form(), property, op, factors);
         if (fields != null) pivot(lab, fields, node);
 
-        // OPENED AS THE OP IS, and re-read when another is picked: a scale whose axes agree opens linked.
+        // OPENED AS THE OP IS, and re-read when another is picked: a scale whose axes agree opens chained.
         PropertyWatch.follow(lab.content(), selected, index -> {
             if (SCALE.equals(CssValues.functionName(op.get()))) {
-                uniform.set(factor(op.get(), 0) == factor(op.get(), 1));
+                factors.linked(factor(op.get(), 0) == factor(op.get(), 1));
             }
         });
-        // ONLY THE ROWS THE PICKED OP IS EDITED BY, which two things decide: its kind, and whether a scale is linked.
-        PropertyWatch.follow(lab.content(), Property.derived(() -> CssValues.functionName(op.get())),
-                kind -> rows.show(kind, Boolean.TRUE.equals(uniform.get())));
-        PropertyWatch.follow(lab.content(), uniform,
-                linked -> rows.show(CssValues.functionName(op.get()), Boolean.TRUE.equals(linked)));
+        // ONLY THE ROWS THE PICKED OP IS EDITED BY.
+        PropertyWatch.follow(lab.content(), Property.derived(() -> CssValues.functionName(op.get())), rows::show);
 
         lab.caption(Property.derived(() -> {
             int count = ops.get().size();
@@ -166,22 +175,17 @@ public final class TransformLab {
     }
 
     /** Every row the lab has, and which kind each belongs to. @see #show */
-    private record Rows(Configurator offset, Configurator angle, Configurator uniform, UIElement flips,
-                        Configurator scale, Configurator scaleX, Configurator scaleY,
-                        Configurator skewX, Configurator skewY, Configurator raw) {
+    private record Rows(Configurator offset, Configurator angle, UIElement flips, Configurator scale,
+                        Configurator skew, Configurator raw) {
 
         /** Shows the picked kind's rows and hides the rest. */
-        void show(String kind, boolean linked) {
+        void show(String kind) {
             boolean scaling = SCALE.equals(kind);
             offset.set(Attribute.HIDDEN, !TRANSLATE.equals(kind));
             angle.set(Attribute.HIDDEN, !ROTATE.equals(kind));
-            uniform.set(Attribute.HIDDEN, !scaling);
             flips.set(Attribute.HIDDEN, !scaling);
-            scale.set(Attribute.HIDDEN, !scaling || !linked);
-            scaleX.set(Attribute.HIDDEN, !scaling || linked);
-            scaleY.set(Attribute.HIDDEN, !scaling || linked);
-            skewX.set(Attribute.HIDDEN, !SKEW.equals(kind));
-            skewY.set(Attribute.HIDDEN, !SKEW.equals(kind));
+            scale.set(Attribute.HIDDEN, !scaling);
+            skew.set(Attribute.HIDDEN, !SKEW.equals(kind));
             // THE TEXT IS THE FLOOR, not a fallback: matrix() and anything a future engine adds is edited here. An
             // empty stack has no op to edit at all, and the caption is what says so.
             boolean known = TRANSLATE.equals(kind) || ROTATE.equals(kind) || scaling || SKEW.equals(kind);
@@ -189,7 +193,7 @@ public final class TransformLab {
         }
     }
 
-    private static Rows rows(PanelForm form, StyleProperty<?> property, Property<String> op, Property<Boolean> uniform) {
+    private static Rows rows(PanelForm form, StyleProperty<?> property, Property<String> op, LinkedPair factors) {
         // A PIXEL OF HAND IS A PIXEL OF OFFSET, on the pad the shadow lab's offsets use.
         Configurator offset = form.control("lab.translate", "Translate", new OffsetPad("lab.translate")
                 .bind(op.map(TransformLab::translation, at -> is(op, TRANSLATE)
@@ -201,25 +205,21 @@ public final class TransformLab {
                 .bind(op.map(text -> degrees(text, 0),
                         turned -> is(op, ROTATE) ? CssValues.function(ROTATE, deg(turned)) : op.get())));
 
-        Configurator uniformRow = form.prop(ConfigDescriptor.bool("lab.scale.uniform", "Uniform"),
-                uniform.map(on -> on, on -> {
-                    // SQUARED BACK when it is switched on, rather than leaving the two axes apart and saying linked.
-                    if (Boolean.TRUE.equals(on) && is(op, SCALE)) op.set(scaled(factor(op.get(), 0), factor(op.get(), 0)));
-                    return on;
-                }));
         UIElement flips = form.custom(flips(op));
-        Configurator scale = form.prop(factorField("lab.scale", "Scale"), factor(op, -1, uniform));
-        Configurator scaleX = form.prop(factorField("lab.scale.x", "Scale X"), factor(op, 0, uniform));
-        Configurator scaleY = form.prop(factorField("lab.scale.y", "Scale Y"), factor(op, 1, uniform));
+        // ONE ROW WITH A CHAIN IN IT, as the free transform bar's W and H: two factors that move together while it
+        // holds, at the ratio they had.
+        Configurator scale = form.control("lab.scale", "Scale", factors.bind(factors(op)));
 
-        Configurator skewX = form.prop(shearField("lab.skew.x", "Skew X"), shear(op, 0));
-        Configurator skewY = form.prop(shearField("lab.skew.y", "Skew Y"), shear(op, 1));
+        // ONE ROW FOR THE PAIR, as every other two-axis value in the kit is: X and Y of one shear, not two shears.
+        Configurator skew = form.prop(ConfigDescriptor.vector("lab.skew", "Skew", 2)
+                .range(-SKEW_MAX, SKEW_MAX).unit("°").decimals(1)
+                .scrubRate(SCRUB_RATE).step(SCRUB_STEP), shear(op));
 
         Configurator raw = form.prop(ConfigDescriptor.text("lab.op", "Function").placeholder("none")
                         .validator(text -> text == null || text.isBlank()
                                 || DeclarationEditors.parses(property, text)),
                 op.map(CssValues::readable, typed -> typed == null ? "" : typed.trim()));
-        return new Rows(offset, angle, uniformRow, flips, scale, scaleX, scaleY, skewX, skewY, raw);
+        return new Rows(offset, angle, flips, scale, skew, raw);
     }
 
     /**
@@ -247,7 +247,7 @@ public final class TransformLab {
                     y.set(percent(next[1]));
                 }).editedIn(fields.history());
 
-        lab.onSpecimen(pin(at, fields));
+        lab.mark(pin(at, fields));
         // ONE ROW, under a rule: the nine places, the pad, and the two percentages. @see OffsetPad.Space#BOX
         lab.form().separator();
         lab.form().control("lab.pivot", "Pivot", new OffsetPad("lab.pivot", OffsetPad.Space.BOX).bind(at));
@@ -256,23 +256,23 @@ public final class TransformLab {
     /**
      * The pivot's mark: a ring with a cross through it, at {@code at} of the specimen's own box, dragged to move it.
      *
-     * <p>A zero-sized anchor holding the drawing, so nothing has to match a negative margin to its size — and the
-     * whole thing is INSIDE the specimen, so it carries the transform and lands on the point the mark visibly turns
-     * about.</p>
+     * <p>A zero-sized anchor holding the drawing, so nothing has to match a negative margin to its size. It is on
+     * the element's own box rather than the transformed one: an origin is measured before anything is applied, which
+     * is the box the ghost draws.</p>
      */
     private static UIElement pin(Property<double[]> at, StyleFields fields) {
         UIElement pin = new UIElement();
         pin.addClass(PIVOT_CLASS);
-        for (String axis : new String[] {"__horizontal__", "__vertical__"}) {
-            pin.append(new UIElement().addClass(PIVOT_BAR_CLASS).addClass(axis));
-        }
-        UIElement mark = new UIElement();
+        UIElement mark = new Mark();
         mark.addClass(PIVOT_MARK_CLASS);
         pin.append(mark);
-        PropertyWatch.follow(pin, at, where -> {
-            LiveEdits.setInline(pin, LayoutProperties.LEFT, percent(where[0]));
-            LiveEdits.setInline(pin, LayoutProperties.TOP, percent(where[1]));
-        });
+        // IN MEASURED PIXELS, not a percentage: a percentage inset resolves against the containing block, and this
+        // layer's own size is its content's -- so the engine answered zero and the mark sat in the corner whatever
+        // the pivot said. Re-read every frame, so it follows the box as well as the value.
+        PropertyWatch.follow(pin, Property.derived(() -> on(pin, at.get(), true)),
+                left -> LiveEdits.setInline(pin, LayoutProperties.LEFT, left));
+        PropertyWatch.follow(pin, Property.derived(() -> on(pin, at.get(), false)),
+                top -> LiveEdits.setInline(pin, LayoutProperties.TOP, top));
 
         double[] from = new double[2];
         StyleGizmos.drag(mark, () -> {
@@ -285,8 +285,9 @@ public final class TransformLab {
         }, (dx, dy) -> {
             UIElement box = pin.parentElement();
             if (box == null || box.box() == null || box.box().width() <= 0f || box.box().height() <= 0f) return;
-            at.set(new double[] {dragged(from[0] + dx / box.box().width()),
-                    dragged(from[1] + dy / box.box().height())});
+            // THE PAD'S OWN RULE, so the mark and the pad snap alike. @see OffsetPad#onBox
+            at.set(new double[] {OffsetPad.onBox(from[0] + dx / box.box().width()),
+                    OffsetPad.onBox(from[1] + dy / box.box().height())});
         }, () -> {
             UndoStack history = fields.history();
             if (history != null) history.endMergeRun();
@@ -294,13 +295,30 @@ public final class TransformLab {
         return pin;
     }
 
-    /** A dragged fraction: held to reach, and snapped to the corners, the edges' middles and the centre. */
-    private static double dragged(double fraction) {
-        double held = Math.max(-DRAG_REACH, Math.min(1d + DRAG_REACH, fraction));
-        for (double ninth : new double[] {0d, 0.5d, 1d}) {
-            if (Math.abs(held - ninth) < SNAP) return ninth;
+    /**
+     * The mark itself, drawn as the canvas's free transform draws its pivot — the same ring and arms over the same
+     * halo, from the same painter, so the two are recognisably one thing. The colours are the two the sheet lends
+     * it, as they are there. @see PivotMark
+     */
+    private static final class Mark extends UIElement {
+        @Override
+        public void paintContent(CgUiPaintContext paint, Box box) {
+            PivotMark.paint(paint, box.width() / 2f, box.height() / 2f,
+                    getStyle().computed().get(StylePropertyRegistry.OUTLINE_COLOR),
+                    getStyle().computed().get(StylePropertyRegistry.TEXT_DECORATION_COLOR));
         }
-        return Math.round(held * 1000d) / 1000d;
+    }
+
+    /**
+     * Where the mark sits on the box it is drawn over, in px — the fraction of a side it is given.
+     *
+     * <p><b>Not rounded to a whole pixel.</b> The stage is a zoomable plane, so a logical pixel is thirteen of them
+     * at thirteen times: a mark snapped to whole ones stepped visibly under a pointer moving smoothly.</p>
+     */
+    private static String on(UIElement pin, double[] at, boolean horizontal) {
+        UIElement box = pin.parentElement();
+        float side = box == null || box.box() == null ? 0f : horizontal ? box.box().width() : box.box().height();
+        return CssValues.px((horizontal ? at[0] : at[1]) * side);
     }
 
     /**
@@ -348,45 +366,31 @@ public final class TransformLab {
         return row;
     }
 
-    /** A factor field: dragged to {@link #SCALE_REACH}, typed as far as anyone likes. */
+    /** A factor field, as a percentage: dragged to {@link #SCALE_REACH}, typed as far as anyone likes. */
     private static ConfigDescriptor factorField(String id, String label) {
         return ConfigDescriptor.number(id, label).range(-SCALE_MAX, SCALE_MAX)
-                .softRange(-SCALE_REACH, SCALE_REACH).step(0.01f).decimals(3);
+                .softRange(-SCALE_REACH, SCALE_REACH).unit("%").decimals(2)
+                .scrubRate(SCRUB_RATE).step(SCRUB_STEP);
     }
 
-    /** A shear field, in degrees whatever the file spells the angle in. */
-    private static ConfigDescriptor shearField(String id, String label) {
-        return ConfigDescriptor.number(id, label).range(-SKEW_MAX, SKEW_MAX).softRange(-SKEW_REACH, SKEW_REACH)
-                .unit("°").decimals(1);
+    /** A scale's two factors as the percentages the fields show, which the chain keeps in proportion. */
+    private static Property<double[]> factors(Property<String> op) {
+        return op.map(text -> new double[] {factor(text, 0) * 100d, factor(text, 1) * 100d},
+                value -> !is(op, SCALE) || value == null ? op.get() : scaled(value[0] / 100d, value[1] / 100d));
     }
 
-    /** One axis of a scale, or both at once for {@code axis} of -1 — which is what Uniform edits. */
-    private static Property<Double> factor(Property<String> op, int axis, Property<Boolean> uniform) {
-        return op.map(text -> factor(text, Math.max(0, axis)), value -> {
-            if (!is(op, SCALE)) return op.get();
-            double next = value == null ? 1d : value;
-            double x = factor(op.get(), 0);
-            double y = factor(op.get(), 1);
-            // LINKED MOVES BOTH, whichever row the edit came from -- the two rows are not shown together.
-            if (axis < 0 || Boolean.TRUE.equals(uniform.get())) return scaled(next, next);
-            return axis == 0 ? scaled(next, y) : scaled(x, next);
-        });
-    }
-
-    /** One axis of a shear, in degrees. */
-    private static Property<Double> shear(Property<String> op, int axis) {
-        return op.map(text -> degrees(text, axis), value -> {
-            if (!is(op, SKEW)) return op.get();
-            double next = value == null ? 0d : value;
-            double other = degrees(op.get(), axis == 0 ? 1 : 0);
-            return CssValues.function(SKEW, deg(axis == 0 ? next : other), deg(axis == 0 ? other : next));
-        });
+    /** A shear's two angles, in degrees whatever the file spells them in. */
+    private static Property<double[]> shear(Property<String> op) {
+        return op.map(text -> new double[] {degrees(text, 0), degrees(text, 1)},
+                value -> !is(op, SKEW) || value == null ? op.get()
+                        : CssValues.function(SKEW, deg(value[0]), deg(value[1])));
     }
 
     /** {@code scale(2)} where the axes agree, as a person writes it, and two arguments where they do not. */
     private static String scaled(double x, double y) {
-        double sx = CssValues.dragged(x);
-        double sy = CssValues.dragged(y);
+        // FOUR PLACES, not the two a dragged length carries: a multiplier's third place is a tenth of a percent.
+        double sx = Math.round(x * 10000d) / 10000d;
+        double sy = Math.round(y * 10000d) / 10000d;
         return sx == sy ? CssValues.function(SCALE, CssValues.write(sx))
                 : CssValues.function(SCALE, CssValues.write(sx), CssValues.write(sy));
     }

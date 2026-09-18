@@ -285,6 +285,14 @@ theme {
     --lab-ground-dark: #000000;
     --lab-ground-light: #FFFFFF;
     --lab-specimen-bg: #FFFFFF14;
+    /* THE PLATE AND WHAT IS ON IT, per GROUND rather than per theme: the two grounds are an absolute black and an
+     * absolute white a person picks, so what reads on them is absolute too -- a theme-derived foreground is a dark
+     * mark on the black plate as soon as the theme is a light one. Literal in both themes, as the grounds are. */
+    --lab-specimen-on-light: #00000014;
+    --lab-mark: #DFE1E5;
+    --lab-mark-on-light: #1E1F22;
+    --lab-ghost: #7A7A7A;
+    --lab-ghost-on-light: #8C8F94;
     --lab-shape-1: #E0398A;
     --lab-shape-2: #F08A24;
     --lab-shape-3: #2BC7A8;
