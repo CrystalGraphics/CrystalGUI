@@ -169,8 +169,8 @@ public final class CssValues {
         for (String layer : layers) {
             // COMMAS INSIDE THE COMMENT, so what is left when the sheet strips it is still a list.
             if (isOff(layer)) {
-                if (wroteOn) out.append(" /* , ").append(bodyOf(layer)).append(" */");
-                else leading.add(bodyOf(layer));
+                if (wroteOn) out.append(" /* , ").append(forComment(bodyOf(layer))).append(" */");
+                else leading.add(forComment(bodyOf(layer)));
                 continue;
             }
             if (wroteOn) out.append(", ");
@@ -198,7 +198,7 @@ public final class CssValues {
         if (functions.isEmpty()) return "none";
         if (on.isEmpty()) {
             List<String> bodies = new ArrayList<>();
-            for (String function : functions) bodies.add(bodyOf(function));
+            for (String function : functions) bodies.add(forComment(bodyOf(function)));
             return "none /* " + String.join(" ", bodies) + " */";
         }
         return String.join(" ", out);
@@ -220,12 +220,31 @@ public final class CssValues {
     public static String bodyOf(String layer) {
         if (!isOff(layer)) return layer.trim();
         String trimmed = layer.trim();
-        return trimmed.substring(2, trimmed.length() - 2).trim();
+        return fromComment(trimmed.substring(2, trimmed.length() - 2).trim());
     }
 
     /** {@code layer} switched on or off. */
     public static String switched(String layer, boolean on) {
-        return on ? bodyOf(layer) : "/* " + bodyOf(layer) + " */";
+        return on ? bodyOf(layer) : "/* " + forComment(bodyOf(layer)) + " */";
+    }
+
+    /**
+     * {@code text} made safe to put INSIDE a comment.
+     *
+     * <p><b>CSS comments do not nest.</b> Only the two characters that close one close it, so a value carrying a
+     * switched-off layer closed the comment its own switched-off DECLARATION was wrapped in, and what was left was
+     * {@code /*}{@code  none /*}{@code  translate(4px) *}{@code / *}{@code /} — which is not a transform, and the
+     * eye on the row appeared to do nothing at all. A space between the two is the smallest thing that stops it,
+     * and the only one a reader still sees what was meant through; nothing valid in a value spells them
+     * adjacent.</p>
+     */
+    public static String forComment(String text) {
+        return text.replace("*/", "* /");
+    }
+
+    /** The inverse of {@link #forComment}, wherever a comment's body is read back. */
+    public static String fromComment(String text) {
+        return text.replace("* /", "*/");
     }
 
     /** {@code body} in place of what {@code layer} held, keeping whether it is on. */
