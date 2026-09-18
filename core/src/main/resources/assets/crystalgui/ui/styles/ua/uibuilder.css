@@ -1141,7 +1141,11 @@ smartguides {
  * moved every panel's column. */
 .__style-lab__ .__configurator__ > .__label__ { flex-basis: 110px; }
 .__style-lab__ {
-    width: 320px;
+    /* WIDE ENOUGH FOR THE FIELDS, which is what a lab is mostly made of: 110px of it is the label column and a
+     * pivot's row spends 76 more on the pad and the nine cells, so at 320 the two numbers were left with fifty
+     * pixels each and `150.0%` came out `150.0'`. The pixels have to come from the lab, not from the gaps
+     * between its controls. */
+    width: 348px;
     /* A LAB SCROLLS RATHER THAN OVERFLOWING. Its content ran to ~700px in a 377px window, and a panel
      * whose rows are wider than it scrolls horizontally too -- which is what put the hit boxes somewhere
      * other than the paint: a press then lands on whichever control has scrolled under the pointer. */
@@ -1462,10 +1466,7 @@ smartguides {
 .__angle-preset__.__active__ { color: var(--accent, #3574F0); }
 
 /* A ROW'S CONTROL: the pad, then X and Y beside it. */
-/* A TIGHT GAP, because the fields want the pixels: the pad and the nine cells are a fixed 38px each, so
- * everything the row does not spend between them is text room for the two numbers -- and a percentage is
- * the widest thing they carry. */
-.__offset-field__ { flex-direction: row; align-items: center; gap: 3px; width: 100%; }
+.__offset-field__ { flex-direction: row; align-items: center; gap: 6px; width: 100%; }
 .__offset-field__ > .__vector__ { width: 0px; flex-grow: 1; }
 /* The offset pad: the dot is where the shadow falls, the crosshair is no offset at all. */
 .__offset-pad__ {
