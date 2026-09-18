@@ -235,11 +235,15 @@ public final class MoveOutOfFlow extends UIElement {
         float farY = box == null || parent == null ? 0f
                 : parent.height() - parent.border().bottom - box.margin().bottom - box.height();
 
+        // IN THE UNIT THE NODE STATES IT IN: a percentage inset follows the parent, and written back as pixels it
+        // stops. @see CanvasLengths
+        float wide = parent == null ? 0f : parent.width();
+        float tall = parent == null ? 0f : parent.height();
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
-            if (rightAnchored) l.right(Math.round(farX - x));
-            else l.left(Math.round(leftInset(node, x)));
-            if (bottomAnchored) l.bottom(Math.round(farY - y));
-            else l.top(Math.round(topInset(node, y)));
+            if (rightAnchored) l.set(LayoutProperties.RIGHT, CanvasLengths.inset(node, LayoutProperties.RIGHT, farX - x, wide));
+            else l.set(LayoutProperties.LEFT, CanvasLengths.inset(node, LayoutProperties.LEFT, leftInset(node, x), wide));
+            if (bottomAnchored) l.set(LayoutProperties.BOTTOM, CanvasLengths.inset(node, LayoutProperties.BOTTOM, farY - y, tall));
+            else l.set(LayoutProperties.TOP, CanvasLengths.inset(node, LayoutProperties.TOP, topInset(node, y), tall));
         });
     }
 
