@@ -533,9 +533,11 @@ public final class StyleFields {
             if (declaration == null) return false;
             // The declaration SPELLED OUT rather than sliced, and the semicolon taken with it: what comes
             // back when it is switched on again has to be a declaration a sheet can hold on its own.
+            // SAFE INSIDE A COMMENT: a value may carry a switched-off layer of its own, and CSS comments do not
+            // nest -- the value's own would have closed this one. @see CssValues#forComment
             String body = declaration.property() + ": " + declaration.value() + ";";
             buffer.edit(ChangeSet.replace(text.length(), declaration.range().start(),
-                    endOfStatement(text, declaration.range().end()), "/* " + body + " */"));
+                    endOfStatement(text, declaration.range().end()), "/* " + CssValues.forComment(body) + " */"));
             return true;
         }
         for (CssSourceModel.Comment comment : model.comments()) {
@@ -745,7 +747,7 @@ public final class StyleFields {
     private static String inner(String comment) {
         String text = comment.trim();
         if (!text.startsWith("/*") || !text.endsWith("*/")) return null;
-        text = text.substring(2, text.length() - 2).trim();
+        text = CssValues.fromComment(text.substring(2, text.length() - 2).trim());
         return text.indexOf(':') > 0 && text.indexOf('{') < 0 ? text : null;
     }
 
