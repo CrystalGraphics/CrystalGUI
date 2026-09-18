@@ -794,6 +794,11 @@ smartguides {
  * A value set inline is bold, and a double-click turns it into a field. */
 .__boxmodel__ {
     padding-block: 4px;
+    /* THE PANEL'S OWN INSET, which a ROW gets on its parts and a custom element gets from nobody: the panel has no
+     * horizontal padding by design (@see inspector.css `.__configurator-panel__`), so a diagram appended to it ran
+     * to the edge and under the scrollbar wherever the tab was long enough to have one. */
+    padding-left: var(--cfg-pad-x);
+    padding-right: var(--cfg-pad-x);
 }
 .__boxmodel__ .__bm-layer__ {
     flex-direction: column;
@@ -1524,6 +1529,26 @@ smartguides {
 }
 .__linked-chain__:hover { background-color: var(--panel-header-icon-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__linked-chain__.__active__ { color: var(--accent, #3574F0); }
+
+/* A LENGTH: the number, and the unit it is in -- a chip that is pressed rather than a word to spell. @see LengthField */
+.__length-field__ { flex-direction: row; align-items: center; gap: 4px; width: 100%; }
+.__length-field__ > numbercontrol { width: 0px; flex-grow: 1; min-width: 0px; }
+.__length-unit__ {
+    min-width: 24px;
+    min-height: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+    border-radius: 3px;
+    background: none;
+    background-color: transparent;
+    color: var(--fg-hint, #7A7A7A);
+}
+.__length-unit__:hover {
+    background-color: var(--panel-header-icon-hover-bg, #393B40);
+    color: var(--fg, #DFE1E5);
+}
 
 /* A ROW'S CONTROL: the pad, then X and Y beside it. */
 .__offset-field__ { flex-direction: row; align-items: center; gap: 6px; width: 100%; }
