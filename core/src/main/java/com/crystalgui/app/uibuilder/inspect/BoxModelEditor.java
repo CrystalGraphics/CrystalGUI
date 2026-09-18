@@ -7,15 +7,11 @@ import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
-import com.google.gson.JsonElement;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 
-import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.ui.box.Box;
@@ -40,9 +36,14 @@ import dev.vfyjxf.taffy.style.TaffyDimension;
  * edge, each editable in place.
  *
  * <pre>{@code
- * form.custom(new BoxModelEditor(node, document));   // edits write SetInlineStyle into the document
- * form.custom(new BoxModelEditor(node, null));       // read-only, for a live pick
+ * form.custom(new BoxModelEditor(node, document));          // the node's own inline style
+ * form.custom(new BoxModelEditor(node, fields));             // a rule in a sheet, through StyleFields
+ * form.custom(new BoxModelEditor(node, (Declarations) null)); // read-only, for a live pick
  * }</pre>
+ *
+ * <p><b>The diagram is the same wherever the values live.</b> It reads the layout — the numbers are what the
+ * element actually got — and writes through {@link Declarations}, so the Layout tab edits the element and the
+ * Style tab edits whichever rule is picked, from one implementation.</p>
  *
  * <p>Ported from Chromium DevTools' {@code MetricsSidebarPane.ts} (BSD-3-Clause): double-click a value to
  * edit it, Up and Down step it by 1 (Shift 10, Alt 0.1) and apply as they go, Enter or a click elsewhere
@@ -93,7 +94,7 @@ public final class BoxModelEditor extends UIElement {
             // A margin may go negative; padding, border and a size may not.
             boolean margin = property == LayoutProperties.MARGIN_TOP || property == LayoutProperties.MARGIN_RIGHT
                     || property == LayoutProperties.MARGIN_BOTTOM || property == LayoutProperties.MARGIN_LEFT;
-            scrub = StyleScrub.on(text, node, property, document)
+            scrub = StyleScrub.on(text, property, target)
                     .measuring(this::measured)
                     .writing(value -> cssValue(this, format((float) value)))
                     .signed(margin)
@@ -137,7 +138,7 @@ public final class BoxModelEditor extends UIElement {
         private void refresh() {
             Box box = node.box();
             text.setText(box == null ? declared(property) : format(read.apply(box)));
-            if (LiveEdits.hasInline(node, property)) text.addClass(AUTHORED_CLASS);
+            if (target.declares(property)) text.addClass(AUTHORED_CLASS);
             else text.removeClass(AUTHORED_CLASS);
         }
     }
@@ -145,7 +146,8 @@ public final class BoxModelEditor extends UIElement {
     private final UIElement node;
 
     @Nullable
-    private final UiBuilderDocument document;
+    /** Where a cell's edits land. @see Declarations */
+    private final Declarations target;
 
     private final List<Cell> cells = new ArrayList<>();
 
@@ -155,19 +157,20 @@ public final class BoxModelEditor extends UIElement {
     @Nullable
     private TextField field;
 
-    /** The inline style when the edit began — what Escape restores and the undo step starts from. */
-    @Nullable
-    private JsonElement before;
-
     /** What had focus when the field opened, handed back when it closes. */
     @Nullable
     private UIElement focusBeforeEdit;
 
     private boolean ticking;
 
+    /** The node's own inline style, recorded in {@code document}; read-only without one. */
     public BoxModelEditor(UIElement node, @Nullable UiBuilderDocument document) {
+        this(node, Declarations.inline(node, document));
+    }
+
+    public BoxModelEditor(UIElement node, @Nullable Declarations target) {
         this.node = node;
-        this.document = document;
+        this.target = target == null ? Declarations.inline(node, null) : target;
         addClass(BOX_CLASS);
 
         UIElement content = new UIElement();
@@ -190,9 +193,9 @@ public final class BoxModelEditor extends UIElement {
         onConnected(this::startTicking);
     }
 
-    /** Whether edits are possible — a document is behind the node. */
+    /** Whether edits are possible — something is behind the node to write into. */
     public boolean isEditable() {
-        return document != null;
+        return target.canWrite();
     }
 
     /** Every number on the diagram, outermost edges first, then the content size. */
@@ -308,10 +311,10 @@ public final class BoxModelEditor extends UIElement {
 
     /** Opens {@code cell} for typing, as a double-click does. A no-op when nothing can be written. */
     public void beginEdit(Cell cell) {
-        if (document == null || node.box() == null || editing == cell) return;
+        if (!target.canWrite() || node.box() == null || editing == cell) return;
         if (editing != null) commit();
         editing = cell;
-        before = inlineStyle();
+        target.beginGesture();
         UIDocument opened = document();
         focusBeforeEdit = opened == null ? null : opened.focus().focused();
 
@@ -344,10 +347,6 @@ public final class BoxModelEditor extends UIElement {
             if (cell.scrub.isScrubbing()) return true;
         }
         return false;
-    }
-
-    private JsonElement inlineStyle() {
-        return NodeFields.inlineStyleOf(node);
     }
 
     /** What is being typed, or null when nothing is open. */
@@ -389,15 +388,11 @@ public final class BoxModelEditor extends UIElement {
         preview(field.getText());
     }
 
-    /** Writes the typed value onto the node, without recording it — what arrow presses do mid-edit. */
+    /** Writes the typed value, without recording it — what arrow presses do mid-edit. @see Declarations */
     private boolean preview(String raw) {
         if (editing == null) return false;
         String trimmed = raw.trim();
-        if (trimmed.isEmpty()) {
-            LiveEdits.clearInline(node, editing.property);
-            return true;
-        }
-        return LiveEdits.setInline(node, editing.property, cssValue(editing, trimmed));
+        return target.set(editing.property, trimmed.isEmpty() ? "" : cssValue(editing, trimmed));
     }
 
     /** Ends the edit, recording what it changed as one step. A value that does not parse changes nothing. */
@@ -405,32 +400,21 @@ public final class BoxModelEditor extends UIElement {
         if (editing == null || field == null) return;
         Cell cell = editing;
         TextField input = field;
-        JsonElement was = before;
         boolean parsed = preview(input.getText());
         close(cell, input);
-        if (!parsed) {
-            InlineStyleCodec.replaceInto(JsonOps.INSTANCE, was, node);
-            return;
-        }
-        LiveEdits.dropIfRedundant(node, cell.property);
-        JsonElement after = inlineStyle();
-        if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
+        target.endGesture(parsed);
     }
 
-    /** Ends the edit and puts back the inline style it began with. */
+    /** Ends the edit and puts back what it began with. */
     public void cancel() {
         if (editing == null || field == null) return;
-        Cell cell = editing;
-        TextField input = field;
-        JsonElement was = before;
-        close(cell, input);
-        InlineStyleCodec.replaceInto(JsonOps.INSTANCE, was, node);
+        close(editing, field);
+        target.endGesture(false);
     }
 
     private void close(Cell cell, TextField input) {
         editing = null;
         field = null;
-        before = null;
         // FOCUS GOES BACK BEFORE THE FIELD GOES: removing the focused element leaves nothing focused, and undo
         // resolves outward from focus, so Ctrl+Z right after Enter reached no history at all.
         UIElement returnTo = focusBeforeEdit;

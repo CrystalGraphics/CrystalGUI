@@ -7,13 +7,9 @@ import java.util.function.DoubleSupplier;
 
 import javax.annotation.Nullable;
 
-import com.google.gson.JsonElement;
 
 
-import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
@@ -22,11 +18,11 @@ import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.config.control.NumberControl;
 
 /**
- * Dragging a handle scrubs one style property of a node, written inline as it goes and recorded as one undo step
- * when released — the box model's numbers and the Position section's insets.
+ * Dragging a handle scrubs one style property, written as it goes and recorded as one undo step when released —
+ * the box model's numbers and the Position section's insets.
  *
  * <pre>{@code
- * StyleScrub.on(label, node, LayoutProperties.LEFT, document)
+ * StyleScrub.on(label, LayoutProperties.LEFT, Declarations.inline(node, document))
  *         .measuring(() -> node.box().x())                 // the value the drag starts from
  *         .writing(value -> Math.round(value) + "px")      // what a value is as CSS
  *         .allowedWhen(() -> isAbsolute(node))
@@ -47,11 +43,10 @@ import com.crystalgui.widget.config.control.NumberControl;
 public final class StyleScrub {
 
     private final UIElement handle;
-    private final UIElement node;
     private final StyleProperty<?> property;
 
-    @Nullable
-    private final UiBuilderDocument document;
+    /** Where the drag's values land: the node's inline style, or a rule. @see Declarations */
+    private final Declarations target;
 
     private DoubleSupplier measured = () -> Double.NaN;
     private DoubleFunction<String> css = value -> Math.round(value) + "px";
@@ -65,18 +60,21 @@ public final class StyleScrub {
     private DragScrub.Gesture scrub = new DragScrub.Gesture(spec);
     private float pixelsPerUnit = 1f;
 
-    @Nullable
-    private JsonElement before;
-
-    private StyleScrub(UIElement handle, UIElement node, StyleProperty<?> property, @Nullable UiBuilderDocument document) {
+    private StyleScrub(UIElement handle, StyleProperty<?> property, Declarations target) {
         this.handle = Objects.requireNonNull(handle, "handle");
-        this.node = Objects.requireNonNull(node, "node");
         this.property = Objects.requireNonNull(property, "property");
-        this.document = document;
+        this.target = Objects.requireNonNull(target, "target");
     }
 
-    public static StyleScrub on(UIElement handle, UIElement node, StyleProperty<?> property, @Nullable UiBuilderDocument document) {
-        return new StyleScrub(handle, node, property, document);
+    /** A drag writing wherever {@code target} keeps the declaration. */
+    public static StyleScrub on(UIElement handle, StyleProperty<?> property, Declarations target) {
+        return new StyleScrub(handle, property, target);
+    }
+
+    /** As {@link #on(UIElement, StyleProperty, Declarations)}, writing the node's own inline style. */
+    public static StyleScrub on(UIElement handle, UIElement node, StyleProperty<?> property,
+                                @Nullable UiBuilderDocument document) {
+        return new StyleScrub(handle, property, Declarations.inline(node, document));
     }
 
     /** The value a drag starts from, asked at the press and when a modifier re-anchors it. */
@@ -133,14 +131,14 @@ public final class StyleScrub {
 
     /** Starts a drag at a press in surface pixels; false when it may not start. Below the threshold it writes nothing. */
     public boolean begin(float surfaceX, float surfaceY) {
-        if (document == null || live || !allowed.getAsBoolean()) return false;
+        if (!target.canWrite() || live || !allowed.getAsBoolean()) return false;
         double start = measured.getAsDouble();
         if (Double.isNaN(start)) return false;
         live = true;
         scrub = new DragScrub.Gesture(signed ? spec : spec.withRange(0d, Double.POSITIVE_INFINITY));
         scrub.begin(start);
         pixelsPerUnit = Drag.pixelsPerLocalUnit(handle);
-        before = NodeFields.inlineStyleOf(node);
+        target.beginGesture();
         Drag.start(handle, surfaceX, surfaceY, new Drag.Listener() {
             @Override
             public void onDragUpdate(float mouseX, float mouseY, float startX, float startY, float deltaX, float deltaY) {
@@ -167,28 +165,14 @@ public final class StyleScrub {
 
     private void update(float dxPixels, float dyPixels) {
         if (!live || !scrub.update(dxPixels, dyPixels)) return;
-        LiveEdits.setInline(node, cast(property), css.apply(scrub.value()));
+        target.set(property, css.apply(scrub.value()));
         onStep.run();
     }
 
-    /** Records the drag as one step, or puts the style back when it was cancelled or never moved. */
+    /** Records the drag as one step, or puts the value back when it was cancelled or never moved. */
     private void end(boolean keep) {
-        JsonElement was = before;
         boolean moved = scrub.isLive();
         live = false;
-        before = null;
-        if (was == null) return;
-        if (!keep || !moved) {
-            if (moved) InlineStyleCodec.replaceInto(JsonOps.INSTANCE, was, node);
-            return;
-        }
-        LiveEdits.dropIfRedundant(node, property);
-        JsonElement after = NodeFields.inlineStyleOf(node);
-        if (document != null && !after.equals(was)) document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
-    }
-
-    @SuppressWarnings("unchecked")
-    private static StyleProperty<Object> cast(StyleProperty<?> property) {
-        return (StyleProperty<Object>) property;
+        target.endGesture(keep && moved);
     }
 }
