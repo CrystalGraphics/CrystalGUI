@@ -443,21 +443,34 @@ public final class ResizeHandles extends UIElement {
         boolean bottomAnchored = MoveOutOfFlow.anchorsBottom(node);
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
             // THE BORDER BOX's position, turned into what the inset says: less the margin and the
-            // parent's border. @see MoveOutOfFlow#leftInset
+            // parent's border, and in the unit the node states it in. @see MoveOutOfFlow#leftInset @see CanvasLengths
             if (spot.xDirection() < 0 && !rightAnchored) {
-                l.left(Math.round(MoveOutOfFlow.leftInset(node, startX - growX)));
+                l.set(LayoutProperties.LEFT, CanvasLengths.inset(node, LayoutProperties.LEFT,
+                        MoveOutOfFlow.leftInset(node, startX - growX), parentBox.width()));
             }
             if (spot.yDirection() < 0 && !bottomAnchored) {
-                l.top(Math.round(MoveOutOfFlow.topInset(node, startY - growY)));
+                l.set(LayoutProperties.TOP, CanvasLengths.inset(node, LayoutProperties.TOP,
+                        MoveOutOfFlow.topInset(node, startY - growY), parentBox.height()));
             }
         });
     }
 
     /** Writes the axes this handle owns, and only those — a side handle must not pin the other one. */
     private static void write(UIElement node, Spot spot, float width, float height) {
+        UIElement parent = node.parentElement();
+        Box parentBox = parent == null ? null : parent.box();
+        float wide = parentBox == null ? 0f : parentBox.width();
+        float tall = parentBox == null ? 0f : parentBox.height();
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(), l -> {
-            if (spot.xDirection() != 0) l.width(Math.max(MIN_SIZE, Math.round(width)));
-            if (spot.yDirection() != 0) l.height(Math.max(MIN_SIZE, Math.round(height)));
+            // IN THE UNIT THE NODE STATES IT IN, as a move writes an inset. @see CanvasLengths
+            if (spot.xDirection() != 0) {
+                l.set(LayoutProperties.WIDTH, CanvasLengths.size(node, LayoutProperties.WIDTH,
+                        Math.max(MIN_SIZE, width), wide));
+            }
+            if (spot.yDirection() != 0) {
+                l.set(LayoutProperties.HEIGHT, CanvasLengths.size(node, LayoutProperties.HEIGHT,
+                        Math.max(MIN_SIZE, height), tall));
+            }
         });
     }
 
