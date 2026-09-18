@@ -64,6 +64,8 @@ public final class OffsetPad extends ValueControl<double[]> {
     public static final String VERTICAL_CLASS = "__vertical__";
     /** On the row and the pad of a {@link Space#BOX} pad, whose dot is placed at a fraction of it. */
     public static final String BOX_CLASS = "__box__";
+    /** Where a box's dot travels: the pad inset by half a dot, so the ends of the range are drawn whole. */
+    public static final String TRACK_CLASS = "__offset-track__";
 
     /** How far the dot may travel from the crosshair, in px: half the pad less half the dot. */
     private static final double DOT_REACH = 14d;
@@ -109,7 +111,16 @@ public final class OffsetPad extends ValueControl<double[]> {
             pad.append(line);
         }
         dot.addClass(DOT_CLASS);
-        pad.append(dot);
+        if (space == Space.BOX) {
+            // INSET BY HALF THE DOT, as the offset pad's own reach is: at the far edge of the box half of it was
+            // outside the pad and the pad clips.
+            UIElement track = new UIElement();
+            track.addClass(TRACK_CLASS);
+            track.append(dot);
+            pad.append(track);
+        } else {
+            pad.append(dot);
+        }
         append(pad);
 
         if (space == Space.BOX) {

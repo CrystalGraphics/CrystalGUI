@@ -439,16 +439,17 @@ public final class StyleLab {
 
     private static String readable(@Nullable String value) {
         if (value == null || value.isBlank()) return "—";
-        // A LAYER A LINE AND NOTHING FURTHER: the lab is a fixed width and the readout wraps within it, so a run
-        // of functions or a long call flows. A line a function made the glass lab's footer fourteen lines tall.
-        List<String> layers = CssValues.layerStack(value);
-        if (layers.size() < 2) return CssValues.readable(value);
-        List<String> shown = new ArrayList<>(layers.size());
-        for (String layer : layers) {
-            String readable = CssValues.readable(CssValues.bodyOf(layer));
-            shown.add(CssValues.isOff(layer) ? "/* " + readable + " */" : readable);
+        // HOW THE CHIP BREAKS IT, which is one definition rather than two: a layer or a function to a line, a long
+        // call opened onto its arguments. A line a function made the glass lab's footer fourteen lines tall, and a
+        // second reading of what a layer is made a transform's readout invent commas.
+        List<CssValues.Line> lines = CssValues.lines(value);
+        if (lines.size() < 2) return CssValues.readable(value);
+        StringBuilder out = new StringBuilder();
+        for (CssValues.Line line : lines) {
+            if (out.length() > 0) out.append('\n').append(line.continued() ? "    " : "");
+            out.append(line.text());
         }
-        return String.join(",\n    ", shown);
+        return out.toString();
     }
 
     private void buildStage() {
