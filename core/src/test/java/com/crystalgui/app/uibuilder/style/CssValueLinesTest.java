@@ -36,6 +36,30 @@ public class CssValueLinesTest {
                 lines("linear-gradient(270deg, #F5005B, #C86AFF 13.8%, #FF7368 46.6%)"));
     }
 
+    /**
+     * <b>A switched-off entry does not decide what the value IS.</b> A layer is kept as a comment inside the value,
+     * and the split at a comment happens whether or not a comma is anywhere near it — so a transform with one op
+     * switched off read as two layers, and the chip and the readout printed it a comma-separated line at a time,
+     * inventing a comma no transform has.
+     */
+    @Test
+    public void aFunctionSwitchedOffDoesNotMakeItACommaList() {
+        assertEquals(List.of(
+                new CssValues.Line("/* translate(40px, 0px) */", false),
+                new CssValues.Line("scale(2.58, 2.58)", false),
+                new CssValues.Line("rotate(358deg)", false)),
+                lines("/* translate(40px, 0px) */ scale(2.58, 2.58) rotate(358deg)"));
+    }
+
+    /** And a comma list still is one: its separator is kept inside the comment, so it is still there to be found. */
+    @Test
+    public void aLayerSwitchedOffKeepsTheListALayerALine() {
+        assertEquals(List.of(
+                new CssValues.Line("#000 0px 1px 2px,", false),
+                new CssValues.Line("/* #F00 0px 0px 4px */", false)),
+                lines("#000 0px 1px 2px /* , #F00 0px 0px 4px */"));
+    }
+
     @Test
     public void aShortValueStaysOnOneLine() {
         assertEquals(1, lines("linear-gradient(90deg, #F00, #00F)").size());

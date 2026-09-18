@@ -1287,8 +1287,9 @@ smartguides {
     width: 100%;
 }
 .__lab-row__ > * { flex-shrink: 1; }
-/* The kit's own rows, at the lab's width. */
-.__lab-content__ .__configurator__ > .__inline__ > .__config-control__ { min-width: 70px; }
+/* The kit's own rows, at the lab's width -- a few pixels wider than the inspector's floor, because a lab's
+ * fields carry a unit and `150.0%` came out as `150.0'`. */
+.__lab-content__ .__configurator__ > .__inline__ > .__config-control__ { min-width: 74px; }
 /* A PILL: a choice among several, set apart from the square fields below it by its shape. A flat fill and no
  * hairline -- a 1px outline on a fully rounded box drew as a thick dark ring. */
 .__lab-keyword__ {
@@ -1419,10 +1420,10 @@ smartguides {
 /* A ROW'S CONTROL: the dial, then the degrees. */
 /* Right-aligned: the degrees field is sized to its number, and the dial and directions sit beside it. */
 .__angle-field__ { flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; }
-.__angle-field__ > numbercontrol, .__angle-field__ > .__config-control__ { width: 44px; flex-grow: 0; flex-shrink: 0; }
+.__angle-field__ > numbercontrol, .__angle-field__ > .__config-control__ { width: 47px; flex-grow: 0; flex-shrink: 0; }
 .__angle-dial__ {
-    width: 24px;
-    height: 24px;
+    width: 30px;
+    height: 30px;
     flex-shrink: 0;
     position: relative;
     border-radius: 999px;
@@ -1435,19 +1436,19 @@ smartguides {
 /* THE NEEDLE'S FOOT ON THE CENTRE, and it turns about its foot: centred whole, it swung about a point 7px below. */
 .__angle-needle__ {
     position: absolute;
-    left: 11px;
-    top: 3px;
+    left: 14px;
+    top: 4px;
     width: 2px;
-    height: 9px;
+    height: 11px;
     background: var(--accent, #3574F0);
     transform-origin-y: 100%;
 }
 /* The eight directions around an empty middle, each an arrow turned to the way it points. */
 /* As tall as the dial beside it, so the row is no taller than a field. */
-.__angle-presets__ { flex-direction: row; flex-wrap: wrap; width: 24px; flex-shrink: 0; }
+.__angle-presets__ { flex-direction: row; flex-wrap: wrap; width: 30px; flex-shrink: 0; }
 .__angle-preset__ {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
     border-radius: 2px;
     padding: 1px;
     overlay: shape("triangle-up");
@@ -1456,12 +1457,12 @@ smartguides {
     color: var(--fg-hint, #7A7A7A);
     cursor: pointer;
 }
-.__angle-preset-gap__ { width: 8px; height: 8px; }
+.__angle-preset-gap__ { width: 10px; height: 10px; }
 .__angle-preset__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__angle-preset__.__active__ { color: var(--accent, #3574F0); }
 
 /* A ROW'S CONTROL: the pad, then X and Y beside it. */
-.__offset-field__ { flex-direction: row; align-items: center; gap: 8px; width: 100%; }
+.__offset-field__ { flex-direction: row; align-items: center; gap: 5px; width: 100%; }
 .__offset-field__ > .__vector__ { width: 0px; flex-grow: 1; }
 /* The offset pad: the dot is where the shadow falls, the crosshair is no offset at all. */
 .__offset-pad__ {
@@ -1496,6 +1497,13 @@ smartguides {
 }
 .__offset-field__.__box__ > .__config-control__.__anchor__ > .__anchor-line__ { gap: 3px; }
 .__offset-field__.__box__ .__anchor-cell__ { width: 8px; height: 8px; border-radius: 1px; }
+.__offset-pad__.__box__ > .__offset-track__ {
+    position: absolute;
+    left: 4.5px;
+    top: 4.5px;
+    right: 4.5px;
+    bottom: 4.5px;
+}
 .__offset-pad__.__box__ .__offset-dot__ { position: absolute; margin-left: -4.5px; margin-top: -4.5px; }
 
 /* THE CORNER BOX, centred: the shape it rounds, a handle inside each corner as far in as the corner is round, and

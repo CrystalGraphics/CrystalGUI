@@ -63,7 +63,7 @@ public final class CssValues {
     public static List<Line> lines(@Nullable String value) {
         if (value == null || value.isBlank()) return List.of();
         List<String> layers = layerStack(value);
-        if (layers.size() >= 2) {
+        if (layers.size() >= 2 && isCommaList(value)) {
             List<Line> out = new ArrayList<>(layers.size());
             for (int i = 0; i < layers.size(); i++) {
                 out.add(new Line(shownEntry(layers.get(i)) + (i < layers.size() - 1 ? "," : ""), false));
@@ -86,6 +86,21 @@ public final class CssValues {
             out.add(new Line(arguments.get(i) + (i < arguments.size() - 1 ? "," : ")"), true));
         }
         return out;
+    }
+
+    /**
+     * Whether a value is a comma list, counting the layers switched off inside it — whose separating comma is kept
+     * in the comment, so it is still there to be found.
+     *
+     * <p>A run of FUNCTIONS is not a comma list however many of its entries are off, and {@link #layerStack} splits
+     * at a comment whether or not a comma is anywhere near it: a transform with one op switched off came back as two
+     * layers, so the chip and the readout printed it a comma-separated line at a time and invented the comma.</p>
+     */
+    private static boolean isCommaList(@Nullable String value) {
+        if (value == null) return false;
+        // THE MARKERS GONE AND THEIR CONTENTS KEPT: what is left is the list as it would read with every layer on.
+        String uncommented = value.replace("/*", " ").replace("*/", " ");
+        return CssParsingUtil.splitTopLevelCommas(uncommented).size() >= 2;
     }
 
     private static String shownEntry(String entry) {
