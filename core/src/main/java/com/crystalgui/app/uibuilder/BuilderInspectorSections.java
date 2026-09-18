@@ -884,7 +884,8 @@ public final class BuilderInspectorSections {
         }
         NodeFields.Field field = fields.style(node, property, label);
         field.descriptor().description(description);
-        Configurator row = prop(form, field.descriptor(), field.value());
+        Configurator row = field.control() == null ? prop(form, field.descriptor(), field.value())
+                : form.control("style." + property.name, label, field.control());
         markSet(row, () -> LiveEdits.hasInline(node, property));
         return row;
     }

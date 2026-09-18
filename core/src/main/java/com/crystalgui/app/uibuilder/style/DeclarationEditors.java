@@ -7,6 +7,7 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.app.uibuilder.inspect.LengthField;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.property.StyleProperty;
@@ -147,11 +148,12 @@ public final class DeclarationEditors {
         }
         Editor editor = OVERRIDES.get(property);
         if (editor != null) return editor.build(new Context(property, id, name, css, fields, node));
-        return byType(property, id, name, css);
+        return byType(property, id, name, css, node);
     }
 
     /** The field a property gets when nothing bespoke is registered for it. */
-    private static Field byType(StyleProperty<?> property, String id, String label, Property<String> css) {
+    private static Field byType(StyleProperty<?> property, String id, String label, Property<String> css,
+                               @Nullable UIElement node) {
         String tooltip = property.name + (property.getAuthoredThrough() == null ? ""
                 : " — written as " + property.getAuthoredThrough());
 
@@ -188,7 +190,16 @@ public final class DeclarationEditors {
         if (property instanceof IntProperty) {
             return new Field(ConfigDescriptor.number(id, label).integral(true).tooltip(tooltip), numeric(property, css));
         }
-        // Lengths, drawables, transforms, gradients, fonts: text until a lab is built for them, and
+        // A LENGTH IS A NUMBER AND A UNIT: px, % and auto reachable without spelling any of them, and the number
+        // scrubbable like every other number in the kit. @see LengthField
+        List<String> units = LengthField.unitsOf(property);
+        if (!units.isEmpty()) {
+            LengthField length = new LengthField(id, units)
+                    .against(() -> LengthField.hundredPercent(node, property), () -> LengthField.emOf(node));
+            length.bind(css);
+            return new Field(ConfigDescriptor.text(id, label).tooltip(tooltip), css, length);
+        }
+        // Drawables, transforms, gradients, fonts: text until a lab is built for them, and
         // validated so an unparseable value never reaches a sheet.
         // SHOWN AS A PERSON READS IT, `52px` rather than the writer's `52.0px`, which is also valid to write back.
         return new Field(ConfigDescriptor.text(id, label).tooltip(tooltip).placeholder("value")

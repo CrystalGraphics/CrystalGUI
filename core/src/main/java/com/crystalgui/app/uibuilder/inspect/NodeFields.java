@@ -34,6 +34,7 @@ import com.crystalgui.ui.dom.ClassNames;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.DragScrub;
+import com.crystalgui.widget.config.ConfigControl;
 
 /**
  * What an inspector section binds a control to when it edits a node of an open {@code .cgui}: a
@@ -61,7 +62,12 @@ import com.crystalgui.ui.input.DragScrub;
 public final class NodeFields {
 
     /** A control's descriptor and the value it edits, as one answer. */
-    public record Field(ConfigDescriptor descriptor, Property<?> value) {
+    public record Field(ConfigDescriptor descriptor, Property<?> value, @Nullable ConfigControl control) {
+
+        /** A field the host builds a row for from the descriptor alone. */
+        public Field(ConfigDescriptor descriptor, Property<?> value) {
+            this(descriptor, value, null);
+        }
     }
 
     private final UiBuilderDocument document;
@@ -214,6 +220,20 @@ public final class NodeFields {
         // typed out it looks like a value someone set. Clearing the field is the same auto again.
         Property<String> value = bind(() -> cssText(key, computed.get()),
                 text -> text == null ? null : inlineEdit(node, key, text.trim()));
+        // A LENGTH IS A NUMBER AND A UNIT, not a line of text to spell: px, % and auto without typing any of them.
+        List<String> units = LengthField.unitsOf(key);
+        if (!units.isEmpty()) {
+            // WHAT IS DECLARED, and the layout's own number only where nothing is: the computed value has no unit
+            // to keep -- `593em` comes back as `5930px` -- so a field reading it could not hold the unit it wrote.
+            Property<String> declared = bind(() -> {
+                String inline = node.getStyle().inlineText(key);
+                return inline != null && !inline.isBlank() ? inline : cssText(key, computed.get());
+            }, text -> text == null ? null : inlineEdit(node, key, text.trim()));
+            LengthField length = new LengthField(id, units)
+                    .against(() -> LengthField.hundredPercent(node, key), () -> LengthField.emOf(node));
+            length.bind(declared);
+            return new Field(ConfigDescriptor.text(id, label).tooltip(key.name), declared, length);
+        }
         return new Field(ConfigDescriptor.text(id, label).placeholder("auto").tooltip(key.name), value);
     }
 
