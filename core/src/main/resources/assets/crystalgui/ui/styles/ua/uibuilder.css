@@ -1462,7 +1462,10 @@ smartguides {
 .__angle-preset__.__active__ { color: var(--accent, #3574F0); }
 
 /* A ROW'S CONTROL: the pad, then X and Y beside it. */
-.__offset-field__ { flex-direction: row; align-items: center; gap: 5px; width: 100%; }
+/* A TIGHT GAP, because the fields want the pixels: the pad and the nine cells are a fixed 38px each, so
+ * everything the row does not spend between them is text room for the two numbers -- and a percentage is
+ * the widest thing they carry. */
+.__offset-field__ { flex-direction: row; align-items: center; gap: 3px; width: 100%; }
 .__offset-field__ > .__vector__ { width: 0px; flex-grow: 1; }
 /* The offset pad: the dot is where the shadow falls, the crosshair is no offset at all. */
 .__offset-pad__ {

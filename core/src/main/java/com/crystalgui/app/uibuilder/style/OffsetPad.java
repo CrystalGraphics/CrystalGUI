@@ -50,7 +50,7 @@ public final class OffsetPad extends ValueControl<double[]> {
         /**
          * The element's own box, 0 at its top left and 1 at its bottom right: a transform's pivot. The value is a pair
          * of FRACTIONS, shown as the percentages a sheet writes, and <b>the nine places anyone means are cells beside
-         * the pad</b> — a drag snaps to those same nine unless Ctrl is down.
+         * the pad</b> — a drag snaps to those same nine unless Ctrl is down, and stops at the box's own edges.
          */
         BOX
     }
@@ -76,8 +76,16 @@ public final class OffsetPad extends ValueControl<double[]> {
     /** How near one of the nine a dragged pivot lands on it, as a fraction of the box. */
     private static final double SNAP = 0.04d;
 
-    /** How far outside the box a pivot may be dragged. Typed, it goes as far as the field allows. */
-    private static final double REACH = 0.5d;
+    /**
+     * A pad that IS the box maps onto the box, so a drag on it stops at the edges — unlike the offset pad, whose
+     * space is unbounded and whose dot stops while its value does not.
+     *
+     * <p>A pivot outside the element is legal CSS and occasionally the point: a hinge past the edge, a hand
+     * swinging about a centre somewhere else. It is typed, or dragged on the mark on the specimen, where there is
+     * room to see where it went — the pad has none, and a dot frozen at the edge while the number climbs says
+     * nothing about where the pivot is.</p>
+     */
+    private static final double[] BOX_RANGE = {0d, 1d};
 
     private final Space space;
     private final UIElement pad = new UIElement();
@@ -187,9 +195,9 @@ public final class OffsetPad extends ValueControl<double[]> {
         endInteraction();
     }
 
-    /** A dragged fraction: held to {@link #REACH} either side, and snapped to the nine unless Ctrl is down. */
+    /** A dragged fraction: held to the box, and snapped to the nine unless Ctrl is down. @see #BOX_RANGE */
     private static double placed(double fraction, boolean fine) {
-        double held = Math.max(-REACH, Math.min(1d + REACH, fraction));
+        double held = Math.max(BOX_RANGE[0], Math.min(BOX_RANGE[1], fraction));
         if (!fine) {
             for (double ninth : new double[] {0d, 0.5d, 1d}) {
                 if (Math.abs(held - ninth) < SNAP) return ninth;
