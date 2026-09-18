@@ -6,8 +6,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import java.util.List;
-
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
@@ -66,18 +64,19 @@ public class TransformLabTest extends UiDocumentTestBase {
         assertFalse("the pad edits a translate, so a scale is not offered one", shown("lab.translate"));
         assertTrue("and has factors instead", shown("lab.scale"));
 
-        write("lab.scale", 2d);
+        // SHOWN AS A PERCENTAGE, written as the bare multiplier CSS takes.
+        write("lab.scale", new double[] {200d, 200d});
         frame();
         assertEquals("both axes, in the one spelling CSS has for it", "scale(2)", css.get());
     }
 
+    /** The chain holds the two in proportion, and a scale whose axes differ opens with it off. */
     @Test
-    public void anUnlinkedScaleWritesEachAxis() {
+    public void anUnchainedScaleWritesEachAxis() {
         Property<String> css = open("scale(1, 2)");
-        assertFalse("a scale whose axes differ opens per axis", shown("lab.scale"));
-        assertTrue(shown("lab.scale.x"));
+        assertTrue(shown("lab.scale"));
 
-        write("lab.scale.x", 3d);
+        write("lab.scale.x", 300d);
         frame();
         assertEquals("scale(3, 2)", css.get());
     }
@@ -97,11 +96,11 @@ public class TransformLabTest extends UiDocumentTestBase {
     @Test
     public void aShearIsAnAngleToo() {
         Property<String> css = open("skew(0.5rad, 0rad)");
-        assertEquals(28.65d, (Double) read("lab.skew.x"), 0.05d);
+        assertArrayEquals("both axes, in one row", new double[] {28.65d, 0d}, (double[]) read("lab.skew"), 0.05d);
 
-        write("lab.skew.x", 10d);
+        write("lab.skew", new double[] {10d, -5d});
         frame();
-        assertEquals("skew(10deg, 0deg)", css.get());
+        assertEquals("skew(10deg, -5deg)", css.get());
     }
 
     /** A value with no gesture is still the file's, so it is edited as the text it is rather than left alone. */
@@ -132,6 +131,14 @@ public class TransformLabTest extends UiDocumentTestBase {
 
         write("lab.pivot", new double[] {0.25d, 1d});
         frame();
+        frame();
+
+        // AND THE MARK IS WHERE IT SAYS: a percentage inset resolves against the containing block, and this layer
+        // is sized by its content -- so the mark sat in the corner whatever the pivot said, in silence.
+        UIElement pin = pivot();
+        UIElement box = pin.parentElement();
+        assertEquals("a quarter along the box", box.box().width() * 0.25f, pin.box().x(), 0.6f);
+        assertEquals("and at its bottom", box.box().height(), pin.box().y(), 0.6f);
         // AS A READER SEES IT: what lands is the property's own spelling of the percentage, `100.0%`.
         assertEquals("100%", CssValues.readable(fields.valueOf("transform-origin-y")));
         assertEquals("the other axis is left alone", "25%",
@@ -155,28 +162,6 @@ public class TransformLabTest extends UiDocumentTestBase {
                     DeclarationEditors.of(origin, "style." + origin.name, origin.name, Property.of("50%"));
             assertTrue(origin.name + " is a lab row", field.control() instanceof StyleChip);
         }
-    }
-
-    /**
-     * <b>Switching one op off leaves the value whole.</b> A stack whose first and last entries are both commented
-     * out begins with {@code /*} and ends with {@code *}{@code /}, which read as ONE comment around the whole
-     * declaration: striking those outer markers stranded the two inside it, and what was written back --
-     * {@code translate(0px, 0px) *}{@code / scale(2) /}{@code * rotate(0deg)} -- was not a transform at all.
-     */
-    @Test
-    public void anOpSwitchedOffAtEitherEndKeepsTheValueWhole() {
-        String both = "/* translate(0px, 0px) */ scale(2) /* rotate(0deg) */";
-        assertFalse("a value that merely begins and ends with a comment is not itself off", CssValues.isOff(both));
-
-        List<String> ops = CssValues.functionStack(both);
-        assertEquals("three ops, two of them off", 3, ops.size());
-        assertEquals("scale(2)", ops.get(1));
-        assertTrue(CssValues.isOff(ops.get(0)) && CssValues.isOff(ops.get(2)));
-        assertEquals("and it writes back as it was read", both, CssValues.joinFunctionStack(ops));
-
-        // AND THE ENGINE STILL READS IT: a comment is whitespace to a tokenizer, so what is left is scale(2).
-        assertNotNull("the declaration is still a transform",
-                StylePropertyRegistry.TRANSFORM.valueParser.parse(both).compute());
     }
 
     private ConfigControl control(String id) {

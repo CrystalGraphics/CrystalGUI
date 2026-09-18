@@ -75,6 +75,8 @@ public final class StyleLab {
     public static final String SAMPLE_CLASS = "__lab-sample__";
     /** On the copy of the specimen showing where it started. @see #ghost */
     public static final String GHOST_CLASS = "__lab-ghost__";
+    /** On the layer a mark is drawn in: the specimen's own box, with nothing applied to it. @see #mark */
+    public static final String MARKS_CLASS = "__lab-marks__";
     public static final String CONTENT_CLASS = "__lab-content__";
     public static final String CAPTION_CLASS = "__lab-caption__";
     public static final String CSS_CLASS = "__lab-css__";
@@ -121,6 +123,10 @@ public final class StyleLab {
 
     private final CanvasView stage = new CanvasView();
     private final UIElement specimen = new UIElement();
+
+    /** Where {@link #mark} draws, built on the first one. */
+    @Nullable
+    private UIElement marks;
     private final UIText zoomLabel = new UIText("1.00x");
     private final List<UIElement> picks = new ArrayList<>();
     /** The kit's own panel, so a lab's rows are the inspector's rows at the lab's width. */
@@ -279,18 +285,25 @@ public final class StyleLab {
     }
 
     /**
-     * Puts {@code marker} on the specimen itself, for a value that is a POINT ON the thing rather than something
-     * done to it — a transform's pivot.
+     * Puts {@code marker} on the specimen's own box — the one with nothing applied to it — for a value that is a
+     * POINT ON the element rather than something done to it: a transform's pivot.
      *
      * <pre>{@code
-     * lab.onSpecimen(pin);   // positioned by the caller, in percentages of the specimen's own box
+     * lab.mark(pin);   // positioned by the caller, in percentages of the box
      * }</pre>
      *
-     * <p>Inside the specimen, so it carries the transform with it and lands on the point the specimen visibly turns
-     * about — which is the image of the origin under the whole transform, and the one place a mark means anything.</p>
+     * <p><b>A layer of its own, not the specimen and not the ghost.</b> Inside the specimen a mark rides the value:
+     * a translate carried the pivot off with the box, when the pivot is measured on the box BEFORE it moved and is
+     * exactly what the ghost is showing. Inside the ghost it would take the ghost's own dimming with it.</p>
      */
-    public StyleLab onSpecimen(UIElement marker) {
-        specimen.append(marker);
+    public StyleLab mark(UIElement marker) {
+        if (marks == null) {
+            marks = new UIElement();
+            marks.addClass(SPECIMEN_CLASS);
+            marks.addClass(MARKS_CLASS);
+            stage.addNode(marks, SPECIMEN_AT, SPECIMEN_AT);
+        }
+        marks.append(marker);
         return this;
     }
 

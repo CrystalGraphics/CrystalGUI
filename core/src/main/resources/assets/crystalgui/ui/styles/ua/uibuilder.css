@@ -1159,7 +1159,9 @@ smartguides {
     padding-right: 8px;
     padding-top: 8px;
     padding-bottom: 8px;
-    gap: 7px;
+    /* TIGHT BETWEEN THE BLOCKS, so the caption's hairline is as near the last row as a separator is; the stage
+     * and the readout take their own margins below. */
+    gap: 3px;
     /* SHRINKS TO THE CAP, so the rows below can scroll: the engine's flex-shrink is 0, and a content box that
      * kept its full height ran past the dialog's max-height and was cut off with nothing to scroll. */
     flex-shrink: 1;
@@ -1174,6 +1176,8 @@ smartguides {
 .__style-lab__ > .__content__ > .__lab-stage__,
 .__style-lab__ > .__content__ > .__lab-caption__,
 .__style-lab__ > .__content__ > .__lab-css__ { flex-shrink: 0; }
+.__style-lab__ > .__content__ > .__lab-stage__ { margin-bottom: 4px; }
+.__style-lab__ > .__content__ > .__lab-css__ { margin-top: 4px; }
 /* ONE STAGE, and the ground is a choice rather than a plate. Two fixed grounds existed because a stroke
  * that reads on one vanishes on the other; a picker answers that in half the width, and lets the specimen
  * carry the element's real colour instead of one chosen to contrast with whichever plate it sat on. */
@@ -1291,6 +1295,13 @@ smartguides {
     width: 100%;
 }
 .__lab-row__ > * { flex-shrink: 1; }
+/* AIR UNDER THE STACK, the same eight the separator and the caption keep: the first row sat flush against the
+ * box above it, so it read as the last line of the list rather than as the first of the form. */
+.__lab-content__ > .__layer-stack__ { margin-bottom: 8px; }
+/* THREE PIXELS AT EVERY BOUNDARY IN THE SCROLL: under the stack's box, either side of a separator, and under
+ * the last row. A row began flush against the box above it and sat eight below the caption's hairline, so the
+ * same row read as pressed against one edge and adrift from the other. Measured, not guessed. */
+.__lab-content__ > .__layer-stack__ { margin-bottom: 3px; }
 /* The kit's own rows, at the lab's width -- a few pixels wider than the inspector's floor, because a lab's
  * fields carry a unit and `150.0%` came out as `150.0'`. */
 .__lab-content__ .__configurator__ > .__inline__ > .__config-control__ { min-width: 74px; }
@@ -1311,26 +1322,45 @@ smartguides {
  * (the row's margin and the group's own inset -- the panel's scrolled rows take no gap). The gap is taken back and returned
  * above the readout. Not a negative margin: on the row it lifted it past the panel's clip, and on the stage it
  * collapsed the content-sized lab. */
-.__style-lab__.__glass-lab__ > .__content__ { gap: 3px; }
-.__style-lab__.__glass-lab__ > .__content__ > .__lab-css__ { margin-top: 4px; }
-
 /* THE TRANSFORM LAB'S SPECIMEN IS A PLATE WITH A MARK ON IT. The plate is what a translate moves and a scale
- * grows; the mark is what says which way up it ended, since a rotate and a flip both leave a rectangle. */
+ * grows; the mark is what says which way up it ended, since a rotate and a flip both leave a rectangle.
+ *
+ * THE PLATE IS A TINT OF THE GROUND'S OPPOSITE, and the mark is the ground's own text colour: a translucent white
+ * plate under white text is nothing at all on the white plate, which is a plate a person picks. */
 .__style-lab__.__transform-lab__ .__lab-specimen__ {
     min-width: 84px;
     min-height: 56px;
     background: var(--lab-specimen-bg, #FFFFFF14);
+    /* SQUARE CORNERS, because a corner is what the pivot is measured to: at 100% 100% the mark sits where the two
+     * edges meet, and a rounded plate cuts that point away and reads as a mark that has missed. */
+    border-radius: 0px;
 }
-/* WHERE IT STARTED: an outline of the same box, under the specimen's own z-index. Faint, because it is a
- * reference and not a second thing on the stage. */
+.__style-lab__.__transform-lab__ .__lab-specimen__ .__lab-sample__ { color: var(--lab-mark, #DFE1E5); }
+.__lab-stage__.__light__ .__lab-specimen__ { background: var(--lab-specimen-on-light, #00000014); }
+.__lab-stage__.__light__ .__lab-specimen__ .__lab-sample__ { color: var(--lab-mark-on-light, #1E1F22); }
+.__lab-stage__.__light__ .__lab-ghost__ { outline: 1px var(--lab-ghost-on-light, #8C8F94); outline-offset: -0.5px; }
+/* WHERE IT STARTED: an outline of the same box, under the specimen's own z-index. The OUTLINE reads at full
+ * strength -- it is the reference every offset is judged against, and dimmed as a whole it was a rectangle you
+ * had to look for -- while the mark inside it stays a ghost of the one on the specimen. */
 .__style-lab__.__transform-lab__ .__lab-ghost__ {
     background: none;
-    opacity: 0.3;
-    outline: 1px var(--configkit-field-border, #4A4D52);
+    outline: 1px var(--lab-ghost, #7A7A7A);
+    /* STRADDLING THE EDGE, not sitting outside it: an outline is drawn outside the border box, so its centre line
+     * ran half a pixel past the corner the pivot measures to and the mark's arms missed it. Half of it back. */
+    outline-offset: -0.5px;
 }
-/* THE PIVOT, on the specimen: Photoshop's reference point -- a ring with a cross through it, at the point every
- * op turns and grows about. A zero-sized anchor carries the position, so the drawing round it never has to match
- * a negative margin to its own size. */
+.__style-lab__.__transform-lab__ .__lab-ghost__ .__lab-sample__ { opacity: 0.25; }
+/* THE MARKS' OWN LAYER: the element's box with nothing applied to it, over both. No plate and no padding -- it
+ * holds marks placed on the box's own edges, so its content box IS the box. @see StyleLab#mark */
+.__style-lab__.__transform-lab__ .__lab-marks__ {
+    background: none;
+    padding: 0px;
+    z-index: 3;
+}
+/* THE PIVOT, on the element's own box: the mark the canvas draws, from the same painter. A zero-sized anchor
+ * carries the position, and the drawing is centred in a box a little larger than it, which is also what there is
+ * to grab. The two colours are LENT to it -- it draws neither an outline nor text -- as they are on the canvas's
+ * own box. @see PivotMark */
 .__lab-pivot__ {
     position: absolute;
     width: 0px;
@@ -1339,22 +1369,17 @@ smartguides {
 }
 .__lab-pivot-mark__ {
     position: absolute;
-    left: -5px;
-    top: -5px;
-    width: 10px;
-    height: 10px;
-    border-radius: 999px;
-    /* HOLLOW, so what it sits on shows through -- the border lab's handles are the same shape for the same reason. */
-    background: none;
-    border-width: 1.5px;
-    border-color: var(--accent, #3574F0);
-    cursor: move;
+    left: -7px;
+    top: -7px;
+    width: 14px;
+    height: 14px;
+    /* THE CANVAS'S OWN CURSOR for the canvas's own mark. */
+    cursor: pivot;
+    /* THE ACCENT HERE, not the canvas's white: the stage is a white ghost outline and a white mark, and a white
+     * pivot on top of them is a mark you have to hunt for. The painter is the same; the colours are lent. */
+    outline-color: var(--accent, #3574F0);
+    text-decoration-color: var(--builder-pivot-halo, #0D0F14C0);
 }
-.__lab-pivot-mark__:hover { border-color: var(--accent-hover, #4A82F2); }
-/* THE CROSS, reaching past the ring: at ten pixels a ring alone reads as a dot, and a dot is not a point. */
-.__lab-pivot-bar__ { position: absolute; background: var(--accent, #3574F0); }
-.__lab-pivot-bar__.__horizontal__ { left: -9px; top: -0.5px; width: 18px; height: 1px; }
-.__lab-pivot-bar__.__vertical__ { left: -0.5px; top: -9px; width: 1px; height: 18px; }
 
 /* NOTHING LEAVES A SWATCH. A transform is the one value that moves what it is drawn on, and unclipped it drew a
  * rotated plate across the panel and over the rows either side of it. `clip` and not `hidden`: a swatch is not a
@@ -1423,11 +1448,18 @@ smartguides {
 
 /* A ROW'S CONTROL: the dial, then the degrees. */
 /* Right-aligned: the degrees field is sized to its number, and the dial and directions sit beside it. */
-.__angle-field__ { flex-direction: row; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; }
-.__angle-field__ > numbercontrol, .__angle-field__ > .__config-control__ { width: 47px; flex-grow: 0; flex-shrink: 0; }
+/* THE SAME EDGE AS EVERY OTHER ROW: the dial starts where the pad and the nine cells do, and the number takes
+ * what is left, so the angle row reads as one form with the pivot's under it. Pushed to the right it lined its
+ * field up with theirs and left its gizmos floating in the middle of the row. */
+.__angle-field__ { flex-direction: row; align-items: center; gap: 6px; width: 100%; }
+/* AS WIDE AS AN ANGLE, no wider: a degree field carries four characters, and grown to the row's own width it
+ * was a field with an inch of nothing in it. The row ends before the others do, which is what a control that
+ * does not need the width looks like. */
+.__angle-field__ > numbercontrol, .__angle-field__ > .__config-control__ { width: 56px; flex-grow: 0; flex-shrink: 0; }
+/* AT THE PAD'S OWN SIZE, so the angle row's first block and the pivot row's line up as a column. */
 .__angle-dial__ {
-    width: 30px;
-    height: 30px;
+    width: 38px;
+    height: 38px;
     flex-shrink: 0;
     position: relative;
     border-radius: 999px;
@@ -1440,19 +1472,25 @@ smartguides {
 /* THE NEEDLE'S FOOT ON THE CENTRE, and it turns about its foot: centred whole, it swung about a point 7px below. */
 .__angle-needle__ {
     position: absolute;
-    left: 14px;
-    top: 4px;
+    left: 18px;
+    top: 5px;
     width: 2px;
-    height: 11px;
+    height: 14px;
     background: var(--accent, #3574F0);
     transform-origin-y: 100%;
 }
 /* The eight directions around an empty middle, each an arrow turned to the way it points. */
 /* As tall as the dial beside it, so the row is no taller than a field. */
-.__angle-presets__ { flex-direction: row; flex-wrap: wrap; width: 30px; flex-shrink: 0; }
+.__angle-presets__ {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 38px;
+    flex-shrink: 0;
+}
 .__angle-preset__ {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
     border-radius: 2px;
     padding: 1px;
     overlay: shape("triangle-up");
@@ -1461,9 +1499,31 @@ smartguides {
     color: var(--fg-hint, #7A7A7A);
     cursor: pointer;
 }
-.__angle-preset-gap__ { width: 10px; height: 10px; }
+.__angle-preset-gap__ { width: 12px; height: 12px; }
 .__angle-preset__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__angle-preset__.__active__ { color: var(--accent, #3574F0); }
+
+/* TWO NUMBERS WITH A CHAIN BETWEEN THEM, the free transform bar's W and H as a row's control: the letter, the
+ * field, the chain, the other letter and field. @see LinkedPair */
+.__linked-pair__ { flex-direction: row; align-items: center; gap: 4px; width: 100%; }
+.__linked-pair__ > numbercontrol { width: 0px; flex-grow: 1; min-width: 0px; }
+.__linked-axis__ { color: var(--cfg-label-text); flex-shrink: 0; }
+.__linked-chain__ {
+    width: 16px;
+    height: 16px;
+    min-width: 0px;
+    min-height: 0px;
+    flex-shrink: 0;
+    padding: 1px;
+    border-radius: 2px;
+    background: none;
+    background-color: transparent;
+    overlay: icon("crystalgui:general/action/link-2");
+    overlay-origin: content-box;
+    color: var(--fg-hint, #7A7A7A);
+}
+.__linked-chain__:hover { background-color: var(--panel-header-icon-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
+.__linked-chain__.__active__ { color: var(--accent, #3574F0); }
 
 /* A ROW'S CONTROL: the pad, then X and Y beside it. */
 .__offset-field__ { flex-direction: row; align-items: center; gap: 6px; width: 100%; }
@@ -1489,17 +1549,19 @@ smartguides {
 /* A PAD THAT IS THE BOX: the dot sits at a fraction of it rather than an offset from its middle, and the nine
  * places anyone means are cells in front of it -- at the pad's own size, since the two are one control and read
  * as a pair. @see OffsetPad.Space#BOX */
+/* RAW: nine cells and nothing round them. Framed like the pad beside it, the grid read as a field holding a
+ * picture of a box rather than as the nine places themselves. It keeps the pad's size, which is what lines the
+ * two up. */
 .__offset-field__.__box__ > .__config-control__.__anchor__ {
+    /* THE PAD'S COLUMN, with the cells CENTRED in it rather than filling it: unframed, a grid grown to the pad's
+     * own size reads as the loudest thing in the row, when it is the shorthand beside the real control. */
     width: 38px;
     height: 38px;
     flex-shrink: 0;
-    padding: 4px;
+    align-items: center;
     gap: 3px;
-    border-radius: 3px;
-    background: var(--configkit-field-bg, #2B2D30);
-    outline: 1px var(--configkit-field-border, #4A4D52);
 }
-.__offset-field__.__box__ > .__config-control__.__anchor__ > .__anchor-line__ { gap: 3px; }
+.__offset-field__.__box__ > .__config-control__.__anchor__ > .__anchor-line__ { gap: 3px; justify-content: center; }
 .__offset-field__.__box__ .__anchor-cell__ { width: 8px; height: 8px; border-radius: 1px; }
 .__offset-pad__.__box__ > .__offset-track__ {
     position: absolute;

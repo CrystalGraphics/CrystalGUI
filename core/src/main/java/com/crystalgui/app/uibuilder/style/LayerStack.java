@@ -265,7 +265,7 @@ public final class LayerStack extends ValueControl<List<String>> {
             Row row = rows.get(i);
             // THE LAYER ITSELF, switched off or not: a hidden layer's row still shows what it would be.
             String layer = CssValues.bodyOf(shown.get(i));
-            if (samplePainter != null && row.specimen != null) {
+            if (samplePainter != null) {
                 samplePainter.accept(row.specimen, layer);
             } else {
                 LiveEdits.setInline(row.plate, property, layer);
@@ -306,8 +306,7 @@ public final class LayerStack extends ValueControl<List<String>> {
         final UIElement sample = new UIElement();
         final UIElement plate = new UIElement();
         /** What {@link #sample(Function, BiConsumer)}'s builder made inside the patch, and what the painter is given. */
-        @Nullable
-        UIElement specimen;
+        UIElement specimen = sample;
         final UIText text = new UIText("");
         final UIElement eye = new UIElement();
 
@@ -331,7 +330,10 @@ public final class LayerStack extends ValueControl<List<String>> {
 
         row.sample.addClass(SAMPLE_CLASS);
         if (sampleBuilder != null) {
-            row.specimen = sampleBuilder.apply(row.sample);
+            UIElement made = sampleBuilder.apply(row.sample);
+            // A BUILDER THAT ANSWERS NOTHING MEANS THE PATCH, which is what a layer needing no specimen of its own
+            // -- a gradient's stop, a flat colour -- would have answered anyway.
+            row.specimen = made == null ? row.sample : made;
         } else {
             row.plate.addClass(PLATE_CLASS);
             row.sample.append(row.plate);
