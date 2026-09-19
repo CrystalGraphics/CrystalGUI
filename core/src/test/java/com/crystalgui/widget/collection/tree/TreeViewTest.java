@@ -10,6 +10,7 @@ import com.crystalgui.ui.input.FocusPolicy;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,6 +36,8 @@ public class TreeViewTest extends UiDocumentTestBase {
 
     private TreeView<String> tree;
     private int childrenCalls;
+    /** What the source answers: {@link #CHILDREN}, which a test may edit before a refresh. */
+    private final Map<String, List<String>> children = new HashMap<>(CHILDREN);
 
     private TreeView<String> build() {
         childrenCalls = 0;
@@ -47,12 +50,12 @@ public class TreeViewTest extends UiDocumentTestBase {
             @Override
             public List<String> children(String parent) {
                 childrenCalls++;
-                return CHILDREN.getOrDefault(parent, List.of());
+                return children.getOrDefault(parent, List.of());
             }
 
             @Override
             public boolean hasChildren(String item) {
-                return CHILDREN.containsKey(item);
+                return children.containsKey(item);
             }
         };
 
@@ -615,12 +618,33 @@ public class TreeViewTest extends UiDocumentTestBase {
         List<Set<Integer>> announced = new ArrayList<>();
         tree.onSelectionChanged.connect(announced::add);
 
-        // Collapsing takes the selected row out of the tree entirely.
-        tree.setExpanded("a", false);
+        // The selected row is gone from the model, which a refresh has to say.
+        children.put("a", List.of("a1"));
+        tree.refresh();
         settle();
 
         assertEquals("a rebuild announced " + announced.size() + " times: " + announced,
                 1, announced.size());
+    }
+
+    /** A fold hides the selection without dropping it, as VS Code's tree does: nothing is announced. */
+    @Test
+    public void aFoldKeepsTheSelectionItHides() {
+        build();
+        tree.setExpanded("a", true);
+        settle();
+        tree.select(indexOf("a2"));
+        settle();
+
+        List<Set<Integer>> announced = new ArrayList<>();
+        tree.onSelectionChanged.connect(announced::add);
+        tree.setExpanded("a", false);
+        settle();
+        assertTrue("a fold announced " + announced, announced.isEmpty());
+
+        tree.setExpanded("a", true);
+        settle();
+        assertTrue("unfolded, the row is selected again", tree.getSelectedIndices().contains(indexOf("a2")));
     }
 
     private int indexOf(String item) {
