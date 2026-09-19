@@ -438,7 +438,12 @@ public final class EditorService implements Disposable {
             boolean announce = active == tab;
             if (announce) tab.setActive(false);
             tab.front = view;
-            if (announce) tab.setActive(true);
+            if (announce) {
+                tab.setActive(true);
+                // A DIFFERENT EDITOR IS IN FRONT, though the document is not -- VS Code's onDidChangeActiveTextEditor
+                // fires here too, and a panel describing "the" editor has to move to the pane now being worked in.
+                onDidChangeActive.emit(tab);
+            }
             return;
         }
     }

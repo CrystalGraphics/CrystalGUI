@@ -26,11 +26,13 @@ import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.editor.TextEditorView;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
@@ -139,6 +141,25 @@ public class SplitEditorTest extends UiDocumentTestBase {
         editorIn(right()).setCaret(6);
         assertEquals(0, editorIn(left()).getCaret());
         assertEquals(6, editorIn(right()).getCaret());
+    }
+
+    /**
+     * Focus moving between the panes of a split is a different editor in front, though the panel and the document are
+     * the same: what follows the active editor — the Hierarchy, the Inspector — has to move to the pane now worked in.
+     */
+    @Test
+    public void workingInTheOtherPaneMakesItsEditorTheActiveOne() {
+        List<EditorService.Tab> announced = new ArrayList<>();
+        workbench.editors().onDidChangeActive.connect(announced::add);
+
+        workbench.dock().setActiveGroup(workbench.dock().groupFor(right()));
+        frames(2);
+        assertSame(editorIn(right()), ((TextEditorView) tab().editor()).editor());
+        assertFalse("nothing following the active editor heard it", announced.isEmpty());
+
+        workbench.dock().setActiveGroup(workbench.dock().groupFor(left()));
+        frames(2);
+        assertSame(editorIn(left()), ((TextEditorView) tab().editor()).editor());
     }
 
     @Test
