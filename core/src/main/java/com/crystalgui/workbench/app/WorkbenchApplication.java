@@ -7,6 +7,7 @@ import java.util.Locale;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -512,10 +513,25 @@ public class WorkbenchApplication extends UIElement
     }
 
     private void saveState(@Nullable UIDocument surface) {
-        if (sessionKey == null || surface == null) return;
+        // A SAVE ASKED FOR AND NOT MADE SAYS WHY. Each of these is right to skip -- no key means the workspace never
+        // answered, so there is no session to write over -- and each looked, from outside, like saving did nothing.
+        if (sessionKey == null) {
+            CrystalGuiCore.LOGGER.info("[session] {} not saved: the workspace never named it", kind().id());
+            return;
+        }
+        if (surface == null) return;
         Box box = surface.box();
-        if (box == null) return;
-        session.save(sessionKey, (int) box.width(), (int) box.height());
+        if (box == null) {
+            CrystalGuiCore.LOGGER.info("[session] {} not saved: its surface is not laid out", kind().id());
+            return;
+        }
+        try {
+            session.save(sessionKey, (int) box.width(), (int) box.height());
+            CrystalGuiCore.LOGGER.info("[session] {} saved as {}", kind().id(), sessionKey);
+        } catch (RuntimeException failed) {
+            // NOT RETHROWN: this runs on the way out, and a throw here skipped the rest of quitting.
+            CrystalGuiCore.LOGGER.error("[session] {} not saved: writing it failed", kind().id(), failed);
+        }
         savePreferences();
     }
 
