@@ -62,9 +62,7 @@ public final class Signal {
                 for (int i = 0, n = slots.size(); i < n; i++) {
                     SlotEntry<Runnable> entry = slots.get(i);
                     if (entry.connected) {
-                        long timed = listenerStarted();
                         entry.listener.run();
-                        listenerDone(timed, entry.listener);
                     }
                 }
             } finally {
@@ -102,9 +100,7 @@ public final class Signal {
                 for (int i = 0, n = slots.size(); i < n; i++) {
                     SlotEntry<Listener<T>> entry = slots.get(i);
                     if (entry.connected) {
-                        long timed = listenerStarted();
                         entry.listener.accept(value);
-                        listenerDone(timed, entry.listener);
                     }
                 }
             } finally {
@@ -120,9 +116,7 @@ public final class Signal {
                     if (condition.test(value)) break;
                     SlotEntry<Listener<T>> entry = slots.get(i);
                     if (entry.connected) {
-                        long timed = listenerStarted();
                         entry.listener.accept(value);
-                        listenerDone(timed, entry.listener);
                     }
                 }
             } finally {
@@ -163,9 +157,7 @@ public final class Signal {
                 for (int i = 0, n = slots.size(); i < n; i++) {
                     SlotEntry<Listener<A, B>> entry = slots.get(i);
                     if (entry.connected) {
-                        long timed = listenerStarted();
                         entry.listener.accept(a, b);
-                        listenerDone(timed, entry.listener);
                     }
                 }
             } finally {
@@ -181,9 +173,7 @@ public final class Signal {
                     if (condition.test(b)) break;
                     SlotEntry<Listener<A, B>> entry = slots.get(i);
                     if (entry.connected) {
-                        long timed = listenerStarted();
                         entry.listener.accept(a, b);
-                        listenerDone(timed, entry.listener);
                     }
                 }
             } finally {

@@ -1,6 +1,5 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgui.core.async.FrameProfile;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.cursor.CursorService;
@@ -685,22 +684,6 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      */
     public void send(@Nullable UIElement target, UIEvent event) {
         if (target == null) return;
-        // A PRESS OR A RELEASE AND EVERYTHING IT SETS OFF, as one nested step: a click's handlers are where a
-        // selection change starts, and the frame line cannot say which handler it was. @see FrameProfile
-        if (FrameProfile.ENABLED && (event instanceof MouseEvent.Down || event instanceof MouseEvent.Up)) {
-            String what = "input:" + event.getClass().getSimpleName() + " -> " + target.tagName();
-            long started = FrameProfile.enter(what);
-            try {
-                dispatch(target, event);
-            } finally {
-                FrameProfile.leave(started, what);
-            }
-            return;
-        }
-        dispatch(target, event);
-    }
-
-    private void dispatch(UIElement target, UIEvent event) {
         List<UIElement> path = composedPath(target);   // root first, path.get(last) == target
 
         event.setPhase(PropagationPhase.CAPTURE);
