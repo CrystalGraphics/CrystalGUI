@@ -4,12 +4,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.dnd.DragGhost;
+import org.joml.Vector3f;
 import org.junit.Test;
 
 /**
@@ -67,6 +69,39 @@ public class DragGhostShowsTest extends UiDocumentTestBase {
         frame();
         assertNull("the ghost kept its box after the drag ended", ghost.box());
         assertFalse("the ghost stayed promoted after the drag", document.isPromoted(ghost));
+    }
+
+    /**
+     * On the first frame it is drawn, the ghost is already under the pointer.
+     *
+     * <p>A ghost has no box until the move that shows it, so that move could not place it: it painted at the
+     * top layer's origin -- the window's top-left corner -- until the pointer moved again.</p>
+     */
+    @Test
+    public void aGhostIsUnderThePointerOnTheFirstFrameItIsShown() {
+        withDefaultStyles();
+        UIElement source = new UIElement();
+        document.append(source);
+        DragGhost ghost = new DragGhost();
+        document.append(ghost);
+        frame();
+
+        ghost.follow(document, "crystalgui:folder", "carrying");
+        Drag drag = Drag.start(source, 10f, 10f, CgMouseCodes.LEFT_BUTTON, "payload",
+                Drag.DEFAULT_THRESHOLD_PX, new Drag.Listener() {
+                    @Override
+                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
+                    }
+                });
+        drag.pointerMoved(300f, 200f);
+        frame();
+
+        assertNotNull(ghost.box());
+        Vector3f at = ghost.box().localToWorld().transformPosition(new Vector3f());
+        assertTrue("the ghost is not under the pointer on its first frame: " + at,
+                Math.abs(at.x - 300f) < 32f && Math.abs(at.y - 200f) < 32f);
+        drag.cancel();
+        frame();
     }
 
     @Test
