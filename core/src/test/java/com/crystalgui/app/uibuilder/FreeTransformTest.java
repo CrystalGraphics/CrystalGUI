@@ -583,6 +583,20 @@ public class FreeTransformTest extends UiDocumentTestBase {
                 30f, originX.resolve(60f), 0.5f);
     }
 
+    /** An edit made elsewhere while the box is up — the Inspector's — is what the canvas then shows. */
+    @Test
+    public void theBoxFollowsAnEditMadeElsewhere() {
+        enterFreeTransform();
+        document.update(W, H);
+        JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> g.transform(Transform.scale(2f, 2f)));
+        model.apply(new BuilderEdit.SetInlineStyle(node, was, InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
+        for (int i = 0; i < 4; i++) frame();
+
+        assertEquals("the preview started over from the new transform, not the one the box opened on",
+                Transform.scale(2f, 2f), drawn(node).box().transform());
+    }
+
     /**
      * <b>What a press means where, which is the whole of what the cursor promises.</b>
      *
