@@ -469,9 +469,7 @@ public final class UIDocument extends UIElement {
         long timed = FrameProfile.begin();
         animation().tick(deltaSeconds);
         FrameProfile.end(timed, "frame:hooks");
-        timed = FrameProfile.begin();
         calculateStyle(deltaSeconds);
-        FrameProfile.end(timed, "frame:style");
         timed = FrameProfile.begin();
         layout(width, height);
         FrameProfile.end(timed, "frame:layout");
@@ -480,11 +478,7 @@ public final class UIDocument extends UIElement {
         timed = FrameProfile.begin();
         settleAfterLayout(width, height, deltaSeconds);
         FrameProfile.end(timed, "frame:afterLayout");
-        // THE POINTER'S HANDLERS RUN HERE -- a click, and everything a selection change sets off.
-        timed = FrameProfile.begin();
-        boolean hoverMoved = input().endFrame();
-        FrameProfile.end(timed, "frame:input");
-        if (hoverMoved) {
+        if (input().endFrame()) {
             // THE HOVER MOVED AFTER THE CASCADE RAN, so `:hover` would paint on the element the pointer just
             // left for one frame. A reflow under a still pointer does exactly that: a virtualised list recycles
             // the row element under it, and the highlight jumps to wherever that element went, then back.

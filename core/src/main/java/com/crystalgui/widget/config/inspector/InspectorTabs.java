@@ -9,7 +9,6 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.widget.config.ConfiguratorPanel;
@@ -78,11 +77,7 @@ final class InspectorTabs {
             // A SECTION MAY ACCEPT AND WRITE NOTHING -- accepts() answers about a kind of subject -- and a tab
             // holding an empty panel reads as broken, which is why Blender hides a panel whose poll fails.
             if (panel.refill(form -> {
-                for (InspectorSection section : tab.getValue()) {
-                    long built = FrameProfile.begin();
-                    section.build(form, context);
-                    FrameProfile.step(built, "section " + tab.getKey() + "/" + section.getClass().getSimpleName());
-                }
+                for (InspectorSection section : tab.getValue()) section.build(form, context);
             })) {
                 shown.add(tab.getKey());
             }

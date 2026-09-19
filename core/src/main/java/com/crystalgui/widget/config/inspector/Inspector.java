@@ -1,6 +1,5 @@
 package com.crystalgui.widget.config.inspector;
 
-import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
@@ -286,11 +285,9 @@ public class Inspector extends UIElement implements DataProvider {
         // tree is the normal case rather than a symptom.
         if (!forcing && document() != null && source != null && source.document() == null) return;
 
-        long asked = FrameProfile.begin();
         DataContext context = source == null ? null : DataContext.from(source);
         List<InspectorSection> sections =
                 context == null ? List.of() : InspectorRegistry.sectionsFor(context);
-        FrameProfile.step(asked, "inspector:sectionsFor x" + sections.size());
         if (DIAGNOSE) {
             CrystalGuiCore.LOGGER.info(
                     "[inspector] rebuild source={} attached={} sections={}",
@@ -329,25 +326,18 @@ public class Inspector extends UIElement implements DataProvider {
         // screenToLocal goes stale and every later frame of the gesture feeds it garbage. A selection
         // that re-asserts itself -- a press on an already-selected node does exactly that -- would
         // otherwise tear the panel down under the press that caused it.
-        long keyed = FrameProfile.begin();
         String key = subjectKey(context, sections);
-        FrameProfile.step(keyed, "inspector:subjectKey");
         if (key.equals(shownKey)) return;
         // And a live gesture INSIDE the inspector is the other half of the same rule: scrubbing a row
         // while the selection changes must not replace the row being scrubbed.
         if (view.isInteracting()) return;
         shownKey = key;
         shownSource = context == null ? null : source;
-        long rebuilt = FrameProfile.enter("inspector:refill");
-        try {
-            boolean described = context != null && view.show(context, sections);
-            // Nothing could describe the subject. An empty framed panel reads as broken, so this is a state a theme
-            // can draw -- Blender hides a panel entirely when its poll fails.
-            if (!described) view.clear();
-            toggleClass(EMPTY_CLASS, !described);
-        } finally {
-            FrameProfile.leave(rebuilt, "inspector:refill");
-        }
+        boolean described = context != null && view.show(context, sections);
+        // Nothing could describe the subject. An empty framed panel reads as broken, so this is a state a theme can
+        // draw -- Blender hides a panel entirely when its poll fails.
+        if (!described) view.clear();
+        toggleClass(EMPTY_CLASS, !described);
     }
 
     /**
