@@ -100,12 +100,25 @@ public final class Widgets implements NodeKinds {
 
     // THE LIBRARY'S CATEGORIES for the shipped widgets. An addon files under its own, or its namespace.
     private static final String CONTROLS = "Controls";
+    private static final String BUTTONS = CONTROLS + "/Buttons and Toggles";
+    private static final String INPUTS = CONTROLS + "/Inputs";
+    private static final String PICKERS = CONTROLS + "/Pickers";
     private static final String DISPLAY = "Display";
     private static final String TEXT = "Text";
     private static final String LAYOUT = "Layout";
+    private static final String CONTAINERS = LAYOUT + "/Containers";
+    private static final String PANES = LAYOUT + "/Panes and Tabs";
     private static final String OVERLAYS = "Overlays";
     private static final String COLLECTIONS = "Collections";
     private static final String FORMS = "Forms";
+    // FORMS IS SPLIT AS UNITY'S UI BUILDER SPLITS ITS FIELDS -- numeric, text, choice, composite, value -- plus the
+    // scaffolding a form is built from.
+    private static final String NUMERIC_FIELDS = FORMS + "/Numeric Fields";
+    private static final String TEXT_FIELDS = FORMS + "/Text Fields";
+    private static final String CHOICE_FIELDS = FORMS + "/Choice Fields";
+    private static final String COMPOSITE_FIELDS = FORMS + "/Composite Fields";
+    private static final String VALUE_FIELDS = FORMS + "/Value Fields";
+    private static final String FORM_STRUCTURE = FORMS + "/Structure";
 
     /** {@code ServiceLoader} needs a public no-argument constructor. */
     public Widgets() {
@@ -124,26 +137,26 @@ public final class Widgets implements NodeKinds {
         // THE PLAIN ELEMENT'S PRESENTATION. `ui.dom` registers the kind itself, so a decode before bootstrap finds
         // it; how a picker files and draws one is this layer's to say.
         UIElementRegistry.describe(UIElement.NAME,
-                KindInfo.named("Element").inCategory(LAYOUT)
+                KindInfo.named("Element").inCategory(CONTAINERS)
                         .synonyms("div", "container", "box", "group", "row", "column")
                         .describedAs("A plain container that lays out its children.")
                         .preview(WidgetSamples.element()));
 
         // ── control ──────────────────────────────────────────────────────────
         UIElementRegistry.register(Button.NAME, Button::new, Button.CONTRACT,
-                KindInfo.named("Button").glyph(GlyphRole.CONTROL).inCategory(CONTROLS)
+                KindInfo.named("Button").glyph(GlyphRole.CONTROL).inCategory(BUTTONS)
                         .synonyms("press", "click", "action").describedAs("A labelled push button.")
                         .starter(() -> new Button("Button")).preview(WidgetSamples.button()));
         UIElementRegistry.register(Checkbox.NAME, Checkbox::new, Checkbox.CONTRACT,
-                KindInfo.named("Checkbox").glyph(GlyphRole.CONTROL).inCategory(CONTROLS)
+                KindInfo.named("Checkbox").glyph(GlyphRole.CONTROL).inCategory(BUTTONS)
                         .synonyms("tick", "check", "toggle").describedAs("An on/off box with a label.")
                         .starter(() -> new Checkbox("Checkbox")).preview(WidgetSamples.checkbox()));
         UIElementRegistry.register(Switch.NAME, Switch::new, Switch.CONTRACT,
-                KindInfo.named("Switch").glyph(GlyphRole.CONTROL).inCategory(CONTROLS)
+                KindInfo.named("Switch").glyph(GlyphRole.CONTROL).inCategory(BUTTONS)
                         .synonyms("toggle", "on", "off").describedAs("An on/off switch with a sliding knob.")
                         .preview(WidgetSamples.switchOn()));
         UIElementRegistry.register(Slider.NAME, Slider::new, Slider.CONTRACT,
-                KindInfo.named("Slider").glyph(GlyphRole.CONTROL).inCategory(CONTROLS)
+                KindInfo.named("Slider").glyph(GlyphRole.CONTROL).inCategory(INPUTS)
                         .synonyms("range", "value").describedAs("Picks a number by dragging a thumb along a track.")
                         .preview(WidgetSamples.slider()));
         UIElementRegistry.register(ProgressBar.NAME, ProgressBar::new, ProgressBar.CONTRACT,
@@ -151,7 +164,7 @@ public final class Widgets implements NodeKinds {
                         .synonyms("loading", "meter", "percent").describedAs("Shows how far something has got.")
                         .preview(WidgetSamples.progressBar()));
         UIElementRegistry.register(TextField.NAME, TextField::new, TextField.CONTRACT,
-                KindInfo.named("Text Field").glyph(GlyphRole.CONTROL).inCategory(CONTROLS)
+                KindInfo.named("Text Field").glyph(GlyphRole.CONTROL).inCategory(INPUTS)
                         .synonyms("input", "entry", "edit").describedAs("One line of editable text.")
                         .preview(WidgetSamples.textField()));
         // INERT: a symbol icon carries nothing over a wire. Registered all the same, because a kind
@@ -182,7 +195,7 @@ public final class Widgets implements NodeKinds {
         UIElementRegistry.register(Scroller.NAME, Scroller::new, NodeContract.INERT,
                 KindInfo.named("Scrollbar").glyph(GlyphRole.LAYOUT).hide());
         UIElementRegistry.register(ScrollerView.NAME, ScrollerView::new, NodeContract.INERT,
-                KindInfo.named("Scroll View").glyph(GlyphRole.LAYOUT).inCategory(LAYOUT)
+                KindInfo.named("Scroll View").glyph(GlyphRole.LAYOUT).inCategory(CONTAINERS)
                         .synonyms("scroll", "overflow", "viewport").describedAs("Scrolls content larger than itself.")
                         .preview(WidgetSamples.scrollView()));
 
@@ -200,7 +213,7 @@ public final class Widgets implements NodeKinds {
                         .synonyms("entry", "option").describedAs("One row of a menu.")
                         .starter(() -> new MenuItem("Menu Item")).preview(WidgetSamples.menuItem()));
         UIElementRegistry.register(Dropdown.NAME, Dropdown::new, Dropdown.CONTRACT,
-                KindInfo.named("Dropdown").glyph(GlyphRole.CONTROL).inCategory(CONTROLS)
+                KindInfo.named("Dropdown").glyph(GlyphRole.CONTROL).inCategory(PICKERS)
                         .synonyms("select", "combo", "choice", "picker").describedAs("Picks one option from a list.")
                         .starter(() -> new Dropdown("Select")).preview(WidgetSamples.dropdown()));
         UIElementRegistry.register(Tooltip.NAME, Tooltip::new, Tooltip.CONTRACT,
@@ -214,22 +227,22 @@ public final class Widgets implements NodeKinds {
                         .synonyms("modal", "window", "alert").describedAs("A titled window over the page.")
                         .starter(() -> new Dialog("Dialog")).preview(WidgetSamples.dialog()));
         UIElementRegistry.register(SplitView.NAME, SplitView::new, SplitView.CONTRACT,
-                KindInfo.named("Split View").glyph(GlyphRole.LAYOUT).inCategory(LAYOUT)
+                KindInfo.named("Split View").glyph(GlyphRole.LAYOUT).inCategory(PANES)
                         .synonyms("divider", "pane", "splitter").describedAs("Two panes with a draggable divider.")
                         .preview(WidgetSamples.splitView()));
         UIElementRegistry.register(TabView.NAME, TabView::new, TabView.CONTRACT,
-                KindInfo.named("Tab View").glyph(GlyphRole.LAYOUT).inCategory(LAYOUT)
+                KindInfo.named("Tab View").glyph(GlyphRole.LAYOUT).inCategory(PANES)
                         .synonyms("tabs", "pages").describedAs("Pages chosen by a row of tabs.")
                         .starter(Widgets::twoTabs)
                         .preview(WidgetSamples.tabView()));
         UIElementRegistry.register(Tab.NAME, Tab::new, Tab.CONTRACT,
-                KindInfo.named("Tab").glyph(GlyphRole.LAYOUT).inCategory(LAYOUT)
+                KindInfo.named("Tab").glyph(GlyphRole.LAYOUT).inCategory(PANES)
                         .synonyms("page").describedAs("One page of a tab view.")
                         .starter(() -> new Tab("Tab")).preview(WidgetSamples.tab()));
         // PageStack is shell chrome with a back stack -- localOnly, so it registers a kind for the
         // cascade's sake (`pagestack { }` is how a theme reaches it) and nothing decodes into it.
         UIElementRegistry.register(PageStack.NAME, PageStack::new, NodeContract.INERT,
-                KindInfo.named("Page Stack").glyph(GlyphRole.LAYOUT).inCategory(LAYOUT)
+                KindInfo.named("Page Stack").glyph(GlyphRole.LAYOUT).inCategory(PANES)
                         .synonyms("navigation", "back", "pages").describedAs("Pages shown one at a time, with a back stack.")
                         .preview(WidgetSamples.pageStack()));
         // The row a tool's options take over. Chrome, like PageStack, and registered for the same reason.
@@ -272,7 +285,7 @@ public final class Widgets implements NodeKinds {
         // nothing a registry could build, and no sheet names it -- the wires are styled through the
         // view. A kind for the cascade would be a kind for nobody.
         UIElementRegistry.register(CanvasView.NAME, CanvasView::new, NodeContract.INERT,
-                KindInfo.named("Canvas View").inCategory(LAYOUT)
+                KindInfo.named("Canvas View").inCategory(CONTAINERS)
                         .synonyms("zoom", "pan", "infinite").describedAs("A plane that pans and zooms what is placed on it.")
                         .preview(WidgetSamples.canvasView()));
         // THE GRAPH IS HIDDEN from pickers: its state is its GraphDocument, which a document cannot hold.
@@ -312,70 +325,70 @@ public final class Widgets implements NodeKinds {
         // kind, which is a real thing rather than a placeholder -- so a description CAN decode into
         // one, which is what makes their contracts reachable from a server's own tree.
         UIElementRegistry.register(Configurator.NAME, Configurator::new, NodeContract.INERT,
-                KindInfo.named("Configurator").glyph(GlyphRole.COLLECTION).inCategory(FORMS)
+                KindInfo.named("Configurator").glyph(GlyphRole.COLLECTION).inCategory(FORM_STRUCTURE)
                         .synonyms("form", "settings", "properties").describedAs("A form of labelled fields.")
                         .preview(WidgetSamples.configurator()));
         UIElementRegistry.register(ConfiguratorGroup.NAME, ConfiguratorGroup::new, NodeContract.INERT,
-                KindInfo.named("Configurator Group").glyphOf(Configurator.NAME).inCategory(FORMS)
+                KindInfo.named("Configurator Group").glyphOf(Configurator.NAME).inCategory(FORM_STRUCTURE)
                         .synonyms("section", "fold").describedAs("A folding section of a form.")
                         .preview(WidgetSamples.configuratorGroup()));
         UIElementRegistry.register(ConfiguratorPanel.NAME, ConfiguratorPanel::new, NodeContract.INERT,
-                KindInfo.named("Configurator Panel").glyphOf(Configurator.NAME).inCategory(FORMS)
+                KindInfo.named("Configurator Panel").glyphOf(Configurator.NAME).inCategory(FORM_STRUCTURE)
                         .synonyms("form", "panel").describedAs("A scrolling form panel.")
                         .preview(WidgetSamples.configuratorPanel()));
         // A FIELD SHARES ITS CONTROL'S MARK where it is that control in a form -- a boolean field is a
         // checkbox -- and the words still name the field.
         UIElementRegistry.register(AnchorControl.NAME, AnchorControl::new, NodeContract.INERT,
-                KindInfo.named("Anchor Field").glyph(GlyphRole.CONTROL).inCategory(FORMS).describedAs("Picks one of nine anchor points.").preview(WidgetSamples.anchorField()));
+                KindInfo.named("Anchor Field").glyph(GlyphRole.CONTROL).inCategory(CHOICE_FIELDS).describedAs("Picks one of nine anchor points.").preview(WidgetSamples.anchorField()));
         UIElementRegistry.register(ArrayControl.NAME, ArrayControl::new, NodeContract.INERT,
-                KindInfo.named("Array Field").glyph(GlyphRole.CONTROL).inCategory(FORMS)
+                KindInfo.named("Array Field").glyph(GlyphRole.CONTROL).inCategory(VALUE_FIELDS)
                         .synonyms("list").describedAs("An editable list of values.")
                         .preview(WidgetSamples.arrayField()));
         UIElementRegistry.register(AssetControl.NAME, AssetControl::new, NodeContract.INERT,
-                KindInfo.named("Asset Field").glyph(GlyphRole.CONTROL).inCategory(FORMS)
+                KindInfo.named("Asset Field").glyph(GlyphRole.CONTROL).inCategory(VALUE_FIELDS)
                         .synonyms("resource", "file").describedAs("Picks a resource.")
                         .preview(WidgetSamples.assetField()));
         UIElementRegistry.register(BooleanControl.NAME, BooleanControl::new, NodeContract.INERT,
-                KindInfo.named("Boolean Field").glyphOf(Checkbox.NAME).inCategory(FORMS)
+                KindInfo.named("Boolean Field").glyphOf(Checkbox.NAME).inCategory(CHOICE_FIELDS)
                         .synonyms("checkbox", "bool").describedAs("A labelled on/off field.")
                         .preview(WidgetSamples.booleanField()));
         UIElementRegistry.register(ClassChips.NAME, ClassChips::new, NodeContract.INERT,
-                KindInfo.named("Class Chips").glyph(GlyphRole.CONTROL).inCategory(FORMS)
+                KindInfo.named("Class Chips").glyph(GlyphRole.CONTROL).inCategory(TEXT_FIELDS)
                         .synonyms("tags", "classes", "tokens").describedAs("A list of names as chips, with a prompt that adds more.")
                         .preview(WidgetSamples.classChipsField()));
         UIElementRegistry.register(ColorControl.NAME, ColorControl::new, NodeContract.INERT,
-                KindInfo.named("Color Field").glyphOf(ColorSelector.NAME).inCategory(FORMS)
+                KindInfo.named("Color Field").glyphOf(ColorSelector.NAME).inCategory(VALUE_FIELDS)
                         .synonyms("colour", "swatch").describedAs("A labelled color field.")
                         .preview(WidgetSamples.colorField()));
         UIElementRegistry.register(HeaderControl.NAME, HeaderControl::new, NodeContract.INERT,
-                KindInfo.named("Form Header").glyph(GlyphRole.TEXT).inCategory(FORMS).describedAs("A heading between form fields.").preview(WidgetSamples.formHeader()));
+                KindInfo.named("Form Header").glyph(GlyphRole.TEXT).inCategory(FORM_STRUCTURE).describedAs("A heading between form fields.").preview(WidgetSamples.formHeader()));
         UIElementRegistry.register(InfoControl.NAME, InfoControl::new, NodeContract.INERT,
-                KindInfo.named("Form Info").glyph(GlyphRole.TEXT).inCategory(FORMS).describedAs("A read-only value in a form.").preview(WidgetSamples.formInfo()));
+                KindInfo.named("Form Info").glyph(GlyphRole.TEXT).inCategory(FORM_STRUCTURE).describedAs("A read-only value in a form.").preview(WidgetSamples.formInfo()));
         UIElementRegistry.register(MaskControl.NAME, MaskControl::new, NodeContract.INERT,
-                KindInfo.named("Mask Field").glyph(GlyphRole.CONTROL).inCategory(FORMS)
+                KindInfo.named("Mask Field").glyph(GlyphRole.CONTROL).inCategory(CHOICE_FIELDS)
                         .synonyms("flags", "bits").describedAs("Toggles a set of flags.")
                         .preview(WidgetSamples.maskField()));
         UIElementRegistry.register(MatrixControl.NAME, MatrixControl::new, NodeContract.INERT,
-                KindInfo.named("Matrix Field").glyph(GlyphRole.CONTROL).inCategory(FORMS).describedAs("Edits a matrix of numbers.").preview(WidgetSamples.matrixField()));
+                KindInfo.named("Matrix Field").glyph(GlyphRole.CONTROL).inCategory(COMPOSITE_FIELDS).describedAs("Edits a matrix of numbers.").preview(WidgetSamples.matrixField()));
         UIElementRegistry.register(NoteControl.NAME, NoteControl::new, NodeContract.INERT,
-                KindInfo.named("Form Note").glyph(GlyphRole.TEXT).inCategory(FORMS).describedAs("A paragraph of help in a form.").preview(WidgetSamples.formNote()));
+                KindInfo.named("Form Note").glyph(GlyphRole.TEXT).inCategory(FORM_STRUCTURE).describedAs("A paragraph of help in a form.").preview(WidgetSamples.formNote()));
         UIElementRegistry.register(NumberControl.NAME, NumberControl::new, NodeContract.INERT,
-                KindInfo.named("Number Field").glyph(GlyphRole.CONTROL).inCategory(FORMS)
+                KindInfo.named("Number Field").glyph(GlyphRole.CONTROL).inCategory(NUMERIC_FIELDS)
                         .synonyms("int", "float", "spinner").describedAs("A labelled number, dragged or typed.")
                         .preview(WidgetSamples.numberField()));
         UIElementRegistry.register(SelectControl.NAME, SelectControl::new, NodeContract.INERT,
-                KindInfo.named("Select Field").glyphOf(Dropdown.NAME).inCategory(FORMS)
+                KindInfo.named("Select Field").glyphOf(Dropdown.NAME).inCategory(CHOICE_FIELDS)
                         .synonyms("dropdown", "enum", "choice").describedAs("A labelled choice from a list.")
                         .preview(WidgetSamples.selectField()));
         UIElementRegistry.register(SliderControl.NAME, SliderControl::new, NodeContract.INERT,
-                KindInfo.named("Slider Field").glyphOf(Slider.NAME).inCategory(FORMS)
+                KindInfo.named("Slider Field").glyphOf(Slider.NAME).inCategory(NUMERIC_FIELDS)
                         .synonyms("range").describedAs("A labelled slider.").preview(WidgetSamples.sliderField()));
         UIElementRegistry.register(TextControl.NAME, TextControl::new, NodeContract.INERT,
-                KindInfo.named("Text Field").glyphOf(TextField.NAME).inCategory(FORMS)
+                KindInfo.named("Text Field").glyphOf(TextField.NAME).inCategory(TEXT_FIELDS)
                         .synonyms("string", "input").describedAs("A labelled line of text.")
                         .preview(WidgetSamples.textControl()));
         UIElementRegistry.register(VectorControl.NAME, VectorControl::new, NodeContract.INERT,
-                KindInfo.named("Vector Field").glyph(GlyphRole.CONTROL).inCategory(FORMS)
+                KindInfo.named("Vector Field").glyph(GlyphRole.CONTROL).inCategory(COMPOSITE_FIELDS)
                         .synonyms("xyz", "position").describedAs("Edits two to four numbers side by side.")
                         .preview(WidgetSamples.vectorField()));
 
@@ -410,11 +423,11 @@ public final class Widgets implements NodeKinds {
 
         // ── form ─────────────────────────────────────────────────────────────
         UIElementRegistry.register(SearchField.NAME, SearchField::new, SearchField.CONTRACT,
-                KindInfo.named("Search Field").glyph(GlyphRole.CONTROL).inCategory(CONTROLS)
+                KindInfo.named("Search Field").glyph(GlyphRole.CONTROL).inCategory(INPUTS)
                         .synonyms("filter", "find", "query").describedAs("A text field with a magnifier and a clear button.")
                         .preview(WidgetSamples.searchField()));
         UIElementRegistry.register(ColorSelector.NAME, ColorSelector::new, ColorSelector.CONTRACT,
-                KindInfo.named("Color Selector").glyph(GlyphRole.COLLECTION).inCategory(CONTROLS)
+                KindInfo.named("Color Selector").glyph(GlyphRole.COLLECTION).inCategory(PICKERS)
                         .synonyms("colour", "picker", "hue").describedAs("Picks a color from a field, hue and alpha.")
                         .preview(WidgetSamples.colorSelector()));
         UIElementRegistry.register(RadarChart.NAME, RadarChart::new, RadarChart.CONTRACT,

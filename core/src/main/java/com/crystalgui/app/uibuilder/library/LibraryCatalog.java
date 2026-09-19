@@ -3,9 +3,12 @@ package com.crystalgui.app.uibuilder.library;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
@@ -113,13 +116,40 @@ public final class LibraryCatalog {
     /**
      * A group listed ahead of the categories: a shipped one, or one a user made.
      *
-     * @param user whether a user made it, and may rename, delete and fill it
+     * <pre>{@code
+     * new Group("Mine", kinds, true);           // a group
+     * new Group("Mine/Buttons", kinds, true);   // listed inside "Mine", as "Buttons"
+     * }</pre>
+     *
+     * @param label its path: {@link #SEPARATOR}-separated, and a group nests inside the group its parent path names
+     * @param user  whether a user made it, and may rename, delete and fill it
      */
     public record Group(String label, List<Name> kinds, boolean user) {
+
+        /** Between a group's name and its parent's, as a category path's. */
+        public static final String SEPARATOR = "/";
 
         /** A shipped group. */
         public Group(String label, List<Name> kinds) {
             this(label, kinds, false);
+        }
+
+        /** Its own name, without its parents'. */
+        public String name() {
+            return label.substring(label.lastIndexOf(SEPARATOR) + 1);
+        }
+
+        /** Its parent's path, or null at the top. */
+        @Nullable
+        public String parent() {
+            return parentOf(label);
+        }
+
+        /** The parent of the group at {@code path}, or null at the top. */
+        @Nullable
+        public static String parentOf(String path) {
+            int at = path.lastIndexOf(SEPARATOR);
+            return at < 0 ? null : path.substring(0, at);
         }
     }
 
@@ -208,19 +238,20 @@ public final class LibraryCatalog {
     public List<Node> tree() {
         List<Node> roots = new ArrayList<>();
         if (!starters.isEmpty()) {
-            List<Node> snippets = new ArrayList<>(starters.size());
-            for (Entry starter : starters) snippets.add(leaf(starter));
-            roots.add(new Node(LibraryStarters.FOLDER, null, snippets));
-        }
-        for (Group group : groups) {
-            List<Node> members = new ArrayList<>();
-            for (Name kind : group.kinds()) {
-                Entry entry = byKind.get(kind);
-                if (entry != null) members.add(leaf(entry));
+            // FILED BY THEIR PATH UNDER STARTERS, as a category is: `Starters/Layout` lists inside it as Layout.
+            Folder snippets = new Folder();
+            for (Entry starter : starters) {
+                Folder folder = snippets;
+                List<String> path = starter.path();
+                int from = !path.isEmpty() && path.get(0).equals(LibraryStarters.FOLDER) ? 1 : 0;
+                for (String segment : path.subList(from, path.size())) folder = folder.child(segment);
+                folder.entries.add(starter);
             }
-            // A USER'S EMPTY GROUP IS LISTED, or a group just made would have nowhere to drag a card to.
-            if (!members.isEmpty() || group.user()) roots.add(new Node(group.label(), null, members, group));
+            List<Node> inside = snippets.nodes();
+            for (Entry starter : snippets.entries) inside.add(leaf(starter));
+            roots.add(new Node(LibraryStarters.FOLDER, null, inside));
         }
+        roots.addAll(groupNodes(null));
 
         Folder root = new Folder();
         for (Entry entry : entries) {
@@ -230,6 +261,26 @@ public final class LibraryCatalog {
         }
         roots.addAll(root.nodes());
         return roots;
+    }
+
+    /** The groups inside the one at {@code parent}, or the top ones for null: subgroups before cards, as a category. */
+    private List<Node> groupNodes(@Nullable String parent) {
+        Set<String> labels = new HashSet<>();
+        for (Group group : groups) labels.add(group.label());
+        List<Node> out = new ArrayList<>();
+        for (Group group : groups) {
+            // A GROUP WHOSE PARENT IS GONE LISTS AT THE TOP rather than vanishing with it.
+            String listedUnder = group.parent() != null && labels.contains(group.parent()) ? group.parent() : null;
+            if (!Objects.equals(listedUnder, parent)) continue;
+            List<Node> inside = groupNodes(group.label());
+            for (Name kind : group.kinds()) {
+                Entry entry = byKind.get(kind);
+                if (entry != null) inside.add(leaf(entry));
+            }
+            // A USER'S EMPTY GROUP IS LISTED, or a group just made would have nowhere to drag a card to.
+            if (!inside.isEmpty() || group.user()) out.add(new Node(group.name(), null, inside, group));
+        }
+        return out;
     }
 
     /** Every entry the query matches by label, synonym, description or category, best first. */

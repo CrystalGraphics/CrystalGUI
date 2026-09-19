@@ -1,7 +1,11 @@
 package com.crystalgui.app.uibuilder.library;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.UnaryOperator;
 
 import javax.annotation.Nullable;
@@ -22,13 +26,17 @@ import com.crystalgui.ui.dom.Name;
  * <pre>{@code
  * UserLibrary mine = UserLibrary.in(workbench.extensionStore(UiBuilderContribution.ID));   // null: the session's
  * mine.createGroup("Forms");
- * mine.addToGroup("Forms", TextField.NAME);
+ * mine.createGroup("Forms/Inputs");                  // nested inside Forms
+ * mine.addToGroup("Forms/Inputs", TextField.NAME);
  * mine.onChanged.connect(() -> panel.setCatalog(LibraryCatalog.current(mine.groups())));
  * }</pre>
  *
  * <ul>
  *   <li>Kept as {@link #FILE}, a {@link ConfigRecord} in the UI builder extension's own store — the same groups in
  *       every application and workspace.</li>
+ *   <li>A group's name is its path, {@code /}-separated: making {@code "A/B"} makes {@code "A"} first if it is
+ *       missing, and renaming or deleting {@code "A"} takes {@code "A/B"} with it. A group may sit inside a shipped
+ *       one — {@code "Common/Mine"} — which is never made or renamed.</li>
  *   <li>A kind may sit in several groups. A group name is unique, and may not be a shipped group's.</li>
  *   <li>A kind no longer registered stays in its group and simply lists nothing, so uninstalling a mod loses no
  *       group that reinstalling it would restore.</li>
@@ -45,7 +53,32 @@ public final class UserLibrary {
         static final State EMPTY = new State(false, List.of());
 
         State {
-            groups = List.copyOf(groups);
+            groups = repaired(groups);
+        }
+
+        /**
+         * {@code groups} as they may be kept: none named like a shipped group, and one per name, a duplicate's kinds
+         * merged into the first. Earlier builds kept both — a shipped name as the parent of a group inside it, and a
+         * second group with the name of the first.
+         */
+        private static List<Group> repaired(List<Group> groups) {
+            Map<String, Integer> at = new HashMap<>();
+            List<Group> out = new ArrayList<>(groups.size());
+            for (Group group : groups) {
+                if (isShipped(group.label())) continue;
+                Integer first = at.get(group.label());
+                if (first == null) {
+                    at.put(group.label(), out.size());
+                    out.add(group);
+                    continue;
+                }
+                List<Name> kinds = new ArrayList<>(out.get(first).kinds());
+                for (Name kind : group.kinds()) {
+                    if (!kinds.contains(kind)) kinds.add(kind);
+                }
+                out.set(first, new Group(group.label(), kinds, true));
+            }
+            return List.copyOf(out);
         }
 
         static final Codec<State> CODEC = new Codec<>() {
@@ -105,42 +138,99 @@ public final class UserLibrary {
         return record.get().groups();
     }
 
+    private static boolean isShipped(String label) {
+        for (Group shipped : LibraryGroups.SHIPPED) {
+            if (shipped.label().equals(label)) return true;
+        }
+        return false;
+    }
+
     @Nullable
     public Group group(String name) {
         int at = indexOf(name);
         return at < 0 ? null : groups().get(at);
     }
 
+    /** {@code name} as a path: each segment trimmed, blank ones dropped — {@code " A / B/"} is {@code "A/B"}. */
+    public static String path(String name) {
+        List<String> segments = new ArrayList<>();
+        for (String segment : name.split(Group.SEPARATOR)) {
+            if (!segment.isBlank()) segments.add(segment.trim());
+        }
+        return String.join(Group.SEPARATOR, segments);
+    }
+
+    /** {@code name} inside the group at {@code parent}, or at the top for null. */
+    public static String pathIn(@Nullable String parent, String name) {
+        return parent == null ? path(name) : path(parent + Group.SEPARATOR + name);
+    }
+
     /** Whether {@code name} could name a new group: not blank, not taken, not a shipped group's. */
     public boolean isFreeName(String name) {
-        String trimmed = name.trim();
-        if (trimmed.isEmpty() || group(trimmed) != null) return false;
-        for (Group shipped : LibraryGroups.SHIPPED) {
-            if (shipped.label().equals(trimmed)) return false;
-        }
-        return true;
+        String wanted = path(name);
+        return !wanted.isEmpty() && group(wanted) == null && !isShipped(wanted);
     }
 
-    /** Makes an empty group; false when the name is not free. */
+    /** Makes an empty group, and any parent it names that is missing; false when the name is not free. */
     public boolean createGroup(String name) {
         if (!isFreeName(name)) return false;
-        return changeGroups(groups -> append(groups, new Group(name.trim(), List.of(), true)));
+        return changeGroups(groups -> withParents(append(groups, new Group(path(name), List.of(), true))));
     }
 
+    /** Renames or moves a group, its subgroups going with it; false when {@code to} is taken or inside {@code from}. */
     public boolean renameGroup(String from, String to) {
-        int at = indexOf(from);
-        if (at < 0 || !isFreeName(to)) return false;
-        return changeGroups(groups -> replace(groups, at, new Group(to.trim(), groups.get(at).kinds(), true)));
+        String target = path(to);
+        if (indexOf(from) < 0 || !isFreeName(target) || isWithin(target, from)) return false;
+        return changeGroups(groups -> {
+            List<Group> out = new ArrayList<>(groups.size());
+            for (Group group : groups) {
+                String label = group.label();
+                out.add(isWithin(label, from)
+                        ? new Group(target + label.substring(from.length()), group.kinds(), true)
+                        : group);
+            }
+            return withParents(out);
+        });
     }
 
+    /** Deletes a group and its subgroups. Their kinds stay in the Library. */
     public boolean deleteGroup(String name) {
-        int at = indexOf(name);
-        if (at < 0) return false;
+        if (indexOf(name) < 0) return false;
         return changeGroups(groups -> {
             List<Group> out = new ArrayList<>(groups);
-            out.remove(at);
+            out.removeIf(group -> isWithin(group.label(), name));
             return out;
         });
+    }
+
+    /** How many groups sit inside {@code name}, at any depth. */
+    public int subgroupCount(String name) {
+        int count = 0;
+        for (Group group : groups()) {
+            if (!group.label().equals(name) && isWithin(group.label(), name)) count++;
+        }
+        return count;
+    }
+
+    /** Whether {@code label} is {@code group} or inside it. */
+    private static boolean isWithin(String label, String group) {
+        return label.equals(group) || label.startsWith(group + Group.SEPARATOR);
+    }
+
+    /** {@code groups} with every missing parent made, each just before its first child. A shipped parent is not made. */
+    private static List<Group> withParents(List<Group> groups) {
+        Set<String> labels = new HashSet<>();
+        for (Group group : groups) labels.add(group.label());
+        List<Group> out = new ArrayList<>(groups.size());
+        for (Group group : groups) {
+            List<Group> missing = new ArrayList<>();
+            for (String parent = group.parent(); parent != null; parent = Group.parentOf(parent)) {
+                if (!isShipped(parent) && labels.add(parent)) missing.add(0, new Group(parent, List.of(), true));
+            }
+            out.addAll(missing);
+            out.add(group);
+        }
+        return out;
     }
 
     /** Adds {@code kind} to the end of the group; false when it is already there or there is no such group. */
