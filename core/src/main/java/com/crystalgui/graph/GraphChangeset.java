@@ -30,8 +30,23 @@ public final class GraphChangeset {
     private final List<EdgeData> addedEdges = new ArrayList<>();
     private final List<EdgeData> removedEdges = new ArrayList<>();
 
+    /**
+     * Whether the document was replaced wholesale — a file opened into it — since this was last cleared. A view then
+     * rebuilds from the document rather than applying the lists, which name ids the new graph may reuse for other
+     * nodes. @see GraphDocument#replaceWith
+     */
+    public boolean isReset() {
+        return reset;
+    }
+
+    void markReset() {
+        reset = true;
+    }
+
+    private boolean reset;
+
     public boolean isEmpty() {
-        return addedNodes.isEmpty() && removedNodes.isEmpty() && movedNodes.isEmpty()
+        return !reset && addedNodes.isEmpty() && removedNodes.isEmpty() && movedNodes.isEmpty()
                 && addedEdges.isEmpty() && removedEdges.isEmpty();
     }
 
@@ -80,8 +95,38 @@ public final class GraphChangeset {
         if (!addedEdges.remove(edge)) removedEdges.add(edge);
     }
 
+    /** Every changeset a document has open — one per view — recorded into together. @see GraphDocument#openChangeset */
+    static final class Open {
+        final List<GraphChangeset> each = new ArrayList<>();
+
+        void nodeAdded(String id) {
+            for (GraphChangeset changeset : each) changeset.nodeAdded(id);
+        }
+
+        void nodeRemoved(String id) {
+            for (GraphChangeset changeset : each) changeset.nodeRemoved(id);
+        }
+
+        void nodeMoved(String id) {
+            for (GraphChangeset changeset : each) changeset.nodeMoved(id);
+        }
+
+        void edgeAdded(EdgeData edge) {
+            for (GraphChangeset changeset : each) changeset.edgeAdded(edge);
+        }
+
+        void edgeRemoved(EdgeData edge) {
+            for (GraphChangeset changeset : each) changeset.edgeRemoved(edge);
+        }
+
+        void reset() {
+            for (GraphChangeset changeset : each) changeset.markReset();
+        }
+    }
+
     /** Empties this changeset. The view calls it after applying, and the document after handing it over. */
     public void clear() {
+        reset = false;
         addedNodes.clear();
         removedNodes.clear();
         movedNodes.clear();

@@ -1,6 +1,7 @@
 package com.crystalgui.graph;
 
 import com.crystalgui.core.settings.Settings;
+import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.core.signal.Signal;
 import lombok.Getter;
@@ -58,8 +59,7 @@ public final class GraphDocument implements SettingsScope {
     private final Map<String, NodeData> nodes = new LinkedHashMap<>();
     private final List<EdgeData> edges = new ArrayList<>();
 
-    @Getter
-    private final GraphChangeset changeset = new GraphChangeset();
+    private final GraphChangeset.Open changeset = new GraphChangeset.Open();
 
     /**
      * How this document decides whether one port may feed another. {@link TypeCompatibility#EXACT} by
@@ -70,14 +70,32 @@ public final class GraphDocument implements SettingsScope {
     private TypeCompatibility typeCompatibility = TypeCompatibility.EXACT;
 
     /**
-     * What has changed since this was last cleared — what a view drains to update itself.
+     * A changeset of one's own, recording every change from now on — what a view drains to update itself. <b>One per
+     * view</b>: a document shown twice has two, since the first view to drain a shared one would take the changes the
+     * second still has to apply.
+     *
+     * <pre>{@code
+     * GraphChangeset mine = document.openChangeset();
+     * ...
+     * document.closeChangeset(mine);   // when the view goes, or it grows for as long as the document lives
+     * }</pre>
      *
      * <p>Live rather than a copy, and the caller clears it: a view that applied half a changeset and
      * then lost the rest would be silently out of step with the document, which is the one failure mode
      * this whole mechanism exists to prevent.</p>
      */
-    public GraphChangeset changeset() {
-        return changeset;
+    public GraphChangeset openChangeset() {
+        GraphChangeset opened = new GraphChangeset();
+        // A RESET, so a view opened over a graph that is already here builds all of it. Not over an empty one, where
+        // it would only throw away whatever the view builds by hand before its first frame.
+        if (!nodes.isEmpty() || !edges.isEmpty()) opened.markReset();
+        changeset.each.add(opened);
+        return opened;
+    }
+
+    /** Stops recording into {@code opened}. @see #openChangeset */
+    public void closeChangeset(GraphChangeset opened) {
+        changeset.each.remove(opened);
     }
 
     /** Fires after any structural change, once the changeset has been updated. */
@@ -537,7 +555,6 @@ public final class GraphDocument implements SettingsScope {
             copy.edges.add(new EdgeData(new PortRef(from, edge.from().portId()),
                     new PortRef(to, edge.to().portId())));
         }
-        copy.changeset.clear();
         return copy;
     }
 
@@ -581,7 +598,30 @@ public final class GraphDocument implements SettingsScope {
      */
     public void clear() {
         for (String id : new ArrayList<>(nodes.keySet())) removeNode(id);
-        settings.replaceLayer(com.crystalgui.core.settings.SettingsLayer.DOCUMENT, null);
+        settings.replaceLayer(SettingsLayer.DOCUMENT, null);
         properties.clear();
+    }
+
+    /**
+     * Makes this document hold what {@code source} holds — a file opened into it — keeping this instance, which every
+     * view and panel is bound to.
+     *
+     * <p>Every open changeset is marked a {@linkplain GraphChangeset#isReset() reset}: the new file reuses the old
+     * one's ids as often as not, and a changeset reads a node removed and added again as one that never left — so a
+     * view catching up by difference would keep the old file's widgets under the new file's ids.</p>
+     *
+     * <p>The DOCUMENT settings layer alone, mirroring what the codec writes; the user and workspace layers come from
+     * other files entirely. Edges are restored rather than reconnected, for the reason {@code GraphCodecs} gives.</p>
+     */
+    public void replaceWith(GraphDocument source) {
+        clear();
+        settings.replaceLayer(SettingsLayer.DOCUMENT, source.settings().layer(SettingsLayer.DOCUMENT).asMap());
+        for (GraphProperty property : source.properties()) addProperty(property);
+        for (NodeData node : source.nodes()) addNode(node);
+        for (EdgeData edge : source.edges()) restoreEdge(edge);
+        changeset.reset();
+        // ONE emit at the end: `restoreEdge` only records, and `clear()` empties the properties after its last
+        // removeNode -- so a file with no nodes, or one ending in an edge, would otherwise tell nobody.
+        onChanged.emit();
     }
 }

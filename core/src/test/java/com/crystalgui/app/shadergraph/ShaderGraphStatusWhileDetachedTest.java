@@ -21,12 +21,12 @@ import com.crystalgui.ui.dom.UIElement;
 public class ShaderGraphStatusWhileDetachedTest extends UiDocumentTestBase {
 
     private final StatusBar bar = new StatusBar();
-    private ShaderGraphEditor editor;
+    private ShaderGraphView editor;
     private UIElement root;
 
     private void build() {
         document.addDataProvider(this::statusBarFor);
-        editor = new ShaderGraphEditor();
+        editor = new ShaderGraphView();
         root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor);
         document.append(root);
@@ -45,7 +45,7 @@ public class ShaderGraphStatusWhileDetachedTest extends UiDocumentTestBase {
         build();
         editor.activated(true);
         assertEquals(1, bar.size());
-        assertEquals(ShaderGraphEditor.COMPILE_STATUS, bar.idOf(bar.entries().get(0)));
+        assertEquals(ShaderGraphView.COMPILE_STATUS, bar.idOf(bar.entries().get(0)));
     }
 
     /**
@@ -82,7 +82,7 @@ public class ShaderGraphStatusWhileDetachedTest extends UiDocumentTestBase {
         frame();
 
         assertEquals("written on the way back in", 1, bar.size());
-        assertEquals(ShaderGraphEditor.COMPILE_STATUS, bar.idOf(bar.entries().get(0)));
+        assertEquals(ShaderGraphView.COMPILE_STATUS, bar.idOf(bar.entries().get(0)));
     }
 
     /** A tab that is not in front stays off the bar however often it is re-attached. */

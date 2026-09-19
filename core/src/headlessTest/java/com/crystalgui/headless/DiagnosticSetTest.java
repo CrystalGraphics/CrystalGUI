@@ -120,7 +120,7 @@ public class DiagnosticSetTest {
      * highlights. A flat list means the last writer wins, which is the failure {@code Workbench.onStatus}
      * had before the status bar was keyed, arriving a second time in a different package.</p>
      *
-     * <p>It was already binding: {@code ShaderGraphEditor} has four independent producers — the emitter, the
+     * <p>It was already binding: {@code ShaderGraphView} has four independent producers — the emitter, the
      * GLSL driver, the preview and graph-level warnings — and had to merge all four by hand on every
      * compile, because any of them writing alone would have erased the other three.</p>
      */

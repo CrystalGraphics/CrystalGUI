@@ -123,7 +123,7 @@ public class ShaderGraphCommandsTest extends UiDocumentTestBase {
     public void theAssembledShaderEditorGetsThemThroughItsGraph() {
         // Left EMPTY on purpose: attaching previews for real nodes starts CgPreviewRenderer, which wants
         // a GL context. Commands do not care how many nodes exist.
-        ShaderGraphEditor editor = new ShaderGraphEditor();
+        ShaderGraphView editor = new ShaderGraphView();
         windowOver(editor);
 
         assertTrue(document.getCommands().contains(GraphCommands.DELETE));

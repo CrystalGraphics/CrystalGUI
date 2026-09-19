@@ -1,6 +1,6 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
-import com.crystalgui.app.shadergraph.ShaderGraphEditor;
+import com.crystalgui.app.shadergraph.ShaderGraphView;
 import com.crystalgui.app.shadergraph.preview.MainPreviewPanel;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -65,7 +65,7 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
     /**
      * <b>The real editor builds exactly one board, with exactly one placeholder.</b>
      *
-     * <p>Through {@code ShaderGraphEditor}'s own constructor and {@code addStarterGraph}, because that is
+     * <p>Through {@code ShaderGraphView}'s own constructor and {@code addStarterGraph}, because that is
      * the sequence the harness runs: the panel refreshes once on construction and again on the graphDocument
      * change the starter graph causes. A panel built in isolation and never told anything changed cannot
      * show the bug.</p>
@@ -76,7 +76,7 @@ public class BlackboardStyleTest extends UiDocumentTestBase {
      */
     @Test
     public void theAssembledEditorShowsOnePlaceholder() {
-        ShaderGraphEditor editor = new ShaderGraphEditor().addStarterGraph();
+        ShaderGraphView editor = new ShaderGraphView().addStarterGraph();
         BlackboardPanel board = editor.blackboard();
 
         UIElement body = childWithClass(board, BlackboardPanel.BODY_CLASS);

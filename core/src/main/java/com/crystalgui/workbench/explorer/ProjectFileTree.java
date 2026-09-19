@@ -269,7 +269,7 @@ public class ProjectFileTree extends UIElement
         // internal child. Stamping the whole subtree makes those removals no-ops, the realised window
         // only ever grows, and layout takes longer every frame until the window stops responding.
         //
-        // Same fix as QuickPick, ProblemsPanel and ShaderGraphEditor. Four widgets now; the wrapper is
+        // Same fix as QuickPick, ProblemsPanel and ShaderGraphView. Four widgets now; the wrapper is
         // the pattern, not a workaround.
         // FOCUSABLE, because this panel's keys are COMMANDS. Delete, F2 and Ctrl+Z all resolve outward
         // from the focused element -- a keymap and an UndoScope both walk that path -- so a panel that

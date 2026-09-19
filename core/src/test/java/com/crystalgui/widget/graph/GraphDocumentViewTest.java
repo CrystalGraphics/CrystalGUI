@@ -300,7 +300,7 @@ public class GraphDocumentViewTest extends UiDocumentTestBase {
      *
      * <p>This is the property per-file editors rest on, and it was the one line that made them
      * impossible: {@code load} used to end in {@code this.document = source}. A host wires its panels to
-     * {@code getDocument()} once, at construction — {@code ShaderGraphEditor} hands the same instance to
+     * {@code getDocument()} once, at construction — {@code ShaderGraphView} hands the same instance to
      * its Main Preview, its Blackboard and its own change listener — so a swap left every one of them
      * driving an <b>orphan</b>. Both halves keep working individually, which is why nothing would have
      * reported it: the board lists a graph that is not on screen and writes edits nobody can see.</p>
@@ -452,7 +452,7 @@ public class GraphDocumentViewTest extends UiDocumentTestBase {
                 untouched, graph.widgetFor(position.id()));
         assertEquals("the moved node followed", 12f,
                 graph.getDocument().node(position.id()).x(), 0.01f);
-        assertTrue("and the changeset was drained", graph.getDocument().changeset().isEmpty());
+        assertTrue("and the changeset was drained", graph.pending.isEmpty());
     }
 
     /** A removal through the document takes the widget with it. */

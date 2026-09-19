@@ -16,7 +16,7 @@ import java.util.List;
  *
  * <p>{@link #SELECTION} is here rather than on {@code GraphView} because the file tree answers it too,
  * and a key owned by one of its answerers is a key the others have to depend on that widget to use.
- * A key belonging to a single feature belongs with that feature — {@code ShaderGraphEditor} declares
+ * A key belonging to a single feature belongs with that feature — {@code ShaderGraphView} declares
  * its own — and this class is only for the ones the engine has an opinion about.</p>
  */
 public final class UiDataKeys {

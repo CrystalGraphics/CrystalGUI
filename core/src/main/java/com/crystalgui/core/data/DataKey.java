@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * written today keeps working in a widget written next year.</p>
  *
  * <p>This codebase already had the pattern three times, hand-rolled and type-specific:
- * {@code GraphCommands.graphFor}, {@code ShaderGraphEditor.editorFor} and {@code UndoScope.nearest}
+ * {@code GraphCommands.graphFor}, {@code ShaderGraphView.editorFor} and {@code UndoScope.nearest}
  * are the same walk with a different {@code instanceof}. A key is that walk with the type pulled out.</p>
  *
  * <h3>Interned by name</h3>

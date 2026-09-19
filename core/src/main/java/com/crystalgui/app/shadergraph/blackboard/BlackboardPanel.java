@@ -733,7 +733,7 @@ public class BlackboardPanel extends UIElement implements DataProvider {
      * arming one behaviour at the start would force them to know in advance.</p>
      *
      * <h3>The drop MUST be stopped from bubbling</h3>
-     * <p>This panel is an overlay <em>inside</em> the {@code GraphView}, and {@code ShaderGraphEditor}
+     * <p>This panel is an overlay <em>inside</em> the {@code GraphView}, and {@code ShaderGraphView}
      * accepts the very same payload on the graph to create a node. {@code DragEvent.Drop} bubbles — so
      * without {@code stopPropagation} a reorder would also drop a node on the canvas underneath, and the
      * board would sprout a node every time a property was moved.</p>
@@ -1186,7 +1186,7 @@ public class BlackboardPanel extends UIElement implements DataProvider {
      *
     /**
      * Registers this panel's commands. Global, so no window is needed — see
-     * {@code ShaderGraphEditor.registerCommands()} for why that mattered.
+     * {@code ShaderGraphView.registerCommands()} for why that mattered.
      *
      * <p>No re-registration guard: the engine calls this once for this class. A
      * {@code if (!registry.contains(DELETE_COMMAND))} here was one command id standing in for three,
