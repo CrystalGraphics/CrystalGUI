@@ -14,6 +14,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.Refillable;
 import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.widget.config.control.NumberControl;
 import com.crystalgui.widget.control.Button;
@@ -36,7 +37,7 @@ import com.crystalgui.widget.overlay.Tooltip;
  * laid out, no font size — the number is kept, because a made-up base is worse than an honest one. {@code auto}
  * is a unit here rather than a keyword to remember, which is what makes it reachable without typing at all.</p>
  */
-public final class LengthField extends ValueControl<String> {
+public final class LengthField extends ValueControl<String> implements Refillable<LengthField> {
 
     public static final Name NAME = Name.of("lengthfield");
 
@@ -137,6 +138,20 @@ public final class LengthField extends ValueControl<String> {
      * <p>Either may answer {@code NaN} — an element with no parent laid out has no percentage — and a conversion
      * that cannot be measured keeps the number instead.</p>
      */
+    /**
+     * Edits what {@code fresh} was built for — another node's length in the same units — keeping this field.
+     * The pixels it remembered for coming back from {@code auto} were the last node's, so they go with it.
+     */
+    @Override
+    public boolean adopt(LengthField fresh) {
+        if (!units.equals(fresh.units) || !adopt(fresh.descriptor())) return false;
+        hundredPercent = fresh.hundredPercent;
+        em = fresh.em;
+        remembered = fresh.remembered;
+        bind(fresh.property());
+        return true;
+    }
+
     public LengthField against(DoubleSupplier hundredPercent, DoubleSupplier em) {
         this.hundredPercent = hundredPercent;
         this.em = em;

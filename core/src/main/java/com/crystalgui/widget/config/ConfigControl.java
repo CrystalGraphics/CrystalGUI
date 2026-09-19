@@ -71,7 +71,8 @@ public abstract class ConfigControl extends UIElement {
      */
     public final Signal.Value<Boolean> interacting = new Signal.Value<>();
 
-    private final ConfigDescriptor descriptor;
+    /** Replaced only by {@link #adopt}, with one of the same shape. */
+    private ConfigDescriptor descriptor;
 
     /** True while a programmatic write is in flight; suppresses {@link #changed}. */
     private boolean updating;
@@ -113,6 +114,36 @@ public abstract class ConfigControl extends UIElement {
 
     public ConfigDescriptor descriptor() {
         return descriptor;
+    }
+
+    /**
+     * Takes {@code next} as this control's descriptor when it would build the same control, and answers whether it
+     * did — what lets a refilled form keep the control it built last time.
+     *
+     * <pre>{@code
+     * if (!control.adopt(next)) replaceWith(ConfigControls.bound(next, value));
+     * }</pre>
+     *
+     * <p>Two descriptors of the same shape differ only in what they ASK — a validator, a range supplier — and those
+     * close over the subject being described. So a control reads its descriptor's questions through
+     * {@link #descriptor()} when it asks them, never from a copy taken at construction; one that derived state from
+     * them re-derives it in {@link #descriptorAdopted}.</p>
+     *
+     * @see ConfigDescriptor#sameShape
+     */
+    public final boolean adopt(ConfigDescriptor next) {
+        if (next == descriptor) return true;
+        if (!descriptor.sameShape(next)) return false;
+        descriptor = next;
+        descriptorAdopted();
+        return true;
+    }
+
+    /**
+     * Called after {@link #adopt} swapped the descriptor: re-derive anything built from its questions — a part
+     * control's own descriptor, a track's range.
+     */
+    protected void descriptorAdopted() {
     }
 
     /** The current value, in whatever type this control speaks. */

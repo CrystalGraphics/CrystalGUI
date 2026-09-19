@@ -19,6 +19,9 @@ import javax.annotation.Nullable;
  * <p>Groups are the panel's, so a group the user closed stays closed when the panel is refilled — see
  * {@link ConfiguratorPanel#group}. A form opened from a group writes into that group's content and shares
  * this form's {@link #isEmpty}, since "was anything written" is a question about the whole panel.</p>
+ *
+ * <p>A form from {@link ConfiguratorPanel#refill} keeps what the last fill placed wherever it places the same thing;
+ * one from {@link ConfiguratorPanel#form} only appends.</p>
  */
 public final class PanelForm implements ConfigForm {
 
@@ -34,14 +37,19 @@ public final class PanelForm implements ConfigForm {
     /** Shared by reference with the forms of groups opened from this one. */
     private final int[] written;
 
-    public PanelForm(ConfiguratorPanel panel) {
-        this(panel, null, new int[1]);
+    /** The refill this form is part of, or null for a form that only appends. */
+    @Nullable
+    private final Refill refill;
+
+    PanelForm(ConfiguratorPanel panel, @Nullable Refill refill) {
+        this(panel, null, new int[1], refill);
     }
 
-    private PanelForm(ConfiguratorPanel panel, @Nullable UIElement parent, int[] written) {
+    private PanelForm(ConfiguratorPanel panel, @Nullable UIElement parent, int[] written, @Nullable Refill refill) {
         this.panel = panel;
         this.parent = parent;
         this.written = written;
+        this.refill = refill;
     }
 
     /** The panel being filled. */
@@ -52,12 +60,12 @@ public final class PanelForm implements ConfigForm {
     @Override
     public <T> Configurator prop(ConfigDescriptor descriptor, Property<T> value) {
         written[0]++;
-        return panel.propTo(host(), descriptor, value);
+        return panel.propInto(host(), descriptor, value, refill);
     }
 
     @Override
     public Configurator row(ConfigDescriptor descriptor, @Nullable Object value) {
-        Configurator row = panel.addTo(host(), descriptor, value);
+        Configurator row = panel.rowInto(host(), descriptor, value, refill);
         if (row == null) throw new IllegalArgumentException("no control is registered for " + descriptor.kind());
         written[0]++;
         return row;
@@ -66,7 +74,7 @@ public final class PanelForm implements ConfigForm {
     @Override
     public Configurator control(String id, String label, ConfigControl control) {
         written[0]++;
-        return panel.addRow(host(), label, id, control);
+        return panel.controlInto(host(), label, id, control, refill);
     }
 
     @Override
@@ -81,25 +89,22 @@ public final class PanelForm implements ConfigForm {
 
     @Override
     public PanelForm group(String title, boolean collapsed) {
-        ConfiguratorGroup group = panel.group(title, collapsed);
-        // ATTACHED HERE: panel.group() leaves that to its caller, since a group may sit inside another.
-        host().append(group);
+        ConfiguratorGroup group = panel.groupInto(host(), title, collapsed, refill);
         written[0]++;
         // Rows go in the group's CONTENT: a ConfiguratorGroup refuses public children.
-        return new PanelForm(panel, group.content(), written);
+        return new PanelForm(panel, group.content(), written, refill);
     }
 
     @Override
     public void separator() {
-        host().append(new UIElement().addClass(SEPARATOR_CLASS));
+        panel.separatorInto(host(), refill);
         written[0]++;
     }
 
     @Override
     public <E extends UIElement> E custom(E element) {
-        host().append(element);
         written[0]++;
-        return element;
+        return panel.customInto(host(), element, refill);
     }
 
     @Override

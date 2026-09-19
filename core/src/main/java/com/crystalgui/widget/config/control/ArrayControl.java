@@ -97,7 +97,8 @@ public class ArrayControl extends ValueControl<List<Object>> {
 
     private final UIElement body = new UIElement();
     private final UIElement foot = new UIElement();
-    private final ConfigDescriptor element;
+    /** What one entry is — replaced with the descriptor, by {@link #descriptorAdopted}. */
+    private ConfigDescriptor element;
     private final List<Object> values = new ArrayList<>();
 
     /** The no-argument constructor the registry's factory needs, over a NEUTRAL
@@ -110,9 +111,7 @@ public class ArrayControl extends ValueControl<List<Object>> {
 
     public ArrayControl(ConfigDescriptor descriptor, @Nullable List<Object> defaultValue) {
         super(NAME, descriptor, defaultValue == null ? List.of() : List.copyOf(defaultValue));
-        this.element = descriptor.element() == null
-                ? ConfigDescriptor.text(descriptor.id() + ".entry", "")
-                : descriptor.element();
+        this.element = elementOf(descriptor);
         addClass("__array__");
         if (descriptor.inlineList()) addClass(INLINE_CLASS);
         UIElement head = new UIElement();
@@ -177,6 +176,21 @@ public class ArrayControl extends ValueControl<List<Object>> {
      * programmatic write. Rebuilding under a live edit would detach the control being typed into, which
      * is the widget-rebuild trap {@code AGENTS.md} records against the table header.</p>
      */
+    private static ConfigDescriptor elementOf(ConfigDescriptor descriptor) {
+        return descriptor.element() == null ? ConfigDescriptor.text(descriptor.id() + ".entry", "") : descriptor.element();
+    }
+
+    /** The entries take the new element descriptor, as the ones built after this will. */
+    @Override
+    protected void descriptorAdopted() {
+        element = elementOf(descriptor());
+        for (UIElement entry : body.children()) {
+            if (!entry.children().isEmpty() && entry.children().get(0) instanceof ConfigControl control) {
+                control.adopt(element);
+            }
+        }
+    }
+
     private void rebuild() {
         body.removeAll();
         if (values.isEmpty()) {

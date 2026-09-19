@@ -1,5 +1,6 @@
 package com.crystalgui.ui.event;
 
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 
 import java.util.HashMap;
@@ -42,6 +43,24 @@ public final class EventListenerGroup<E extends EventTarget, T extends UIEvent> 
         if (capture)
             this.capture.connect(listener);
         return element;
+    }
+
+    /**
+     * As {@link #attachListener}, answering the subscription — for a listener that lives shorter than the element.
+     *
+     * <pre>{@code
+     * row.decorations().add(label.onMouseDown.subscribe(this::press, false, true));   // gone at the next refill
+     * }</pre>
+     */
+    public Connection subscribe(UIEvent.Listener<E, T> listener, boolean capture, boolean bubble) {
+        Connection atTarget = this.target.connect(listener);
+        Connection bubbling = bubble ? this.bubble.connect(listener) : Connection.DISCONNECTED;
+        Connection capturing = capture ? this.capture.connect(listener) : Connection.DISCONNECTED;
+        return () -> {
+            atTarget.disconnect();
+            bubbling.disconnect();
+            capturing.disconnect();
+        };
     }
 
     public void emitTarget(T event) {

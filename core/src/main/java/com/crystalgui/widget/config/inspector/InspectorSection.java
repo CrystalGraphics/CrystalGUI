@@ -74,6 +74,10 @@ public interface InspectorSection {
      *             Property.derived(node::scale, node::setScale).editedIn(node.history()));
      * }
      * }</pre>
+     *
+     * <p><b>The form is a refill</b> ({@code ConfiguratorPanel.refill}): a row placed the same way as last time is
+     * last time's row, bound to this subject. Hang anything you attach to a returned row on its
+     * {@code decorations()}, and make a custom element {@code Refillable} to keep it too.</p>
      */
     void build(ConfigForm form, DataContext context);
 

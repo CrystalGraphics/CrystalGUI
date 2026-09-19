@@ -65,7 +65,7 @@ public class SliderControl extends ValueControl<Double> {
         // ONE DESCRIPTOR FOR BOTH HALVES, suppliers included, so a live range or unit reaches the field.
         number = new NumberControl(descriptor.part(descriptor.id() + ".value", ""), defaultValue);
         if (descriptor.live()) {
-            PropertyWatch watch = new PropertyWatch(this, Property.derived(() -> track(descriptor)),
+            PropertyWatch watch = new PropertyWatch(this, Property.derived(() -> track(descriptor())),
                     (was, now) -> track(now));
             whileConnected(watch::start);
         }
@@ -98,6 +98,13 @@ public class SliderControl extends ValueControl<Double> {
     public boolean adoptLabel(UIElement label) {
         number.scrubWith(label);
         return true;
+    }
+
+    /** The field takes the same descriptor's part, and the track its range, as construction gave them. */
+    @Override
+    protected void descriptorAdopted() {
+        number.adopt(descriptor().part(descriptor().id() + ".value", ""));
+        track(track(descriptor()));
     }
 
     /** The track's span and increment as the descriptor states them now. */

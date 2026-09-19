@@ -6,7 +6,9 @@ import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.property.Property;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.control.InfoControl;
@@ -15,6 +17,9 @@ import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.FlexDirection;
 
 import javax.annotation.Nullable;
+
+import java.util.ArrayList;
+import java.util.Set;
 
 /**
  * <b>One field: a label and a control</b> — a row of an inspector, or a cell of a toolbar.
@@ -98,6 +103,9 @@ public class Configurator extends UIElement implements DataProvider {
     }
 
     private final UIText label;
+
+    /** @see #labelText */
+    private final String labelText;
     private final UIElement inline = new UIElement();
     private final ConfigControl control;
 
@@ -148,6 +156,7 @@ public class Configurator extends UIElement implements DataProvider {
         }
 
         boolean labelled = !control.selfLabelling() && labelText != null && !labelText.isEmpty();
+        this.labelText = labelText == null ? "" : labelText;
         label = new UIText(labelled ? labelText : "");
         label.addClass(LABEL_CLASS);
         if (!labelled || !control.adoptLabel(label)) label.setHitTest(false);
@@ -169,6 +178,48 @@ public class Configurator extends UIElement implements DataProvider {
             if (arrangement != Arrangement.COMPACT) hint.addClass(Tooltip.WAIT_CLASS);
             hint.setDescription(control.descriptor().description());
         }
+        builtClasses = Set.copyOf(classes());
+    }
+
+    // ── Across refills ──────────────────────────────────────────────────────
+    //
+    // A refilled panel hands a row it built last time back to the next fill. What the row was BUILT with is its
+    // own; what a fill did to it afterwards belonged to that fill, and must not survive into the next.
+
+    /** The classes the row was built with — the ones {@link #reclaim} keeps. */
+    private final Set<String> builtClasses;
+
+    private final ConnectionGroup decorations = new ConnectionGroup();
+
+    /**
+     * Where a fill hangs what it attaches to this row, so the next refill can take it off again.
+     *
+     * <pre>{@code
+     * Configurator row = form.prop(descriptor, value);
+     * row.decorations().add(row.label().onMouseDown.subscribe(this::scrub, false, true));
+     * row.decorations().add(row.whileConnected(() -> source.changed.connect(this::follow)));
+     * }</pre>
+     *
+     * <p>A class or a display state set on the row is undone for you. A listener, a watch or a hook is not —
+     * the row cannot know what it was — so it goes in here, or it stays on a row the next fill reuses and acts
+     * on whatever the previous one was describing.</p>
+     */
+    public ConnectionGroup decorations() {
+        return decorations;
+    }
+
+    /**
+     * Undoes what the last fill did to this row, before a refill hands it out again: its decorations, the classes
+     * it added, a hidden or inert state and a history it named.
+     */
+    void reclaim() {
+        decorations.disconnectAll();
+        for (String added : new ArrayList<>(classes())) {
+            if (!builtClasses.contains(added)) removeClass(added);
+        }
+        setDisplayed(true);
+        control.set(Attribute.INERT, false);
+        history = null;
     }
 
     private static String textFor(Arrangement arrangement, ConfigDescriptor descriptor) {
@@ -184,6 +235,11 @@ public class Configurator extends UIElement implements DataProvider {
 
     public ConfigControl control() {
         return control;
+    }
+
+    /** The label this row was built with — shown beside the control unless the control labels itself. */
+    public String labelText() {
+        return labelText;
     }
 
     /** Null on a self-labelling field — there is no label element, not merely an empty one. */
@@ -218,7 +274,7 @@ public class Configurator extends UIElement implements DataProvider {
         describing.setText(text.get());
         PropertyWatch watch = new PropertyWatch(this, text,
                 (was, now) -> describing.setText(now == null ? "" : now));
-        whileConnected(watch::start);
+        decorations.add(whileConnected(watch::start));
         return this;
     }
 }

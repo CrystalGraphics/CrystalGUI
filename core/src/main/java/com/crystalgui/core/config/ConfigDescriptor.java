@@ -5,6 +5,7 @@ import java.util.Collection;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.DoubleSupplier;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
@@ -651,6 +652,48 @@ public final class ConfigDescriptor {
     public ConfigDescriptor child(ConfigDescriptor value) {
         this.children.add(value);
         return this;
+    }
+
+    /**
+     * Whether {@code other} would build the same control as this — every stated value equal, and each asked-for one
+     * (a range supplier, a validator) present on both or on neither.
+     *
+     * <pre>{@code
+     * if (row.control().descriptor().sameShape(next)) row.control().adopt(next);   // what a refill does
+     * }</pre>
+     *
+     * <p>What is ASKED FOR is compared by presence only: a supplier is a closure over whatever the form is
+     * describing, and two fills of the same form over two subjects are meant to differ exactly there. A control
+     * that adopts {@code other} asks the new suppliers from then on.</p>
+     */
+    public boolean sameShape(@Nullable ConfigDescriptor other) {
+        if (other == this) return true;
+        if (other == null || kind != other.kind || !id.equals(other.id) || !label.equals(other.label)) return false;
+        return Objects.equals(tooltip, other.tooltip) && options.equals(other.options)
+                && Objects.equals(range, other.range) && Objects.equals(softRange, other.softRange)
+                && arity == other.arity && integral == other.integral && Float.compare(step, other.step) == 0
+                && hdr == other.hdr && Objects.equals(unit, other.unit) && Objects.equals(shortLabel, other.shortLabel)
+                && decimals == other.decimals && commitWhileTyping == other.commitWhileTyping && toggle == other.toggle
+                && Double.compare(scrubRate, other.scrubRate) == 0 && Objects.equals(description, other.description)
+                && inlineList == other.inlineList && Objects.equals(emptyText, other.emptyText)
+                && Objects.equals(placeholder, other.placeholder)
+                && (rangeSource == null) == (other.rangeSource == null)
+                && (softRangeSource == null) == (other.softRangeSource == null)
+                && (stepSource == null) == (other.stepSource == null)
+                && (unitSource == null) == (other.unitSource == null)
+                && (scrubRateSource == null) == (other.scrubRateSource == null)
+                && (suggestions == null) == (other.suggestions == null)
+                && (validator == null) == (other.validator == null)
+                && (element == null ? other.element == null : element.sameShape(other.element))
+                && sameShapes(children, other.children);
+    }
+
+    private static boolean sameShapes(List<ConfigDescriptor> these, List<ConfigDescriptor> those) {
+        if (these.size() != those.size()) return false;
+        for (int i = 0; i < these.size(); i++) {
+            if (!these.get(i).sameShape(those.get(i))) return false;
+        }
+        return true;
     }
 
     /**

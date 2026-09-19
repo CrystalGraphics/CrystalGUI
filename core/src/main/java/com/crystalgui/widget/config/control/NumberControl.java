@@ -98,7 +98,7 @@ public class NumberControl extends ValueControl<Double> {
         // A UNIT THAT FOLLOWS ANOTHER VALUE is re-shown when it moves, since the text is only written on a
         // programmatic set and would otherwise keep the old suffix until the number itself changed.
         if (descriptor.live()) {
-            PropertyWatch unitWatch = new PropertyWatch(this, Property.derived(descriptor::unit), (was, now) -> {
+            PropertyWatch unitWatch = new PropertyWatch(this, Property.derived(() -> descriptor().unit()), (was, now) -> {
                 if (!isEditing()) quietly(() -> writeToWidgets(getValue()));
             });
             whileConnected(unitWatch::start);

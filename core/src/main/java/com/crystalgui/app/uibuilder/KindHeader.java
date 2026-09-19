@@ -5,6 +5,7 @@ import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.Refillable;
 import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.widget.text.UIText;
 
@@ -19,7 +20,7 @@ import com.crystalgui.widget.text.UIText;
  * heading does. The glyph and words are the node's Hierarchy row's, from one resolver, and follow a layout
  * change on the next frame as the row does. No tooltip: the words the glyph would say are printed beside it.</p>
  */
-final class KindHeader extends HeaderControl {
+final class KindHeader extends HeaderControl implements Refillable<KindHeader> {
 
     /** On the heading. */
     static final String CLASS = "__kind-header__";
@@ -30,7 +31,8 @@ final class KindHeader extends HeaderControl {
     /** Takes the band's free space, so the words and the tag keep their natural widths. */
     static final String SPACER_CLASS = "__kind-spacer__";
 
-    private final UIElement node;
+    /** Whose kind this heads — the last fill's node until a refill hands it the next. @see #adopt */
+    private UIElement node;
 
     private final GlyphView glyph = new GlyphView(null);
 
@@ -54,6 +56,14 @@ final class KindHeader extends HeaderControl {
             refresh();
             return true;
         }));
+    }
+
+    @Override
+    public boolean adopt(KindHeader fresh) {
+        node = fresh.node;
+        tag.setText(tagOf(node.name()));
+        refresh();
+        return true;
     }
 
     private void refresh() {

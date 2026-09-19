@@ -59,6 +59,12 @@ public class MatrixControl extends ValueControl<double[]> {
     private final int arity;
     private final List<NumberControl> cells = new ArrayList<>();
 
+    /** Each cell takes its part of the new descriptor, as construction gave it one. */
+    @Override
+    protected void descriptorAdopted() {
+        for (int i = 0; i < cells.size(); i++) cells.get(i).adopt(descriptor().part(descriptor().id() + "." + i, ""));
+    }
+
     public MatrixControl(ConfigDescriptor descriptor, @Nullable double[] defaultValue) {
         super(NAME, descriptor, defaultValue);
         this.arity = Math.max(1, descriptor.arity());

@@ -56,6 +56,14 @@ public class VectorControl extends ValueControl<double[]> {
 
     private final List<NumberControl> components = new ArrayList<>();
 
+    /** Each component takes its part of the new descriptor, as construction gave it one. */
+    @Override
+    protected void descriptorAdopted() {
+        for (int i = 0; i < components.size(); i++) {
+            components.get(i).adopt(descriptor().part(descriptor().id() + "." + AXES[i], AXES[i]));
+        }
+    }
+
     public VectorControl(ConfigDescriptor descriptor, double[] defaultValue) {
         super(NAME, descriptor, defaultValue);
         int arity = Math.max(1, Math.min(AXES.length, descriptor.arity()));

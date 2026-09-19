@@ -5,7 +5,6 @@ import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.core.signal.Connection;
-import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.style.StyleScope;
 import com.crystalgui.ui.input.keymap.KeymapScope;
@@ -703,17 +702,32 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
 
     // ── Subscriptions that follow the tree ──────────────────────────────────────
 
-    /** Re-subscribed on every attach; the returned connections are dropped on every detach. */
+    /** Re-subscribed on every attach; each one's connection is dropped on every detach. */
     @Nullable
-    private List<Supplier<Connection>> subscriptions;
+    private List<Subscription> subscriptions;
+
+    /** One {@link #whileConnected} registration, and what it is subscribed to during the current attach. */
+    private static final class Subscription {
+        final Supplier<Connection> subscribe;
+        Connection current = Connection.DISCONNECTED;
+
+        Subscription(Supplier<Connection> subscribe) {
+            this.subscribe = subscribe;
+        }
+
+        void start() {
+            current = subscribe.get();
+        }
+
+        void stop() {
+            current.disconnect();
+            current = Connection.DISCONNECTED;
+        }
+    }
 
     /** Run after the subscriptions, on every attach. */
     @Nullable
     private List<Runnable> onConnected;
-
-    /** What {@link #subscriptions} produced for the attach this node is currently in. */
-    @Nullable
-    private ConnectionGroup live;
 
     /**
      * Holds a subscription for exactly as long as this node is in a tree — <b>declare it in the
@@ -740,12 +754,26 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      *
      * <p>Safe to call once the node is already attached: it subscribes on the spot as well as on every
      * attach after.</p>
+     *
+     * <p><b>Ended early by what it returns</b>, for a subscription that lives shorter than the node — one a
+     * refilled form hangs on a row it reuses:</p>
+     *
+     * <pre>{@code
+     * row.decorations().add(row.whileConnected(() -> text.changed.connect(this::describe)));
+     * }</pre>
+     *
+     * @return ends the registration: disconnects it now and stops it being made on any later attach
      */
-    public final void whileConnected(Supplier<Connection> subscribe) {
+    public final Connection whileConnected(Supplier<Connection> subscribe) {
         Objects.requireNonNull(subscribe, "subscribe");
         if (subscriptions == null) subscriptions = new ArrayList<>();
-        subscriptions.add(subscribe);
-        if (isConnected()) liveGroup().add(subscribe.get());
+        Subscription subscription = new Subscription(subscribe);
+        subscriptions.add(subscription);
+        if (isConnected()) subscription.start();
+        return () -> {
+            if (subscriptions != null) subscriptions.remove(subscription);
+            subscription.stop();
+        };
     }
 
     /**
@@ -766,11 +794,6 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
         if (isConnected()) action.run();
     }
 
-    private ConnectionGroup liveGroup() {
-        if (live == null) live = new ConnectionGroup();
-        return live;
-    }
-
     /**
      * Runs the registrations for an attach, then the node's own {@link #connected} hook.
      *
@@ -782,9 +805,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
         if (subscriptions != null) {
             // BY INDEX, and re-reading the size: an action below may register another subscription,
             // and one added during the walk still belongs to this attach.
-            for (int i = 0; i < subscriptions.size(); i++) {
-                liveGroup().add(subscriptions.get(i).get());
-            }
+            for (int i = 0; i < subscriptions.size(); i++) subscriptions.get(i).start();
         }
         if (onConnected != null) {
             for (int i = 0; i < onConnected.size(); i++) onConnected.get(i).run();
@@ -794,7 +815,9 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
 
     /** The counterpart of {@link #enterTree}; same reason for living here. */
     private void leaveTree() {
-        if (live != null) live.disconnectAll();
+        if (subscriptions != null) {
+            for (Subscription subscription : subscriptions) subscription.stop();
+        }
         disconnected();
     }
 
