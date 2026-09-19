@@ -633,6 +633,52 @@ public class StripeView extends UIElement {
     }
 
     /**
+     * Which half of {@code region} a point on THIS RAIL means, or {@code null} when the rail cannot say.
+     *
+     * <p><b>The rail's own boundary, not the workbench's midpoint.</b> {@link RegionDropZones} splits a
+     * region at half its height, which is the right answer over the region's BODY — the panel area really
+     * is halved there. Over the rail it is not: the separator sits wherever the upper group's buttons
+     * end, which is usually near the top, so everything between it and the middle of the window read as
+     * PRIMARY and a button dragged just below the separator went back where it came from.</p>
+     *
+     * <p>The boundary is the last upper button's bottom edge, which is where the separator is drawn; with
+     * nothing above it, the first lower button's top edge instead, so an empty upper half stays reachable.
+     * Below every button is the lower half, which is the gesture that CREATES one.</p>
+     */
+    @Nullable
+    public RegionSide sideAt(DockRegion region, float screenY) {
+        ItemButton last = lastOf(slotButtons(region, RegionSide.PRIMARY));
+        if (last != null) {
+            Box box = last.box();
+            return box == null ? null : screenY < box.worldY() + box.height()
+                    ? RegionSide.PRIMARY : RegionSide.SECONDARY;
+        }
+        ItemButton first = firstOf(slotButtons(region, RegionSide.SECONDARY));
+        if (first == null) return null;   // neither half has anything to measure a boundary from
+        Box box = first.box();
+        return box == null ? null : screenY < box.worldY() ? RegionSide.PRIMARY : RegionSide.SECONDARY;
+    }
+
+    /** The last button that still has a box — the one being carried is hidden and measures nothing. */
+    @Nullable
+    private ItemButton lastOf(List<ItemButton> slot) {
+        ItemButton found = null;
+        for (ItemButton button : slot) {
+            if (!button.typeId.equals(dragging) && button.box() != null) found = button;
+        }
+        return found;
+    }
+
+    /** @see #lastOf */
+    @Nullable
+    private ItemButton firstOf(List<ItemButton> slot) {
+        for (ItemButton button : slot) {
+            if (!button.typeId.equals(dragging) && button.box() != null) return button;
+        }
+        return null;
+    }
+
+    /**
      * Shows where a drop would insert, and returns that index — or hides the marker when this rail is not
      * the target.
      *

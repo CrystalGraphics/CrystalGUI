@@ -223,8 +223,38 @@ public class RegionDropOverlay extends UIElement {
         // host's offset into the window.
         float x = local.x();
         float y = local.y();
-        return RegionDropZones.forPoint(x, y, width, height,
+        RegionDropZones.Target target = RegionDropZones.forPoint(x, y, width, height,
                 leftBand(host), rightBand(host), bottomBand(host));
+        return overRail(target, position);
+    }
+
+    /**
+     * Lets the RAIL decide which half a point over it means, where {@link RegionDropZones} splits the
+     * region at half its height.
+     *
+     * <p>That split is right over a region's body and wrong over its rail: the separator sits wherever the
+     * upper group's buttons end, near the top, so the whole band between it and the middle of the window
+     * resolved PRIMARY and a button dragged just below the separator went straight back above it. The rail
+     * is the only thing that knows where it drew that line.</p>
+     *
+     * <p>Here rather than in either caller, because the preview and the drop both read this one answer —
+     * deciding it twice is how a marker ends up promising a slot the release does not honour.</p>
+     */
+    @Nullable
+    private RegionDropZones.Target overRail(@Nullable RegionDropZones.Target target, ReadOnlyVec2f position) {
+        if (target == null || target.region() == DockRegion.PANEL) return target;
+        for (StripeView stripe : workbench.stripes()) {
+            if (stripe.rail() != StripeRail.of(target.region(), target.side())) continue;
+            Box box = stripe.box();
+            if (box == null) continue;
+            float localX = position.x() - box.worldX();
+            float localY = position.y() - box.worldY();
+            if (localX < 0f || localY < 0f || localX > box.width() || localY > box.height()) continue;
+            RegionSide side = stripe.sideAt(target.region(), position.y());
+            return side == null || side == target.side()
+                    ? target : new RegionDropZones.Target(target.region(), side);
+        }
+        return target;
     }
 
     /**
