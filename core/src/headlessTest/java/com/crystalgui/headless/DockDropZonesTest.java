@@ -9,10 +9,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 /**
- * The drop-zone hit map, ported from VS Code's {@code positionOverlay}.
+ * The drop-zone hit map, from VS Code's {@code positionOverlay} with wider edges and the nearest edge winning.
  *
  * <p>Pure arithmetic on a rectangle, so it can be checked exhaustively rather than by waving a mouse at a
- * scene — which is the only way the 10%-vs-30% asymmetry and the corner tie-breaks get looked at at all.</p>
+ * scene — which is the only way the thresholds and the corner tie-breaks get looked at at all.</p>
  */
 public class DockDropZonesTest {
 
@@ -25,7 +25,7 @@ public class DockDropZonesTest {
         assertEquals(DockDropZone.MERGE, DockDropZones.forPane(W / 2f, H / 2f, W, H));
     }
 
-    /** Anywhere inside the 10% inset on both axes still merges, right up to the threshold. */
+    /** Anywhere inside the 30% inset on both axes still merges, right up to the threshold. */
     @Test
     public void theWholeInsetBoxMerges() {
         float insetX = W * DockDropZones.EDGE_THRESHOLD;
@@ -34,49 +34,20 @@ public class DockDropZonesTest {
         assertEquals(DockDropZone.MERGE, DockDropZones.forPane(W - insetX - 1f, H - insetY - 1f, W, H));
     }
 
-    /** Outside the inset, the thirds decide. Side-by-side preferred: left/right own the outer thirds. */
+    /** Each edge band splits on its own side, well in from the edge: three quarters across is a right split. */
     @Test
-    public void sideBySidePrefersLeftAndRight() {
-        assertEquals(DockDropZone.SPLIT_LEFT, DockDropZones.forPane(1f, H / 2f, W, H));
-        assertEquals(DockDropZone.SPLIT_RIGHT, DockDropZones.forPane(W - 1f, H / 2f, W, H));
-        // Middle third, near the top edge -> up.
-        assertEquals(DockDropZone.SPLIT_UP, DockDropZones.forPane(W / 2f, 1f, W, H));
-        assertEquals(DockDropZone.SPLIT_DOWN, DockDropZones.forPane(W / 2f, H - 1f, W, H));
+    public void eachEdgeBandSplitsOnItsSide() {
+        assertEquals(DockDropZone.SPLIT_LEFT, DockDropZones.forPane(W * 0.25f, H / 2f, W, H));
+        assertEquals(DockDropZone.SPLIT_RIGHT, DockDropZones.forPane(W * 0.75f, H / 2f, W, H));
+        assertEquals(DockDropZone.SPLIT_UP, DockDropZones.forPane(W / 2f, H * 0.25f, W, H));
+        assertEquals(DockDropZone.SPLIT_DOWN, DockDropZones.forPane(W / 2f, H * 0.75f, W, H));
     }
 
-    /** With side-by-side NOT preferred the map transposes: up/down own the outer thirds. */
+    /** Outside the merge box the nearest edge wins: near the top of the left third is up, not left. */
     @Test
-    public void stackedPrefersUpAndDown() {
-        assertEquals(DockDropZone.SPLIT_UP, DockDropZones.forPane(W / 2f, 1f, W, H, false, false));
-        assertEquals(DockDropZone.SPLIT_DOWN, DockDropZones.forPane(W / 2f, H - 1f, W, H, false, false));
-        assertEquals(DockDropZone.SPLIT_LEFT, DockDropZones.forPane(1f, H / 2f, W, H, false, false));
-        assertEquals(DockDropZone.SPLIT_RIGHT, DockDropZones.forPane(W - 1f, H / 2f, W, H, false, false));
-    }
-
-    /**
-     * <b>A whole group gets a bigger target along the preferred axis — 30%, not 10%.</b>
-     *
-     * <p>VS Code's asymmetry, and deliberate rather than a rounding: a group is a bigger thing to place.
-     * At 15% of the width a single panel still merges and a group already splits.</p>
-     */
-    @Test
-    public void draggingAGroupWidensTheEdgeAlongThePreferredAxis() {
-        float x = W * 0.15f;
-        float y = H / 2f;
-
-        assertEquals("a single panel is still inside the 10% inset",
-                DockDropZone.MERGE, DockDropZones.forPane(x, y, W, H, true, false));
-        assertEquals("a group is already past the 30% inset",
-                DockDropZone.SPLIT_LEFT, DockDropZones.forPane(x, y, W, H, true, true));
-    }
-
-    /** …and only along the preferred axis. The other one keeps 10%, or every drop would split. */
-    @Test
-    public void theWidenedEdgeAppliesToOneAxisOnly() {
-        float x = W / 2f;
-        float y = H * 0.15f;
-        assertEquals("15% down, side-by-side preferred, dragging a group: still the merge box",
-                DockDropZone.MERGE, DockDropZones.forPane(x, y, W, H, true, true));
+    public void theNearestEdgeWins() {
+        assertEquals(DockDropZone.SPLIT_UP, DockDropZones.forPane(W * 0.2f, H * 0.05f, W, H));
+        assertEquals(DockDropZone.SPLIT_LEFT, DockDropZones.forPane(W * 0.05f, H * 0.2f, W, H));
     }
 
     /** A degenerate pane cannot be split into anything, so it merges rather than dividing by zero. */

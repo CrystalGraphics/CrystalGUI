@@ -20,6 +20,7 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.workbench.dock.drag.DockDragPayload;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.drag.DockDropZones;
+import com.crystalgui.workbench.dock.drag.DockForeignDrop;
 import com.crystalgui.workbench.dock.layout.DockBranch;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -1099,12 +1100,73 @@ public class DockArea extends UIElement {
             return torn;
         }
 
+        if (payload.isForeign()) return adopt(payload.panels());
+
         DockPanelRef panel = payload.panel();
         if (panel == null || sourceLeaf.indexOf(panel) < 0) return null;
         sourceLeaf.remove(panel);
         if (sourceLeaf.isEmpty() && !sourceLeaf.isCentral()) source.layout.remove(sourceLeaf);
         source.requestRebuild();
         return new DockLeaf(panel);
+    }
+
+    /** Panels from outside a dock drag, as one leaf: each lifted from whichever window already shows it. */
+    private DockLeaf adopt(List<DockPanelRef> panels) {
+        for (DockPanelRef panel : panels) {
+            DockArea holding = areaHolding(panel);
+            if (holding == null) continue;
+            DockLeaf leaf = holding.layout.leafContaining(panel);
+            leaf.remove(panel);
+            if (leaf.isEmpty() && !leaf.isCentral()) holding.layout.remove(leaf);
+            holding.requestRebuild();
+        }
+        return new DockLeaf(panels.toArray(new DockPanelRef[0]));
+    }
+
+    /**
+     * Turns a drag this dock did not start into panels it can drop — set on the home, asked by every window.
+     *
+     * <pre>{@code
+     * dock.setForeignDrop(opener.fileDrops());
+     * }</pre>
+     */
+    public DockArea setForeignDrop(@Nullable DockForeignDrop drop) {
+        home().foreignDrop = drop;
+        return this;
+    }
+
+    @Nullable
+    private DockForeignDrop foreignDrop;
+
+    /** The drag this dock asked about last, and what it made of it — so a drag's every move asks once. */
+    @Nullable
+    private Object resolvedDrag;
+
+    @Nullable
+    private DockDragPayload resolvedPayload;
+
+    /**
+     * What a drag means to the dock: its own payload as it stands, anything else as the foreign drop reads it, or
+     * null to refuse. A single panel already open is its TAB, so dropping a file that is open is a tab drag.
+     */
+    @Nullable
+    private DockDragPayload payloadOf(@Nullable Object dragged) {
+        if (dragged instanceof DockDragPayload own) return own;
+        if (dragged == null) return null;
+        if (dragged == resolvedDrag) return resolvedPayload;
+        DockForeignDrop drop = home().foreignDrop;
+        List<DockPanelRef> panels = drop == null ? List.of() : drop.panelsFor(dragged);
+        DockDragPayload payload = null;
+        if (panels.size() == 1 && areaHolding(panels.get(0)) != null) {
+            DockPanelRef panel = panels.get(0);
+            DockArea holding = areaHolding(panel);
+            payload = DockDragPayload.ofPanel(holding, holding.layout.leafContaining(panel), panel);
+        } else if (!panels.isEmpty()) {
+            payload = DockDragPayload.ofPanels(panels);
+        }
+        resolvedDrag = dragged;
+        resolvedPayload = payload;
+        return payload;
     }
 
     /**
@@ -1333,18 +1395,10 @@ public class DockArea extends UIElement {
             if (window == null) return;
             parkGhost();
             setActiveGroup(group);
-            // A PRESS SELECTS THE TAB -- on the press, not on the click.
-            //
-            // A drag never completes a click: the pointer moves, so no Up lands on the tab it went down
-            // on, and the selection that a click would have made never happens. So dragging a tab that
-            // was not already selected left the strip showing TWO lit tabs -- the one that is selected
-            // and the one being carried, which click-focus has just outlined -- and dropped it as a
-            // background tab. IntelliJ and VS Code both select on press for exactly this reason.
-            //
-            // Safe during dispatch, which is the thing to check before touching a tree mid-press:
-            // DockGroup.sync rebuilds its strip only when the panel LIST changes, and this changes the
-            // selection. The elements this press is being dispatched through are not recreated.
-            activateHere(panel);
+            // A PRESS DOES NOT SELECT THE TAB: a click does, through TabView, and a drop selects what it dropped
+            // (performDrop's focusPanel). Selecting on the press swapped a background tab's content in the
+            // moment it was touched, so dragging it past the active one showed the wrong editor all the way.
+            // The two lit tabs that once justified it cannot happen: a dragged tab leaves its strip.
             addClass(DRAGGING_CLASS);
             dragMoved = false;
             // THE SAME GHOST A RAIL BUTTON GETS, for the same reason: a drag with pointer capture pins
@@ -1506,8 +1560,8 @@ public class DockArea extends UIElement {
         // Over and Drop bubble, so listening on the area alone covers every group inside it. Doing it per
         // group would mean re-attaching a listener on every strip rebuild for no gain.
         events.getGroup(DragEvent.Over.class).attachListener((el, event) -> {
-            if (!(event.getPayload() instanceof DockDragPayload)) return;
-            DockDragPayload payload = (DockDragPayload) event.getPayload();
+            DockDragPayload payload = payloadOf(event.getPayload());
+            if (payload == null) return;
             if (!updatePreview(payload, event.getPosition().x(), event.getPosition().y())) {
                 clearPreview();
                 return;
@@ -1521,15 +1575,22 @@ public class DockArea extends UIElement {
         events.getGroup(DragEvent.Leave.class).attachListener((el, event) -> clearPreview(), false, false);
 
         events.getGroup(DragEvent.Drop.class).attachListener((el, event) -> {
-            if (!(event.getPayload() instanceof DockDragPayload)) return;
-            DockDragPayload payload = (DockDragPayload) event.getPayload();
+            DockDragPayload payload = payloadOf(event.getPayload());
+            resolvedDrag = null;
+            resolvedPayload = null;
+            if (payload == null) return;
             if (previewZone == null) {
                 clearPreview();
                 return;
             }
             DockLeaf target = previewGroup != null ? previewGroup.leaf() : null;
-            performDrop(payload, target, previewZone, previewIsOuterEdge, previewTabIndex);
+            DockLeaf landed = performDrop(payload, target, previewZone, previewIsOuterEdge, previewTabIndex);
             clearPreview();
+            // WHAT AN OPEN DOES BESIDES PLACING A TAB, for anything that did not start as one of ours.
+            DockForeignDrop drop = home().foreignDrop;
+            if (landed != null && drop != null && !(event.getPayload() instanceof DockDragPayload)) {
+                drop.opened(payload.panels());
+            }
         }, false, true);
     }
 
@@ -1595,10 +1656,7 @@ public class DockArea extends UIElement {
         Box groupBox = group.box();
         if (groupBox == null) return false;
         var localGroup = group.toLocal(pointerX, pointerY);
-        DockDropZone zone = DockDropZones.forPane(
-                localGroup.x(), localGroup.y(),
-                groupBox.width(), groupBox.height(),
-                true, payload.isGroupDrag());
+        DockDropZone zone = DockDropZones.forPane(localGroup.x(), localGroup.y(), groupBox.width(), groupBox.height());
         setPreview(group, zone, false, -1);
         return true;
     }

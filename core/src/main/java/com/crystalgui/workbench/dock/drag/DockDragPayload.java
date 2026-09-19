@@ -3,6 +3,7 @@ package com.crystalgui.workbench.dock.drag;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
+import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -17,48 +18,67 @@ import javax.annotation.Nullable;
  * float, or back — knows which tree to detach from. Without it the source area has to be inferred from
  * the dragged element's ancestors, which stops working the moment a drag outlives the element's
  * attachment.</p>
+ *
+ * <p>A drag the dock did not start — files from the Project panel — arrives as {@link #ofPanels}: panels with no
+ * source, each lifted from wherever it already is when the drop lands. @see DockForeignDrop</p>
  */
 public final class DockDragPayload {
 
-    private final DockArea sourceArea;
-    private final DockLeaf sourceLeaf;
     @Nullable
-    private final DockPanelRef panel;
+    private final DockArea sourceArea;
+    @Nullable
+    private final DockLeaf sourceLeaf;
+    private final List<DockPanelRef> panels;
 
-    private DockDragPayload(DockArea sourceArea, DockLeaf sourceLeaf, @Nullable DockPanelRef panel) {
+    private DockDragPayload(@Nullable DockArea sourceArea, @Nullable DockLeaf sourceLeaf, List<DockPanelRef> panels) {
         this.sourceArea = sourceArea;
         this.sourceLeaf = sourceLeaf;
-        this.panel = panel;
+        this.panels = List.copyOf(panels);
     }
 
     public static DockDragPayload ofPanel(DockArea area, DockLeaf leaf, DockPanelRef panel) {
-        return new DockDragPayload(area, leaf, panel);
+        return new DockDragPayload(area, leaf, List.of(panel));
     }
 
     public static DockDragPayload ofGroup(DockArea area, DockLeaf leaf) {
-        return new DockDragPayload(area, leaf, null);
+        return new DockDragPayload(area, leaf, List.of());
     }
 
+    /** Panels from outside the dock's own drag, opened where they drop — or moved there, if already open. */
+    public static DockDragPayload ofPanels(List<DockPanelRef> panels) {
+        if (panels.isEmpty()) throw new IllegalArgumentException("no panels");
+        return new DockDragPayload(null, null, panels);
+    }
+
+    /** The dock the drag started in, or null for {@link #ofPanels}. */
+    @Nullable
     public DockArea sourceArea() {
         return sourceArea;
     }
 
+    /** The leaf the drag started in, or null for {@link #ofPanels}. */
+    @Nullable
     public DockLeaf sourceLeaf() {
         return sourceLeaf;
     }
 
-    /** The single panel in flight, or {@code null} when the whole group is. */
+    /** The panel in flight — the first, of several — or {@code null} when a whole group is. */
     @Nullable
     public DockPanelRef panel() {
-        return panel;
+        return panels.isEmpty() ? null : panels.get(0);
+    }
+
+    /** Every panel in flight, in order; empty for a whole group. */
+    public List<DockPanelRef> panels() {
+        return panels;
     }
 
     public boolean isWholeGroup() {
-        return panel == null;
+        return panels.isEmpty();
     }
 
-    /** A group drag gets a larger edge target — see {@link DockDropZones#GROUP_EDGE_THRESHOLD}. */
-    public boolean isGroupDrag() {
-        return panel == null;
+    /** Whether this came from outside the dock's own drag. @see #ofPanels */
+    public boolean isForeign() {
+        return sourceLeaf == null;
     }
 }

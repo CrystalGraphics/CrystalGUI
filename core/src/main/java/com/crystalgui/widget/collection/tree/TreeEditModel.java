@@ -5,6 +5,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgui.ui.service.DragData;
 
 /**
  * What a tree's items are, and how to change them — the half of {@link TreeEditing} only its owner can write.
@@ -90,6 +91,19 @@ public interface TreeEditModel<T> {
 
     /** Lands an outside drag's {@code payload} at {@code to}, which {@link #canDropForeign} passed, as one undo step. */
     default void dropForeign(Object payload, Target<T> to) {
+    }
+
+    /**
+     * What a drag of {@code items} offers a target OUTSIDE this tree, found there with {@link DragData#find}, or null
+     * for nothing. The explorer offers its files, which an editor area opens where they land.
+     *
+     * <pre>{@code
+     * public Object transfer(List<CgPath> paths) { return new DraggedResources(files(paths)); }
+     * }</pre>
+     */
+    @Nullable
+    default Object transfer(List<T> items) {
+        return null;
     }
 
     /** The item's name: what rename opens with and edits. */

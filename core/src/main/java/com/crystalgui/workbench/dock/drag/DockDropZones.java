@@ -3,19 +3,21 @@ package com.crystalgui.workbench.dock.drag;
 /**
  * Where a pointer over a pane means to drop — the geometry every IDE has and none documents.
  *
- * <p>Ported verbatim from VS Code's {@code positionOverlay} in
- * {@code workbench/browser/parts/editor/editorDropTarget.ts} (MIT), which is the only readable statement
- * of these numbers. Pure arithmetic on a rectangle: no element, no window, no GL, so it is tested
- * headlessly and exhaustively rather than by waving a mouse at a scene.</p>
+ * <p>From VS Code's {@code positionOverlay} in {@code workbench/browser/parts/editor/editorDropTarget.ts}
+ * (MIT), with two deliberate differences. Its edge band is 10% of the pane for a tab and 30% for a group;
+ * here it is 30% for both, since at 10% a split had to be aimed at a sliver of a large editor. And outside
+ * the merge box the NEAREST edge wins, relative to the pane's size, where VS Code's thirds made a pointer
+ * near the top edge of the left third a left split. The smaller merge box costs little: a tab strip always
+ * merges. Pure arithmetic on a rectangle, so it is tested headlessly and exhaustively.</p>
  *
  * <pre>
- * ----------------------------------------------
- * |                SPLIT UP                    |
- * |--------------------------------------------|
- * |  SPLIT LEFT  |    MERGE    |  SPLIT RIGHT  |
- * |--------------------------------------------|
- * |                SPLIT DOWN                  |
- * ----------------------------------------------
+ * ---------------------------------
+ * | \          SPLIT UP         / |
+ * |   \-----------------------/   |
+ * | L  |        MERGE        |  R |
+ * |   /-----------------------\   |
+ * | /         SPLIT DOWN        \ |
+ * ---------------------------------
  * </pre>
  */
 public final class DockDropZones {
@@ -23,19 +25,8 @@ public final class DockDropZones {
     private DockDropZones() {
     }
 
-    /** Inside this fraction of the pane on both axes, a drop merges into the tab strip instead of splitting. */
-    public static final float EDGE_THRESHOLD = 0.1f;
-
-    /**
-     * The edge threshold along the preferred split axis when a whole group is being dragged.
-     *
-     * <p>A group is a bigger thing to place than a single tab, so it gets a bigger target — VS Code's own
-     * reasoning, and the asymmetry is deliberate rather than a rounding of 0.1.</p>
-     */
-    public static final float GROUP_EDGE_THRESHOLD = 0.3f;
-
-    /** Past a third of the way across, a split is offered on that side. */
-    public static final float SPLIT_THRESHOLD = 1f / 3f;
+    /** Within this fraction of the pane from an edge, a drop splits on that side; inside it on both axes, it merges. */
+    public static final float EDGE_THRESHOLD = 0.25f;
 
     /** How far the drop overlay covers the pane when it is previewing a split. */
     public static final float PREVIEW_FRACTION = 0.5f;
@@ -51,51 +42,23 @@ public final class DockDropZones {
     /** The band at the very edge of the whole dock area that targets the outer edge, in logical pixels. */
     public static final float OUTER_EDGE_BAND_PX = 24f;
 
-    /**
-     * The zone for a pointer at {@code (x, y)} in a pane's local space.
-     *
-     * @param preferSideBySide whether left/right is the preferred split arrangement, which decides which
-     *        axis gets the larger hit zone. VS Code derives this from
-     *        {@code workbench.editor.openSideBySideDirection === 'right'}
-     * @param draggingGroup whether a whole group is in flight rather than a single panel
-     */
-    public static DockDropZone forPane(float x, float y, float width, float height,
-                                       boolean preferSideBySide, boolean draggingGroup) {
-        if (width <= 0f || height <= 0f) return DockDropZone.MERGE;
-
-        float edgeWidthFactor = EDGE_THRESHOLD;
-        float edgeHeightFactor = EDGE_THRESHOLD;
-        if (draggingGroup) {
-            edgeWidthFactor = preferSideBySide ? GROUP_EDGE_THRESHOLD : EDGE_THRESHOLD;
-            edgeHeightFactor = preferSideBySide ? EDGE_THRESHOLD : GROUP_EDGE_THRESHOLD;
-        }
-
-        float edgeWidth = width * edgeWidthFactor;
-        float edgeHeight = height * edgeHeightFactor;
-
-        // Inside the middle box on BOTH axes: merge. This is the most-used drop in the whole system, and
-        // the one an edge-zones-only implementation forgets — leaving a dock where every drop splits and
-        // two panels can never share a strip.
-        if (x > edgeWidth && x < width - edgeWidth && y > edgeHeight && y < height - edgeHeight) {
-            return DockDropZone.MERGE;
-        }
-
-        float splitWidth = width * SPLIT_THRESHOLD;
-        float splitHeight = height * SPLIT_THRESHOLD;
-
-        if (preferSideBySide) {
-            if (x < splitWidth) return DockDropZone.SPLIT_LEFT;
-            if (x > splitWidth * 2f) return DockDropZone.SPLIT_RIGHT;
-            return y < height / 2f ? DockDropZone.SPLIT_UP : DockDropZone.SPLIT_DOWN;
-        }
-        if (y < splitHeight) return DockDropZone.SPLIT_UP;
-        if (y > splitHeight * 2f) return DockDropZone.SPLIT_DOWN;
-        return x < width / 2f ? DockDropZone.SPLIT_LEFT : DockDropZone.SPLIT_RIGHT;
-    }
-
-    /** The common case: a single panel in flight, side-by-side preferred. */
+    /** The zone for a pointer at {@code (x, y)} in a pane's local space. */
     public static DockDropZone forPane(float x, float y, float width, float height) {
-        return forPane(x, y, width, height, true, false);
+        if (width <= 0f || height <= 0f) return DockDropZone.MERGE;
+        float left = x / width;
+        float right = 1f - left;
+        float up = y / height;
+        float down = 1f - up;
+
+        // Inside the middle box on BOTH axes: merge. The most-used drop in the whole system, and the one an
+        // edge-zones-only implementation forgets -- leaving a dock where every drop splits.
+        if (Math.min(left, right) > EDGE_THRESHOLD && Math.min(up, down) > EDGE_THRESHOLD) return DockDropZone.MERGE;
+
+        float nearest = Math.min(Math.min(left, right), Math.min(up, down));
+        if (nearest == left) return DockDropZone.SPLIT_LEFT;
+        if (nearest == right) return DockDropZone.SPLIT_RIGHT;
+        if (nearest == up) return DockDropZone.SPLIT_UP;
+        return DockDropZone.SPLIT_DOWN;
     }
 
     /**

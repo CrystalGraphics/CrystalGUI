@@ -6,6 +6,7 @@ import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentState;
+import com.crystalgui.document.DraggedResources;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -13,9 +14,11 @@ import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.DragData;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
+import com.crystalgui.workbench.dock.drag.DockForeignDrop;
 import com.crystalgui.workbench.dock.drag.DockPlacement;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
@@ -23,6 +26,8 @@ import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.panel.DockOpenOptions;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.editor.EditorService;
+import java.util.ArrayList;
+import java.util.List;
 import javax.annotation.Nullable;
 
 /**
@@ -221,6 +226,40 @@ public final class WorkbenchOpener {
             return;
         }
         openResource(Resource.of(path), onOpened, revealToolWindows);
+    }
+
+    /**
+     * Files dragged onto an editor area open where they land — IntelliJ's and VS Code's drag from the project tree —
+     * with the zones a tab gets. What else an open does happens after: the file is recent, and a new tab brings up
+     * its kind's tool windows. @see DraggedResources
+     */
+    public DockForeignDrop fileDrops() {
+        return new DockForeignDrop() {
+            @Override
+            public List<DockPanelRef> panelsFor(Object payload) {
+                DraggedResources dragged = DragData.find(payload, DraggedResources.class);
+                if (dragged == null) return List.of();
+                List<DockPanelRef> panels = new ArrayList<>();
+                for (Resource resource : dragged.resources()) {
+                    // openResource's rule: a resource nothing can read opens nothing.
+                    if (!resource.isProject() && workbench.workspace.providerFor(resource) == null) continue;
+                    panels.add(workbench.refForResource(resource));
+                }
+                return panels;
+            }
+
+            @Override
+            public void opened(List<DockPanelRef> panels) {
+                for (DockPanelRef panel : panels) {
+                    Resource resource = Resource.parse(panel.state(Workbench.PATH_STATE, ""));
+                    CgPath path = resource.asPath();
+                    if (path != null) workbench.recentFiles.record(path);
+                    // A TAB MOVED IS NOT A FILE OPENED: the panel factory reads the new ones on the next build, so
+                    // a document the editors already hold was on screen before the drop.
+                    if (workbench.editors.tabFor(EditorInput.of(resource)) == null) revealToolWindowsFor(resource);
+                }
+            }
+        };
     }
 
     /** Shows the tool windows a document of {@code resource}'s kind wants beside it, keeping the keyboard where it is. */

@@ -7,13 +7,16 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.document.DraggedResources;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -32,7 +35,11 @@ import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.Drag;
+import com.crystalgui.workbench.dock.DockArea;
+import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLayout;
@@ -196,5 +203,76 @@ public class FloatingWindowsActLikeSplitsTest extends UiDocumentTestBase {
         frames(8);
         assertNull("the document outlived its last tab", tabOf(BOTTOM));
         assertTrue("the emptied window stayed open", workbench.dock().windows().isEmpty());
+    }
+
+    /** Drags {@code files} from nowhere in particular and drops them at {@code (fx, fy)} of {@code leaf}'s group. */
+    private void dropFiles(DockArea area, DockLeaf leaf, float fx, float fy, CgPath... files) {
+        DockGroup group = area.groupFor(leaf);
+        Box box = group.box();
+        float x = box.worldX() + box.width() * fx;
+        float y = box.worldY() + box.height() * fy;
+        List<Resource> resources = new ArrayList<>();
+        for (CgPath file : files) resources.add(Resource.of(file));
+        // FROM OUTSIDE THE DOCK, as the Project panel is: a drag never targets its own source.
+        UIElement source = new UIElement().layout(l -> l.width(4).height(4));
+        document.append(source);
+        frame();
+        Drag.start(source, 1f, 1f, CgMouseCodes.LEFT_BUTTON, new DraggedResources(resources),
+                Drag.DEFAULT_THRESHOLD_PX, new Drag.Listener() {
+                    @Override
+                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
+                    }
+
+                    @Override
+                    public void onDragEnd(float ex, float ey) {
+                    }
+                });
+        // THROUGH THE INPUT, whose pointer is what a drag event carries.
+        move(x, y);
+        frame();
+        release(x, y, CgMouseCodes.LEFT_BUTTON);
+        source.removeSelf();
+        frames(12);
+    }
+
+    @Test
+    public void aFileDroppedInAGroupOpensThere() {
+        workbench.openFile(TOP);
+        frames(12);
+        dropFiles(workbench.dock(), leafOf(TOP), 0.5f, 0.5f, NEXT);
+        assertSame("the middle of a group merges into it", leafOf(TOP), leafOf(NEXT));
+        assertNotNull("dropped and never read", tabOf(NEXT).editor());
+    }
+
+    @Test
+    public void aFileDroppedNearAnEdgeSplitsThere() {
+        workbench.openFile(TOP);
+        frames(12);
+        DockLeaf top = leafOf(TOP);
+        dropFiles(workbench.dock(), top, 0.8f, 0.5f, NEXT);
+        assertTrue("four fifths across did not split", leafOf(NEXT) != top);
+        assertSame(workbench.dock(), workbench.dock().areaHolding(workbench.refFor(NEXT)));
+    }
+
+    @Test
+    public void aFileDroppedOnAWindowOpensInIt() {
+        workbench.openFile(TOP);
+        workbench.openFile(BOTTOM);
+        frames(12);
+        DockWindow torn = tearOut(BOTTOM);
+        dropFiles(torn.area(), leafOf(BOTTOM), 0.5f, 0.5f, NEXT);
+        assertSame(leafOf(BOTTOM), leafOf(NEXT));
+    }
+
+    @Test
+    public void anOpenFileDroppedElsewhereMovesItsTab() {
+        workbench.openFile(TOP);
+        workbench.openFile(BOTTOM);
+        frames(12);
+        DockWindow torn = tearOut(TOP);
+        dropFiles(torn.area(), leafOf(TOP), 0.5f, 0.5f, BOTTOM);
+        assertSame("a second copy, or none moved", leafOf(TOP), leafOf(BOTTOM));
+        assertSame(torn.area(), workbench.dock().areaHolding(workbench.refFor(BOTTOM)));
+        assertEquals(1, workbench.dock().allPanels().stream().filter(workbench.refFor(BOTTOM)::equals).count());
     }
 }
