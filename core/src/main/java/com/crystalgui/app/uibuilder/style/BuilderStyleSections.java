@@ -113,7 +113,10 @@ public final class BuilderStyleSections {
 
     private static StyleTarget chosen(DataContext context) {
         BuilderSelection selection = selection(context);
-        return StyleTargets.of(node(context), sheets(context)).chosen(selection == null ? null : selection.styleTarget());
+        String key = selection == null ? null : selection.styleTarget();
+        // NOTHING PICKED IS THE ELEMENT ITSELF, with no need to list every rule that matches it to find that out.
+        if (key == null || key.isEmpty()) return StyleTarget.inline();
+        return StyleTargets.of(node(context), sheets(context)).chosen(key);
     }
 
     private static Button action(String label, String styleClass, Runnable done) {

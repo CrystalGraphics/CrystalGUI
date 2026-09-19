@@ -1,5 +1,6 @@
 package com.crystalgui.widget.config.inspector;
 
+import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
@@ -89,6 +90,8 @@ public class Inspector extends UIElement implements DataProvider {
         super(NAME);
         addClass(INSPECTOR_CLASS);
         append(tabs);
+        // A TAB'S PANEL GOES IN WHEN THE TAB IS FIRST SHOWN. @see #waiting
+        tabs.onTabSelected.connect(tab -> attachWaiting(nameOf(tab)));
 
         // ALL THREE OUTLIVE THIS ELEMENT -- two are static and one belongs to the window -- so an
         // inspector that subscribed and was then discarded would stay connected for the life of the
@@ -308,9 +311,11 @@ public class Inspector extends UIElement implements DataProvider {
         // tree is the normal case rather than a symptom.
         if (!forcing && document() != null && source != null && source.document() == null) return;
 
+        long asked = FrameProfile.begin();
         DataContext context = source == null ? null : DataContext.from(source);
         List<InspectorSection> sections =
                 context == null ? List.of() : InspectorRegistry.sectionsFor(context);
+        FrameProfile.step(asked, "inspector:sectionsFor x" + sections.size());
         if (DIAGNOSE) {
             CrystalGuiCore.LOGGER.info(
                     "[inspector] rebuild source={} attached={} sections={}",
@@ -349,20 +354,33 @@ public class Inspector extends UIElement implements DataProvider {
         // screenToLocal goes stale and every later frame of the gesture feeds it garbage. A selection
         // that re-asserts itself -- a press on an already-selected node does exactly that -- would
         // otherwise tear the panel down under the press that caused it.
+        long keyed = FrameProfile.begin();
         String key = subjectKey(context, sections);
+        FrameProfile.step(keyed, "inspector:subjectKey");
         if (key.equals(shownKey)) return;
         // And a live gesture INSIDE the inspector is the other half of the same rule: scrubbing a row
         // while the selection changes must not replace the row being scrubbed.
         if (isInteracting()) return;
         shownKey = key;
         shownSource = context == null ? null : source;
+        long rebuilt = FrameProfile.enter("inspector:rebuild");
+        try {
+            build(context, sections);
+        } finally {
+            FrameProfile.leave(rebuilt, "inspector:rebuild");
+        }
+    }
 
+    /** The rebuild proper, once the subject is known to have changed. @see #rebuild */
+    private void build(@Nullable DataContext context, List<InspectorSection> sections) {
         String wasSelected = selectedTabName();
         // Which tabs EXISTED, so the build below can tell a tab that has just appeared from one that was
         // already there. See the selection rule at the end of this method.
         Set<String> previousTabs = new LinkedHashSet<>(tabsByName.keySet());
 
+        long cleared = FrameProfile.begin();
         tabs.clearTabs();
+        FrameProfile.step(cleared, "inspector:clearTabs");
         tabsByName.clear();
         hostsByName.clear();
         removeClass(EMPTY_CLASS);
@@ -381,12 +399,16 @@ public class Inspector extends UIElement implements DataProvider {
         Map<String, PanelForm> forms = new LinkedHashMap<>();
         for (InspectorSection section : sections) {
             PanelForm form = forms.computeIfAbsent(section.tab(), this::formFor);
+            long built = FrameProfile.begin();
             section.build(form, context);
+            FrameProfile.step(built, "section " + section.tab() + "/" + section.getClass().getSimpleName());
         }
+        waiting.clear();
         for (Map.Entry<String, PanelForm> entry : forms.entrySet()) {
             PanelForm form = entry.getValue();
             if (form.isEmpty()) continue;
-            hostFor(entry.getKey()).append(form.panel());
+            tabFor(entry.getKey());
+            waiting.put(entry.getKey(), form.panel());
             livePanels.add(form.panel());
         }
 
@@ -397,7 +419,37 @@ public class Inspector extends UIElement implements DataProvider {
             return;
         }
 
+        long selected = FrameProfile.begin();
         tabs.selectTab(tabToSelect(wasSelected, previousTabs));
+        // WHETHER OR NOT THE SELECTION CHANGED: a tab kept across the rebuild selects nothing new and fires nothing.
+        attachWaiting(selectedTabName());
+        FrameProfile.step(selected, "inspector:selectTab");
+    }
+
+    /**
+     * The panels of this build whose tab has not been shown yet, by tab name.
+     *
+     * <p><b>A hidden tab is kept out of the tree</b>, not merely hidden. An unselected pane is {@code display: none},
+     * which lays out nothing and still leaves every element in it to be matched against every sheet -- two tabs
+     * nobody is looking at, rebuilt and re-matched on each selection, were most of what selecting a node cost. A
+     * panel's rows follow their properties only while connected, so one attached later is current when it
+     * appears.</p>
+     */
+    private final Map<String, ConfiguratorPanel> waiting = new LinkedHashMap<>();
+
+    /** Puts {@code name}'s panel into its tab, the first time that tab is shown in this build. */
+    private void attachWaiting(@Nullable String name) {
+        ConfiguratorPanel panel = name == null ? null : waiting.remove(name);
+        UIElement host = panel == null ? null : hostsByName.get(name);
+        if (host != null) host.append(panel);
+    }
+
+    @Nullable
+    private String nameOf(@Nullable Tab tab) {
+        for (Map.Entry<String, Tab> entry : tabsByName.entrySet()) {
+            if (entry.getValue() == tab) return entry.getKey();
+        }
+        return null;
     }
 
     /**
@@ -517,19 +569,8 @@ public class Inspector extends UIElement implements DataProvider {
         });
     }
 
-    /** Where a tab's panel goes, creating the tab if this is the first section to claim it. */
-    private UIElement hostFor(String name) {
-        tabFor(name);
-        return hostsByName.get(name);
-    }
-
     @Nullable
     private String selectedTabName() {
-        Tab selected = tabs.getSelectedTab();
-        if (selected == null) return null;
-        for (Map.Entry<String, Tab> entry : tabsByName.entrySet()) {
-            if (entry.getValue() == selected) return entry.getKey();
-        }
-        return null;
+        return nameOf(tabs.getSelectedTab());
     }
 }

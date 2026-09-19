@@ -278,10 +278,12 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
     @Override
     public Object getData(DataKey<?> key) {
         if (key == HIERARCHY) return this;
-        // THE BUILDER'S OWN KEYS, so its commands on a row's menu -- Copy and Paste Attributes -- act on this
-        // document and its selection, as they do from the canvas.
-        if ((key == BuilderEditor.UI_BUILDER || key == BuilderEditor.BUILDER_SELECTION)
-                && builder instanceof DataProvider surface) {
+        // ALL THREE OF THE BUILDER'S KEYS, so this panel is the same subject as the canvas it is a view of: its commands
+        // on a row's menu act on this document and its selection, and the Inspector -- which asks the focus owner --
+        // describes the node identically from either. With two of the three, focus moving into a row changed which
+        // sections answered, and the Inspector rebuilt for it before the click had chosen anything: a flicker.
+        if ((key == BuilderEditor.UI_BUILDER || key == BuilderEditor.UI_DOCUMENT
+                || key == BuilderEditor.BUILDER_SELECTION) && builder instanceof DataProvider surface) {
             return surface.getData(key);
         }
         // THE HISTORY TOO. The walk stops at the first provider, and one answering only its own key hid the

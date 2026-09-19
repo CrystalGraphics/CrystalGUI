@@ -862,6 +862,41 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      * matches it. A nested shadow root ends the walk: reaching into one needs {@code exportparts},
      * which does not exist yet, so there is nothing there for an outer rule to match.</p>
      */
+    /**
+     * A pseudo-class of this node changed: it re-matches, and so does what a rule reaches THROUGH that state.
+     *
+     * <p><b>Not the subtree.</b> {@link #invalidateStyleMatch} marks everything below, which a class change needs
+     * -- {@code .__collapsed__ > .__content__} -- and a state change almost never does: only a rule with a
+     * pseudo-class on an ANCESTOR compound can change a descendant's match, and the sheets index which descendants
+     * those rules can reach from which ancestors (Blink's RuleFeatureSet). Hover changes as fast as the mouse
+     * moves, and focus-within flips on every ancestor of the focus owner, so the full walk re-matched a whole
+     * panel -- a thousand elements -- on crossing it, and both panels on a click that moved focus between them.</p>
+     */
+    private void invalidateStateMatch() {
+        if (frozen) return;
+        StyleEngine engine = styleEngine();
+        if (engine == null) return;
+        if (document != null) engine.markDirty(this);
+        invalidateExposedParts(engine);
+        // NULL IS NOTHING BELOW: no rule reaches through this node's state, so its subtree is not even walked.
+        Set<String> reachable = engine.stateDescendantKeysFrom(this);
+        if (reachable == null) return;
+        for (UIElement child : children) {
+            if (!child.frozen) child.markReachable(engine, reachable);
+        }
+    }
+
+    /** The descendant half of {@link #invalidateStateMatch}: marks only what carries a reachable key. */
+    private void markReachable(StyleEngine engine, Set<String> reachable) {
+        if (document != null && StyleEngine.carriesAny(this, reachable)) {
+            engine.markDirty(this);
+            invalidateExposedParts(engine);
+        }
+        for (UIElement child : children) {
+            if (!child.frozen) child.markReachable(engine, reachable);
+        }
+    }
+
     private void invalidateExposedParts(StyleEngine engine) {
         if (shadowRoot == null) return;
         markExposedParts(shadowRoot, engine);
@@ -878,12 +913,12 @@ public class UIElement extends UINode implements EventTarget, Styleable {
 
     /** The input service's. A change is a pseudo-class change, so it re-matches. */
     public final void setHovered(boolean value) {
-        if (hovered != value) { hovered = value; invalidateStyleMatch(); }
+        if (hovered != value) { hovered = value; invalidateStateMatch(); }
     }
 
     /** The input service's. */
     public final void setPressed(boolean value) {
-        if (pressed != value) { pressed = value; invalidateStyleMatch(); }
+        if (pressed != value) { pressed = value; invalidateStateMatch(); }
     }
 
     /**
@@ -906,17 +941,17 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      * and nothing would clear it until that node was focused and blurred again through the service.</p>
      */
     public final void setFocused(boolean value) {
-        if (focused != value) { focused = value; invalidateStyleMatch(); }
+        if (focused != value) { focused = value; invalidateStateMatch(); }
         setFocusVisible(value);
     }
 
     public final void setFocusVisible(boolean value) {
-        if (focusVisible != value) { focusVisible = value; invalidateStyleMatch(); }
+        if (focusVisible != value) { focusVisible = value; invalidateStateMatch(); }
     }
 
     /** The focus service's: an ancestor of the focus owner. */
     public final void setFocusWithin(boolean value) {
-        if (focusWithin != value) { focusWithin = value; invalidateStyleMatch(); }
+        if (focusWithin != value) { focusWithin = value; invalidateStateMatch(); }
     }
 
     // ── Focus policy, typing, chords ─────────────────────────────────────────

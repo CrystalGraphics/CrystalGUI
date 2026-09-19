@@ -244,7 +244,9 @@ public final class BoxTree {
     public void layout(float width, float height) {
         document.require("layout");
         if (structureDirty || root == null) {
+            long synced = FrameProfile.begin();
             sync();
+            FrameProfile.end(synced, "layout:sync");
             structureDirty = false;
         }
         Box root = this.root;
@@ -252,11 +254,13 @@ public final class BoxTree {
         boolean viewportMoved = width != viewportWidth || height != viewportHeight;
         viewportWidth = width;
         viewportHeight = height;
+        long restyled = FrameProfile.begin();
         refreshStyles(root);
         for (Mirror mirror : mirrors) {
             refreshStyles(mirror.root);
             pinMirrorSize(mirror);
         }
+        FrameProfile.end(restyled, "layout:refreshStyles");
         // The document's box IS the viewport, whatever its style says -- written after the style
         // refresh, which would otherwise hand it back its sheet's `auto` on the next restyle. And it
         // is a BLOCK container unless a sheet says otherwise: CSS's root is one, so children stack
@@ -268,14 +272,20 @@ public final class BoxTree {
         }
         if (viewportMoved) taffy.markDirty(root.taffyId);
         if (taffy.isDirty(root.taffyId)) {
+            long computed = FrameProfile.begin();
             taffy.computeLayout(root.taffyId,
                     TaffySize.of(AvailableSpace.definite(width), AvailableSpace.definite(height)));
+            FrameProfile.end(computed, "layout:taffy");
             layoutPasses++;
+            long readBack = FrameProfile.begin();
             read(root);
+            FrameProfile.end(readBack, "layout:read");
             clampScrolls(root);
             transformsDirty = true;
         }
+        long composed = FrameProfile.begin();
         composeIfDirty();
+        FrameProfile.end(composed, "layout:compose");
     }
 
     /**

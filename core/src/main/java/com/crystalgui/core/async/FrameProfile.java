@@ -6,9 +6,12 @@ import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * What a slow frame actually spent its time on — a <b>probe</b>, enabled by a system property.
@@ -90,6 +93,97 @@ public final class FrameProfile {
         frameStart = System.nanoTime();
         lastMark = frameStart;
         gcAtFrameStart = gcMillis();
+        if (SAMPLE) startSampling();
+    }
+
+    // ── Sampling ─────────────────────────────────────────────────────────────
+    //
+    // A phase line says WHICH phase was slow and nothing about why; the steps say why only where somebody thought
+    // to put one. Sampling the frame thread's stack names the method outright, in one run -- how a selection that
+    // cost half a second was found to be a sheet re-parsed once per Inspector section.
+
+    /**
+     * {@code -Dcrystalgui.frameprofile.sample=true}: sample the frame thread's stack during every frame, and list
+     * where a reported frame spent its time.
+     */
+    private static final boolean SAMPLE = ENABLED && Boolean.getBoolean("crystalgui.frameprofile.sample");
+
+    /** How often a frame is sampled. Each sample costs a stack walk, so a frame runs slower while sampled. */
+    private static final long SAMPLE_NANOS = 250_000L;
+
+    private static final Object SAMPLES_LOCK = new Object();
+
+    /** Per method, how many samples it was anywhere on the stack in; per method, how many it was on top of ours. */
+    private static final Map<String, Integer> INCLUSIVE = new HashMap<>();
+    private static final Map<String, Integer> SELF = new HashMap<>();
+    private static int sampleCount;
+
+    private static volatile Thread frameThread;
+    private static volatile boolean inFrame;
+    private static Thread sampler;
+
+    private static void startSampling() {
+        synchronized (SAMPLES_LOCK) {
+            INCLUSIVE.clear();
+            SELF.clear();
+            sampleCount = 0;
+        }
+        frameThread = Thread.currentThread();
+        inFrame = true;
+        if (sampler != null) return;
+        sampler = new Thread(FrameProfile::sampleForever, "crystalgui-frame-sampler");
+        sampler.setDaemon(true);
+        sampler.start();
+    }
+
+    private static void sampleForever() {
+        while (true) {
+            Thread target = frameThread;
+            if (inFrame && target != null) record(target.getStackTrace());
+            try {
+                Thread.sleep(SAMPLE_NANOS / 1_000_000L, (int) (SAMPLE_NANOS % 1_000_000L));
+            } catch (InterruptedException stopped) {
+                return;
+            }
+        }
+    }
+
+    /** Our frames only: a JDK collection method on top says nothing about which of our calls to fix. */
+    private static void record(StackTraceElement[] stack) {
+        synchronized (SAMPLES_LOCK) {
+            sampleCount++;
+            Set<String> seen = new HashSet<>();
+            boolean top = true;
+            for (StackTraceElement frame : stack) {
+                if (!frame.getClassName().startsWith("com.crystalgui")) continue;
+                String name = frame.getClassName();
+                String method = name.substring(name.lastIndexOf('.') + 1) + "." + frame.getMethodName();
+                if (top) {
+                    SELF.merge(method, 1, Integer::sum);
+                    top = false;
+                }
+                if (seen.add(method)) INCLUSIVE.merge(method, 1, Integer::sum);
+            }
+        }
+    }
+
+    /** The methods a reported frame spent the most samples in, as a share of the frame. */
+    private static void reportSamples() {
+        synchronized (SAMPLES_LOCK) {
+            if (sampleCount == 0) return;
+            CrystalGuiCore.LOGGER.info("[sample] {} samples; inclusive, then self", sampleCount);
+            printTop(INCLUSIVE, 40);
+            printTop(SELF, 15);
+        }
+    }
+
+    private static void printTop(Map<String, Integer> counts, int limit) {
+        List<Map.Entry<String, Integer>> top = new ArrayList<>(counts.entrySet());
+        top.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+        for (int i = 0; i < Math.min(limit, top.size()); i++) {
+            Map.Entry<String, Integer> entry = top.get(i);
+            CrystalGuiCore.LOGGER.info("[sample]   {}% {}", entry.getValue() * 100 / sampleCount, entry.getKey());
+        }
     }
 
     /**
@@ -230,6 +324,15 @@ public final class FrameProfile {
      */
     public static void blame(String what, String... ignorePackages) {
         if (!ENABLED) return;
+        // A STACK WALK PER CALL, and a frame that re-matches two thousand elements makes two thousand of them: the
+        // probe was a quarter of the frames it measured. Every call is attributed up to a cap, then one in a stride
+        // stands for the stride, so the totals hold and the cost does not grow with them.
+        int nth = blamesThisFrame++;
+        int weight = 1;
+        if (nth >= BLAME_EXACTLY) {
+            if ((nth - BLAME_EXACTLY) % BLAME_STRIDE != 0) return;
+            weight = BLAME_STRIDE;
+        }
         StackTraceElement[] stack = new Throwable().getStackTrace();
         for (StackTraceElement frame : stack) {
             String at = frame.getClassName();
@@ -244,15 +347,20 @@ public final class FrameProfile {
             if (skip) continue;
             int dot = at.lastIndexOf('.');
             SITES.merge((dot < 0 ? at : at.substring(dot + 1))
-                    + '.' + frame.getMethodName() + ':' + frame.getLineNumber(), 1, Integer::sum);
+                    + '.' + frame.getMethodName() + ':' + frame.getLineNumber(), weight, Integer::sum);
             return;
         }
-        SITES.merge(what + "(unattributed)", 1, Integer::sum);
+        SITES.merge(what + "(unattributed)", weight, Integer::sum);
     }
 
     private static final Map<String, Integer> SITES = new LinkedHashMap<>();
 
-    /** Called at the very end of a frame; reports if the frame was slow and the rate limit allows. */
+    /** How many invalidations {@link #blame} attributes one by one each frame, and how it samples after that. */
+    private static final int BLAME_EXACTLY = 256;
+    private static final int BLAME_STRIDE = 16;
+
+    private static int blamesThisFrame;
+
     /**
      * Whether this frame gets past the rate limit.
      *
@@ -309,8 +417,10 @@ public final class FrameProfile {
         return out;
     }
 
+    /** Called at the very end of a frame; reports if the frame was slow and the rate limit allows. */
     public static void frameEnd() {
         if (!ENABLED || frameStart == 0L) return;
+        inFrame = false;
         long now = System.nanoTime();
         long total = now - frameStart;
         // COUNTED BEFORE ANYTHING IS DECIDED, so the census covers every frame rather than the reported
@@ -322,6 +432,7 @@ public final class FrameProfile {
             // STILL CLEARED. @see #frameBegin -- the blame window has to advance every frame, or a quiet
             // stretch accumulates into the next report and blames it for work it never did.
             SITES.clear();
+        blamesThisFrame = 0;
             return;
         }
         lastReport = now;
@@ -361,5 +472,7 @@ public final class FrameProfile {
             CrystalGuiCore.LOGGER.info(blamed.toString());
         }
         SITES.clear();
+        blamesThisFrame = 0;
+        if (SAMPLE) reportSamples();
     }
 }
