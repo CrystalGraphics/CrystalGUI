@@ -5,6 +5,8 @@ import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.document.Document;
 import com.crystalgui.serialization.PlainOps;
@@ -23,10 +25,14 @@ import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.protocol.FsError;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.function.Consumer;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -79,7 +85,6 @@ public final class EditorService implements Disposable {
     /** A tab opened. */
     public final Signal.Value<Tab> onDidOpen = new Signal.Value<>();
 
-    /** A tab closed. */
     /**
      * The content is in — this tab's document exists and its model holds the file.
      *
@@ -90,11 +95,13 @@ public final class EditorService implements Disposable {
      */
     public final Signal.Value<Tab> onDidLoad = new Signal.Value<>();
 
+    /** A tab closed. */
     public final Signal.Value<Tab> onDidClose = new Signal.Value<>();
 
     /**
-     * A different tab is in front. <b>The one to follow for "show me whatever is being edited"</b>, and
-     * null when the last editor closed.
+     * A different tab is in front — the one with focus — and null when the last editor closed. <b>The one to follow
+     * for a panel that describes whatever is being edited</b>, whatever kind it is; a panel that describes only one
+     * kind follows {@link #follow} instead.
      *
      * <p>Not the dock's {@code onDidChangeActivePanel}, which announces a PANEL and fires while the read
      * behind it is still in flight; not {@link #onDidOpen}, which says nothing when you click between two
@@ -110,6 +117,11 @@ public final class EditorService implements Disposable {
      * well, or re-reads on both.</p>
      */
     public final Signal.Value<Tab> onDidChangeActive = new Signal.Value<>();
+
+    /**
+     * Which tabs are on screen changed: a group's front tab moved, or a group came or went. @see #visible()
+     */
+    public final Signal.Action onDidChangeVisible = new Signal.Action();
 
     /** A tab's state moved — what a tab strip redraws its decoration from. */
     public final Signal.Value<Tab> onDidChangeState = new Signal.Value<>();
@@ -151,6 +163,12 @@ public final class EditorService implements Disposable {
     /** The tab last asked to the front, loaded or not: what a read landing later may still bring forward. */
     @Nullable
     private Tab wanted;
+
+    /** What the host shows: the front tab of every group, by input, so a tab opened after it was shown counts. */
+    private Set<EditorInput> visibleInputs = Set.of();
+
+    /** Every tab that has been in front, most recent first. @see #follow */
+    private final List<Tab> recency = new ArrayList<>();
 
     public EditorService(Workspace workspace, WorkspaceDocuments documents, DocumentKinds kinds) {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
@@ -245,9 +263,108 @@ public final class EditorService implements Disposable {
         if (active == tab) return;
         if (active != null) active.setActive(false);
         active = tab;
-        if (tab != null) tab.setActive(true);
+        if (tab != null) {
+            tab.setActive(true);
+            recency.remove(tab);
+            recency.add(0, tab);
+        }
         // AFTER the field moves, so a listener that reads active() gets the new one.
         onDidChangeActive.emit(tab);
+    }
+
+    // ── What is on screen ───────────────────────────────────────────────────
+
+    /**
+     * The tabs on screen: the front tab of every group, the {@linkplain #active() active} one among them — VS Code's
+     * {@code visibleTextEditors} beside its {@code activeTextEditor}.
+     */
+    public List<Tab> visible() {
+        List<Tab> out = new ArrayList<>();
+        for (Tab tab : tabs.values()) {
+            if (visibleInputs.contains(tab.input())) out.add(tab);
+        }
+        return out;
+    }
+
+    /** Says which inputs are on screen. <b>The host's</b>, called as its layout changes; nothing else should. */
+    public void setVisible(Collection<EditorInput> inputs) {
+        Set<EditorInput> next = new LinkedHashSet<>(inputs);
+        if (next.equals(visibleInputs)) return;
+        visibleInputs = next;
+        onDidChangeVisible.emit();
+    }
+
+    /**
+     * The editor of the most recently active visible tab whose editor is a {@code kind}, or null — what a panel
+     * describing one kind of document shows. A visible tab that was never in front counts after every one that was.
+     */
+    @Nullable
+    public <E extends DocumentEditor> E lastVisible(Class<E> kind) {
+        for (Tab tab : recency) {
+            if (visibleInputs.contains(tab.input()) && kind.isInstance(tab.editor())) return kind.cast(tab.editor());
+        }
+        for (Tab tab : visible()) {
+            if (!recency.contains(tab) && kind.isInstance(tab.editor())) return kind.cast(tab.editor());
+        }
+        return null;
+    }
+
+    /**
+     * Follows the editor a panel describing ONE kind of document shows: {@link #lastVisible}, handed to
+     * {@code follower} now and whenever it changes — null when no visible tab holds that kind.
+     *
+     * <pre>{@code
+     * whileConnected(() -> workbench.editors().follow(BuilderEditor.class, this::show));
+     *
+     * private void show(@Nullable BuilderEditor editor) { ... }
+     * }</pre>
+     *
+     * <p>Not the active tab: a panel that can describe only a {@code .cgui} has nothing to say about a CSS file
+     * focused beside one, and emptying for it throws away a canvas still on screen and editable. So it keeps the
+     * last one it could show while that is visible, as Unity's Hierarchy keeps its scene while a script is edited,
+     * and moves when another becomes the most recent or it leaves the screen.</p>
+     *
+     * <ul>
+     *   <li>Called again when the tab's editor is replaced — a load, a reload — and never for the same editor twice.</li>
+     *   <li>Only visible tabs are asked for their editor, so following builds nothing that was not on screen.</li>
+     * </ul>
+     *
+     * @return ends the following
+     */
+    public <E extends DocumentEditor> Connection follow(Class<E> kind, Consumer<? super E> follower) {
+        Objects.requireNonNull(kind, "kind");
+        Objects.requireNonNull(follower, "follower");
+        Follower<E> following = new Follower<>(kind, follower);
+        following.check();
+        ConnectionGroup triggers = new ConnectionGroup();
+        triggers.add(onDidChangeActive.connect(tab -> following.check()));
+        triggers.add(onDidChangeVisible.connect(following::check));
+        triggers.add(onDidOpen.connect(tab -> following.check()));
+        triggers.add(onDidLoad.connect(tab -> following.check()));
+        triggers.add(onDidClose.connect(tab -> following.check()));
+        return triggers::dispose;
+    }
+
+    /** One {@link #follow}: what it last handed out, so only a change is handed out again. */
+    private final class Follower<E extends DocumentEditor> {
+        private final Class<E> kind;
+        private final Consumer<? super E> follower;
+        private boolean told;
+        @Nullable
+        private E editor;
+
+        Follower(Class<E> kind, Consumer<? super E> follower) {
+            this.kind = kind;
+            this.follower = follower;
+        }
+
+        void check() {
+            E now = lastVisible(kind);
+            if (told && now == editor) return;
+            told = true;
+            editor = now;
+            follower.accept(now);
+        }
     }
 
     /**
@@ -260,6 +377,7 @@ public final class EditorService implements Disposable {
      */
     public void close(Tab tab) {
         if (tabs.remove(tab.input()) == null) return;
+        recency.remove(tab);
         boolean wasInFront = active == tab;
         if (wanted == tab) wanted = null;
         if (wasInFront) {

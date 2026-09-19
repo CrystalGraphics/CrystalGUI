@@ -229,13 +229,6 @@ public final class BuilderEditor implements DocumentEditor {
         if (document.root().contains(node) || node == document.root()) into.add(node);
     }
 
-    /** The builder in the active tab, or null when that tab is not a {@code .cgui} — what a panel following the builder asks. */
-    @Nullable
-    public static BuilderContext inFront(EditorService editors) {
-        EditorService.Tab active = editors.active();
-        return active != null && active.editor() instanceof BuilderEditor editor ? editor.surface() : null;
-    }
-
     public UiBuilderDocument document() {
         return document;
     }

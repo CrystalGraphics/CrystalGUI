@@ -902,6 +902,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
             if (toolWindowManager != null) toolWindowManager.retryPendingShows();
             bindStatusToActiveTab();
         }));
+        // WHAT IS ON SCREEN, which a panel describing one kind of editor follows rather than the one with focus.
+        // @see EditorService#follow
+        lifetime.add(dock.onDidChangeShownPanels.connect(this::syncVisibleTabs));
+        syncVisibleTabs(dock.shownPanels());
         // The rails' :checked state follows the dock's structure and nothing else, so they can subscribe
         // now. Their BUTTONS wait for a window -- see onWindowChanged.
         for (StripeView stripe : stripes()) stripe.listenToLayout(dock);
@@ -1732,6 +1736,16 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     public void refreshBreadcrumbs() {
         statusBar.breadcrumbs().setCrumbs(saveActions.trailFor(activeResource()));
+    }
+
+    /** Tells the editors which of them the dock shows: the front document of every group. */
+    private void syncVisibleTabs(List<DockPanelRef> shown) {
+        List<EditorInput> inputs = new ArrayList<>();
+        for (DockPanelRef panel : shown) {
+            Resource resource = documentTabs.viewedResource(panel);
+            if (resource != null) inputs.add(EditorInput.of(resource));
+        }
+        editors.setVisible(inputs);
     }
 
     private void syncActiveTab() {

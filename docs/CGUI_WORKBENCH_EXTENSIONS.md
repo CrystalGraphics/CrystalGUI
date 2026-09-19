@@ -222,6 +222,18 @@ different tab comes to the front, and null when the last one closes. Pair it wit
 need the document itself: a tab is announced before the read behind it lands, so the first answer has
 an active tab whose `editor()` is still null.
 
+**A panel that describes ONE kind of document follows `editors().follow` instead.** The active tab is the
+one with focus, and in a split that is often a file your panel has nothing to say about — a CSS file beside
+a canvas. `follow` hands you the most recently active editor of your class *on screen*, now and whenever that
+changes, and null only when none is visible:
+
+```java
+whileConnected(() -> workbench.editors().follow(MyEditor.class, this::show));   // show(@Nullable MyEditor)
+```
+
+It covers activation, a group's front tab changing, a tab opening, loading and closing — one call where the
+active-editor route needs two signals and still empties for the wrong reason.
+
 **Hand `view(...)` the panel, not a factory.**
 
 ```java
@@ -478,7 +490,10 @@ lifetime.add(workbench.markers().onDidChange.connect(resource -> recount()));
 |---|---|
 | `editors().onDidChangeActive` | **A different editor is in front**, and null when the last one closed. What you want for "follow the editor". Its `editor()` may still be null — activation and the content landing are different events. |
 | `editors().onDidLoad` | That tab's content is in. Pair it with the one above when you need the document itself. |
+| `editors().follow(kind, follower)` | **The panel that describes one kind of editor.** The most recently active visible editor of that class, now and on every change; null while none is on screen. |
+| `editors().onDidChangeVisible` | Which tabs are on screen changed — a group's front tab, or a group itself. `editors().visible()` is the set. |
 | `dock().onDidChangeActivePanel` | The active *panel* changed — a tool window taking focus counts, and it fires while a read behind a tab is still in flight. |
+| `dock().onDidChangeShownPanels` | The front panel of any group changed. What `onDidChangeVisible` is built from. |
 | `onDidOpenDocument()` | A file's *content* landed. Not a tab change — it says nothing when you click between two files that are already open. |
 | `documents().onDidOpen` | A document was opened, for indexing. |
 | `markers().onDidChange` | Diagnostics moved. |

@@ -263,6 +263,19 @@ public class DockArea extends UIElement {
     }
 
     /**
+     * The panel in front of every group, in layout order — what is on screen, of which {@link #activePanel()} is the
+     * one with focus. Derived, like it.
+     */
+    public List<DockPanelRef> shownPanels() {
+        List<DockPanelRef> shown = new ArrayList<>();
+        for (DockLeaf leaf : layout.leaves()) {
+            DockPanelRef panel = leaf.activePanel();
+            if (panel != null) shown.add(panel);
+        }
+        return shown;
+    }
+
+    /**
      * Brings {@code panel} to the front and focuses its group.
      *
      * <p>The three-step sequence — activate in the leaf, sync, make its group active — appeared inline at
@@ -320,7 +333,17 @@ public class DockArea extends UIElement {
     private DockPanelRef announcedPanel;
 
     /**
-     * Announces the active panel if it moved. <b>Idempotent — call it freely.</b>
+     * What is on screen changed: a group's front panel moved, a group came or went. {@link #shownPanels()} as
+     * announced — the view a panel following several editors at once needs, where {@link #onDidChangeActivePanel}
+     * is only the one with focus.
+     */
+    public final Signal.Value<List<DockPanelRef>> onDidChangeShownPanels = new Signal.Value<>();
+
+    /** @see #announcedPanel */
+    private List<DockPanelRef> announcedShown = List.of();
+
+    /**
+     * Announces the active panel and the shown panels, each if it moved. <b>Idempotent — call it freely.</b>
      *
      * <h3>Why a compare here rather than an emit at each mutation site</h3>
      *
@@ -335,13 +358,18 @@ public class DockArea extends UIElement {
      * <p>{@code Signal.Value} does <b>not</b> suppress equal values, so this guard is load-bearing rather
      * than belt-and-braces.</p>
      */
-    void announceActivePanel() {
+    void announcePanels() {
         // NOT WHILE THE TREE IS DETACHED. rebuild() empties `content` before buildNode, and buildNode
         // syncs every group -- so a sync's own announce reaches a listener whose panel is in no document:
         // anything resolved by walking outward, a status bar most of all, is simply not there. Dropping
         // the announce rather than the edge is what matters: rebuild() announces again after appending,
         // and consuming the edge here made that second call a no-op. @see #rebuild
         if (rebuilding) return;
+        List<DockPanelRef> shown = shownPanels();
+        if (!shown.equals(announcedShown)) {
+            announcedShown = shown;
+            onDidChangeShownPanels.emit(shown);
+        }
         DockPanelRef now = activePanel();
         if (Objects.equals(now, announcedPanel)) return;
         announcedPanel = now;
@@ -360,7 +388,7 @@ public class DockArea extends UIElement {
         if (activeGroup != null) activeGroup.setActive(false);
         activeGroup = group;
         if (group != null) group.setActive(true);
-        announceActivePanel();
+        announcePanels();
         return this;
     }
 
@@ -695,7 +723,7 @@ public class DockArea extends UIElement {
         // AFTER the tree is built and the fallback has run. A rebuild is how a close, a drop and a
         // restore all reach the front panel, and none of them announces on its own -- setActiveGroup
         // only fires when the GROUP moved, which a close within one group does not.
-        announceActivePanel();
+        announcePanels();
         announceLayoutChange();
         phase("announce");
         traced = TRACE;

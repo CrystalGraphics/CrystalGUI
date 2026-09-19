@@ -177,7 +177,7 @@ public class DockGroup extends UIElement {
                 // active -- which is the ordinary case for switching tabs within one pane, and would
                 // otherwise be the one active-panel change that announces nothing. The announce is
                 // idempotent, so the two paths overlapping costs nothing.
-                area.announceActivePanel();
+                area.announcePanels();
             }
         });
 
@@ -277,7 +277,7 @@ public class DockGroup extends UIElement {
             // anything following it kept showing what was there before.
             //
             // Idempotent, so overlapping with the other announce sites costs nothing.
-            area.announceActivePanel();
+            area.announcePanels();
         } finally {
             // Restored rather than cleared, so a nested sync cannot re-open the door on the way out.
             syncing = wasSyncing;
