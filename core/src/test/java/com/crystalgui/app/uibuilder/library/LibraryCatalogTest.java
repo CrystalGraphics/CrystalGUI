@@ -11,6 +11,8 @@ import java.util.Map;
 
 import org.junit.Test;
 
+import com.crystalgui.app.machine.ui.EnginePanel;
+import com.crystalgui.app.machine.ui.MachinePanel;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.taskbar.Taskbar;
@@ -125,6 +127,15 @@ public class LibraryCatalogTest {
                 UIDocument.NAME)) {
             assertNull(machinery + " is machinery and must not be listed", catalog.entry(machinery));
         }
+    }
+
+    /** A networked panel is a server's window, not something to place: defining its type lists none of its tags. */
+    @Test
+    public void aNetworkedPanelIsNeverListed() {
+        MachinePanel.TYPE.tag();
+        LibraryCatalog catalog = LibraryCatalog.current();
+        assertNull(catalog.entry(MachinePanel.NAME));
+        assertNull("nor the panels it nests", catalog.entry(EnginePanel.NAME));
     }
 
     @Test

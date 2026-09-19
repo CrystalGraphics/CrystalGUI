@@ -2,6 +2,7 @@ package com.crystalgui.net.window;
 
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.KindInfo;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.template.Bound;
@@ -131,7 +132,10 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
         Name kind = declaredKind(type, tag);
         if (UIElementRegistry.isRegistered(kind)) return false;
         NodeContract contract = WidgetContracts.of(type);
-        UIElementRegistry.register(kind, factory, contract != null ? contract : UIElementRegistry.plain(kind, true));
+        // HIDDEN: a panel is a server's window, which nothing can place into a document. Listed, every one a mod
+        // opened would appear in the builder's Library as a card with no category and nothing to show.
+        UIElementRegistry.register(kind, factory, contract != null ? contract : UIElementRegistry.plain(kind, true),
+                KindInfo.hidden());
         return true;
     }
 
