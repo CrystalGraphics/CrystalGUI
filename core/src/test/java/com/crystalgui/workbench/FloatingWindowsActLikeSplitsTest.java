@@ -1,6 +1,10 @@
 package com.crystalgui.workbench;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Paths;
 import java.util.List;
@@ -10,7 +14,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -33,9 +39,10 @@ import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
+import com.crystalgui.workbench.editor.EditorService;
 
-/** <b>A file opens in the group you were last working in</b>, a split or a torn-out window alike. */
-public class OpeningLandsInTheActiveGroupTest extends UiDocumentTestBase {
+/** <b>A torn-out window is a split in another window</b>: what a group does, it does there too. */
+public class FloatingWindowsActLikeSplitsTest extends UiDocumentTestBase {
 
     private static final String PROJECT = "scratch";
     private static final CgPath TOP = CgPath.of(PROJECT, "top.txt");
@@ -134,5 +141,60 @@ public class OpeningLandsInTheActiveGroupTest extends UiDocumentTestBase {
         workbench.openFile(LAST);
         frames(12);
         assertSame(leafOf(TOP), leafOf(LAST));
+    }
+
+    /** Tears {@code path}'s tab out of the main dock into a window of its own. */
+    private DockWindow tearOut(CgPath path) {
+        DockPanelRef ref = workbench.refFor(path);
+        workbench.dock().layout().leafContaining(ref).remove(ref);
+        workbench.dock().requestRebuild();
+        DockWindow torn = new DockWindow(workbench.dock(), DockLayout.of(new DockLeaf(ref)), path.toString());
+        Desktop.of(document).addWindow(torn);
+        frames(12);
+        return torn;
+    }
+
+    private EditorService.Tab tabOf(CgPath path) {
+        return workbench.editors().tabFor(EditorInput.of(Resource.of(path)));
+    }
+
+    @Test
+    public void aRestoredWindowShowsItsEditorsOnceTheyLoad() {
+        workbench.openFile(TOP);
+        workbench.openFile(BOTTOM);
+        frames(12);
+        tearOut(BOTTOM);
+        WorkbenchSession session = new WorkbenchSession(workbench);
+        String record = session.toJson(1200, 800);
+
+        for (DockPanelRef panel : workbench.dock().allPanels()) workbench.dock().closePanel(panel);
+        frames(8);
+        assertTrue(workbench.dock().windows().isEmpty());
+        assertNull(tabOf(BOTTOM));
+
+        assertTrue(session.fromJson(record));
+        session.reopenTornOutWindows();
+        frames(16);
+
+        assertEquals(1, workbench.dock().windows().size());
+        EditorService.Tab tab = tabOf(BOTTOM);
+        assertNotNull("the window's document was never read", tab);
+        assertNotNull(tab.editor());
+        assertSame("the window still shows what stood in while the read was in flight",
+                tab.viewElement(), workbench.dock().builtContentFor(workbench.refFor(BOTTOM)));
+    }
+
+    @Test
+    public void closingATabInAWindowReleasesItsDocument() {
+        workbench.openFile(TOP);
+        workbench.openFile(BOTTOM);
+        frames(12);
+        DockWindow torn = tearOut(BOTTOM);
+        assertNotNull(tabOf(BOTTOM));
+
+        torn.area().closePanel(workbench.refFor(BOTTOM));
+        frames(8);
+        assertNull("the document outlived its last tab", tabOf(BOTTOM));
+        assertTrue("the emptied window stayed open", workbench.dock().windows().isEmpty());
     }
 }

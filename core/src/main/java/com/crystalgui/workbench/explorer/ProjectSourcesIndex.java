@@ -207,7 +207,7 @@ public final class ProjectSourcesIndex {
         // AND EVERY TAB, for the same reason and one more: a tab's icon is pulled when the tab is BUILT
         // and never re-read, which was correct while it was a function of the file NAME. It is now a
         // function of what the file declares, and that answer arrives later than the tab does.
-        workbench.documentTabs.syncTabDecorations();
+        workbench.documentTabs.refreshTabTitles();
         // AND THE TRAIL, which is the same question asked a third time: a `.java` crumb draws what its
         // file declares, and it is built when the tab is ACTIVATED -- before the file has been read.
         // Without this the status bar keeps the file-type icon while the tab beside it and the row above

@@ -1053,6 +1053,10 @@ dock.activePanel();          // front panel of the area the user last worked in,
 dock.shownPanels();          // every group's front panel on screen; a minimised window's are not
 dock.allPanels();            // every tab, minimised windows included
 dock.activatePanel(ref);     // in whichever window holds it, brought forward and restored
+dock.closePanel(ref);        // likewise, asking the home's guard; closePanelDiscarding skips it
+dock.removePanel(ref);       // a tab whose subject has gone: no guard, no close announcement
+dock.replacePanel(was, now); // a renamed file's tab, in place
+dock.rebuildPanel(ref);      // a placeholder whose document has landed, restored windows included
 dock.activeArea();           // where the next file opens
 dock.windows();              // what the session saves
 new DockWindow(dock, layout, title);   // joins dock's home, with its registry, close guard, icon, application
@@ -1062,7 +1066,11 @@ new DockWindow(dock, layout, title);   // joins dock's home, with its registry, 
   clicking bare desktop or a tool window activates no editor group, and the editor you were in stays the
   one you were in. Minimising or closing that window hands it back to the home.
 - **`activeGroup()` stays per area** — it is what a command dispatched inside that window acts on.
-- **Both announcements come from the home**; a torn-out area forwards, so a listener subscribes once.
+- **The home announces for every window** — the active and shown panels, and `onWillClosePanel` /
+  `onDidClosePanel` — so a listener subscribes once. `onDidChangeLayout` stays per area: it is what a
+  window closes itself on when emptied.
+- **A new operation on "the dock" answers across windows or it is a bug**: the rule every one above
+  broke once, each as a feature that worked in a split and not in a window beside it.
 
 ---
 

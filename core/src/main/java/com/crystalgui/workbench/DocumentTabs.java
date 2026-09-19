@@ -76,19 +76,13 @@ public final class DocumentTabs {
             // The TAB goes too, and this is the half that is easy to forget: a document dropped with its
             // tab left behind leaves the dock asking the registry to rebuild a panel for a file that no
             // longer exists, which comes back as the "__missing__" placeholder.
-            workbench.dock.layout().closePanel(workbench.refForResource(resource));
-            workbench.dock.requestRebuild();
+            workbench.dock.removePanel(workbench.refForResource(resource));
         });
         workbench.documents.onDidOpen.connect(document -> document.onDidChangeResource.connect((from, to) -> {
             // In place, so the tab keeps its position and its selection. A remove-then-add would send the
             // renamed file to the end of the strip and, if it was active, hand the selection to a
             // neighbour on the way -- the file you just renamed vanishing from where you were looking.
-            DockPanelRef was = workbench.refForResource(from);
-            DockPanelRef now = workbench.refForResource(to);
-            for (DockLeaf leaf : workbench.dock.layout().leaves()) {
-                if (leaf.replace(was, now)) break;
-            }
-            workbench.dock.requestRebuild();
+            workbench.dock.replacePanel(workbench.refForResource(from), workbench.refForResource(to));
         }));
     }
 
@@ -149,7 +143,7 @@ public final class DocumentTabs {
         if (why == null || !why.is(FsError.NOT_FOUND)) return false;
         workbench.placeholders.remove(ref);
         workbench.editors.close(tab);
-        if (workbench.dock.layout().closePanel(ref)) workbench.dock.requestRebuild();
+        workbench.dock.removePanel(ref);
         return true;
     }
 
@@ -234,17 +228,6 @@ public final class DocumentTabs {
         // resolve() says so with null rather than with an empty decoration.
         FileDecoration decoration = workbench.decorations().resolve(path, false);
         return decoration == null ? null : decoration.styleClass();
-    }
-
-    /**
-     * Re-reads every open tab's decoration.
-     *
-     * <p>Through the dock's own {@code refreshPanelPresentation} rather than by walking leaves to groups
-     * to tabs — the walk {@code DockArea} explicitly warns callers off, because it keeps compiling long
-     * after the dock changes how a tab is built.</p>
-     */
-    public void syncTabDecorations() {
-        for (DockPanelRef panel : workbench.dock.allPanels()) workbench.dock.refreshPanelPresentation(panel);
     }
 
     /**
@@ -450,11 +433,7 @@ public final class DocumentTabs {
      * tree both paid for. Setting the text on the tabs that already exist changes nothing structural.</p>
      */
     public void refreshTabTitles() {
-        for (DockLeaf leaf : workbench.dock.layout().leaves()) {
-            DockGroup group = workbench.dock.groupFor(leaf);
-            if (group == null) continue;
-            for (DockPanelRef panel : group.panels()) workbench.dock.refreshPanelPresentation(panel);
-        }
+        for (DockPanelRef panel : workbench.dock.allPanels()) workbench.dock.refreshPanelPresentation(panel);
     }
 
     /**
@@ -503,10 +482,9 @@ public final class DocumentTabs {
         } catch (RuntimeException unparseable) {
             return;
         }
-        for (DockLeaf leaf : workbench.dock.layout().leaves()) {
-            for (DockPanelRef panel : leaf.panels()) {
-                if (path.toString().equals(panel.state(DockPanelRef.PATH, ""))) return;
-            }
+        // IN ANY WINDOW: a file closed here may still be open in a torn-out one.
+        for (DockPanelRef panel : workbench.dock.allPanels()) {
+            if (path.toString().equals(panel.state(DockPanelRef.PATH, ""))) return;
         }
         long timed = FrameProfile.begin();
         // THE TAB'S REFERENCE, and nothing more. The document is disposed by its LAST holder, which may
