@@ -92,9 +92,28 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         // connected the signal to a fold that nothing raised. That is not five preferences; it is one
         // behaviour every tree wants, implemented five times.
         onRowActivated.connect(this::foldOnActivate);
+        // ANY OTHER CHANGE OF SELECTION IS A NEW ONE, and what a fold hid goes with the old. @see #foldedSelection
+        onSelectionChanged.connect(indices -> {
+            if (!reflattening) foldedSelection.clear();
+        });
         putData(KEY, this);
         refresh();
     }
+
+    /**
+     * Selected items a fold has hidden, selected again when a fold shows them.
+     *
+     * <p>VS Code's tree keeps its selection on the nodes, not the visible rows: collapsing a parent hides a selected
+     * child without deselecting it, and expanding shows it selected. Dropping it instead told every consumer the
+     * selection had changed when nobody had chosen anything — the Hierarchy wrote that into the document, and
+     * unfolding the parent found its child deselected.</p>
+     *
+     * <p>Forgotten when the selection next changes for any other reason, which is where a click replaces it.</p>
+     */
+    private final Set<T> foldedSelection = new LinkedHashSet<>();
+
+    /** True while a re-flatten puts the selection back, so its own announcement forgets nothing. */
+    private boolean reflattening;
 
     /** The tree a command was invoked from — answered by the tree itself. @see TreeViewCommands */
     @SuppressWarnings("rawtypes")
@@ -234,7 +253,7 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
     public TreeView<T> setExpandedItems(Collection<T> items) {
         expanded.clear();
         if (items != null) expanded.addAll(items);
-        refresh();
+        reflatten(true);
         return this;
     }
 
@@ -243,7 +262,7 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         if (open && !source.hasChildren(item)) return this;
         boolean changed = open ? expanded.add(item) : expanded.remove(item);
         if (!changed) return this;
-        refresh();
+        reflatten(true);
         onExpandChanged.emit(item, open);
         return this;
     }
@@ -315,7 +334,7 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         }
         // ONE re-flatten however many folds arrived, which is the point of queueing them rather than
         // applying each as it lands.
-        if (moved) refresh();
+        if (moved) reflatten(true);
 
         // COLLAPSING A NODE MOVES FOCUS TO THAT NODE — the ARIA tree pattern, and the same rule the editor
         // already applies to folding a block the caret is in: a focus owner that is no longer on screen
@@ -452,6 +471,15 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
      * cost is a list of records, not a list of elements.</p>
      */
     public void refresh() {
+        reflatten(false);
+    }
+
+    /**
+     * Rebuilds the rows. {@code folding} says only what is open changed, so a selected row that disappears was
+     * hidden, and is kept in {@link #foldedSelection}; otherwise the tree's contents changed, and one that
+     * disappears was removed or moved away, and goes.
+     */
+    private void reflatten(boolean folding) {
         List<TreeRow<T>> flattened = new ArrayList<>();
         for (T root : source.roots()) flatten(root, 0, -1, flattened);
 
@@ -466,41 +494,58 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         // And even without that, indices do not survive a re-flatten. Folding a directory above the
         // selected file renumbers every row beneath it, so an index-based selection silently moves to a
         // different file. Every tree that keeps a selection across expansion tracks items for this reason.
-        List<T> selectedItems = new ArrayList<>();
-        for (int index : getSelectedIndices()) {
-            TreeRow<T> row = rowAt(index);
-            if (row != null) selectedItems.add(row.item());
-        }
+        List<T> selectedItems = selectedItems();
+        Set<T> before = new LinkedHashSet<>(selectedItems);
+        before.addAll(foldedSelection);
 
         // ONE ANNOUNCEMENT FOR THE WHOLE REBUILD. Putting the selection back means taking it apart --
         // clear what the clamp left, then restore the remembered items one by one -- and every step of
         // that used to be announced as though a person had done it. @see ListView#withoutAnnouncing
-        withoutAnnouncing(() -> {
-            // ONE announcement, not one per row. A ListView rebuilds its realised window on every change, so
-            // adding a flattened tree row by row rebuilt it once per row -- and each rebuild discarded the
-            // horizontal scroll extent and re-measured it, which is what made the scrollbar flicker on every
-            // refresh.
-            getModel().setAll(flattened);
+        reflattening = true;
+        try {
+            withoutAnnouncing(() -> put(flattened, before, folding), () -> !selection().equals(before));
+        } finally {
+            reflattening = false;
+        }
+    }
 
-            // CLEARED FIRST, and this is the half that was missing. ListView's clamp only discards indices that
-            // are now OUT OF RANGE -- an index that is still in range survives and quietly points at a
-            // different row. Restoring the remembered items on top of that leaves BOTH: the stale index and the
-            // real one, selected together.
-            //
-            // It showed as the file tree gaining a selected row on every flip of the search mode. Nothing was
-            // additive; each flip left one more index behind, so the selection grew by one and looked like
-            // repeated clicking. The remembered items above are the whole truth about what is selected, so
-            // anything the clamp happened to leave is noise.
-            clearSelection();
+    /** The rows, then the selection put back over them by item. @see #reflatten */
+    private void put(List<TreeRow<T>> flattened, Set<T> wanted, boolean folding) {
+        // ONE announcement, not one per row. A ListView rebuilds its realised window on every change, so
+        // adding a flattened tree row by row rebuilt it once per row -- and each rebuild discarded the
+        // horizontal scroll extent and re-measured it, which is what made the scrollbar flicker on every
+        // refresh.
+        getModel().setAll(flattened);
 
-            if (selectedItems.isEmpty()) return;
-            for (int index = 0; index < flattened.size(); index++) {
-                // toggle(), because it is the additive one -- select() replaces, so restoring a multi-selection
-                // through it would leave only the last row. Anything no longer in the tree simply drops out,
-                // which is what a deleted or collapsed-away row should do.
-                if (selectedItems.contains(flattened.get(index).item()) && !isSelected(index)) toggle(index);
-            }
-        });
+        // CLEARED FIRST, and this is the half that was missing. ListView's clamp only discards indices that
+        // are now OUT OF RANGE -- an index that is still in range survives and quietly points at a
+        // different row. Restoring the remembered items on top of that leaves BOTH: the stale index and the
+        // real one, selected together.
+        //
+        // It showed as the file tree gaining a selected row on every flip of the search mode. Nothing was
+        // additive; each flip left one more index behind, so the selection grew by one and looked like
+        // repeated clicking. The remembered items above are the whole truth about what is selected, so
+        // anything the clamp happened to leave is noise.
+        clearSelection();
+
+        Set<T> hidden = new LinkedHashSet<>(folding ? wanted : foldedSelection);
+        for (int index = 0; index < flattened.size(); index++) {
+            // toggle(), because it is the additive one -- select() replaces, so restoring a multi-selection
+            // through it would leave only the last row. What is not shown is kept only when a fold hid it.
+            T item = flattened.get(index).item();
+            if (!wanted.contains(item)) continue;
+            hidden.remove(item);
+            if (!isSelected(index)) toggle(index);
+        }
+        foldedSelection.clear();
+        foldedSelection.addAll(hidden);
+    }
+
+    /** What is selected, shown or folded away. */
+    private Set<T> selection() {
+        Set<T> all = new LinkedHashSet<>(selectedItems());
+        all.addAll(foldedSelection);
+        return all;
     }
 
     private void flatten(T item, int depth, int parentIndex, List<TreeRow<T>> out) {
