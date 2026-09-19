@@ -131,7 +131,7 @@ public class TabView extends UIElement {
      * The fade over each end of the rail, hidden until tabs are scrolled out past it — IntelliJ's tab row, where a
      * clipped tab fades out rather than being sliced. {@link #FADE_START_CLASS} or {@link #FADE_END_CLASS} says
      * which end; the sheet gives it its width and colour, and shows it under {@link #CLIPPED_START_CLASS} /
-     * {@link #CLIPPED_END_CLASS} on the strip.
+     * {@link #CLIPPED_END_CLASS} on the strip. Its opacity is ours: it thins over the last of its own width of scroll.
      */
     public static final String FADE_CLASS = "__strip-fade__";
     public static final String FADE_START_CLASS = "__start__";
@@ -180,6 +180,8 @@ public class TabView extends UIElement {
     private final ScrollerView rail;
     private final Scroller bar;
     private final UIElement stripActions = new UIElement();
+    private final UIElement fadeStart = stripFade(FADE_START_CLASS);
+    private final UIElement fadeEnd = stripFade(FADE_END_CLASS);
     private final UIElement panes;
     private TabOverflow tabOverflow = TabOverflow.SCROLL;
     private final List<Tab> tabs = new ArrayList<>();
@@ -233,8 +235,11 @@ public class TabView extends UIElement {
             if (syncingBar) return;
             Box box = rail.box();
             if (box == null) return;
-            if (tabSide.isVertical()) rail.scrollTo(box.scrollLeft(), v * box.maxScrollTop());
-            else rail.scrollTo(v * box.maxScrollLeft(), box.scrollTop());
+            float left = tabSide.isVertical() ? box.scrollLeft() : v * box.maxScrollLeft();
+            float top = tabSide.isVertical() ? v * box.maxScrollTop() : box.scrollTop();
+            // A DRAG LANDS INSTANTLY, as ScrollerView's own bars do: the rail eases, and the thumb would lag the cursor.
+            if (bar.isDragging()) rail.setScrollOffsets(left, top);
+            else rail.scrollTo(left, top);
         });
         this.bar.onScrollIntent.connect(f -> {
             // The node's own offsets, not a private "target": a smooth scroll is the node's business
@@ -247,15 +252,11 @@ public class TabView extends UIElement {
                 rail.scrollTo(rail.scrollLeft() + f * contentExtent(box, true), rail.scrollTop());
             }
         });
+        // AFTER THE RAIL AND BEFORE THE BAR, so they paint over the tabs and under the bar, which runs the strip's width;
+        // they take no clicks, so a tab under one still does.
+        this.strip.append(fadeStart);
+        this.strip.append(fadeEnd);
         this.strip.append(this.bar);
-        // AFTER THE RAIL AND THE BAR, so they paint over the tabs; they take no clicks, so a tab under one still does.
-        for (String end : new String[]{FADE_START_CLASS, FADE_END_CLASS}) {
-            UIElement fade = new UIElement();
-            fade.addClass(FADE_CLASS);
-            fade.addClass(end);
-            fade.setHitTest(false);
-            this.strip.append(fade);
-        }
         // LAST, over the fades: what a tab scrolls under is the fade, and what it never scrolls under is this.
         stripActions.addClass(STRIP_ACTIONS_CLASS);
         this.strip.append(stripActions);
@@ -755,6 +756,8 @@ public class TabView extends UIElement {
             setClass(strip, CLIPPED_START_CLASS, max > 0f && scrolled > 0.5f);
             setClass(strip, CLIPPED_END_CLASS, max > 0f && scrolled < max - 0.5f);
             if (max <= 0f) return;
+            fadeByDistance(fadeStart, scrolled, vertical);
+            fadeByDistance(fadeEnd, max - scrolled, vertical);
 
             bar.setVisibleRatio(content <= 0f ? 1f : client / content);
             bar.setStepFraction(content <= 0f ? 0f : LINE_PX / content);
@@ -762,6 +765,25 @@ public class TabView extends UIElement {
         } finally {
             syncingBar = false;
         }
+    }
+
+    private static UIElement stripFade(String end) {
+        UIElement fade = new UIElement();
+        fade.addClass(FADE_CLASS);
+        fade.addClass(end);
+        fade.setHitTest(false);
+        return fade;
+    }
+
+    /**
+     * Android's fading edge: full strength while at least the fade's own length is left to scroll past its end, thinning
+     * to nothing over the last of it, so the fade leaves with the tab it covers instead of vanishing when the rail stops.
+     */
+    private static void fadeByDistance(UIElement fade, float remaining, boolean vertical) {
+        Box box = fade.box();
+        float length = box == null ? 0f : vertical ? box.height() : box.width();
+        float strength = length <= 0f ? 1f : Math.min(1f, remaining / length);
+        StyleGroup.inlinePipeline(fade.getStyle().getGeneralGroup(), g -> g.opacity(strength));
     }
 
     /** Adds or removes {@code name} only when that changes something, since this runs every frame. */
