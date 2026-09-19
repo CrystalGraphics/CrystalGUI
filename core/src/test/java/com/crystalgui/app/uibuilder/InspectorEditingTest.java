@@ -115,11 +115,41 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         frame();
     }
 
+    /**
+     * The control for {@code id}, on whichever tab holds it -- showing that tab, since a tab's rows are in the tree
+     * only once it has been shown, as they are to a person.
+     */
     private ConfigControl control(String id) {
+        ConfigControl found = shownControl(id);
+        for (String tab : List.copyOf(inspector.tabNames())) {
+            if (found != null) return found;
+            showTab(tab);
+            found = shownControl(id);
+        }
+        return found;
+    }
+
+    private ConfigControl shownControl(String id) {
         for (UIElement each : inspector.composedSubtree()) {
             if (each instanceof ConfigControl control && id.equals(control.descriptor().id())) return control;
         }
         return null;
+    }
+
+    private void showTab(String name) {
+        inspector.showTab(name);
+        frame();
+        frame();
+    }
+
+    /** The box diagram, which is on the Layout tab. */
+    private BoxModelEditor boxDiagram() {
+        showTab(BuilderInspectorSections.LAYOUT_TAB);
+        BoxModelEditor found = null;
+        for (UIElement each : inspector.composedSubtree()) {
+            if (each instanceof BoxModelEditor diagram) found = diagram;
+        }
+        return found;
     }
 
     @SuppressWarnings("unchecked")
@@ -386,10 +416,7 @@ public class InspectorEditingTest extends UiDocumentTestBase {
     @Test
     public void aBoxEditIsOneStepAndEscapeWritesNothing() {
         inspect(ok);
-        BoxModelEditor box = null;
-        for (UIElement each : inspector.composedSubtree()) {
-            if (each instanceof BoxModelEditor found) box = found;
-        }
+        BoxModelEditor box = boxDiagram();
         assertNotNull(box);
         BoxModelEditor.Cell left = box.cellFor(LayoutProperties.PADDING_LEFT);
 
@@ -422,10 +449,7 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         }
         frame();
         frame();
-        BoxModelEditor box = null;
-        for (UIElement each : inspector.composedSubtree()) {
-            if (each instanceof BoxModelEditor found) box = found;
-        }
+        BoxModelEditor box = boxDiagram();
         assertNotNull(box);
         BoxModelEditor.Cell left = box.cellFor(LayoutProperties.PADDING_LEFT);
         double before = Double.parseDouble(left.shown());
@@ -464,10 +488,7 @@ public class InspectorEditingTest extends UiDocumentTestBase {
         editor.document().apply(new BuilderEdit.SetAttribute<>(ok, Attribute.HIDDEN, false, true));
         frame();
         frame();
-        BoxModelEditor box = null;
-        for (UIElement each : inspector.composedSubtree()) {
-            if (each instanceof BoxModelEditor found) box = found;
-        }
+        BoxModelEditor box = boxDiagram();
         assertNotNull(box);
 
         assertNull(ok.box());
@@ -481,6 +502,7 @@ public class InspectorEditingTest extends UiDocumentTestBase {
     @Test
     public void selectingAnotherNodeReplacesTheBoxDiagram() {
         inspect(ok);
+        showTab(BuilderInspectorSections.LAYOUT_TAB);
         inspect(volume);
         inspect(ok);
 

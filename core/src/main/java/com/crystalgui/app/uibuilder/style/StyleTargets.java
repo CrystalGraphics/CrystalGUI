@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder.style;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -105,7 +106,26 @@ public final class StyleTargets {
     @Nullable
     private static CssSourceModel modelOf(StyleSheet sheet, @Nullable SheetDocuments.Sheet entry) {
         String text = entry != null && entry.buffer() != null ? entry.buffer().toString() : sheet.source();
-        return text == null ? null : CssSourceModel.parse(text);
+        return text == null ? null : parse(text);
+    }
+
+    /**
+     * The last few sheets parsed, keyed by their TEXT, so an edit is a new key and nothing is served stale.
+     *
+     * <p>Every Inspector section asks for its target, and parsing the user-agent sheet -- six thousand lines --
+     * each time was forty milliseconds a section: half a second to select a node.</p>
+     */
+    private static final Map<String, CssSourceModel> PARSED = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, CssSourceModel> eldest) {
+            return size() > 8;
+        }
+    };
+
+    private static CssSourceModel parse(String text) {
+        synchronized (PARSED) {
+            return PARSED.computeIfAbsent(text, CssSourceModel::parse);
+        }
     }
 
     /**
@@ -117,7 +137,7 @@ public final class StyleTargets {
         if (sheets == null) return;
         for (SheetDocuments.Sheet sheet : sheets.sheets()) {
             if (!sheet.isEditable() || sheet.buffer() == null) continue;
-            CssSourceModel model = CssSourceModel.parse(sheet.buffer().toString());
+            CssSourceModel model = parse(sheet.buffer().toString());
             for (CssSourceModel.Rule rule : model.rules()) {
                 if (rule.sourceOrder() >= 0 && !rule.declarations().isEmpty()) continue;
                 String selector = model.textOf(rule.selectorsRange()).trim();

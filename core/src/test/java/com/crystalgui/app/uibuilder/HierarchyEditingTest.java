@@ -26,6 +26,7 @@ import com.crystalgui.app.uibuilder.panel.HierarchyActions;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.widget.overlay.ContextMenu;
@@ -39,6 +40,8 @@ import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.collection.tree.TreeEditModel;
 import com.crystalgui.widget.collection.tree.TreeEditing;
+import com.crystalgui.widget.config.inspector.InspectorRegistry;
+import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.text.UIText;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -250,6 +253,34 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
         assertSame("the press chose the node before the gesture could become a drag", note, editor.selection().node());
         release(at[0], at[1]);
         assertSame("the click did not choose the node", title, editor.selection().node());
+    }
+
+    /**
+     * A row is the same Inspector subject as the canvas: the same sections, asking the same questions.
+     *
+     * <p>The Inspector takes its subject from the focus owner, and a press on a row moves focus there before the
+     * click has chosen anything. With a key the row did not forward, fewer sections answered, the subject read as
+     * changed, and the Inspector rebuilt into the old node's half-view before rebuilding into the new one.</p>
+     */
+    @Test
+    public void aRowIsTheSameInspectorSubjectAsTheCanvas() {
+        Disposable sections = BuilderInspectorSections.register();
+        try {
+            editor.selection().selectOnly(title);
+            settle();
+            UIElement row = hierarchy.tree().realisedRows().values().iterator().next();
+            assertEquals(subjectOf(DataContext.from(editor.surface())), subjectOf(DataContext.from(row)));
+        } finally {
+            sections.dispose();
+        }
+    }
+
+    private static List<String> subjectOf(DataContext context) {
+        List<String> keys = new ArrayList<>();
+        for (InspectorSection section : InspectorRegistry.sectionsFor(context)) {
+            keys.add(section.getClass().getSimpleName() + "=" + section.subjectKey(context));
+        }
+        return keys;
     }
 
     @Test

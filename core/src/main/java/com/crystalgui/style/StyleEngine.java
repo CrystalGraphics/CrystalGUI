@@ -208,25 +208,13 @@ public final class StyleEngine {
     }
 
     /**
-     * Whether a STATE change on an ancestor could alter {@code descendant}'s match. @see StyleSheet
-     *
-     * <p>The question {@code Styleable.invalidateStyleMatch()} asks before re-matching a subtree.
-     * Answering it honestly is what turns a hover into a walk instead of hundreds of re-matches — in a
-     * running client one hover change re-matched <b>291</b> elements and a focus change <b>402 to 713</b>,
-     * every one of them at 20-25µs.</p>
-     *
-     * <p>Yes for anything at all when a sheet carries a rule whose subject cannot be keyed, which is the
-     * conservative answer and the pre-existing behaviour.</p>
-     */
-    /**
      * What a state change on {@code ancestor} can reach — the keys, or null for <b>nothing at all</b>.
      *
      * <h3>Resolved once per invalidation, not once per descendant</h3>
      *
-     * <p>{@link #stateReaches} asks the flat question — "could any state rule reach an element carrying
-     * this key" — and the answer is the same for every ancestor, so a hover anywhere marked every element
-     * whose tag or class appeared in any such rule. {@code text} is one of those, so every label in the
-     * window re-matched on every mouse move.</p>
+     * <p>The flat question -- could any state rule reach an element carrying this key -- has the same answer
+     * for every ancestor, so a hover anywhere marked every element whose tag or class appeared in any such
+     * rule. {@code text} is one of those, so every label in the window re-matched on every mouse move.</p>
      *
      * <p>This asks the narrow one, and it is answered <em>before</em> the walk starts: a null return means
      * the subtree is not walked at all, which is the second half of the win — the old walk visited every
@@ -275,20 +263,6 @@ public final class StyleEngine {
         return !descendant.getId().isEmpty() && reachable.contains(descendant.getId());
     }
 
-    public boolean stateReaches(Styleable descendant) {
-        for (int i = 0; i < sheets.size(); i++) {
-            StyleSheet sheet = sheets.get(i).sheet();
-            if (sheet.hasUnboundedStateDescendants()) return true;
-            Set<String> keys = sheet.stateDescendantKeys();
-            if (keys.isEmpty()) continue;
-            if (keys.contains(descendant.tagName())) return true;
-            for (String cls : descendant.getClasses()) {
-                if (keys.contains(cls)) return true;
-            }
-            if (!descendant.getId().isEmpty() && keys.contains(descendant.getId())) return true;
-        }
-        return false;
-    }
 
     /** Called from {@link Styleable#invalidateStyleMatch()} — marks an element for re-matching. */
     public void markDirty(Styleable element) {

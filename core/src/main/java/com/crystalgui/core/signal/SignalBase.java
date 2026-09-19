@@ -1,5 +1,7 @@
 package com.crystalgui.core.signal;
 
+import com.crystalgui.core.async.FrameProfile;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -94,6 +96,23 @@ public abstract class SignalBase<L> {
     }
 
     /** Marks emission as started. Must be called before iterating slots. */
+    /** Starts timing one listener while the frame profile is on, and costs nothing otherwise. @see #listenerDone */
+    protected static long listenerStarted() {
+        return FrameProfile.begin();
+    }
+
+    /**
+     * Logs a listener that took long enough to matter, named by the class that connected it: a selection change
+     * fans out to a dozen listeners, and the frame line can only say that the fan-out was slow.
+     */
+    protected static void listenerDone(long started, Object listener) {
+        if (started == 0L) return;
+        String name = listener.getClass().getName();
+        int lambda = name.indexOf("$$Lambda");
+        if (lambda >= 0) name = name.substring(0, lambda);
+        FrameProfile.step(started, "listener " + name.substring(name.lastIndexOf('.') + 1));
+    }
+
     protected final void beginEmit() {
         emitDepth++;
     }
