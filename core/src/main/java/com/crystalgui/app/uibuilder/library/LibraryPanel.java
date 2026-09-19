@@ -246,6 +246,8 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         // Measured against the default two: a scroll's p90 7.5ms against 8.6, for about 2ms more on a re-flow frame.
         // Bounded all the same, for a catalog an addon has made long.
         tree().setOverscan(REALISED_ROWS);
+        // A FOLDER'S NAME SCROLLS rather than truncating, as the Hierarchy's rows do.
+        tree().setHorizontalScrolling(true);
 
         content.append(search);
         append(content);
@@ -513,7 +515,10 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             float gap = second == null ? 0f : second.x() - first.x() - first.width();
             float pitch = first.width() + Math.max(0f, gap);
             // THE ROW, not the strip inside it: the strip is as wide as the cards it holds, so it would only ever fit them.
-            float available = stripBox.contentBoxWidth();
+            // LESS WHAT OVERHANGS THE VIEW: scrolling sideways widens every row to the widest, and cards follow the view.
+            Box viewport = tree().box();
+            float overhang = viewport == null ? 0f : Math.max(0f, stripBox.width() - viewport.clientWidth());
+            float available = stripBox.contentBoxWidth() - overhang;
             int fits = Math.max(1, (int) Math.floor((available + Math.max(0f, gap)) / pitch));
             float height = first.height() + STRIP_SLACK;
             boolean reflow = fits != perStrip;
