@@ -203,10 +203,11 @@ public class NodeWireLayer extends UIElement {
      */
     @Nullable
     public GraphConnection pickWire(float worldX, float worldY) {
-        float originX = 0f, originY = 0f;
+        // NO BOX, NO WIRE: a hidden graph -- its tab behind another -- still hears the pointer leave it.
         Box cache = box();
-        originX = cache.x();
-        originY = cache.y();
+        if (cache == null) return null;
+        float originX = cache.x();
+        float originY = cache.y();
 
         // Divided by the zoom so the grab band is a constant thickness ON SCREEN. As a flat plane-space
         // value it shrank with the view: zoomed out, a wire drawn at its minimum width had a hit target
