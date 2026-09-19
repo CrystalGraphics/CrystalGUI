@@ -988,31 +988,8 @@ public final class TransformBox extends UIElement {
         }
     }
 
-    /**
-     * One side of the box, at any angle.
-     *
-     * <p><b>A stroke, not a rotated fill.</b> Four {@code fillRect}s can only draw the box this one used
-     * to be, so it was drawn as a one-pixel rect inside a rotated pose — which is geometrically right
-     * and the worst case there is for a quad: a hairline at 30 degrees has no whole pixel anywhere along
-     * it, and the quad path carries no coverage term to soften one with. The stroke path computes
-     * coverage from the segment's distance field, so the edge is smooth at every angle and every zoom
-     * without a multisampled target underneath it.</p>
-     */
+    /** One side of the box, at any angle. @see CanvasRects#line */
     private static void edge(CgUiPaintContext paint, Vector2f from, Vector2f to, int colour) {
-        stroke(paint, from.x, from.y, to.x, to.y, colour, HAIRLINE);
-    }
-
-    /**
-     * One segment at a given stroke half-width.
-     *
-     * <p>Half-width, so {@link #HAIRLINE} is one logical pixel — and it stays one LOGICAL pixel,
-     * because the pose scales stroke widths as it scales everything else.</p>
-     */
-    private static void stroke(CgUiPaintContext paint, float x0, float y0, float x1, float y1,
-                               int colour, float width) {
-        float dx = x1 - x0;
-        float dy = y1 - y0;
-        if (dx * dx + dy * dy < 0.0001f) return;
-        paint.curve().line(x0, y0, x1, y1).width(width).color(colour).submit();
+        CanvasRects.line(paint, from.x, from.y, to.x, to.y, HAIRLINE, colour);
     }
 }

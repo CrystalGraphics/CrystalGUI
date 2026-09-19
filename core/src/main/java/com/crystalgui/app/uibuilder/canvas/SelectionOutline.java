@@ -58,10 +58,8 @@ public final class SelectionOutline extends UIElement {
         // property that can fail, and when it did the canvas outlined one node while the inspector
         // described another. One source for everything a reader sees; the other stays an implementation
         // detail of dragging.
-        // THE LAYOUT BOX, as the resize handles are. This marks WHICH element is selected and what its
-        // geometry is, and a transformed element draws somewhere other than it measures: outlining the
-        // drawn bounds put the selection on the render size while the handles sat on the real one, so
-        // one piece of chrome contradicted the other.
+        // WHAT IS PAINTED, as the resize handles are: a transformed element is selected where it is drawn, and the
+        // two pieces of chrome agree because both read CanvasRects.quadOf.
         // AND WHERE THIS PANE DRAWS IT: the selection holds document nodes, which have no box of their own.
         List<UIElement> selected = new ArrayList<>();
         for (UIElement node : builder.builderSelection().nodes()) {
@@ -76,11 +74,11 @@ public final class SelectionOutline extends UIElement {
         // THE PARENT FIRST, so the selection's own stroke wins where they touch -- a child flush against
         // its parent's padding box shares an edge, and the one you are moving is the one to see.
         for (UIElement node : selected) {
-            float[] parent = parentRectWorthDrawing(node);
-            if (parent != null) CanvasRects.outline(paint, parent, THICKNESS, parentStroke);
+            float[] parent = parentQuadWorthDrawing(node);
+            if (parent != null) CanvasRects.outlineQuad(paint, parent, THICKNESS, parentStroke);
         }
         for (UIElement node : selected) {
-            CanvasRects.outline(paint, CanvasRects.ofLayout(node, this), THICKNESS, accent);
+            CanvasRects.outlineQuad(paint, CanvasRects.quadOf(node, this), THICKNESS, accent);
         }
     }
 
@@ -98,17 +96,17 @@ public final class SelectionOutline extends UIElement {
      * </ul>
      */
     @Nullable
-    private float[] parentRectWorthDrawing(UIElement node) {
+    private float[] parentQuadWorthDrawing(UIElement node) {
         UIElement parent = node.parentElement();
         if (parent == null || parent == builder.artboard()) return null;
-        float[] rect = CanvasRects.ofLayout(parent, this);
-        float[] own = CanvasRects.ofLayout(node, this);
-        if (rect == null || own == null) return rect;
-        return sameRect(rect, own) ? null : rect;
+        float[] quad = CanvasRects.quadOf(parent, this);
+        float[] own = CanvasRects.quadOf(node, this);
+        if (quad == null || own == null) return quad;
+        return sameQuad(quad, own) ? null : quad;
     }
 
-    private static boolean sameRect(float[] a, float[] b) {
-        for (int i = 0; i < 4; i++) {
+    private static boolean sameQuad(float[] a, float[] b) {
+        for (int i = 0; i < 8; i++) {
             if (Math.abs(a[i] - b[i]) > 0.5f) return false;
         }
         return true;

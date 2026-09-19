@@ -102,14 +102,15 @@ public final class HoverHighlight extends UIElement {
     private void placeTag() {
         Box own = box();
         Box tagBox = tag.box();
-        float[] rect = CanvasRects.ofLayout(target, this);
+        float[] quad = CanvasRects.quadOf(target, this);
         if (own == null || tagBox == null) return;
-        if (rect == null) {
+        if (quad == null) {
             tagBox.setTransform(null);
             return;
         }
         // ABOVE the outline where there is room, inside it where there is not -- a tag drawn off the top
-        // of the viewport names nothing.
+        // of the viewport names nothing. Beside the painted box's bounds, so a rotated one's tag stays upright.
+        float[] rect = CanvasRects.bounds(quad);
         float above = rect[1] - tagBox.height();
         float y = above >= 0f ? above : rect[1];
         tagBox.setTransform(Transform.translate(rect[0], y));
@@ -127,9 +128,7 @@ public final class HoverHighlight extends UIElement {
     @Override
     public void paintContent(CgUiPaintContext paint, Box box) {
         if (box == null) return;
-        float[] rect = CanvasRects.ofLayout(target, this);
-        if (rect == null) return;
-        CanvasRects.outline(paint, rect, THICKNESS,
+        CanvasRects.outlineQuad(paint, CanvasRects.quadOf(target, this), THICKNESS,
                 getStyle().computed().get(StylePropertyRegistry.COLOR));
     }
 }

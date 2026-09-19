@@ -85,13 +85,9 @@ public final class CanvasRects {
     }
 
     /**
-     * {@code target}'s LAYOUT box as {x, y, width, height} in {@code space}'s coordinates.
-     *
-     * <p><b>This is what design-time chrome wants</b> — the selection outline, the hover highlight, the
-     * resize handles, the snap guides. Each of them states or edits the element's geometry, and a
-     * transformed element draws somewhere other than it measures. {@link #of} is for the few things that
-     * have to sit on what the eye sees, such as the in-place text editor over the glyphs it is
-     * editing.</p>
+     * {@code target}'s LAYOUT box as {x, y, width, height} in {@code space}'s coordinates: where it would be drawn
+     * without its own {@code transform}. What a drop target and the snap guides measure against, since the parent's
+     * layout places children by it; selection chrome sits on {@link #quadOf what is painted}.
      */
     @Nullable
     public static float[] ofLayout(@Nullable UIElement target, @Nullable UIElement space) {
@@ -102,6 +98,82 @@ public final class CanvasRects {
         Vector2f bottomRight = apply(frame, box.width(), box.height());
         return new float[]{topLeft.x, topLeft.y,
                 Math.abs(bottomRight.x - topLeft.x), Math.abs(bottomRight.y - topLeft.y)};
+    }
+
+    /**
+     * {@code target}'s border box as painted: its four corners in {@code space}, top-left, top-right, bottom-right,
+     * bottom-left, as {@code x, y} pairs — its own {@code transform} and everything above it applied.
+     *
+     * <pre>{@code
+     * float[] quad = CanvasRects.quadOf(node, overlay);
+     * CanvasRects.outlineQuad(ctx, quad, 1f, accent);     // on the element as the eye sees it
+     * float[] tag = CanvasRects.bounds(quad);             // somewhere to put a label beside it
+     * }</pre>
+     *
+     * <p>What selection chrome sits on, as Figma's and Unity's does: a rotated or skewed element is selected where it
+     * is drawn. Null when either has no box.</p>
+     */
+    @Nullable
+    public static float[] quadOf(@Nullable UIElement target, @Nullable UIElement space) {
+        Matrix4f frame = localToSpace(target, space);
+        Box box = target == null ? null : target.box();
+        if (frame == null || box == null) return null;
+        float w = box.width(), h = box.height();
+        Vector2f a = apply(frame, 0f, 0f), b = apply(frame, w, 0f), c = apply(frame, w, h), d = apply(frame, 0f, h);
+        return new float[]{a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y};
+    }
+
+    /** The point at fractions {@code (fx, fy)} of a quad from {@link #quadOf}: {@code (0.5, 1)} is the bottom's middle. */
+    public static Vector2f pointOn(float[] quad, float fx, float fy) {
+        float topX = quad[0] + (quad[2] - quad[0]) * fx, topY = quad[1] + (quad[3] - quad[1]) * fx;
+        float bottomX = quad[6] + (quad[4] - quad[6]) * fx, bottomY = quad[7] + (quad[5] - quad[7]) * fx;
+        return new Vector2f(topX + (bottomX - topX) * fy, topY + (bottomY - topY) * fy);
+    }
+
+    /** A quad's axis-aligned bounds, as {x, y, width, height}. */
+    public static float[] bounds(float[] quad) {
+        float x0 = Math.min(Math.min(quad[0], quad[2]), Math.min(quad[4], quad[6]));
+        float y0 = Math.min(Math.min(quad[1], quad[3]), Math.min(quad[5], quad[7]));
+        float x1 = Math.max(Math.max(quad[0], quad[2]), Math.max(quad[4], quad[6]));
+        float y1 = Math.max(Math.max(quad[1], quad[3]), Math.max(quad[5], quad[7]));
+        return new float[]{x0, y0, x1 - x0, y1 - y0};
+    }
+
+    /** Whether a quad is an upright rectangle: moved and scaled, never rotated or skewed. */
+    public static boolean isUpright(float[] quad) {
+        float e = 0.01f;
+        return Math.abs(quad[1] - quad[3]) < e && Math.abs(quad[5] - quad[7]) < e
+                && Math.abs(quad[0] - quad[6]) < e && Math.abs(quad[2] - quad[4]) < e;
+    }
+
+    /**
+     * Outlines a quad from {@link #quadOf}: upright, the ring {@link #outline} draws; rotated or skewed, a hairline
+     * along each edge, which stays one pixel wide whatever the element's own transform does to its box.
+     */
+    public static void outlineQuad(CgUiPaintContext ctx, @Nullable float[] quad, float thickness, int argb) {
+        if (quad == null) return;
+        if (isUpright(quad)) {
+            outline(ctx, bounds(quad), thickness, argb);
+            return;
+        }
+        for (int i = 0; i < 4; i++) {
+            int j = (i + 1) % 4;
+            line(ctx, quad[i * 2], quad[i * 2 + 1], quad[j * 2], quad[j * 2 + 1], thickness * 0.5f, argb);
+        }
+    }
+
+    /**
+     * One straight stroke at any angle, {@code halfWidth} either side of it.
+     *
+     * <p><b>A stroke, not a rotated fill.</b> A hairline at 30 degrees has no whole pixel anywhere along it and the
+     * quad path carries no coverage term to soften one with; the stroke path computes coverage from the segment's
+     * distance field, so the edge is smooth at every angle and every zoom.</p>
+     */
+    public static void line(CgUiPaintContext ctx, float x0, float y0, float x1, float y1, float halfWidth, int argb) {
+        float dx = x1 - x0;
+        float dy = y1 - y0;
+        if (dx * dx + dy * dy < 0.0001f) return;
+        ctx.curve().line(x0, y0, x1, y1).width(halfWidth).color(argb).submit();
     }
 
     /**
