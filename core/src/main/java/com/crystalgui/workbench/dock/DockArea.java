@@ -656,7 +656,10 @@ public class DockArea extends UIElement {
             boolean onTheGroup = surface != null && surface.focus().focused() == group;
             if (holdsFocus(built) || onTheGroup) requestPanelFocus(panel, null);
             group.forgetContent(panel);
-            requestRebuild();
+            // A RESYNC, NOT A REBUILD: only this group's content changed. A rebuild detaches every group for the
+            // frame, and with it whatever held focus outside the content -- the tab just clicked, whose document
+            // this is, lost the keyboard the moment its read landed.
+            requestSync();
         }
     }
 
