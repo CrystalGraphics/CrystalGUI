@@ -29,6 +29,7 @@ import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
@@ -116,6 +117,16 @@ public class DockArea extends UIElement {
     private boolean ticking;
     @Nullable
     private DockGroup activeGroup;
+
+    /** The dock this one was torn out of, or null for a home. @see #home() */
+    @Nullable
+    private final DockArea home;
+
+    /** On a home: every window torn out of it and not destroyed, in the order they opened. */
+    private final List<DockWindow> windows = new ArrayList<>();
+
+    /** On a home: the area whose group was last made active. @see #activeArea() */
+    private DockArea activeArea = this;
     @Nullable
     private DockGroup previewGroup;
     @Nullable
@@ -125,9 +136,19 @@ public class DockArea extends UIElement {
     private int previewTabIndex = -1;
 
     public DockArea(DockPanelRegistry<UIElement> registry, DockLayout layout) {
+        this(registry, layout, null);
+    }
+
+    /** A dock torn out of {@code from}, belonging to its home. @see DockWindow */
+    DockArea(DockArea from, DockLayout layout) {
+        this(from.home().registry, layout, from.home());
+    }
+
+    private DockArea(DockPanelRegistry<UIElement> registry, DockLayout layout, @Nullable DockArea home) {
         super(NAME);
         this.registry = registry;
         this.layout = layout;
+        this.home = home;
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
         StyleGroup.defaultPipeline(content.getStyle().getLayoutGroup(), l -> l.flexGrow(1f).flexBasis(0));
         append(content);
@@ -216,9 +237,11 @@ public class DockArea extends UIElement {
      * that has just been closed is the ordinary case, not a caller error.</p>
      */
     public void refreshPanelPresentation(DockPanelRef panel) {
-        for (DockLeaf leaf : layout.leaves()) {
-            DockGroup group = groups.get(leaf);
-            if (group != null) group.refreshPresentation(panel);
+        for (DockArea area : home().allAreas()) {
+            for (DockLeaf leaf : area.layout.leaves()) {
+                DockGroup group = area.groups.get(leaf);
+                if (group != null) group.refreshPresentation(panel);
+            }
         }
     }
 
@@ -249,8 +272,69 @@ public class DockArea extends UIElement {
         return central == null ? null : groups.get(central);
     }
 
+    // ── One set of editors, however many windows ───────────────────────────────────────────────
+
     /**
-     * The panel in front of the active group, or null when nothing is.
+     * The dock this one was torn out of, or this one if it was not — the HOME its windows belong to.
+     *
+     * <p>A tab torn into a window of its own is still one of the same workbench's editors, as a VS Code
+     * auxiliary window's are, so what a workbench asks is answered across the home and all of its windows:
+     * {@link #activePanel()}, {@link #shownPanels()}, {@link #allPanels()}, {@link #activatePanel} and both
+     * announcements. A torn-out area answers by asking its home. {@link #activeGroup()} stays this area's
+     * own: it is what a command dispatched inside this window acts on.</p>
+     */
+    public DockArea home() {
+        return home == null ? this : home;
+    }
+
+    /** Every window torn out of this dock's home and not destroyed, minimised ones included. */
+    public List<DockWindow> windows() {
+        return Collections.unmodifiableList(home().windows);
+    }
+
+    /**
+     * Where the user is working: the area whose group was last made active — by a press, by focus, or by
+     * {@link #activatePanel} — while it is on screen, and the home otherwise. The next file opens here, and
+     * {@link #activePanel()} is its front panel.
+     *
+     * <p>Not the desktop's active window: clicking bare desktop, or into a tool window, activates no editor
+     * group, and the editor you were in is still the one you were in.</p>
+     */
+    public DockArea activeArea() {
+        return home().activeArea;
+    }
+
+    /** The area whose layout holds {@code panel}, among the home and all its windows, or null. */
+    @Nullable
+    public DockArea areaHolding(DockPanelRef panel) {
+        for (DockArea area : home().allAreas()) {
+            if (area.layout.leafContaining(panel) != null) return area;
+        }
+        return null;
+    }
+
+    /** The home, then each window's area, minimised or not. */
+    private List<DockArea> allAreas() {
+        List<DockArea> out = new ArrayList<>();
+        out.add(this);
+        for (DockWindow window : windows) out.add(window.area());
+        return out;
+    }
+
+    /** A window torn out of this home. @see DockWindow */
+    void adopt(DockWindow window) {
+        windows.add(window);
+    }
+
+    /** A window of this home was destroyed. */
+    void release(DockWindow window) {
+        if (!windows.remove(window)) return;
+        if (activeArea == window.area()) activeArea = this;
+        announcePanels();
+    }
+
+    /**
+     * The panel in front of the {@linkplain #activeArea() active area}'s active group, or null when nothing is.
      *
      * <p>Derived, never stored — the same read-side reasoning {@link #activeGroup()} gives. What <em>is</em>
      * stored is the last value {@link #onDidChangeActivePanel} announced, which is a different thing:
@@ -258,19 +342,23 @@ public class DockArea extends UIElement {
      */
     @Nullable
     public DockPanelRef activePanel() {
-        DockGroup group = activeGroup();
+        DockGroup group = activeArea().activeGroup();
         return group == null ? null : group.leaf().activePanel();
     }
 
     /**
-     * The panel in front of every group, in layout order — what is on screen, of which {@link #activePanel()} is the
-     * one with focus. Derived, like it.
+     * The panel in front of every group on screen — the home's, then each window's that is not minimised — of
+     * which {@link #activePanel()} is the one with focus. Derived, like it.
      */
     public List<DockPanelRef> shownPanels() {
         List<DockPanelRef> shown = new ArrayList<>();
-        for (DockLeaf leaf : layout.leaves()) {
-            DockPanelRef panel = leaf.activePanel();
-            if (panel != null) shown.add(panel);
+        for (DockArea area : home().allAreas()) {
+            // A MINIMISED WINDOW IS DETACHED, and what it holds is not on screen.
+            if (area != home() && area.document() == null) continue;
+            for (DockLeaf leaf : area.layout.leaves()) {
+                DockPanelRef panel = leaf.activePanel();
+                if (panel != null) shown.add(panel);
+            }
         }
         return shown;
     }
@@ -284,9 +372,20 @@ public class DockArea extends UIElement {
      * {@code setActiveGroup} the panel is in front of a group that is not the active one, so every command
      * resolving through {@link #activePanel()} still answers with the previous file.</p>
      *
+     * <p>In whichever window holds it, which is brought forward — restored, if it was minimised.</p>
+     *
      * @return whether the panel was found
      */
     public boolean activatePanel(DockPanelRef panel) {
+        DockArea holding = areaHolding(panel);
+        if (holding == null) return false;
+        holding.activateHere(panel);
+        if (holding != this) holding.raiseWindow();
+        return true;
+    }
+
+    /** {@link #activatePanel}, in this area only. */
+    private boolean activateHere(DockPanelRef panel) {
         DockLeaf leaf = layout().leafContaining(panel);
         if (leaf == null) return false;
         leaf.activate(panel);
@@ -295,6 +394,15 @@ public class DockArea extends UIElement {
         syncGroups();
         setActiveGroup(groupFor(leaf));
         return true;
+    }
+
+    /** Activates the window this area is torn out into, if it is one. */
+    private void raiseWindow() {
+        UIDocument surface = home().document();
+        if (surface == null) return;
+        for (DockWindow window : home().windows) {
+            if (window.area() == this) Desktop.of(surface).activate(window);
+        }
     }
 
     /**
@@ -306,7 +414,9 @@ public class DockArea extends UIElement {
      */
     public List<DockPanelRef> allPanels() {
         List<DockPanelRef> out = new ArrayList<>();
-        for (DockLeaf leaf : layout().leaves()) out.addAll(leaf.panels());
+        for (DockArea area : home().allAreas()) {
+            for (DockLeaf leaf : area.layout.leaves()) out.addAll(leaf.panels());
+        }
         return out;
     }
 
@@ -365,6 +475,11 @@ public class DockArea extends UIElement {
         // the announce rather than the edge is what matters: rebuild() announces again after appending,
         // and consuming the edge here made that second call a no-op. @see #rebuild
         if (rebuilding) return;
+        // THE HOME ANNOUNCES FOR EVERY WINDOW, so a listener subscribes once. @see #home()
+        if (home != null) {
+            home.announcePanels();
+            return;
+        }
         List<DockPanelRef> shown = shownPanels();
         if (!shown.equals(announcedShown)) {
             announcedShown = shown;
@@ -384,12 +499,21 @@ public class DockArea extends UIElement {
      * would get the right answer only for groups whose content happens not to be focusable.</p>
      */
     public DockArea setActiveGroup(@Nullable DockGroup group) {
-        if (activeGroup == group) return this;
+        // A GROUP MADE ACTIVE IS WHERE THE USER IS WORKING, in whichever window it is. @see #activeArea()
+        boolean claimed = group != null && home().activeArea != this;
+        if (claimed) home().activeArea = this;
+        if (!swapActiveGroup(group) && !claimed) return this;
+        announcePanels();
+        return this;
+    }
+
+    /** Makes {@code group} this area's active one without claiming the home's attention: a fallback, not a choice. */
+    private boolean swapActiveGroup(@Nullable DockGroup group) {
+        if (activeGroup == group) return false;
         if (activeGroup != null) activeGroup.setActive(false);
         activeGroup = group;
         if (group != null) group.setActive(true);
-        announcePanels();
-        return this;
+        return true;
     }
 
     /**
@@ -405,9 +529,20 @@ public class DockArea extends UIElement {
     @Override
     protected void connected() {
         super.connected();
+        // A WINDOW COMING BACK puts its panels on screen again.
+        if (home != null) home.announcePanels();
         UIDocument window = document();
         if (window == null) return;
         window.animation().every(this, this::tickFrame);
+    }
+
+    /** A torn-out window minimised or closing: its panels leave the screen, and the home is where the user works. */
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        if (home == null) return;
+        if (home.activeArea == this) home.activeArea = home;
+        home.announcePanels();
     }
 
     // ── Rebuild ─────────────────────────────────────────────────────────────────────────────────
@@ -632,7 +767,7 @@ public class DockArea extends UIElement {
         UIDocument window = document();
         if (window == null) return;
         if (!pendingFocusFronted) {
-            if (!activatePanel(panel)) {
+            if (!activateHere(panel)) {
                 pendingFocus = null;
                 return;
             }
@@ -718,7 +853,7 @@ public class DockArea extends UIElement {
         }
         if (activeGroup == null || activeGroup.leaf().parent() == null) {
             List<DockLeaf> leaves = layout.leaves();
-            setActiveGroup(leaves.isEmpty() ? null : groups.get(leaves.get(0)));
+            swapActiveGroup(leaves.isEmpty() ? null : groups.get(leaves.get(0)));
         }
         // AFTER the tree is built and the fallback has run. A rebuild is how a close, a drop and a
         // restore all reach the front panel, and none of them announces on its own -- setActiveGroup
@@ -1006,7 +1141,7 @@ public class DockArea extends UIElement {
      * the area to close something — which is what makes one guard enough.</p>
      */
     public void closePanel(DockPanelRef panel) {
-        if (!closeGuard.test(panel)) return;
+        if (!home().closeGuard.test(panel)) return;
         closePanelDiscarding(panel);
     }
 
@@ -1168,7 +1303,7 @@ public class DockArea extends UIElement {
             // Safe during dispatch, which is the thing to check before touching a tree mid-press:
             // DockGroup.sync rebuilds its strip only when the panel LIST changes, and this changes the
             // selection. The elements this press is being dispatched through are not recreated.
-            activatePanel(panel);
+            activateHere(panel);
             addClass(DRAGGING_CLASS);
             dragMoved = false;
             // THE SAME GHOST A RAIL BUTTON GETS, for the same reason: a drag with pointer capture pins
@@ -1300,9 +1435,7 @@ public class DockArea extends UIElement {
                 ? DockLayout.of((DockLeaf) moved)
                 : DockLayout.of((DockBranch) moved, DockOrientation.HORIZONTAL);
         String title = payload.panel() != null ? registry.windowTitleOf(payload.panel()) : "";
-        DockWindow frame = new DockWindow(registry, torn, title);
-        if (tornWindowIcon != null) frame.setIcon(tornWindowIcon);
-        if (tornWindowApplication != null) frame.setApplication(tornWindowApplication);
+        DockWindow frame = new DockWindow(this, torn, title);
 
         var pointer = window.input().pointer();
         var local = window.toLocal(pointer.x(), pointer.y());

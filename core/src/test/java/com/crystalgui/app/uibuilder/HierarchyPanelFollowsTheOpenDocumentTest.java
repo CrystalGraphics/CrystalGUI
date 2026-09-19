@@ -22,6 +22,7 @@ import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -48,7 +49,9 @@ import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.extension.InspectorExtension;
 import com.crystalgui.workbench.WorkbenchSession;
 import com.crystalgui.workbench.dock.DockGroup;
+import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
+import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
@@ -392,6 +395,42 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         workbench.dock().closePanel(page);
         for (int i = 0; i < 12; i++) frameAndPump();
         assertNull("the .cgui left the screen and the tree stayed", panel().hierarchy());
+    }
+
+    /** A torn-out window's editors are the workbench's: on screen while it is, active while you work in it. */
+    @Test
+    public void aTornOutWindowIsOnScreenUntilMinimised() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        workbench.open(DockInput.of(workbench.refFor(OTHER)));
+        for (int i = 0; i < 16; i++) frameAndPump();
+
+        DockPanelRef page = workbench.refFor(FILE);
+        DockPanelRef notes = workbench.refFor(OTHER);
+        workbench.dock().layout().leafContaining(page).remove(page);
+        workbench.dock().requestRebuild();
+        DockWindow torn = new DockWindow(workbench.dock(), DockLayout.of(new DockLeaf(page)), "new.cgui");
+        Desktop.of(document).addWindow(torn);
+        for (int i = 0; i < 16; i++) frameAndPump();
+        assertEquals(List.of(torn), workbench.dock().windows());
+
+        assertTrue(workbench.dock().activatePanel(notes));
+        for (int i = 0; i < 12; i++) frameAndPump();
+        assertEquals(OTHER.toString(), String.valueOf(workbench.activeResource()));
+        assertNotNull("the .cgui in its own window is on screen, and the tree emptied", panel().hierarchy());
+
+        assertTrue(workbench.dock().activatePanel(page));
+        for (int i = 0; i < 12; i++) frameAndPump();
+        assertSame("working in the window did not make it the active dock", torn.area(), workbench.dock().activeArea());
+        assertEquals(FILE.toString(), String.valueOf(workbench.activeResource()));
+
+        torn.hide();
+        for (int i = 0; i < 12; i++) frameAndPump();
+        assertSame(workbench.dock(), workbench.dock().activeArea());
+        assertNull("a minimised window is not on screen", panel().hierarchy());
+
+        torn.destroy();
+        for (int i = 0; i < 4; i++) frameAndPump();
+        assertTrue(workbench.dock().windows().isEmpty());
     }
 
     /** With nothing open it is empty, which is the state it must not be stuck in. */

@@ -54,7 +54,6 @@ import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -1607,9 +1606,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     /** The file behind the active tab, or null when the active tab is not a file. */
     @Nullable
     public CgPath activeFilePath() {
-        DockGroup group = dock.activeGroup();
-        if (group == null) return null;
-        DockPanelRef panel = group.leaf().activePanel();
+        DockPanelRef panel = dock.activePanel();
         // A PANEL WITH A PATH, not a panel of one particular type. Binding an extension to its own editor
         // gives that tab a different type id, so testing for FILE_TYPE made every bound document report
         // "no file tab active" -- unsaveable by the very mechanism that opened it.
@@ -1621,9 +1618,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     /** What the active tab shows, project file or not. */
     @Nullable
     public Resource activeResource() {
-        DockGroup group = dock.activeGroup();
-        if (group == null) return null;
-        DockPanelRef panel = group.leaf().activePanel();
+        // IN WHICHEVER WINDOW the user is working in. @see DockArea#activeArea
+        DockPanelRef panel = dock.activePanel();
         return panel == null ? null : documentTabs.viewedResource(panel);
     }
 
@@ -2023,7 +2019,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     }
 
     /**
-     * Every file with a <b>tab</b>, built or not, in strip order across every group.
+     * Every file with a <b>tab</b>, built or not, in strip order across every group, torn-out windows included.
      *
      * <p>The counterpart to {@link #openPaths()}, and the one that answers "what is open" the way a user
      * would mean it: a restored tab is a title until something activates it, and it is no less open for
@@ -2032,17 +2028,15 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
     public List<CgPath> openTabPaths() {
         List<CgPath> paths = new ArrayList<>();
-        for (DockLeaf leaf : dock.layout().leaves()) {
-            for (DockPanelRef panel : leaf.panels()) {
-                String path = panel.state(PATH_STATE, "");
-                if (path.isEmpty()) continue;
-                Resource resource = Resource.parse(path);
-                CgPath parsed = resource.asPath();
-                if (parsed == null) continue;
-                // The same file can be open in two groups -- a split of one document is two tabs and one
-                // document -- and this is a set of files, not of tabs.
-                if (!paths.contains(parsed)) paths.add(parsed);
-            }
+        for (DockPanelRef panel : dock.allPanels()) {
+            String path = panel.state(PATH_STATE, "");
+            if (path.isEmpty()) continue;
+            Resource resource = Resource.parse(path);
+            CgPath parsed = resource.asPath();
+            if (parsed == null) continue;
+            // The same file can be open in two groups -- a split of one document is two tabs and one
+            // document -- and this is a set of files, not of tabs.
+            if (!paths.contains(parsed)) paths.add(parsed);
         }
         return paths;
     }

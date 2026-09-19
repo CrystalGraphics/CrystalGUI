@@ -3,8 +3,6 @@ package com.crystalgui.workbench.dock;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.pattern.FilePatternMap;
-import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentState;
@@ -67,25 +65,29 @@ public final class WorkbenchOpener {
      * @return the leaf it landed in, so a caller can act on it without searching for it again
      */
     public DockLeaf open(DockInput input, DockPlacement placement, DockOpenOptions options) {
-        // THE DOCK THE USER IS WORKING IN, which is not always this workbench's own -- see activeDock().
-        // Shadowed deliberately: every line below means "the dock this open is going into", and one
-        // resolution at the top is what stops half a method reading the field and half the answer.
-        DockArea dock = activeDock();
         DockPanelRef ref = input.ref();
 
-        // ALREADY OPEN wins over placement, always. Re-opening a file that is on screen means "show me
-        // that one", never "make a second copy of it somewhere else" -- and a placement that ignored this
-        // would silently duplicate a document, which is the one outcome no caller wants.
-        DockLeaf existing = dock.layout().leafContaining(ref);
-        if (existing != null) {
-            existing.activate(ref);
-            dock.syncGroups();
+        // ALREADY OPEN wins over placement, always, in whichever window holds it. Re-opening a file that is
+        // on screen means "show me that one", never "make a second copy of it somewhere else" -- and a
+        // placement that ignored this would silently duplicate a document, which is the one outcome no
+        // caller wants.
+        DockArea holding = workbench.dock.areaHolding(ref);
+        if (holding != null) {
+            DockLeaf existing = holding.layout().leafContaining(ref);
             if (options.activates()) {
-                dock.setActiveGroup(dock.groupFor(existing));
-                dock.focusPanel(ref);
+                holding.activatePanel(ref);
+                holding.focusPanel(ref);
+            } else {
+                existing.activate(ref);
+                holding.syncGroups();
             }
             return existing;
         }
+
+        // THE DOCK THE USER IS WORKING IN, which is not always this workbench's own: the last editor group
+        // you were in gets the next file, torn-out window or not. Shadowed deliberately -- every line below
+        // means "the dock this open is going into". @see DockArea#activeArea
+        DockArea dock = workbench.dock.activeArea();
 
         DockLeaf target = DockPlacement.resolve(placement, dock);
         boolean splitting = placement instanceof DockPlacement.Side;
@@ -437,33 +439,6 @@ public final class WorkbenchOpener {
             if (leaf.isCentral()) return leaf;
         }
         return in.layout().leaves().get(0);
-    }
-
-    /**
-     * The dock a newly opened document goes into — <b>the one the user is working in</b> (W9).
-     *
-     * <h3>Asked of the compositor, not tracked here</h3>
-     *
-     * <p>Once an editor tab can be torn out into a window of its own, "open this file" has more than one
-     * possible destination, and both references answer it the same way: the last editor group you were
-     * in gets the next file. Opening into this workbench's own dock regardless would mean a torn-out
-     * window could never be worked in — every file you opened from it would appear behind it, in the
-     * window you had just deliberately left.</p>
-     *
-     * <p>The answer is the <b>active window</b>, which the desktop already tracks and already updates on
-     * exactly the gestures that should move it: a press in a frame, focus arriving, the switcher. A
-     * second notion of "active dock" maintained here would be a copy of that, kept in step by hand, and
-     * would disagree with the title bar the first time one of them missed an event.</p>
-     *
-     * <p>Falls back to this workbench's own dock whenever the active window is not a torn-out one, which
-     * covers the ordinary case, the no-desktop case, and the editor's own frame.</p>
-     */
-    public DockArea activeDock() {
-        UIDocument window = workbench.document();
-        if (window == null) return workbench.dock;
-        WindowFrame active = Desktop.of(window).activeWindow();
-        if (active instanceof DockWindow torn && torn.area() != null) return torn.area();
-        return workbench.dock;
     }
 
     /**
