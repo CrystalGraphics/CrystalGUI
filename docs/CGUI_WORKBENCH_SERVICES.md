@@ -1074,6 +1074,25 @@ new DockWindow(dock, layout, title);   // joins dock's home, with its registry, 
 
 ---
 
+### Dropping files onto an editor area
+
+A file dragged from the Project panel opens where it is dropped, with the zones a dragged tab gets: into a
+group, beside it, or along the dock's outer edge. Nothing about files is in the dock: a drag it did not start
+is asked of a `DockForeignDrop` on the home, and the payload says what it carries through `DragData`.
+
+```java
+// a tree offers its rows to targets outside it
+public Object transfer(List<CgPath> paths) { return new DraggedResources(files(paths)); }
+
+// the workbench tells its dock what a drop opens
+dock.setForeignDrop(opener.fileDrops());
+```
+
+- **A file already open moves its tab** — the drop is a tab drag, guards and all.
+- **`panelsFor` runs on every move of the drag**, cached per payload by the dock; keep it cheap.
+- **The dock places the tab; the panel factory reads the file**, as a session restore does. `opened` does the
+  rest of an open: the file is recent, a new tab brings up its kind's tool windows.
+
 ## Opening things
 
 **One opener, and it is the dock's.**

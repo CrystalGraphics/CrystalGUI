@@ -889,6 +889,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // ASKED BEFORE ANYTHING IS DISCARDED. Ctrl+W on an edited file used to throw the work away with no
         // warning at all -- the tab marker said it was modified and nothing acted on that.
         dock.setCloseGuard(saveActions::confirmClose);
+        // A FILE DRAGGED FROM THE PROJECT PANEL opens where it is dropped. @see WorkbenchOpener#fileDrops
+        dock.setForeignDrop(opener.fileDrops());
         // Two of this widget's per-frame polls, replaced by the announcement they were both watching for.
         // Not registered on a Disposable: the signal belongs to the dock, this workbench owns the dock, so
         // the subscription cannot outlive either -- an ownership registration here would be ceremony.

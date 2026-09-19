@@ -7,6 +7,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.document.DraggedResources;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.FileOperations;
@@ -63,6 +64,17 @@ final class ExplorerEditModel implements TreeEditModel<CgPath> {
     @Override
     public boolean canDrop(List<CgPath> paths, CgPath folder) {
         return TreeEditModel.super.canDrop(paths, folder) && mayWrite(folder);
+    }
+
+    /** The files among {@code paths}, which an editor area opens where they are dropped. Folders are not opened. */
+    @Nullable
+    @Override
+    public Object transfer(List<CgPath> paths) {
+        List<Resource> files = new ArrayList<>();
+        for (CgPath path : paths) {
+            if (!tree.isDirectory(path)) files.add(Resource.of(path));
+        }
+        return files.isEmpty() ? null : new DraggedResources(files);
     }
 
     @Override

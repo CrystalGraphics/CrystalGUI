@@ -21,6 +21,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragData;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.widget.dnd.DragGhost;
 
@@ -94,8 +95,17 @@ final class TreeDragAndDrop<T> {
 
     private float openingSeconds;
 
-    /** The items being carried, and the editing they came from — so a drag from another tree is ignored. */
-    private record Payload(TreeEditing<?> from, List<?> items) {
+    /**
+     * The items being carried, and the editing they came from — so a drag from another tree is ignored — plus what
+     * the model offers anything else. @see TreeEditModel#transfer
+     */
+    private record Payload(TreeEditing<?> from, List<?> items, @Nullable Object transfer) implements DragData {
+
+        @Nullable
+        @Override
+        public <D> D as(Class<D> type) {
+            return type.isInstance(transfer) ? type.cast(transfer) : null;
+        }
     }
 
     /**
@@ -150,7 +160,7 @@ final class TreeDragAndDrop<T> {
             if (carried.size() == 1) ghost.follow(window, icon, label);
             else ghost.follow(window, null, carried.size() + " items");
             Drag.start(row, event.getPosition().x(), event.getPosition().y(), CgMouseCodes.LEFT_BUTTON,
-                    new Payload(editing, carried), Drag.DEFAULT_THRESHOLD_PX,
+                    new Payload(editing, carried, model.transfer(carried)), Drag.DEFAULT_THRESHOLD_PX,
                     (x, y, sx, sy, dx, dy) -> { });
         }, false, true);
     }
