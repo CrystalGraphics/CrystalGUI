@@ -101,6 +101,16 @@ public final class BuilderStyleSections {
         return null;
     }
 
+    /**
+     * The style target the inspector is pointed at, as the fields to write through: the element's own inline style
+     * unless a rule has been picked. Every tab's style rows write here, which is what the chips choose.
+     */
+    @Nullable
+    public static StyleFields styleFields(DataContext context, @Nullable UIElement node) {
+        UiBuilderDocument document = context.get(BuilderEditor.UI_DOCUMENT);
+        return node == null || document == null ? null : StyleFields.on(document, chosen(context), node);
+    }
+
     private static StyleTarget chosen(DataContext context) {
         BuilderSelection selection = selection(context);
         return StyleTargets.of(node(context), sheets(context)).chosen(selection == null ? null : selection.styleTarget());
@@ -140,7 +150,13 @@ public final class BuilderStyleSections {
 
     // ── Where an edit lands ─────────────────────────────────────────────────
 
-    /** The chip row: inline, then every rule that matched, one of them the write target. */
+    /**
+     * The chip row: inline, then every rule that matched, one of them the write target.
+     *
+     * <p><b>One row, in the Style tab, for the whole inspector.</b> The target is a single choice and every tab's
+     * style rows write through it — the Layout tab's numbers and its box diagram included — so a second copy of the
+     * chips would be two controls over one piece of state.</p>
+     */
     private static final class TargetsSection extends StyleAware {
 
         @Override

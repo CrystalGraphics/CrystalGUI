@@ -76,6 +76,27 @@ public final class NodeFields {
         this.document = document;
     }
 
+    /**
+     * Where this panel's STYLE rows write, or null for the element's own inline style.
+     *
+     * <p>Per build rather than per document: the inspector points every tab at one target, and the tab is rebuilt
+     * whenever that changes. An ATTRIBUTE — an id, a class, a widget's state — is the element's whatever this says,
+     * because a class is not a declaration.</p>
+     */
+    @Nullable
+    private Declarations target;
+
+    /** Points this panel's style rows at {@code target}; null is the element's own inline style. @see #target */
+    public NodeFields writingTo(@Nullable Declarations target) {
+        this.target = target;
+        return this;
+    }
+
+    /** Whether the target these rows write to declares {@code property} — what a row marks as set. */
+    public boolean declares(UIElement node, StyleProperty<?> property) {
+        return (target == null ? Declarations.inline(node, document) : target).declares(property);
+    }
+
     /** The fields of the document {@code context} is editing, or null when it is editing none. */
     @Nullable
     public static NodeFields of(DataContext context) {
@@ -199,42 +220,47 @@ public final class NodeFields {
         Class<?> type = key.type;
         String id = "style." + key.name;
         Supplier<Object> computed = () -> node.getStyle().computed().get(key);
+        // WHEREVER THE ROWS ARE POINTED: the element's own inline style unless the inspector has picked a rule.
+        // @see #writingTo
+        Declarations into = target == null ? Declarations.inline(node, document) : target;
+        Property<String> declaration = into.value(key);
+
         if (type.isEnum()) {
             List<String> labels = new ArrayList<>();
             for (Object constant : type.getEnumConstants()) labels.add(labelOf((Enum<?>) constant));
-            Property<String> value = bind(() -> computed.get() instanceof Enum<?> constant ? labelOf(constant) : "",
+            Property<String> value = declaration.map(
+                    ignored -> computed.get() instanceof Enum<?> constant ? labelOf(constant) : "",
                     chosen -> {
                         for (Object constant : type.getEnumConstants()) {
-                            if (labelOf((Enum<?>) constant).equals(chosen)) return inlineEdit(node, key, key.write(constant));
+                            if (labelOf((Enum<?>) constant).equals(chosen)) return key.write(constant);
                         }
-                        return null;
+                        return "";
                     });
             return new Field(ConfigDescriptor.select(id, label, labels).tooltip(key.name), value);
         }
         if (type == Float.class || type == Double.class || type == Integer.class) {
-            Property<Double> value = bind(() -> computed.get() instanceof Number n ? n.doubleValue() : 0d,
-                    number -> number == null ? null : inlineEdit(node, key, cssNumber(number, type == Integer.class)));
+            Property<Double> value = declaration.map(
+                    ignored -> computed.get() instanceof Number number ? number.doubleValue() : 0d,
+                    number -> number == null ? "" : cssNumber(number, type == Integer.class));
             return new Field(ConfigDescriptor.number(id, label).integral(type == Integer.class).tooltip(key.name), value);
         }
-        // AN AUTOMATIC VALUE READS AS AN EMPTY FIELD with auto greyed in it, as Figma leaves an unset value blank:
-        // typed out it looks like a value someone set. Clearing the field is the same auto again.
-        Property<String> value = bind(() -> cssText(key, computed.get()),
-                text -> text == null ? null : inlineEdit(node, key, text.trim()));
+        // WHAT THE TARGET DECLARES, and the layout's own number only where it declares nothing: the computed value
+        // has no unit left in it -- `593em` comes back as `5930px` -- so a field reading it cannot hold what it
+        // just wrote. An unset one reads as what the layout uses, which is what the placeholder says.
+        Property<String> shown = declaration.map(
+                text -> text != null && !text.isBlank() ? text : cssText(key, computed.get()),
+                typed -> typed == null ? "" : typed.trim());
         // A LENGTH IS A NUMBER AND A UNIT, not a line of text to spell: px, % and auto without typing any of them.
         List<String> units = LengthField.unitsOf(key);
         if (!units.isEmpty()) {
-            // WHAT IS DECLARED, and the layout's own number only where nothing is: the computed value has no unit
-            // to keep -- `593em` comes back as `5930px` -- so a field reading it could not hold the unit it wrote.
-            Property<String> declared = bind(() -> {
-                String inline = node.getStyle().inlineText(key);
-                return inline != null && !inline.isBlank() ? inline : cssText(key, computed.get());
-            }, text -> text == null ? null : inlineEdit(node, key, text.trim()));
             LengthField length = new LengthField(id, units)
                     .against(() -> LengthField.hundredPercent(node, key), () -> LengthField.emOf(node));
-            length.bind(declared);
-            return new Field(ConfigDescriptor.text(id, label).tooltip(key.name), declared, length);
+            length.bind(shown);
+            return new Field(ConfigDescriptor.text(id, label).tooltip(key.name), shown, length);
         }
-        return new Field(ConfigDescriptor.text(id, label).placeholder("auto").tooltip(key.name), value);
+        // AN AUTOMATIC VALUE READS AS AN EMPTY FIELD with auto greyed in it, as Figma leaves an unset value blank:
+        // typed out it looks like a value someone set. Clearing the field is the same auto again.
+        return new Field(ConfigDescriptor.text(id, label).placeholder("auto").tooltip(key.name), shown);
     }
 
     /**
