@@ -250,6 +250,13 @@ dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__rail__ {
     height: auto;
     flex-shrink: 0;
 }
+/* EACH ROW WHERE A SINGLE ROW SITS: centred in a header-high band. A lone row is centred by the rail's
+ * `align-items`; rows that size the rail would start at its top edge, a couple of pixels above where one row sat.
+ * 2.5px either side of a 17px tab is the 22px header's band. */
+dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__rail__ > tab {
+    margin-top: 2.5px;
+    margin-bottom: 2.5px;
+}
 dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__strip-actions__ {
     bottom: auto;
     height: var(--panel-header-h, 22px);
@@ -2657,31 +2664,17 @@ navigatorview treeview .__row__.__selected__ {
 
 /* ── THE EDITOR TAB STRIP'S SCROLLBAR ───────────────────────────────────────────────────────────
  *
- * THE RAIL HAS TO GIVE THE BAR ITS ROOM. `flex-shrink` defaults to 0 in this engine -- the divergence
- * from CSS most likely to bite -- so the rail, which has `flex-grow: 1`, took the strip's whole 22px
- * and would not give any of it back when the bar appeared. Measured: rail y=0 h=22, bar y=22 h=3,
- * panes y=22. The bar was not hidden and was not too small; it was laid out entirely BELOW the strip,
- * and the editor was drawn over it.
+ * OVER THE STRIP'S FOOT, as IntelliJ's is, rather than a row of its own. In flow it took 3 of the header's 22px, and
+ * the tabs rode up by that much whenever there was something to scroll -- and a layout that wrapped kept the shift.
+ * Pinned to the bottom it cannot move anything, and it stays inside the strip, which the first in-flow version (laid
+ * out BELOW the strip, under the editor) did not. It spans the rail and stops before the ⋮'s reserved padding.
  *
- * With the rail able to shrink, the strip's 22 divides as it should: the bar takes 3 (it does not
- * shrink), the rail takes 19, and the tabs move up by exactly the bar's height. When there is nothing
- * to scroll TabView sets the bar to `display: none` and the rail has all 22 back -- so the header
- * keeps one height, and the row shares it only when there is something to share it with.
- *
- * This is the whole fix. Four earlier attempts tried to make room for the OTHER bar -- the
- * ScrollerView's `__h-scroller__`, which is absolutely positioned and so can never push anything --
- * by padding the strip, raising its min-height, or gating either on a class the sheet cannot read.
- * Each one either rode the tabs up, made the header taller than every other panel header, or stopped
- * the bar appearing at all. None of them was near the actual fault.
- *
- * Keyed on `dockgroup`, so it reaches the main editor's strips and a torn-out window's alike; a
- * DockWindow builds the same DockGroups. */
-dockgroup > tabview > .__strip__ > .__rail__ {
-    flex-shrink: 1;
-    min-height: 0;
-}
-
+ * Keyed on `dockgroup`, so it reaches the main editor's strips and a torn-out window's alike. */
 dockgroup > tabview > .__strip__ > .__strip-bar__ {
+    position: absolute;
+    left: 0;
+    right: 20px;
+    bottom: 0;
     height: 3px;
 }
 
