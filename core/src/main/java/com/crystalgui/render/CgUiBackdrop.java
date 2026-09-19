@@ -256,16 +256,20 @@ final class CgUiBackdrop {
         // wrong there; a framebuffer region is already surface pixels, so they are the only right
         // answer here.
         Matrix4f pose = ctx.poseStack.last().pose();
-        Vector3f min = pose.transformPosition(new Vector3f(x, y, 0f));
-        Vector3f max = pose.transformPosition(new Vector3f(x + width, y + height, 0f));
+        Vector3f tl = pose.transformPosition(new Vector3f(x, y, 0f));
+        Vector3f tr = pose.transformPosition(new Vector3f(x + width, y, 0f));
+        Vector3f bl = pose.transformPosition(new Vector3f(x, y + height, 0f));
+        Vector3f br = pose.transformPosition(new Vector3f(x + width, y + height, 0f));
+        // ALL FOUR CORNERS. Two opposite ones bound a rotated quad far too tightly -- at 45 degrees the box
+        // they give is half the area -- and what the capture misses is mirror-folded back in at the sample.
         // AND IN SCREEN PIXELS, which a bounded layer's are not: its pixel (0,0) is its region's corner, so the
         // pose inside one is relative to that. Glass inside a clipped, zoomed canvas sampled a patch offset by
         // the layer's position and scaled by the layer's size against the screen's.
         int[] origin = targetOrigin();
-        int px0 = Math.round(Math.min(min.x, max.x)) + origin[0];
-        int py0 = Math.round(Math.min(min.y, max.y)) + origin[1];
-        int px1 = Math.round(Math.max(min.x, max.x)) + origin[0];
-        int py1 = Math.round(Math.max(min.y, max.y)) + origin[1];
+        int px0 = Math.round(Math.min(Math.min(tl.x, tr.x), Math.min(bl.x, br.x))) + origin[0];
+        int py0 = Math.round(Math.min(Math.min(tl.y, tr.y), Math.min(bl.y, br.y))) + origin[1];
+        int px1 = Math.round(Math.max(Math.max(tl.x, tr.x), Math.max(bl.x, br.x))) + origin[0];
+        int py1 = Math.round(Math.max(Math.max(tl.y, tr.y), Math.max(bl.y, br.y))) + origin[1];
         int rw = Math.max(1, px1 - px0);
         int rh = Math.max(1, py1 - py0);
 
@@ -299,25 +303,29 @@ final class CgUiBackdrop {
         if (PROBE) pConsumers++;
         if (!ensureCaptured(wantX0, wantY0, wantX1, wantY1)) return null;
 
-        // Y IS FLIPPED. GL framebuffers are bottom-left origin and the UI is top-left, so the region's
-        // v runs the other way. blitLayer carries the same flip spelled uv(0, 1, 1, 0).
-        // Relative to the CAPTURE's origin, since the capture is a region rather than the whole surface.
-        float u0 = (px0 - capX0) / (float) w;
-        float u1 = (px1 - capX0) / (float) w;
-        float vBottom = 1f - (py1 - capY0) / (float) h;
-        float vTop = 1f - (py0 - capY0) / (float) h;
+        // WHERE THE ELEMENT'S OWN UV LANDS IN THE CAPTURE, through the pose: the origin plus a step per axis,
+        // so a rotated element reads a rotated patch and the backdrop stays on the screen behind it. The
+        // bounding rect cannot say that -- handed to the quad's parametric uv it maps the patch onto the
+        // element, and the world visibly turns with the glass.
+        // Y IS FLIPPED. GL framebuffers are bottom-left origin and the UI is top-left, so v runs the other
+        // way; blitLayer carries the same flip spelled uv(0, 1, 1, 0). Relative to the CAPTURE's origin,
+        // since the capture is a region rather than the whole surface.
+        float u0 = (tl.x + origin[0] - capX0) / w;
+        float v0 = 1f - (tl.y + origin[1] - capY0) / h;
+        float ux = (tr.x - tl.x) / w, vx = -(tr.y - tl.y) / h;
+        float uy = (bl.x - tl.x) / w, vy = -(bl.y - tl.y) / h;
 
         CgTexture2D sharp = (CgTexture2D) captureFbo.getColorTexture(0);
         CgTexture2D blurred = blurredBackdrop(blurRadiusPx);
         if (sharp == null || blurred == null) return null;
         if (GEOMETRY_LOG && blurRadiusPx != loggedRadius) {
             loggedRadius = blurRadiusPx;
-            logGeometry(blurRadiusPx, px0, py0, px1, py1, w, h, vTop, vBottom, blurred);
+            logGeometry(blurRadiusPx, px0, py0, px1, py1, w, h, v0, v0 + vy, blurred);
         }
         // WHAT THIS ELEMENT MAY SAMPLE, as the same normalised rect: its padded, clipped rect, inset half a texel
         // so a tap at the boundary never filters in the texels beyond it.
         float halfU = 0.5f / w, halfV = 0.5f / h;
-        return new CgUiPaintContext.Backdrop(sharp, blurred, u0, vBottom, u1, vTop,
+        return new CgUiPaintContext.Backdrop(sharp, blurred, u0, v0, ux, vx, uy, vy,
                 (wantX0 - capX0) / (float) w + halfU, 1f - (wantY1 - capY0) / (float) h + halfV,
                 (wantX1 - capX0) / (float) w - halfU, 1f - (wantY0 - capY0) / (float) h - halfV);
     }

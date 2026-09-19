@@ -218,8 +218,9 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
         b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
         b.vec2("_BoxSize", drawWidth, drawHeight);
-        b.vec4("_BackdropRect", drawBackdrop.u0(), drawBackdrop.v0(),
-                drawBackdrop.u1(), drawBackdrop.v1());
+        b.vec2("_BackdropOrigin", drawBackdrop.u0(), drawBackdrop.v0());
+        b.vec2("_BackdropAxisX", drawBackdrop.ux(), drawBackdrop.vx());
+        b.vec2("_BackdropAxisY", drawBackdrop.uy(), drawBackdrop.vy());
         b.vec4("_CaptureRect", drawBackdrop.cu0(), drawBackdrop.cv0(),
                 drawBackdrop.cu1(), drawBackdrop.cv1());
         b.colorARGB("_Tint", tintArgb);
