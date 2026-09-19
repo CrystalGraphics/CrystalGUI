@@ -300,7 +300,9 @@ UIDocument.frame(delta, w, h):
   layout(w, h)                  // sync the box tree, compute ONCE, read boxes, compose matrices
   settleAfterLayout(...)        // afterLayout hooks -- may move a box, may not add one
   input().endFrame()            // hover diff + dispatch of the frame's accumulated mouse events
-  (style + layout again)        // only when that diff moved the hover, so :hover lands this frame
+  (style + layout + settle)     // only when that diff moved the hover, so :hover lands this frame --
+                                // and it SETTLES, because an enter dispatched above is what shows a
+                                // tooltip, and this is that tip's first layout
 ```
 
 **Animation before style before layout is load-bearing**, and it is why an ordinary per-frame hook

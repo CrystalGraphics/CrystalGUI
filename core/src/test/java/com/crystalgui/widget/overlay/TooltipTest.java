@@ -164,6 +164,35 @@ public class TooltipTest extends UiDocumentTestBase {
                 y(anchor) + anchor.box().height(), y(tip), 0.5f);
     }
 
+    /**
+     * <b>A tip the hover shows is placed on the frame it appears, not the one after.</b>
+     *
+     * <p>An enter is dispatched from {@code input().endFrame()}, after the frame has already settled — so
+     * the layout that first gives the tip a box is the trailing hover pass, and if that pass does not run
+     * the post-layout hooks then nothing ever writes {@code left}/{@code top}: the tip is laid out at the
+     * top layer's origin and PAINTED in the corner of the screen. Every tooltip with
+     * {@code tooltip-delay: 0} did this, the activity bar's among them. One with a delay was hidden from
+     * it, because the wait's ticker shows it before layout rather than after — which is why the tests
+     * calling {@code showFor} directly all passed.</p>
+     */
+    @Test
+    public void aTipTheHoverShowsIsPlacedOnTheSameFrame() {
+        UIElement anchor = new UIElement().layout(l -> l.width(100).height(40).marginLeft(50).marginTop(50));
+        newRoot().append(anchor);
+        attach();
+        Tooltip tip = Tooltip.attach(anchor, "explain");
+        tip.layout(l -> l.width(TIP_W).height(TIP_H));
+        int[] at = centreOf(anchor);
+
+        move(at[0], at[1]);
+        settle();
+
+        assertTrue("the hover showed it", tip.isShown());
+        assertEquals("left-aligned with the anchor rather than in the corner", x(anchor), x(tip), 0.5f);
+        assertEquals("below the anchor rather than in the corner",
+                y(anchor) + anchor.box().height(), y(tip), 0.5f);
+    }
+
     /** A press on the anchor hides its tip, and it stays hidden until the pointer leaves and comes back. */
     @Test
     public void aPressHidesTheTipUntilThePointerLeaves() {
