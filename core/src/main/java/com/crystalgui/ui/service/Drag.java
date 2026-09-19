@@ -90,6 +90,9 @@ public final class Drag implements InputMode {
     private boolean activated;
     private @Nullable UIElement ghost;
     private float ghostOffsetX, ghostOffsetY;
+    /** Where the pointer last was, in surface pixels, for a ghost placed after layout. @see #placeGhostAfterLayout */
+    private float ghostSurfaceX, ghostSurfaceY;
+    private boolean ghostPlacementPending;
     private @Nullable UIElement dropTarget;
     private boolean dropAccepted;
     private boolean live = true;
@@ -325,20 +328,43 @@ public final class Drag implements InputMode {
         return ghost;
     }
 
-    private void moveGhost(float surfaceX, float surfaceY) {
+    /** @return whether the ghost was placed -- false while it has no box to place */
+    private boolean moveGhost(float surfaceX, float surfaceY) {
         // READ LIVE, never cached. The ghost's box comes into existence when it is shown and is
         // rebuilt whenever anything restructures it, so a reference taken once is a reference to a box
         // that may already be gone -- and, on the frame the ghost is first displayed, to no box at all.
         Box box = ghost == null ? null : ghost.box();
-        if (box == null) return;
+        if (box == null) return false;
         Box top = box.host();
-        if (top == null) return;
+        if (top == null) return false;
         // Surface pixels into the top layer's own space: the ghost is hosted there, so that is the
         // space its transform is applied in. The layer is at the document's origin, so this is the
         // root transform's inverse and nothing more -- but going through the matrix is what keeps it
         // right when uiScale moves.
         org.joml.Vector4f p = new org.joml.Vector4f(surfaceX, surfaceY, 0f, 1f).mul(top.worldToLocal());
         box.setTransform(Transform.translate(p.x - ghostOffsetX, p.y - ghostOffsetY));
+        return true;
+    }
+
+    /**
+     * Places the ghost under the pointer once this frame's layout has given it a box.
+     *
+     * <p>A ghost is {@code display: none} until its drag, and a node that is not displayed has no box, so the
+     * move that shows it cannot place it. Left there, it painted at the top layer's origin -- the window's
+     * top-left corner -- until the pointer moved again, and stayed there for a pointer held still. The hook runs
+     * after layout and before paint, so the first frame the ghost is drawn in has it under the pointer.</p>
+     */
+    private void placeGhostAfterLayout() {
+        UIElement shown = ghost;
+        UIDocument document = shown == null ? null : shown.document();
+        if (document == null || ghostPlacementPending) return;
+        ghostPlacementPending = true;
+        // UNTIL IT LANDS, at wherever the pointer is by then: one hook, ending on the first frame it can do the job.
+        document.animation().afterLayout(shown, delta -> {
+            boolean waiting = live && ghost == shown && !moveGhost(ghostSurfaceX, ghostSurfaceY);
+            ghostPlacementPending = waiting;
+            return waiting;
+        });
     }
 
     private void releaseGhost() {
@@ -404,7 +430,9 @@ public final class Drag implements InputMode {
             activated = true;
         }
         showGhost();
-        moveGhost(x, y);
+        ghostSurfaceX = x;
+        ghostSurfaceY = y;
+        if (!moveGhost(x, y)) placeGhostAfterLayout();
         float[] local = toLocal(source, x, y);
         // THE DELTA IS A VECTOR, NOT A DIFFERENCE OF TWO POINTS, and it has to be: `toLocal` puts the
         // box's own origin at zero (M6.1), so a source that MOVES WITH THE DRAG changes the frame its

@@ -231,6 +231,27 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
         release(at[0], at[1] + 20f * uiScale());
     }
 
+    /**
+     * A press on an unselected row highlights it and selects its node on the CLICK, VS Code's list: choosing a node
+     * rebuilds the Inspector, and a press that paid for it held the drag it armed for that whole frame.
+     */
+    @Test
+    public void aPressChoosesTheNodeOnTheClickNotThePress() {
+        editor.selection().selectOnly(note);
+        settle();
+        UIText label = null;
+        for (UIElement row : hierarchy.tree().realisedRows().values()) {
+            for (UIElement child : row.children()) {
+                if (child instanceof UIText text && "#title".equals(text.getText())) label = text;
+            }
+        }
+        int[] at = centreOf(label);
+        press(at[0], at[1]);
+        assertSame("the press chose the node before the gesture could become a drag", note, editor.selection().node());
+        release(at[0], at[1]);
+        assertSame("the click did not choose the node", title, editor.selection().node());
+    }
+
     @Test
     public void newOffersEachKindUnderItsOwnNameAndGlyph() {
         Disposable rows = HierarchyActions.register(CommandRegistry.global());

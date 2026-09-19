@@ -14,8 +14,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -362,17 +362,23 @@ public final class StyleSheet {
      * the candidate set, callers must still verify with {@link Selector#matches}.
      */
     public List<StyleRule> candidatesFor(Styleable element) {
-        Set<StyleRule> candidates = new LinkedHashSet<>(universal);
-        if (!element.getId().isEmpty()) {
-            candidates.addAll(byId.getOrDefault(element.getId(), List.of()));
+        // BY IDENTITY, in the order found. A rule is a record, so a hashed set hashed its selector and every
+        // declaration's value on each re-match -- a sixth of a selection frame, measured -- to tell apart
+        // objects that were already distinct: two rules of one sheet always differ in sourceOrder.
+        List<StyleRule> candidates = new ArrayList<>(universal);
+        Set<StyleRule> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        seen.addAll(universal);
+        if (!element.getId().isEmpty()) addUnseen(candidates, seen, byId.get(element.getId()));
+        for (String cls : element.getClasses()) addUnseen(candidates, seen, byClass.get(cls));
+        for (String type : element.typeKeys()) addUnseen(candidates, seen, byType.get(type));
+        return candidates;
+    }
+
+    private static void addUnseen(List<StyleRule> into, Set<StyleRule> seen, @Nullable List<StyleRule> bucket) {
+        if (bucket == null) return;
+        for (StyleRule rule : bucket) {
+            if (seen.add(rule)) into.add(rule);
         }
-        for (String cls : element.getClasses()) {
-            candidates.addAll(byClass.getOrDefault(cls, List.of()));
-        }
-        for (String type : element.typeKeys()) {
-            candidates.addAll(byType.getOrDefault(type, List.of()));
-        }
-        return new ArrayList<>(candidates);
     }
 
     /** Re-reads the {@code ua/} parts at {@link StyleOrigin#USER_AGENT}.

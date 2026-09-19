@@ -295,6 +295,62 @@ public class TreeEditingTest extends UiDocumentTestBase {
         assertTarget(drops.spotAt(model, rowElement(a), a, 0.9f), TreeDragAndDrop.DROP_AFTER_CLASS, a, 0);
     }
 
+    /**
+     * Below a group's last row, X picks the depth: over the row it stays its parent's last child, left of its indent
+     * it lands after the parent — pragmatic-drag-and-drop's {@code reparent}.
+     */
+    @Test
+    public void belowAGroupsLastRowThePointersXPicksTheDepth() {
+        TreeDragAndDrop<Node> drops = new TreeDragAndDrop<>(editing, new UIElement());
+        UIElement last = rowElement(a1);   // root > a > a1, and b follows a
+        TreeDragAndDrop.Spot<Node> inside = drops.spotAt(model, last, a1, 0.9f, 100f);
+        assertTarget(inside, TreeDragAndDrop.DROP_AFTER_CLASS, a, 1);
+        assertEquals("the line starts at a1's own indent", 2, inside.level());
+        TreeDragAndDrop.Spot<Node> out = drops.spotAt(model, last, a1, 0.9f, 0f);
+        assertTarget(out, TreeDragAndDrop.DROP_AFTER_CLASS, root, 1);
+        assertEquals("and one level out when it steps out", 1, out.level());
+        // THE ROOT TAKES NO SIBLINGS: c ends root's group, and far left is still inside root.
+        assertTarget(drops.spotAt(model, rowElement(c), c, 0.9f, 0f), TreeDragAndDrop.DROP_AFTER_CLASS, root, 3);
+    }
+
+    /**
+     * Under the last row is outside its group, a level per half row-height further down: dragging under is how a person
+     * says "not in it", and a deep group is left one level at a time.
+     */
+    @Test
+    public void theSpaceUnderTheLastRowStepsOutALevelPerHalfRow() {
+        // root > a > (a1, x1 > x2), so the tail x2 is three deep and ends x1's group, a's, and nothing of root's.
+        Node x2 = new Node("x2", false);
+        Node x1 = new Node("x1", true, x2);
+        x1.parent = a;
+        a.children.add(x1);
+        root.children.remove(b);
+        root.children.remove(c);
+        tree.setExpanded(x1, true);
+        tree.refresh();
+        settle();
+        TreeDragAndDrop<Node> drops = new TreeDragAndDrop<>(editing, new UIElement());
+        // Rows root, a, a1, x1, x2 at ten pixels each: x2 ends at 50, and a level is every five pixels below it.
+        TreeDragAndDrop.Spot<Node> once = drops.spotFor(tree, 90f, 52f);
+        assertNotNull("the space under the rows took no drop", once);
+        assertTarget(once, TreeDragAndDrop.DROP_AFTER_CLASS, a, 2);
+        assertSame("the line is under the last row", rowElement(x2), once.row());
+        assertEquals("just under the row is one level out", 2, once.level());
+
+        TreeDragAndDrop.Spot<Node> twice = drops.spotFor(tree, 90f, 57f);
+        assertTarget(twice, TreeDragAndDrop.DROP_AFTER_CLASS, root, 1);
+        assertEquals("half a row further, two", 1, twice.level());
+        // THE ROOT TAKES NO SIBLINGS, however far down.
+        assertTarget(drops.spotFor(tree, 90f, 95f), TreeDragAndDrop.DROP_AFTER_CLASS, root, 1);
+    }
+
+    /** A row with a sibling below it ends no group, so X changes nothing. */
+    @Test
+    public void aRowThatEndsNoGroupIgnoresTheX() {
+        TreeDragAndDrop<Node> drops = new TreeDragAndDrop<>(editing, new UIElement());
+        assertTarget(drops.spotAt(model, rowElement(b), b, 0.9f, 0f), TreeDragAndDrop.DROP_AFTER_CLASS, root, 2);
+    }
+
     @Test
     public void anUnorderedTreeDropsIntoAFolderAndALeafMeansItsFolder() {
         model.ordered = false;

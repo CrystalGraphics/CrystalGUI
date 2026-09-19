@@ -11,6 +11,10 @@ import org.joml.Vector2f;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.StyleSlot;
+import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -28,6 +32,16 @@ import com.crystalgui.widget.dnd.DragGhost;
  * {@code listView.ts} splits it; after an open container with children means its first child. In an unordered
  * tree a drop lands into the row's item, or into its parent when the item is a leaf. The model decides whether
  * a drop is allowed and performs it; the modifier it names makes it a copy.</p>
+ *
+ * <p><b>After the last row of a group, the pointer's X picks the depth</b> — Atlassian pragmatic-drag-and-drop's
+ * {@code hitbox/tree-item.ts} (Apache-2.0) {@code reparent} instruction. Below a container's last child the line
+ * could mean "its last child" or "after the container", and a vertical split cannot tell them apart: over the row
+ * it stays in, left of its indent it steps out a level per indent, down to the outermost group the row ends.
+ * The line starts at the level it lands in, so the two read differently.</p>
+ *
+ * <p><b>Under the last row is outside its group.</b> Mid-tree the next row's top quarter already says "after the
+ * group"; at the end of the tree the empty space below says it — one level out just under it, a level more every
+ * half row-height further down — and X takes it further.</p>
  */
 final class TreeDragAndDrop<T> {
 
@@ -52,6 +66,8 @@ final class TreeDragAndDrop<T> {
 
     @Nullable
     private String markedClass;
+
+    private int markedLevel = -1;
 
     /** How long a drag rests on a closed branch before it opens — VS Code's explorer. */
     static final float AUTO_EXPAND_SECONDS = 0.5f;
@@ -82,9 +98,26 @@ final class TreeDragAndDrop<T> {
     private record Payload(TreeEditing<?> from, List<?> items) {
     }
 
-    /** Where a drop would land, and which row and mark say so. */
-    record Spot<T>(UIElement row, String mark, TreeEditModel.Target<T> target) {
+    /**
+     * Where a drop would land, and which row and mark say so.
+     *
+     * @param level the depth whose indent a before/after line starts at, or -1 for a drop into the row
+     */
+    record Spot<T>(UIElement row, String mark, TreeEditModel.Target<T> target, int level) {
+
+        Spot(UIElement row, String mark, TreeEditModel.Target<T> target) {
+            this(row, mark, target, -1);
+        }
     }
+
+    /**
+     * A before/after line's left offset with no level to show: the user-agent sheet's {@code outline-offset: -1px}
+     * on {@code *}, which keeps an outline inside a clipping panel.
+     */
+    private static final float LINE_BASE_OFFSET = -1f;
+
+    /** How far under the last row, in row-heights, each further level out is. */
+    static final float LEVEL_STEP_ROWS = 0.5f;
 
     TreeDragAndDrop(TreeEditing<T> editing, UIElement host) {
         this.editing = editing;
@@ -297,20 +330,53 @@ final class TreeDragAndDrop<T> {
     @Nullable
     Spot<T> spotFor(@Nullable UIElement hit, float x, float y) {
         TreeEditModel<T> model = editing.model();
+        if (model == null) return null;
         UIElement row = editing.rowElementFor(hit);
-        T item = row == null ? null : editing.itemForRow(row);
-        Box box = row == null ? null : row.box();
-        if (model == null || item == null || box == null) return null;
+        if (row == null) return belowTheRows(model, x, y);
+        T item = editing.itemForRow(row);
+        Box box = row.box();
+        if (item == null || box == null) return null;
         Vector2f local = row.toLocal(x, y);
-        return spotAt(model, row, item, local.y / Math.max(1f, box.height()));
+        return spotAt(model, row, item, local.y / Math.max(1f, box.height()), local.x);
     }
 
     /**
-     * The spot for a pointer {@code fraction} of the way down {@code row}.
+     * The empty space under the last row: after the group that row ends, one level out per half row-height down.
+     *
+     * <p>Dragging UNDER a group is how a person says "not in it" — mid-tree the next row's top quarter already
+     * means that, and at the end of the tree there was no row to say it and so no drop at all. Its own bottom
+     * quarter stays its parent's last child; X steps further out from here as it does on the row.</p>
+     */
+    @Nullable
+    private Spot<T> belowTheRows(TreeEditModel<T> model, float x, float y) {
+        if (!model.isOrdered()) return null;
+        TreeView<T> tree = editing.tree();
+        UIElement row = tree.realisedRows().get(tree.getModel().size() - 1);
+        T item = row == null ? null : editing.itemForRow(row);
+        Box box = row == null ? null : row.box();
+        if (item == null || box == null || model.parentOf(item) == null) return null;
+        Vector2f local = row.toLocal(x, y);
+        float height = Math.max(1f, box.height());
+        if (local.y < height) return null;
+        int depth = depthOf(row);
+        // A LEVEL A HALF ROW-HEIGHT: the first gap under the row is one level out, the next two, so a deep group is
+        // left one level at a time by dragging further down. A whole row a level was too much travel.
+        float step = height * LEVEL_STEP_ROWS;
+        int out = 1 + (int) Math.floor((local.y - height) / step);
+        return after(model, row, item, depth, Math.min(levelAt(local.x, depth), depth - out));
+    }
+
+    /** As {@link #spotAt(TreeEditModel, UIElement, Object, float, float)}, with the pointer over the row's label. */
+    Spot<T> spotAt(TreeEditModel<T> model, UIElement row, T item, float fraction) {
+        return spotAt(model, row, item, fraction, Float.POSITIVE_INFINITY);
+    }
+
+    /**
+     * The spot for a pointer {@code fraction} of the way down {@code row} and {@code x} pixels in from its left edge.
      *
      * <p>Package-private so the geometry is testable without a pointer.</p>
      */
-    Spot<T> spotAt(TreeEditModel<T> model, UIElement row, T item, float fraction) {
+    Spot<T> spotAt(TreeEditModel<T> model, UIElement row, T item, float fraction, float x) {
         T parent = model.parentOf(item);
         boolean container = model.isContainer(item);
         if (!model.isOrdered()) {
@@ -319,17 +385,59 @@ final class TreeDragAndDrop<T> {
         }
         if (parent == null) return new Spot<>(row, DROP_INTO_CLASS, new TreeEditModel.Target<>(item, -1));
         int index = model.indexOf(item);
+        int depth = depthOf(row);
         if (fraction < 0.25f || (!container && fraction < 0.5f)) {
-            return new Spot<>(row, DROP_BEFORE_CLASS, new TreeEditModel.Target<>(parent, index));
+            return new Spot<>(row, DROP_BEFORE_CLASS, new TreeEditModel.Target<>(parent, index), depth);
         }
         if (fraction > 0.75f || !container) {
             // AFTER AN OPEN CONTAINER is before its first child: that row is what sits under the line.
             if (container && isOpenWithChildren(row)) {
-                return new Spot<>(row, DROP_AFTER_CLASS, new TreeEditModel.Target<>(item, 0));
+                return new Spot<>(row, DROP_AFTER_CLASS, new TreeEditModel.Target<>(item, 0), depth + 1);
             }
-            return new Spot<>(row, DROP_AFTER_CLASS, new TreeEditModel.Target<>(parent, index + 1));
+            return after(model, row, item, depth, levelAt(x, depth));
         }
         return new Spot<>(row, DROP_INTO_CLASS, new TreeEditModel.Target<>(item, -1));
+    }
+
+    /** {@code tree-item.ts}' {@code reparent}: the level asked for is how many whole indents {@code x} is in. */
+    private int levelAt(float x, int depth) {
+        float indent = editing.tree().getIndentPerDepth();
+        return indent <= 0f ? depth : (int) Math.floor(x / indent);
+    }
+
+    /**
+     * After {@code item} at level {@code wanted}: its own, or — when it is its parent's last child, and that parent
+     * its own parent's, and so on — after one of those ancestors instead, held between the outermost group this row
+     * ends and the row's own depth.
+     */
+    private Spot<T> after(TreeEditModel<T> model, UIElement row, T item, int depth, int wanted) {
+        // ONLY OUT OF A GROUP THIS ROW ENDS: the row below sits at the shallowest level the line may reach, since
+        // stepping past it would put the drop after something the line is drawn above.
+        int floor = depthBelow(row);
+        T at = item;
+        T parent = model.parentOf(item);
+        int level = depth;
+        while (level > wanted && level > floor) {
+            T grandparent = model.parentOf(parent);
+            if (grandparent == null) break;   // the root takes no siblings
+            at = parent;
+            parent = grandparent;
+            level--;
+        }
+        return new Spot<>(row, DROP_AFTER_CLASS, new TreeEditModel.Target<>(parent, model.indexOf(at) + 1), level);
+    }
+
+    /** The depth of the row after {@code row}, or 0 when it is the last: every group deeper than that ends here. */
+    private int depthBelow(UIElement row) {
+        int index = editing.tree().indexOfRowElement(row);
+        TreeRow<T> next = index < 0 ? null : editing.tree().rowAt(index + 1);
+        return next == null ? 0 : next.depth();
+    }
+
+    /** The row's depth as the tree draws it, which is what its indent is measured from. */
+    private int depthOf(UIElement row) {
+        TreeRow<T> at = rowOf(row);
+        return at == null ? 0 : at.depth();
     }
 
     private boolean isOpenWithChildren(UIElement row) {
@@ -346,10 +454,26 @@ final class TreeDragAndDrop<T> {
     private void mark(@Nullable Spot<T> spot) {
         UIElement row = spot == null ? null : spot.row();
         String mark = spot == null ? null : spot.mark();
-        if (row == markedRow && (mark == null ? markedClass == null : mark.equals(markedClass))) return;
-        if (markedRow != null && markedClass != null) markedRow.removeClass(markedClass);
+        int level = spot == null ? -1 : spot.level();
+        if (row == markedRow && level == markedLevel
+                && (mark == null ? markedClass == null : mark.equals(markedClass))) return;
+        if (markedRow != null) {
+            if (markedClass != null) markedRow.removeClass(markedClass);
+            markedRow.getStyle().removeCandidates(StylePropertyRegistry.OUTLINE_OFFSET_LEFT,
+                    slot -> slot.origin() == StyleOrigin.INLINE);
+        }
         markedRow = row;
         markedClass = mark;
-        if (row != null && mark != null) row.addClass(mark);
+        markedLevel = level;
+        if (row == null || mark == null) return;
+        row.addClass(mark);
+        // THE LINE STARTS WHERE THE DROP LANDS, at the indent of its level: "last child" and "after the group" are
+        // two lines rather than one.
+        if (level >= 0) {
+            float inset = level * editing.tree().getIndentPerDepth();
+            row.getStyle().replaceOrPutCandidate(StylePropertyRegistry.OUTLINE_OFFSET_LEFT, StyleSlot.of(
+                    StylePropertyRegistry.OUTLINE_OFFSET_LEFT, StyleOrigin.INLINE, 0, 0L,
+                    LengthPercent.px(LINE_BASE_OFFSET - inset)));
+        }
     }
 }

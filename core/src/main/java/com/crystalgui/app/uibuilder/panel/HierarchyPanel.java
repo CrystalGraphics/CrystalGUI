@@ -29,6 +29,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.collection.tree.TreeClipboard;
 import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
@@ -120,6 +121,16 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
     /** Guards the two directions against answering each other. */
     private boolean syncing;
 
+    /**
+     * The nodes a row press chose while it could still become a drag, written on release. @see #chooseRows
+     */
+    @Nullable
+    private List<UIElement> chosenOnRelease;
+
+    /** The shared selection as that press found it, so a drop that chose for itself is not overwritten. */
+    @Nullable
+    private List<UIElement> selectionAtPress;
+
     /** The root the expansion was last stated against. @see #followRoot */
     @Nullable
     private UIElement shownRoot;
@@ -188,6 +199,8 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         // SELECTION, not activation: a single click on a row is choosing that node, and activation is
         // the double-click that will open a template.
         whileConnected(() -> tree.onSelectionChanged.connect(this::chooseRows));
+        // BUBBLING, after the row's own release: under pointer capture the release reaches the pressed row.
+        tree.onMouseUp.attachListener((element, event) -> chooseOnRelease(), false, true);
         whileConnected(() -> builder.builderSelection().onChanged.connect(this::followSelection));
         whileConnected(() -> builder.getDocument().onChanged().connect(this::followSelection));
         // WHAT IT MISSED WHILE IT WAS OUT: the document may have been edited and the canvas selection
@@ -385,6 +398,38 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         for (int index : indices) {
             if (index >= 0 && index < rows.size()) chosen.add(rows.get(index).item());
         }
+        // THE HIGHLIGHT NOW, THE SELECTION ON THE CLICK -- VS Code's list, which selects on the press and opens on
+        // the click. Choosing a node rebuilds the Inspector, a frame of a quarter of a second, and a press that
+        // paid it made the drag it armed wait out that frame before a single move reached it: a fixed pause on
+        // an unselected row, and none on a selected one, which chooses nothing.
+        if (pressMayDrag()) {
+            chosenOnRelease = chosen;
+            selectionAtPress = builder.builderSelection().nodes();
+            return;
+        }
+        chosenOnRelease = null;
+        write(chosen);
+    }
+
+    /** Whether a row press has armed a drag from this tree that has not yet moved. */
+    private boolean pressMayDrag() {
+        Drag drag = document() == null ? null : document().input().mode(Drag.class);
+        if (drag == null || drag.isActivated()) return false;
+        for (UIElement at = drag.source(); at != null; at = at.parentElement()) {
+            if (at == tree) return true;
+        }
+        return false;
+    }
+
+    /** Writes the press's choice, unless a drop has already chosen what it landed. */
+    private void chooseOnRelease() {
+        List<UIElement> chosen = chosenOnRelease;
+        chosenOnRelease = null;
+        if (chosen == null || !builder.builderSelection().nodes().equals(selectionAtPress)) return;
+        write(chosen);
+    }
+
+    private void write(List<UIElement> chosen) {
         syncing = true;
         try {
             builder.builderSelection().replaceWith(chosen);
