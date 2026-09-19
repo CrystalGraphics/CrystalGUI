@@ -432,6 +432,49 @@ tabview.__right__ .__rail__ {
 tabview .__strip-bar__ {
     height: 2px;
 }
+
+/* A CLIPPED TAB FADES OUT rather than being sliced, as IntelliJ's does: a fade over each end of the rail,
+ * shown by TabView while tabs are scrolled out past that end. It fades into the strip's own background; a
+ * transparent strip fades into whatever is behind it, so that context restates the colour (workbench.css). */
+tabview .__strip-fade__ {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 16px;
+    display: none;
+}
+tabview .__strip-fade__.__start__ {
+    left: 0;
+    background: linear-gradient(to left, transparent, var(--tab-strip-bg, #2A2A2A));
+}
+tabview .__strip-fade__.__end__ {
+    right: 0;
+    background: linear-gradient(to right, transparent, var(--tab-strip-bg, #2A2A2A));
+}
+tabview .__strip__.__clipped-start__ > .__strip-fade__.__start__,
+tabview .__strip__.__clipped-end__ > .__strip-fade__.__end__ {
+    display: flex;
+}
+/* A column of tabs scrolls vertically, so its fades are across the top and bottom. */
+tabview.__left__ .__strip-fade__,
+tabview.__right__ .__strip-fade__ {
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 16px;
+}
+tabview.__left__ .__strip-fade__.__start__,
+tabview.__right__ .__strip-fade__.__start__ {
+    top: 0;
+    bottom: auto;
+    background: linear-gradient(to top, transparent, var(--tab-strip-bg, #2A2A2A));
+}
+tabview.__left__ .__strip-fade__.__end__,
+tabview.__right__ .__strip-fade__.__end__ {
+    top: auto;
+    bottom: 0;
+    background: linear-gradient(to bottom, transparent, var(--tab-strip-bg, #2A2A2A));
+}
 tabview.__left__ .__strip-bar__,
 tabview.__right__ .__strip-bar__ {
     width: 2px;
