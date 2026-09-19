@@ -773,6 +773,12 @@ public final class Box {
         Vector4f p = new Vector4f(worldX, worldY, 0f, 1f);
         worldToLocal.transform(p);
         boolean inside = p.x >= 0f && p.y >= 0f && p.x < width && p.y < height;
+        // THE ROUNDED BORDER BOX IS THE SURFACE, as Blink's LayoutBox::HitTestClippedOutByBorder has it: a corner
+        // cut away by `border-radius` is not this box. Asked only of a box the point is already inside, so the eight
+        // radius lookups are paid for the pointer's own ancestors rather than for every box in the tree.
+        if (inside && !insideCorners(p.x, p.y)) inside = false;
+        // And when the box CLIPS, the corner is outside the clip, so nothing inside it is there either -- which is
+        // the same reading of `clips()` the rectangle gets, and the painter's, which masks the subtree to the radii.
         if (!inside && clips()) return null;
         List<Box> order = children();
         for (int i = order.size() - 1; i >= 0; i--) {
@@ -795,6 +801,35 @@ public final class Box {
         // and no statement at all about what is inside.
         if (stackingOnly) return null;
         return inside && !skip.test(this) ? this : null;
+    }
+
+    /**
+     * Whether {@code (x, y)} — in this box's own space, already inside its rectangle — is inside its rounded corners.
+     *
+     * <p>The radii are the PAINTER's, resolved by the same call that draws them, so what a pointer lands on and what
+     * a person sees cannot differ: percentages against this box's own size, and CSS's one scale factor where two
+     * radii on a side add up past it.</p>
+     */
+    private boolean insideCorners(float x, float y) {
+        BoxPainter.Radii r = BoxPainter.radiiOf(node.computedStyle(), width, height);
+        if (r.isZero()) return true;
+        return !outsideCorner(x, y, r.rxTL, r.ryTL)
+                && !outsideCorner(width - x, y, r.rxTR, r.ryTR)
+                && !outsideCorner(width - x, height - y, r.rxBR, r.ryBR)
+                && !outsideCorner(x, height - y, r.rxBL, r.ryBL);
+    }
+
+    /**
+     * Whether a point {@code (dx, dy)} in from one corner falls outside that corner's ellipse.
+     *
+     * <p>Only the {@code rx} by {@code ry} square at the corner is curved at all; inside it the point is measured
+     * against the quarter ellipse centred where the curve meets both edges.</p>
+     */
+    private static boolean outsideCorner(float dx, float dy, float rx, float ry) {
+        if (rx <= 0f || ry <= 0f || dx >= rx || dy >= ry) return false;
+        float nx = (rx - dx) / rx;
+        float ny = (ry - dy) / ry;
+        return nx * nx + ny * ny > 1f;
     }
 
     private static float clamp(float v, float lo, float hi) {
