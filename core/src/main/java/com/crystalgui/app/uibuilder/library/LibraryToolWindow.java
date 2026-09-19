@@ -4,16 +4,14 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import dev.vfyjxf.taffy.style.TaffyDisplay;
-
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
+import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.workbench.view.TitleActionsContributor;
@@ -21,8 +19,8 @@ import com.crystalgui.workbench.view.TitleActionsContributor;
 /**
  * The <b>Library</b> tool window: every placeable kind, placed into whatever {@code .cgui} is in front.
  *
- * <p>One panel for the whole workbench, shown while a builder is in front and empty otherwise — the Hierarchy's
- * rule, followed on the same signals. Hidden rather than rebuilt, because unlike a document's tree the kinds
+ * <p>One panel for the whole workbench, shown while a builder is in front and an {@link EmptyState} otherwise — the Hierarchy's
+ * rule, followed on the same signals. Vacant rather than rebuilt, because unlike a document's tree the kinds
  * do not change with the tab: a card built once is kept, and coming back to a {@code .cgui} draws them at once.</p>
  */
 public final class LibraryToolWindow extends UIElement implements TitleActionsContributor, FocusableView {
@@ -31,6 +29,9 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
 
     private final WorkbenchContext workbench;
     private final LibraryPanel panel = new LibraryPanel(LibraryCatalog.current());
+    private final EmptyState empty = EmptyState.of(this, "To place something from the Library:",
+            "— Open a document that takes it, such as a .cgui file",
+            "— Double-click a card, or drag it onto the document");
 
     @Nullable
     private List<ActionButton> titleActions;
@@ -40,9 +41,6 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
 
     /** Whether the panel reads the extension's store yet. */
     private boolean storeBound;
-
-    /** Whether the panel is displayed; it starts so, and the first follow decides. */
-    private boolean showing = true;
 
     /** @param extensionId the extension this panel ships with, whose store keeps the user's groups */
     public LibraryToolWindow(WorkbenchContext workbench, String extensionId) {
@@ -70,20 +68,15 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
     @Nullable
     private BuilderContext builder;
 
-    /** Shows the panel while a builder is on screen, and nothing otherwise. */
+    /** Shows the panel while a builder is on screen, and its empty state otherwise. */
     private void show(@Nullable UIBuilderView editor) {
-        BuilderContext next = editor == null ? null : editor.surface();
-        builder = next;
-        boolean shown = next != null;
-        if (shown == showing) return;
-        showing = shown;
-        StyleGroup.inlinePipeline(panel.getStyle().getLayoutGroup(),
-                l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        builder = editor == null ? null : editor.surface();
+        empty.setVacant(builder == null);
     }
 
     /** Whether the panel is shown: a {@code .cgui} is on screen. */
     public boolean isShowing() {
-        return showing;
+        return !empty.isVacant();
     }
 
     /** Places {@code entry} into the builder on screen, by the rule New ▸ uses. Nothing happens with no builder. */

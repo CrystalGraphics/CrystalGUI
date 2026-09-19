@@ -16,6 +16,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.keymap.KeyChord;
@@ -54,11 +55,6 @@ public final class RunPanel extends UIElement {
     public static final Name NAME = Name.of("runpanel");
 
     public static final String NOTICE_CLASS = "__run-notice__";
-    public static final String EMPTY_CLASS = "__run-empty__";
-    /** The block inside it — see {@link #buildEmptyState} for why the note needs two containers. */
-    public static final String EMPTY_LINES_CLASS = "__run-empty-lines__";
-    public static final String EMPTY_HEAD_CLASS = "__run-empty-head__";
-    public static final String EMPTY_LINE_CLASS = "__run-empty-line__";
     public static final String INPUT_CLASS = "__run-input__";
     public static final String BODY_CLASS = "__run-body__";
 
@@ -256,8 +252,6 @@ public final class RunPanel extends UIElement {
         body.append(view.element());
         // THE STRIPE AND THE RUN BAR ARE NOT ATTACHED YET, and neither is anything else that acts on a
         // run -- nothing has run. @see #showControls
-        buildEmptyState();
-        body.append(emptyNote);
         rail.onScriptChosen.connect(script -> {
             selected = script;
             RunConsole showing = console;
@@ -311,44 +305,8 @@ public final class RunPanel extends UIElement {
      * tab stops in front of the transcript — the same reason the rail and the input row attach rather
      * than hide.</p>
      */
-    private final UIElement emptyNote = new UIElement();
-    private final UIElement emptyLines = new UIElement();
-    private final UIText emptyHeading = new UIText("To run a script, do one of the following:");
-    private final UIText emptyRunLine = new UIText("");
-    private final UIText emptyPaletteLine =
-            new UIText("— Find “Run Script” in the command palette");
-
-    /** What {@link #refreshEmptyState} last wrote, so an unchanged line is not rebuilt every frame. */
-    private String emptyRunText = "";
-
-    /**
-     * Two containers, because the block is centred and its lines are not.
-     *
-     * <p>Centring the lines <em>individually</em> — one column with {@code align-items: center} — puts
-     * every line's left edge at a different x, so the two dashes do not line up with each other and the
-     * heading sits indented between them. IntelliJ's note is a left-aligned block that happens to be
-     * centred, which is why its dashes form a column.</p>
-     *
-     * <p>So the outer element centres, and the inner one shrinks to its widest line and left-aligns
-     * inside it. There is no way to say that with one container: {@code align-items} is the cross-axis
-     * rule for a container's children, and a child cannot both be centred and align its own children to
-     * a shared edge.</p>
-     */
-    private void buildEmptyState() {
-        emptyNote.addClass(EMPTY_CLASS);
-        // NOT HIT-TESTABLE, all of it. It is a caption over the console's own surface, and a caption that
-        // swallowed a press would make the area behind it dead to a click for no visible reason.
-        emptyNote.setHitTest(false);
-        emptyLines.addClass(EMPTY_LINES_CLASS);
-        emptyLines.setHitTest(false);
-        emptyHeading.addClass(EMPTY_HEAD_CLASS);
-        emptyRunLine.addClass(EMPTY_LINE_CLASS);
-        emptyPaletteLine.addClass(EMPTY_LINE_CLASS);
-        emptyLines.append(emptyHeading);
-        emptyLines.append(emptyRunLine);
-        emptyLines.append(emptyPaletteLine);
-        emptyNote.append(emptyLines);
-    }
+    private final EmptyState emptyNote = EmptyState.of(this, "To run a script, do one of the following:",
+            "", "— Find “Run Script” in the command palette");
 
     /** What the empty state says can run — {@code java}, {@code java, javascript}. @see RunPanels */
     private String runnableLanguages = "";
@@ -370,10 +328,7 @@ public final class RunPanel extends UIElement {
      */
     private void refreshEmptyState() {
         String what = runnableLanguages.isEmpty() ? "a script" : "a " + runnableLanguages + " file";
-        String wanted = "— Open " + what + " and press " + describeAction("Run", null, ScriptCommands.RUN);
-        if (wanted.equals(emptyRunText)) return;
-        emptyRunText = wanted;
-        emptyRunLine.setText(wanted);
+        emptyNote.setLine(0, "— Open " + what + " and press " + describeAction("Run", null, ScriptCommands.RUN));
     }
 
     /** Puts the run controls back, once there is a run for them to act on. @see #emptyNote */
@@ -411,7 +366,6 @@ public final class RunPanel extends UIElement {
      * way; the empty state simply did not copy it.</p>
      */
     private void showControls() {
-        detach(body, emptyNote);
         // THE TRANSCRIPT COMES BACK WITH THEM. `showRail` has usually already moved it into the split's
         // pane by now, in which case it has a parent and this does nothing.
         if (view.element().parent() == null) body.insertAt(0, view.element());
@@ -437,7 +391,6 @@ public final class RunPanel extends UIElement {
         // paints its OWN surface, several shades darker than the panel around it, so an empty console
         // reads as a black hole where a panel should be. There is also nothing in it by definition.
         detach(body, view.element());
-        if (emptyNote.parent() == null) body.append(emptyNote);
         if (runBar.parent() == null) return;
         detach(body, stripe);
         remove(runBar);
@@ -578,6 +531,7 @@ public final class RunPanel extends UIElement {
         }
         // THE CONTROLS ARE ASKED EVERY FRAME, because these ARE idempotent and the transition version had
         // one chance to be right with no way to notice it was not. @see #showControls
+        emptyNote.setVacant(!wanted);
         if (wanted) {
             showControls();
         } else {

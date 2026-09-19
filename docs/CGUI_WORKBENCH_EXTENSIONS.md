@@ -251,8 +251,10 @@ panel is the right size, and it reads as "the panel is empty". Assert on the box
 counting `visibleRows()` reports green against a blank panel.
 
 **What is still a design decision.** One panel for the workbench, re-pointed as the tab changes, or one
-per document — the Hierarchy panel takes the first, and empties rather than disappearing when the tab in
-front is not its kind. A tool window that comes and goes moves everything beside it, and "the panel I
+per document — the Hierarchy panel takes the first, and says what to do rather than disappearing when
+the tab in front is not its kind. A blank panel reads as broken, so a panel that can be vacant
+declares its note with `EmptyState.of(this, heading, lines...)` and calls `setVacant` on it; the
+container places the note and swaps it in. See `docs/CGUI_WIDGETS.md` §6b. A tool window that comes and goes moves everything beside it, and "the panel I
 docked has gone" is indistinguishable from a bug.
 
 `HierarchyToolWindow` + `HierarchyPanel` (`app/uibuilder/panel/`) is the worked example, and

@@ -992,6 +992,7 @@ int value types.
 | `Slider` | `slider` | `cgui-slider` |
 | `TextField` | `textfield` | `cgui-textfield` |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
+| `EmptyState` | `emptystate` | `cgui-desktop` — any vacant panel |
 | `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
 | `Dialog` | `dialog` | `cgui-gallery` (Dialog page, modal page) |
 | `Popover` | `popover` | `cgui-gallery` (menus page) |

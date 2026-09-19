@@ -43,6 +43,7 @@ import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.workbench.Workbench;
@@ -210,10 +211,17 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         workbench.open(DockInput.of(workbench.refFor(OTHER)));
         for (int i = 0; i < 12; i++) frameAndPump();
         assertNull("a text file is not a builder", panel().hierarchy());
+        assertTrue("a vacant panel says so", showsEmptyState(panel()));
 
         workbench.open(DockInput.of(workbench.refFor(FILE)));
         for (int i = 0; i < 12; i++) frameAndPump();
         assertNotNull("came back to the .cgui and the panel stayed empty", panel().hierarchy());
+        assertFalse("the note stays over the tree", showsEmptyState(panel()));
+    }
+
+    /** The container shows the window's note in its place: the note is laid out and the window is not. */
+    private static boolean showsEmptyState(HierarchyToolWindow window) {
+        return window.get(EmptyState.NOTE).box() != null && window.box() == null;
     }
 
     /**
