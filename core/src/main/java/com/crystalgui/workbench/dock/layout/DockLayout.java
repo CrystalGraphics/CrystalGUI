@@ -503,7 +503,7 @@ public final class DockLayout {
     public boolean closePanel(@Nullable DockLeaf leaf, DockPanelRef panel) {
         if (leaf == null || leaf.indexOf(panel) < 0) return false;
         leaf.remove(panel);
-        if (leaf.isEmpty() && !leaf.isCentral()) remove(leaf);
+        closeEmptied(leaf);
         return true;
     }
 
@@ -514,8 +514,43 @@ public final class DockLayout {
         if (source == target) return source.move(source.indexOf(panel), index);
         source.remove(panel);
         target.add(panel, index);
+        // NOT closeEmptied: the panel is going somewhere else, so the main editor area stays even when it
+        // is what just emptied -- and a tear-out is a move whose target leaves the tree, which would hand
+        // the central role to the leaf on its way out. @see DockArea#tearOutToWindow
         if (source.isEmpty() && !source.isCentral()) remove(source);
         return true;
+    }
+
+    /**
+     * Drops a leaf whose last panel was just CLOSED, handing the central role on rather than leaving a band.
+     *
+     * <p><b>A central leaf that is the last one standing stays</b> — there is always an editor area, and an
+     * empty one means nothing is open. Beside a sibling it must not: the half just emptied keeps its weight
+     * and sits there blank, which is what closing one side of a split editor looked like. VS Code closes the
+     * group and lets another become the main one, and so does this.</p>
+     *
+     * <p><b>Closing only.</b> A move empties its source as a side effect of the panel going somewhere else,
+     * and the main editor area outlives that; a tear-out is a move whose target then leaves the tree, so
+     * handing it the central role would hand it to the leaf on its way out.</p>
+     */
+    private void closeEmptied(DockLeaf leaf) {
+        if (!leaf.isEmpty()) return;
+        if (!leaf.isCentral()) {
+            remove(leaf);
+            return;
+        }
+        DockLeaf heir = null;
+        for (DockLeaf other : leaves()) {
+            if (other != leaf) {
+                heir = other;
+                break;
+            }
+        }
+        // THE LAST ONE STANDING has nobody to hand it to, and an empty editor area is the resting state.
+        if (heir == null) return;
+        leaf.setCentral(false);
+        heir.setCentral(true);
+        remove(leaf);
     }
 
     // ── Invariants ──────────────────────────────────────────────────────────────────────────────
