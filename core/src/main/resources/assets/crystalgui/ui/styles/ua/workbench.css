@@ -2667,13 +2667,14 @@ navigatorview treeview .__row__.__selected__ {
  * OVER THE STRIP'S FOOT, as IntelliJ's is, rather than a row of its own. In flow it took 3 of the header's 22px, and
  * the tabs rode up by that much whenever there was something to scroll -- and a layout that wrapped kept the shift.
  * Pinned to the bottom it cannot move anything, and it stays inside the strip, which the first in-flow version (laid
- * out BELOW the strip, under the editor) did not. It spans the rail and stops before the ⋮'s reserved padding.
+ * out BELOW the strip, under the editor) did not. It runs the strip's full width, under the ⋮ too, as IntelliJ's does:
+ * a thumb is a fraction of the rail's extent, so a wider track still says where you are.
  *
  * Keyed on `dockgroup`, so it reaches the main editor's strips and a torn-out window's alike. */
 dockgroup > tabview > .__strip__ > .__strip-bar__ {
     position: absolute;
     left: 0;
-    right: 20px;
+    right: 0;
     bottom: 0;
     height: 3px;
 }
