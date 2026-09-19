@@ -808,4 +808,69 @@ public class DockAreaTest extends UiDocumentTestBase {
         frame();
         assertFalse(isHidden(tabOf(alpha)));
     }
+
+    /**
+     * <b>Closing one side of a split gives its space back to the other.</b>
+     *
+     * <p>{@code SplitView.applySplit} writes each pane's weight straight into {@code flex-grow}, and
+     * flex-grow divides free space <em>in proportion to the total</em> — so weights that no longer sum
+     * to one leave the remainder as a blank band, which is what a closed editor region looked like.
+     * {@code SplitFill} already documents the same trap for the frame's own regions.</p>
+     */
+    @Test
+    public void closingOneSideOfASplitGivesItsSpaceBack() {
+        setUpTwoGroups();
+        DockLeaf survivingLeaf = layout.leaves().stream()
+                .filter(leaf -> leaf.indexOf(alpha) >= 0).findFirst().orElseThrow();
+
+        area.closePanel(beta);
+        frame();
+        frame();
+
+        UIElement survivor = area.groupFor(survivingLeaf);
+        assertNotNull("alpha's group outlives beta", survivor);
+        assertEquals("the survivor spans the whole area rather than leaving a blank band",
+                area.box().width(), survivor.box().width(), 1f);
+    }
+
+
+
+    /**
+     * <b>Closing the last tab of the CENTRAL half still gives its space back.</b>
+     *
+     * <p>{@code DockLayout.closePanel} keeps an emptied leaf when it is the central one, which is right
+     * for the last leaf standing — there is always an editor area — and wrong beside a sibling: the empty
+     * half keeps its weight and sits there as a blank band. VS Code closes the group and lets another
+     * become the main one.</p>
+     */
+    @Test
+    public void closingTheCentralHalfOfASplitGivesItsSpaceBack() {
+        DockLeaf centre = new DockLeaf(alpha);
+        // AS THE WORKBENCH BUILDS IT -- Workbench marks the editor's own leaf central, and that flag is
+        // the whole difference between this and the test above.
+        centre.setCentral(true);
+        layout = DockLayout.of(centre);
+        layout.drop(centre, DockDropZone.SPLIT_RIGHT, new DockLeaf(beta));
+
+        area = new DockArea(registry(), layout);
+        UIElement root = new UIElement().layout(l -> l.width(600).height(400)
+                                                      .flexDirection(FlexDirection.COLUMN));
+        root.append(area);
+        area.layout(l -> l.width(600).height(400));
+        document.append(root);
+        document.styleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+        frame();
+        frame();
+
+        area.closePanel(centre, alpha);
+        frame();
+        frame();
+
+        assertEquals("one editor region is left", 1, layout.leaves().size());
+        UIElement survivor = area.groupFor(layout.leaves().get(0));
+        assertNotNull(survivor);
+        assertEquals("the survivor spans the whole area rather than leaving a blank band",
+                area.box().width(), survivor.box().width(), 1f);
+    }
+
 }
