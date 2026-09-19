@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.Map;
 
 import javax.annotation.Nullable;
@@ -312,6 +313,9 @@ public class DockArea extends UIElement {
     /** The area whose layout holds {@code panel}, among the home and all its windows, or null. */
     @Nullable
     public DockArea areaHolding(DockPanelRef panel) {
+        // THE FOCUSED WINDOW FIRST, for a panel shown in several: acting on "the" copy means the one being looked at.
+        DockArea focused = home().activeArea;
+        if (focused != null && focused.layout.leafContaining(panel) != null) return focused;
         for (DockArea area : home().allAreas()) {
             if (area.layout.leafContaining(panel) != null) return area;
         }
@@ -326,10 +330,15 @@ public class DockArea extends UIElement {
      * @return whether any window held it
      */
     public boolean removePanel(DockPanelRef panel) {
-        DockArea holding = areaHolding(panel);
-        if (holding == null || !holding.layout.closePanel(panel)) return false;
-        holding.requestRebuild();
-        return true;
+        // EVERY COPY: a subject that has gone is gone from every group showing it.
+        boolean any = false;
+        for (DockArea area : home().allAreas()) {
+            while (area.layout.closePanel(panel)) {
+                any = true;
+                area.requestRebuild();
+            }
+        }
+        return any;
     }
 
     /**
@@ -339,12 +348,33 @@ public class DockArea extends UIElement {
      * @return whether any window held {@code from}
      */
     public boolean replacePanel(DockPanelRef from, DockPanelRef to) {
-        DockArea holding = areaHolding(from);
-        if (holding == null) return false;
-        DockLeaf leaf = holding.layout.leafContaining(from);
-        if (leaf == null || !leaf.replace(from, to)) return false;
-        holding.requestRebuild();
-        return true;
+        // EVERY COPY: a renamed file is renamed in every group showing it.
+        boolean any = false;
+        for (DockArea area : home().allAreas()) {
+            for (DockLeaf leaf : area.layout.leaves()) {
+                if (!leaf.replace(from, to)) continue;
+                any = true;
+                area.requestRebuild();
+            }
+        }
+        return any;
+    }
+
+    /** The area among the home and its windows whose layout holds {@code leaf}, or null. */
+    @Nullable
+    private DockArea areaOwning(DockLeaf leaf) {
+        for (DockArea area : home().allAreas()) {
+            if (area.layout.leaves().contains(leaf)) return area;
+        }
+        return null;
+    }
+
+    /** The leaf here showing {@code panel}: the focused group's when it holds a copy, else the first that does. */
+    @Nullable
+    private DockLeaf leafShowing(DockPanelRef panel) {
+        DockGroup focused = activeGroup();
+        if (focused != null && focused.leaf().indexOf(panel) >= 0) return focused.leaf();
+        return layout.leafContaining(panel);
     }
 
     /**
@@ -442,7 +472,7 @@ public class DockArea extends UIElement {
 
     /** {@link #activatePanel}, in this area only. */
     private boolean activateHere(DockPanelRef panel) {
-        DockLeaf leaf = layout().leafContaining(panel);
+        DockLeaf leaf = leafShowing(panel);
         if (leaf == null) return false;
         leaf.activate(panel);
         // syncGroups, not requestRebuild: only the selection changed, and a rebuild would detach and
@@ -710,7 +740,18 @@ public class DockArea extends UIElement {
      * already cost a session to.</p>
      */
     public void syncGroups() {
+        pruneMovedContent();
         for (DockGroup group : groups.values()) group.sync();
+    }
+
+    /**
+     * Every group in every window lets go of content for panels that left it, <b>before any group builds</b> — so a
+     * panel that moved finds its view free and is mounted again rather than rebuilt. @see DockGroup#pruneContent
+     */
+    private void pruneMovedContent() {
+        for (DockArea area : home().allAreas()) {
+            for (DockGroup group : area.groups.values()) group.pruneContent();
+        }
     }
 
     /** The per-frame hook, registered from {@link #connected()}. */
@@ -899,6 +940,7 @@ public class DockArea extends UIElement {
 
         content.removeAll();
         pruneStaleGroups();
+        pruneMovedContent();
         splitBranches.clear();
 
         phase("clear + prune");
@@ -969,6 +1011,8 @@ public class DockArea extends UIElement {
             // leaf, so this group never syncs again -- meaning the one case that most needs a release is
             // the one a per-sync prune cannot reach.
             entry.getValue().releaseAllPanes();
+            // AND ITS CONTENT, detached so a panel that moved out of it is mounted again where it went.
+            entry.getValue().releaseAllContent();
             return true;
         });
     }
@@ -1209,7 +1253,7 @@ public class DockArea extends UIElement {
      * from its own callback: the prompt is asynchronous, so the honest answer at the moment of the veto is
      * "not now", not "yes eventually".</p>
      */
-    private java.util.function.Predicate<DockPanelRef> closeGuard = panel -> true;
+    private Predicate<DockPanelRef> closeGuard = panel -> true;
 
     /**
      * The icon a window torn out of this dock wears. Null leaves it to the frame's own fallback.
@@ -1256,8 +1300,25 @@ public class DockArea extends UIElement {
         return tornWindowIcon;
     }
 
+    /** Whether a panel may be shown in a second group at once. @see #canShowTwice */
+    private Predicate<DockPanelRef> showsTwice = panel -> true;
+
+    /**
+     * Says which panels may be shown in two groups at once — a split. One that may not is MOVED by a split instead,
+     * as VS Code moves a singleton editor. The home's answer serves every window.
+     */
+    public DockArea setCanShowTwice(@Nullable Predicate<DockPanelRef> rule) {
+        this.showsTwice = rule == null ? panel -> true : rule;
+        return this;
+    }
+
+    /** @see #setCanShowTwice */
+    public boolean canShowTwice(DockPanelRef panel) {
+        return home().showsTwice.test(panel);
+    }
+
     /** @see #closeGuard */
-    public DockArea setCloseGuard(@Nullable java.util.function.Predicate<DockPanelRef> guard) {
+    public DockArea setCloseGuard(@Nullable Predicate<DockPanelRef> guard) {
         this.closeGuard = guard == null ? panel -> true : guard;
         return this;
     }
@@ -1269,8 +1330,16 @@ public class DockArea extends UIElement {
      * the area to close something — which is what makes one guard enough.</p>
      */
     public void closePanel(DockPanelRef panel) {
+        closePanel(null, panel);
+    }
+
+    /**
+     * Closes {@code leaf}'s copy of a panel shown in several groups — a tab's own close — unless the guard refuses.
+     * A null leaf closes the focused group's copy, else the first.
+     */
+    public void closePanel(@Nullable DockLeaf leaf, DockPanelRef panel) {
         if (!home().closeGuard.test(panel)) return;
-        closePanelDiscarding(panel);
+        closePanelDiscarding(leaf, panel);
     }
 
     /**
@@ -1280,18 +1349,24 @@ public class DockArea extends UIElement {
      * whatever the guard was protecting, and that should be uncomfortable to type by accident.</p>
      */
     public void closePanelDiscarding(DockPanelRef panel) {
+        closePanelDiscarding(null, panel);
+    }
+
+    /** {@link #closePanelDiscarding(DockPanelRef)}, of {@code leaf}'s copy. @see #closePanel(DockLeaf, DockPanelRef) */
+    public void closePanelDiscarding(@Nullable DockLeaf leaf, DockPanelRef panel) {
         // IN WHICHEVER WINDOW HOLDS IT: a guard's "Don't save" arrives at the home. @see #home()
-        DockArea holding = areaHolding(panel);
+        DockArea holding = leaf != null ? areaOwning(leaf) : areaHolding(panel);
         if (holding == null) return;
+        DockLeaf from = leaf != null ? leaf : holding.leafShowing(panel);
         long profiled = FrameProfile.enter("closePanel " + panel.state(DockPanelRef.PATH, "?"));
         try {
-            holding.closePanelDiscardingImpl(panel);
+            holding.closePanelDiscardingImpl(from, panel);
         } finally {
             FrameProfile.leave(profiled, "closePanel");
         }
     }
 
-    private void closePanelDiscardingImpl(DockPanelRef panel) {
+    private void closePanelDiscardingImpl(@Nullable DockLeaf held, DockPanelRef panel) {
         long timed = FrameProfile.begin();
         captureDividerPositions();
         FrameProfile.step(timed, "close.captureDividers");
@@ -1299,8 +1374,9 @@ public class DockArea extends UIElement {
         // WHICH LEAF, CAPTURED BEFORE THE CLOSE, so we can tell afterwards whether the TREE changed or
         // only one strip did. `closePanel` answers true either way -- it removes the leaf only when that
         // leaf empties and is not the central one -- and that difference is the whole cost of a close.
-        DockLeaf held = layout.leafContaining(panel);
-        boolean removed = layout.closePanel(panel);
+        DockGroup closingGroup = held == null ? null : groups.get(held);
+        UIElement closingContent = closingGroup == null ? null : closingGroup.builtContentFor(panel);
+        boolean removed = layout.closePanel(held, panel);
         boolean shapeChanged = held == null || !layout.leaves().contains(held);
         FrameProfile.step(timed, "close.layout.closePanel"
                 + (shapeChanged ? " (the leaf went too)" : " (the leaf stands)"));
@@ -1345,8 +1421,13 @@ public class DockArea extends UIElement {
         // takes the widget out of the tree, and a detached element has no boxes -- so anything that
         // needs to MEASURE what is closing (an editor saving where its floating panels sat) has to be
         // told here. onDidClosePanel is too late by construction.
-        home().onWillClosePanel.emit(panel);
-        for (DockGroup group : groups.values()) group.forgetContent(panel);
+        ClosedPanel closing = new ClosedPanel(panel, closingContent);
+        home().onWillClosePanel.emit(closing);
+        // EVERY GROUP NO LONGER HOLDING IT, which is the closing one and any keeping a stale build -- and NOT a group
+        // still showing its own copy of a panel shown in several, whose view is open and stays so.
+        for (DockGroup group : groups.values()) {
+            if (group.leaf().indexOf(panel) < 0) group.forgetContent(panel);
+        }
         FrameProfile.step(timed, "close.forgetContent x" + groups.size());
         // A STRIP RESYNC WHEN ONLY A STRIP CHANGED, and the full rebuild only when the tree did.
         //
@@ -1375,12 +1456,21 @@ public class DockArea extends UIElement {
         // process did. `Disposer` could not help, because the thing that knew the panel was gone had no
         // way to say so. This is that way.
         timed = FrameProfile.begin();
-        home().onDidClosePanel.emit(panel);
+        home().onDidClosePanel.emit(closing);
         FrameProfile.step(timed, "close.onDidClosePanel (releases the document)");
     }
 
     /** A panel that is about to close, while its widget is still in the tree. @see #onDidClosePanel */
-    public final Signal.Value<DockPanelRef> onWillClosePanel = new Signal.Value<>();
+    public final Signal.Value<ClosedPanel> onWillClosePanel = new Signal.Value<>();
+
+    /**
+     * A panel closing out of one group, and what that group had built for it — which says whose view this was when
+     * one panel is shown in several groups.
+     *
+     * @param content null when the group never built it: a restored tab that was never selected
+     */
+    public record ClosedPanel(DockPanelRef panel, @Nullable UIElement content) {
+    }
 
     /**
      * A panel left the layout — by a close, not by a drag — in the home or any of its windows, announced by the
@@ -1393,7 +1483,7 @@ public class DockArea extends UIElement {
      * <p>Not fired by a drag between groups, which removes and re-adds the same panel: that is a move,
      * and disposing there would destroy the thing being dragged mid-gesture.</p>
      */
-    public final Signal.Value<DockPanelRef> onDidClosePanel = new Signal.Value<>();
+    public final Signal.Value<ClosedPanel> onDidClosePanel = new Signal.Value<>();
 
     /** Maximizes a group, or restores when it is already the maximized one. */
     public void toggleMaximize(DockLeaf leaf) {

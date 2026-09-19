@@ -52,6 +52,13 @@ import org.jetbrains.annotations.Nullable;
  * read lands — which is what lets a session restore put twelve tabs on screen at once rather than
  * revealing them one round trip at a time.</p>
  *
+ * <h3>One document, a view per pane</h3>
+ *
+ * <p>A file shown in two groups is ONE {@link Tab} — one document, one history, one dirty state — with a {@link View}
+ * for each group, and each view keeps its own caret, selection, scroll and folds: VS Code's model beside its editor
+ * panes, IntelliJ's {@code Document} beside its {@code FileEditor}s. A new view starts where the front one is, which
+ * is what a split looks like: the same place, then its own way.</p>
+ *
  * <h3>An editor is a view; the document outlives it</h3>
  *
  * <p>Closing a tab releases that tab's {@link DocumentReference} and nothing more. The document is
@@ -314,9 +321,9 @@ public final class EditorService implements Disposable {
      * {@code follower} now and whenever it changes — null when no visible tab holds that kind.
      *
      * <pre>{@code
-     * whileConnected(() -> workbench.editors().follow(BuilderEditor.class, this::show));
+     * whileConnected(() -> workbench.editors().follow(UIBuilderView.class, this::show));
      *
-     * private void show(@Nullable BuilderEditor editor) { ... }
+     * private void show(@Nullable UIBuilderView editor) { ... }
      * }</pre>
      *
      * <p>Not the active tab: a panel that can describe only a {@code .cgui} has nothing to say about a CSS file
@@ -418,6 +425,25 @@ public final class EditorService implements Disposable {
     }
 
     /**
+     * Makes the view mounted in {@code content} its tab's front one — the pane with focus, when a file is shown in
+     * several. When that tab is the active one the old front view is told it went back and the new one that it came
+     * forward; otherwise this only records which will be told.
+     */
+    public void focusView(@Nullable UIElement content) {
+        if (content == null) return;
+        for (Tab tab : tabs.values()) {
+            View view = tab.viewIn(content);
+            if (view == null) continue;
+            if (tab.front == view) return;
+            boolean announce = active == tab;
+            if (announce) tab.setActive(false);
+            tab.front = view;
+            if (announce) tab.setActive(true);
+            return;
+        }
+    }
+
+    /**
      * Tells a freshly-built view that it is in front, <b>once it is on a surface</b>.
      *
      * <p>Called every frame. A view announces what it has to say — the caret, the indentation, the
@@ -435,8 +461,8 @@ public final class EditorService implements Disposable {
             pendingActivation = null;
             return;
         }
-        UIElement element = pending.viewElement();
-        if (element == null || element.document() == null) return;
+        View view = pending.front;
+        if (view == null || view.element.document() == null) return;
         pendingActivation = null;
         pending.setActive(true);
     }
@@ -543,10 +569,49 @@ public final class EditorService implements Disposable {
     // ── A tab ───────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * One open editor.
+     * One pane's look at a tab's document: an editor built for one dock group, with its own caret, selection and
+     * scroll.
+     */
+    public final class View {
+
+        private final DocumentEditor editor;
+        /** Asked of the editor once: everything done with a view has to be done to the same element. */
+        private final UIElement element;
+        private boolean disposed;
+
+        private View(DocumentEditor editor) {
+            this.editor = editor;
+            this.element = editor.view();
+        }
+
+        public DocumentEditor editor() {
+            return editor;
+        }
+
+        public UIElement element() {
+            return element;
+        }
+
+        /** In no pane: built and not shown yet, or left by a pane that moved away. Mounting reuses it. */
+        private boolean isFree() {
+            return !disposed && element.parent() == null;
+        }
+
+        private void dispose() {
+            if (disposed) return;
+            disposed = true;
+            // BEFORE disposing it, while its element is still worth naming. An inspector RETAINS a detached subject
+            // on purpose, so without this a closed document kept its sections on screen over whatever was opened next.
+            InspectorRegistry.subjectClosed(element);
+            editor.disposeView();
+        }
+    }
+
+    /**
+     * One open document, and the views showing it.
      *
-     * <p>Holds the input it was opened with, the reference that keeps the document alive, and the view —
-     * built lazily, because a tab restored into a background group has a state and a title long before
+     * <p>Holds the input it was opened with, the reference that keeps the document alive, and a {@link View} per
+     * pane — built lazily, because a tab restored into a background group has a state and a title long before
      * anybody looks at it.</p>
      */
     public final class Tab {
@@ -554,11 +619,11 @@ public final class EditorService implements Disposable {
         private final EditorInput input;
         @Nullable
         private DocumentReference reference;
+        /** One per pane showing this document. */
+        private final List<View> views = new ArrayList<>();
+        /** The view in the pane that last had focus: what {@link #editor()} answers and what is told it is in front. */
         @Nullable
-        private DocumentEditor editor;
-        /** Asked of the editor once. @see #viewElement() */
-        @Nullable
-        private UIElement viewElement;
+        private View front;
         @Nullable
         private ReplyError failure;
         private DocumentState state = DocumentState.LOADING;
@@ -571,20 +636,11 @@ public final class EditorService implements Disposable {
             return input;
         }
 
-        /**
-         * This tab's element, asked of the editor <b>once</b>.
-         *
-         * <p>Everything the engine does with a view — showing it in the dock, stamping the editor class
-         * on it, naming it as the Inspector's closed subject — has to be the same element or each does
-         * its work to a different one. Asking once here is what makes that true whatever an
-         * implementation of {@link DocumentEditor#view()} does.</p>
-         */
+        /** The front view's element, or null. @see #editor() */
         @Nullable
         public UIElement viewElement() {
-            DocumentEditor held = editor;
-            if (held == null) return null;
-            if (viewElement == null) viewElement = held.view();
-            return viewElement;
+            View view = front();
+            return view == null ? null : view.element;
         }
 
         public Resource resource() {
@@ -622,31 +678,63 @@ public final class EditorService implements Disposable {
         }
 
         /**
-         * The view, built on first ask.
+         * The front view's editor, building the first view on first ask.
          *
          * <p>Null when the kind declares no editor, which is a real declaration: a kind that can be
          * opened, analysed and saved with nothing to look at it is what a build artefact is.</p>
          */
         @Nullable
         public DocumentEditor editor() {
-            if (editor != null) return editor;
+            View view = front();
+            return view == null ? null : view.editor;
+        }
+
+        /** Every view of this document, one per pane showing it. */
+        public List<View> views() {
+            return List.copyOf(views);
+        }
+
+        /** The view in the pane that last had focus, building the first one if there is none. */
+        @Nullable
+        public View front() {
+            if (front == null) front = views.isEmpty() ? build() : views.get(0);
+            return front;
+        }
+
+        /**
+         * A view for a pane about to show this document: one no pane holds — built ahead, or left by a pane that
+         * moved away — else a new one. A new one is what gives a split its own editor rather than the first's.
+         */
+        @Nullable
+        public View mount() {
+            for (View view : views) {
+                if (view.isFree()) return view;
+            }
+            return build();
+        }
+
+        @Nullable
+        private View build() {
             Document document = document();
             if (document == null || !document.kind().hasEditor()) return null;
-            editor = document.kind().createEditor(document);
+            View view = new View(document.kind().createEditor(document));
             // WHAT A VIEW IN THE EDITOR REGION IS, applied here because it is true of EVERY kind's view
             // and not of the text one that happened to declare it. A tab's content sits flush against the
             // dock group, so the bottom two corners of the document ARE the island's -- and a square view
             // squares the island off under it. Only `texteditor` said so, so a .cgui and a shadergraph
             // came out pointed against a rounded panel.
-            viewElement().addClass(Workbench.FILE_EDITOR_CLASS);
+            view.element.addClass(Workbench.FILE_EDITOR_CLASS);
             // THE OPENING'S, applied to the VIEW. A read-only opening and an editable one are two tabs
             // over ONE document -- which is what lets a diff's left pane sit beside the live file --
             // so the refusal cannot live on the model without taking the other tab down with it.
-            if (input.isReadOnly()) editor.setReadOnly(true);
-            // AND WHAT IT WAS SHOWING LAST TIME, if this file has been closed and reopened in this
-            // session. @see #captureViewState
-            StateMap<?> stored = viewStates.get(input);
-            if (stored != null) editor.readViewState(stored);
+            if (input.isReadOnly()) view.editor.setReadOnly(true);
+            // WHERE THE FRONT VIEW IS, for a second pane: a split opens on the same place and then goes its own way,
+            // as VS Code's fillActiveEditorViewState and IntelliJ's currentStateAsFileEntry do. Else what the file
+            // showed when last closed in this session. @see #captureViewState
+            StateMap<?> seed = front != null ? stateOf(front) : viewStates.get(input);
+            if (seed != null) view.editor.readViewState(seed);
+            views.add(view);
+            if (front == null) front = view;
             // AND TOLD IT IS IN FRONT, if it already is -- but NOT HERE. `setActive` runs when a tab
             // BECOMES active and does nothing when the view is not built yet, which is every restored
             // tab: the arrangement is applied while the documents are still crossing the wire. So the
@@ -659,23 +747,55 @@ public final class EditorService implements Disposable {
             // own data context -- and at this moment the view has just been constructed and the dock has
             // not put it in the tree yet. Every readout was computed and dropped, which looks exactly
             // like never having been told. @see #flushPendingActivation
-            if (active == this) pendingActivation = this;
-            return editor;
+            if (active == this && front == view) pendingActivation = this;
+            return view;
+        }
+
+        private StateMap<?> stateOf(View view) {
+            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            view.editor.writeViewState(out);
+            return out;
         }
 
         /**
-         * Remembers what this editor is showing, so a reopen puts it back.
+         * Remembers what the view in {@code closing} is showing, so a reopen puts it back.
          *
          * <p>Called from {@code onWillClosePanel} rather than from {@link #release}, because the dock
          * detaches the widget first and a detached element has no geometry to ask for: the rects came
          * back empty and nothing was stored.</p>
+         *
+         * @param closing the pane's content, as the dock built it
          */
-        public void captureViewState() {
-            DocumentEditor view = editor;
+        public void captureViewState(@Nullable UIElement closing) {
+            View view = viewIn(closing);
+            if (view != null) viewStates.put(input, stateOf(view));
+        }
+
+        /**
+         * Disposes the view one pane showed, for a pane that closed while another still shows this document. The
+         * last goes with {@link EditorService#close}.
+         */
+        public void closeView(@Nullable UIElement closing) {
+            View view = viewIn(closing);
             if (view == null) return;
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
-            view.writeViewState(out);
-            viewStates.put(input, out);
+            views.remove(view);
+            if (front == view) {
+                boolean announce = active == this;
+                if (announce) view.editor.activated(false);
+                front = views.isEmpty() ? null : views.get(0);
+                if (announce) setActive(true);
+            }
+            view.dispose();
+        }
+
+        /** The view mounted in {@code content}: the element itself, or a banner column around it. */
+        @Nullable
+        private View viewIn(@Nullable UIElement content) {
+            if (content == null) return null;
+            for (View view : views) {
+                if (view.element == content || content.contains(view.element)) return view;
+            }
+            return null;
         }
 
         private void bind(DocumentReference held) {
@@ -695,31 +815,24 @@ public final class EditorService implements Disposable {
         }
 
         private void setActive(boolean isActive) {
-            DocumentEditor view = editor;
+            View view = front;
             // NOT INTO A VIEW THAT IS NOT ON A SURFACE YET. A view says what it has to say by walking up
             // from itself -- the status bar is resolved through its own data context -- so telling it
             // while the dock still has it detached publishes nothing and reports nothing. Parked, and
             // said again on the first frame it can be heard. @see #flushPendingActivation
-            if (isActive && view != null && viewElement().document() == null) {
+            if (isActive && view != null && view.element.document() == null) {
                 pendingActivation = this;
                 return;
             }
-            if (view != null) view.activated(isActive);
+            if (view != null) view.editor.activated(isActive);
             Document document = document();
             if (document != null && isActive) document.kind().contributeStatus(document);
         }
 
         private void release() {
-            DocumentEditor view = editor;
-            if (view != null) {
-                // BEFORE disposing it, while its element is still worth naming. An inspector RETAINS
-                // a detached subject on purpose, so without this a closed document kept its sections on
-                // screen over whatever was opened next.
-                InspectorRegistry.subjectClosed(viewElement());
-                view.disposeView();
-            }
-            editor = null;
-            viewElement = null;
+            for (View view : views) view.dispose();
+            views.clear();
+            front = null;
             if (reference != null) reference.dispose();
             reference = null;
         }

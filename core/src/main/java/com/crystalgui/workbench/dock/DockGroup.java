@@ -275,6 +275,7 @@ public class DockGroup extends UIElement {
             Tab active = tabByPanel.get(leaf.activePanel());
             if (active != null && tabs.getSelectedTab() != active) tabs.selectTab(active);
             prunePanes(wanted);
+            pruneContent();
             // BEFORE retargetPane, which moves a pane's view into the active panel's HOST -- and with
             // content built lazily that host does not exist until this line has run. Reversed, the first
             // activation of a pane-backed panel finds no host and silently moves nothing.
@@ -338,7 +339,7 @@ public class DockGroup extends UIElement {
             // `aDockTabCarriesACloseButton` is that half now.
             if (area.registry().isClosable(panel)) {
                 tab.setClosable(true);
-                tab.onCloseRequested.connect(() -> area.closePanel(panel));
+                tab.onCloseRequested.connect(() -> area.closePanel(leaf, panel));
             }
             // ITS OWN MENU, on the tab rather than the group: a listener outside the strip would see the press
             // retargeted to the tab view and could not tell which tab it was. @see DockTab
@@ -733,6 +734,29 @@ public class DockGroup extends UIElement {
     void forgetContent(DockPanelRef panel) {
         UIElement built = content.remove(panel);
         if (built != null) built.removeSelf();
+    }
+
+    /**
+     * Lets go of what was built for panels no longer in this group's leaf — moved to another group, or taken out
+     * without a close.
+     *
+     * <p>Detached rather than disposed: a panel that MOVED is still open, and the group it went to mounts that same
+     * view again rather than building a second one, which is what keeps a dragged editor's caret, scroll and undo.
+     * Run over every group before any group builds, or the receiving group asks while the view is still held here.</p>
+     */
+    void pruneContent() {
+        List<DockPanelRef> wanted = leaf.panels();
+        content.entrySet().removeIf(entry -> {
+            if (wanted.contains(entry.getKey())) return false;
+            entry.getValue().removeSelf();
+            return true;
+        });
+    }
+
+    /** Lets go of everything built here, for a group whose leaf has gone. @see #pruneContent */
+    void releaseAllContent() {
+        for (UIElement built : content.values()) built.removeSelf();
+        content.clear();
     }
 
     /**

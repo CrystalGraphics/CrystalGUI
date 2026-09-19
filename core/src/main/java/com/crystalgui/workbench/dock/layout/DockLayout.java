@@ -496,8 +496,12 @@ public final class DockLayout {
      * exists, and an empty one shows a watermark rather than disappearing.</p>
      */
     public boolean closePanel(DockPanelRef panel) {
-        DockLeaf leaf = leafContaining(panel);
-        if (leaf == null) return false;
+        return closePanel(leafContaining(panel), panel);
+    }
+
+    /** As {@link #closePanel(DockPanelRef)}, from {@code leaf} — one pane's copy of a panel shown in several. */
+    public boolean closePanel(@Nullable DockLeaf leaf, DockPanelRef panel) {
+        if (leaf == null || leaf.indexOf(panel) < 0) return false;
         leaf.remove(panel);
         if (leaf.isEmpty() && !leaf.isCentral()) remove(leaf);
         return true;
