@@ -4,6 +4,7 @@ import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -19,6 +20,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.dnd.InsertionMarker;
@@ -112,6 +114,14 @@ public class DockGroup extends UIElement {
         this.leaf = leaf;
 
         append(tabs);
+        tabs.setTabOverflow(area.tabOverflow());
+
+        // IntelliJ's ⋮ AT THE END OF THE TAB ROW. Pressing it makes this the active group, as any press in the group
+        // does, so the verbs in it act here.
+        ActionButton options = ActionButton.menu("Options", MenuId.EDITOR_GROUP_OPTIONS).icon("crystalgui:more-vertical");
+        options.setDropdownMark(false);
+        options.context(this);
+        tabs.stripActions().append(options);
 
         // The overlay must NOT take the pointer: an overlay that is hittable ends the drag on top of
         // itself, and the drop reads as having done nothing. setHitTest(false) covers the whole subtree,

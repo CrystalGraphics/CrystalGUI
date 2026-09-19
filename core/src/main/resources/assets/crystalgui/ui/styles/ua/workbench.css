@@ -209,6 +209,52 @@ dockgroup > tabview > .__strip__,
     padding-right: 3px;
 }
 
+/* AN EDITOR GROUP'S ⋮ -- IntelliJ's, at the end of its tab row, always shown. The strip reserves its width
+ * (3px either side of a 14px button), so the rail and its fade end before it and a tab never scrolls under it. */
+dockgroup > tabview > .__strip__ {
+    padding-right: 20px;
+}
+dockgroup > tabview > .__strip__ > .__strip-actions__ {
+    right: 3px;
+}
+/* THE END FADE SITS AT THE RAIL'S END, not the strip's: an absolute box is placed against the padding edge, which is
+ * past the padding reserved above -- so at `right: 0` it lay under the ⋮ and never showed. Each strip's own padding,
+ * less a pixel: the rail's clip is quantised to device pixels and the fade is not, so flush they could leave a
+ * column of the last tab showing past the fade. */
+dockgroup > tabview > .__strip__ > .__strip-fade__.__end__ {
+    right: 19px;
+}
+.__view-content__ tabview > .__strip__ > .__strip-fade__.__end__ {
+    right: 2px;
+}
+dockgroup > tabview > .__strip__ > .__strip-actions__ .__action-button__ {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    min-height: 0px;
+    padding: 2px;
+    border-radius: var(--radius-control, 3px);
+    background: none;
+    background-color: transparent;
+    overlay-origin: content-box;
+    overlay-size: contain;
+    color: var(--panel-header-icon, #A0A0A0);
+}
+dockgroup > tabview > .__strip__ > .__strip-actions__ .__action-button__:hover {
+    color: var(--panel-header-icon-hover, #E0E0E0);
+    background-color: var(--panel-header-icon-hover-bg, #393B40);
+}
+
+/* MULTIPLE ROWS: the rail grows to hold them rather than filling one header row, and the ⋮ stays on the first. */
+dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__rail__ {
+    height: auto;
+    flex-shrink: 0;
+}
+dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__strip-actions__ {
+    bottom: auto;
+    height: var(--panel-header-h, 22px);
+}
+
 /* THE STRIPS ARE TRANSPARENT, so a clipped tab fades into the panel behind them -- written per context,
  * since a custom property here is one sheet-wide value and cannot vary by selector. */
 dockgroup > tabview > .__strip__ > .__strip-fade__.__start__ {

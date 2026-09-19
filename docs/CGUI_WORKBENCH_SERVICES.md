@@ -1059,6 +1059,7 @@ dock.replacePanel(was, now); // a renamed file's tab, in place
 dock.rebuildPanel(ref);      // a placeholder whose document has landed, restored windows included
 dock.activeArea();           // where the next file opens
 dock.windows();              // what the session saves
+dock.setTabOverflow(WRAP);   // every group's tab strip, windows and later groups included
 new DockWindow(dock, layout, title);   // joins dock's home, with its registry, close guard, icon, application
 ```
 

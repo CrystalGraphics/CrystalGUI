@@ -44,6 +44,7 @@ import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
+import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.editor.EditorService;
@@ -274,5 +275,23 @@ public class FloatingWindowsActLikeSplitsTest extends UiDocumentTestBase {
         assertSame("a second copy, or none moved", leafOf(TOP), leafOf(BOTTOM));
         assertSame(torn.area(), workbench.dock().areaHolding(workbench.refFor(BOTTOM)));
         assertEquals(1, workbench.dock().allPanels().stream().filter(workbench.refFor(BOTTOM)::equals).count());
+    }
+
+    /** How tabs overflow is one choice for every group: the main dock's, a window's, and one split off later. */
+    @Test
+    public void theTabOverflowReachesEveryGroup() {
+        workbench.openFile(TOP);
+        workbench.openFile(BOTTOM);
+        frames(12);
+        DockWindow torn = tearOut(BOTTOM);
+        workbench.dock().setTabOverflow(TabView.TabOverflow.WRAP);
+        assertEquals(TabView.TabOverflow.WRAP, workbench.dock().groupFor(leafOf(TOP)).tabView().tabOverflow());
+        assertEquals(TabView.TabOverflow.WRAP, torn.area().groupFor(leafOf(BOTTOM)).tabView().tabOverflow());
+
+        workbench.dock().layout().drop(leafOf(TOP), DockDropZone.SPLIT_RIGHT, new DockLeaf(workbench.refFor(NEXT)));
+        workbench.dock().requestRebuild();
+        frames(12);
+        assertTrue("a group built after the choice did not take it",
+                workbench.dock().groupFor(leafOf(NEXT)).tabView().hasClass(TabView.WRAP_CLASS));
     }
 }
