@@ -92,11 +92,13 @@ public final class CssValues {
      * Whether a value is a comma list, counting the layers switched off inside it — whose separating comma is kept
      * in the comment, so it is still there to be found.
      *
+     * <p>Also what a lab's footer asks before breaking anything: it wraps, so only a layer earns a line of its own.</p>
+     *
      * <p>A run of FUNCTIONS is not a comma list however many of its entries are off, and {@link #layerStack} splits
      * at a comment whether or not a comma is anywhere near it: a transform with one op switched off came back as two
      * layers, so the chip and the readout printed it a comma-separated line at a time and invented the comma.</p>
      */
-    private static boolean isCommaList(@Nullable String value) {
+    static boolean isCommaList(@Nullable String value) {
         if (value == null) return false;
         // THE MARKERS GONE AND THEIR CONTENTS KEPT: what is left is the list as it would read with every layer on.
         String uncommented = value.replace("/*", " ").replace("*/", " ");
