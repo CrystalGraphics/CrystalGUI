@@ -339,7 +339,9 @@ public final class ResizeHandles extends UIElement {
         // `transform: scale(2)` breaks them exactly as a committed Free Transform does; the gesture is
         // not the cause, the missing conversion is. Pinned at the press, since it is what the drag is
         // measured against.
-        Matrix4f toViewport = CanvasRects.layoutFrame(node, this);
+        // THE PAINTED FRAME, own transform included, so a drag is read along the element's own axes: an edge of a
+        // rotated element grows it along its own width, as the handle it is drawn on says.
+        Matrix4f toViewport = CanvasRects.localToSpace(node, this);
         showBadge(node, startWidth, startHeight);
 
         Drag.start(this, event.getPosition().x(), event.getPosition().y(), new Drag.Listener() {
@@ -676,30 +678,27 @@ public final class ResizeHandles extends UIElement {
      */
     private void place() {
         Box own = box();
-        // THE LAYOUT BOX, not the drawn one. These handles write `width` and `height`, and a gesture has
-        // to be drawn on the thing it edits: placed through localToWorld they wrap the element as
-        // TRANSFORMED, so a scaled element gets a handle box identical to the transform box's and the
-        // two gestures become indistinguishable -- which is what "they are still shared" was. Now a
-        // scaled element shows its real size inside its drawing, which is the honest picture.
-        float[] rect = CanvasRects.ofLayout(target, this);
+        // ON WHAT IS PAINTED, as Figma's and Unity's are: a transformed element is resized where it is drawn. Free
+        // Transform draws its own box on the same quad and is a mode of its own, so the two never show at once.
+        float[] quad = CanvasRects.quadOf(target, this);
         if (DIAGNOSE) {
-            CrystalGuiCore.LOGGER.info("[handles] place target={} targetBox={} ownBox={} rect={}",
+            CrystalGuiCore.LOGGER.info("[handles] place target={} targetBox={} ownBox={} quad={}",
                     target, target == null ? null : target.box(), own,
-                    rect == null ? null : java.util.Arrays.toString(rect));
+                    quad == null ? null : java.util.Arrays.toString(quad));
         }
-        if (own == null || rect == null) return;
+        if (own == null || quad == null) return;
         float half = SIZE * 0.5f;
         for (int i = 0; i < handles.size(); i++) {
             Spot spot = Spot.values()[i];
             Box handleBox = handles.get(i).box();
             if (handleBox == null) continue;
-            float x = rect[0] + (rect[2] * (spot.xDirection() + 1) * 0.5f) - half;
-            float y = rect[1] + (rect[3] * (spot.yDirection() + 1) * 0.5f) - half;
-            handleBox.setTransform(Transform.translate(x, y));
+            Vector2f at = CanvasRects.pointOn(quad, (spot.xDirection() + 1) * 0.5f, (spot.yDirection() + 1) * 0.5f);
+            handleBox.setTransform(Transform.translate(at.x - half, at.y - half));
         }
         Box badgeBox = badge.box();
         if (badgeBox != null) {
             // BELOW THE BOX'S BOTTOM-LEFT, where it does not sit under the pointer that is dragging.
+            float[] rect = CanvasRects.bounds(quad);
             badgeBox.setTransform(Transform.translate(rect[0], rect[1] + rect[3] + half));
         }
     }
