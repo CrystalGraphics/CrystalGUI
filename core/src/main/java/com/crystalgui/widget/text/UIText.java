@@ -676,7 +676,20 @@ public final class UIText extends UIElement implements Measurable {
         // The shadows ride the same draw, keyed ahead of the text: one call when they share its atlas.
         TextShadowStyle.applyTo(draw, general, color);
         appendHighlightShadows(draw, layout, color);
-        draw.submit();
+        // OVERFLOW CLIPS THE ELEMENT'S OWN TEXT, as CSS's does -- the painter's scissor covers only its children, and
+        // a squeezed tab's label ran on under the next tab. Only when the line is wider than the box: a scissor
+        // breaks the batch, and every button's label is `overflow: hidden`.
+        boolean clip = box.clips() && layout.totalWidth() > contentWidth + 0.5f;
+        if (clip) {
+            var edge = box.border();
+            ctx.pushScissor(edge.left, edge.top, Math.max(0f, box.width() - edge.left - edge.right),
+                    Math.max(0f, box.height() - edge.top - edge.bottom));
+        }
+        try {
+            draw.submit();
+        } finally {
+            if (clip) ctx.popScissor();
+        }
 
         if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
     }
