@@ -557,7 +557,16 @@ tv.selectIndex(2);  tv.getSelectedTab();  tv.getTabs();
 tv.removeTab(first);  tv.clearTabs();
 tv.attachListener(tab -> …);                // or: onTabSelected — emits null when the last tab goes
 tv.strip(); tv.rail(); tv.bar(); tv.panes();   // for styling
+tv.setTabOverflow(TabView.TabOverflow.WRAP);    // SCROLL (default) | SQUEEZE | WRAP
+tv.stripActions().append(menuButton);          // controls at the strip's end, never scrolled under
 ```
+
+**When the tabs do not fit** — IntelliJ's "Show tabs in". `SCROLL` pans the rail and fades whichever end
+has tabs past it; `SQUEEZE` gives every tab an equal share, capped at its natural width, and cuts its
+label; `WRAP` breaks the rail into rows. The
+mode is a class on the view (`__tabs-squeeze__`, `__tabs-wrap__`) and the sheet does the layout.
+`stripActions()` sits over the strip's end: a strip that fills it reserves the width with its own
+`padding-right`, as an editor group's does.
 
 Structure: `TabView → __strip__ { __rail__ (a ScrollerView), __strip-bar__ (a Scroller) } + __panes__ {
 __pane__ … }`. The rail is a real `ScrollerView` with its bars hidden, so an overflowing tab strip pans

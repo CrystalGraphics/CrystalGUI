@@ -9,6 +9,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -41,6 +42,7 @@ public final class DockCommands {
     public static final String FOCUS_PREVIOUS_GROUP = "dock.focusPreviousGroup";
     public static final String NEXT_TAB = "dock.nextTab";
     public static final String PREVIOUS_TAB = "dock.previousTab";
+    public static final String CLOSE_ALL_IN_GROUP = "dock.closeAllInGroup";
 
     private DockCommands() {
     }
@@ -64,12 +66,14 @@ public final class DockCommands {
         registry.register(Command.of(SPLIT_RIGHT, "Split Right")
                 .binding("Mod+Backslash")
                 .menu(MenuId.MAIN_WINDOW, "1_panes", 10)
+                .menu(MenuId.EDITOR_GROUP_OPTIONS, "2_split", 10)
                 .run(context -> splitActive(context, DockDropZone.SPLIT_RIGHT))
                 .enabledWhen(DockCommands::hasActivePanel));
 
         registry.register(Command.of(SPLIT_DOWN, "Split Down")
                 .binding("Mod+Shift+Backslash")
                 .menu(MenuId.MAIN_WINDOW, "1_panes", 20)
+                .menu(MenuId.EDITOR_GROUP_OPTIONS, "2_split", 20)
                 .run(context -> splitActive(context, DockDropZone.SPLIT_DOWN))
                 .enabledWhen(DockCommands::hasActivePanel));
 
@@ -89,6 +93,7 @@ public final class DockCommands {
         registry.register(Command.of(TOGGLE_MAXIMIZE, "Toggle Maximize Group")
                 .binding("Mod+M")
                 .menu(MenuId.MAIN_WINDOW, "1_panes", 30)
+                .menu(MenuId.EDITOR_GROUP_OPTIONS, "2_split", 30)
                 .run(context -> withArea(context, area -> {
                     DockGroup group = area.activeGroup();
                     if (group != null) area.toggleMaximize(group.leaf());
@@ -117,6 +122,16 @@ public final class DockCommands {
                     DockArea area = areaFor(context);
                     return area != null && area.layout().leaves().size() > 1;
                 }));
+
+        registry.register(Command.of(CLOSE_ALL_IN_GROUP, "Close All Tabs in Group")
+                .menu(MenuId.EDITOR_GROUP_OPTIONS, "1_close", 10)
+                .run(context -> withArea(context, area -> {
+                    DockGroup group = area.activeGroup();
+                    if (group == null) return;
+                    // EACH THROUGH THE GUARD, so an edited file still asks before it goes.
+                    for (DockPanelRef panel : new ArrayList<>(group.leaf().panels())) area.closePanel(panel);
+                }))
+                .enabledWhen(DockCommands::hasActivePanel));
 
         registry.register(Command.of(NEXT_TAB, "Next Tab")
                 .binding("Mod+PageDown")

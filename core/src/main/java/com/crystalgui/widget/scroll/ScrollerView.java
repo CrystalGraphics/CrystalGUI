@@ -18,6 +18,7 @@ import dev.vfyjxf.taffy.style.TaffyDisplay;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import com.crystalgraphics.platform.CgPlatform;
 import dev.vfyjxf.taffy.style.FlexDirection;
+import dev.vfyjxf.taffy.style.FlexWrap;
 import com.crystalgui.ui.box.Box;
 import javax.annotation.Nullable;
 
@@ -162,6 +163,9 @@ public class ScrollerView extends UIElement {
     /** Guards the two-way sync between scroll offset and bar value from feeding back on itself. */
     private boolean syncing = false;
     private boolean scrollbarsVisible = true;
+
+    /** @see #setFitsMainAxis */
+    private boolean fitsMainAxis;
 
     public ScrollerView() {
         this(NAME);
@@ -402,7 +406,8 @@ public class ScrollerView extends UIElement {
      * as a box having appeared between two elements that used to be adjacent.</p>
      *
      * <p>{@code justify-content} is mirrored with them although nothing sets it on a scroller today: it
-     * is the identical shape, and leaving it would arm the same trap for whoever writes that rule.</p>
+     * is the identical shape, and leaving it would arm the same trap for whoever writes that rule. So is
+     * {@code flex-wrap}, which a tab rail set in multiple-rows mode and nothing wrapped.</p>
      *
      * <p>Mirroring rather than inheriting is the narrowest fix that is also correct: a scroll
      * container's direction IS the axis its content runs along, and alignment set on a scroller is
@@ -415,12 +420,39 @@ public class ScrollerView extends UIElement {
         FlexDirection direction = computedStyle().get(LayoutProperties.FLEX_DIRECTION);
         AlignItems align = computedStyle().get(LayoutProperties.ALIGN_ITEMS);
         AlignContent justify = computedStyle().get(LayoutProperties.JUSTIFY_CONTENT);
+        FlexWrap wrap = computedStyle().get(LayoutProperties.FLEX_WRAP);
+        boolean row = direction == FlexDirection.ROW || direction == FlexDirection.ROW_REVERSE;
         StyleGroup.defaultPipeline(viewport.getStyle().getLayoutGroup(),
                 l -> {
                     l.flexDirection(direction == null ? FlexDirection.COLUMN : direction);
                     if (align != null) l.alignItems(align);
                     if (justify != null) l.justifyContent(justify);
+                    l.flexWrap(wrap == null ? FlexWrap.NO_WRAP : wrap);
+                    // THE VIEW'S LENGTH ALONG THE CONTENT'S AXIS, or content-sized. @see #setFitsMainAxis
+                    if (fitsMainAxis && row) l.widthPercent(100f);
+                    else l.widthAuto();
+                    if (fitsMainAxis && !row) l.heightPercent(100f);
+                    else l.heightAuto();
                 });
+    }
+
+    /**
+     * Lays the content out within the view along the axis it runs, as a CSS container sizes its items, instead of
+     * letting it grow past the view to be scrolled: what a row whose items squeeze or wrap needs.
+     *
+     * <pre>{@code
+     * rail.setFitsMainAxis(true);   // tabs shrink or wrap to the rail's width
+     * }</pre>
+     *
+     * <p>Off by default, and not merely an optimisation of it: the slot is content-sized so that content can
+     * exceed the view, and every list that scrolls relies on that. Items that cannot shrink still overflow, and
+     * still scroll.</p>
+     */
+    public ScrollerView setFitsMainAxis(boolean fits) {
+        if (fitsMainAxis == fits) return this;
+        fitsMainAxis = fits;
+        mirrorFlexContainer();
+        return this;
     }
 
     @Override
@@ -429,7 +461,8 @@ public class ScrollerView extends UIElement {
         super.computedChanged(property, oldValue, newValue);
         if (property == LayoutProperties.FLEX_DIRECTION
                 || property == LayoutProperties.ALIGN_ITEMS
-                || property == LayoutProperties.JUSTIFY_CONTENT) mirrorFlexContainer();
+                || property == LayoutProperties.JUSTIFY_CONTENT
+                || property == LayoutProperties.FLEX_WRAP) mirrorFlexContainer();
     }
 
     public void refreshScrollers() {

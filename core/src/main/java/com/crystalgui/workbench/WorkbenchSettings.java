@@ -10,6 +10,7 @@ import com.crystalgui.style.theme.ThemeRegistry;
 import com.crystalgui.style.theme.UiTheme;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.widget.texteditor.TextEditor;
 
 import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
@@ -105,6 +106,33 @@ public final class WorkbenchSettings {
             Setting.number("editor.caretBlinkSeconds", "Caret blink interval", 0.5)
                     .description("Seconds between caret blinks. Zero holds the caret steady.");
 
+    // ── Editor tabs ─────────────────────────────────────────────────────────────────────────────
+
+    /** Editor ▸ Editor Tabs in the preferences window. */
+    public static final String EDITOR_TABS_PAGE = "editor.tabs";
+
+    public static final String TABS_SCROLL = "Scroll the tabs panel";
+    public static final String TABS_SQUEEZE = "Squeeze tabs";
+    public static final String TABS_WRAP = "Multiple rows";
+
+    /**
+     * IntelliJ's "Show tabs in", and its words: one row that scrolls, one row whose tabs squeeze, or as many rows as it
+     * takes. Stored as the shown option, as the theme is; {@link #tabOverflow} is the bridge to the constant.
+     */
+    public static final Setting<String> TAB_OVERFLOW =
+            Setting.select(EDITOR_TABS_PAGE + ".overflow", "When tabs don't fit",
+                            List.of(TABS_SCROLL, TABS_SQUEEZE, TABS_WRAP), TABS_SCROLL)
+                    .description("Scroll the row of tabs, squeeze every tab narrower, or wrap them onto more rows.");
+
+    /** The stored choice as the strip's mode. */
+    public static TabView.TabOverflow tabOverflow(Workbench workbench) {
+        return switch (workbench.resolve(TAB_OVERFLOW)) {
+            case TABS_SQUEEZE -> TabView.TabOverflow.SQUEEZE;
+            case TABS_WRAP -> TabView.TabOverflow.WRAP;
+            default -> TabView.TabOverflow.SCROLL;
+        };
+    }
+
     // ── Appearance ──────────────────────────────────────────────────────────────────────────────
 
     /**
@@ -183,6 +211,7 @@ public final class WorkbenchSettings {
         // node in somebody menu by accident. @see SettingsCategory
         SettingsCategory.page("explorer", "Explorer");
         SettingsCategory.page("editor", "Editor");
+        SettingsCategory.page(EDITOR_TABS_PAGE, "Editor Tabs");
         SettingsCategory.page("workbench", "Workbench");
         SettingsCategory.page("appearance", "Appearance & Behavior");
 
@@ -196,6 +225,7 @@ public final class WorkbenchSettings {
         registry.register(SCROLL_BEYOND_LAST_LINE);
         registry.register(TAB_SIZE);
         registry.register(CARET_BLINK);
+        registry.register(TAB_OVERFLOW);
         registry.register(RESTORE_SESSION);
         registry.register(RESTORE_VIEW_STATE);
         registry.register(UI_THEME);
@@ -296,6 +326,7 @@ public final class WorkbenchSettings {
         // THE ORDER IS THE MODEL'S and setting it invalidates, which ANNOUNCES -- so the panel
         // showing the listing redraws itself and this no longer names a widget.
         workbench.projectListing().setSortOrder(sortOrder(workbench));
+        workbench.dock().setTabOverflow(tabOverflow(workbench));
 
         for (CgPath path : workbench.openPaths()) {
             TextEditor editor = workbench.editorFor(path);

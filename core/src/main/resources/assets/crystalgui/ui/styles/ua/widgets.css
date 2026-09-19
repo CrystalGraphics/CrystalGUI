@@ -455,6 +455,64 @@ tabview .__strip__.__clipped-start__ > .__strip-fade__.__start__,
 tabview .__strip__.__clipped-end__ > .__strip-fade__.__end__ {
     display: flex;
 }
+/* ── WHEN THE TABS DO NOT FIT ───────────────────────────────────────────────────────────────────
+ *
+ * IntelliJ's "Show tabs in", as TabView.TabOverflow: scrolling is the default above; these are the other two.
+ *
+ * SQUEEZE: every tab takes an equal share of the row, down to its icon, and its label is CUT rather than
+ * ellipsised, as IntelliJ's is -- an ellipsis in each of a dozen tabs is a row of dots. The clip is the
+ * label's own square one; clipping the tab would take its rounded pill down the layer path.
+ *
+ * WRAP: the rail breaks into rows and grows to hold them, so nothing is ever scrolled out. */
+
+/* AN EQUAL SHARE, capped at the tab's natural width -- IntelliJ's compressible row. A share rather than shrinking in
+ * proportion to content: in proportion, a tab whose content grew (its close button appearing on hover) took width
+ * from every other. A share does not move until it reaches the cap, and a tab at its cap has room to spare. */
+tabview.__tabs-squeeze__ tab {
+    flex-grow: 1;
+    flex-shrink: 1;
+    flex-basis: 0;
+    min-width: 24px;
+    max-width: max-content;
+}
+tabview.__tabs-squeeze__ tab::part(label) {
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+}
+/* ...AND ITS CLOSE BUTTON TAKES NO ROOM UNTIL IT IS SHOWN, as IntelliJ's squeezed tabs' does. Everywhere else its space
+ * is always paid for so a hover moves nothing (see THE CLOSE BUTTON); a squeezed tab has none to pay with, and its
+ * share is what keeps a hover from moving anything here: shown, the button takes its room from the tab's own label. */
+tabview.__tabs-squeeze__ tab .__close__,
+tabview.__tabs-squeeze__ tab::part(close) {
+    display: none;
+}
+tabview.__tabs-squeeze__ tab:hover .__close__,
+tabview.__tabs-squeeze__ tab:checked .__close__,
+tabview.__tabs-squeeze__ tab:hover::part(close),
+tabview.__tabs-squeeze__ tab:checked::part(close) {
+    display: flex;
+}
+tabview.__tabs-wrap__ .__rail__ {
+    flex-wrap: wrap;
+}
+tabview.__tabs-squeeze__ .__rail__,
+tabview.__tabs-wrap__ .__rail__ {
+    overflow: hidden;
+}
+
+/* THE STRIP'S ACTIONS sit at its end, over the fade rather than under it -- a strip that fills them reserves
+ * their width with its padding (an editor group's does, in workbench.css). */
+tabview .__strip-actions__ {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    flex-direction: row;
+    align-items: center;
+}
+
 /* A column of tabs scrolls vertically, so its fades are across the top and bottom. */
 tabview.__left__ .__strip-fade__,
 tabview.__right__ .__strip-fade__ {
@@ -681,11 +739,9 @@ tab:hover::part(close),
 tab:checked::part(close) {
     opacity: 1;
 }
-/* And its own hover is the usual affordance a control gets, so it reads as pressable rather than as a
- * mark printed on the tab. */
+/* Its own hover brightens the glyph and fills nothing: a chip behind a mark this small reads as a box over the tab. */
 tab .__close__:hover,
 tab::part(close):hover {
-    background-color: var(--tab-close-hover-bg, #5A5A5A);
     color: var(--tab-close-hover-fg, #DDDDDD);
 }
 

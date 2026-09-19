@@ -149,13 +149,39 @@ public class TabView extends UIElement {
     public static final String LEFT_CLASS = "__left__";
     public static final String RIGHT_CLASS = "__right__";
 
+    /**
+     * What the strip does when its tabs do not fit — IntelliJ's "Show tabs in": one row that scrolls, one row whose
+     * tabs squeeze, or as many rows as it takes.
+     *
+     * <pre>{@code
+     * tabs.setTabOverflow(TabView.TabOverflow.WRAP);
+     * }</pre>
+     *
+     * <p>A class on the view, {@link #SQUEEZE_CLASS} or {@link #WRAP_CLASS}, and the sheet does the layout; scrolling
+     * is the default and has none.</p>
+     */
+    public enum TabOverflow {
+        SCROLL, SQUEEZE, WRAP
+    }
+
+    /** On the view while its tabs squeeze into one row. @see TabOverflow */
+    public static final String SQUEEZE_CLASS = "__tabs-squeeze__";
+
+    /** On the view while its tabs wrap onto more rows. @see TabOverflow */
+    public static final String WRAP_CLASS = "__tabs-wrap__";
+
+    /** The actions at the end of the strip — an editor group's ⋮. Empty, and taking no room, until filled. */
+    public static final String STRIP_ACTIONS_CLASS = "__strip-actions__";
+
     /** Fires whenever the selected tab changes. Carries {@code null} when the last tab is removed. */
     public final Signal.Value<Tab> onTabSelected = new Signal.Value<>();
 
     private final UIElement strip;
     private final ScrollerView rail;
     private final Scroller bar;
+    private final UIElement stripActions = new UIElement();
     private final UIElement panes;
+    private TabOverflow tabOverflow = TabOverflow.SCROLL;
     private final List<Tab> tabs = new ArrayList<>();
     /**
      * A tab that has been selected and not yet scrolled to — see {@link #revealPendingTab}.
@@ -230,6 +256,9 @@ public class TabView extends UIElement {
             fade.setHitTest(false);
             this.strip.append(fade);
         }
+        // LAST, over the fades: what a tab scrolls under is the fade, and what it never scrolls under is this.
+        stripActions.addClass(STRIP_ACTIONS_CLASS);
+        this.strip.append(stripActions);
 
         this.panes = new UIElement();
         this.panes.addClass(PANES_CLASS);
@@ -563,6 +592,32 @@ public class TabView extends UIElement {
         return tabSide;
     }
 
+    /** @see TabOverflow */
+    public TabView setTabOverflow(TabOverflow overflow) {
+        this.tabOverflow = overflow == null ? TabOverflow.SCROLL : overflow;
+        if (tabOverflow == TabOverflow.SQUEEZE) addClass(SQUEEZE_CLASS);
+        else removeClass(SQUEEZE_CLASS);
+        if (tabOverflow == TabOverflow.WRAP) addClass(WRAP_CLASS);
+        else removeClass(WRAP_CLASS);
+        // THE TABS LAY OUT IN THE RAIL'S WIDTH to squeeze or wrap -- a scroller otherwise lets its row grow past it.
+        rail.setFitsMainAxis(tabOverflow != TabOverflow.SCROLL);
+        // A STRIP THAT DOES NOT SCROLL STARTS AT ITS START, or one scrolled before stays shifted.
+        if (tabOverflow != TabOverflow.SCROLL) rail.scrollTo(0f, 0f);
+        return this;
+    }
+
+    public TabOverflow tabOverflow() {
+        return tabOverflow;
+    }
+
+    /**
+     * Where controls at the end of the strip go — beside the tabs, never scrolled under them. The sheet places it;
+     * a strip that fills it reserves its width (an editor group's does).
+     */
+    public UIElement stripActions() {
+        return stripActions;
+    }
+
     /**
      * Moves the header strip to an edge.
      *
@@ -687,8 +742,11 @@ public class TabView extends UIElement {
             float content = contentExtent(railBox, !vertical);
             float client = vertical ? railBox.clientHeight() : railBox.clientWidth();
 
+            // ONLY A SCROLLING STRIP HAS A BAR. Squeezed tabs at their minimum still overflow a little, and a bar that came
+            // and went with it flickered as the group was resized.
+            boolean scrolls = max > 0f && tabOverflow == TabOverflow.SCROLL;
             StyleGroup.inlinePipeline(bar.getStyle().getLayoutGroup(),
-                    l -> l.display(max > 0f ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+                    l -> l.display(scrolls ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
             float scrolled = vertical ? rail.scrollTop() : rail.scrollLeft();
             // HALF A PIXEL OF SLACK, or a rail scrolled to its end by a fractional amount keeps its fade.
             setClass(strip, CLIPPED_START_CLASS, max > 0f && scrolled > 0.5f);

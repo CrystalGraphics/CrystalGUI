@@ -58,6 +58,9 @@ public final class MenuId {
     /** Right-click on an editor tab. */
     public static final MenuId EDITOR_TAB_CONTEXT = of("editor/tab/context");
 
+    /** An editor group's ⋮, at the end of its tab row — the group's own verbs. */
+    public static final MenuId EDITOR_GROUP_OPTIONS = of("editor/group/options");
+
     /** Right-click inside a text editor. */
     public static final MenuId EDITOR_CONTEXT = of("editor/context");
 

@@ -13,6 +13,7 @@ import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -128,6 +129,9 @@ public class DockArea extends UIElement {
 
     /** On a home: the area whose group was last made active. @see #activeArea() */
     private DockArea activeArea = this;
+
+    /** On a home: what every group's tab strip does when its tabs do not fit. @see #setTabOverflow */
+    private TabView.TabOverflow tabOverflow = TabView.TabOverflow.SCROLL;
     @Nullable
     private DockGroup previewGroup;
     @Nullable
@@ -341,6 +345,28 @@ public class DockArea extends UIElement {
         if (leaf == null || !leaf.replace(from, to)) return false;
         holding.requestRebuild();
         return true;
+    }
+
+    /**
+     * What every group's tab strip does when its tabs do not fit — IntelliJ's "Show tabs in" — in the home and every
+     * window, and in any group built later.
+     *
+     * <pre>{@code
+     * workbench.dock().setTabOverflow(TabView.TabOverflow.WRAP);
+     * }</pre>
+     */
+    public DockArea setTabOverflow(TabView.TabOverflow overflow) {
+        DockArea home = home();
+        if (home.tabOverflow == overflow) return this;
+        home.tabOverflow = overflow;
+        for (DockArea area : home.allAreas()) {
+            for (DockGroup group : area.groups.values()) group.tabView().setTabOverflow(overflow);
+        }
+        return this;
+    }
+
+    public TabView.TabOverflow tabOverflow() {
+        return home().tabOverflow;
     }
 
     /** The home, then each window's area, minimised or not. */
