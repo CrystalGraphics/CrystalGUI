@@ -124,7 +124,7 @@ editor scheme's.
 | `--activitybar-item-focused-bg` | `var(--accent)` | base.css |
 | `--activitybar-item-focused-fg` | `var(--fg-on-accent)` | base.css |
 | `--activitybar-item-hover-bg` | `#46484b` | crystal-dark.css |
-| `--activitybar-separator` | `var(--divider)` | base.css |
+| `--activitybar-separator` | `var(--border-strong)` | base.css |
 | `--balloon-bg` | `var(--surface-base)` | base.css |
 | `--balloon-border` | `var(--border-base)` | base.css |
 | `--balloon-hover-bg` | `var(--hover-bg)` | base.css |
