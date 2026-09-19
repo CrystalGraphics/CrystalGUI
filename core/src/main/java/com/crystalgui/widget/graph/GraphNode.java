@@ -2,7 +2,7 @@ package com.crystalgui.widget.graph;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.box.InkOverflow;
+import com.crystalgui.render.InkOverflow;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.graph.port.PortType;

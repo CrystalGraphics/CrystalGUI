@@ -4,7 +4,7 @@ import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.property.visual.shadow.Shadow;
 import com.crystalgui.style.property.visual.shadow.ShadowList;
-import com.crystalgui.ui.box.InkOverflow;
+import com.crystalgui.render.InkOverflow;
 
 /**
  * Puts the cascade's {@code text-shadow} on a text draw, and says how far it paints outside the box.

@@ -149,7 +149,8 @@ public class EngineBoundaryTest {
             // are documented at length is exactly how two definitions drift.
             "com/crystalgui/ui/input/UIInputHandler",
             "com/crystalgui/ui/input/UIDragController",
-            "com/crystalgui/ui/input/DragScrub",
+            // NOT DragScrub ANY MORE: it is scrub arithmetic, pointer movement in and a value out, and names no
+            // element of either engine. `Drag.scrub` is written over it, the carve-out FocusPolicy has above.
             // NOT ui/input/keymap ANY MORE. It was old-engine because Keymap and KeymapResolver
             // took a UIElement -- and M6.3 retyped the whole command layer onto CommandTarget and
             // KeymapScope, which is what unblocked ContextMenu, MenuBuilder and the inspector out of
