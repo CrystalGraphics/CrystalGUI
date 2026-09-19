@@ -380,7 +380,7 @@ public class DockArea extends UIElement {
         DockArea holding = areaHolding(panel);
         if (holding == null) return false;
         holding.activateHere(panel);
-        if (holding != this) holding.raiseWindow();
+        holding.raiseWindow();
         return true;
     }
 
@@ -396,12 +396,14 @@ public class DockArea extends UIElement {
         return true;
     }
 
-    /** Activates the window this area is torn out into, if it is one. */
+    /** Activates the window this area is torn out into, unless it is one already in front. */
     private void raiseWindow() {
-        UIDocument surface = home().document();
+        if (home == null) return;
+        UIDocument surface = home.document();
         if (surface == null) return;
-        for (DockWindow window : home().windows) {
-            if (window.area() == this) Desktop.of(surface).activate(window);
+        Desktop desktop = Desktop.of(surface);
+        for (DockWindow window : home.windows) {
+            if (window.area() == this && desktop.activeWindow() != window) desktop.activate(window);
         }
     }
 
