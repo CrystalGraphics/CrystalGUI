@@ -469,6 +469,12 @@ public final class SaveActions {
         if (state.isEmpty()) return true;
         CgPath path = CgPath.parse(state);
         if (!isDirty(path)) return true;
+        // ANOTHER PANE STILL SHOWS IT, and the unsaved work with it: closing one of two views discards nothing.
+        int shown = 0;
+        for (DockPanelRef open : workbench.dock.allPanels()) {
+            if (open.equals(panel)) shown++;
+        }
+        if (shown > 1) return true;
 
         InputDialog.confirm(workbench, "Unsaved changes",
                 path.name() + " has unsaved changes — Enter to discard, Escape to keep editing",

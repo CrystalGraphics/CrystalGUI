@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  *         .files(FilePatterns.extension("shadergraph"))
  *         .icon("crystalshader:graph")
  *         .model(GraphDocument::decode)          // bytes    -> DocumentModel
- *         .editor(ShaderGraphEditor::new)        // Document -> DocumentEditor
+ *         .editor(ShaderGraphView::new)        // Document -> DocumentEditor
  *         .status(GraphStatus::contribute);      // while active
  * }</pre>
  *
@@ -61,6 +61,7 @@ public final class DocumentKind {
     @Nullable
     private Language language;
     private boolean isFallback;
+    private boolean singleView;
     private boolean frozen;
     private List<String> revealsToolWindows = List.of();
 
@@ -103,6 +104,26 @@ public final class DocumentKind {
         checkOpen();
         this.isFallback = true;
         return this;
+    }
+
+    /**
+     * An editor of this kind cannot share its document with a second one, so a split <b>moves</b> it rather than
+     * showing it twice — VS Code's {@code Singleton} editor capability. For an editor whose view IS its document's
+     * state; one that renders a model it does not own needs nothing.
+     *
+     * <pre>{@code
+     * DocumentKind.of("mymod:thing", "Thing").model(Thing::decode).editor(ThingView::new).singleView();
+     * }</pre>
+     */
+    public DocumentKind singleView() {
+        checkOpen();
+        this.singleView = true;
+        return this;
+    }
+
+    /** @see #singleView() */
+    public boolean isSingleView() {
+        return singleView;
     }
 
     /**

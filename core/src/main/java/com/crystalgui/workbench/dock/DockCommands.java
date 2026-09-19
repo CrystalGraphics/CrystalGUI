@@ -159,7 +159,7 @@ public final class DockCommands {
                 .menu(MenuId.EDITOR_TAB_CONTEXT, "1_close", 10)
                 .run(context -> {
                     DockTab tab = DockTab.of(context);
-                    if (tab != null) tab.area().closePanel(tab.panel());
+                    if (tab != null) tab.area().closePanel(tab.group().leaf(), tab.panel());
                 })
                 .enabledWhen(DockCommands::hasTab));
 
@@ -248,7 +248,8 @@ public final class DockCommands {
         DockTab tab = DockTab.of(context);
         if (tab == null) return;
         DockLeaf leaf = tab.group().leaf();
-        if (move) leaf.remove(tab.panel());
+        // A PANEL THAT CANNOT BE SHOWN TWICE MOVES, or the new group takes the only view and the old one goes blank.
+        if (move || !tab.area().canShowTwice(tab.panel())) leaf.remove(tab.panel());
         tab.area().layout().drop(leaf, zone, new DockLeaf(tab.panel()));
         tab.area().requestRebuild();
     }
@@ -258,7 +259,7 @@ public final class DockCommands {
         DockTab tab = DockTab.of(context);
         DockLeaf opposite = oppositeOf(tab);
         if (opposite == null) return;
-        if (move) {
+        if (move || !tab.area().canShowTwice(tab.panel())) {
             tab.area().layout().movePanel(tab.panel(), opposite, opposite.panelCount());
         } else if (opposite.indexOf(tab.panel()) < 0) {
             opposite.add(tab.panel());
@@ -278,7 +279,7 @@ public final class DockCommands {
         DockTab tab = DockTab.of(context);
         if (tab == null) return;
         for (DockPanelRef panel : new ArrayList<>(tab.group().leaf().panels())) {
-            if (which.test(tab, panel)) tab.area().closePanel(panel);
+            if (which.test(tab, panel)) tab.area().closePanel(tab.group().leaf(), panel);
         }
     }
 

@@ -50,7 +50,7 @@ public final class EditorTabCommands {
                     Workbench workbench = context.data().get(Workbench.WORKBENCH);
                     if (tab == null || workbench == null) return;
                     for (DockPanelRef panel : tab.group().leaf().panels().toArray(new DockPanelRef[0])) {
-                        if (!isModified(workbench, panel)) tab.area().closePanel(panel);
+                        if (!isModified(workbench, panel)) tab.area().closePanel(tab.group().leaf(), panel);
                     }
                 })
                 .enabledWhen(context -> DockTab.of(context) != null));

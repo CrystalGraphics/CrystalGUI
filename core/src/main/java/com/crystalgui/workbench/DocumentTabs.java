@@ -455,7 +455,8 @@ public final class DocumentTabs {
      * <p>Paired with {@link #releaseClosedPanel}, and deliberately a separate step: that one runs after
      * the dock has detached the widget, which is too late to measure anything.</p>
      */
-    void captureClosingPanel(DockPanelRef closing) {
+    void captureClosingPanel(DockArea.ClosedPanel closingPanel) {
+        DockPanelRef closing = closingPanel.panel();
         String raw = closing.state(DockPanelRef.PATH, "");
         if (raw.isEmpty()) return;
         EditorService.Tab tab;
@@ -466,10 +467,11 @@ public final class DocumentTabs {
         } catch (RuntimeException unparseable) {
             return;
         }
-        if (tab != null) tab.captureViewState();
+        if (tab != null) tab.captureViewState(closingPanel.content());
     }
 
-    void releaseClosedPanel(DockPanelRef closed) {
+    void releaseClosedPanel(DockArea.ClosedPanel closedPanel) {
+        DockPanelRef closed = closedPanel.panel();
         String raw = closed.state(DockPanelRef.PATH, "");
         if (raw.isEmpty()) return;
         CgPath path;
@@ -482,9 +484,13 @@ public final class DocumentTabs {
         } catch (RuntimeException unparseable) {
             return;
         }
-        // IN ANY WINDOW: a file closed here may still be open in a torn-out one.
+        // IN ANY WINDOW: a file closed here may still be open in a torn-out one, or in another pane of this one --
+        // and then only this pane's view goes.
         for (DockPanelRef panel : workbench.dock.allPanels()) {
-            if (path.toString().equals(panel.state(DockPanelRef.PATH, ""))) return;
+            if (!path.toString().equals(panel.state(DockPanelRef.PATH, ""))) continue;
+            EditorService.Tab still = workbench.editors.tabFor(EditorInput.of(Resource.of(path)));
+            if (still != null) still.closeView(closedPanel.content());
+            return;
         }
         long timed = FrameProfile.begin();
         // THE TAB'S REFERENCE, and nothing more. The document is disposed by its LAST holder, which may

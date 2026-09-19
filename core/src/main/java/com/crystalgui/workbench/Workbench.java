@@ -54,6 +54,7 @@ import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.dock.DockArea;
+import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -890,6 +891,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // ASKED BEFORE ANYTHING IS DISCARDED. Ctrl+W on an edited file used to throw the work away with no
         // warning at all -- the tab marker said it was modified and nothing acted on that.
         dock.setCloseGuard(saveActions::confirmClose);
+        // A DOCUMENT WHOSE KIND CANNOT BE SHOWN TWICE is moved by a split rather than copied. @see DocumentKind#singleView
+        dock.setCanShowTwice(panel -> {
+            DocumentKind kind = kinds.byId(panel.typeId());
+            return kind == null || !kind.isSingleView();
+        });
         // A FILE DRAGGED FROM THE PROJECT PANEL opens where it is dropped. @see WorkbenchOpener#fileDrops
         dock.setForeignDrop(opener.fileDrops());
         // Two of this widget's per-frame polls, replaced by the announcement they were both watching for.
@@ -919,7 +925,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         lifetime.add(dock.onDidClosePanel.connect(documentTabs::releaseClosedPanel));
         // ...AND ITS PLACEHOLDER RECORD, which is keyed by a ref and would otherwise outlive the
         // panel and be read against whatever reopened under the same name.
-        lifetime.add(dock.onDidClosePanel.connect(placeholders::remove));
+        lifetime.add(dock.onDidClosePanel.connect(closed -> placeholders.remove(closed.panel())));
         /*
          * A TAB'S VIEW ARRIVING IS A PANEL THAT HAS TO BE BUILT AGAIN.
          *
@@ -1751,7 +1757,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         Resource shown = activeResource();
         if (shown == null) return;
         EditorService.Tab tab = editors.tabFor(EditorInput.of(shown));
-        if (tab != null) editors.activate(tab);
+        if (tab == null) return;
+        // THE FOCUSED PANE'S VIEW FIRST, so a file shown in two panes announces the one being worked in.
+        DockGroup group = dock.activeArea().activeGroup();
+        DockPanelRef panel = group == null ? null : group.leaf().activePanel();
+        if (panel != null) editors.focusView(group.builtContentFor(panel));
+        editors.activate(tab);
     }
 
     private void setViewActive(@Nullable Document document, boolean active) {

@@ -3,7 +3,6 @@ package com.crystalgui.workbench.dock;
 import com.crystalgui.core.async.FrameProfile;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.pattern.FilePatternMap;
-import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.DraggedResources;
@@ -507,7 +506,8 @@ public final class WorkbenchOpener {
                 workbench.editors.open(input);
                 tab = workbench.editors.tabFor(input);
             }
-            DocumentEditor view = tab == null ? null : tab.editor();
+            // A VIEW PER PANE: the dock asks once per group, so a split gets an editor of its own over the same document.
+            EditorService.View view = tab == null ? null : tab.mount();
             // A TAB EXISTS IMMEDIATELY, IN LOADING, and its view arrives when the read lands -- which is
             // what lets a session restore put twelve tabs on screen at once rather than revealing them
             // one round trip at a time. An empty element is the placeholder until then.
@@ -518,9 +518,7 @@ public final class WorkbenchOpener {
             // that does not move the answer. @see #refreshPanelForTab
             if (view != null) {
                 workbench.placeholders.remove(ref);
-                // THROUGH THE TAB, which asks the editor once -- the dock memoises what this factory
-                // answers, so a second element here would be the one on screen forever.
-                return tab.viewElement();
+                return view.element();
             }
             workbench.placeholders.put(ref, tab == null ? DocumentState.LOADING : tab.state());
             return new UIElement();
