@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import lombok.Getter;
@@ -972,13 +973,21 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      */
     protected void withoutAnnouncing(Runnable change) {
         TreeSet<Integer> before = new TreeSet<>(selected);
+        withoutAnnouncing(change, () -> !selected.equals(before));
+    }
+
+    /**
+     * As {@link #withoutAnnouncing(Runnable)}, announcing only when {@code moved} says so — for a subclass whose
+     * selection is more than these indices, as a tree's is more than its visible rows.
+     */
+    protected void withoutAnnouncing(Runnable change, BooleanSupplier moved) {
         quiet++;
         try {
             change.run();
         } finally {
             quiet--;
         }
-        if (quiet == 0 && !selected.equals(before)) selectionChanged();
+        if (quiet == 0 && moved.getAsBoolean()) selectionChanged();
     }
 
     private void selectionChanged() {
