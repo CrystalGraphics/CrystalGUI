@@ -335,12 +335,23 @@ public class InsertionMarker extends UIElement {
      * Where a drop at this screen point would insert among {@code items} — {@code [0, items.size()]}.
      *
      * <p>Pure geometry, so it can be asked without showing anything. {@code items} must be siblings laid
-     * out along {@link #axis}; the marker's own host supplies the coordinate space.</p>
+     * out along {@link #axis}, in one line or in several that wrap.</p>
      */
     public int indexFor(UIElement host, List<? extends UIElement> items, float screenX, float screenY) {
         if (host == null || items == null || items.isEmpty()) return 0;
-        var local = host.toLocal(screenX, screenY);
+        // IN THE SPACE THE ITEMS ARE LAID OUT IN, which is what their positions are measured in: the box they
+        // are children of, scrolled or not. The host's own space is off by whatever lies between -- a strip's
+        // padding in one row, and a whole line of tabs once they wrap.
+        Box parentBox = items.get(0).box() == null ? null : items.get(0).box().host();
+        var local = (parentBox != null ? parentBox.node() : host).toLocal(screenX, screenY);
         float along = axis == Axis.HORIZONTAL ? local.x : local.y;
+        float across = axis == Axis.HORIZONTAL ? local.y : local.x;
+
+        // A POINTER ON THE GAP KEEPS THE GAP, as SortableJS's placeholder does. An in-flow gap moves the items
+        // after it, and in a list that WRAPS it moves them onto other lines -- so without this the answer
+        // changed because the gap had moved, the gap moved because the answer changed, and it flickered across
+        // every line at once. The gap is where the pointer already chose.
+        if (mode == Mode.IN_FLOW && index >= 0 && covers(along, across)) return index;
 
         // WALKED IN LAID-OUT ORDER, not in the order the caller happened to build the list.
         //
@@ -348,10 +359,32 @@ public class InsertionMarker extends UIElement {
         // it a list whose second entry is drawn last and it returns early on that one, and the answer stops
         // moving however far down you drag. The caller's list is sorted by a model field, which agrees with
         // the layout right up until something is mid-move -- which is exactly when this is being asked.
-        for (UIElement item : ordered(items)) {
+        //
+        // AND ONE LINE OF IT: a wrapping list is several runs along the axis, stacked across it, and the midpoint
+        // rule is a rule about one run. The line is the one the pointer is across from, or the nearest end.
+        List<List<UIElement>> lines = lines(items);
+        List<UIElement> line = lines.get(lines.size() - 1);
+        // ONLY THE CARRIED ONE: nothing to be before, so the end.
+        if (line.isEmpty()) return items.size();
+        for (List<UIElement> each : lines) {
+            if (across < crossEnd(each)) {
+                line = each;
+                break;
+            }
+        }
+        for (UIElement item : line) {
             if (along < start(item) + extent(item) / 2f) return items.indexOf(item);
         }
-        return items.size();
+        // PAST THE LINE'S LAST ITEM is right after it -- the list's end only on its last line.
+        return items.indexOf(line.get(line.size() - 1)) + 1;
+    }
+
+    /** Whether this gap holds {@code (along, across)} -- a sibling of the items, so in their space. */
+    private boolean covers(float along, float across) {
+        if (box() == null) return false;
+        float start = start(this);
+        float crossStart = crossStart(this);
+        return along >= start && along < start + extent(this) && across >= crossStart && across < crossStart + thickness(this);
     }
 
     /**
@@ -364,13 +397,51 @@ public class InsertionMarker extends UIElement {
      * last item" resolved to a sibling index in the middle of the run and the gap never reached the end.</p>
      */
     private List<? extends UIElement> ordered(List<? extends UIElement> items) {
+        List<UIElement> sorted = new ArrayList<>();
+        for (List<UIElement> line : lines(items)) sorted.addAll(line);
+        return sorted;
+    }
+
+    /**
+     * {@code items} as the lines they are laid out in, first line first, each in order along the axis — one line for
+     * a list that does not wrap.
+     *
+     * <p>A line is items overlapping across the axis, not items at one exact cross position: tabs of different
+     * heights centred in a row start at different y and are still one row.</p>
+     */
+    private List<List<UIElement>> lines(List<? extends UIElement> items) {
         List<UIElement> sorted = new ArrayList<>(items);
         // WITHOUT THE ONE BEING CARRIED, for every caller at once. It is hidden for the duration of the
         // drag so it has no box, and a zero-extent entry makes every midpoint test after it answer
         // against a cell that is not there. It is also simply not part of the list being inserted into.
         if (withdrawn != null) sorted.remove(withdrawn);
-        sorted.sort((a, b) -> Float.compare(start(a), start(b)));
-        return sorted;
+        sorted.sort((a, b) -> Float.compare(crossStart(a), crossStart(b)));
+        List<List<UIElement>> lines = new ArrayList<>();
+        float lineEnd = Float.NEGATIVE_INFINITY;
+        for (UIElement item : sorted) {
+            if (lines.isEmpty() || crossStart(item) >= lineEnd) {
+                lines.add(new ArrayList<>());
+                lineEnd = crossStart(item) + thickness(item);
+            } else {
+                lineEnd = Math.max(lineEnd, crossStart(item) + thickness(item));
+            }
+            lines.get(lines.size() - 1).add(item);
+        }
+        for (List<UIElement> line : lines) line.sort((a, b) -> Float.compare(start(a), start(b)));
+        if (lines.isEmpty()) lines.add(new ArrayList<>());
+        return lines;
+    }
+
+    private float crossStart(UIElement item) {
+        var cache = item.box();
+        return axis == Axis.HORIZONTAL ? cache.y() : cache.x();
+    }
+
+    /** Where {@code line} ends across the axis. */
+    private float crossEnd(List<UIElement> line) {
+        float end = Float.NEGATIVE_INFINITY;
+        for (UIElement item : line) end = Math.max(end, crossStart(item) + thickness(item));
+        return end;
     }
 
     private float start(UIElement item) {
