@@ -47,7 +47,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
-import com.crystalgui.ui.box.InkOverflow;
+import com.crystalgui.render.InkOverflow;
 import org.joml.Vector2f;
 
 /**

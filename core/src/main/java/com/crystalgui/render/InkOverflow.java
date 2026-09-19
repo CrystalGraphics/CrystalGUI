@@ -1,11 +1,9 @@
-package com.crystalgui.ui.box;
-
-import com.crystalgui.ui.dom.UIElement;
+package com.crystalgui.render;
 
 /**
  * How far a node draws outside its own border box, in the node's own space.
  *
- * <p>What {@link UIElement#inkOverflow()} answers, and the one input to {@link Box#inkX0 ink bounds}
+ * <p>What {@code UIElement.inkOverflow()} answers, and the one input to a box's ink bounds
  * the cascade cannot supply: an outline or a mask offset is a style value the box tree reads for
  * itself, but a widget painting a handle, a glow or a wire by hand is the only thing that knows.</p>
  *

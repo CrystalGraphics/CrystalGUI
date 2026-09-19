@@ -25,7 +25,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.text.TextDecorationLine;
 import com.crystalgui.style.property.visual.text.TextOverflow;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.box.InkOverflow;
+import com.crystalgui.render.InkOverflow;
 import com.crystalgui.ui.box.Measurable;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
