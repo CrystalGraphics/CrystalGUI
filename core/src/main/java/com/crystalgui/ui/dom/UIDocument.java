@@ -483,9 +483,18 @@ public final class UIDocument extends UIElement {
             // left for one frame. A reflow under a still pointer does exactly that: a virtualised list recycles
             // the row element under it, and the highlight jumps to wherever that element went, then back.
             // One more pass on the frames the hover changed, at zero delta as settling does.
+            //
+            // AND IT SETTLES, because this can be the FIRST layout a node has ever had. An enter
+            // dispatched here is what shows a tooltip, and a placer cannot measure a box that did not
+            // exist until this pass -- so without settling the tip is laid out at the top layer's
+            // origin and PAINTED there, and only the next frame moves it: the corner flash, for
+            // everything shown straight from an input dispatch rather than from a ticker. It is why
+            // Popover parks itself off-screen on open and Tooltip, which has no such hack, showed the
+            // flash wherever `tooltip-delay` is 0 and the enter shows the tip at once.
             timed = FrameProfile.begin();
             calculateStyle(0f);
             layout(width, height);
+            settleAfterLayout(width, height, 0f);
             FrameProfile.end(timed, "frame:hover");
         }
     }
@@ -523,9 +532,12 @@ public final class UIDocument extends UIElement {
      * zero, because transitions have already been ticked for this frame and advancing them again would
      * make an animation run at the number of settle passes times its proper speed.</p>
      *
-     * <p><b>The hooks themselves are NOT re-run.</b> They have had their frame; a placer that ran once
-     * against measured geometry has its answer, and running it again against the geometry its own write
-     * produced is how a fixed point turns into an oscillation.</p>
+     * <p><b>The hooks ARE re-run on every pass</b>, which is the half that took longest to get right and
+     * the opposite of what this paragraph used to claim: the pass that CREATES a box is itself a layout,
+     * so a placer run only once finds nothing to measure and declines. It does not oscillate because a
+     * placer is a fixed point — handed the same geometry it writes the same position — and
+     * {@code replaceOrPutCandidate} no-ops on an unchanged value, so the pass after the one that settles
+     * dirties nothing and the loop breaks on its own.</p>
      */
     private void settleAfterLayout(float width, float height, float deltaSeconds) {
         for (int pass = 0; pass < MAX_SETTLE_PASSES; pass++) {
