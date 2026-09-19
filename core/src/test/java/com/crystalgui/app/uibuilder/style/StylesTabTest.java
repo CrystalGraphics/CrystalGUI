@@ -17,7 +17,7 @@ import org.junit.Test;
 
 
 import com.crystalgui.app.uibuilder.BuilderInspectorSections;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.async.PendingReply;
@@ -64,7 +64,7 @@ public class StylesTabTest extends UiDocumentTestBase {
             }
             """;
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private Inspector inspector;
     private Disposable sections;
     private TextBuffer sheet;
@@ -75,7 +75,7 @@ public class StylesTabTest extends UiDocumentTestBase {
         UIElementRegistry.bootstrap();
         sections = BuilderInspectorSections.register();
         sheet = new TextBuffer(SHEET);
-        editor = new BuilderEditor(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"), null,
+        editor = new UIBuilderView(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"), null,
                 new SheetDocuments(resource -> reply(reference(resource, sheet)),
                         Resource.of(CgPath.of("p", "ui/page.cgui"))));
 
@@ -98,6 +98,11 @@ public class StylesTabTest extends UiDocumentTestBase {
     @After
     public void release() {
         sections.dispose();
+    }
+
+    /** Where a document node is drawn — what the inspector reads a cascade from, since the document has none. */
+    private UIElement drawn(UIElement node) {
+        return editor.shownTree().shown(node);
     }
 
     private void inspect(UIElement... nodes) {
@@ -145,7 +150,7 @@ public class StylesTabTest extends UiDocumentTestBase {
         assertTrue("and the write landed in the sheet's text", sheet.toString().contains("opacity: 0.25"));
         frame();
         assertEquals("which restyled the canvas", Float.valueOf(0.25f),
-                card.getStyle().getComputed(StylePropertyRegistry.OPACITY));
+                drawn(card).getStyle().getComputed(StylePropertyRegistry.OPACITY));
     }
 
     /**
@@ -158,8 +163,8 @@ public class StylesTabTest extends UiDocumentTestBase {
     public void addingADeclarationPutsARowInTheForm() {
         assertNull("nothing declares opacity yet", control("style.opacity"));
 
-        StyleFields fields = StyleFields.on(editor.document(), StyleTargets.of(card, editor.sheets()).chosen(""),
-                card);
+        StyleFields fields = StyleFields.on(editor.document(), StyleTargets.of(drawn(card), editor.sheets()).chosen(""),
+                drawn(card));
         fields.add("opacity", "1");
         // NO REFRESH OF OUR OWN: this is the path a palette pick takes, and the panel has to notice by
         // itself. It did not -- the edit reached the document and the rows were the ones built before it.
@@ -168,7 +173,7 @@ public class StylesTabTest extends UiDocumentTestBase {
 
         assertNotNull("the row is in the panel", control("style.opacity"));
 
-        fields = StyleFields.on(editor.document(), StyleTargets.of(card, editor.sheets()).chosen(""), card);
+        fields = StyleFields.on(editor.document(), StyleTargets.of(drawn(card), editor.sheets()).chosen(""), drawn(card));
         fields.remove("opacity");
         frame();
         frame();
@@ -230,10 +235,10 @@ public class StylesTabTest extends UiDocumentTestBase {
      */
     @Test
     public void aLayeredValueIsALineALayerAndScrollsBelowItsWidestLine() {
-        LiveEdits.setInline(card, StylePropertyRegistry.TEXT_SHADOW,
+        LiveEdits.setInline(drawn(card), StylePropertyRegistry.TEXT_SHADOW,
                 "#CF0600FF 1px -14px 24.49px, #00AA00FF 0px 4px 12.25px, #0000FFFF 3px 3px 9px, #FFFFFFFF 0px 0px 2px");
-        LiveEdits.setInline(card, StylePropertyRegistry.TEXT_STROKE_WIDTH, "2px");
-        LiveEdits.setInline(card, StylePropertyRegistry.TEXT_STROKE_COLOR, "#8F0FE3");
+        LiveEdits.setInline(drawn(card), StylePropertyRegistry.TEXT_STROKE_WIDTH, "2px");
+        LiveEdits.setInline(drawn(card), StylePropertyRegistry.TEXT_STROKE_COLOR, "#8F0FE3");
         inspector.layout(l -> l.width(150f).minWidth(150f).maxWidth(150f));
         document.update(W, H);
         inspect(card);
@@ -287,7 +292,7 @@ public class StylesTabTest extends UiDocumentTestBase {
     public void anAddedPropertyChangesNothingItShouldNot() {
         assertEquals("normal", StylePropertyRegistry.LINE_HEIGHT.write(StylePropertyRegistry.LINE_HEIGHT.initialValue));
 
-        LiveEdits.setInline(card, StylePropertyRegistry.COLOR, "#12AB34");
+        LiveEdits.setInline(drawn(card), StylePropertyRegistry.COLOR, "#12AB34");
         frame();
         DeclarationList list = null;
         for (UIElement each : inspector.composedSubtree()) {
@@ -297,7 +302,7 @@ public class StylesTabTest extends UiDocumentTestBase {
         list.pick("caret-color");
         frame();
         assertEquals("the caret starts at the text's color", Integer.valueOf(0xFF12AB34),
-                card.getStyle().getComputed(StylePropertyRegistry.CARET_COLOR));
+                drawn(card).getStyle().getComputed(StylePropertyRegistry.CARET_COLOR));
     }
 
     /** A rule's declaration that something stronger beats is drawn struck through, and follows it. */
@@ -308,17 +313,17 @@ public class StylesTabTest extends UiDocumentTestBase {
         UIElement row = control("style.opacity").parentElement().parentElement();
         assertFalse(row.hasClass(BuilderStyleSections.OVERRIDDEN_CLASS));
 
-        LiveEdits.setInline(card, StylePropertyRegistry.OPACITY, "0.9");
+        LiveEdits.setInline(drawn(card), StylePropertyRegistry.OPACITY, "0.9");
         frame();
         assertTrue("inline beats the rule", row.hasClass(BuilderStyleSections.OVERRIDDEN_CLASS));
 
-        LiveEdits.clearInline(card, StylePropertyRegistry.OPACITY);
+        LiveEdits.clearInline(drawn(card), StylePropertyRegistry.OPACITY);
         frame();
         assertFalse("and the rule wins again", row.hasClass(BuilderStyleSections.OVERRIDDEN_CLASS));
     }
 
     private StyleTarget ruleTarget() {
-        for (StyleTarget target : StyleTargets.of(card, editor.sheets()).targets()) {
+        for (StyleTarget target : StyleTargets.of(drawn(card), editor.sheets()).targets()) {
             if (!target.isInline()) return target;
         }
         return null;

@@ -6,9 +6,9 @@ import static org.junit.Assert.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.Test;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -39,7 +39,7 @@ public class HierarchyPanelSurvivesADetachTest extends UiDocumentTestBase {
         UIElement second = new UIElement().layout(l -> l.width(40).height(20));
         model.root().append(first, second);
 
-        BuilderEditor editor = new BuilderEditor(model);
+        UIBuilderView editor = new UIBuilderView(model);
         UIElement host = new UIElement().layout(l -> l.width(400).height(300));
         host.append(editor.view());
         document.append(host);

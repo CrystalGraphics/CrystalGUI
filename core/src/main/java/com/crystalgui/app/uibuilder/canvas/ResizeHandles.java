@@ -226,6 +226,11 @@ public final class ResizeHandles extends UIElement {
 
     private final UIText badgeText = new UIText();
 
+    /** The selected DOCUMENT node, whose drawing the handles sit on. */
+    @Nullable
+    private UIElement selected;
+
+    /** Where {@link #selected} is drawn in this pane — what the handles measure and preview on. */
     @Nullable
     private UIElement target;
 
@@ -248,7 +253,7 @@ public final class ResizeHandles extends UIElement {
         append(badge);
     }
 
-    /** What the handles are on, or null when the selection is not exactly one node. */
+    /** The drawing the handles are on, or null when the selection is not exactly one node. */
     @Nullable
     public UIElement target() {
         return target;
@@ -585,6 +590,7 @@ public final class ResizeHandles extends UIElement {
     private void commit(UIElement node, JsonElement before) {
         JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
         if (after.equals(before)) return;
+        // NAMED BY THE DRAWING, which the document resolves to its own node. @see UiBuilderDocument#resolve
         document.apply(new BuilderEdit.SetInlineStyle(node, before, after));
     }
 
@@ -603,8 +609,9 @@ public final class ResizeHandles extends UIElement {
             Boolean.getBoolean("crystalgui.builder.diagnose");
 
     private void followSelection() {
-        List<UIElement> selected = ctx.builderSelection().nodes();
-        target = selected.size() == 1 ? selected.get(0) : null;
+        List<UIElement> nodes = ctx.builderSelection().nodes();
+        selected = nodes.size() == 1 ? nodes.get(0) : null;
+        target = ctx.shown(selected);
         pendingVisibility = true;
     }
 
@@ -646,8 +653,10 @@ public final class ResizeHandles extends UIElement {
     }
 
     private void applyVisibility() {
+        // EVERY FRAME, since a node inserted and selected in one step has its drawing only once the pane follows.
+        target = ctx.shown(selected);
         // DESIGN MODE IS PART OF THE ANSWER, and leaving it out is why handles came back during a
-        // preview. BuilderEditor hides them when the mode flips, but this runs every frame from an
+        // preview. UIBuilderView hides them when the mode flips, but this runs every frame from an
         // afterLayout hook and re-showed them on the next one -- a one-shot instruction losing to a
         // standing rule. The rule has to state the whole condition.
         boolean wanted = ctx.isDesignMode() && target != null && target.box() != null

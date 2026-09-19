@@ -233,7 +233,7 @@ behaves.
 | Owner | Owns | Notes |
 |---|---|---|
 | `CrystalEditor` | every `ShaderGraphEditor` it builds | replaced a `graphs` list that was never pruned, so every graph ever opened stayed reachable for the session |
-| `ShaderGraphEditor` | its `MainPreviewPanel` | that panel's `delete()` had **no caller anywhere** — its `createOwned` target and meshes leaked for the life of the process |
+| `ShaderGraphView` | its `MainPreviewPanel` | that panel's `delete()` had **no caller anywhere** — its `createOwned` target and meshes leaked for the life of the process |
 | `DocumentReference` | one holder's claim on a document | the model is disposed by the **last** reference released, so a tab, the Problems panel and a background compile can each hold one |
 | `CgUiLifecycle` | the GL gate and its queue | not an owner — the seam |
 
@@ -362,7 +362,7 @@ preview or something not yet written can participate in a command written today.
   many keys. Cache where the value changes, not here.
 - **Declare a key where its concept lives.** `UiDataKeys` is for what the engine has an opinion about;
   a key belonging to one feature belongs with that feature (`GraphView.GRAPH_VIEW`,
-  `ShaderGraphEditor.SHADER_GRAPH`).
+  `ShaderGraphView.SHADER_GRAPH`).
 - **Do not keep a `DataContext`.** It caches for one pass and is only valid for that pass.
 
 ### Two behaviours worth knowing
@@ -427,7 +427,7 @@ what the test suite caught when `ExplorerCommands` (which closes over a `Workben
 
 | Global today | Still per-window, because they capture an owner |
 |---|---|
-| `UndoCommands`, `GraphCommands`, `DockCommands`, `EditorCommands`, `ShaderGraphEditor`, `BlackboardPanel` | `ExplorerCommands` (`Workbench`), `CrystalEditorCommands` (`CrystalEditor`, `UIDocument`), `ChromeCommands` (`UIDocument`) |
+| `UndoCommands`, `GraphCommands`, `DockCommands`, `EditorCommands`, `ShaderGraphView`, `BlackboardPanel` | `ExplorerCommands` (`Workbench`), `CrystalEditorCommands` (`CrystalEditor`, `UIDocument`), `ChromeCommands` (`UIDocument`) |
 
 The three on the right migrate once there are data keys for a workbench, an editor and a window — the
 same move that turned `GraphCommands.graphFor` from an `instanceof` walk into a key.
@@ -1130,13 +1130,52 @@ overload and no way to ask.** That is why VS Code's is `openEditor(input, option
   whichever window holds it. Re-opening something on screen means "show me that one", never "make a second
   copy somewhere else".
 - **Anything new opens in `dock.activeArea()`** — the last editor group you were in, torn-out or not.
-- **A ref is a panel's identity**, so the same ref cannot be opened twice. Two tabs on one file means two
-  panel *types* over one path, which is what the release guard checks for.
+- **A ref is a panel's identity**, so the same ref cannot be *opened* twice — opening it again shows the
+  copy that is there. A **split** is the one way it is shown in two groups at once; see below. Two panel
+  *types* over one path is a different thing — a diff's left pane beside the live file.
 - `open` returns the leaf it landed in, so a caller acts on it rather than searching for it again.
 - **The dock decides what is in front; `EditorService.active()` follows it.** Loading a document with no
   tab of its own uses `editors.open(input, false)`, which loads and announces the tab but leaves the front
   alone, now and when the read lands. Restoring unsaved work at launch opens this way. When the tab behind
   the dock's front panel appears, the workbench makes it active.
+
+### Split: one document, a view per pane
+
+**A file shown in two groups is one `EditorService.Tab` with a `View` per group** — one document, one
+history, one dirty state; a caret, a selection, a scroll and folds per pane. VS Code's model beside its
+editor panes; IntelliJ's `Document` beside its `FileEditor`s.
+
+```java
+EditorService.Tab tab = editors.tabFor(input);
+tab.views();                   // one per pane showing it
+tab.editor();                  // the FRONT view's: the pane that last had focus
+editors.focusView(content);    // the workbench calls this as focus moves between panes
+```
+
+- **The dock asks per group, and each ask mounts a view.** `Tab.mount()` reuses a view no pane holds —
+  built ahead, or left by a pane a tab was dragged out of — else builds one. A new view starts where the
+  front one is (VS Code's `fillActiveEditorViewState`), so a split opens on the same place and then goes
+  its own way.
+- **A group lets go of what it built for a panel that left it**, and the whole family is pruned before any
+  group builds — so a dragged editor is re-mounted, never rebuilt, and keeps its caret and undo.
+- **Closing is per copy.** `DockArea.closePanel(leaf, ref)` closes that group's; the close signals carry the
+  closing pane's content (`DockArea.ClosedPanel`), so only that pane's view is disposed. The document goes
+  with the last copy, and a dirty file closes without a prompt while another pane still shows it.
+- **A kind whose editor cannot share its document declares `DocumentKind.singleView()`**, and a split
+  *moves* it instead — VS Code's `Singleton` capability. An editor that renders a model it does not own
+  needs nothing; one whose view IS the document's state needs this until it stops being so.
+
+**Every shipped kind splits**, and the two whose model was once their view show the two ways to get there:
+
+- **A graph** — `ShaderGraphDocument` holds the `GraphDocument` and one `UndoStack`; each `ShaderGraphView` is a
+  `GraphView` over them. A view drains **its own** changeset (`GraphDocument.openChangeset`), because the first
+  view to drain a shared one takes the second's changes. Edits reverse the *document*, never a view, so an undo
+  outlives the pane that made the change; a view that made a change does it itself and `record`s it.
+- **A UI tree** — a `UiBuilderDocument`'s tree is never on screen. Each pane shows a `ShownTree`, a copy that
+  follows the document's observer and reconciles after each change. **A gesture works on the pane's drawing** —
+  measuring, previewing — and crosses to the document only to commit; `UiBuilderDocument.apply` resolves a node a
+  pane draws to its own, so no write site has to know which it holds. Anything reading a box or a computed style
+  asks the drawing: `BuilderContext.shown(node)`, `UIBuilderView.drawnSelection(context)`.
 
 ## `UINode.setOnlyChild`
 
@@ -1641,7 +1680,7 @@ markers.detach(resource);   // closing a document
 
 | Rule | Why |
 |---|---|
-| **A producer names itself** | A flat list means the last writer wins — the failure `onStatus` had, in a different package. `ShaderGraphEditor` has four producers and had to merge them by hand because the model could not hold them apart |
+| **A producer names itself** | A flat list means the last writer wins — the failure `onStatus` had, in a different package. `ShaderGraphDocument` has four producers and had to merge them by hand because the model could not hold them apart |
 | **`changeAll` for a producer that writes several owners** | Otherwise a bound Problems panel rebuilds once per owner for one compile, and an owner left unmentioned keeps last compile's errors beside this one's |
 | **`Markers` is an INSTANCE, never static** | It holds a listener on every set it indexes, so nothing indexed can be collected. As a global that is forever: it killed the test worker with a non-zero exit and no failing assertion. VS Code injects its marker service per window |
 | **`detach` on close is the half that leaks** | A closed file's problems are not the workspace's, and the listener keeps the document alive |

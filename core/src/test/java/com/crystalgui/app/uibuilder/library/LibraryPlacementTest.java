@@ -10,11 +10,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.joml.Vector2f;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.DropResolver;
 import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.app.uibuilder.document.NewNode;
@@ -33,7 +33,7 @@ import com.crystalgui.widget.text.UIText;
 public class LibraryPlacementTest extends UiDocumentTestBase {
 
     private UiBuilderDocument model;
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private HierarchyPanel hierarchy;
     private LibraryPanel library;
     private UIElement group;
@@ -48,7 +48,7 @@ public class LibraryPlacementTest extends UiDocumentTestBase {
         label = new UIText("words");
         model.root().append(group, label);
 
-        editor = new BuilderEditor(model);
+        editor = new UIBuilderView(model);
         UIElement canvasHost = new UIElement().layout(l -> l.width(400).height(260));
         canvasHost.append(editor.view());
         UIElement libraryHost = new UIElement().layout(l -> l.width(300).height(300));
@@ -126,8 +126,9 @@ public class LibraryPlacementTest extends UiDocumentTestBase {
         for (int i = 0; i < 4; i++) frame();
     }
 
-    private static float[] at(UIElement node, float fx, float fy) {
-        Box box = node.box();
+    /** A world point at fractions of where {@code node} is drawn. */
+    private float[] at(UIElement node, float fx, float fy) {
+        Box box = editor.shownTree().shown(node).box();
         Vector2f world = Transform2D.apply(box.localToWorld(), box.width() * fx, box.height() * fy);
         return new float[] {world.x, world.y};
     }

@@ -268,7 +268,10 @@ public final class MoveOutOfFlow extends UIElement {
         return y - (parent == null ? 0f : parent.border().top) - (box == null ? 0f : box.margin().top);
     }
 
-    /** One edit for the gesture, as the resize handles do. */
+    /**
+     * One edit for the gesture, as the resize handles do. Named by the drawing the drag previewed on, which the document
+     * resolves to its own node, so every pane showing the file gets the result. @see UiBuilderDocument#resolve
+     */
     private void commit(UIElement node, JsonElement before) {
         JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
         if (after.equals(before)) return;

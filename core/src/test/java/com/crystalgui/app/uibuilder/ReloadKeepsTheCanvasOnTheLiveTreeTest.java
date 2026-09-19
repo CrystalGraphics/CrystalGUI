@@ -7,10 +7,10 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -41,12 +41,12 @@ public class ReloadKeepsTheCanvasOnTheLiveTreeTest extends UiDocumentTestBase {
 
     private static final String RELOADED = SOURCE.replace("bao", "mao");
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
 
     @Before
     public void openTheDocument() {
         UIElementRegistry.bootstrap();
-        editor = new BuilderEditor(new UiBuilderDocument(
+        editor = new UIBuilderView(new UiBuilderDocument(
                 SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
         UIElement host = new UIElement().layout(l -> l.width(800).height(500));
         host.append(editor.view());
@@ -65,7 +65,7 @@ public class ReloadKeepsTheCanvasOnTheLiveTreeTest extends UiDocumentTestBase {
 
         UIElement root = editor.document().root();
         assertSame("the artboard is still showing the replaced tree",
-                root, editor.artboard().children().get(0));
+                editor.shownTree().shown(root), editor.artboard().children().get(0));
     }
 
     /**
@@ -96,9 +96,10 @@ public class ReloadKeepsTheCanvasOnTheLiveTreeTest extends UiDocumentTestBase {
         frame();
 
         assertSame(title, editor.selection().node());
+        UIElement drawn = editor.shownTree().shown(title);
         assertNotNull("selected a node that is in no document, so it has no box and nothing can be "
-                + "drawn on it", title.box());
-        assertSame(title, editor.handles().target());
+                + "drawn on it", drawn == null ? null : drawn.box());
+        assertSame(drawn, editor.handles().target());
     }
 
     /** A selection from the replaced tree is dropped rather than left pointing at dead elements. */

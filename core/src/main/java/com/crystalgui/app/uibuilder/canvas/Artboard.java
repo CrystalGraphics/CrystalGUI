@@ -12,14 +12,14 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
- * One canvas size, with the document's real tree inside it — the thing you design on.
+ * One canvas size, with a pane's copy of the document's tree inside it — the thing you design on.
  *
- * <p>A fixed-size frame placed on the surface's plane, holding the live root. Not a picture of the UI: a
- * document opened at 800×480 is the same tree, laid out by the same engine, at that size — which is what
- * makes what you see what a player gets.</p>
+ * <p>A fixed-size frame placed on the surface's plane. Not a picture of the UI: the copy is a real tree, laid out
+ * by the same engine at the frame's size — which is what makes what you see what a player gets. A copy rather
+ * than the document's own tree, so a second pane onto the file has one too. @see ShownTree</p>
  *
  * <pre>{@code
- * Artboard board = new Artboard(document);
+ * Artboard board = new Artboard(document, shown.root());
  * surface.surface().place(board, 0f, 0f);
  * }</pre>
  *
@@ -41,7 +41,7 @@ public final class Artboard extends UIElement {
     private float width;
     private float height;
 
-    public Artboard(UiBuilderDocument document) {
+    public Artboard(UiBuilderDocument document, UIElement shown) {
         super(NAME);
         this.document = document;
         addClass(FRAME_CLASS);
@@ -50,7 +50,7 @@ public final class Artboard extends UIElement {
         this.height = size[1];
         applySize();
         setDesignMode(true);
-        append(document.root());
+        append(shown);
     }
 
     /** Not {@code document()}: that is {@code UINode}'s, and it answers the window this is shown in. */
@@ -118,24 +118,15 @@ public final class Artboard extends UIElement {
         return this;
     }
 
-    /**
-     * Puts the document's current root back in, after an adopt replaced it.
-     *
-     * <p><b>Idempotent, and it must be called.</b> {@code adopt} builds a brand-new root element — a
-     * reload, a revert, the file changing underneath — and this frame held the old one. Nothing called
-     * this: the hierarchy read {@code document.root()} and listed the NEW tree while the canvas went on
-     * showing the OLD one, so a row click selected a node that was in no document and therefore had no
-     * box. Handles stranded at their layer's origin, no outline, nothing resizable, and a canvas click
-     * selecting a node with no row in the panel — all one cause.</p>
-     *
-     * @return whether the tree was actually replaced
-     */
-    public boolean resync() {
-        UIElement current = document.root();
-        if (children().size() == 1 && children().get(0) == current) return false;
+    /** The copy's root now on this frame. */
+    public UIElement shownRoot() {
+        return children().get(0);
+    }
+
+    /** Shows {@code shown} in place of the copy there — the document was reopened, and the copy rebuilt with it. */
+    public void show(UIElement shown) {
         removeAll();
-        append(current);
-        return true;
+        append(shown);
     }
 
     private void applySize() {

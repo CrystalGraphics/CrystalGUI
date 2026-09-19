@@ -1,6 +1,9 @@
 package com.crystalgui.app.uibuilder.canvas;
 
+import java.util.ArrayList;
 import java.util.List;
+
+import com.crystalgui.ui.dom.UIElement;
 
 import javax.annotation.Nullable;
 
@@ -27,7 +30,7 @@ import com.crystalgui.widget.surface.SurfaceEditor;
  * and for the same reason: a feature is written against the CONTEXT, so it needs something that is both
  * a surface and a builder to activate against.</p>
  *
- * <p>Built by {@link BuilderEditor}; nothing else constructs one.</p>
+ * <p>Built by {@link UIBuilderView}; nothing else constructs one.</p>
  */
 public final class BuilderSurface extends SurfaceEditor implements BuilderContext, DataProvider {
 
@@ -37,6 +40,9 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
 
     private final Artboard artboard;
 
+    /** This pane's copy of the document's tree, which the artboard shows. */
+    private final ShownTree shownTree;
+
     /** @see BuilderContext#smartGuides */
     private final SmartGuides smartGuides = new SmartGuides();
 
@@ -45,10 +51,10 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
 
     private final BuilderSelection selection = new BuilderSelection();
 
-    /** The editor this plane belongs to, for {@link BuilderEditor#UI_BUILDER}. Set once, straight after
+    /** The editor this plane belongs to, for {@link UIBuilderView#UI_BUILDER}. Set once, straight after
      * construction — the editor cannot hand itself over from inside its own field initialiser. */
     @Nullable
-    private BuilderEditor owner;
+    private UIBuilderView owner;
 
     /** Fires after design mode is switched. @see #setDesignMode */
     public final Signal.Value<Boolean> onDidChangeDesignMode = new Signal.Value<>();
@@ -63,10 +69,11 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     /** How far a blank press may travel and still be a click rather than a marquee, in surface pixels. */
     private static final float CLICK_SLOP = 3f;
 
-    BuilderSurface(UiBuilderDocument document, Artboard artboard, @Nullable List<String> enabled) {
+    BuilderSurface(UiBuilderDocument document, Artboard artboard, ShownTree shownTree, @Nullable List<String> enabled) {
         super(NAME, new TreePolicy(artboard), enabled);
         this.document = document;
         this.artboard = artboard;
+        this.shownTree = shownTree;
         // ALT IS OURS INSIDE THE CANVAS: resize from the centre, and suspend snapping during a move.
         // Without this the desktop's Alt+drag takes the press first and moves the window instead.
         set(Attribute.KEEPS_MODIFIER_PRESS, true);
@@ -119,7 +126,13 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
             if (syncingSelection) return;
             syncingSelection = true;
             try {
-                selection.replaceWith(selection().items());
+                // THE ENGINE PICKS WHAT IS DRAWN; the builder selects what it stands for.
+                List<UIElement> sources = new ArrayList<>();
+                for (UIElement item : selection().items()) {
+                    UIElement source = shownTree.source(item);
+                    if (source != null) sources.add(source);
+                }
+                selection.replaceWith(sources);
             } finally {
                 syncingSelection = false;
             }
@@ -128,7 +141,12 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
             if (syncingSelection) return;
             syncingSelection = true;
             try {
-                selection().replaceWith(selection.nodes());
+                List<UIElement> drawn = new ArrayList<>();
+                for (UIElement node : selection.nodes()) {
+                    UIElement shown = shownTree.shown(node);
+                    if (shown != null) drawn.add(shown);
+                }
+                selection().replaceWith(drawn);
             } finally {
                 syncingSelection = false;
             }
@@ -194,13 +212,13 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         return onDidChangeDesignMode;
     }
 
-    void ownedBy(BuilderEditor editor) {
+    void ownedBy(UIBuilderView editor) {
         this.owner = editor;
     }
 
     /** The editor this plane belongs to, or null before one claims it. */
     @Nullable
-    BuilderEditor owner() {
+    UIBuilderView owner() {
         return owner;
     }
 
@@ -225,13 +243,13 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
      */
     @Override
     public Object getData(DataKey<?> key) {
-        if (key == BuilderEditor.UI_BUILDER) return owner;
-        if (key == BuilderEditor.UI_DOCUMENT) return document;
+        if (key == UIBuilderView.UI_BUILDER) return owner;
+        if (key == UIBuilderView.UI_DOCUMENT) return document;
         // ONLY WHEN IT HAS SOMETHING TO SAY. A DataContext stops at the first non-null answer, and the
         // inspector's source is the ACTIVE EDITOR'S VIEW -- which for a .cgui is this element. Answering
         // an empty selection therefore shadowed the document-level LiveSubject outright, so live inspect
         // reported nothing for exactly the file type it exists for. Silence lets the walk reach it.
-        if (key == BuilderEditor.BUILDER_SELECTION) return selection.statesNothing() ? null : selection;
+        if (key == UIBuilderView.BUILDER_SELECTION) return selection.statesNothing() ? null : selection;
         // AND THEN THE SURFACE'S OWN, which this used to end by returning null instead of asking for.
         //
         // An override that answers its own keys and drops the rest does not fall through to its
@@ -314,5 +332,17 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     @Override
     public DropIndicator dropIndicator() {
         return dropIndicator;
+    }
+
+    @Override
+    @Nullable
+    public UIElement shown(@Nullable UIElement node) {
+        return shownTree.shown(node);
+    }
+
+    @Override
+    @Nullable
+    public UIElement sourceOf(@Nullable UIElement drawn) {
+        return shownTree.source(drawn);
     }
 }

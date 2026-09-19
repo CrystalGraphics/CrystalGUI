@@ -18,7 +18,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * the child it lands against.
  *
  * <pre>{@code
- * DropResolver.Drop drop = new DropResolver(root, ctx.dropIndicator()).resolve(sources, rawX, rawY);
+ * DropResolver.Drop drop = DropResolver.forPane(ctx).resolve(sources, rawX, rawY);
  * ctx.dropIndicator().show(drop);   // each update; null shows nothing
  * ctx.dropIndicator().clear();      // when the gesture ends
  * }</pre>

@@ -19,14 +19,13 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonPrimitive;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.style.BuilderStyleSections;
 import com.crystalgui.app.uibuilder.canvas.BuilderToolbar;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.BoxModelEditor;
 import com.crystalgui.app.uibuilder.inspect.HeaderFields;
-import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
 import com.crystalgui.app.uibuilder.inspect.StyleScrub;
 import com.crystalgui.ui.box.Box;
@@ -141,7 +140,7 @@ public final class BuilderInspectorSections {
 
     @Nullable
     private static BuilderSelection selection(DataContext context) {
-        return context.get(BuilderEditor.BUILDER_SELECTION);
+        return context.get(UIBuilderView.BUILDER_SELECTION);
     }
 
     private static Subject subject(DataContext context) {
@@ -155,10 +154,10 @@ public final class BuilderInspectorSections {
         return selection.canvasSelected() ? Subject.CANVAS : Subject.NONE;
     }
 
+    /** @see UIBuilderView#drawnSelection */
     @Nullable
     private static UIElement node(DataContext context) {
-        BuilderSelection selection = selection(context);
-        return selection == null ? null : selection.node();
+        return UIBuilderView.drawnSelection(context);
     }
 
     /**
@@ -693,18 +692,18 @@ public final class BuilderInspectorSections {
 
         @Override
         public boolean accepts(DataContext context) {
-            return subject(context) == Subject.CANVAS && context.get(BuilderEditor.UI_DOCUMENT) != null;
+            return subject(context) == Subject.CANVAS && context.get(UIBuilderView.UI_DOCUMENT) != null;
         }
 
         @Override
         public String subjectKey(DataContext context) {
-            UiBuilderDocument document = context.get(BuilderEditor.UI_DOCUMENT);
+            UiBuilderDocument document = context.get(UIBuilderView.UI_DOCUMENT);
             return getClass().getSimpleName() + ":" + (document == null ? "" : System.identityHashCode(document));
         }
 
         @Override
         public void build(ConfigForm form, DataContext context) {
-            UiBuilderDocument document = context.get(BuilderEditor.UI_DOCUMENT);
+            UiBuilderDocument document = context.get(UIBuilderView.UI_DOCUMENT);
             if (document != null) build(form, document);
         }
 

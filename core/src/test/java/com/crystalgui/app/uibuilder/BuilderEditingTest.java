@@ -8,12 +8,12 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.CanvasRects;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.widget.control.TextField;
@@ -46,13 +46,13 @@ public class BuilderEditingTest extends UiDocumentTestBase {
             + "    ] }\n"
             + "}\n";
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private UIText title;
 
     @Before
     public void openTheDocument() {
         UIElementRegistry.bootstrap();
-        editor = new BuilderEditor(new UiBuilderDocument(
+        editor = new UIBuilderView(new UiBuilderDocument(
                 SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
         UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor.view());
@@ -62,6 +62,12 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         frame();
 
         title = (UIText) editor.document().root().children().get(0);
+    }
+
+    /** Where a document node is drawn in the pane; anything else is itself. */
+    private UIElement drawn(UIElement node) {
+        UIElement shown = editor.shownTree().shown(node);
+        return shown != null ? shown : node;
     }
 
     // ── L4.5 ────────────────────────────────────────────────────────────────────────────────────
@@ -74,7 +80,7 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         assertSame("nothing selected, nothing to resize", null, handles.target());
 
         editor.selection().selectOnly(title);
-        assertSame(title, handles.target());
+        assertSame(drawn(title), handles.target());
 
         editor.selection().clear();
         assertSame(null, handles.target());
@@ -145,7 +151,7 @@ public class BuilderEditingTest extends UiDocumentTestBase {
     public void aButtonsLabelIsEditedInPlace() {
         Button save = new Button("Save");
         editor.document().root().append(save);
-        document.update(W, H);
+        frame();
 
         editor.selection().selectOnly(save);
         assertTrue(editor.editSelectedText());
@@ -173,7 +179,7 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         frame();
         frame();
 
-        float[] node = CanvasRects.of(title, editor.textEditing());
+        float[] node = CanvasRects.of(drawn(title), editor.textEditing());
         float[] field = CanvasRects.of(editor.textEditing().field(), editor.textEditing());
         assertNotNull(node);
         assertNotNull(field);
@@ -182,7 +188,7 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         }
         assertEquals("the field is not the node's height at half zoom", node[3], field[3], 0.5f);
         assertEquals("the field's text is not drawn at the node's scale",
-                node[3] / title.box().height(), field[3] / editor.textEditing().field().box().height(), 0.01f);
+                node[3] / drawn(title).box().height(), field[3] / editor.textEditing().field().box().height(), 0.01f);
     }
 
     /** A node with no text of its own refuses rather than opening an empty field. */
@@ -402,9 +408,9 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         assertSame("the hierarchy answered its own refresh and cleared the selection",
                 title, editor.selection().node());
         assertSame("...and the engine's item set with it",
-                title, editor.surface().selection().items().isEmpty()
+                drawn(title), editor.surface().selection().items().isEmpty()
                         ? null : editor.surface().selection().items().get(0));
-        assertSame("so the handles came off the node", title, editor.handles().target());
+        assertSame("so the handles came off the node", drawn(title), editor.handles().target());
     }
 
     /**
@@ -425,7 +431,7 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         frame();
 
         assertSame("a row click selected nothing", title, editor.selection().node());
-        assertSame("and the handles are not on it", title, editor.handles().target());
+        assertSame("and the handles are not on it", drawn(title), editor.handles().target());
 
         // AND AGAIN, on the other node: "perma break" means the second one does nothing.
         int rootRow = rowFor(hierarchy, editor.document().root());
@@ -462,14 +468,14 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         assertSame(root, rowItem(hierarchy));
         // ROOT AND TITLE OCCUPY THE SAME BOX -- root is auto-height around one text line -- so a
         // disagreement between the panels is invisible on the canvas until something depends on it.
-        assertSame("the handles are on a different node", root, editor.handles().target());
+        assertSame("the handles are on a different node", drawn(root), editor.handles().target());
 
         hierarchy.tree().select(rowFor(hierarchy, title));
         document.update(W, H);
         frame();
         assertSame(title, editor.selection().node());
         assertSame(title, rowItem(hierarchy));
-        assertSame("the handles stayed on the previous node", title, editor.handles().target());
+        assertSame("the handles stayed on the previous node", drawn(title), editor.handles().target());
 
         // AND FROM THE CANVAS, which is the direction that rebuilds the tree to reveal the node.
         editor.selection().selectOnly(root);
@@ -477,8 +483,7 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         frame();
         assertSame("the hierarchy answered its own rebuild", root, editor.selection().node());
         assertSame("the row highlight did not follow", root, rowItem(hierarchy));
-        assertSame("the handles are on a different node from the one being described",
-                root, editor.handles().target());
+        assertSame("the handles are on a different node from the one being described", drawn(root), editor.handles().target());
     }
 
     /** What the list itself has highlighted, which is what a reader sees. */

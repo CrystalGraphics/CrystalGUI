@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.BuilderContext;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.attributes.StyleAttributes;
 import com.crystalgui.app.uibuilder.canvas.ReorderInFlow;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
@@ -167,7 +168,7 @@ public final class BuilderCommands {
         registry.register(Command.of(TOGGLE_PREVIEW, "Toggle Preview")
                 .binding("Ctrl+Alt+P")
                 .run(context -> {
-                    BuilderEditor builder = builderOf(context);
+                    UIBuilderView builder = builderOf(context);
                     // The toolbar's toggle follows the surface, so the key needs to tell it nothing.
                     builder.surface().setDesignMode(!builder.surface().isDesignMode());
                 })
@@ -244,7 +245,7 @@ public final class BuilderCommands {
         registry.register(Command.of(CONVERT_TO_SIZE, "Convert to Size")
                 .run(context -> builderOf(context).transformBox().convertToSize(selectionOf(context)))
                 .enabledWhen(context -> hasBuilder(context)
-                        && TransformBox.isScaleStandingInForSize(selectionOf(context))));
+                        && TransformBox.isScaleStandingInForSize(drawnSelectionOf(context))));
     }
 
     /**
@@ -254,7 +255,7 @@ public final class BuilderCommands {
      * the frame thread that draws it.</p>
      */
     private static void pasteAttributes(CommandContext context) {
-        BuilderEditor builder = builderOf(context);
+        UIBuilderView builder = builderOf(context);
         UIElement node = selectionOf(context);
         if (builder == null || node == null) return;
         AttributeSet copied = AttributeClipboard.pending(StyleAttributes.DOMAIN);
@@ -277,7 +278,7 @@ public final class BuilderCommands {
      * single "previous".</p>
      */
     private static void shift(CommandContext context, boolean later, boolean copy) {
-        BuilderEditor builder = builderOf(context);
+        UIBuilderView builder = builderOf(context);
         List<UIElement> nodes = shiftable(builder);
         if (nodes.isEmpty()) return;
         UIElement parent = nodes.get(0).parentElement();
@@ -288,7 +289,7 @@ public final class BuilderCommands {
         if (copy) {
             edits = TreeMoves.duplicate(builder.document(), parent, later ? last + 1 : first, nodes);
         } else {
-            int neighbour = neighbourInFlow(children, later ? last : first, later ? 1 : -1, nodes);
+            int neighbour = neighbourInFlow(builder.surface(), children, later ? last : first, later ? 1 : -1, nodes);
             if (neighbour < 0) return;
             edits = TreeMoves.move(parent, later ? neighbour + 1 : neighbour, nodes);
         }
@@ -302,12 +303,11 @@ public final class BuilderCommands {
     }
 
     /** The selection's outermost reorderable nodes, when they share one container; else empty. */
-    private static List<UIElement> shiftable(@Nullable BuilderEditor builder) {
+    private static List<UIElement> shiftable(@Nullable UIBuilderView builder) {
         if (builder == null || !builder.surface().isDesignMode()) return List.of();
-        UIElement root = builder.document().root();
         List<UIElement> nodes = new ArrayList<>();
         for (UIElement node : TreeMoves.outermost(builder.selection().nodes())) {
-            if (!ReorderInFlow.isReorderable(root, node)) return List.of();
+            if (!ReorderInFlow.isReorderable(builder.surface(), node)) return List.of();
             if (!nodes.isEmpty() && node.parentElement() != nodes.get(0).parentElement()) return List.of();
             nodes.add(node);
         }
@@ -319,10 +319,13 @@ public final class BuilderCommands {
     }
 
     /** The nearest in-flow child past {@code from} in {@code step}'s direction that is not one of {@code moving}, or -1. */
-    private static int neighbourInFlow(List<UIElement> children, int from, int step, List<UIElement> moving) {
+    private static int neighbourInFlow(BuilderContext pane, List<UIElement> children, int from, int step,
+                                       List<UIElement> moving) {
         for (int i = from + step; i >= 0 && i < children.size(); i += step) {
             UIElement child = children.get(i);
-            if (!moving.contains(child) && SortPlacement.inFlow(child)) return i;
+            // IN FLOW IS A COMPUTED FACT, and the document's own tree has no cascade: asked of where it is drawn.
+            UIElement drawn = pane.shown(child);
+            if (!moving.contains(child) && drawn != null && SortPlacement.inFlow(drawn)) return i;
         }
         return -1;
     }
@@ -330,9 +333,10 @@ public final class BuilderCommands {
     /** @see #FREE_TRANSFORM */
     private static boolean canFreeTransform(CommandContext context) {
         if (!hasBuilder(context)) return false;
-        BuilderEditor builder = builderOf(context);
+        UIBuilderView builder = builderOf(context);
         if (builder == null || !builder.surface().isDesignMode()) return false;
-        UIElement node = selectionOf(context);
+        // MEASURED AND CASCADED ON THE DRAWING: the document's own tree has neither a box nor a computed style.
+        UIElement node = drawnSelectionOf(context);
         if (node == null || node.box() == null) return false;
         // AND A TRANSFORM THE BOX CAN ACTUALLY SHOW. The gesture describes translate/rotate/skew/scale
         // composed in that order; anything else opens at identity showing none of it, and committing
@@ -360,7 +364,7 @@ public final class BuilderCommands {
      * falls back to the document's top level.</p>
      */
     private static void selectAll(CommandContext context) {
-        BuilderEditor builder = builderOf(context);
+        UIBuilderView builder = builderOf(context);
         if (builder == null) return;
         UIElement node = selectionOf(context);
         UIElement parent = node == null ? null : node.parentElement();
@@ -373,7 +377,7 @@ public final class BuilderCommands {
 
     /** @see #SELECT_NEXT_SIBLING */
     private static void selectSibling(CommandContext context, int step) {
-        BuilderEditor builder = builderOf(context);
+        UIBuilderView builder = builderOf(context);
         UIElement node = selectionOf(context);
         if (builder == null || node == null) return;
         UIElement parent = node.parentElement();
@@ -397,7 +401,7 @@ public final class BuilderCommands {
      * when it runs out of tree is a different verb wearing a navigation key.</p>
      */
     private static void selectRelative(CommandContext context, boolean up) {
-        BuilderEditor builder = builderOf(context);
+        UIBuilderView builder = builderOf(context);
         UIElement node = selectionOf(context);
         if (node == null) return;
         UIElement next = up ? node.parentElement()
@@ -408,17 +412,24 @@ public final class BuilderCommands {
 
     @Nullable
     private static UIElement selectionOf(CommandContext context) {
-        BuilderSelection selection = context.data().get(BuilderEditor.BUILDER_SELECTION);
+        BuilderSelection selection = context.data().get(UIBuilderView.BUILDER_SELECTION);
         return selection == null ? null : selection.node();
     }
 
+    /** Where the selected node is drawn in the builder asked — what a box or a computed style is read from. */
+    @Nullable
+    private static UIElement drawnSelectionOf(CommandContext context) {
+        UIBuilderView builder = builderOf(context);
+        return builder == null ? null : builder.surface().shown(selectionOf(context));
+    }
+
     private static boolean hasBuilder(CommandContext context) {
-        return context.data().get(BuilderEditor.UI_BUILDER) != null;
+        return context.data().get(UIBuilderView.UI_BUILDER) != null;
     }
 
     /** Only ever called behind {@link #hasBuilder}. */
-    private static BuilderEditor builderOf(CommandContext context) {
-        return context.data().get(BuilderEditor.UI_BUILDER);
+    private static UIBuilderView builderOf(CommandContext context) {
+        return context.data().get(UIBuilderView.UI_BUILDER);
     }
 
     /** The window the command was invoked in, walked out of whatever had focus. */

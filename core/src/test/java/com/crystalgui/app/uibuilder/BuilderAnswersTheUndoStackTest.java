@@ -7,11 +7,11 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.Test;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataContext;
@@ -43,8 +43,9 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
     @Test
     public void aNodeOnTheCanvasResolvesTheDocumentsHistory() {
         UiBuilderDocument model = openBuilder();
-        BuilderEditor editor = editorFor(model);
-        UIElement node = model.root().children().get(0);
+        UIBuilderView editor = editorFor(model);
+        // A NODE ON THE CANVAS is the pane's drawing of the document's.
+        UIElement node = editor.shownTree().shown(model.root().children().get(0));
 
         // THE WALK CTRL+Z USES -- DataContext, outward through commandParent(), not UndoScope's own.
         assertSame("a command asking from the canvas cannot find the history",
@@ -66,7 +67,7 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
     @Test
     public void modZUndoesOnTheCanvas() {
         UiBuilderDocument model = openBuilder();
-        BuilderEditor editor = editorFor(model);
+        UIBuilderView editor = editorFor(model);
         UIElement node = model.root().children().get(0);
         editor.selection().selectOnly(node);
         document.focus().requestFocus(editor.surface());
@@ -77,19 +78,20 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
         model.apply(new BuilderEdit.SetInlineStyle(node, before,
                 InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
         document.update(W, H);
-        assertEquals(99f, node.box().width(), 0.01f);
+        UIElement drawn = editor.shownTree().shown(node);
+        assertEquals(99f, drawn.box().width(), 0.01f);
 
         assertTrue("Mod+Z was not handled at all", chord(CgKeyCodes.KEY_Z, CgModifiers.CTRL));
         releaseModifiers();
         document.update(W, H);
-        assertEquals("Mod+Z did not undo the edit", 40f, node.box().width(), 0.01f);
+        assertEquals("Mod+Z did not undo the edit", 40f, drawn.box().width(), 0.01f);
     }
 
     /** And an edit made on the canvas is genuinely undoable through it. */
     @Test
     public void anEditOnTheCanvasUndoes() {
         UiBuilderDocument model = openBuilder();
-        editorFor(model);
+        UIBuilderView editor = editorFor(model);
         UIElement node = model.root().children().get(0);
 
         var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
@@ -97,11 +99,12 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
         var after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
         model.apply(new BuilderEdit.SetInlineStyle(node, before, after));
         document.update(W, H);
-        assertEquals(99f, node.box().width(), 0.01f);
+        UIElement drawn = editor.shownTree().shown(node);
+        assertEquals(99f, drawn.box().width(), 0.01f);
 
-        DataContext.from(node).get(UiDataKeys.UNDO_STACK).undo();
+        DataContext.from(drawn).get(UiDataKeys.UNDO_STACK).undo();
         document.update(W, H);
-        assertEquals("undo did not put the box back", 40f, node.box().width(), 0.01f);
+        assertEquals("undo did not put the box back", 40f, drawn.box().width(), 0.01f);
     }
 
     /**
@@ -114,7 +117,7 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
     @Test
     public void anUndoSelectsTheNodeItChanged() {
         UiBuilderDocument model = openBuilder();
-        BuilderEditor editor = editorFor(model);
+        UIBuilderView editor = editorFor(model);
         UIElement node = model.root().children().get(0);
 
         var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
@@ -136,7 +139,7 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
     @Test
     public void aRedoSelectsItToo() {
         UiBuilderDocument model = openBuilder();
-        BuilderEditor editor = editorFor(model);
+        UIBuilderView editor = editorFor(model);
         UIElement node = model.root().children().get(0);
 
         var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
@@ -160,8 +163,8 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
         return model;
     }
 
-    private BuilderEditor editorFor(UiBuilderDocument model) {
-        BuilderEditor editor = new BuilderEditor(model);
+    private UIBuilderView editorFor(UiBuilderDocument model) {
+        UIBuilderView editor = new UIBuilderView(model);
         UIElement host = new UIElement().layout(l -> l.width(400).height(300));
         host.append(editor.view());
         document.append(host);

@@ -17,7 +17,7 @@ import com.crystalgui.widget.dnd.SortPlacement;
  * Where a drop at the pointer would land in the document — which container, at which child index.
  *
  * <pre>{@code
- * DropResolver resolver = new DropResolver(document.root(), overlay);
+ * DropResolver resolver = DropResolver.forPane(ctx);                  // document nodes in, document nodes out
  * DropResolver.Drop drop = resolver.resolve(sources, rawX, rawY);
  * if (drop != null) document.applyAll("move", TreeMoves.move(drop.target(), drop.index(), sources));
  * }</pre>
@@ -42,9 +42,27 @@ public final class DropResolver {
 
     private final UIElement space;
 
+    /** The pane a drop is measured in, whose drawn nodes are translated to the document's and back; null for none. */
+    @Nullable
+    private final BuilderContext pane;
+
+    /** A drop over {@code root}, a laid-out tree, answered in its own nodes. */
     public DropResolver(UIElement root, UIElement space) {
+        this(root, space, null);
+    }
+
+    private DropResolver(UIElement root, UIElement space, @Nullable BuilderContext pane) {
         this.root = root;
         this.space = space;
+        this.pane = pane;
+    }
+
+    /**
+     * A drop onto the document shown in {@code ctx}'s pane: sources and targets are DOCUMENT nodes, and the
+     * measuring happens on what the pane draws — the document's own tree is never laid out.
+     */
+    public static DropResolver forPane(BuilderContext ctx) {
+        return new DropResolver(ctx.artboard().shownRoot(), ctx.dropIndicator(), ctx);
     }
 
     /**
@@ -66,6 +84,11 @@ public final class DropResolver {
     /** The drop at raw pointer pixels, or null where nothing may land — outside the document. */
     @Nullable
     public Drop resolve(Collection<UIElement> sources, float rawX, float rawY) {
+        return inDocument(resolveDrawn(drawn(sources), rawX, rawY));
+    }
+
+    @Nullable
+    private Drop resolveDrawn(Collection<UIElement> sources, float rawX, float rawY) {
         Vector2f at = space.toLocal(rawX, rawY);
         for (UIElement node = hoveredAt(root, sources, rawX, rawY); node != null;
              node = node == root ? null : node.parentElement()) {
@@ -85,6 +108,12 @@ public final class DropResolver {
      */
     @Nullable
     public Drop at(UIElement target, int index) {
+        UIElement drawnTarget = pane == null ? target : pane.shown(target);
+        return drawnTarget == null ? null : inDocument(atDrawn(drawnTarget, index));
+    }
+
+    @Nullable
+    private Drop atDrawn(UIElement target, int index) {
         float[] targetRect = CanvasRects.ofLayout(target, space);
         if (targetRect == null) return null;
         SortPlacement.Flow flow = SortPlacement.Flow.of(target);
@@ -117,6 +146,31 @@ public final class DropResolver {
         Against against = new Against(children.get(cell.index()), found.side(),
                 new float[] {cell.x(), cell.y(), cell.width(), cell.height()});
         return new Drop(target, found.index(flow.reversed()), against, flow.column(), targetRect);
+    }
+
+    /** The pane's drawn copies of {@code sources}; the sources themselves with no pane. */
+    private Collection<UIElement> drawn(Collection<UIElement> sources) {
+        if (pane == null) return sources;
+        List<UIElement> out = new ArrayList<>(sources.size());
+        for (UIElement source : sources) {
+            UIElement shown = pane.shown(source);
+            if (shown != null) out.add(shown);
+        }
+        return out;
+    }
+
+    /** {@code drop} with its nodes the document's rather than the pane's; the rects are the pane's either way. */
+    @Nullable
+    private Drop inDocument(@Nullable Drop drop) {
+        if (drop == null || pane == null) return drop;
+        UIElement target = pane.sourceOf(drop.target());
+        if (target == null) return null;
+        Against against = drop.against();
+        if (against != null) {
+            UIElement child = pane.sourceOf(against.child());
+            against = child == null ? null : new Against(child, against.side(), against.rect());
+        }
+        return new Drop(target, drop.index(), against, drop.column(), drop.targetRect());
     }
 
     /**

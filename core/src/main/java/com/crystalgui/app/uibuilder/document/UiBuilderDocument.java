@@ -11,6 +11,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 
+import javax.annotation.Nullable;
+
+import com.crystalgui.core.signal.Connection;
+import com.crystalgui.core.undo.CompositeEdit;
+import com.crystalgui.core.undo.Edit;
 import com.crystalgui.document.AbstractDocumentModel;
 import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.net.mirror.UIElementMirror;
@@ -22,7 +27,9 @@ import com.crystalgui.template.UiTemplates;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementTreeSource;
 
 /**
  * A {@code .cgui} open for editing: the live tree, the header it came with, and one undo history over
@@ -59,10 +66,40 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
 
     private final DiagnosticSet problems = new DiagnosticSet();
 
+    /** Everything following the tree — one per pane showing it. @see #watch */
+    private final List<TreeObserver<UIElement>> watchers = new ArrayList<>();
+
+    /** The tree's one observer slot, handing every report to each watcher. */
+    private final TreeObserver<UIElement> fanOut = new TreeObserver<>() {
+        @Override public void inserted(UIElement node, UIElement parent, int index) {
+            for (TreeObserver<UIElement> each : List.copyOf(watchers)) each.inserted(node, parent, index);
+        }
+        @Override public void removed(UIElement node, UIElement parent) {
+            for (TreeObserver<UIElement> each : List.copyOf(watchers)) each.removed(node, parent);
+        }
+        @Override public void moved(UIElement node, UIElement parent, int index) {
+            for (TreeObserver<UIElement> each : List.copyOf(watchers)) each.moved(node, parent, index);
+        }
+        @Override public void attributeChanged(UIElement node) {
+            for (TreeObserver<UIElement> each : List.copyOf(watchers)) each.attributeChanged(node);
+        }
+        @Override public void inlineStyleChanged(UIElement node) {
+            for (TreeObserver<UIElement> each : List.copyOf(watchers)) each.inlineStyleChanged(node);
+        }
+        @Override public void stateChanged(UIElement node) {
+            for (TreeObserver<UIElement> each : List.copyOf(watchers)) each.stateChanged(node);
+        }
+    };
+
+    @Nullable
+    private UIElementTreeSource observed;
+
     public UiBuilderDocument(byte[] bytes, String origin) {
         this.origin = origin;
         // No merge window: a value edit merges only inside a held gesture. @see #mergeable
         history().setMergeWindowMillis(0L);
+        // AN UNDO OR A REDO touches what its edit names, and says so. @see #announce
+        history().onDidStep.connect(this::announce);
         adopt(bytes);
     }
 
@@ -71,9 +108,22 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
         return origin;
     }
 
-    /** The live tree. Read it freely; change it only through {@link #apply}. */
+    /**
+     * The live tree. Read it freely; change it only through {@link #apply}. <b>Never on screen</b>: each pane shows a
+     * copy of it, so it has no boxes and no computed style — ask a pane for where a node is drawn.
+     */
     public UIElement root() {
         return root;
+    }
+
+    /**
+     * Reports every change to the tree to {@code observer}, until the connection is ended — how a pane's copy
+     * follows. The reports arrive during the change; an observer records them and acts after, since the engine
+     * refuses a mutation from inside a notification.
+     */
+    public Connection watch(TreeObserver<UIElement> observer) {
+        watchers.add(observer);
+        return () -> watchers.remove(observer);
     }
 
     /** Design values, bindings and hooks, keyed by node. */
@@ -106,9 +156,49 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
 
     // ── The one door ────────────────────────────────────────────────────────
 
-    /** Applies an edit and records it. The only way anything in this document changes. */
+    /**
+     * Applies an edit and records it. The only way anything in this document changes.
+     *
+     * <p>An edit may name a node as a pane draws it — the drawing a gesture previewed on, the drawn node the inspector
+     * reads — and is resolved to the document's own first. @see #resolve</p>
+     */
     public void apply(BuilderEdit edit) {
-        super.apply(edit);
+        BuilderEdit resolved = edit.resolvedIn(this::resolve);
+        // BEFORE THE CHANGE, which announces itself: a pane follows on that, and reads the node as it then is.
+        announce(resolved);
+        super.apply(resolved);
+    }
+
+    /**
+     * Tells every watcher what {@code edit} touched, whether or not the tree reported it. An edit is often recorded
+     * after its caller already wrote the value — a gesture's preview — and applying it then changes nothing, so no
+     * notification comes; a pane following the tree would keep its old drawing.
+     */
+    private void announce(Edit edit) {
+        if (edit instanceof CompositeEdit composite) {
+            for (Edit each : composite.edits()) announce(each);
+            return;
+        }
+        if (!(edit instanceof BuilderEdit change) || change.node() == null) return;
+        UIElement node = change.node();
+        if (edit instanceof BuilderEdit.SetInlineStyle) fanOut.inlineStyleChanged(node);
+        else if (edit instanceof BuilderEdit.SetState) fanOut.stateChanged(node);
+        else if (edit instanceof BuilderEdit.SetId || edit instanceof BuilderEdit.SetClasses
+                || edit instanceof BuilderEdit.SetAttribute<?>) fanOut.attributeChanged(node);
+    }
+
+    /**
+     * The document node {@code node} is or stands for: itself when it is one of the document's, else what a pane
+     * drawing it says it stands for, else itself — a node not yet in any tree, about to be inserted.
+     */
+    public UIElement resolve(UIElement node) {
+        if (node == root || root.contains(node)) return node;
+        for (TreeObserver<UIElement> watcher : watchers) {
+            if (!(watcher instanceof DocumentDrawing drawing)) continue;
+            UIElement source = drawing.source(node);
+            if (source != null) return source;
+        }
+        return node;
     }
 
     /**
@@ -133,7 +223,11 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
         if (edits.isEmpty()) return;
         history().beginTransaction(label);
         try {
-            for (BuilderEdit edit : edits) super.apply(edit);
+            for (BuilderEdit edit : edits) {
+                BuilderEdit resolved = edit.resolvedIn(this::resolve);
+                announce(resolved);
+                super.apply(resolved);
+            }
         } finally {
             history().endTransaction();
         }
@@ -183,6 +277,10 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
             problems.changeOne(PARSE,
                     List.of(Diagnostic.onRow(0, DiagnosticSeverity.ERROR, broken.getMessage())));
         }
+        // THE OBSERVER SLOT FOLLOWS THE ROOT, which a reopen replaces.
+        if (observed != null) observed.close();
+        observed = new UIElementTreeSource(root);
+        observed.observe(fanOut);
         adopted();
     }
 

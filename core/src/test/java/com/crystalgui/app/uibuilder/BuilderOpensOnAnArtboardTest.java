@@ -7,10 +7,10 @@ import static org.junit.Assert.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -32,11 +32,11 @@ public class BuilderOpensOnAnArtboardTest extends UiDocumentTestBase {
             + "  \"root\": { \"kind\": \"element\", \"id\": \"root\" }\n"
             + "}\n";
 
-    private BuilderEditor open() {
+    private UIBuilderView open() {
         UIElementRegistry.bootstrap();
         UiBuilderDocument model =
                 new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page");
-        BuilderEditor editor = new BuilderEditor(model);
+        UIBuilderView editor = new UIBuilderView(model);
         UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor.view());
         document.append(root);
@@ -46,7 +46,7 @@ public class BuilderOpensOnAnArtboardTest extends UiDocumentTestBase {
 
     @Test
     public void itOpensOnTheSharedSurfaceAndAnswersTheBuildersContext() {
-        BuilderEditor editor = open();
+        UIBuilderView editor = open();
 
         assertTrue("the builder's plane IS the shared surface's context",
                 editor.surface() instanceof BuilderContext);
@@ -59,7 +59,7 @@ public class BuilderOpensOnAnArtboardTest extends UiDocumentTestBase {
 
     @Test
     public void theArtboardIsOnThePlaneAndSelectIsTheOnlyTool() {
-        BuilderEditor editor = open();
+        UIBuilderView editor = open();
 
         assertTrue("the artboard is an item on the plane, not a painted rectangle",
                 editor.surface().surface().items().contains(editor.artboard()));

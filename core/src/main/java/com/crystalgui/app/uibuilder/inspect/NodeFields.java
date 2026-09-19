@@ -12,7 +12,7 @@ import javax.annotation.Nullable;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.NodeIds;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
@@ -100,7 +100,7 @@ public final class NodeFields {
     /** The fields of the document {@code context} is editing, or null when it is editing none. */
     @Nullable
     public static NodeFields of(DataContext context) {
-        UiBuilderDocument document = context.get(BuilderEditor.UI_DOCUMENT);
+        UiBuilderDocument document = context.get(UIBuilderView.UI_DOCUMENT);
         return document == null ? null : new NodeFields(document);
     }
 
@@ -113,9 +113,9 @@ public final class NodeFields {
         return document;
     }
 
-    /** Whether {@code node} is in this document's tree — the root included. */
+    /** Whether {@code node} is in this document's tree — the root included — or is a pane's drawing of one. */
     public boolean owns(@Nullable UIElement node) {
-        for (UINode at = node; at != null; at = at.parent()) {
+        for (UINode at = node == null ? null : document.resolve(node); at != null; at = at.parent()) {
             if (at == document.root()) return true;
         }
         return false;

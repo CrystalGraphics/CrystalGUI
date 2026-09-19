@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import org.joml.Vector2f;
@@ -22,7 +23,6 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.BoxModelEditor;
@@ -70,7 +70,7 @@ public class InspectorEditingTest extends UiDocumentTestBase {
             + "    ] }\n"
             + "}\n";
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private Inspector inspector;
     private Disposable sections;
     private Button ok;
@@ -80,7 +80,7 @@ public class InspectorEditingTest extends UiDocumentTestBase {
     public void openTheDocument() {
         UIElementRegistry.bootstrap();
         sections = BuilderInspectorSections.register();
-        editor = new BuilderEditor(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
+        editor = new UIBuilderView(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
         // SIDE BY SIDE, as a workbench docks them: stacked, the inspector's lower rows fell outside the window
         // and a press aimed at them landed on the document.
         UIElement row = new UIElement().layout(l -> l.flexDirection(FlexDirection.ROW).width(W).height(H));

@@ -53,14 +53,14 @@ public final class Placement {
         builder.getDocument().apply(new BuilderEdit.Insert(parent, node, clamped));
         builder.builderSelection().replaceWith(List.of(node));
         if (node instanceof UIText) {
-            BuilderEditor editor = editorOf(builder);
+            UIBuilderView editor = editorOf(builder);
             if (editor != null) editor.textEditing().begin(node);
         }
         return true;
     }
 
     @Nullable
-    private static BuilderEditor editorOf(BuilderContext builder) {
+    private static UIBuilderView editorOf(BuilderContext builder) {
         return builder instanceof BuilderSurface surface ? surface.owner() : null;
     }
 }

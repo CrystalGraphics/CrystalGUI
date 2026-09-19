@@ -2,6 +2,8 @@ package com.crystalgui.app.uibuilder.document;
 
 import java.util.List;
 
+import java.util.function.UnaryOperator;
+
 import javax.annotation.Nullable;
 
 import com.google.gson.JsonElement;
@@ -53,8 +55,22 @@ public sealed interface BuilderEdit extends Edit {
         return null;
     }
 
+    /**
+     * This edit with every node it names passed through {@code toDocument} — how the document takes an edit that names
+     * a node as a pane draws it. The same edit when nothing changes, so an edit that merges by identity still does.
+     */
+    default BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+        return this;
+    }
+
     /** Adds a node at an index. */
     record Insert(UIElement parent, UIElement node, int index) implements BuilderEdit {
+
+        @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement p = toDocument.apply(parent), n = toDocument.apply(node);
+            return p == parent && n == node ? this : new Insert(p, n, index);
+        }
 
         @Override
         public void apply() {
@@ -76,6 +92,12 @@ public sealed interface BuilderEdit extends Edit {
     record Remove(UIElement parent, UIElement node, int index) implements BuilderEdit {
 
         @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement p = toDocument.apply(parent), n = toDocument.apply(node);
+            return p == parent && n == node ? this : new Remove(p, n, index);
+        }
+
+        @Override
         public void apply() {
             parent.remove(node);
         }
@@ -94,6 +116,12 @@ public sealed interface BuilderEdit extends Edit {
     /** Reparents or reorders. One edit, never a remove and an insert — those lose the node. */
     record Move(UIElement node, UIElement fromParent, int fromIndex, UIElement toParent, int toIndex)
             implements BuilderEdit {
+
+        @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement n = toDocument.apply(node), from = toDocument.apply(fromParent), to = toDocument.apply(toParent);
+            return n == node && from == fromParent && to == toParent ? this : new Move(n, from, fromIndex, to, toIndex);
+        }
 
         @Override
         public void apply() {
@@ -118,6 +146,12 @@ public sealed interface BuilderEdit extends Edit {
     }
 
     record SetId(UIElement node, String from, String to) implements BuilderEdit {
+
+        @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement n = toDocument.apply(node);
+            return n == node ? this : new SetId(n, from, to);
+        }
 
         @Override
         public void apply() {
@@ -148,6 +182,12 @@ public sealed interface BuilderEdit extends Edit {
      */
     record SetClasses(UIElement node, List<String> from, List<String> to) implements BuilderEdit {
 
+        @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement n = toDocument.apply(node);
+            return n == node ? this : new SetClasses(n, from, to);
+        }
+
         public SetClasses {
             from = ClassNames.authored(from);
             to = ClassNames.authored(to);
@@ -177,6 +217,12 @@ public sealed interface BuilderEdit extends Edit {
     /** One state slot, encoded — the form the contract reads, so no widget setter is named here. */
     record SetState(UIElement node, String key, @Nullable JsonElement from, @Nullable JsonElement to)
             implements BuilderEdit {
+
+        @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement n = toDocument.apply(node);
+            return n == node ? this : new SetState(n, key, from, to);
+        }
 
         @Override
         public void apply() {
@@ -218,6 +264,12 @@ public sealed interface BuilderEdit extends Edit {
     record SetAttribute<T>(UIElement node, Attribute<T> key, T from, T to) implements BuilderEdit {
 
         @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement n = toDocument.apply(node);
+            return n == node ? this : new SetAttribute<>(n, key, from, to);
+        }
+
+        @Override
         public void apply() {
             node.set(key, to);
         }
@@ -243,6 +295,12 @@ public sealed interface BuilderEdit extends Edit {
     /** The node's whole inline style, as the codec writes it. */
     record SetInlineStyle(UIElement node, @Nullable JsonElement from, @Nullable JsonElement to)
             implements BuilderEdit {
+
+        @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement n = toDocument.apply(node);
+            return n == node ? this : new SetInlineStyle(n, from, to);
+        }
 
         @Override
         public void apply() {
@@ -281,6 +339,12 @@ public sealed interface BuilderEdit extends Edit {
     /** A design value, a binding or a hook — document data, which is why it goes in the side table. */
     record SetExtra(DocumentExtras<JsonElement> extras, UIElement node, String key,
             @Nullable JsonElement from, @Nullable JsonElement to) implements BuilderEdit {
+
+        @Override
+        public BuilderEdit resolvedIn(UnaryOperator<UIElement> toDocument) {
+            UIElement n = toDocument.apply(node);
+            return n == node ? this : new SetExtra(extras, n, key, from, to);
+        }
 
         @Override
         public void apply() {

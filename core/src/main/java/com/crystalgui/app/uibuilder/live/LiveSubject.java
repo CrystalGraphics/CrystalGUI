@@ -7,7 +7,7 @@ import java.util.WeakHashMap;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.dom.UIDocument;
@@ -71,6 +71,6 @@ public final class LiveSubject implements DataProvider {
         // write an edit through it -- must find nothing rather than something that cannot be written to,
         // which is what keeps the read-only sections working over a live screen and the editing ones
         // silent.
-        return key == BuilderEditor.BUILDER_SELECTION ? selection : null;
+        return key == UIBuilderView.BUILDER_SELECTION ? selection : null;
     }
 }

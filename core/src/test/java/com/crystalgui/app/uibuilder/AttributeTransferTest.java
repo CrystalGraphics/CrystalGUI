@@ -10,12 +10,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.attributes.AttributeGroup;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.attributes.StyleAttributes;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.attribute.AttributeClipboard;
@@ -189,7 +189,7 @@ public class AttributeTransferTest extends UiDocumentTestBase {
      */
     @Test
     public void aRightClickActsOnWhatIsUnderThePointer() {
-        BuilderEditor editor = new BuilderEditor(model);
+        UIBuilderView editor = new UIBuilderView(model);
         UIElement host = new UIElement().layout(l -> l.width(400f).height(300f));
         host.append(editor.view());
         document.append(host);
@@ -206,7 +206,7 @@ public class AttributeTransferTest extends UiDocumentTestBase {
     /** Right-clicking inside a multi-selection must not collapse it to the one under the pointer. */
     @Test
     public void aRightClickInsideASelectionLeavesItAlone() {
-        BuilderEditor editor = new BuilderEditor(model);
+        UIBuilderView editor = new UIBuilderView(model);
         UIElement host = new UIElement().layout(l -> l.width(400f).height(300f));
         host.append(editor.view());
         document.append(host);

@@ -9,11 +9,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.property.Property;
@@ -46,7 +46,7 @@ public class InspectorRefillTest extends UiDocumentTestBase {
             + "    ] }\n"
             + "}\n";
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private Inspector inspector;
     private Disposable sections;
     private UIElement ok;
@@ -56,7 +56,7 @@ public class InspectorRefillTest extends UiDocumentTestBase {
     public void openTheDocument() {
         UIElementRegistry.bootstrap();
         sections = BuilderInspectorSections.register();
-        editor = new BuilderEditor(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
+        editor = new UIBuilderView(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
         UIElement row = new UIElement().layout(l -> l.flexDirection(FlexDirection.ROW).width(W).height(H));
         UIElement root = new UIElement().layout(l -> l.width(500).height(500));
         root.append(editor.view());

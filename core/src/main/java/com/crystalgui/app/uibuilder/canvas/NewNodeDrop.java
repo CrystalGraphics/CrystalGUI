@@ -68,7 +68,7 @@ final class NewNodeDrop {
 
     @Nullable
     private DropResolver.Drop resolve(float rawX, float rawY) {
-        return new DropResolver(ctx.getDocument().root(), ctx.dropIndicator()).resolve(List.of(), rawX, rawY);
+        return DropResolver.forPane(ctx).resolve(List.of(), rawX, rawY);
     }
 
     /** Starts the edge pan and a watch that clears the indicator however the drag ends — a release refused here sends nothing. */

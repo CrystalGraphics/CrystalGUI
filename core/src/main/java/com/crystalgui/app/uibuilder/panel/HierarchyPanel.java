@@ -10,10 +10,10 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.glyph.GlyphView;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.command.CommandRegistry;
@@ -282,8 +282,8 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         // on a row's menu act on this document and its selection, and the Inspector -- which asks the focus owner --
         // describes the node identically from either. With two of the three, focus moving into a row changed which
         // sections answered, and the Inspector rebuilt for it before the click had chosen anything: a flicker.
-        if ((key == BuilderEditor.UI_BUILDER || key == BuilderEditor.UI_DOCUMENT
-                || key == BuilderEditor.BUILDER_SELECTION) && builder instanceof DataProvider surface) {
+        if ((key == UIBuilderView.UI_BUILDER || key == UIBuilderView.UI_DOCUMENT
+                || key == UIBuilderView.BUILDER_SELECTION) && builder instanceof DataProvider surface) {
             return surface.getData(key);
         }
         // THE HISTORY TOO. The walk stops at the first provider, and one answering only its own key hid the

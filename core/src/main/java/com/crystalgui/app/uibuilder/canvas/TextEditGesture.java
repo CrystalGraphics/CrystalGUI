@@ -32,7 +32,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * declares a {@code text} state, such as a button.
  *
  * <pre>{@code
- * TextEditGesture editing = new TextEditGesture(document);
+ * TextEditGesture editing = new TextEditGesture(ctx, document);
  * surface.surface().addOverlay(editing);
  * editing.begin(node);       // Enter or blur commits, Esc cancels
  * }</pre>
@@ -61,8 +61,12 @@ public final class TextEditGesture extends UIElement {
     @Nullable
     private UIElement target;
 
-    public TextEditGesture(UiBuilderDocument document) {
+    /** The pane the field opens in, which knows where a document node is drawn. */
+    private final BuilderContext ctx;
+
+    public TextEditGesture(BuilderContext ctx, UiBuilderDocument document) {
         super(NAME);
+        this.ctx = ctx;
         this.document = document;
         addClass(OVERLAY_CLASS);
         // FULL SIZE so the field has somewhere to be, and HIT_TRANSPARENT so the layer is never itself
@@ -125,14 +129,17 @@ public final class TextEditGesture extends UIElement {
      * @return whether editing started
      */
     public boolean begin(@Nullable UIElement node) {
+        // THE DOCUMENT NODE IS EDITED; a hit on the canvas names its drawing.
+        if (ctx.sourceOf(node) != null) node = ctx.sourceOf(node);
         State<UIElement, String> text = textState(node);
-        if (text == null) return false;
+        UIElement drawn = ctx.shown(node);
+        if (text == null || drawn == null) return false;
         target = node;
         field.setText(text.read(node));
         field.selectAll();
         // THE NODE'S OWN FONT, in its own units: place() scales the whole field by the node's frame, so the
         // text is the node's size at every zoom rather than only at 100%.
-        var computed = node.getStyle().computed();
+        var computed = drawn.getStyle().computed();
         StyleGroup.inlinePipeline(field.getStyle().getGeneralGroup(),
                 g -> g.fontSize(computed.get(StylePropertyRegistry.FONT_SIZE))
                         .fontFamily(computed.get(StylePropertyRegistry.FONT_FAMILY)));
@@ -179,7 +186,7 @@ public final class TextEditGesture extends UIElement {
      * the node's picture with a caret in it.</p>
      */
     private void place() {
-        UIElement node = target;
+        UIElement node = ctx.shown(target);
         Box nodeBox = node == null ? null : node.box();
         Box fieldBox = field.box();
         Matrix4f frame = CanvasRects.localToSpace(node, this);
