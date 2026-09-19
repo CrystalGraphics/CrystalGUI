@@ -115,7 +115,7 @@ public final class NetworkedPanels implements WindowMount {
         // OPENED THROUGH THE DOCK, never by reaching into a group: a restore has already put this ref in
         // the layout, and open() finds it there and activates it rather than making a second tab.
         workbench.open(DockInput.of(ref));
-        workbench.dock().requestRebuild();
+        workbench.dock().rebuildPanel(ref);
         return new Mounted(panel, ref, context, false);
     }
 
@@ -221,7 +221,7 @@ public final class NetworkedPanels implements WindowMount {
         // same type. Dropping then takes away a panel that is on screen and working.
         String windowKey = ref.state(WINDOW_KEY, "");
         if (live.containsKey(panelKey(ref.typeId(), windowKey.isEmpty() ? null : windowKey))) return;
-        if (workbench.dock().layout().closePanel(ref)) workbench.dock().requestRebuild();
+        workbench.dock().removePanel(ref);
         workbench.hidePanel(ref.typeId());
     }
 
@@ -322,7 +322,7 @@ public final class NetworkedPanels implements WindowMount {
                 workbench.hidePanel(ref.typeId());
                 workbench.showPanel(ref.typeId());
             } else {
-                workbench.dock().requestRebuild();
+                workbench.dock().rebuildPanel(ref);
             }
         }
     }

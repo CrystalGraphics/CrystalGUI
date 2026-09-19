@@ -833,7 +833,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // built and has no reason to look again on its own.
         lifetime.add(markers.onDidChange.connect(resource -> {
             fileDecorations.invalidate();
-            documentTabs.syncTabDecorations();
+            documentTabs.refreshTabTitles();
         }));
         // RENDERED FROM THE RESULT, never from the call site. One update path serves this client's own
         // operations and another client's alike -- see Q11 in the chrome plan, and why two paths into

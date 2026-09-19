@@ -313,6 +313,35 @@ public class DockArea extends UIElement {
         return null;
     }
 
+    /**
+     * Takes {@code panel} out of whichever window holds it, with no guard and no close announcement — for a tab
+     * whose subject has already gone: its document closed, its file deleted, its server window refused. A
+     * window left empty closes itself. Closing a tab the user asked to close is {@link #closePanel}.
+     *
+     * @return whether any window held it
+     */
+    public boolean removePanel(DockPanelRef panel) {
+        DockArea holding = areaHolding(panel);
+        if (holding == null || !holding.layout.closePanel(panel)) return false;
+        holding.requestRebuild();
+        return true;
+    }
+
+    /**
+     * Puts {@code to} where {@code from} is, in whichever window holds it, keeping its place in the strip and its
+     * selection — a renamed file's tab.
+     *
+     * @return whether any window held {@code from}
+     */
+    public boolean replacePanel(DockPanelRef from, DockPanelRef to) {
+        DockArea holding = areaHolding(from);
+        if (holding == null) return false;
+        DockLeaf leaf = holding.layout.leafContaining(from);
+        if (leaf == null || !leaf.replace(from, to)) return false;
+        holding.requestRebuild();
+        return true;
+    }
+
     /** The home, then each window's area, minimised or not. */
     private List<DockArea> allAreas() {
         List<DockArea> out = new ArrayList<>();
@@ -554,8 +583,20 @@ public class DockArea extends UIElement {
         rebuildPending = true;
     }
 
+    /** What is on screen for {@code panel} in any window, or null when no group has built one. */
+    @Nullable
+    public UIElement builtContentFor(DockPanelRef panel) {
+        for (DockArea area : home().allAreas()) {
+            for (DockGroup group : area.groups.values()) {
+                UIElement built = group.builtContentFor(panel);
+                if (built != null) return built;
+            }
+        }
+        return null;
+    }
+
     /**
-     * <b>This panel's content is stale — build it again.</b>
+     * <b>This panel's content is stale — build it again</b>, in whichever window shows it.
      *
      * <p>{@link DockGroup} memoises what it built, deliberately: the map survives every rebuild of the
      * tree above, which is what stops a split or a drag rebuilding a live editor underneath the user.
@@ -570,17 +611,11 @@ public class DockArea extends UIElement {
      * <p>Does nothing for a ref no group holds, which is the ordinary case for a file that is open in
      * the document store and not on screen.</p>
      */
-    /** What is on screen for {@code panel}, or null when no group has built one. */
-    @Nullable
-    public UIElement builtContentFor(DockPanelRef panel) {
-        for (DockGroup group : groups.values()) {
-            UIElement built = group.builtContentFor(panel);
-            if (built != null) return built;
-        }
-        return null;
+    public void rebuildPanel(DockPanelRef panel) {
+        for (DockArea area : home().allAreas()) area.rebuildPanelHere(panel);
     }
 
-    public void rebuildPanel(DockPanelRef panel) {
+    private void rebuildPanelHere(DockPanelRef panel) {
         for (DockGroup group : groups.values()) {
             UIElement built = group.builtContentFor(panel);
             if (built == null) continue;
@@ -1154,9 +1189,12 @@ public class DockArea extends UIElement {
      * whatever the guard was protecting, and that should be uncomfortable to type by accident.</p>
      */
     public void closePanelDiscarding(DockPanelRef panel) {
+        // IN WHICHEVER WINDOW HOLDS IT: a guard's "Don't save" arrives at the home. @see #home()
+        DockArea holding = areaHolding(panel);
+        if (holding == null) return;
         long profiled = FrameProfile.enter("closePanel " + panel.state(DockPanelRef.PATH, "?"));
         try {
-            closePanelDiscardingImpl(panel);
+            holding.closePanelDiscardingImpl(panel);
         } finally {
             FrameProfile.leave(profiled, "closePanel");
         }
@@ -1216,7 +1254,7 @@ public class DockArea extends UIElement {
         // takes the widget out of the tree, and a detached element has no boxes -- so anything that
         // needs to MEASURE what is closing (an editor saving where its floating panels sat) has to be
         // told here. onDidClosePanel is too late by construction.
-        onWillClosePanel.emit(panel);
+        home().onWillClosePanel.emit(panel);
         for (DockGroup group : groups.values()) group.forgetContent(panel);
         FrameProfile.step(timed, "close.forgetContent x" + groups.size());
         // A STRIP RESYNC WHEN ONLY A STRIP CHANGED, and the full rebuild only when the tree did.
@@ -1246,12 +1284,16 @@ public class DockArea extends UIElement {
         // process did. `Disposer` could not help, because the thing that knew the panel was gone had no
         // way to say so. This is that way.
         timed = FrameProfile.begin();
-        onDidClosePanel.emit(panel);
+        home().onDidClosePanel.emit(panel);
         FrameProfile.step(timed, "close.onDidClosePanel (releases the document)");
     }
 
+    /** A panel that is about to close, while its widget is still in the tree. @see #onDidClosePanel */
+    public final Signal.Value<DockPanelRef> onWillClosePanel = new Signal.Value<>();
+
     /**
-     * A panel left the layout — by a close, not by a drag.
+     * A panel left the layout — by a close, not by a drag — in the home or any of its windows, announced by the
+     * home.
      *
      * <p>The seam that lets a document be released when its last tab goes. It is deliberately about the
      * <b>panel</b> rather than the document: the dock does not know what a document is, and the workbench
@@ -1260,9 +1302,6 @@ public class DockArea extends UIElement {
      * <p>Not fired by a drag between groups, which removes and re-adds the same panel: that is a move,
      * and disposing there would destroy the thing being dragged mid-gesture.</p>
      */
-    /** A panel that is about to close, while its widget is still in the tree. @see #onDidClosePanel */
-    public final Signal.Value<DockPanelRef> onWillClosePanel = new Signal.Value<>();
-
     public final Signal.Value<DockPanelRef> onDidClosePanel = new Signal.Value<>();
 
     /** Maximizes a group, or restores when it is already the maximized one. */
