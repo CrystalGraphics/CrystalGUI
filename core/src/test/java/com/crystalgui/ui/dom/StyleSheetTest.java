@@ -1,5 +1,6 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -55,7 +56,7 @@ public class StyleSheetTest extends UiDocumentTestBase {
         var decls = sheet.getRules().get(0).declarations();
         assertTrue(decls.get(0).important());
         assertFalse(decls.get(1).important());
-        assertEquals((Integer) 5, decls.get(0).value().compute());
+        assertEquals(ZIndex.of(5), decls.get(0).value().compute());
     }
 
     @Test
@@ -157,7 +158,7 @@ public class StyleSheetTest extends UiDocumentTestBase {
         assertEquals(1, sheet.getRules().size());
         var decls = sheet.getRules().get(0).declarations();
         assertEquals(1, decls.size());
-        assertEquals((Integer) 7, decls.get(0).value().compute());
+        assertEquals(ZIndex.of(7), decls.get(0).value().compute());
     }
 
     @Test

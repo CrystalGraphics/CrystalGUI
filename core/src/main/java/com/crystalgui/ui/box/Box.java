@@ -4,15 +4,19 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.stacking.Isolation;
+import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatRect;
+import dev.vfyjxf.taffy.style.TaffyPosition;
 import dev.vfyjxf.taffy.tree.NodeId;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
@@ -66,7 +70,6 @@ public final class Box {
     boolean hostedByPromotion;
     /** The boxes hosted here, in insertion order: natural children first, then overrides by sequence. */
     final List<Box> hosted = new ArrayList<>();
-    private @Nullable List<Box> paintOrder;
 
     @Nullable ComputedStyle appliedStyle;
 
@@ -79,7 +82,7 @@ public final class Box {
 
     // Per-box state that is not style: what the compositor is animating. The SCROLL is the node's,
     // so it survives a freeze with nothing captured and a mirror shows the same offset.
-    private @Nullable Integer zIndexOverride;
+    private @Nullable ZIndex zIndexOverride;
     private @Nullable Float opacityOverride;
     private @Nullable Transform transformOverride;
 
@@ -209,15 +212,12 @@ public final class Box {
         tree.structureChanged();
     }
 
-    /** The boxes hosted here in PAINT order: z-index ascending, ties in insertion order. */
+    /**
+     * The boxes hosted here, in hosting order: natural children in document order, then boxes hosted here by
+     * override. Not paint order, which is the stacking context's. @see #isStackingContext
+     */
     public List<Box> children() {
-        List<Box> order = paintOrder;
-        if (order == null) {
-            order = new ArrayList<>(hosted);
-            if (!stacksByInsertion) order.sort(Comparator.comparingInt(Box::zIndex));
-            paintOrder = order = Collections.unmodifiableList(order);
-        }
-        return order;
+        return Collections.unmodifiableList(hosted);
     }
 
     private boolean stacksByInsertion;
@@ -234,7 +234,8 @@ public final class Box {
     public void setStacksByInsertion(boolean stacksByInsertion) {
         if (this.stacksByInsertion == stacksByInsertion) return;
         this.stacksByInsertion = stacksByInsertion;
-        invalidatePaintOrder();
+        reclassify();
+        tree.stackingChanged();
         requestRepaint();
     }
 
@@ -242,8 +243,66 @@ public final class Box {
         return stacksByInsertion;
     }
 
-    void invalidatePaintOrder() {
-        paintOrder = null;
+    // ── Stacking ─────────────────────────────────────────────────────────────
+
+    /** @see #reclassify */
+    private boolean stackingContext;
+    private boolean positioned;
+    private ZIndex classifiedZ = ZIndex.AUTO;
+    private @Nullable StackingOrder stackingOrder;
+
+    /**
+     * Whether this box is a stacking context: what it hosts paints and hit-tests inside it, never interleaved with
+     * anything outside it. CSS's rule, and Blink's.
+     *
+     * <p>The root, a box hosted by override (a popup, a mirror, the top layer) and one whose {@code z-index} is not
+     * {@code auto}, whose {@code opacity} is below 1, whose {@code transform} is not the identity, or that has a
+     * {@code backdrop-filter}, a {@code mask} or {@code isolation: isolate}. The compositor's overrides count as the
+     * cascade's values do. Rounded {@code overflow: hidden} is <b>not</b> one, as in CSS: a descendant lifted past it
+     * is still clipped to it.</p>
+     */
+    public boolean isStackingContext() {
+        return stackingContext;
+    }
+
+    /** {@code position: absolute}: painted with its stacking context's z-ordered boxes, after its normal flow. */
+    public boolean isPositioned() {
+        return positioned;
+    }
+
+    /** Painted and hit-tested from a stacking context's lists rather than where it sits. @see StackingOrder */
+    boolean isZOrdered() {
+        return stackingContext || positioned;
+    }
+
+    /** The z-ordered boxes this box paints, as though it were a stacking context; rebuilt when stacking changed. */
+    StackingOrder stackingOrder() {
+        StackingOrder order = stackingOrder;
+        int epoch = tree.stackingEpoch();
+        if (order == null || order.epoch != epoch) stackingOrder = order = StackingOrder.of(this, epoch);
+        return order;
+    }
+
+    /**
+     * Reads what decides this box's stacking from its style, its hosting and the compositor's overrides, and tells
+     * the tree when the answer moved. Idempotent and cheap: a fade from 0.3 to 0.4 moves nothing.
+     */
+    void reclassify() {
+        ComputedStyle style = node.computedStyle();
+        ZIndex z = zIndex();
+        boolean context = host() == null || hostOverride != null || mirrorRoot || stacksByInsertion
+                || !z.auto()
+                || opacity() < 1f
+                || !transform().isIdentity()
+                || style.get(StylePropertyRegistry.BACKDROP_FILTER) != null
+                || style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY
+                || style.get(StylePropertyRegistry.ISOLATION) == Isolation.ISOLATE;
+        boolean absolute = style.get(LayoutProperties.POSITION) == TaffyPosition.ABSOLUTE;
+        if (context == stackingContext && absolute == positioned && z.equals(classifiedZ)) return;
+        stackingContext = context;
+        positioned = absolute;
+        classifiedZ = z;
+        tree.stackingChanged();
     }
 
     // ── Geometry ─────────────────────────────────────────────────────────────
@@ -361,6 +420,11 @@ public final class Box {
     /** @see #inkX0 */
     public float inkY1() {
         return inkY1;
+    }
+
+    /** Whether the world point falls inside what this box's subtree paints. @see #inkX0 */
+    boolean inkContains(float worldX, float worldY) {
+        return worldX >= inkX0 && worldX < inkX1 && worldY >= inkY0 && worldY < inkY1;
     }
 
     /** Whether this box's subtree paints anything at all â€” false for a zero-area or fully clipped one. */
@@ -539,21 +603,20 @@ public final class Box {
         setScroll(left, top);
     }
 
-    public int zIndex() {
+    public ZIndex zIndex() {
         if (zIndexOverride != null) return zIndexOverride;
         return node.computedStyle().get(StylePropertyRegistry.Z_INDEX);
     }
 
-    /** A compositor's z, above the cascade's; {@code null} withdraws it. */
+    /** A compositor's z, above the cascade's; {@code null} withdraws it. A number makes this a stacking context. */
     public void setZIndex(@Nullable Integer zIndex) {
-        if (Objects.equals(zIndexOverride, zIndex)) return;
-        zIndexOverride = zIndex;
+        ZIndex wanted = zIndex == null ? null : ZIndex.of(zIndex);
+        if (Objects.equals(zIndexOverride, wanted)) return;
+        zIndexOverride = wanted;
+        reclassify();
         Box host = host();
-        if (host != null) {
-            host.invalidatePaintOrder();
-            // The ORDER is what changed, and nothing about either box's own geometry did.
-            host.requestRepaint();
-        }
+        // The ORDER is what changed, and nothing about either box's own geometry did.
+        if (host != null) host.requestRepaint();
     }
 
     public float opacity() {
@@ -577,6 +640,7 @@ public final class Box {
     public void setOpacity(@Nullable Float opacity) {
         if (Objects.equals(opacityOverride, opacity)) return;
         opacityOverride = opacity;
+        reclassify();
         Box host = host();
         // No host is the root, which composites into the screen: there is nothing above to tell.
         (host != null ? host : this).requestRepaint();
@@ -591,6 +655,7 @@ public final class Box {
     /** A compositor's transform, above the cascade's; {@code null} withdraws it. Layout-free. */
     public void setTransform(@Nullable Transform transform) {
         transformOverride = transform;
+        reclassify();
         tree.transformsChanged();
     }
 
@@ -772,23 +837,42 @@ public final class Box {
         return search(worldX, worldY, skip, false);
     }
 
+    /**
+     * The topmost box at a world point in what this box paints, searched in exactly the reverse of the order it is
+     * painted in, taking this box as the stacking context whether or not it is one. @see StackingOrder
+     */
     private @Nullable Box search(float worldX, float worldY, Predicate<Box> skip, boolean respectHitTest) {
-        if (respectHitTest && !hitTestable()) return null;
-        Vector4f p = new Vector4f(worldX, worldY, 0f, 1f);
-        worldToLocal.transform(p);
-        boolean inside = p.x >= 0f && p.y >= 0f && p.x < width && p.y < height;
-        // THE ROUNDED BORDER BOX IS THE SURFACE, as Blink's LayoutBox::HitTestClippedOutByBorder has it: a corner
-        // cut away by `border-radius` is not this box. Asked only of a box the point is already inside, so the eight
-        // radius lookups are paid for the pointer's own ancestors rather than for every box in the tree.
-        if (inside && !insideCorners(p.x, p.y)) inside = false;
-        // And when the box CLIPS, the corner is outside the clip, so nothing inside it is there either -- which is
-        // the same reading of `clips()` the rectangle gets, and the painter's, which masks the subtree to the radii.
-        if (!inside && clips()) return null;
-        List<Box> order = children();
-        for (int i = order.size() - 1; i >= 0; i--) {
-            Box hit = order.get(i).search(worldX, worldY, skip, respectHitTest);
-            if (hit != null) return hit;
+        return search(this, worldX, worldY, skip, respectHitTest, true);
+    }
+
+    /**
+     * {@code box} and what it paints: as a stacking context, its lists and its normal flow in reverse paint order;
+     * otherwise its normal flow alone, since its z-ordered descendants are searched from the context's lists.
+     */
+    private static @Nullable Box search(Box box, float worldX, float worldY, Predicate<Box> skip,
+                                        boolean respectHitTest, boolean asContext) {
+        if (respectHitTest && !box.hitTestable()) return null;
+        boolean inside = box.contains(worldX, worldY);
+        // WHEN THE BOX CLIPS, nothing it paints lies outside it -- the rectangle and, as the painter masks, the corners.
+        if (!inside && box.clips()) return null;
+        Box hit = null;
+        if (asContext) {
+            StackingOrder order = box.stackingOrder();
+            hit = searchLifted(order.top, box, worldX, worldY, skip, respectHitTest);
+            if (hit == null) hit = searchLifted(order.positive, box, worldX, worldY, skip, respectHitTest);
+            if (hit == null) hit = searchLifted(order.zero, box, worldX, worldY, skip, respectHitTest);
         }
+        if (hit == null) {
+            List<Box> flow = box.hosted;
+            for (int i = flow.size() - 1; i >= 0 && hit == null; i--) {
+                Box child = flow.get(i);
+                if (!child.isZOrdered()) hit = search(child, worldX, worldY, skip, respectHitTest, false);
+            }
+        }
+        if (hit == null && asContext) {
+            hit = searchLifted(box.stackingOrder().negative, box, worldX, worldY, skip, respectHitTest);
+        }
+        if (hit != null) return hit;
         // SKIPPED means "not the answer", never "nor anything inside me". An inert node's children
         // are inert too when the reason is the ATTRIBUTE, so a subtree still falls through whole --
         // but when the reason is a MODAL, the one box the pointer may still reach is inside the box
@@ -803,8 +887,47 @@ public final class Box {
         // WITHOUT recursing, so it would make every popup, menu and dialog in the top layer unhittable.
         // The distinction wanted here is the one `skip` already draws a line under: not the answer,
         // and no statement at all about what is inside.
-        if (stackingOnly) return null;
-        return inside && !skip.test(this) ? this : null;
+        if (box.stackingOnly) return null;
+        return inside && !skip.test(box) ? box : null;
+    }
+
+    /** One of a context's lists, last painted first. */
+    private static @Nullable Box searchLifted(List<Box> lifted, Box context, float worldX, float worldY,
+                                              Predicate<Box> skip, boolean respectHitTest) {
+        for (int i = lifted.size() - 1; i >= 0; i--) {
+            Box box = lifted.get(i);
+            // NOTHING IT PAINTS IS THERE: its ink holds every box it could answer with, and a context lists every
+            // realised row of every virtualised list, so this is what keeps a pointer move from walking them all.
+            if (!box.inkContains(worldX, worldY)) continue;
+            if (!reachable(box, context, worldX, worldY, respectHitTest)) continue;
+            Box hit = search(box, worldX, worldY, skip, respectHitTest, box.isStackingContext());
+            if (hit != null) return hit;
+        }
+        return null;
+    }
+
+    /**
+     * Whether a box lifted into {@code context}'s lists can be hit at the point through the boxes between them: none
+     * has hit-testing off, and every one that clips holds the point. They are not walked on the way to it, so what
+     * they would have refused is refused here.
+     */
+    private static boolean reachable(Box lifted, Box context, float worldX, float worldY, boolean respectHitTest) {
+        for (Box between = lifted.host(); between != null && between != context; between = between.host()) {
+            if (respectHitTest && !between.hitTestable()) return false;
+            if (between.clips() && !between.contains(worldX, worldY)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Whether the world point falls on this box: inside its border box and, as Blink's
+     * {@code LayoutBox::HitTestClippedOutByBorder} has it, inside its rounded corners.
+     */
+    private boolean contains(float worldX, float worldY) {
+        Vector4f p = new Vector4f(worldX, worldY, 0f, 1f);
+        worldToLocal.transform(p);
+        if (p.x < 0f || p.y < 0f || p.x >= width || p.y >= height) return false;
+        return insideCorners(p.x, p.y);
     }
 
     /**

@@ -60,7 +60,7 @@ public class DialogManagerTest extends UiDocumentTestBase {
     }
 
     private int z(Dialog d) {
-        return d.getStyle().getGeneralGroup().zIndex();
+        return d.getStyle().getGeneralGroup().zIndex().orZero();
     }
 
     private float left(Dialog d) {

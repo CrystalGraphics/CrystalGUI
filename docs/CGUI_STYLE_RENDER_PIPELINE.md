@@ -869,6 +869,40 @@ fill are the same colour. `text.shader` takes the silhouette's coverage as the u
 between the two by how much of it each occupies; paint order decides which is measured first only
 where they genuinely overlap, which is `center` and `inset` and never `outset`.
 
+## 8e. Stacking order — what paints over what
+
+Paint order and hit order are CSS's (2.1 Appendix E), from Blink's stacking model: a **stacking context**
+paints its own background, then its negative `z-index` boxes, then its normal flow, then its `auto`/`0` and
+positive boxes; hit-testing walks that exactly backwards. `StackingOrder` holds a context's three lists,
+`BoxPainter` and `Box.hitTest`/`pick` both read them.
+
+| A box is… | when |
+|---|---|
+| a **stacking context** | the root; hosted by override (a popup, a mirror, the top layer); `z-index` not `auto`; `opacity` < 1; a `transform`; `backdrop-filter`; `mask`; `isolation: isolate` |
+| **positioned** | `position: absolute` — painted with its context's `auto` boxes, after its normal flow |
+| **normal flow** | everything else, painted in tree order where it sits |
+
+A z-ordered box (a context, or positioned) is painted by the nearest context above it, **not** inside its
+parent — so a transformed button in one row paints and takes the pointer over the row after it, as in a
+browser. It is still clipped by every box it rose out of, rounded corners included.
+
+- **`z-index` applies to every box**, positioned or not: every box here is a flex or grid item, which CSS
+  gives a `z-index` whether or not it is positioned. `auto` is the initial value and is not `0`.
+- **A negative `z-index` sits under its context's whole normal flow** — under its parent's background too,
+  unless the parent is the context. `isolation: isolate` on the parent is the fix that changes nothing else.
+- **An absolute box without a `z-index` paints over later normal-flow siblings.** A wash meant to sit under
+  its siblings takes `z-index: -1` inside a context (the taskbar's glows).
+- **The top layer paints after everything**, outside every context in the document, as CSS's does: a popup
+  or dialog is over any `z-index` a window was raised to. And a family of boxes numbered against each other —
+  windows raised by an ever-growing `z-index` — needs a context of its own (`desktop .__windows__` isolates),
+  or the numbers are ordered against the whole document.
+- **Rounded `overflow: hidden` is not a context**, as in CSS; a lifted descendant is masked to the corners
+  through its own layer.
+- **Deviation:** within one normal flow a box paints whole (background, content, children) rather than in
+  CSS's phases (all backgrounds, then all content). It matters only where in-flow boxes overlap.
+
+---
+
 ## 9. Known Gaps vs. the Web
 
 - **No `@import` or media queries.** External stylesheets *are* supported now —

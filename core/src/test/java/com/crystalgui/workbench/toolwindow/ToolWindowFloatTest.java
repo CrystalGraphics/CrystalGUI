@@ -711,7 +711,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
 
     /** Its place in the stack, read the way the desktop writes it. */
     private static int z(WindowFrame frame) {
-        return frame.getStyle().getGeneralGroup().zIndex();
+        return frame.getStyle().getGeneralGroup().zIndex().orZero();
     }
 
     private static boolean isInside(UIElement element, UIElement ancestor) {

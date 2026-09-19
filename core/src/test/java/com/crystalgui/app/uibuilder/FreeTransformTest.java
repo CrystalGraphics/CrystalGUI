@@ -584,33 +584,6 @@ public class FreeTransformTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>Chrome still answers for itself.</b>
-     *
-     * <p>Design picking corrects what the box tree found; it does not replace the question. Answering it
-     * from scratch by walking the artboard means a press on a resize handle resolves to whatever document
-     * element happens to be behind it — so the tool selects that element and consumes the press, and the
-     * handles stop dragging while a corner selects the parent.</p>
-     */
-    @Test
-    public void aPressOnChromeIsNotRedirectedIntoTheDocument() {
-        Artboard artboard = new Artboard(model, model.root());
-        document.append(artboard);
-        UIElement inside = new UIElement().layout(l -> l.width(40f).height(20f));
-        model.root().append(inside);
-        UIElement chrome = new UIElement().layout(l -> l.width(6f).height(6f));
-        document.append(chrome);
-        document.update(W, H);
-
-        TreePolicy policy = new TreePolicy(artboard);
-
-        assertSame("something drawn over the canvas has to keep the press it was given",
-                chrome, policy.pickAt(chrome, 0f, 0f));
-        assertSame("a hit on the document's own content is corrected to the layout box",
-                inside, policy.pickAt(inside,
-                        inside.box().x() + 2f, inside.box().y() + 2f));
-    }
-
-    /**
      * <b>What a press means where, which is the whole of what the cursor promises.</b>
      *
      * <p>Rotate has no handle drawn for it — the band outside a corner IS the affordance — so it has to

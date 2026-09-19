@@ -229,8 +229,8 @@ public class ErrorStripeTest extends UiDocumentTestBase {
         assertNotNull("no thumb to compare against", thumb);
 
         assertTrue("the stripe sits under the thumb and will be hidden by it",
-                mark.getStyle().getGeneralGroup().zIndex()
-                        > thumb.getStyle().getGeneralGroup().zIndex());
+                mark.getStyle().getGeneralGroup().zIndex().orZero()
+                        > thumb.getStyle().getGeneralGroup().zIndex().orZero());
     }
 
     private static UIElement findByClass(UIElement element, String cssClass) {

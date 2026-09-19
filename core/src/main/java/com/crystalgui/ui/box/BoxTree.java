@@ -401,10 +401,7 @@ public final class BoxTree {
             box.hostedByPromotion = true;
         }
         // Hosting: natural children first in document order, then overrides in the order declared.
-        for (Box box : inOrder) {
-            box.hosted.clear();
-            box.invalidatePaintOrder();
-        }
+        for (Box box : inOrder) box.hosted.clear();
         for (Box box : inOrder) {
             if (box.hostOverride == null && box.naturalHost != null) box.naturalHost.hosted.add(box);
         }
@@ -420,6 +417,10 @@ public final class BoxTree {
             for (int i = 0; i < wanted.length; i++) wanted[i] = box.hosted.get(i).taffyId;
             if (!sameChildren(box.taffyId, wanted)) taffy.setChildren(box.taffyId, wanted);
         }
+        // WHAT STACKS WHERE follows the hosting: a box hosted elsewhere is a stacking context, and every list may
+        // have gained or lost a box.
+        for (Box box : inOrder) box.reclassify();
+        stackingChanged();
     }
 
     private @Nullable Box syncNode(UIElement node, @Nullable Box naturalHost, Map<UIElement, Box> realm,
@@ -556,7 +557,6 @@ public final class BoxTree {
         boolean hosted = box.hostOverride != null;
         if (computed != box.appliedStyle || hosted != box.appliedHosted) {
             box.appliedHosted = hosted;
-            int zBefore = box.appliedStyle == null ? 0 : box.appliedStyle.get(StylePropertyRegistry.Z_INDEX);
             BoxStyle.apply(box.bridge, computed, hosted, box.mirrorRoot);
             // AND ANY PIN IS GONE WITH IT. `BoxStyle.apply` writes width, height and the minimums and
             // maximums straight from the source's computed style, so re-applying a style silently
@@ -575,10 +575,7 @@ public final class BoxTree {
             box.appliedStyle = computed;
             taffy.markDirty(box.taffyId);
             transformsDirty = true;
-            if (computed.get(StylePropertyRegistry.Z_INDEX) != zBefore) {
-                Box host = box.host();
-                if (host != null) host.invalidatePaintOrder();
-            }
+            box.reclassify();
         }
         for (Box child : box.hosted) refreshStyles(child);
     }
@@ -822,6 +819,20 @@ public final class BoxTree {
 
     void structureChanged() {
         structureDirty = true;
+    }
+
+    /**
+     * Moves whenever anything that decides stacking does: a box becoming or ceasing to be a stacking context or
+     * positioned, a {@code z-index}, the hosting. Each context's {@link StackingOrder} is rebuilt on first use after.
+     */
+    private int stackingEpoch;
+
+    int stackingEpoch() {
+        return stackingEpoch;
+    }
+
+    void stackingChanged() {
+        stackingEpoch++;
     }
 
     /** Public because a node's {@code scroll-exempt} changes composition without changing layout. */

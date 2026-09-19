@@ -99,6 +99,9 @@ desktop .__windows__ {
     height: 0;
     flex-grow: 1;
     overflow: visible;
+    /* THE WINDOWS STACK AMONG THEMSELVES. A raise writes an ever-growing `z-index`, and without a context of its
+     * own each one would be ordered against the whole document -- over the taskbar and every popup. */
+    isolation: isolate;
 }
 
 /* THE DIALOG BAND — the work area exactly, and nothing of its own.
@@ -204,6 +207,8 @@ taskbar .__glow__ {
     width: 100%;
     height: 100%;
     background: linear-gradient(90deg, transparent 18%, var(--taskbar-glow, #3574F033) 50%, transparent 82%);
+    /* UNDER THE ENTRIES: an absolute box paints over its context's flow, and the glass bar is the context. */
+    z-index: -1;
 }
 
 /* THE ENTRIES ARE BOUNDED BY THE BAR. `max-width` bounds the box and `overflow` bounds what paints —
@@ -430,6 +435,12 @@ taskbar .__entry__ .__badge__ {
  * under the label rather than over it, which is what makes it a fill rather than a curtain. The WIDTH
  * is written from Java in PERCENT, never pixels — see Taskbar.applyProgress. Rounded to the entry's
  * own radius so a part-filled entry keeps its corners. */
+/* THE ENTRY IS ITS STACKING CONTEXT, so the fill's `z-index: -1` lands under the label and over the entry's own
+ * background -- without one it would drop under the bar's flow, entry background and all. */
+taskbar .__entry__.__busy__ {
+    isolation: isolate;
+}
+
 taskbar .__entry__.__busy__ .__progress__ {
     position: absolute;
     left: 0;
@@ -1229,6 +1240,8 @@ menu.__jump-list__.__rising__ {
     height: 100%;
     border-radius: var(--radius-panel, 8px);
     background: linear-gradient(180deg, var(--preview-glow, #3574F033), transparent);
+    /* Under the header and the picture: see taskbar .__glow__. */
+    z-index: -1;
 }
 
 /* The header is a ROW that fills the panel's width, and the title is the part that gives. `width: 0`
@@ -1431,6 +1444,8 @@ menu.__jump-list__.__rising__ {
     height: 100%;
     border-radius: var(--radius-panel, 8px);
     background: linear-gradient(180deg, var(--switcher-glow, #3574F033), transparent);
+    /* Under the tiles: see taskbar .__glow__. */
+    z-index: -1;
 }
 
 /* One window. A COLUMN -- icon and title above, picture below, which is Windows' arrangement and not the

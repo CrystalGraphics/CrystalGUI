@@ -12,6 +12,9 @@ import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
+import com.crystalgui.style.property.visual.stacking.Isolation;
+import com.crystalgui.style.property.visual.stacking.ZIndex;
+import com.crystalgui.style.property.visual.stacking.ZIndexProperty;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.property.visual.OverscrollBehavior;
 import com.crystalgui.style.property.visual.ScrollBehavior;
@@ -241,7 +244,10 @@ public class StylePropertyRegistry {
             create(new LengthPercentProperty("text-offset-x", LengthPercent.ZERO)).setInheritable(true);
     public static final StyleProperty<LengthPercent> TEXT_OFFSET_Y =
             create(new LengthPercentProperty("text-offset-y", LengthPercent.ZERO)).setInheritable(true);
-    public static final StyleProperty<Integer> Z_INDEX = create("z-index", 0);
+    /** {@code auto} or a number; a number makes the box a stacking context. @see ZIndex */
+    public static final StyleProperty<ZIndex> Z_INDEX = create(new ZIndexProperty("z-index"));
+    /** {@code isolate} makes the box a stacking context and does nothing else. */
+    public static final StyleProperty<Isolation> ISOLATION = create("isolation", Isolation.class, Isolation.AUTO);
     // Whether clipping happens at all. The clip *mechanism* (scissor vs mask) is auto-detected from
     // the element's resolved shape — see UIElement#resolveOverflowClip(). Replaces the old
     // `clip: none|scissor|mask` property, which let authors pick the mechanism directly.

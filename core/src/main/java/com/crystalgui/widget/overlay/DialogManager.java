@@ -125,9 +125,9 @@ public final class DialogManager {
     }
 
     private boolean isFrontMost(Dialog dialog) {
-        int z = dialog.getStyle().getGeneralGroup().zIndex();
+        int z = dialog.getStyle().getGeneralGroup().zIndex().orZero();
         for (Dialog other : dialogs) {
-            if (other != dialog && other.getStyle().getGeneralGroup().zIndex() >= z) return false;
+            if (other != dialog && other.getStyle().getGeneralGroup().zIndex().orZero() >= z) return false;
         }
         return true;
     }

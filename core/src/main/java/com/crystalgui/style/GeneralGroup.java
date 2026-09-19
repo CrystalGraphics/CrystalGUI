@@ -1,5 +1,7 @@
 package com.crystalgui.style;
 
+import com.crystalgui.style.property.visual.stacking.Isolation;
+import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.property.visual.text.StrokeAlign;
 import com.crystalgui.style.property.visual.text.PaintOrder;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -349,12 +351,23 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public int zIndex() {
+    public ZIndex zIndex() {
         return getValueSave(StylePropertyRegistry.Z_INDEX);
     }
 
+    public Isolation isolation() {
+        return getValueSave(StylePropertyRegistry.ISOLATION);
+    }
+
+    /** {@link Isolation#ISOLATE} makes the box a stacking context and does nothing else. */
+    public GeneralGroup isolation(Isolation isolation) {
+        set(StylePropertyRegistry.ISOLATION, isolation);
+        return this;
+    }
+
+    /** A numbered {@code z-index}, which makes the box a stacking context. */
     public GeneralGroup zIndex(int zIndex) {
-        set(StylePropertyRegistry.Z_INDEX, zIndex);
+        set(StylePropertyRegistry.Z_INDEX, ZIndex.of(zIndex));
         return this;
     }
 
