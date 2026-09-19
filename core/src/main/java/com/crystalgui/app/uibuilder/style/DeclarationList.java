@@ -229,26 +229,39 @@ final class DeclarationList extends UIElement {
     }
 
     /**
-     * What a shorthand starts at when its longhands' initials would change nothing: a stroke of no width in no color
-     * is not an edit, so an inline pick of it recorded nothing and no row appeared.
+     * What a name starts at when its own initial would change nothing, or cannot be written at all.
+     *
+     * <p>A stroke of no width in no color is not an edit, so an inline pick of one recorded nothing and no row
+     * appeared. {@code backdrop-filter} is the other half of that: its initial is null — an element with no filter
+     * must not capture and blur the surface behind it to draw nothing — so there was no value to write and the pick
+     * failed outright. It starts where the glass lab starts.</p>
      */
     private static final Map<String, String> STARTERS = Map.of(StyleFields.TEXT_STROKE, "1px #000000",
-            StyleFields.BORDER_RADIUS, "4px", StyleFields.BORDER_WIDTH, "1px", StyleFields.OUTLINE_OFFSET, "2px", StyleFields.OUTLINE, "1px #FFFFFF");
+            StyleFields.BORDER_RADIUS, "4px", StyleFields.BORDER_WIDTH, "1px", StyleFields.OUTLINE_OFFSET, "2px",
+            "backdrop-filter", GlassLab.DEFAULT);
+    // `outline` had a width-and-colour entry here and could never reach it -- the registry holds `outline` itself,
+    // as the drawable slot, whose parser reads no such value. It starts at its own initial, as it always did.
 
-    /** A name's initial value as a sheet writes it; a shorthand's is its starter, else its longhands' initials. */
-    private static String initialOf(String name) {
-        StyleProperty<?> property = StyleFields.propertyOf(name);
-        if (property != null) return initialOf(property);
+    /**
+     * What a palette pick writes: the name's starter, else its own initial as a sheet writes it, else its longhands'.
+     *
+     * <p>Every name the palette offers has to reach one of those — {@code StylePaletteStartsTest} says so. There is
+     * no keyword meaning "whatever this property's initial is": the engine parses no CSS-wide keywords, so a name
+     * with nothing to start at used to be offered, picked, and refused by its own parser.</p>
+     */
+    static String initialOf(String name) {
         String starter = STARTERS.get(name);
         if (starter != null) return starter;
+        StyleProperty<?> property = StyleFields.propertyOf(name);
+        if (property != null) return initialOf(property);
         List<String> parts = new ArrayList<>();
         for (StyleProperty<?> longhand : PropertyPalette.longhandsOf(name)) parts.add(initialOf(longhand));
-        return parts.isEmpty() ? "initial" : String.join(" ", parts);
+        return String.join(" ", parts);
     }
 
     private static String initialOf(StyleProperty<?> property) {
         String written = property.initialValue == null ? null : StyleFields.cast(property).write(property.initialValue);
-        return written == null || written.isBlank() ? "initial" : written;
+        return written == null ? "" : written;
     }
 
     @SuppressWarnings("unchecked")
