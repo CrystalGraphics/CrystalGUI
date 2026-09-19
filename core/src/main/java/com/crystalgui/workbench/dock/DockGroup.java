@@ -839,20 +839,16 @@ public class DockGroup extends UIElement {
     }
 
     /**
-     * Where in the strip a drop at {@code screenX} would land.
+     * Where in the strip a drop at {@code (screenX, screenY)} would land — on the row the pointer is over, when the
+     * tabs wrap.
      *
      * <p>Delegated to {@link InsertionMarker}, which is where the two rules now live: the first item whose
      * midpoint is past the pointer, and an index range of {@code [0, size]} so the far end stays reachable.
      * This was the original statement of both, and the stripes needing the same thing rotated ninety
      * degrees is what made it worth having once.</p>
      */
-    public int insertionIndexAt(float screenX) {
-        List<Tab> strip = tabs.getTabs();
-        // The empty case already answers 0; a tab that has not been laid out answers the same. The
-        // strip's own band is what `stripBandContains` reads for exactly this reason.
-        Box firstTab = strip.isEmpty() ? null : strip.get(0).box();
-        float y = firstTab == null ? 0f : firstTab.y();
-        return insertion.indexFor(this, strip, screenX, y);
+    public int insertionIndexAt(float screenX, float screenY) {
+        return insertion.indexFor(this, tabs.getTabs(), screenX, screenY);
     }
 
     /** Draws the caret at the boundary {@code index} would insert at. */

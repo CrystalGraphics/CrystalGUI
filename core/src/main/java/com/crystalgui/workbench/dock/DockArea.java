@@ -1671,7 +1671,7 @@ public class DockArea extends UIElement {
             // refusal clears the preview: the gap slammed shut the moment the pointer rested over the
             // tab's own home and reopened as soon as it moved a pixel. A no-op drop is now accepted and
             // performs `move(from, from)`, which DockLeaf.move already returns false for.
-            setPreview(group, DockDropZone.MERGE, false, group.insertionIndexAt(pointerX));
+            setPreview(group, DockDropZone.MERGE, false, group.insertionIndexAt(pointerX, pointerY));
             return true;
         }
 
