@@ -14,7 +14,12 @@
 theme {
     --activitybar-badge-fg: var(--fg-on-accent);
     --activitybar-bg: var(--surface-base);
-    --activitybar-separator: var(--divider);
+    /* NOT --divider, which is tuned for a full-width rule between panels: this is ONE PIXEL twelve
+     * across on a raised surface, and at that size the divider's five levels of contrast against the
+     * bar are invisible -- the two halves of the rail read as one list. A mark this small has to
+     * punch above the weight a long rule needs, which is why IntelliJ gives the stripe separator a
+     * colour of its own rather than reusing its borders. */
+    --activitybar-separator: var(--border-strong);
 
     /* THE BASE SURFACE, not the raised one. A balloon floats over the editor rather than sitting in a
      * panel, and `raised` read as a lighter patch pasted on top of it. @see --notification-bg */
