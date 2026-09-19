@@ -392,6 +392,16 @@ menu::part(items) {
     gap: 2px;
 }
 
+/* NO TALLER THAN THE WINDOW: past that the rows scroll, as the font list's do, rather than running off the bottom.
+ * The scroller gives way to the cap; a menu that fits never shows a bar. */
+menu {
+    max-height: 100%;
+}
+menu::part(scroller) {
+    flex-shrink: 1;
+    min-height: 0;
+}
+
 /* The gap stays 2px while the rows tightened, and that is deliberate: it is what keeps two focus bars
  * from touching, which is a different job from the space around the text. Tightening it as well is what
  * would make a run of highlighted rows read as one block. */

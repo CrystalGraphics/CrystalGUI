@@ -6,6 +6,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.*;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -21,6 +22,7 @@ import java.util.List;
 
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.widget.scroll.ScrollerView;
 
 /**
  * A menu — ARIA's {@code role="menu"}, and the widget behind both a dropdown list and a context menu.
@@ -65,6 +67,9 @@ public class Menu extends Popover {
 
 
     public static final String ITEMS_PART = "items";
+
+    /** What scrolls the items once the menu is taller than the window. */
+    public static final String SCROLLER_PART = "scroller";
 
     /** A grouping rule between items. @see #addSeparator() */
     public static final String SEPARATOR_PART = "separator";
@@ -139,7 +144,11 @@ public class Menu extends Popover {
         StyleGroup.defaultPipeline(itemSlot.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN));
         this.items.append(itemSlot);
-        shadow().append(this.items);
+        // A LONG MENU SCROLLS: capped at the window by the sheet, the rows move under a bar as the font list's do.
+        ScrollerView scroller = new ScrollerView();
+        scroller.set(Attribute.PART, SCROLLER_PART);
+        scroller.append(this.items);
+        shadow().append(scroller);
 
         // CLICK_NOT_TABBABLE, not FOCUSABLE: this is a real focus target now (see onOpened below), but
         // a menu is still "one tab stop" per MenuItem's own doc — Tab has nothing to do inside an open
@@ -605,7 +614,10 @@ public class Menu extends Popover {
     private void focusItem(int index) {
         if (index < 0 || index >= itemList.size()) return;
         UIDocument window = document();
-        if (window != null) window.focus().requestFocus(itemList.get(index));
+        if (window == null) return;
+        MenuItem item = itemList.get(index);
+        window.focus().requestFocus(item);
+        if (item.box() != null) item.box().scrollIntoView(Box.Reach.NEAREST);
     }
 
     private int focusedIndex() {

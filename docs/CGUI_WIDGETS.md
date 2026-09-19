@@ -842,6 +842,10 @@ per the ARIA pattern), Home/End; Enter/Space comes from `Button`. The whole menu
 items are `CLICK_NOT_TABBABLE`, and unlike `Tab` the stop does not rove, because an open menu holds focus
 outright and Tab has nothing to do inside it.
 
+**A menu is never taller than the window.** Past that its rows scroll inside `::part(scroller)`, a
+`ScrollerView`, and the keyboard scrolls the focused row into view — so a submenu listing fifty groups
+is a scrolling list, as a font picker's is. A menu that fits shows no bar.
+
 **An icon before a row's label** comes from its command, so every menu showing the command draws it; a menu
 holding any such row reserves the icon column on every row (`__has-icons__`), so labels stay aligned:
 
