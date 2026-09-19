@@ -115,8 +115,18 @@ public final class SvgRasterCache {
         if (m.m00() <= 0f || m.m00() != m.m11()) return false;
         float device = ctx.deviceScale();
         if (Math.max(document.width(), document.height()) * scale * device > MAX_DEVICE_PX) return false;
-        // The raster is aligned to the pixel grid, so the origin has to be on it -- CgUiSvg snaps it
-        // there for a settled icon, and an icon mid-zoom is exactly the case that must not be cached.
+        // SUB-PIXEL CELLS LEAVE NO CHOICE, whatever the alignment. Below one device pixel per document
+        // unit a scanline cell is thinner than a pixel, and the direct path has to let one cell claim
+        // the whole pixel -- so a fill paints a pixel per row and the icon comes out a SLAB many times
+        // its size, in its own colour. That is what a window thumbnail is (BoxTree.mirror re-draws the
+        // subtree at a fifth of its size), and why every icon in a taskbar preview and a switcher tile
+        // was a filled block. Accumulation is exact at any scale, and half a device pixel of
+        // misalignment is nothing at four pixels across; the cost is a raster per scale while something
+        // zooms out, each of them a few pixels.
+        if (scale * device < 1f) return true;
+        // Otherwise the raster is drawn 1:1 and aligned to the pixel grid, so the origin has to be on
+        // it -- CgUiSvg snaps it there for a settled icon, and an icon mid-zoom is exactly the case
+        // that must not be cached.
         float px = m.m00() * x + m.m30(), py = m.m11() * y + m.m31();
         return Math.abs(px - Math.round(px)) < 1e-3f && Math.abs(py - Math.round(py)) < 1e-3f;
     }
