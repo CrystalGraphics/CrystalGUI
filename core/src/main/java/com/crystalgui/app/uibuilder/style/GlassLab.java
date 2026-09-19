@@ -41,8 +41,8 @@ public final class GlassLab {
     /** How much of a length a 28x16 swatch keeps: a 24px blur or a 16px bezel is larger than the swatch itself. */
     private static final float SAMPLE_SCALE = 0.25f;
 
-    /** What an empty or {@code none} value opens on. */
-    private static final String DEFAULT = "blur(12px) saturate(1.2)";
+    /** What an empty or {@code none} value opens on, and what a palette pick of the property starts at. */
+    static final String DEFAULT = "blur(12px) saturate(1.2)";
 
     /** The engine's own filter, which is what an unwritten function means. */
     private static final CgUiBackdropFilter DEFAULTS = new CgUiBackdropFilter();
