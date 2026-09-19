@@ -530,6 +530,10 @@ public class DockArea extends UIElement {
     @Nullable
     private DockPanelRef announcedPanel;
 
+    /** The group {@link #announcedPanel} was in front of. @see #announcePanels */
+    @Nullable
+    private DockGroup announcedGroup;
+
     /**
      * What is on screen changed: a group's front panel moved, a group came or went. {@link #shownPanels()} as
      * announced — the view a panel following several editors at once needs, where {@link #onDidChangeActivePanel}
@@ -574,8 +578,12 @@ public class DockArea extends UIElement {
             onDidChangeShownPanels.emit(shown);
         }
         DockPanelRef now = activePanel();
-        if (Objects.equals(now, announcedPanel)) return;
+        // AND THE GROUP, since one panel can be in front of two: focus moving between the panes of a split changes
+        // which copy is being worked in and not the panel, and everything following the active editor has to hear it.
+        DockGroup group = activeArea().activeGroup();
+        if (Objects.equals(now, announcedPanel) && group == announcedGroup) return;
         announcedPanel = now;
+        announcedGroup = group;
         onDidChangeActivePanel.emit(now);
     }
 
