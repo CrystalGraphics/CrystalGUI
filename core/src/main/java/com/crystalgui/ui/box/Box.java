@@ -696,14 +696,18 @@ public final class Box {
         for (Box ancestor = host(); ancestor != null; ancestor = ancestor.host()) {
             if (!ancestor.clips()) continue;
             if (reach == Reach.NEAREST && ancestor != nearestClipping()) break;
+            // IN THE ANCESTOR'S OWN SPACE, where this box's width and the ancestor's are in the same units. World
+            // positions carry the surface's uiScale and sizes do not, so comparing the two revealed a box that was
+            // already in view -- by exactly how far it sat from the ancestor, times the scale less one.
             FloatRect b = ancestor.border();
-            float viewLeft = ancestor.worldX() + b.left;
-            float viewTop = ancestor.worldY() + b.top;
+            float viewLeft = b.left;
+            float viewTop = b.top;
             float viewRight = viewLeft + Math.max(0f, ancestor.width() - b.left - b.right);
             float viewBottom = viewTop + Math.max(0f, ancestor.height() - b.top - b.bottom);
 
-            float left = worldX() + shiftX;
-            float top = worldY() + shiftY;
+            Vector2f origin = originIn(this, ancestor);
+            float left = origin.x + shiftX;
+            float top = origin.y + shiftY;
             float right = left + width;
             float bottom = top + height;
 

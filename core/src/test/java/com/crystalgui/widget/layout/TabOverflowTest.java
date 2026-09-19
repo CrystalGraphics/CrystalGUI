@@ -96,4 +96,31 @@ public class TabOverflowTest extends UiDocumentTestBase {
         }
         return rows;
     }
+
+    /** Selecting a tab in full view leaves the strip where it is, at any uiScale; a cut tab comes just into view. */
+    @Test
+    public void selectingATabScrollsOnlyWhenItIsCut() {
+        document.boxes().setUiScale(2f);
+        TabView tabs = strip(TabView.TabOverflow.SCROLL);
+        tabs.rail().box().setScroll(40f, 0f);
+        frame();
+        Tab visible = null;
+        for (Tab tab : tabs.getTabs()) {
+            float start = tab.box().x() - 40f;
+            // THE LAST IN FULL VIEW, furthest along the rail, where a doubled offset lands past its end.
+            if (start >= 0f && start + tab.box().width() <= tabs.rail().box().clientWidth() && tab != tabs.getSelectedTab()) {
+                visible = tab;
+            }
+        }
+        tabs.selectTab(visible);
+        for (int i = 0; i < 4; i++) frame();
+        assertEquals("a tab in full view scrolled the strip", 40f, tabs.rail().scrollLeft(), 0.5f);
+
+        Tab last = tabs.getTabs().get(tabs.getTabs().size() - 1);
+        tabs.selectTab(last);
+        for (int i = 0; i < 60; i++) frame();
+        Box box = last.box();
+        assertEquals("the cut tab did not come flush to the strip's end",
+                box.x() + box.width() - tabs.rail().box().clientWidth(), tabs.rail().scrollLeft(), 0.5f);
+    }
 }

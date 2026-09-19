@@ -94,6 +94,22 @@ public class ScrollIntoViewTest extends UiDocumentTestBase {
                 3 * ROW_H - VIEWPORT, view.scrollTop(), 0.5f);
     }
 
+    /**
+     * <b>At any uiScale.</b> A world position carries the surface's scale and a size does not, so comparing the two
+     * saw a visible row at twice its offset -- past the fold -- and scrolled it.
+     */
+    @Test
+    public void aScaledSurfaceScrollsNeitherTooMuchNorAVisibleRow() {
+        document.boxes().setUiScale(2f);
+        frame();
+        view.box().setScroll(0f, 0f);
+        row(1).box().scrollIntoView();
+        assertEquals("a row in full view was scrolled", 0f, view.scrollTop(), 0.5f);
+
+        row(2).box().scrollIntoView();
+        assertEquals(3 * ROW_H - VIEWPORT, view.scrollTop(), 0.5f);
+    }
+
     /** An element already visible must not move the view at all. */
     @Test
     public void alreadyVisibleElementDoesNotScroll() {

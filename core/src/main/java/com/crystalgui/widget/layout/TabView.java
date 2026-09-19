@@ -532,11 +532,14 @@ public class TabView extends UIElement {
         Box railBox = rail.box();
         if (railBox == null) return;
         boolean vertical = tabSide.isVertical();
-        float viewStart = vertical ? railBox.worldY() + railBox.border().top
-                : railBox.worldX() + railBox.border().left;
+        // IN THE RAIL'S OWN SPACE, its scroll applied, where the tab's size and the rail's are in the same units -- a
+        // world position carries the surface's uiScale, and adding a logical width to one scrolled a tab that was
+        // already in full view.
+        var origin = Box.originIn(wantedBox, railBox);
+        float viewStart = vertical ? railBox.border().top : railBox.border().left;
         float viewLength = vertical ? Math.max(0f, railBox.clientHeight())
                 : Math.max(0f, railBox.clientWidth());
-        float start = vertical ? wantedBox.worldY() : wantedBox.worldX();
+        float start = vertical ? origin.y : origin.x;
         float length = vertical ? wantedBox.height() : wantedBox.width();
 
         float shift = 0f;
