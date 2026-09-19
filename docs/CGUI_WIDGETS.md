@@ -193,7 +193,7 @@ programmatic focus, false after a mouse click — except on elements that take t
   card draws what its factory builds; machinery a document never holds hides itself:
 
   ```java
-  KindInfo.named("Machine Gauge").inCategory("Machines")              // mymod's folder otherwise
+  KindInfo.named("Machine Gauge").inCategory("Machines/Gauges")      // a path nests; mymod's folder otherwise
           .synonyms("dial", "meter").describedAs("A needle over a scale.")
           .starter(() -> new MachineGauge().setValue(40))             // what a drop or double-click inserts
           .preview(Preview.sample(() -> new MachineGauge().setValue(70)).width(80));   // what its card draws
@@ -201,6 +201,13 @@ programmatic focus, false after a mouse click — except on elements that take t
   KindInfo.named("Reactor").preview(Preview.picture("icon(\"mymod:reactor\")"));   // cannot be shown live
   KindInfo.hidden();                                                  // a part, never listed
   ```
+
+  A category is a `/`-separated path, and so is a user's group in the Library: `Mine/Buttons` lists inside
+  `Mine`, a group's menu offers **New Group Inside…**, and renaming or deleting a group carries its
+  subgroups. The shipped `Forms` splits as Unity's UI Builder splits its fields — Numeric, Text, Choice,
+  Composite and Value — plus `Structure`; `Controls` into Buttons and Toggles, Inputs and Pickers; `Layout`
+  into Containers and Panes and Tabs; `Starters` into Layout, Forms and Dialogs, and Game UI (a starter's
+  category is `Starters/<folder>`). A category of a handful stays flat.
 
   | Supplier | Used by | Defaults to |
   |---|---|---|

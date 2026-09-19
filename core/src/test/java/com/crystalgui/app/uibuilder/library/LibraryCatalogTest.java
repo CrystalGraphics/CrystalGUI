@@ -140,9 +140,46 @@ public class LibraryCatalogTest {
     public void startersThenCommonComeFirst() {
         List<LibraryCatalog.Node> roots = LibraryCatalog.current().tree();
         assertEquals(LibraryStarters.FOLDER, roots.get(0).label());
-        assertEquals(LibraryStarters.ALL.size(), roots.get(0).children().size());
+        assertEquals(LibraryStarters.ALL.size(), leaves(roots.get(0)));
+        assertEquals("filed in sub-folders", "Forms and Dialogs", roots.get(0).children().get(0).label());
         assertEquals("Common", roots.get(1).label());
         assertEquals(Button.NAME, roots.get(1).children().get(2).entry().kind());
+    }
+
+    @Test
+    public void aCategoryPathNestsFolders() {
+        LibraryCatalog catalog = catalog(Map.of(DIAL, KindInfo.of("Forms/Numeric Fields")));
+
+        LibraryCatalog.Node forms = catalog.tree().get(0);
+        assertEquals("Forms", forms.label());
+        LibraryCatalog.Node numeric = forms.children().get(0);
+        assertEquals("Numeric Fields", numeric.label());
+        assertEquals(DIAL, numeric.children().get(0).entry().kind());
+    }
+
+    /** A group is listed inside the group its parent path names, by its own name; an orphan lists at the top. */
+    @Test
+    public void aGroupIsListedInsideItsParent() {
+        List<LibraryCatalog.Group> groups = List.of(
+                new LibraryCatalog.Group("Mine", List.of(), true),
+                new LibraryCatalog.Group("Mine/Buttons", List.of(DIAL), true),
+                new LibraryCatalog.Group("Gone/Orphan", List.of(), true));
+        LibraryCatalog catalog = LibraryCatalog.of(List.of(DIAL), kind -> KindInfo.of("Controls"), groups);
+
+        List<LibraryCatalog.Node> roots = catalog.tree();
+        assertEquals("Mine", roots.get(0).label());
+        LibraryCatalog.Node buttons = roots.get(0).children().get(0);
+        assertEquals("Buttons", buttons.label());
+        assertEquals("Mine/Buttons", buttons.group().label());
+        assertEquals(DIAL, buttons.children().get(0).entry().kind());
+        assertEquals("Orphan", roots.get(1).label());
+    }
+
+    private static int leaves(LibraryCatalog.Node node) {
+        if (!node.isCategory()) return 1;
+        int count = 0;
+        for (LibraryCatalog.Node child : node.children()) count += leaves(child);
+        return count;
     }
 
     private static LibraryCatalog catalog(Map<Name, KindInfo> kinds) {

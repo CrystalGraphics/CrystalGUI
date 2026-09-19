@@ -8,13 +8,16 @@ import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.extension.SessionSlice;
 import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.workbench.view.TitleActionsContributor;
+import com.google.gson.JsonElement;
 
 /**
  * The <b>Library</b> tool window: every placeable kind, placed into whatever {@code .cgui} is in front.
@@ -62,6 +65,38 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
             storeBound = true;
             panel.useLibrary(UserLibrary.in(store));
         });
+    }
+
+    private static final String KEY_EXPANDED = "expandedFolders";
+    private static final String KEY_FOLDER = "key";
+
+    /**
+     * Keeps which folders are open, per workspace, under the extension this Library ships with — so a Library
+     * another extension fills keeps folds of its own.
+     *
+     * <pre>{@code
+     * Disposable folds = workbench.registerSessionSlice(window.session());
+     * }</pre>
+     */
+    public SessionSlice session() {
+        return new SessionSlice() {
+            @Override
+            public String id() {
+                return extensionId;
+            }
+
+            @Override
+            public void write(StateMap<JsonElement> into) {
+                into.putList(KEY_EXPANDED, panel.expandedFolders(), (entry, key) -> entry.putString(KEY_FOLDER, key));
+            }
+
+            @Override
+            public void read(StateMap<JsonElement> from) {
+                // A FIRST RUN HAS NOTHING, and keeps the panel's own default of opening Common.
+                if (!from.has(KEY_EXPANDED)) return;
+                panel.restoreExpanded(from.getList(KEY_EXPANDED, entry -> entry.getString(KEY_FOLDER, "")));
+            }
+        };
     }
 
     /** The builder the panel places into, or null while none is on screen. */

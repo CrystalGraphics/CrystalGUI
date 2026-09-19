@@ -273,7 +273,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             if (!opened) {
                 opened = true;
                 search.refresh();
-                openCommon();
+                if (!foldsRestored) openCommon();
             }
             window.animation().every(this, delta -> {
                 PreviewStyles.of(window).sync();
@@ -368,6 +368,34 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         return selected;
     }
 
+    /** The group the selected card was picked in, or null: a kind in several groups has a card in each. */
+    @Nullable
+    public LibraryCatalog.Group selectedGroup() {
+        return selectedGroup;
+    }
+
+    @Nullable
+    private LibraryCatalog.Group selectedGroup;
+
+    /** Remembers the group {@code picked} — a card or a compact row — sits in. */
+    private void pickedIn(UIElement picked) {
+        for (UIElement at = picked; at != null && at != tree(); at = at.parentElement()) {
+            RowView view = views.get(at);
+            if (view == null) continue;
+            selectedGroup = (LibraryCatalog.Group) view.dataFor(GROUP);
+            return;
+        }
+        selectedGroup = null;
+    }
+
+    /** Delete takes the selected card out of the user's group it was picked in. */
+    @Override
+    protected void bindKeys() {
+        super.bindKeys();
+        keymap().bind("Delete", LibraryActions.REMOVE_FROM_GROUP);
+        keymap().bind("Backspace", LibraryActions.REMOVE_FROM_GROUP);
+    }
+
     /** Selects the card for {@code entry}, or clears the selection. */
     public void select(@Nullable LibraryCatalog.Entry entry) {
         if (Objects.equals(entry == null ? null : entry.id(), selected == null ? null : selected.id())) return;
@@ -393,6 +421,36 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         return key == LIBRARY ? this : null;
     }
 
+    /** Whether folds were restored, which replaces opening Common on a first run. */
+    private boolean foldsRestored;
+
+    /**
+     * The folders open now, by their keys — the same across a refresh and a relaunch, for a host to keep.
+     *
+     * <pre>{@code
+     * List<String> open = panel.expandedFolders();   // kept by whoever owns this Library
+     * other.restoreExpanded(open);                    // a later panel, over the same catalog
+     * }</pre>
+     */
+    public List<String> expandedFolders() {
+        List<String> out = new ArrayList<>();
+        for (Row row : tree().expandedItems()) {
+            if (row instanceof Folder folder) out.add(folder.key());
+        }
+        return out;
+    }
+
+    /**
+     * Opens exactly the folders {@code keys} name, and no others. A folder not listed yet — a user's group read in
+     * later — opens when it is, since a folder is its key. Replaces opening Common on a first run.
+     */
+    public void restoreExpanded(List<String> keys) {
+        foldsRestored = true;
+        List<Row> folders = new ArrayList<>(keys.size());
+        for (String key : keys) folders.add(new Folder(key, "", List.of(), null));
+        tree().setExpandedItems(folders);
+    }
+
     private void openCommon() {
         for (Row row : search.treeView().roots()) {
             if (row instanceof Folder folder && folder.label().equals(LibraryGroups.COMMON.label())) {
@@ -410,7 +468,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             if (node.isCategory()) {
                 flush(run, path, group, out);
                 // A GROUP'S KEY IS ITS OWN, so a user's group named after a category is still a folder of its own.
-                String key = node.group() != null ? "group:" + node.label() : path + "/" + node.label();
+                String key = node.group() != null ? "group:" + node.group().label() : path + "/" + node.label();
                 out.add(new Folder(key, node.label(), rowsFor(node.children(), key, node.group()), node.group()));
             } else {
                 run.add(node.entry());
@@ -675,6 +733,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
             // A STARTER JOINS NO GROUP, so its card offers what the panel does.
             if (at instanceof PreviewCard card && card.entry() != null) {
                 select(card.entry());
+                pickedIn(card);
                 return ContextMenu.of(card.entry().isStarter() ? PANEL_MENU : CARD_MENU);
             }
             RowView view = views.get(at);
@@ -693,6 +752,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         // NEVER FROM THE KEYBOARD: a drag armed by a synthesized press can never be released.
         if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON || event.getDetail() == Input.KEYBOARD_DETAIL) return;
         select(entry);
+        pickedIn(source);
         if (event.getDetail() >= 2) {
             onPlace.emit(entry);
             return;

@@ -86,13 +86,16 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                         .openByDefault());
 
         Disposable libraryCommands = LibraryActions.register(CommandRegistry.global());
+        LibraryToolWindow libraryWindow = new LibraryToolWindow(workbench, ID);
         Disposable library = workbench.registerToolWindow(
                 ToolWindowKind.of(LIBRARY_PANEL, "Library")
                         .icon("crystalgui:toolwindows/library")
                         .region(DockRegion.SIDEBAR)
-                        .view(new LibraryToolWindow(workbench, ID)));
+                        .view(libraryWindow));
+        Disposable libraryFolds = workbench.registerSessionSlice(libraryWindow.session());
 
         return () -> {
+            libraryFolds.dispose();
             library.dispose();
             libraryCommands.dispose();
             panel.dispose();

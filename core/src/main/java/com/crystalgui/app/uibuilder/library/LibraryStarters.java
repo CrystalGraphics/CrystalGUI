@@ -27,6 +27,10 @@ public final class LibraryStarters {
     /** The folder starters are listed under. */
     public static final String FOLDER = "Starters";
 
+    private static final String LAYOUT = "Layout";
+    private static final String FORMS = "Forms and Dialogs";
+    private static final String GAME = "Game UI";
+
     /** How a starter's card shows it; what placing it inserts is the snippet as shipped either way. */
     private enum Fit {
         /** At its own size: a snippet small enough to read in the card as it is. */
@@ -40,26 +44,26 @@ public final class LibraryStarters {
     /** What a {@link Fit#NARROW} starter is laid out at in its card, in logical pixels. */
     private static final float NARROW_WIDTH = 100f;
 
-    public static final LibraryCatalog.Entry ROW = starter("Row", "row", Fit.OWN, "crystalgui:nodes/ui/row",
+    public static final LibraryCatalog.Entry ROW = starter(LAYOUT, "Row", "row", Fit.OWN, "crystalgui:nodes/ui/row",
             "Children side by side, centred on the cross axis.", "horizontal", "hstack", "inline");
-    public static final LibraryCatalog.Entry COLUMN = starter("Column", "column", Fit.OWN, "crystalgui:nodes/ui/column",
+    public static final LibraryCatalog.Entry COLUMN = starter(LAYOUT, "Column", "column", Fit.OWN, "crystalgui:nodes/ui/column",
             "Children stacked top to bottom.", "vertical", "vstack", "stack");
-    public static final LibraryCatalog.Entry CARD = starter("Card", "card", Fit.NARROW, "crystalgui:nodes/ui/frame",
+    public static final LibraryCatalog.Entry CARD = starter(LAYOUT, "Card", "card", Fit.NARROW, "crystalgui:nodes/ui/frame",
             "A padded, rounded panel with a title and a line of text.", "panel", "box", "tile");
-    public static final LibraryCatalog.Entry TOOLBAR = starter("Toolbar", "toolbar", Fit.OWN, "crystalgui:nodes/ui/button",
+    public static final LibraryCatalog.Entry TOOLBAR = starter(LAYOUT, "Toolbar", "toolbar", Fit.OWN, "crystalgui:nodes/ui/button",
             "A row of buttons.", "actions", "buttons", "bar");
-    public static final LibraryCatalog.Entry LABELLED_FIELD = starter("Labelled Field", "labelled-field", Fit.OWN,
+    public static final LibraryCatalog.Entry LABELLED_FIELD = starter(FORMS, "Labelled Field", "labelled-field", Fit.OWN,
             "crystalgui:nodes/ui/textfield", "A label beside a text field.", "form", "input", "label");
-    public static final LibraryCatalog.Entry CONFIRM_DIALOG = starter("Confirm Dialog", "confirm-dialog", Fit.CARD,
+    public static final LibraryCatalog.Entry CONFIRM_DIALOG = starter(FORMS, "Confirm Dialog", "confirm-dialog", Fit.CARD,
             "crystalgui:nodes/ui/dialog", "A question, what it means, and Cancel beside the action.",
             "modal", "prompt", "are you sure", "warning", "ok", "cancel");
-    public static final LibraryCatalog.Entry STAT_BAR = starter("Stat Bar", "stat-bar", Fit.CARD,
+    public static final LibraryCatalog.Entry STAT_BAR = starter(GAME, "Stat Bar", "stat-bar", Fit.CARD,
             "crystalgui:nodes/ui/progressbar", "A stat's name, a bar of how full it is, and its value.",
             "health", "mana", "energy", "progress", "meter");
-    public static final LibraryCatalog.Entry STAT_LIST = starter("Stat List", "stat-list", Fit.CARD,
+    public static final LibraryCatalog.Entry STAT_LIST = starter(GAME, "Stat List", "stat-list", Fit.CARD,
             "crystalgui:nodes/ui/tableview", "Names down one side, their values down the other.",
             "stats", "key value", "properties", "details");
-    public static final LibraryCatalog.Entry ITEM_TOOLTIP = starter("Item Tooltip", "item-tooltip", Fit.CARD,
+    public static final LibraryCatalog.Entry ITEM_TOOLTIP = starter(GAME, "Item Tooltip", "item-tooltip", Fit.CARD,
             "crystalgui:nodes/ui/tooltip", "An item's name over its lore, on the dark purple-edged panel.",
             "lore", "hover", "item name", "description");
 
@@ -69,11 +73,12 @@ public final class LibraryStarters {
     private LibraryStarters() {
     }
 
-    private static LibraryCatalog.Entry starter(String label, String file, Fit fit, String icon, String description,
-                                                String... synonyms) {
+    /** @param folder the sub-folder of {@link #FOLDER} it is listed in */
+    private static LibraryCatalog.Entry starter(String folder, String label, String file, Fit fit, String icon,
+                                                String description, String... synonyms) {
         String asset = "crystalgui:uibuilder/starters/" + file;
         Supplier<UIElement> build = () -> UiTemplates.load(asset).inflate();
-        KindInfo info = KindInfo.named(label).inCategory(FOLDER).describedAs(description).synonyms(synonyms)
+        KindInfo info = KindInfo.named(label).inCategory(FOLDER + "/" + folder).describedAs(description).synonyms(synonyms)
                 .glyph(icon, GlyphRole.LAYOUT).starter(build);
         if (fit == Fit.CARD) info = info.preview(Preview.sample(build).atCardWidth());
         if (fit == Fit.NARROW) info = info.preview(Preview.sample(build).width(NARROW_WIDTH));

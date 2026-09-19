@@ -5,12 +5,14 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.dispose.Disposable;
@@ -46,7 +48,9 @@ public class LibraryPanelTest extends UiDocumentTestBase {
     /** The Starters folder draws each snippet as its card, the way a kind's card draws its sample. */
     @Test
     public void aStarterHasACardDrawingItsSnippet() {
-        expand(LibraryStarters.FOLDER);
+        for (LibraryPanel.Row row : panel.tree().roots()) {
+            if (row instanceof LibraryPanel.Folder folder && folder.label().equals(LibraryStarters.FOLDER)) expandAll(folder);
+        }
         for (int i = 0; i < 30; i++) frame();
 
         PreviewCard card = panel.realisedCards().stream()
@@ -78,14 +82,19 @@ public class LibraryPanelTest extends UiDocumentTestBase {
     @Test
     public void aKindInTwoCategoriesHasACardInEach() {
         for (LibraryPanel.Row row : panel.tree().roots()) {
-            if (row instanceof LibraryPanel.Folder folder && folder.label().equals("Controls")) {
-                panel.tree().setExpanded(folder, true);
-            }
+            if (row instanceof LibraryPanel.Folder folder && folder.label().equals("Controls")) expandAll(folder);
         }
         settle();
 
         assertEquals("Button is in Common and in Controls", 2,
                 kinds().stream().filter(Button.NAME::equals).count());
+    }
+
+    private void expandAll(LibraryPanel.Folder folder) {
+        panel.tree().setExpanded(folder, true);
+        for (LibraryPanel.Row child : folder.children()) {
+            if (child instanceof LibraryPanel.Folder inner) expandAll(inner);
+        }
     }
 
     @Test
@@ -157,6 +166,43 @@ public class LibraryPanelTest extends UiDocumentTestBase {
         }
     }
 
+    /** Delete takes a card out of the user's group it was clicked in. */
+    @Test
+    public void deleteTakesTheClickedCardOutOfItsGroup() {
+        Disposable commands = LibraryActions.register(CommandRegistry.global());
+        try {
+            UserLibrary mine = UserLibrary.in(null);
+            panel.useLibrary(mine);
+            mine.createGroup("Mine");
+            mine.addToGroup("Mine", Button.NAME);
+            settle();
+            expand("Mine");
+            settle();
+            for (LibraryPanel.Row row : panel.tree().roots()) {
+                // COMMON SHUT, so Mine's card is on screen: the only Button card left to click.
+                if (row instanceof LibraryPanel.Folder folder && folder.label().equals("Common")) {
+                    panel.tree().setExpanded(folder, false);
+                }
+            }
+            settle();
+
+            for (PreviewCard card : panel.realisedCards()) {
+                if (!card.entry().kind().equals(Button.NAME)) continue;
+                int[] centre = centreOf(card);
+                click(centre[0], centre[1]);
+                settle();
+                if (panel.selectedGroup() != null && panel.selectedGroup().label().equals("Mine")) break;
+            }
+            assertEquals("Mine", panel.selectedGroup().label());
+
+            keyPress(CgKeyCodes.KEY_DELETE);
+            settle();
+            assertTrue(mine.group("Mine").kinds().isEmpty());
+        } finally {
+            commands.dispose();
+        }
+    }
+
     @Test
     public void aCardDraggedOntoAUsersGroupJoinsIt() {
         UserLibrary mine = UserLibrary.in(null);
@@ -184,6 +230,56 @@ public class LibraryPanelTest extends UiDocumentTestBase {
         settle();
 
         assertEquals(List.of(Button.NAME), mine.group("Favourites").kinds());
+    }
+
+    /** A group made inside a shipped one lists there, leaves it open, and shows the cards dropped into it. */
+    @Test
+    public void aGroupInsideCommonListsThereAndShowsItsCards() {
+        UserLibrary mine = UserLibrary.in(null);
+        panel.useLibrary(mine);
+        settle();
+        assertTrue(mine.createGroup("Common/Bebe"));
+        settle();
+
+        List<LibraryPanel.Folder> commons = new ArrayList<>();
+        for (LibraryPanel.Row row : panel.tree().roots()) {
+            if (row instanceof LibraryPanel.Folder folder && folder.label().equals("Common")) commons.add(folder);
+        }
+        assertEquals("one Common, not a user's beside the shipped one", 1, commons.size());
+        assertTrue("making a group inside Common folded it", panel.tree().isExpanded(commons.get(0)));
+
+        mine.addToGroup("Common/Bebe", UIElement.NAME);
+        settle();
+        LibraryPanel.Folder bebe = (LibraryPanel.Folder) panel.tree().roots().stream()
+                .filter(commons.get(0)::equals).findFirst().map(common -> ((LibraryPanel.Folder) common).children().get(0))
+                .orElseThrow();
+        assertEquals("Bebe", bebe.label());
+        panel.tree().setExpanded(bebe, true);
+        settle();
+        assertEquals("Element in Common and in Bebe", 2, kinds().stream().filter(UIElement.NAME::equals).count());
+    }
+
+    /** A later panel restored from the folds an earlier one reported opens those and no others — Common included. */
+    @Test
+    public void foldsRestoreIntoAPanelBuiltAgain() {
+        for (LibraryPanel.Row row : panel.tree().roots()) {
+            if (!(row instanceof LibraryPanel.Folder folder)) continue;
+            if (folder.label().equals("Common")) panel.tree().setExpanded(folder, false);
+            if (folder.label().equals("Controls")) {
+                panel.tree().setExpanded(folder, true);
+                panel.tree().setExpanded(folder.children().get(1), true);
+            }
+        }
+        settle();
+        List<String> kept = panel.expandedFolders();
+        assertEquals("Controls and one of its folders", 2, kept.size());
+
+        LibraryPanel again = new LibraryPanel(LibraryCatalog.current());
+        again.restoreExpanded(kept);
+        host.removeAll();
+        host.append(again);
+        settle();
+        assertEquals(new HashSet<>(kept), new HashSet<>(again.expandedFolders()));
     }
 
     private void expand(String label) {

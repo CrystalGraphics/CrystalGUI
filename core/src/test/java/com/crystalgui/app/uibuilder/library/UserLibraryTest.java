@@ -11,6 +11,7 @@ import org.junit.Test;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
 
 /** B.9: a user's groups and view are theirs, kept in their private store. */
@@ -64,6 +65,43 @@ public class UserLibraryTest {
         assertEquals(List.of(Button.NAME), library.group("Inputs").kinds());
         assertTrue(library.deleteGroup("Inputs"));
         assertEquals(List.of("Toolbar"), library.groups().stream().map(LibraryCatalog.Group::label).toList());
+    }
+
+    /** A group's name is its path: its parents are made for it, and its subgroups move and go with it. */
+    @Test
+    public void aNestedGroupMakesItsParentsAndCarriesItsSubgroups() {
+        UserLibrary library = UserLibrary.in(null);
+        assertTrue(library.createGroup(" A / B /C "));
+        assertEquals(List.of("A", "A/B", "A/B/C"), labels(library));
+
+        library.addToGroup("A/B/C", Button.NAME);
+        assertTrue(library.renameGroup("A", "Z"));
+        assertEquals(List.of("Z", "Z/B", "Z/B/C"), labels(library));
+        assertEquals(List.of(Button.NAME), library.group("Z/B/C").kinds());
+        assertFalse("moved inside itself", library.renameGroup("Z", "Z/B/Y"));
+
+        assertTrue(library.deleteGroup("Z/B"));
+        assertEquals(List.of("Z"), labels(library));
+    }
+
+    /** What earlier builds kept — a shipped name as a parent, and a name twice — reads back as one group each. */
+    @Test
+    public void aKeptShippedNameAndADuplicateAreRepairedOnRead() {
+        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        store.write(UserLibrary.FILE, "{\"rows\": false, \"groups\": ["
+                + "{\"name\": \"Common\", \"kinds\": []},"
+                + "{\"name\": \"Common/Bebe\", \"kinds\": [\"" + Button.NAME + "\"]},"
+                + "{\"name\": \"Common/Bebe\", \"kinds\": [\"" + Slider.NAME + "\"]}]}");
+        UserLibrary library = UserLibrary.in(store);
+        assertEquals(List.of("Common/Bebe"), labels(library));
+
+        assertTrue(library.addToGroup("Common/Bebe", Checkbox.NAME));
+        assertEquals(List.of("Common/Bebe"), labels(library));
+        assertEquals(List.of(Button.NAME, Slider.NAME, Checkbox.NAME), library.group("Common/Bebe").kinds());
+    }
+
+    private static List<String> labels(UserLibrary library) {
+        return library.groups().stream().map(LibraryCatalog.Group::label).toList();
     }
 
     @Test
