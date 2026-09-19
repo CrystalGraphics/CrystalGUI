@@ -28,7 +28,7 @@ import javax.annotation.Nullable;
  * {@code eslint} and a linter can each replace only their own findings on one file; IntelliJ does the same
  * per inspection.</p>
  *
- * <p>It was already binding here before it was fixed. {@code ShaderGraphEditor} has <b>four</b> independent
+ * <p>It was already binding here before it was fixed. {@code ShaderGraphView} has <b>four</b> independent
  * producers — the emitter's own problems, the GLSL driver's refusal, the preview's failure, and graph-level
  * warnings — and merged all four into one list by hand on every compile, because the model could not hold
  * them separately. Each is now an owner that replaces itself and leaves the others alone, which is also

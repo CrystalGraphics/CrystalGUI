@@ -7,12 +7,10 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphChangeset;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphIds;
-import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.PortRef;
@@ -37,6 +35,14 @@ final class GraphDocumentSync {
 
     /** Every bound node, by document id. The index {@link #widgetFor} and {@link #portFor} answer from. */
     private final Map<String, GraphNode> widgetsById = new LinkedHashMap<>();
+
+    /**
+     * Widgets for nodes this view removed, by id, so a node coming back — an undo, a redo — is the SAME widget. What
+     * the edit used to hold; held here because an edit reverses the document, and only the view that built a widget
+     * can keep it. A node built by hand, with no type a factory could build again, survives a delete-then-undo only
+     * this way. Emptied by a {@link #load}, which is where the history goes too.
+     */
+    private final Map<String, GraphNode> retired = new LinkedHashMap<>();
 
     GraphDocumentSync(GraphView view) {
         this.view = view;
@@ -86,7 +92,9 @@ final class GraphDocumentSync {
      * node on screen that the document no longer had.</p>
      */
     void markSynced() {
-        view.document.changeset().clear();
+        // NOT A RESET, which this view has yet to rebuild from -- a change of its own does not stand in for that.
+        if (view.pending.isReset()) return;
+        view.pending.clear();
     }
 
     /** Puts node DATA into the document without a widget — what a paste and the create menu do first,
@@ -113,6 +121,7 @@ final class GraphDocumentSync {
         if (id != null) {
             view.document.removeNode(id);
             widgetsById.remove(id);
+            retired.put(id, widget);
         }
         // A port's default editor is a SEPARATE plane child, not a descendant of the node — removing the
         // node does not take it with it. Forgotten explicitly, or a deleted node's floating field is
@@ -169,7 +178,7 @@ final class GraphDocumentSync {
      * <h3>It copies the CONTENTS in; it does not adopt the object</h3>
      * <p>This used to end in {@code this.document = source}, and that is the one line that made a
      * per-file editor impossible. A host wires its panels to {@code getDocument()} once, at construction —
-     * {@code ShaderGraphEditor} hands the same instance to its Main Preview, its Blackboard and its own
+     * {@code ShaderGraphView} hands the same instance to its Main Preview, its Blackboard and its own
      * {@code onChanged} listener. Swapping the field left every one of them bound to an <b>orphan</b>: the
      * board would go on listing the previous graph's properties and write its edits into a document nobody
      * was showing, with both halves individually working and no error anywhere.</p>
@@ -198,24 +207,10 @@ final class GraphDocumentSync {
      * document stored, which is why the document stores them.</p>
      */
     void load(GraphDocument source) {
-        view.document.clear();
-        // The DOCUMENT layer alone, mirroring what the codec writes — the user and workspace layers come
-        // from other files entirely and are not this graph's to carry.
-        view.document.settings().replaceLayer(SettingsLayer.DOCUMENT,
-                source.settings().layer(SettingsLayer.DOCUMENT).asMap());
-        for (GraphProperty property : source.properties()) view.document.addProperty(property);
-        for (NodeData node : source.nodes()) view.document.addNode(node);
-        for (EdgeData edge : source.edges()) view.document.restoreEdge(edge);
-
-        applyPending();
+        view.document.replaceWith(source);
         view.edits.history().clear();
-        // ONE emit at the end, and it is not belt and braces. `restoreEdge` deliberately only records in
-        // the changeset, and `GraphDocument.clear()` empties the property list AFTER its last removeNode
-        // — so loading a graph with no nodes, or one whose last act is an edge, would tell nothing
-        // downstream that anything had happened and the Blackboard would still be listing the previous
-        // file's properties. Listeners re-read the document rather than taking a payload, so a spare emit
-        // is a no-op and a missing one is a stale panel.
-        view.document.onChanged.emit();
+        // THIS VIEW AT ONCE; every other view of the document rebuilds on its next frame, from the same reset.
+        applyPending();
     }
 
     /**
@@ -234,8 +229,12 @@ final class GraphDocumentSync {
      * @return how many individual changes were applied
      */
     int applyPending() {
-        GraphChangeset pending = view.document.changeset();
+        GraphChangeset pending = view.pending;
         if (pending.isEmpty()) return 0;
+        if (pending.isReset()) {
+            pending.clear();
+            return rebuild();
+        }
 
         // Snapshot EVERYTHING, then clear, then apply — because applying re-enters. `CanvasView.addNode`
         // calls `moveNode` polymorphically, which reaches the view's override, which writes through to the
@@ -252,6 +251,7 @@ final class GraphDocumentSync {
         for (String id : removedNodes) {
             GraphNode widget = widgetsById.remove(id);
             if (widget == null) continue;
+            retired.put(id, widget);
             // Same reason detachNode forgets them: a floating default editor is not a descendant of its
             // node, so the removal below never reaches it. Missing here left every port's box and dot
             // permanently orphaned on the plane whenever a removal arrived through the changeset instead
@@ -263,15 +263,7 @@ final class GraphDocumentSync {
         for (String id : addedNodes) {
             NodeData data = view.document.node(id);
             if (data == null || widgetsById.containsKey(id)) continue;
-            NodeWidgetFactory factory = view.getNodeFactory() != null
-                    ? view.getNodeFactory() : NodeWidgetFactory.of(view.getNodeLibrary()).build();
-            NodeType type = view.getNodeLibrary() != null
-                    ? view.getNodeLibrary().get(data.typeId()) : null;
-            GraphNode widget = factory.create(type, data);
-            widget.bindToDocument(data.id(), data.typeId());
-            widgetsById.put(id, widget);
-            view.addNodeDirect(widget, data.x(), data.y());
-            view.watchPortsOf(widget);
+            place(data);
             applied++;
         }
         for (String id : movedNodes) {
@@ -299,6 +291,40 @@ final class GraphDocumentSync {
         view.getSelection().prune(view);
         if (applied > 0) view.onConnectionsChanged.emit();
         return applied;
+    }
+
+    /** A widget for {@code data} on the plane: the one this view retired under that id, else a new one. */
+    private void place(NodeData data) {
+        GraphNode widget = retired.remove(data.id());
+        if (widget == null) {
+            NodeWidgetFactory factory = view.getNodeFactory() != null
+                    ? view.getNodeFactory() : NodeWidgetFactory.of(view.getNodeLibrary()).build();
+            NodeType type = view.getNodeLibrary() != null ? view.getNodeLibrary().get(data.typeId()) : null;
+            widget = factory.create(type, data);
+            widget.bindToDocument(data.id(), data.typeId());
+        }
+        widgetsById.put(data.id(), widget);
+        view.addNodeDirect(widget, data.x(), data.y());
+        view.watchPortsOf(widget);
+    }
+
+    /**
+     * Throws every widget away and builds the plane from the document, for a {@linkplain GraphChangeset#isReset()
+     * reset}: a file opened into it, or this view's first look at a graph already there.
+     */
+    private int rebuild() {
+        for (GraphNode widget : new ArrayList<>(widgetsById.values())) {
+            view.forgetPortsOf(widget);
+            view.content().remove(widget);
+        }
+        widgetsById.clear();
+        retired.clear();
+        view.connections.clear();
+        for (NodeData data : view.document.nodes()) place(data);
+        for (EdgeData edge : view.document.edges()) linkWidgets(edge);
+        view.getSelection().prune(view);
+        view.onConnectionsChanged.emit();
+        return view.document.nodeCount() + view.document.edges().size();
     }
 
     /**

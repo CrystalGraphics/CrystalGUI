@@ -75,18 +75,30 @@ final class GraphWires {
 
         GraphConnection existing = firstConnectionTo(input);
         if (existing == null) {
-            view.edits.apply(new GraphEdits.Connect(this, edge));
+            connectRecorded(edge);
             return connection;
         }
         EdgeData existingEdge = edgeDataOf(existing);
         view.edits.begin("reconnect");
         try {
-            if (existingEdge != null) view.edits.apply(new GraphEdits.Disconnect(this, existingEdge));
-            view.edits.apply(new GraphEdits.Connect(this, edge));
+            if (existingEdge != null) disconnectRecorded(existingEdge);
+            connectRecorded(edge);
         } finally {
             view.edits.end();
         }
         return connection;
+    }
+
+    /** Joins two ports here and remembers it: the history reverses the document, and every view follows. */
+    private void connectRecorded(EdgeData edge) {
+        addEdge(edge);
+        view.edits.record(new GraphEdits.Connect(view.document, edge));
+    }
+
+    /** @see #connectRecorded */
+    private void disconnectRecorded(EdgeData edge) {
+        removeEdge(edge);
+        view.edits.record(new GraphEdits.Disconnect(view.document, edge));
     }
 
     /** The raw add both {@link GraphEdits.Connect} and {@link GraphEdits.Disconnect} share. */
@@ -117,7 +129,7 @@ final class GraphWires {
         if (!view.connections.contains(connection)) return false;
         EdgeData edge = edgeDataOf(connection);
         if (edge == null) return false;
-        view.edits.apply(new GraphEdits.Disconnect(this, edge));
+        disconnectRecorded(edge);
         return true;
     }
 
@@ -133,7 +145,7 @@ final class GraphWires {
         try {
             for (GraphConnection connection : doomed) {
                 EdgeData edge = edgeDataOf(connection);
-                if (edge != null) view.edits.apply(new GraphEdits.Disconnect(this, edge));
+                if (edge != null) disconnectRecorded(edge);
             }
         } finally {
             view.edits.end();

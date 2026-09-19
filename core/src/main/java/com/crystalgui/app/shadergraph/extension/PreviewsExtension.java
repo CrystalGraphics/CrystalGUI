@@ -47,8 +47,11 @@ public final class PreviewsExtension implements SurfaceExtension {
         MainPreviewPanel mainPreview =
                 new MainPreviewPanel(graph.getDocument(), shader.nodes(), shader.master());
         graph.mountOverlay(mainPreview);
-        shader.publishPreviews(previews, mainPreview);
+        shader.publishPreviews(graph, previews, mainPreview);
 
-        return connections::disconnectAll;
+        return () -> {
+            connections.disconnectAll();
+            shader.withdraw(graph);
+        };
     }
 }

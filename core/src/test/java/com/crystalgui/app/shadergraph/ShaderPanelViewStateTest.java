@@ -22,13 +22,13 @@ public class ShaderPanelViewStateTest extends UiDocumentTestBase {
 
     private static final String RECT = "40.0,60.0,300.0,200.0";
 
-    private ShaderGraphEditor open() {
-        ShaderGraphEditor editor = new ShaderGraphEditor();
+    private ShaderGraphView open() {
+        ShaderGraphView editor = new ShaderGraphView();
         UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        editor.adopt(new byte[0]);
+        editor.model().adopt(new byte[0]);
         document.update(W, H);
         return editor;
     }
@@ -39,10 +39,10 @@ public class ShaderPanelViewStateTest extends UiDocumentTestBase {
      */
     @Test
     public void aPlacedPanelIsWrittenIntoTheSessionState() {
-        ShaderGraphEditor editor = open();
+        ShaderGraphView editor = open();
 
         StateMap<Object> placed = new StateMap<>(PlainOps.INSTANCE);
-        placed.putString(ShaderGraphEditor.VIEW_PREVIEW_RECT, RECT);
+        placed.putString(ShaderGraphView.VIEW_PREVIEW_RECT, RECT);
         editor.readViewState(placed);
         document.update(W, H);
 
@@ -50,30 +50,30 @@ public class ShaderPanelViewStateTest extends UiDocumentTestBase {
         editor.writeViewState(out);
 
         assertNotEquals("the panel's rectangle reached the session state",
-                "", out.getString(ShaderGraphEditor.VIEW_PREVIEW_RECT, ""));
+                "", out.getString(ShaderGraphView.VIEW_PREVIEW_RECT, ""));
     }
 
     /** And the round trip a reopen actually performs. */
     @Test
     public void aSecondEditorOpensWherePanelsWereLeft() {
-        ShaderGraphEditor first = open();
+        ShaderGraphView first = open();
 
         StateMap<Object> placed = new StateMap<>(PlainOps.INSTANCE);
-        placed.putString(ShaderGraphEditor.VIEW_PREVIEW_RECT, RECT);
+        placed.putString(ShaderGraphView.VIEW_PREVIEW_RECT, RECT);
         first.readViewState(placed);
         document.update(W, H);
 
         StateMap<Object> saved = new StateMap<>(PlainOps.INSTANCE);
         first.writeViewState(saved);
 
-        ShaderGraphEditor reopened = open();
+        ShaderGraphView reopened = open();
         reopened.readViewState(saved);
         document.update(W, H);
 
         StateMap<Object> after = new StateMap<>(PlainOps.INSTANCE);
         reopened.writeViewState(after);
         assertEquals("the reopened editor put its preview back where the first one left it",
-                saved.getString(ShaderGraphEditor.VIEW_PREVIEW_RECT, "?"),
-                after.getString(ShaderGraphEditor.VIEW_PREVIEW_RECT, ""));
+                saved.getString(ShaderGraphView.VIEW_PREVIEW_RECT, "?"),
+                after.getString(ShaderGraphView.VIEW_PREVIEW_RECT, ""));
     }
 }

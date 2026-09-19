@@ -7,6 +7,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.surface.SurfacePolicy;
 
@@ -22,10 +23,24 @@ import com.crystalgui.widget.surface.SurfacePolicy;
  */
 final class GraphPolicy implements SurfacePolicy {
 
-    private final GraphView view;
+    @Nullable
+    private final UndoStack history;
+    /** Bound once the view's constructor is past super, which is where this is built. */
+    private GraphView view;
 
-    GraphPolicy(GraphView view) {
+    GraphPolicy(@Nullable UndoStack history) {
+        this.history = history;
+    }
+
+    void bind(GraphView view) {
         this.view = view;
+    }
+
+    /** The document's, when the view was given one, so every view of it undoes into one history. */
+    @Override
+    @Nullable
+    public UndoStack history() {
+        return history;
     }
 
     @Override
@@ -67,7 +82,7 @@ final class GraphPolicy implements SurfacePolicy {
         List<Edit> each = new ArrayList<>(moves.size());
         for (Move move : moves) {
             if (!(move.item() instanceof GraphNode node) || node.getNodeId() == null) continue;
-            each.add(new GraphEdits.MoveNode(view, node.getNodeId(),
+            each.add(new GraphEdits.MoveNode(view.document, node.getNodeId(),
                     move.fromX(), move.fromY(), move.toX(), move.toY()));
         }
         return each.isEmpty() ? null : CompositeEdit.of("move", each.toArray(new Edit[0]));

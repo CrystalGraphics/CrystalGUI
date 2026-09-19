@@ -30,12 +30,12 @@ import static org.junit.Assert.assertTrue;
  * painting a frame and the only symptom was "Not Responding" — no exception, no log line, nothing for a
  * conventional test to observe. A timeout turns that into a red test instead of a hung suite.</p>
  */
-public class ShaderGraphEditorTest extends UiDocumentTestBase {
+public class ShaderGraphViewTest extends UiDocumentTestBase {
 
-    private ShaderGraphEditor editor;
+    private ShaderGraphView editor;
 
     private void build() {
-        editor = new ShaderGraphEditor();
+        editor = new ShaderGraphView();
         UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor);
         document.append(root);
@@ -62,7 +62,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         build();
         for (int i = 0; i < 3; i++) frame();
         assertNotNull("no compile result at all", editor.lastCompile());
-        assertNotNull(editor.source().getText());
+        assertNotNull(new GeneratedSourceView(editor.model()).editor().getText());
     }
 
     /**
@@ -116,32 +116,27 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>The emitted source is detached, and stays live once a host parents it.</b>
+     * <b>The emitted source is a view of the document, and stays live wherever a host puts it.</b>
      *
-     * <p>It used to sit in an internal {@code SplitView} beside the canvas, which is a layout decision
-     * taken away from the host: a docking host wants it as an ordinary tab — draggable, closable,
-     * restorable — and it can be none of those while it is nailed inside one element. So the widget keeps
-     * it compiled and parents it nowhere.</p>
-     *
-     * <p>Both halves are asserted, because only the pair is the contract. That it is detached without also
-     * checking it still recompiles would pass just as well for a source pane that had been forgotten
-     * about — which is precisely the failure this shape invites.</p>
+     * <p>A docking host wants it as an ordinary tab — draggable, closable, restorable — so nothing nails it beside
+     * the canvas: a host builds one per tab and places it. Both halves are asserted, because only the pair is the
+     * contract: a source view that never recompiles would pass the first alone.</p>
      */
     @Test
-    public void theEmittedSourceIsDetachedSoAHostCanPlaceIt() {
+    public void theEmittedSourceIsAViewAHostPlaces() {
         build();
-        assertNull("source() must not be in the editor's own tree -- a host places it",
-                editor.source().parent());
+        GeneratedSourceView source = new GeneratedSourceView(editor.model());
+        assertNull("a host places it", source.editor().parent());
 
         UIElement host = new UIElement().layout(l -> l.width(300).height(200));
         editor.parent().append(host);
-        host.append(editor.source());
+        host.append(source.editor());
         for (int i = 0; i < 3; i++) frame();
 
-        String before = editor.source().getText();
+        String before = source.editor().getText();
         editor.addStarterGraph();
-        assertNotEquals("a recompile does not reach a source pane the host parented",
-                before, editor.source().getText());
+        assertNotEquals("a recompile does not reach a source view the host placed",
+                before, source.editor().getText());
     }
 
     // ── As a file ───────────────────────────────────────────────────────────
@@ -166,15 +161,15 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         int nodes = editor.graph().getDocument().nodeCount();
         int edges = editor.graph().getDocument().edges().size();
         assertTrue("this fixture needs a graph to be worth round-tripping", nodes > 1);
-        byte[] saved = editor.encode();
+        byte[] saved = editor.model().encode();
 
         // A DIFFERENT editor, which is what opening the file in a new tab is.
-        ShaderGraphEditor reopened = new ShaderGraphEditor();
+        ShaderGraphView reopened = new ShaderGraphView();
         UIElement host = new UIElement().layout(l -> l.width(800).height(500));
         host.append(reopened);
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        reopened.adopt(saved);
+        reopened.model().adopt(saved);
 
         assertEquals("every node came back", nodes, reopened.graph().getDocument().nodeCount());
         assertEquals("and every wire", edges, reopened.graph().getDocument().edges().size());
@@ -182,7 +177,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
                 nodes, reopened.graph().nodes().size());
         assertEquals("and the file it would write next is the same file",
                 new String(saved, java.nio.charset.StandardCharsets.UTF_8),
-                new String(reopened.encode(), java.nio.charset.StandardCharsets.UTF_8));
+                new String(reopened.model().encode(), java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /**
@@ -203,7 +198,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     @Test
     public void aBrandNewEmptyFileOpensWithTheStarterGraph() {
         build();
-        editor.adopt("".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        editor.model().adopt("".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         assertTrue("a new file opens with the starter graph, not an empty canvas",
                 editor.graph().getDocument().nodeCount() > 0);
         assertEquals("and being handed one is not something to undo",
@@ -212,9 +207,9 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         // What it would write is a real graph file, and reading it back gives the same graph -- through
         // the SAVED path this time, not the blank one.
         int seeded = editor.graph().getDocument().nodeCount();
-        byte[] saved = editor.encode();
+        byte[] saved = editor.model().encode();
         assertTrue("a blank file must become a valid one on the first save", saved.length > 0);
-        editor.adopt(saved);
+        editor.model().adopt(saved);
         assertEquals(seeded, editor.graph().getDocument().nodeCount());
     }
 
@@ -233,10 +228,10 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
      */
     @Test
     public void aDetachedEditorCanStillAdopt() {
-        ShaderGraphEditor detached = new ShaderGraphEditor();
+        ShaderGraphView detached = new ShaderGraphView();
         assertNull("this fixture is only meaningful while detached", detached.parent());
 
-        detached.adopt(new byte[0]);
+        detached.model().adopt(new byte[0]);
 
         assertTrue("the document did not get the starter graph",
                 detached.graph().getDocument().nodeCount() > 0);
@@ -258,20 +253,20 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     @Test
     public void theCanvasViewSurvivesASaveAndReopen() {
         build();
-        editor.adopt(new byte[0]);
+        editor.model().adopt(new byte[0]);
         editor.graph().setZoom(2.5f);
         editor.graph().setPan(-120f, 64f);
 
-        byte[] saved = editor.encode();
+        byte[] saved = editor.model().encode();
         StateMap<JsonElement> view = new StateMap<>(JsonOps.INSTANCE);
         editor.writeViewState(view);
 
-        ShaderGraphEditor reopened = new ShaderGraphEditor();
+        ShaderGraphView reopened = new ShaderGraphView();
         UIElement host = new UIElement().layout(l -> l.width(800).height(500));
         host.append(reopened);
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        reopened.adopt(saved);
+        reopened.model().adopt(saved);
         reopened.readViewState(new StateMap<>(JsonOps.INSTANCE, view.encode()));
 
         assertEquals(2.5f, reopened.graph().getZoom(), 0.001f);
@@ -289,7 +284,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     @Test
     public void aPropertyNodeReloadsAsAPropertyNode() {
         build();
-        editor.adopt(new byte[0]);
+        editor.model().adopt(new byte[0]);
         com.crystalgui.graph.GraphProperty property = editor.blackboard().addProperty("Color");
         assertNotNull("this fixture needs a property to reference", property);
         editor.blackboard().pillFor(property.id()).endRename();
@@ -297,14 +292,14 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         editor.graph().getDocument().addNode(
                 ShaderPropertyNodes.create(property, 40f, 40f));
         editor.graph().syncFromDocument();
-        byte[] saved = editor.encode();
+        byte[] saved = editor.model().encode();
 
-        ShaderGraphEditor reopened = new ShaderGraphEditor();
+        ShaderGraphView reopened = new ShaderGraphView();
         UIElement host = new UIElement().layout(l -> l.width(800).height(500));
         host.append(reopened);
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        reopened.adopt(saved);
+        reopened.model().adopt(saved);
 
         GraphNode loaded = null;
         for (GraphNode node : reopened.graph().nodes()) {
@@ -322,7 +317,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     @Test
     public void whitespaceCountsAsBlank() {
         build();
-        editor.adopt(" \n\t ".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        editor.model().adopt(" \n\t ".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         assertTrue(editor.graph().getDocument().nodeCount() > 0);
     }
 
@@ -337,7 +332,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     public void amalformedFileIsStillRefused() {
         build();
         try {
-            editor.adopt("{ this is not a graph".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            editor.model().adopt("{ this is not a graph".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             org.junit.Assert.fail("a corrupt file must be refused, not silently emptied");
         } catch (RuntimeException expected) {
             // The workbench turns this into "refusing to save -- it never loaded".
@@ -354,9 +349,9 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
     public void openingAGraphIsNotUndoable() {
         build();
         editor.addStarterGraph();
-        byte[] saved = editor.encode();
+        byte[] saved = editor.model().encode();
 
-        editor.adopt(saved);
+        editor.model().adopt(saved);
 
         assertEquals(0, editor.graph().undoStack().undoDepth());
     }
@@ -374,7 +369,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
      */
     @Test
     public void compileProblemsBecomeAttributedDiagnostics() {
-        ShaderGraphEditor editor = new ShaderGraphEditor();
+        ShaderGraphView editor = new ShaderGraphView();
         UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(editor);
         document.append(root);
@@ -383,7 +378,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
         assertNotNull("a graph must answer with a set, not null", editor.diagnostics());
 
         // An empty graph has no output node, which is the graph-level problem every compile starts from.
-        editor.adopt("{}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        editor.model().adopt("{}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         for (int i = 0; i < 6; i++) frame();
 
         List<Diagnostic> reported = editor.diagnostics().all();
@@ -403,7 +398,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
      */
     @Test
     public void duplicatePropertyNamesAreReported() {
-        ShaderGraphEditor editor = new ShaderGraphEditor();
+        ShaderGraphView editor = new ShaderGraphView();
         UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(editor);
         document.append(root);
@@ -434,7 +429,7 @@ public class ShaderGraphEditorTest extends UiDocumentTestBase {
      */
     @Test
     public void aNodeTypeThisBuildLacksIsReported() {
-        ShaderGraphEditor editor = new ShaderGraphEditor();
+        ShaderGraphView editor = new ShaderGraphView();
         UIElement root = new UIElement().layout(l -> l.width(600).height(400));
         root.append(editor);
         document.append(root);

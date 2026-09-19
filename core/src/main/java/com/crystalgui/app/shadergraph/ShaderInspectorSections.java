@@ -98,20 +98,20 @@ public final class ShaderInspectorSections {
     // ── Shared resolution ───────────────────────────────────────────────────────────────────────
 
     @Nullable
-    private static ShaderGraphEditor editor(DataContext context) {
-        return context.get(ShaderGraphEditor.SHADER_GRAPH);
+    private static ShaderGraphView editor(DataContext context) {
+        return context.get(ShaderGraphView.SHADER_GRAPH);
     }
 
     @Nullable
     private static GraphSelection selection(DataContext context) {
-        ShaderGraphEditor editor = editor(context);
+        ShaderGraphView editor = editor(context);
         return editor == null ? null : editor.graph().getSelection();
     }
 
     /** The property the blackboard has selected, which is shown INSTEAD of the graph selection. */
     @Nullable
     private static GraphProperty selectedProperty(DataContext context) {
-        ShaderGraphEditor editor = editor(context);
+        ShaderGraphView editor = editor(context);
         if (editor == null || editor.blackboard() == null) return null;
         return editor.blackboard().selectedProperty();
     }
@@ -124,7 +124,7 @@ public final class ShaderInspectorSections {
     /** A node that merely REFERENCES a property is shown as that property — it has no fields of its own. */
     @Nullable
     private static GraphProperty referencedProperty(DataContext context, GraphNode node) {
-        ShaderGraphEditor editor = editor(context);
+        ShaderGraphView editor = editor(context);
         if (editor == null || node.getNodeId() == null) return null;
         NodeData data = editor.graph().getDocument().node(node.getNodeId());
         return data == null ? null : ShaderPropertyNodes.resolve(editor.graph().getDocument(), data);
@@ -214,7 +214,7 @@ public final class ShaderInspectorSections {
 
         @Override
         public void build(ConfigForm form, DataContext context) {
-            ShaderGraphEditor editor = editor(context);
+            ShaderGraphView editor = editor(context);
             GraphNode widget = nodes(context).get(0);
             GraphDocument document = editor.graph().getDocument();
             NodeData data = widget.getNodeId() == null ? null : document.node(widget.getNodeId());
@@ -240,7 +240,7 @@ public final class ShaderInspectorSections {
      * inline editor uses. A port that something is wired into shows the source instead of its own value,
      * because a literal nothing reads is not "the value greyed out" — it has been overridden.</p>
      */
-    private static void fieldRow(ConfigForm form, ShaderGraphEditor editor, GraphNode widget,
+    private static void fieldRow(ConfigForm form, ShaderGraphView editor, GraphNode widget,
                                  NodeData data, NodeField field) {
         GraphDocument document = editor.graph().getDocument();
         EdgeData incoming = field.isPortField()
@@ -272,7 +272,7 @@ public final class ShaderInspectorSections {
      * to {@code Multiply.O…}. Spelled {@code from X}, not with an arrow: the bundled fonts have no U+2190
      * and it drew as a blank advance.</p>
      */
-    private static void connectedRow(ConfigForm form, ShaderGraphEditor editor, NodeField field,
+    private static void connectedRow(ConfigForm form, ShaderGraphView editor, NodeField field,
                                      EdgeData incoming) {
         GraphDocument document = editor.graph().getDocument();
         NodeData source = document.node(incoming.from().nodeId());
@@ -369,7 +369,7 @@ public final class ShaderInspectorSections {
          * name alone collides with the node type it came from — a {@code Color} property sits next to a
          * {@code Color} node in exactly the selection that prompted this.</p>
          */
-        private static String labelOf(DataContext context, ShaderGraphEditor editor, GraphNode node,
+        private static String labelOf(DataContext context, ShaderGraphView editor, GraphNode node,
                                       NodeData data) {
             GraphProperty property = referencedProperty(context, node);
             if (property != null) return property.name() + " (" + property.displayType() + ")";
@@ -384,7 +384,7 @@ public final class ShaderInspectorSections {
 
         @Override
         public void build(ConfigForm form, DataContext context) {
-            ShaderGraphEditor editor = editor(context);
+            ShaderGraphView editor = editor(context);
             GraphDocument document = editor.graph().getDocument();
             List<GraphNode> nodes = nodes(context);
             GraphSelection selection = selection(context);
@@ -464,7 +464,7 @@ public final class ShaderInspectorSections {
 
         @Override
         public void build(ConfigForm form, DataContext context) {
-            ShaderGraphEditor editor = editor(context);
+            ShaderGraphView editor = editor(context);
             GraphConnection wire = selection(context).wire();
             form.header("Connection");
             ConfigForm about = form.group("About", true);
@@ -473,7 +473,7 @@ public final class ShaderInspectorSections {
         }
 
         /** {@code Multiply.Out}, from the port's own widget. */
-        private static String describe(ShaderGraphEditor editor, NodePort port) {
+        private static String describe(ShaderGraphView editor, NodePort port) {
             GraphNode owner = port.node();
             NodeData data = owner == null || owner.getNodeId() == null ? null
                     : editor.graph().getDocument().node(owner.getNodeId());
@@ -527,7 +527,7 @@ public final class ShaderInspectorSections {
 
         @Override
         public void build(ConfigForm form, DataContext context) {
-            ShaderGraphEditor editor = editor(context);
+            ShaderGraphView editor = editor(context);
             GraphProperty property = resolve(context);
             if (property == null) return;
             String id = property.id();
@@ -571,7 +571,7 @@ public final class ShaderInspectorSections {
          * writing a stale copy back would silently undo whatever changed in between.</p>
          */
         @SuppressWarnings("unchecked")
-        private static <T> Property<T> field(ShaderGraphEditor editor, String propertyId,
+        private static <T> Property<T> field(ShaderGraphView editor, String propertyId,
                                              Function<GraphProperty, ?> read,
                                              BiFunction<GraphProperty, Object, GraphProperty> write) {
             GraphDocument document = editor.graph().getDocument();
@@ -589,7 +589,7 @@ public final class ShaderInspectorSections {
          * <p>The panel may have rebuilt since the row was built, and writing a stale copy back would
          * silently undo whatever changed in between.</p>
          */
-        private static void edit(ShaderGraphEditor editor, String propertyId,
+        private static void edit(ShaderGraphView editor, String propertyId,
                                  UnaryOperator<GraphProperty> change) {
             GraphDocument document = editor.graph().getDocument();
             GraphProperty current = document.property(propertyId);
@@ -621,7 +621,7 @@ public final class ShaderInspectorSections {
 
         @Override
         public String subjectKey(DataContext context) {
-            ShaderGraphEditor editor = editor(context);
+            ShaderGraphView editor = editor(context);
             if (editor == null) return "";
             // The DOCUMENT only. Including the compile result was a mistake with a sharp edge: it is a
             // fresh object per emit, so an animated graph -- one with a Time node -- produced a new key
@@ -632,7 +632,7 @@ public final class ShaderInspectorSections {
 
         @Override
         public void build(ConfigForm form, DataContext context) {
-            ShaderGraphEditor editor = editor(context);
+            ShaderGraphView editor = editor(context);
             GraphDocument document = editor.graph().getDocument();
 
             form.header("Shader");
@@ -683,7 +683,7 @@ public final class ShaderInspectorSections {
          * numbers move without the panel being rebuilt — which {@link #subjectKey} deliberately never
          * asks for.</p>
          */
-        private static void compile(ConfigForm form, ShaderGraphEditor editor) {
+        private static void compile(ConfigForm form, ShaderGraphView editor) {
             GraphDocument document = editor.graph().getDocument();
             ConfigForm group = form.group("Compile", true);
             // INFO, not a disabled TEXT row: a compile count is a fact, and a text field drew it as
@@ -695,7 +695,7 @@ public final class ShaderInspectorSections {
             live(group, "Errors", () -> stat(editor, result -> result.errors().size()));
         }
 
-        private static String stat(ShaderGraphEditor editor,
+        private static String stat(ShaderGraphView editor,
                                    ToIntFunction<CgShaderEmitter.Result> count) {
             CgShaderEmitter.Result result = editor.lastCompile();
             return result == null ? "—" : String.valueOf(count.applyAsInt(result));

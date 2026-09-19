@@ -96,7 +96,7 @@ final class GraphClipboard {
                 view.addNode(widget, placed.x(), placed.y());
 
                 NodeData stored = view.document.node(id);
-                if (stored != null) view.edits.record(new GraphEdits.AddNode(view, widget, stored));
+                if (stored != null) view.edits.record(new GraphEdits.AddNode(view.document, stored));
                 pasted.add(widget);
             }
             for (EdgeData edge : clip.edges()) {

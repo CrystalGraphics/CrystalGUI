@@ -57,7 +57,7 @@ public final class BlackboardExtension implements SurfaceExtension {
         connections.add(graph.getDocument().onChanged.connect(() -> syncPropertyNodes(graph)));
 
         graph.mountOverlay(board);
-        shader.publishBlackboard(board);
+        shader.publishBlackboard(graph, board);
         Disposable drop = surface.registerDropHandler(new PropertyDrop(graph, shader));
 
         return () -> {

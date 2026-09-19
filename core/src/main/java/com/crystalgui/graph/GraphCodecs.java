@@ -216,7 +216,6 @@ public final class GraphCodecs {
                 // plugin" case the model is built to survive.
                 for (EdgeData edge : in.field("edges", Codecs.listOf(EDGE))) document.restoreEdge(edge);
             }
-            document.getChangeset().clear();
             return document;
         }
     };

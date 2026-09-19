@@ -1,10 +1,8 @@
 package com.crystalgui.app.shadergraph.extension;
 
-import com.crystalgraphics.shadergraph.CgShaderEmitter;
-import com.crystalgui.app.shadergraph.ShaderGraphBridge;
 import com.crystalgui.app.shadergraph.ShaderGraphServices;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.signal.ConnectionGroup;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.widget.graph.GraphContext;
 import com.crystalgui.widget.surface.SurfaceContext;
 import com.crystalgui.widget.surface.extension.SurfaceExtension;
@@ -33,18 +31,11 @@ public final class GeneratedShaderExtension implements SurfaceExtension {
         if (!(surface instanceof GraphContext graph)) return () -> { };
         ShaderGraphServices shader = ShaderGraphServices.of(graph.getDocument());
 
-        ConnectionGroup connections = new ConnectionGroup();
-        connections.add(graph.connectionsChanged().connect(() -> compile(graph, shader)));
-        connections.add(shader.recompileRequested.connect(() -> compile(graph, shader)));
+        // STALE-ONLY: every pane onto a graph sees every wire change, and one compile covers them all.
+        Connection wires = graph.connectionsChanged().connect(shader::compileIfStale);
         // The first one, so a graph that opens already wired shows its source rather than waiting for
         // an edit that may never come.
-        compile(graph, shader);
-        return connections::disconnectAll;
-    }
-
-    private static void compile(GraphContext graph, ShaderGraphServices shader) {
-        CgShaderEmitter.Result result =
-                ShaderGraphBridge.compile(graph.getDocument(), shader.nodes(), shader.master());
-        shader.publish(result);
+        shader.compileIfStale();
+        return wires::disconnect;
     }
 }

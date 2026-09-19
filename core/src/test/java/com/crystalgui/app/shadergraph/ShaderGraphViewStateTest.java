@@ -31,7 +31,7 @@ import static org.junit.Assert.assertNotEquals;
  */
 public class ShaderGraphViewStateTest extends UiDocumentTestBase {
 
-    private ShaderGraphEditor editor;
+    private ShaderGraphView editor;
 
     /** A step that changes nothing, so the bytes stay identical and only the version can tell. */
     private static final class NoOpEdit implements Edit {
@@ -50,20 +50,20 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
     }
 
     private void build() {
-        editor = new ShaderGraphEditor();
+        editor = new ShaderGraphView();
         UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor);
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        editor.adopt(new byte[0]);
+        editor.model().adopt(new byte[0]);
     }
 
-    private ShaderGraphEditor second(byte[] content) {
-        ShaderGraphEditor other = new ShaderGraphEditor();
+    private ShaderGraphView second(byte[] content) {
+        ShaderGraphView other = new ShaderGraphView();
         UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(other);
         document.append(root);
-        other.adopt(content);
+        other.model().adopt(content);
         return other;
     }
 
@@ -74,25 +74,25 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
     @Test
     public void movingTheCameraDoesNotChangeTheFile() {
         build();
-        byte[] before = editor.encode();
+        byte[] before = editor.model().encode();
 
         editor.graph().setZoom(2.5f);
         editor.graph().setPan(-400f, 175f);
 
         assertArrayEquals("a pan and a zoom are not an edit and must not reach the file",
-                before, editor.encode());
+                before, editor.model().encode());
     }
 
     /** And it does not make the tab dirty either, which is the same fact one layer up. */
     @Test
     public void movingTheCameraDoesNotMakeTheDocumentDirty() {
         build();
-        int version = editor.version();
+        int version = editor.model().version();
 
         editor.graph().setZoom(1.8f);
         editor.graph().setPan(20f, 30f);
 
-        assertEquals("looking around is not a change", version, editor.version());
+        assertEquals("looking around is not a change", version, editor.model().version());
     }
 
     /**
@@ -109,7 +109,7 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
         editor.writeViewState(saved);
 
         // A SECOND PERSON'S EDITOR over the same file, with a camera of their own.
-        ShaderGraphEditor other = second(editor.encode());
+        ShaderGraphView other = second(editor.model().encode());
         other.graph().setZoom(1f);
         other.graph().setPan(0f, 0f);
 
@@ -134,23 +134,23 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
     @Test
     public void aGraphEditDoesNotSerialiseTheGraph() {
         build();
-        byte[] before = editor.encode();
-        int version = editor.version();
+        byte[] before = editor.model().encode();
+        int version = editor.model().version();
 
         editor.graph().undoStack().push(new NoOpEdit());
 
         assertEquals("the bytes are identical, which is why an encode-and-compare says clean",
                 new String(before, StandardCharsets.UTF_8),
-                new String(editor.encode(), StandardCharsets.UTF_8));
+                new String(editor.model().encode(), StandardCharsets.UTF_8));
         assertNotEquals("and the version still moved, which is what dirtiness is made of",
-                version, editor.version());
+                version, editor.model().version());
     }
 
     /** A graph offers no three-way merge: a line-based merge of a JSON graph produces a broken graph. */
     @Test
     public void aGraphConflictOffersNoMerge() {
         build();
-        assertFalse("text is the one thing a three-way merge is actually for", editor.mergeable());
+        assertFalse("text is the one thing a three-way merge is actually for", editor.model().mergeable());
     }
 
     /**
@@ -167,7 +167,7 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
         editor.writeViewState(record);
         JsonElement persisted = record.encode();
 
-        ShaderGraphEditor restored = second(editor.encode());
+        ShaderGraphView restored = second(editor.model().encode());
         restored.readViewState(new StateMap<>(JsonOps.INSTANCE, persisted));
 
         assertEquals(1.75f, restored.graph().getZoom(), 0.001f);
@@ -184,11 +184,11 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
     @Test
     public void anOlderFilesCameraIsStillReadAsASeed() {
         build();
-        String withCamera = new String(editor.encode(), StandardCharsets.UTF_8)
+        String withCamera = new String(editor.model().encode(), StandardCharsets.UTF_8)
                 .replaceFirst("\\{", "{\"settings\":{\"graph.view.zoom\":\"3.0\","
                         + "\"graph.view.panX\":\"-90.0\",\"graph.view.panY\":\"12.0\"},");
 
-        ShaderGraphEditor opened = second(withCamera.getBytes(StandardCharsets.UTF_8));
+        ShaderGraphView opened = second(withCamera.getBytes(StandardCharsets.UTF_8));
 
         assertEquals(3.0f, opened.graph().getZoom(), 0.001f);
         assertEquals(-90.0f, opened.graph().getPanX(), 0.001f);

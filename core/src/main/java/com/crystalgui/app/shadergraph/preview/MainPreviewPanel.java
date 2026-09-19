@@ -403,7 +403,7 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
      * and freeing it off the GL thread would corrupt silently rather than throw.</p>
      *
      * <p><b>This was dead code.</b> {@code delete()} existed and had no caller anywhere:
-     * {@code ShaderGraphEditor}'s teardown released {@code previews} and not this, so the target and
+     * {@code ShaderGraphView}'s teardown released {@code previews} and not this, so the target and
      * its meshes leaked for the life of the process. It is now owned by the graph editor that builds it.</p>
      */
     @Override

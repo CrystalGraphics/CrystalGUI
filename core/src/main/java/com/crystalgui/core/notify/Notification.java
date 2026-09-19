@@ -14,7 +14,7 @@ import java.util.List;
  *
  * <h3>Why this is not a String</h3>
  *
- * <p>It was one. {@code Workbench.onStatus} and {@code ShaderGraphEditor.onStatusChanged} were both
+ * <p>It was one. {@code Workbench.onStatus} and {@code ShaderGraphView.onStatusChanged} were both
  * {@code Signal.Value<String>}, so "created folder" and "3 error(s): undefined variable" arrived
  * identically and were rendered identically. A severity is not decoration: it decides whether the
  * message is dismissed on the next one or held, whether it is coloured, and whether it belongs in a

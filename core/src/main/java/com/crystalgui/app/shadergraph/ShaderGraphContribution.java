@@ -4,11 +4,8 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.notify.Notification;
-import com.crystalgui.workbench.dock.panel.DockInput;
-import com.crystalgui.workbench.dock.panel.DockOpenOptions;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
-import com.crystalgui.workbench.dock.drag.DockPlacement;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
@@ -90,17 +87,19 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
      * not.</p>
      */
     public static Disposable register(WorkbenchContext workbench) {
-        // A GRAPH IS ITS OWN MODEL AND ITS OWN VIEW, and saying so is more honest than splitting it: the
-        // canvas holds the GraphDocument, the previews and the Blackboard are bound to that instance at
-        // construction, and a load copies into it rather than replacing it (see GraphView.load). A second
-        // object in front of it would be a wrapper with nothing of its own to hold. What the split DOES
-        // buy elsewhere -- two views of one document -- a graph does not yet offer, and the day it does
-        // is the day this is worth separating.
+        // THE FILE IS ONE ShaderGraphDocument AND EACH TAB A ShaderGraphView OF IT, so a split shows one graph twice:
+        // one history and one compile, each pane with its own camera and panels.
         workbench.contribute(DocumentKind.of(GRAPH_TYPE, "Shader Graph")
                 .files(DocumentKind.FilePatterns.extension("shadergraph"))
                 .model((resource, bytes) -> {
-                    ShaderGraphEditor editor = new ShaderGraphEditor();
-                    editor.setResource(resource);
+                    ShaderGraphDocument graph = new ShaderGraphDocument();
+                    graph.setResource(resource);
+                    graph.adopt(bytes);
+                    return graph;
+                })
+                // A PANE PER TAB: a split shows one graph twice, each pane with its own camera and panels.
+                .editor(document -> {
+                    ShaderGraphView editor = new ShaderGraphView(document.as(ShaderGraphDocument.class));
                     // THE GRAPH ASKS, THE SHELL DECIDES -- and the shell is this contribution now rather
                     // than the application. The graph knows it can emit GLSL and nothing about docks.
                     editor.onViewGeneratedRequested.connect(() -> showGenerated(workbench, editor));
@@ -118,10 +117,8 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
                         editor.blackboard().onPropertySelected.connect(
                                 id -> InspectorRegistry.subjectChanged());
                     }
-                    editor.adopt(bytes);
                     return editor;
-                })
-                .editor(document -> (ShaderGraphEditor) document.model()),
+                }),
                 "shadergraph");
 
         // A DOCUMENT, one per graph -- not a singleton view following the front tab. Five open graphs have
@@ -130,11 +127,11 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
         // Shader Graph opens "View Generated Shader" per graph for the same reason.
         workbench.registerPanel(DockPanelDescriptor.document(SOURCE_TYPE, SOURCE_TITLE),
                 ref -> {
-                    ShaderGraphEditor graph = graphFor(workbench, ref.state(DockPanelRef.PATH, ""));
+                    ShaderGraphDocument graph = graphFor(workbench, ref.state(DockPanelRef.PATH, ""));
                     // An empty box rather than null when the graph has since closed: a tab with nothing
                     // behind it is visible and reportable, a silently absent one looks like a failed
-                    // restore.
-                    return graph == null ? new UIElement() : graph.source();
+                    // restore. A view per tab, like the graph's own.
+                    return graph == null ? new UIElement() : new GeneratedSourceView(graph).editor();
                 });
 
         // AND WHY THAT TAB IS NOT AN ORDINARY EDITOR. It is setReadOnly(true), so typing in it silently
@@ -143,7 +140,7 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
         // was the graph, and the derived resource carries its origin, so this can offer it.
         workbench.panels().registerBanner(panel -> {
             if (!SOURCE_TYPE.equals(panel.typeId())) return null;
-            ShaderGraphEditor graph = graphFor(workbench, panel.state(DockPanelRef.PATH, ""));
+            ShaderGraphDocument graph = graphFor(workbench, panel.state(DockPanelRef.PATH, ""));
             Notification banner = Notification.info(
                     "Generated from the shader graph. Edit the graph, not this file.");
             if (graph == null || graph.resource() == null || !graph.resource().isProject()) return banner;
@@ -179,8 +176,8 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
             DerivedView.of(SOURCE_TYPE, SOURCE_SCHEME).titled(ShaderGraphContribution::titleFor);
 
     /** Opens the generated shader for {@code graph}, beside it. */
-    public static boolean showGenerated(WorkbenchContext workbench, @Nullable ShaderGraphEditor graph) {
-        return graph != null && GENERATED.open(workbench, graph.resource(), graph);
+    public static boolean showGenerated(WorkbenchContext workbench, @Nullable ShaderGraphView graph) {
+        return graph != null && GENERATED.open(workbench, graph.model().resource(), graph);
     }
 
     /**
@@ -190,10 +187,10 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
      * beside the document store.</p>
      */
     @Nullable
-    private static ShaderGraphEditor graphFor(WorkbenchContext workbench, String rawResource) {
+    private static ShaderGraphDocument graphFor(WorkbenchContext workbench, String rawResource) {
         Resource origin = GENERATED.originOf(rawResource);
         if (origin == null || !origin.isProject()) return null;
         Document document = workbench.documentFor(origin.asPath());
-        return document != null && document.model() instanceof ShaderGraphEditor graph ? graph : null;
+        return document != null && document.model() instanceof ShaderGraphDocument graph ? graph : null;
     }
 }

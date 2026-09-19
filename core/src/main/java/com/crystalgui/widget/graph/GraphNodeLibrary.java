@@ -157,7 +157,7 @@ final class GraphNodeLibrary {
         try {
             view.addNode(node, pendingWorldX, pendingWorldY);
             NodeData placed = view.document.node(node.getNodeId());
-            if (placed != null) view.edits.record(new GraphEdits.AddNode(view, node, placed));
+            if (placed != null) view.edits.record(new GraphEdits.AddNode(view.document, placed));
             NodePort source = pendingFrom;
             if (source != null && offer.port() != null) {
                 for (NodePort port : node.getPorts()) {

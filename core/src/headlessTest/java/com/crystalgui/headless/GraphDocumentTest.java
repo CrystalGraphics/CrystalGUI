@@ -320,13 +320,13 @@ public class GraphDocumentTest {
     @Test
     public void theChangesetDescribesExactlyWhatMoved() {
         GraphDocument doc = chain("alpha", "beta");
-        doc.getChangeset().clear();
+        var changes = doc.openChangeset();
+        changes.clear();
 
         doc.moveNode("alpha", 50f, 60f);
         doc.addNode(node("gamma", 400f, 0f));
         doc.connect(new PortRef("beta", "out"), new PortRef("gamma", "in"));
 
-        var changes = doc.getChangeset();
         assertEquals(java.util.Set.of("alpha"), changes.movedNodes());
         assertEquals(java.util.Set.of("gamma"), changes.addedNodes());
         assertEquals(1, changes.addedEdges().size());
@@ -342,12 +342,45 @@ public class GraphDocumentTest {
     public void addingBackWhatWasRemovedCancelsOut() {
         GraphDocument doc = new GraphDocument();
         doc.addNode(node("alpha", 0f, 0f));
-        doc.getChangeset().clear();
+        var changes = doc.openChangeset();
+        changes.clear();
 
         doc.removeNode("alpha");
         doc.addNode(node("alpha", 0f, 0f));
 
-        assertTrue(doc.getChangeset().removedNodes().isEmpty());
-        assertTrue(doc.getChangeset().addedNodes().isEmpty());
+        assertTrue(changes.removedNodes().isEmpty());
+        assertTrue(changes.addedNodes().isEmpty());
+    }
+
+    /** Two views of one document each drain their own: the first to catch up must not take the second's changes. */
+    @Test
+    public void eachViewHasAChangesetOfItsOwn() {
+        GraphDocument doc = new GraphDocument();
+        var left = doc.openChangeset();
+        var right = doc.openChangeset();
+
+        doc.addNode(node("alpha", 0f, 0f));
+        left.clear();
+
+        assertEquals(java.util.Set.of("alpha"), right.addedNodes());
+        doc.closeChangeset(right);
+        doc.addNode(node("beta", 0f, 0f));
+        assertEquals("a closed changeset records nothing more", java.util.Set.of("alpha"), right.addedNodes());
+    }
+
+    /**
+     * A file opened into the document is a RESET, not a difference: the new file reuses the old one's ids, and a
+     * changeset reads a node removed and added again as one that never left.
+     */
+    @Test
+    public void replacingTheGraphIsAResetForEveryView() {
+        GraphDocument doc = chain("alpha", "beta");
+        var view = doc.openChangeset();
+        view.clear();
+
+        doc.replaceWith(chain("alpha", "gamma"));
+
+        assertTrue(view.isReset());
+        assertEquals(java.util.Set.of("alpha", "gamma"), doc.nodeIds());
     }
 }

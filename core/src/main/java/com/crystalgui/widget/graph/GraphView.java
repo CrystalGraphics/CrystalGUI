@@ -12,6 +12,7 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.EdgeData;
+import com.crystalgui.graph.GraphChangeset;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.PortRef;
@@ -19,6 +20,7 @@ import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.TypeCompatibility;
 import com.crystalgui.core.undo.UndoCommands;
 import com.crystalgui.core.undo.UndoScope;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.widget.surface.edit.Clipboard;
 import com.crystalgui.widget.surface.edit.Edits;
 import com.crystalgui.render.CgUiPaintContext;
@@ -181,7 +183,10 @@ public class GraphView extends SurfaceEditor implements GraphContext {
      * that list is derived: {@link #load} rebuilds it from the document and nothing else may.</p>
      */
     @Getter
-    GraphDocument document = new GraphDocument();
+    final GraphDocument document;
+
+    /** What this view has not applied yet: its own, since another view of the document drains another. */
+    final GraphChangeset pending;
 
     private final NodeWireLayer wireLayer;
 
@@ -277,7 +282,11 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     /** What a graph means by the engine's questions. @see GraphPolicy */
     @Override
     protected SurfacePolicy createPolicy() {
-        return new GraphPolicy(this);
+        // UNREACHED: every constructor hands super a policy, since what it answers -- the history above all -- is asked
+        // before this view's own fields exist.
+        GraphPolicy policy = new GraphPolicy(null);
+        policy.bind(this);
+        return policy;
     }
 
     /** A graph's selection answers two typed questions the engine's does not. @see GraphSelection */
@@ -299,7 +308,32 @@ public class GraphView extends SurfaceEditor implements GraphContext {
      * @param enabled the extension ids this graph wants, or null for everything contributed
      */
     public GraphView(@Nullable List<String> enabled) {
-        super(NAME, enabled);
+        this(new GraphDocument(), null, enabled);
+    }
+
+    /**
+     * A view of {@code document}, which other views may show too — a split pane, a torn-out window. Each keeps its own
+     * pan, zoom and selection; a change made in one reaches the rest through the document.
+     *
+     * <pre>{@code
+     * GraphView left = new GraphView(document, history, null);
+     * GraphView right = new GraphView(document, history, null);   // the same graph, its own camera
+     * }</pre>
+     *
+     * @param history the document's undo history, shared by every view of it; null gives this view one of its own
+     */
+    public GraphView(GraphDocument document, @Nullable UndoStack history, @Nullable List<String> enabled) {
+        this(new GraphPolicy(history), document, enabled);
+    }
+
+    private GraphView(GraphPolicy policy, GraphDocument document, @Nullable List<String> enabled) {
+        super(NAME, policy, enabled);
+        policy.bind(this);
+        this.document = document;
+        this.pending = document.openChangeset();
+        // AN UNDO REVERSES THE DOCUMENT, not a view, so every view of it shows the result at once rather than on its next
+        // frame -- the one pressing Ctrl+Z most of all. @see GraphEdits
+        whileConnected(() -> edits().history().onDidStep.connect(step -> documents.applyPending()));
         wireLayer = new NodeWireLayer(this, connections);
         // First, so it paints under every node: equal z-index siblings paint in insertion order.
         addNode(wireLayer, 0f, 0f);
@@ -406,8 +440,19 @@ public class GraphView extends SurfaceEditor implements GraphContext {
      */
     public boolean tickFrame(float deltaSeconds) {
         super.tickFrame(deltaSeconds);
+        // WHAT THE DOCUMENT DID WITHOUT THIS VIEW -- another view of it, an undo, a server -- applied here and not on
+        // the change: a view's own edit reaches the document before it has registered its widget, so following on the
+        // signal would build that node a second time.
+        documents.applyPending();
         ports.reposition();
         return true;
+    }
+
+    /** Stops following the document, which may outlive this view — another pane still showing it. */
+    @Override
+    public void dispose() {
+        document.closeChangeset(pending);
+        super.dispose();
     }
 
     /**
@@ -603,7 +648,8 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         edits.begin("delete node");
         try {
             for (NodePort port : node.getPorts()) disconnectAll(port);
-            edits.apply(new GraphEdits.DeleteNode(this, node, data));
+            detachNode(node);
+            edits.record(new GraphEdits.DeleteNode(document, data));
         } finally {
             edits.end();
         }
