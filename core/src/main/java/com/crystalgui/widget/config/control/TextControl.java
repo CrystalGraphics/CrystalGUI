@@ -75,9 +75,6 @@ public class TextControl extends ValueControl<String> {
 
     private final TextField field = new TextField();
 
-    @Nullable
-    private final Predicate<String> validator;
-
     private boolean invalid;
 
     /** The arrow inside a field that suggests: what says there is a list, and a press opens it. */
@@ -89,9 +86,6 @@ public class TextControl extends ValueControl<String> {
     /** A divider's key in the list, by the group it ends. */
     private record Divider(int afterGroup) {
     }
-
-    @Nullable
-    private final Supplier<? extends List<? extends Collection<String>>> suggestionSource;
 
     /** Built only for a field that suggests. */
     @Nullable
@@ -170,7 +164,6 @@ public class TextControl extends ValueControl<String> {
 
     public TextControl(ConfigDescriptor descriptor, String defaultValue) {
         super(NAME, descriptor, defaultValue);
-        this.validator = descriptor.validator();
         addClass("__text__");
         append(field);
         field.setText(defaultValue == null ? "" : defaultValue);
@@ -178,6 +171,8 @@ public class TextControl extends ValueControl<String> {
         if (descriptor.placeholder() != null) field.setPlaceholder(descriptor.placeholder()).setPlaceholderShownUnfocused(true);
 
         field.attachListener(text -> {
+            // ASKED OF THE DESCRIPTOR NOW, never a copy: a refill hands this control the next subject's. @see #adopt
+            Predicate<String> validator = descriptor().validator();
             boolean ok = validator == null || validator.test(text);
             if (ok != !invalid) {
                 invalid = !ok;
@@ -189,8 +184,7 @@ public class TextControl extends ValueControl<String> {
             showScrubbable();
         });
 
-        suggestionSource = descriptor.suggestions();
-        if (suggestionSource == null) {
+        if (descriptor.suggestions() == null) {
             suggestions = null;
             suggestionScroller = null;
             suggestionRows = null;
@@ -284,10 +278,11 @@ public class TextControl extends ValueControl<String> {
      */
     public List<List<String>> suggestionsFor(String typed) {
         List<List<String>> out = new ArrayList<>();
-        if (suggestionSource == null) return out;
+        Supplier<? extends List<? extends Collection<String>>> source = descriptor().suggestions();
+        if (source == null) return out;
         String query = typed.trim().toLowerCase(Locale.ROOT);
         Set<String> seen = new HashSet<>();
-        for (Collection<String> group : suggestionSource.get()) {
+        for (Collection<String> group : source.get()) {
             List<String> prefix = new ArrayList<>();
             List<String> contains = new ArrayList<>();
             for (String name : group) {

@@ -7,19 +7,11 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.config.ConfigControl;
 
-import java.util.ArrayList;
-import com.crystalgui.widget.config.ConfiguratorPanel;
-import com.crystalgui.widget.config.PanelForm;
-import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.layout.TabView;
 
 import javax.annotation.Nullable;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import com.crystalgui.core.CrystalGuiCore;
 
@@ -36,12 +28,12 @@ import com.crystalgui.core.CrystalGuiCore;
  * sections apply. <b>Tabs come from the sections that answered</b>, never from a fixed list — so a
  * package makes something inspectable by registering a section, and nothing here changes.</p>
  *
- * <h3>Rebuild, do not retarget</h3>
+ * <h3>Refill, do not retarget</h3>
  *
  * <p>There is deliberately no {@code setEditor}, no {@code shown} field and no subscription group. A
- * section holds nothing, so pointing the inspector somewhere else is rebuilding from the new context —
- * one code path instead of a retarget protocol. The apparatus that {@code DockPane} needs exists because
- * a pane <em>does</em> hold per-input state; an inspector built this way does not.</p>
+ * section holds nothing, so pointing the inspector somewhere else is filling it again from the new context —
+ * one code path instead of a retarget protocol. What makes that cheap is the kit's: a refill keeps every row
+ * the sections place the same way, so a new subject of the same kind costs its values. @see InspectorTabs</p>
  *
  * <p><b>The selected tab survives</b> a subject change where the tab still exists. Switching between two
  * nodes must not throw you back to the first tab, which is the one thing the old per-graph swap also got
@@ -59,20 +51,8 @@ public class Inspector extends UIElement implements DataProvider {
 
     private final TabView tabs = new TabView();
 
-    /** Tab label → its holder, so a rebuild can keep the selection when the tab is still there. */
-    private final Map<String, Tab> tabsByName = new LinkedHashMap<>();
-
-    /**
-     * The scrolling host inside each tab, created with the tab.
-     *
-     * <p><b>A ScrollerView and not just {@code overflow: auto}.</b> Scrolling is an ordinary element
-     * capability here, driven by the property — so a plain content box can already be scrolled by wheel.
-     * What it cannot do is show a BAR: that is the whole of what ScrollerView adds. An inspector is the
-     * one panel whose content is unbounded by construction (however many sections a subject declares) in
-     * a region whose height is whatever the user dragged it to, so it is the one that most needs to say
-     * how much more there is.</p>
-     */
-    private final Map<String, UIElement> hostsByName = new LinkedHashMap<>();
+    /** What is shown for the subject: a panel per tab, refilled. */
+    private final InspectorTabs view = new InspectorTabs(tabs);
 
     /**
      * On the PANEL, which is the tab's scroller.
@@ -90,8 +70,6 @@ public class Inspector extends UIElement implements DataProvider {
         super(NAME);
         addClass(INSPECTOR_CLASS);
         append(tabs);
-        // A TAB'S PANEL GOES IN WHEN THE TAB IS FIRST SHOWN. @see #waiting
-        tabs.onTabSelected.connect(tab -> attachWaiting(nameOf(tab)));
 
         // ALL THREE OUTLIVE THIS ELEMENT -- two are static and one belongs to the window -- so an
         // inspector that subscribed and was then discarded would stay connected for the life of the
@@ -244,7 +222,7 @@ public class Inspector extends UIElement implements DataProvider {
 
     /** The tab labels currently shown, in order — what the sections asked for. */
     public Set<String> tabNames() {
-        return tabsByName.keySet();
+        return view.names();
     }
 
     /**
@@ -259,10 +237,7 @@ public class Inspector extends UIElement implements DataProvider {
      * @return whether there was such a tab
      */
     public boolean showTab(String name) {
-        Tab tab = tabsByName.get(name);
-        if (tab == null) return false;
-        tabs.selectTab(tab);
-        return true;
+        return view.select(name);
     }
 
 
@@ -360,96 +335,19 @@ public class Inspector extends UIElement implements DataProvider {
         if (key.equals(shownKey)) return;
         // And a live gesture INSIDE the inspector is the other half of the same rule: scrubbing a row
         // while the selection changes must not replace the row being scrubbed.
-        if (isInteracting()) return;
+        if (view.isInteracting()) return;
         shownKey = key;
         shownSource = context == null ? null : source;
-        long rebuilt = FrameProfile.enter("inspector:rebuild");
+        long rebuilt = FrameProfile.enter("inspector:refill");
         try {
-            build(context, sections);
+            boolean described = context != null && view.show(context, sections);
+            // Nothing could describe the subject. An empty framed panel reads as broken, so this is a state a theme
+            // can draw -- Blender hides a panel entirely when its poll fails.
+            if (!described) view.clear();
+            toggleClass(EMPTY_CLASS, !described);
         } finally {
-            FrameProfile.leave(rebuilt, "inspector:rebuild");
+            FrameProfile.leave(rebuilt, "inspector:refill");
         }
-    }
-
-    /** The rebuild proper, once the subject is known to have changed. @see #rebuild */
-    private void build(@Nullable DataContext context, List<InspectorSection> sections) {
-        String wasSelected = selectedTabName();
-        // Which tabs EXISTED, so the build below can tell a tab that has just appeared from one that was
-        // already there. See the selection rule at the end of this method.
-        Set<String> previousTabs = new LinkedHashSet<>(tabsByName.keySet());
-
-        long cleared = FrameProfile.begin();
-        tabs.clearTabs();
-        FrameProfile.step(cleared, "inspector:clearTabs");
-        tabsByName.clear();
-        hostsByName.clear();
-        removeClass(EMPTY_CLASS);
-
-        if (context == null) {
-            addClass(EMPTY_CLASS);
-            return;
-        }
-
-        // ONE PANEL PER TAB, filled by every section that wanted that tab. Sections write into a shared
-        // form rather than each returning a widget, so two features sharing a tab read as one panel.
-        livePanels.clear();
-        // Filled DETACHED, then attached only where something was actually written. A section may accept
-        // and still contribute nothing -- accepts() answers about a KIND of subject -- and a tab holding
-        // an empty panel reads as broken, which is why Blender hides a panel outright when its poll fails.
-        Map<String, PanelForm> forms = new LinkedHashMap<>();
-        for (InspectorSection section : sections) {
-            PanelForm form = forms.computeIfAbsent(section.tab(), this::formFor);
-            long built = FrameProfile.begin();
-            section.build(form, context);
-            FrameProfile.step(built, "section " + section.tab() + "/" + section.getClass().getSimpleName());
-        }
-        waiting.clear();
-        for (Map.Entry<String, PanelForm> entry : forms.entrySet()) {
-            PanelForm form = entry.getValue();
-            if (form.isEmpty()) continue;
-            tabFor(entry.getKey());
-            waiting.put(entry.getKey(), form.panel());
-            livePanels.add(form.panel());
-        }
-
-        if (tabsByName.isEmpty()) {
-            // Nothing could describe the subject. An empty framed panel reads as broken, so this is a
-            // state a theme can draw -- Blender hides a panel entirely when its poll fails.
-            addClass(EMPTY_CLASS);
-            return;
-        }
-
-        long selected = FrameProfile.begin();
-        tabs.selectTab(tabToSelect(wasSelected, previousTabs));
-        // WHETHER OR NOT THE SELECTION CHANGED: a tab kept across the rebuild selects nothing new and fires nothing.
-        attachWaiting(selectedTabName());
-        FrameProfile.step(selected, "inspector:selectTab");
-    }
-
-    /**
-     * The panels of this build whose tab has not been shown yet, by tab name.
-     *
-     * <p><b>A hidden tab is kept out of the tree</b>, not merely hidden. An unselected pane is {@code display: none},
-     * which lays out nothing and still leaves every element in it to be matched against every sheet -- two tabs
-     * nobody is looking at, rebuilt and re-matched on each selection, were most of what selecting a node cost. A
-     * panel's rows follow their properties only while connected, so one attached later is current when it
-     * appears.</p>
-     */
-    private final Map<String, ConfiguratorPanel> waiting = new LinkedHashMap<>();
-
-    /** Puts {@code name}'s panel into its tab, the first time that tab is shown in this build. */
-    private void attachWaiting(@Nullable String name) {
-        ConfiguratorPanel panel = name == null ? null : waiting.remove(name);
-        UIElement host = panel == null ? null : hostsByName.get(name);
-        if (host != null) host.append(panel);
-    }
-
-    @Nullable
-    private String nameOf(@Nullable Tab tab) {
-        for (Map.Entry<String, Tab> entry : tabsByName.entrySet()) {
-            if (entry.getValue() == tab) return entry.getKey();
-        }
-        return null;
     }
 
     /**
@@ -462,9 +360,6 @@ public class Inspector extends UIElement implements DataProvider {
     @Nullable
     private String shownKey;
 
-    /** A separator no subject key will contain, so two keys cannot run together into a third. */
-    private static final String SEPARATOR = " | ";
-
     private String subjectKey(@Nullable DataContext context, List<InspectorSection> sections) {
         if (context == null) return "";
         StringBuilder key = new StringBuilder();
@@ -474,103 +369,5 @@ public class Inspector extends UIElement implements DataProvider {
             key.append(section.subjectKey(context)).append("");
         }
         return key.toString();
-    }
-
-    /** Whether any control this inspector built is mid-gesture. */
-    private boolean isInteracting() {
-        for (ConfiguratorPanel panel : livePanels) {
-            for (ConfigControl control : panel.controls().values()) {
-                if (control.isInteracting()) return true;
-            }
-        }
-        return false;
-    }
-
-    /** The panels of the current build, for the interaction check above. */
-    private final List<ConfiguratorPanel> livePanels = new ArrayList<>();
-
-    /**
-     * One panel per tab, <b>kept across rebuilds</b> — never rebuilt, only refilled.
-     *
-     * <h3>Why a panel outlives the build that filled it</h3>
-     *
-     * <p>Because everything a panel remembers is <b>view state</b>: which foldouts are open, and where it
-     * is scrolled to. That is the same side of the line as selection and scroll position elsewhere in this
-     * engine — how you are looking at the thing, not what the thing is — so it has to survive a subject
-     * change, and a panel discarded on every rebuild remembers nothing by construction.</p>
-     *
-     * <p>{@code ConfiguratorPanel} already implements both halves and says so: {@code groupCollapsed} is
-     * documented as outliving {@code clearRows()}, and {@code clearRows()} exists <em>"for a panel that is
-     * rebuilt rather than merely updated, which any inspector bound to a selection is"</em>. Building a
-     * fresh panel each time orphaned both — you opened a node's {@code About}, clicked the next node, and
-     * it had shut itself again, which is the exact failure that javadoc describes.</p>
-     *
-     * <p><b>Never pruned</b>, deliberately. A tab that disappears when its section stops polling true —
-     * {@code Node}, whenever the selection is cleared — must find its foldouts as it left them when it
-     * comes back, and dropping the panel with the tab is the same bug one level up. The map is bounded by
-     * the number of distinct tab names, which is a handful.</p>
-     *
-     * <p>Safe only because a row follows its property <b>while it is in the tree</b>, and
-     * {@code clearRows()} takes the rows out. A section that connected to something panel-scoped or
-     * longer-lived on each build would accumulate one listener per rebuild, and the reuse is what would make
-     * that visible — so a store's signal goes in the property's {@code announcedBy}, as
-     * {@code SettingsConfigurator.property} does, never in a listener the section holds.</p>
-     */
-    private final Map<String, ConfiguratorPanel> panelsByTab = new LinkedHashMap<>();
-
-    /** The form for a tab: its panel, emptied of rows but not of what it remembers. */
-    private PanelForm formFor(String tab) {
-        ConfiguratorPanel panel = panelsByTab.computeIfAbsent(tab, t -> {
-            ConfiguratorPanel made = new ConfiguratorPanel();
-            // IT IS THE SCROLLER NOW. @see #SCROLL_CLASS
-            made.addClass(SCROLL_CLASS);
-            return made;
-        });
-        panel.clearRows();
-        // Detached FIRST. The panel is still a child of the previous build's Tab content -- clearTabs()
-        // drops the tabs, not the panel's parent pointer -- and re-adding it without this reparents from
-        // under a stale owner.
-        panel.removeSelf();
-        return panel.form();
-    }
-
-    /**
-     * <b>A tab that has just appeared wins the selection.</b>
-     *
-     * <p>Otherwise the tab you were on, and only then the first one.</p>
-     *
-     * <p>Keeping the old tab unconditionally is what "select a node and the Inspector still shows the
-     * graph" was: the Node tab was built correctly and left behind the one already in front, so the answer
-     * to what you just clicked took a second click to reach. A tab exists only because a section polled
-     * true, so a <em>new</em> one is the engine's own evidence that the subject gained something it could
-     * not describe a moment ago — which is the thing worth looking at. Unity's Shader Graph focuses Node
-     * Settings on selection for the same reason.</p>
-     *
-     * <p>Self-limiting, which is what makes it safe to apply to every future section: it can fire at most
-     * once per appearance, so a tab that stays put never steals focus again, and switching between two
-     * nodes leaves you where you were.</p>
-     *
-     * <p>On the first build every tab is new and the first one is also the fallback, so this changes
-     * nothing there.</p>
-     */
-    private Tab tabToSelect(@Nullable String wasSelected, Set<String> previousTabs) {
-        for (Map.Entry<String, Tab> entry : tabsByName.entrySet()) {
-            if (!previousTabs.contains(entry.getKey())) return entry.getValue();
-        }
-        Tab remembered = wasSelected == null ? null : tabsByName.get(wasSelected);
-        return remembered != null ? remembered : tabsByName.values().iterator().next();
-    }
-
-    private Tab tabFor(String name) {
-        return tabsByName.computeIfAbsent(name, n -> {
-            Tab tab = tabs.addTab(n);
-            hostsByName.put(n, tab.content());
-            return tab;
-        });
-    }
-
-    @Nullable
-    private String selectedTabName() {
-        return nameOf(tabs.getSelectedTab());
     }
 }

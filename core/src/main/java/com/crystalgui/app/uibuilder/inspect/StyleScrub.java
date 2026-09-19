@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 
 
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
@@ -27,6 +28,8 @@ import com.crystalgui.widget.config.control.NumberControl;
  *         .writing(value -> Math.round(value) + "px")      // what a value is as CSS
  *         .allowedWhen(() -> isAbsolute(node))
  *         .attach();                                       // a press on the label starts it
+ *
+ * row.decorations().add(scrub.attach());                   // on a refilled form's row: gone at the next fill
  * }</pre>
  *
  * <p>Whole units a little over three pixels apart by default, Shift ten times faster, Escape mid-drag restoring the value — the
@@ -116,17 +119,27 @@ public final class StyleScrub {
         return this;
     }
 
-    /** Makes a single press on the handle start a drag, with the scrub cursor over it. */
-    public StyleScrub attach() {
+    /**
+     * Makes a single press on the handle start a drag, with the scrub cursor over it.
+     *
+     * @return undoes it — the listener, the cursor and the hit-testing — for a handle that outlives this scrub
+     */
+    public Connection attach() {
+        boolean wasHandle = handle.hasClass(NumberControl.SCRUB_HANDLE_CLASS);
+        boolean wasHitTest = handle.isHitTest();
         handle.addClass(NumberControl.SCRUB_HANDLE_CLASS);
         // A gesture needs the press, and a label is scenery with hit-testing off by default.
         handle.setHitTest(true);
-        handle.onMouseDown.attachListener((element, event) -> {
+        Connection press = handle.onMouseDown.subscribe((element, event) -> {
             if (event instanceof MouseEvent.Down down && down.getDetail() < 2 && begin(down.getPosition().x(), down.getPosition().y())) {
                 event.preventDefault();
             }
         }, false, true);
-        return this;
+        return () -> {
+            press.disconnect();
+            if (!wasHandle) handle.removeClass(NumberControl.SCRUB_HANDLE_CLASS);
+            handle.setHitTest(wasHitTest);
+        };
     }
 
     /** Starts a drag at a press in surface pixels; false when it may not start. Below the threshold it writes nothing. */

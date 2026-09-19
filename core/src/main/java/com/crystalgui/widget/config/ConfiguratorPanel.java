@@ -15,9 +15,11 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.scroll.ScrollerView;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.Nullable;
 
@@ -173,8 +175,49 @@ public class ConfiguratorPanel extends ScrollerView {
      * }</pre>
      */
     public PanelForm form() {
-        return new PanelForm(this);
+        return new PanelForm(this, null);
     }
+
+    /**
+     * Fills the panel again, <b>keeping</b> whatever the last fill placed that this one places the same way — a
+     * selection-driven panel's rebuild, at the cost of a value change rather than a new subtree.
+     *
+     * <pre>{@code
+     * panel.refill(form -> {
+     *     form.header("Transform");
+     *     form.prop(ConfigDescriptor.number("x", "X"), node.x());   // the row from last time, bound to this node
+     * });
+     * }</pre>
+     *
+     * <p>A {@link ConfigForm#prop} row is kept when its descriptor has the same shape: its control takes the new
+     * descriptor and binds the new property, so a validator or a range supplier over the new subject is the one it
+     * asks. A group is kept by its title and refilled in turn. A {@link ConfigForm#custom} element, or a
+     * {@link ConfigForm#control}'s control, is kept only when it is {@link Refillable}; otherwise it is replaced.
+     * What nothing claimed is removed, and what was kept is put in the order this fill wrote.</p>
+     *
+     * <ul>
+     *   <li>A row handed back may be last fill's: undo nothing on it by hand — its classes and display state are
+     *       reset for you — and hang what else you attach on {@link Configurator#decorations()}.</li>
+     *   <li>Use what a placement returns, which is the element on screen.</li>
+     * </ul>
+     *
+     * @return whether the fill wrote anything
+     */
+    public boolean refill(Consumer<PanelForm> fill) {
+        Refill refill = new Refill(placedKeys);
+        refill.enter(this);
+        controls.clear();
+        PanelForm form = new PanelForm(this, refill);
+        try {
+            fill.accept(form);
+        } finally {
+            placedKeys = refill.finish();
+        }
+        return !form.isEmpty();
+    }
+
+    /** What each row, group and separator was placed under, for the next {@link #refill} to claim it by. */
+    private Map<UIElement, String> placedKeys = new IdentityHashMap<>();
 
     /** Builds a row for {@code descriptor}, bound to {@code value}, and appends it. @see ConfigForm#prop */
     public <T> Configurator prop(ConfigDescriptor descriptor, Property<T> value) {
@@ -183,7 +226,7 @@ public class ConfiguratorPanel extends ScrollerView {
 
     /** As {@link #prop}, into a group's content rather than the panel root. */
     public <T> Configurator propTo(UIElement parent, ConfigDescriptor descriptor, Property<T> value) {
-        return place(parent, descriptor.id(), new Configurator(descriptor, ConfigControls.bound(descriptor, value)));
+        return propInto(parent, descriptor, value, null);
     }
 
     /**
@@ -199,9 +242,7 @@ public class ConfiguratorPanel extends ScrollerView {
     /** As {@link #add}, into a group's content rather than the panel root. */
     @Nullable
     public Configurator addTo(UIElement parent, ConfigDescriptor descriptor, @Nullable Object value) {
-        ConfigControl control = ConfigControls.create(descriptor, value);
-        if (control == null) return null;
-        return place(parent, descriptor.id(), new Configurator(descriptor, control));
+        return rowInto(parent, descriptor, value, null);
     }
 
     /**
@@ -240,7 +281,7 @@ public class ConfiguratorPanel extends ScrollerView {
      * label column and change signal.</p>
      */
     public Configurator addRow(UIElement parent, String label, String id, ConfigControl control) {
-        return place(parent, id, new Configurator(label, control));
+        return controlInto(parent, label, id, control, null);
     }
 
     /**
@@ -269,16 +310,101 @@ public class ConfiguratorPanel extends ScrollerView {
         controls.values().removeIf(control -> control == row.control());
     }
 
-    private Configurator place(UIElement parent, String id, Configurator row) {
-        parent.append(register(id, row));
-        return row;
-    }
-
     private Configurator register(String id, Configurator row) {
         ConfigControl control = row.control();
         controls.put(id, control);
         control.changed.connect(value -> changed.emit(id, value));
         return row;
+    }
+
+    // ── Placing, with or without a refill ───────────────────────────────────
+    //
+    // One path each: without a refill it appends what it built; with one it first claims what the last fill placed
+    // under the same key. A claimed row is reclaimed -- what that fill did to it undone -- before it is handed out.
+
+    <T> Configurator propInto(UIElement parent, ConfigDescriptor descriptor, Property<T> value, @Nullable Refill refill) {
+        String key = "prop:" + descriptor.id();
+        Configurator row = refill == null ? null : refill.claim(parent, key, Configurator.class,
+                kept -> kept.control() instanceof ValueControl<?> && kept.control().descriptor().sameShape(descriptor));
+        if (row == null) return placed(parent, key, register(descriptor.id(),
+                new Configurator(descriptor, ConfigControls.bound(descriptor, value))), refill);
+        row.reclaim();
+        row.control().adopt(descriptor);
+        ValueControl<T> control = cast(row.control());
+        control.bind(value);
+        controls.put(descriptor.id(), control);
+        return placed(parent, key, row, refill);
+    }
+
+    @Nullable
+    Configurator rowInto(UIElement parent, ConfigDescriptor descriptor, @Nullable Object value, @Nullable Refill refill) {
+        String key = "row:" + descriptor.id();
+        Configurator row = refill == null ? null : refill.claim(parent, key, Configurator.class,
+                kept -> kept.control().descriptor().sameShape(descriptor));
+        if (row == null) {
+            ConfigControl control = ConfigControls.create(descriptor, value);
+            if (control == null) return null;
+            return placed(parent, key, register(descriptor.id(), new Configurator(descriptor, control)), refill);
+        }
+        row.reclaim();
+        row.control().adopt(descriptor);
+        if (value != null) row.control().setValueObject(value);
+        controls.put(descriptor.id(), row.control());
+        return placed(parent, key, row, refill);
+    }
+
+    Configurator controlInto(UIElement parent, String label, String id, ConfigControl control, @Nullable Refill refill) {
+        String key = "control:" + id;
+        Configurator row = refill == null ? null : refill.claim(parent, key, Configurator.class,
+                kept -> kept.labelText().equals(label == null ? "" : label) && adopts(kept.control(), control));
+        if (row == null) return placed(parent, key, register(id, new Configurator(label, control)), refill);
+        row.reclaim();
+        controls.put(id, row.control());
+        return placed(parent, key, row, refill);
+    }
+
+    ConfiguratorGroup groupInto(UIElement parent, String title, boolean collapsed, @Nullable Refill refill) {
+        String key = "group:" + title;
+        ConfiguratorGroup group = refill == null ? null : refill.claim(parent, key, ConfiguratorGroup.class, kept -> true);
+        if (group == null) {
+            group = group(title, collapsed);
+        } else {
+            // WHAT IT HELD IS THIS FILL'S TO CLAIM, and goes if the fill writes nothing into it.
+            refill.enter(group.content());
+        }
+        return placed(parent, key, group, refill);
+    }
+
+    UIElement separatorInto(UIElement parent, @Nullable Refill refill) {
+        String key = "separator";
+        UIElement separator = refill == null ? null : refill.claim(parent, key, UIElement.class, kept -> true);
+        if (separator == null) separator = new UIElement().addClass(PanelForm.SEPARATOR_CLASS);
+        return placed(parent, key, separator, refill);
+    }
+
+    <E extends UIElement> E customInto(UIElement parent, E element, @Nullable Refill refill) {
+        String key = "custom:" + element.getClass().getName();
+        UIElement kept = refill == null ? null : refill.claim(parent, key, UIElement.class, old -> adopts(old, element));
+        @SuppressWarnings("unchecked")
+        E shown = kept == null ? element : (E) kept;
+        return placed(parent, key, shown, refill);
+    }
+
+    /** Whether {@code kept} took over what {@code fresh} would show — only a {@link Refillable} of its class can. */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static boolean adopts(UIElement kept, UIElement fresh) {
+        return kept.getClass() == fresh.getClass() && kept instanceof Refillable refillable && refillable.adopt(fresh);
+    }
+
+    private <E extends UIElement> E placed(UIElement parent, String key, E element, @Nullable Refill refill) {
+        if (refill == null) parent.append(element);
+        else refill.place(parent, key, element);
+        return element;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> ValueControl<T> cast(ConfigControl control) {
+        return (ValueControl<T>) control;
     }
 
     /**
@@ -295,6 +421,7 @@ public class ConfiguratorPanel extends ScrollerView {
     public void clearRows() {
         removeAll();
         controls.clear();
+        placedKeys = new IdentityHashMap<>();
     }
 
 

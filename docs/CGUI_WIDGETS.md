@@ -1110,10 +1110,39 @@ text, and its colour field binds `stored.map(ShaderColorFieldWidget::parseVec4, 
 - **A toolbar cell shows the `shortLabel`** and the full label on hover, hung from the cell so it clears
   the bar. `group` in a toolbar starts a new cluster behind a separator; there is nowhere to fold.
 - **A kind with no registered control throws** — a blank field is what the registry exists to prevent.
-- A `PanelForm` group remembers being closed across a refill of its panel; the panel's rows are released
-  by `clearRows()`, which is what makes a rebuilt inspector free.
+- A `PanelForm` group remembers being closed across a refill of its panel.
 - Geometry is `ua/inspector.css`. The one layout in Java is that a toolbar page, a cell and an anchor's
   lines are rows, at `DEFAULT` origin, as a `Button` is.
+
+#### Refilling — a panel that follows a selection
+
+A panel describing whatever is selected fills itself again on every change. `refill` keeps what the last fill
+placed wherever this one places the same thing, so the next node of the same kind costs its values rather than
+a new subtree — no teardown, no new elements, no restyle, no relayout. The `Inspector` fills its tabs this way.
+
+```java
+panel.refill(form -> {
+    form.header("Transform");
+    form.prop(ConfigDescriptor.number("x", "X"), node.x());   // last fill's row, bound to this node
+    Configurator left = form.prop(ConfigDescriptor.text("left", "Left"), node.left());
+    left.addClass(SET_CLASS);                                  // reset for you before the next fill
+    left.decorations().add(scrub.attach());                    // taken off by the next fill
+});
+```
+
+- **A `prop` row is kept when its descriptor has the same shape** (`ConfigDescriptor.sameShape`): every stated
+  value equal, each supplier present on both or neither. Its control adopts the new descriptor and binds the
+  new property, so a validator or range over the new subject is the one it asks. State the whole descriptor
+  before placing it — one changed afterwards no longer matches.
+- **A group is kept by its title** and refilled in turn; a `separator` by position.
+- **A `custom` element, or a `control` row's control, is kept only when it is `Refillable`** — handed the one
+  this fill built, it takes over what that one shows. Otherwise it is replaced, which is always correct.
+- **Use what a placement returns** — it is the element on screen.
+- **A kept row forgets what the last fill did to it**: the classes it added, a hidden or inert state and an
+  `editedIn` are undone. A listener, watch or hook cannot be, so it goes in `row.decorations()` — or it stays
+  on a row the next fill reuses and acts on whatever was selected before.
+- **A control reads its descriptor's questions when it asks them**, through `descriptor()`, never from a copy
+  taken at construction; one that derived state from them re-derives it in `descriptorAdopted`.
 
 A descriptor also says how a field READS, and these four are what a dense inspector row needs:
 

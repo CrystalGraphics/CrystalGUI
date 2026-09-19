@@ -55,6 +55,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.config.ConfigForm;
 import com.crystalgui.widget.config.Configurator;
+import com.crystalgui.widget.config.Refillable;
 import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.widget.config.control.ClassChips;
 import com.crystalgui.widget.config.inspector.InspectorSection;
@@ -589,10 +590,11 @@ public final class BuilderInspectorSections {
             form.prop(ConfigDescriptor.info("flex.parent", "Parent direction").tooltip("flex-direction")
                             .description("Whether the parent lays its children out in a row or a column."),
                     Property.derived(() -> NodeFields.humanize(String.valueOf(parent.getStyle().computed().get(LayoutProperties.FLEX_DIRECTION)))));
+            // A tenth per pixel: grow and shrink are ratios, and a unit a pixel reaches 40 in a flick.
             Configurator grow = styleRow(form, fields, node, LayoutProperties.FLEX_GROW, "Grow",
-                    "How much of the parent's spare room this takes, against its siblings. No effect while absolute.");
+                    "How much of the parent's spare room this takes, against its siblings. No effect while absolute.", 0.1d);
             Configurator shrink = styleRow(form, fields, node, LayoutProperties.FLEX_SHRINK, "Shrink",
-                    "How much this gives up when the parent is too small. 0 here by default, unlike the web. No effect while absolute.");
+                    "How much this gives up when the parent is too small. 0 here by default, unlike the web. No effect while absolute.", 0.1d);
             Configurator basis = styleRow(form, fields, node, LayoutProperties.FLEX_BASIS, "Basis",
                     "Its size along the parent's direction before growing or shrinking: auto, 40px or 50%. No effect while absolute.");
             // AN ABSOLUTE NODE IS NOT ONE OF THE CHILDREN ITS PARENT SHARES ROOM BETWEEN, so these three say nothing
@@ -611,10 +613,6 @@ public final class BuilderInspectorSections {
             }
             styleRow(form, fields, node, LayoutProperties.ALIGN_SELF, "Align self",
                     "Where it sits across the parent's direction, overriding the parent's Align items.");
-            // A tenth per pixel: grow and shrink are ratios, and a unit a pixel reaches 40 in a flick.
-            for (Configurator row : new Configurator[] {grow, shrink}) {
-                if (row != null) row.control().descriptor().scrubRate(0.1d);
-            }
         }
     }
 
@@ -660,7 +658,9 @@ public final class BuilderInspectorSections {
             for (int i = 0; i < insets.length; i++) {
                 StyleProperty<?> property = properties[i];
                 Configurator row = insets[i];
-                StyleScrub.on(row.label(), node, property, fields.document())
+                // THE ROW'S, NOT THE LABEL'S FOR GOOD: a refill hands this row to the next node, and a scrub left on its
+                // label would drag this one.
+                row.decorations().add(StyleScrub.on(row.label(), node, property, fields.document())
                         .measuring(() -> insetOf(node, property))
                         .rate(1d)
                         .signed(true)
@@ -669,7 +669,7 @@ public final class BuilderInspectorSections {
                         .onStep(() -> {
                             if (row.control() instanceof ValueControl<?> control) control.property().refresh();
                         })
-                        .attach();
+                        .attach());
             }
             // THE INSETS ARE AN ABSOLUTE NODE'S, so a relative one does not list them -- followed each frame, since
             // choosing Absolute or undoing it restyles on the next one, and a rebuild would replace the dropdown just
@@ -884,13 +884,22 @@ public final class BuilderInspectorSections {
     @Nullable
     private static Configurator styleRow(ConfigForm form, @Nullable NodeFields fields, UIElement node,
                                         StyleProperty<?> property, String label, String description) {
+        return styleRow(form, fields, node, property, label, description, Double.NaN);
+    }
+
+    /** As above, scrubbing {@code scrubRate} units a pixel; NaN for the kit's own rate. */
+    @Nullable
+    private static Configurator styleRow(ConfigForm form, @Nullable NodeFields fields, UIElement node,
+                                        StyleProperty<?> property, String label, String description, double scrubRate) {
         if (fields == null) {
             form.prop(ConfigDescriptor.info("style." + property.name, label).tooltip(property.name).description(description),
                     Property.derived(() -> String.valueOf(node.getStyle().computed().get(cast(property)))));
             return null;
         }
         NodeFields.Field field = fields.style(node, property, label);
+        // STATED BEFORE IT IS PLACED: a refill keeps a row only for a descriptor of the same shape.
         field.descriptor().description(description);
+        if (!Double.isNaN(scrubRate)) field.descriptor().scrubRate(scrubRate);
         Configurator row = field.control() == null ? prop(form, field.descriptor(), field.value())
                 : form.control("style." + property.name, label, field.control());
         markSet(row, () -> fields.declares(node, property));
@@ -933,17 +942,27 @@ public final class BuilderInspectorSections {
      * An invisible part of a form that owns a per-frame hook: placed with the rows, cleared with them, and the hook
      * stops when it leaves the tree. A section cannot hang a hook on a row it did not build the class of.
      */
-    private static final class FrameFollower extends UIElement {
+    private static final class FrameFollower extends UIElement implements Refillable<FrameFollower> {
+
+        /** What runs after every layout — the last fill's, whose follower this may have been. */
+        private Runnable follow;
 
         FrameFollower(Runnable follow) {
+            this.follow = follow;
             setDisplayed(false);
             onConnected(() -> {
                 UIDocument window = document();
                 if (window != null) window.animation().afterLayout(this, delta -> {
-                    follow.run();
+                    this.follow.run();
                     return true;
                 });
             });
+        }
+
+        @Override
+        public boolean adopt(FrameFollower fresh) {
+            follow = fresh.follow;
+            return true;
         }
     }
 
@@ -955,7 +974,7 @@ public final class BuilderInspectorSections {
         };
         follow.run();
         if (row.control() instanceof ValueControl<?> control) {
-            control.property().changed.connect((was, now) -> follow.run());
+            row.decorations().add(control.property().changed.connect((was, now) -> follow.run()));
         }
     }
 

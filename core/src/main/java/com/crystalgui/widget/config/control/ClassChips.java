@@ -21,6 +21,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.widget.config.ConfigControlContracts;
+import com.crystalgui.widget.config.Refillable;
 import com.crystalgui.widget.config.ValueControl;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.overlay.Popover;
@@ -46,7 +47,7 @@ import com.crystalgui.widget.text.UIText;
  *   <li>The value is the whole list in order; a name already present is not added twice.</li>
  * </ul>
  */
-public class ClassChips extends ValueControl<List<String>> {
+public class ClassChips extends ValueControl<List<String>> implements Refillable<ClassChips> {
 
     public static final Name NAME = Name.of("classchips");
 
@@ -137,6 +138,17 @@ public class ClassChips extends ValueControl<List<String>> {
     public ClassChips setAccepts(Predicate<String> accepts) {
         this.accepts = accepts == null ? name -> true : accepts;
         return this;
+    }
+
+    /** Takes over what {@code fresh} was built to edit: its descriptor, its three questions and its value. */
+    @Override
+    public boolean adopt(ClassChips fresh) {
+        if (!adopt(fresh.descriptor())) return false;
+        suggestionSource = fresh.suggestionSource;
+        accepts = fresh.accepts;
+        flagged = fresh.flagged;
+        bind(fresh.property());
+        return true;
     }
 
     // ── Editing ─────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.DragScrub;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.config.Refillable;
 import com.crystalgui.widget.config.control.NumberControl;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.overlay.Tooltip;
@@ -60,7 +61,7 @@ import dev.vfyjxf.taffy.style.TaffyDimension;
  *   <li>A value set inline is drawn bold; the rest come from a sheet or the default.</li>
  * </ul>
  */
-public final class BoxModelEditor extends UIElement {
+public final class BoxModelEditor extends UIElement implements Refillable<BoxModelEditor> {
 
     public static final String BOX_CLASS = "__boxmodel__";
     public static final String LAYER_CLASS = "__bm-layer__";
@@ -81,7 +82,10 @@ public final class BoxModelEditor extends UIElement {
         private final Function<Box, Float> read;
         private final UIText text = new UIText("");
         private final boolean contentSize;
-        private final StyleScrub scrub;
+        private final boolean signed;
+
+        /** Writes into the diagram's target, so a new target is a new scrub. @see #rescrub */
+        private StyleScrub scrub;
 
         private Cell(StyleProperty<?> property, Function<Box, Float> read, boolean contentSize) {
             this.property = property;
@@ -92,13 +96,9 @@ public final class BoxModelEditor extends UIElement {
             // A gesture needs the press, and a label is scenery with hit-testing off by default.
             text.setHitTest(true);
             // A margin may go negative; padding, border and a size may not.
-            boolean margin = property == LayoutProperties.MARGIN_TOP || property == LayoutProperties.MARGIN_RIGHT
+            signed = property == LayoutProperties.MARGIN_TOP || property == LayoutProperties.MARGIN_RIGHT
                     || property == LayoutProperties.MARGIN_BOTTOM || property == LayoutProperties.MARGIN_LEFT;
-            scrub = StyleScrub.on(text, property, target)
-                    .measuring(this::measured)
-                    .writing(value -> cssValue(this, format((float) value)))
-                    .signed(margin)
-                    .allowedWhen(() -> editing == null);
+            rescrub();
             Tooltip hint = Tooltip.attach(text, property.name);
             hint.addClass(Tooltip.WAIT_CLASS);
             hint.setDescription(contentSize
@@ -113,6 +113,14 @@ public final class BoxModelEditor extends UIElement {
                 }
                 event.preventDefault();
             }, false, true);
+        }
+
+        private void rescrub() {
+            scrub = StyleScrub.on(text, property, target)
+                    .measuring(this::measured)
+                    .writing(value -> cssValue(this, format((float) value)))
+                    .signed(signed)
+                    .allowedWhen(() -> editing == null);
         }
 
         public StyleProperty<?> property() {
@@ -143,11 +151,11 @@ public final class BoxModelEditor extends UIElement {
         }
     }
 
-    private final UIElement node;
+    /** The node described — a refill's next one, once {@link #adopt} has run. */
+    private UIElement node;
 
-    @Nullable
     /** Where a cell's edits land. @see Declarations */
-    private final Declarations target;
+    private Declarations target;
 
     private final List<Cell> cells = new ArrayList<>();
 
@@ -191,6 +199,20 @@ public final class BoxModelEditor extends UIElement {
         append(margin);
 
         onConnected(this::startTicking);
+    }
+
+    /**
+     * Describes {@code fresh}'s node, written into {@code fresh}'s target — declined while a number is being typed,
+     * which a refill then replaces rather than yank the field out from under the typing.
+     */
+    @Override
+    public boolean adopt(BoxModelEditor fresh) {
+        if (editing != null) return false;
+        node = fresh.node;
+        target = fresh.target;
+        for (Cell cell : cells) cell.rescrub();
+        refresh();
+        return true;
     }
 
     /** Whether edits are possible — something is behind the node to write into. */
