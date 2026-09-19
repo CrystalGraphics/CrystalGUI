@@ -191,21 +191,17 @@ dockgroup > tabview > .__strip__ > .__rail__,
     align-items: center;
 }
 
-/* THE FIRST TAB STANDS OFF THE PANE'S EDGE, in both strips. In a panel the number lines the tab's label
- * up under the title: the header carries `padding-left: 8px` and a `tab` its own `padding-left: 4px`.
- * An editor group has no title, and takes it anyway -- without it the first tab's pill sat on the
- * pane's rounded border, where IntelliJ's is inset. */
-dockgroup > tabview > .__strip__ > .__rail__,
-.__view-content__ tabview > .__strip__ > .__rail__ {
-    padding-left: 3px;
-}
-
-/* ...AND THE LAST STOPS SHORT OF IT. The group is a rounded island that does not clip -- that is what makes
- * its rounding free -- so the rail's square clip is the only edge an overflowing tab meets, and it ran to
- * the island's border: a tab scrolled past the end painted over it. Inset on the STRIP, not the rail: a
- * scroller's padding scrolls under its content, and this has to move the clip. */
+/* THE TABS STAND OFF THE PANE'S EDGES, in both strips, as IntelliJ's are inset from its rounded border. In a panel
+ * the start lines the tab's label up under the title: the header carries `padding-left: 8px` and a `tab` its own
+ * `padding-left: 4px`.
+ *
+ * ON THE STRIP, NOT THE RAIL, at both ends. The group is a rounded island that does not clip -- that is what makes
+ * its rounding free -- so the rail's square clip is the only edge an overflowing tab meets. A scroller's padding
+ * scrolls under its content, so an inset there left that clip on the island's border: a tab scrolled past either
+ * end painted over the rounded corner. */
 dockgroup > tabview > .__strip__,
 .__view-content__ tabview > .__strip__ {
+    padding-left: 3px;
     padding-right: 3px;
 }
 
@@ -2678,7 +2674,6 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
     left: 0;
     right: 0;
     bottom: 0;
-    height: 3px;
 }
 
 /* ── A TAB'S DRAG GHOST ─────────────────────────────────────────────────────────────────────────
