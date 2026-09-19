@@ -8,6 +8,8 @@ import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
+import com.crystalgui.core.property.Property;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -57,6 +59,20 @@ final class InlineDeclarations implements Declarations {
         BuilderEdit edit = NodeFields.on(document).inlineEdit(node, property, css);
         if (edit != null) document.apply(edit);
         return edit != null;
+    }
+
+    @Override
+    public Property<String> value(StyleProperty<?> property) {
+        Property<String> value = Property.derived(() -> valueOf(property),
+                css -> set(property, css == null ? "" : css.trim())).editedIn(history());
+        // THE DOCUMENT SAYS WHEN IT MOVED, so a row follows an undo and an edit made anywhere else.
+        return document == null ? value : value.announcedBy(refresh -> document.onChanged().connect(refresh::run));
+    }
+
+    @Override
+    @Nullable
+    public UndoStack history() {
+        return document == null ? null : document.history();
     }
 
     @Override

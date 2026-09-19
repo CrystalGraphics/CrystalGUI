@@ -160,11 +160,17 @@ public final class BuilderInspectorSections {
         return selection == null ? null : selection.node();
     }
 
-    /** The fields for {@code node} when it can be edited, else null — a live pick, or a node of another tree. */
+    /**
+     * The fields for {@code node} when it can be edited, else null — a live pick, or a node of another tree.
+     *
+     * <p>Pointed at whatever style target the inspector has picked, which is the element itself unless the Style
+     * tab's chips say a rule.</p>
+     */
     @Nullable
     private static NodeFields editable(DataContext context, @Nullable UIElement node) {
         NodeFields fields = NodeFields.of(context);
-        return fields != null && fields.owns(node) ? fields : null;
+        if (fields == null || !fields.owns(node)) return null;
+        return fields.writingTo(BuilderStyleSections.styleFields(context, node));
     }
 
     /** Shared by every section that describes one node. */
@@ -533,7 +539,8 @@ public final class BuilderInspectorSections {
             if (node == null) return;
             form.header("Box");
             NodeFields fields = editable(context, node);
-            form.custom(new BoxModelEditor(node, fields == null ? null : fields.document()));
+            // THE SAME DIAGRAM OVER WHATEVER IS PICKED: the element's own inline style, or a rule in a sheet.
+            form.custom(new BoxModelEditor(node, BuilderStyleSections.styleFields(context, node)));
         }
     }
 
@@ -886,7 +893,7 @@ public final class BuilderInspectorSections {
         field.descriptor().description(description);
         Configurator row = field.control() == null ? prop(form, field.descriptor(), field.value())
                 : form.control("style." + property.name, label, field.control());
-        markSet(row, () -> LiveEdits.hasInline(node, property));
+        markSet(row, () -> fields.declares(node, property));
         return row;
     }
 

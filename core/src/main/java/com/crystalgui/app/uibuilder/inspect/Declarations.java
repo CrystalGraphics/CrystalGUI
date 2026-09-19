@@ -3,6 +3,8 @@ package com.crystalgui.app.uibuilder.inspect;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.core.property.Property;
+import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -31,6 +33,12 @@ public interface Declarations {
     String valueOf(StyleProperty<?> property);
 
     /**
+     * The declaration as a bound property — read, written and recorded wherever the target keeps it, which is what
+     * an inspector ROW binds to.
+     */
+    Property<String> value(StyleProperty<?> property);
+
+    /**
      * Writes {@code css}, or clears the declaration for an empty string.
      *
      * @return whether it landed — false for a value the property's own parser will not read
@@ -42,6 +50,10 @@ public interface Declarations {
 
     /** Whether anything written here lands at all: a live pick has nothing to record into, and a sheet may be read-only. */
     boolean canWrite();
+
+    /** Where an edit here is undone: the document for an element, the sheet's own buffer for a rule. */
+    @Nullable
+    UndoStack history();
 
     /** Opens a gesture: everything written until it closes is one undo step. */
     void beginGesture();

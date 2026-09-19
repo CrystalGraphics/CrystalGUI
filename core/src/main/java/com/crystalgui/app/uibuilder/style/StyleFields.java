@@ -2,6 +2,7 @@ package com.crystalgui.app.uibuilder.style;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -13,6 +14,7 @@ import com.google.gson.JsonElement;
 
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
+import com.crystalgui.app.uibuilder.inspect.Declarations;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
 import com.crystalgui.core.property.Property;
@@ -59,7 +61,7 @@ import com.crystalgui.ui.dom.UIElement;
  *       longhands, so an inline target reads and writes them behind that one name, in one edit.</li>
  * </ul>
  */
-public final class StyleFields {
+public final class StyleFields implements Declarations {
 
     /**
      * One declaration as the target holds it — read from the sheet's text, or off the element for inline.
@@ -222,6 +224,81 @@ public final class StyleFields {
     public static StyleFields on(@Nullable UiBuilderDocument document, StyleTarget target, UIElement node) {
         return new StyleFields(document, target, node);
     }
+
+    // ── Where a gizmo's edits land ──────────────────────────────────────────
+    //
+    // THE INSPECTOR'S ROWS AND GIZMOS ARE TARGET-BLIND: they name a declaration, and this is the target answering.
+    // @see Declarations
+
+    @Override
+    public String valueOf(StyleProperty<?> property) {
+        return valueOf(property.name);
+    }
+
+    @Override
+    public Property<String> value(StyleProperty<?> property) {
+        return value(property.name);
+    }
+
+    @Override
+    public boolean set(StyleProperty<?> property, String css) {
+        // INSIDE AN ELEMENT'S GESTURE the write is live and unrecorded, which is the inline style's own mechanism.
+        if (inGesture != null) return inGesture.set(property, css);
+        write(property.name, css);
+        return true;
+    }
+
+    @Override
+    public boolean declares(StyleProperty<?> property) {
+        return !valueOf(property.name).isEmpty();
+    }
+
+    /**
+     * A gesture's writes are one undo step: the run holds the history open, and every write inside it folds into
+     * the one before it. @see UndoStack#beginMergeRun
+     */
+    @Override
+    public void beginGesture() {
+        // AN ELEMENT'S GESTURE IS THE INLINE STYLE'S: it snapshots the whole of it, writes live and records the
+        // difference once -- so a cancelled edit records NOTHING, which a text put back cannot manage.
+        if (target.isInline() && document != null) {
+            inGesture = Declarations.inline(node, document);
+            inGesture.beginGesture();
+            return;
+        }
+        gestureFrom = new LinkedHashMap<>();
+        UndoStack history = history();
+        if (history != null) history.beginMergeRun();
+    }
+
+    @Override
+    public void endGesture(boolean keep) {
+        if (inGesture != null) {
+            inGesture.endGesture(keep);
+            inGesture = null;
+            return;
+        }
+        Map<String, String> was = gestureFrom;
+        // PUT BACK WHAT EACH ONE SAID, which is what a cancelled edit means wherever the declaration lives --
+        // INSIDE the run, so the writes and their undoing are one step, and only where the value actually moved,
+        // so a gesture that wrote nothing records nothing.
+        if (!keep && was != null) {
+            was.forEach((property, text) -> {
+                if (!valueOf(property).equals(text)) write(property, text);
+            });
+        }
+        gestureFrom = null;
+        UndoStack history = history();
+        if (history != null) history.endMergeRun();
+    }
+
+    /** What each property said when the open gesture began, so a cancelled one can put it back. */
+    @Nullable
+    private Map<String, String> gestureFrom;
+
+    /** The element's own gesture, while one is open over an inline target. @see #beginGesture */
+    @Nullable
+    private Declarations inGesture;
 
     public StyleTarget target() {
         return target;
@@ -669,6 +746,7 @@ public final class StyleFields {
     // ── Writing ─────────────────────────────────────────────────────────────
 
     private void write(String property, String css) {
+        if (gestureFrom != null) gestureFrom.putIfAbsent(property, valueOf(property));
         if (!canWrite()) return;
         if (target.isInline()) {
             writeInline(property, css);
