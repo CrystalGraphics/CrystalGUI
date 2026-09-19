@@ -269,6 +269,7 @@ editor scheme's.
 | `--editor-zoom-link-pressed` | `#2F7FD8` | dark-plus.css |
 | `--editorfind-bg` | `var(--surface-panel)` | base.css |
 | `--editorfind-border` | `var(--surface-base)` | base.css |
+| `--empty-state-fg` | `var(--fg-hint)` | base.css |
 | `--error` | `#F14C4C` | crystal-dark.css |
 | `--error-icon` | `#E55765` | crystal-dark.css |
 | `--fg` | `#DFE1E5` | crystal-dark.css |
@@ -537,7 +538,6 @@ editor scheme's.
 | `--run-action-hover-bg` | `var(--hover-bg)` | base.css |
 | `--run-action-hover-fg` | `var(--fg)` | base.css |
 | `--run-boundary-fg` | `var(--accent)` | base.css |
-| `--run-empty-fg` | `var(--fg-hint)` | base.css |
 | `--run-input-fg` | `var(--success)` | base.css |
 | `--run-link-fg` | `var(--link)` | base.css |
 | `--run-live-fg` | `var(--success-icon)` | base.css |

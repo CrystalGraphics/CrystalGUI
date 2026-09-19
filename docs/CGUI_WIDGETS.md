@@ -485,6 +485,35 @@ size on the element that draws, or on the `::part()`.
 - Tag `text` · no shadow parts
 - Scenes: `cgui-text` (wrapping, font fallback, live binding), `cgui-gallery`
 
+## 6b. `EmptyState` — what a vacant panel says (`widget.display`)
+
+A heading and a few short lines over the middle of the panel — IntelliJ's `StatusText`. It never
+wraps: a panel narrower than the note clips each line evenly at both ends while centred, so a resize
+never reflows it. `setCentred(false)` lines a list of dashes up on one edge, as every workbench panel
+does. **The copy is a direction, not a status**: "To <do the thing>:" and the steps there, naming the
+kind of document the panel needs with one example, since another extension may serve the same panel.
+
+**A workbench panel declares one and says when it is vacant**; the `ViewContainer` it is docked in
+places the note and shows it in the panel's place:
+
+```java
+private final EmptyState empty = EmptyState.of(this, "To see a document's structure:",
+        "— Open one that has a structure, such as a .cgui file");
+
+private void show(@Nullable Thing thing) {
+    empty.setVacant(thing == null);
+}
+```
+
+`of` records the note on the panel (`EmptyState.NOTE`) and lines it up as a list; it starts vacant. A
+line that changes is rewritten on the same note: `empty.setLine(0, "— Press Run (" + key + ")")`.
+Outside a container, `new EmptyState(...)`, append it and `setDisplayed` it yourself — it fills its
+parent absolutely and takes no pointer, so the parent needs a size.
+
+- Tag `emptystate` · parts `lines`, `heading`, `line` · token `--empty-state-fg`
+- Declared by `RunPanel`, `HierarchyToolWindow`, `LibraryToolWindow`, `Inspector`
+- Scenes: `cgui-desktop` (open the Run, Hierarchy or Library panel with no `.cgui` in front)
+
 ## 7. `Scroller` and `ScrollerView`
 
 Two different things, and the distinction is the point.

@@ -1279,17 +1279,11 @@ runpanel .__run-input__ {
     border-color: var(--accent, #3574F0);
 }
 
-/* WHAT THE PANEL SAYS BEFORE ANYTHING HAS RUN.
+/* WHAT A PANEL SAYS WHILE IT HAS NOTHING TO SHOW -- `EmptyState`, IntelliJ's `StatusText`.
  *
- * A blank rectangle is not a neutral answer -- it reads as broken, on the panel most likely to be opened
- * first because the activity bar has a button for it. IntelliJ centres a note here and so does every VS
- * Code panel with a precondition; the Problems view in this application already does.
- *
- * ABSOLUTE AND INSET TO NOTHING, so it sits over the console's own surface rather than beside it: the
- * transcript is empty by definition here, so there is nothing to displace, and laying the note out in
- * the flow would give the console a share of the height it does not need. `.__run-empty__` is a child of
- * the body, whose containing block it fills. */
-runpanel .__run-empty__ {
+ * Absolute and inset to nothing, so it sits over the panel's own surface rather than taking a share of
+ * its height from the content it stands in for. */
+emptystate {
     position: absolute;
     left: 0;
     right: 0;
@@ -1300,34 +1294,26 @@ runpanel .__run-empty__ {
     justify-content: center;
 }
 
-/* THE BLOCK IS CENTRED; ITS LINES ARE NOT.
- *
- * One container cannot say both. `align-items: center` on the column above centres each line
- * INDIVIDUALLY, so every line's left edge lands at a different x -- the two dashes stop lining up with
- * each other and the heading sits indented between them. IntelliJ's note is a left-aligned block that
- * happens to be centred, which is why its dashes form a column.
- *
- * So this one shrinks to its widest line and aligns its children to that edge, and the one above centres
- * it. No width: a flex item with no size and `flex-shrink: 0` (the default here) takes its content size,
- * which is exactly the widest line. */
-runpanel .__run-empty-lines__ {
+/* Never wraps: a panel being resized would reflow the note on every pixel. Each line is centred on its own
+ * and the block on the panel, so a panel narrower than the note clips every line evenly at both ends and a
+ * short line survives whole. */
+emptystate::part(lines) {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 3px;
 }
 
-/* `font-size` DOES NOT INHERIT -- `default.css` opens with `* { font-size: 10 }`, which is a candidate at
- * STYLESHEET origin on every element, and inheritance only applies where there is no candidate at any
- * origin. So each line states its own, and a rule on the container above would silently do nothing. */
-runpanel .__run-empty-head__ {
-    font-size: 10px;
-    color: var(--run-empty-fg, #6B6B6B);
-    white-space: nowrap;
+/* A list whose dashes should form a column. Clips from the right-hand end instead. */
+emptystate.__start-aligned__::part(lines) {
+    align-items: flex-start;
 }
 
-runpanel .__run-empty-line__ {
+/* Each line states its own size: `* { font-size: 10 }` is a candidate on every element, so a rule on the
+ * block would not inherit. */
+emptystate::part(heading),
+emptystate::part(line) {
     font-size: 10px;
-    color: var(--run-empty-fg, #6B6B6B);
+    color: var(--empty-state-fg, #6B6B6B);
     white-space: nowrap;
 }
 

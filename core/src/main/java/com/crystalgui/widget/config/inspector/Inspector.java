@@ -7,6 +7,7 @@ import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.UIElement;
 
+import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.widget.layout.TabView;
 
 import javax.annotation.Nullable;
@@ -50,6 +51,8 @@ public class Inspector extends UIElement implements DataProvider {
 
     private final TabView tabs = new TabView();
 
+    private final EmptyState empty = EmptyState.of(this, "To inspect something:", "— Select it in an editor");
+
     /** What is shown for the subject: a panel per tab, refilled. */
     private final InspectorTabs view = new InspectorTabs(tabs);
 
@@ -64,6 +67,11 @@ public class Inspector extends UIElement implements DataProvider {
      * and the outer one down. The project tree never showed either, having only ever had one.</p>
      */
     public static final String SCROLL_CLASS = "__inspector-scroll__";
+
+    /** What is shown while nothing can be described, for a host to reword. */
+    public EmptyState emptyState() {
+        return empty;
+    }
 
     public Inspector() {
         super(NAME);
@@ -338,6 +346,7 @@ public class Inspector extends UIElement implements DataProvider {
         // draw -- Blender hides a panel entirely when its poll fails.
         if (!described) view.clear();
         toggleClass(EMPTY_CLASS, !described);
+        empty.setVacant(!described);
     }
 
     /**

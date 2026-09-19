@@ -9,6 +9,7 @@ import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
+import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.workbench.view.TitleActionsContributor;
@@ -21,7 +22,7 @@ import com.crystalgui.workbench.view.TitleActionsContributor;
  * it built first. Focusing a CSS file beside the canvas keeps the tree: it has nothing to say about CSS, and the
  * canvas is still there to edit. @see EditorService#follow</p>
  *
- * <p>It empties rather than disappearing when no builder is on screen. A tool window that comes and goes moves
+ * <p>It says so rather than disappearing when no builder is on screen. A tool window that comes and goes moves
  * everything beside it, and "the panel I docked has gone" is indistinguishable from a bug.</p>
  */
 public final class HierarchyToolWindow extends UIElement implements TitleActionsContributor, FocusableView {
@@ -37,6 +38,9 @@ public final class HierarchyToolWindow extends UIElement implements TitleActions
 
     @Nullable
     private BuilderContext shown;
+
+    private final EmptyState empty = EmptyState.of(this, "To see a document's structure:",
+            "— Open one that has a structure, such as a .cgui file");
 
     public HierarchyToolWindow(WorkbenchContext workbench) {
         super(NAME);
@@ -78,6 +82,7 @@ public final class HierarchyToolWindow extends UIElement implements TitleActions
         removeAll();
         hierarchy = builder == null ? null : new HierarchyPanel(builder);
         if (hierarchy != null) append(hierarchy);
+        empty.setVacant(hierarchy == null);
     }
 
 }

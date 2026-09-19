@@ -41,6 +41,9 @@ public final class InspectorExtension implements WorkbenchExtension {
         // placeholder while waiting for something hands back the placeholder for the rest of the
         // session.
         Inspector inspector = new Inspector();
+        inspector.emptyState().setHeading("To inspect something, do one of the following:").setLines(
+                "— Select an element on a canvas, such as in a .cgui file",
+                "— Select a node in a graph, such as in a .shadergraph file");
         ConnectionGroup lifetime = new ConnectionGroup();
 
         // ONE DECLARATION, which is the whole of what this says about the panel: where it goes, what

@@ -489,10 +489,9 @@ theme {
      * read as a 10px mark. Read by the activity bar's dot AND by the file tree's row, from this one name,
      * so the two greens cannot drift apart again — which they had, having been chosen weeks apart. */
     --run-live-fg: var(--success-icon);
-    /* The "nothing has run yet" note. The SAME hint tone as the eviction notice, deliberately: both are
-     * the panel talking about itself rather than showing a script's output, and a second grey for the
-     * same voice is how two of them come to disagree. */
-    --run-empty-fg: var(--fg-hint);
+    /* A panel's empty-state note. The SAME hint tone as the Run console's eviction notice: both are a
+     * panel talking about itself, and a second grey for one voice is how two of them come to disagree. */
+    --empty-state-fg: var(--fg-hint);
     /* The line that opens a run — the accent, because that is this vocabulary's "look here" and a run
      * boundary is the one thing in a transcript you scroll to find. It reads against the output around
      * it (the scheme's own foreground) and against the faded grey of the line that CLOSES a run, which

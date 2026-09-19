@@ -19,6 +19,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.layout.TabView;
@@ -235,6 +236,7 @@ public class ViewContainer extends UIElement implements WindowChrome, DataProvid
         if (views.size() == 1) {
             UIElement only = views.get(0).build();
             content.setOnlyChild(only);
+            placeEmptyState(content, only);
             mounted = only;
             // ITS CONTROLS GO ON THE TITLE LINE — IntelliJ's tool window title actions. @see
             // HeaderContributor. Only for a lone view: with two sharing a container the header names the
@@ -254,9 +256,17 @@ public class ViewContainer extends UIElement implements WindowChrome, DataProvid
         }
         for (ViewContainerRegistry.ViewEntry view : views) {
             Tab tab = tabs.addTab(view.title());
-            tab.content().append(view.build());
+            UIElement built = view.build();
+            tab.content().append(built);
+            placeEmptyState(tab.content(), built);
         }
         content.setOnlyChild(tabs);
+    }
+
+    /** Places the note {@code view} declared, if any, beside it in {@code slot}. @see EmptyState#of */
+    private static void placeEmptyState(UIElement slot, UIElement view) {
+        EmptyState note = view.get(EmptyState.NOTE);
+        if (note != null) note.placeIn(slot);
     }
 
     /** Takes the previous view's header controls off, so a container that swaps views does not keep them. */
