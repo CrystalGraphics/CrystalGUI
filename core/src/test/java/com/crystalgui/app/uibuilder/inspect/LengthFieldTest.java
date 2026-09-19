@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder.inspect;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
@@ -26,6 +27,9 @@ public class LengthFieldTest {
                 List.of("px", "%"), LengthField.unitsOf(StylePropertyRegistry.OUTLINE_WIDTH));
 
         assertTrue("a bare number is not a length", LengthField.unitsOf(StylePropertyRegistry.OPACITY).isEmpty());
+        assertTrue("nor is a PAIR of them: gap reads 12px and writes `12px 12px`",
+                LengthField.unitsOf(LayoutProperties.GAP).isEmpty());
+        assertFalse("though one axis of it is", LengthField.unitsOf(LayoutProperties.ROW_GAP).isEmpty());
         assertTrue("nor is a colour", LengthField.unitsOf(StylePropertyRegistry.COLOR).isEmpty());
         assertTrue("nor a keyword", LengthField.unitsOf(StylePropertyRegistry.OVERFLOW).isEmpty());
     }

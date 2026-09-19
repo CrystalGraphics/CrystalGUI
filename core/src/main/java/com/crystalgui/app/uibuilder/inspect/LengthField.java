@@ -99,8 +99,24 @@ public final class LengthField extends ValueControl<String> {
         // throws it away, so an opacity and a font size answer yes to `1px` and are plain numbers with the kit's
         // own field. Nothing that is not a length reads `1%`.
         if (!out.contains("px") || !out.contains("%")) return List.of();
+        // AND IT IS ONE LENGTH, NOT A PAIR: `gap` reads `12px` and writes `12px 12px`, so a single field would
+        // drop the axis somebody set on its own. What a length writes back is a single term.
+        if (terms(property, "1px") != 1) return List.of();
         if (parses(property, AUTO)) out.add(AUTO);
         return out;
+    }
+
+    /** How many terms {@code property} writes back for {@code text}: one for a length, two for a pair. */
+    @SuppressWarnings("unchecked")
+    private static int terms(StyleProperty<?> property, String text) {
+        try {
+            Object value = property.valueParser.parse(text).compute();
+            if (value == null) return 0;
+            String written = ((StyleProperty<Object>) property).write(value).trim();
+            return written.isEmpty() ? 0 : written.split("\s+").length;
+        } catch (RuntimeException malformed) {
+            return 0;
+        }
     }
 
     private static boolean parses(StyleProperty<?> property, String text) {
