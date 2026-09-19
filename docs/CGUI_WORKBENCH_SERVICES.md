@@ -629,6 +629,8 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 |---|---|---|
 | `onDidChangeActive` | `EditorService` | the Hierarchy panel's per-frame poll, and the Inspector's three-source workaround |
 | `onDidChangeActivePanel` | `DockArea` | three per-frame polls at once |
+| `onDidChangeShownPanels` | `DockArea` | nothing — a group other than the focused one had no way to say what it showed |
+| `onDidChangeVisible`, `follow` | `EditorService` | the Hierarchy and the Library following the ACTIVE tab, and emptying whenever a file they could not describe took focus beside a canvas still on screen |
 | `onDidClosePanel` | `DockArea` | nothing — the fact nobody could state |
 | `onDidOpenDocument` / `onDidCloseDocument` | `Workbench` | `onDocumentLoaded`, and its missing half |
 | `onDidChangeLayout` | `DockArea` | the activity bar's `:checked` sweep |

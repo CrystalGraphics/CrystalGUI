@@ -15,6 +15,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.workbench.view.TitleActionsContributor;
 
@@ -51,10 +52,8 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
         this.extensionId = extensionId;
         append(panel);
         panel.onPlace.connect(this::place);
-        // WHICH TAB, and then WHETHER ITS CONTENT IS IN -- as the Hierarchy follows it. @see HierarchyToolWindow
-        whileConnected(() -> workbench.editors().onDidChangeActive.connect(tab -> follow()));
-        whileConnected(() -> workbench.editors().onDidLoad.connect(tab -> follow()));
-        onConnected(this::follow);
+        // THE BUILDER ON SCREEN, as the Hierarchy follows it. @see EditorService#follow
+        whileConnected(() -> workbench.editors().follow(BuilderEditor.class, this::show));
         // THE USER'S GROUPS AND VIEW, from the extension's store -- read on the first attach, NOT here: extensions
         // activate inside the Workbench constructor, and the application supplies the stores only after it, so
         // asked now the store is always null and every group was the session's alone. A host with no store
@@ -68,21 +67,27 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
         });
     }
 
-    /** Shows the panel while a builder is in front, and nothing otherwise. */
-    public void follow() {
-        boolean shown = builder() != null;
+    /** The builder the panel places into, or null while none is on screen. */
+    @Nullable
+    private BuilderContext builder;
+
+    /** Shows the panel while a builder is on screen, and nothing otherwise. */
+    private void show(@Nullable BuilderEditor editor) {
+        BuilderContext next = editor == null ? null : editor.surface();
+        builder = next;
+        boolean shown = next != null;
         if (shown == showing) return;
         showing = shown;
         StyleGroup.inlinePipeline(panel.getStyle().getLayoutGroup(),
                 l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
     }
 
-    /** Whether the panel is shown: a {@code .cgui} is in front. */
+    /** Whether the panel is shown: a {@code .cgui} is on screen. */
     public boolean isShowing() {
         return showing;
     }
 
-    /** Places {@code entry} into the builder in front, by the rule New ▸ uses. Nothing happens with no builder. */
+    /** Places {@code entry} into the builder on screen, by the rule New ▸ uses. Nothing happens with no builder. */
     public boolean place(LibraryCatalog.Entry entry) {
         BuilderContext builder = builder();
         return builder != null && Placement.intoSelection(builder, entry.build());
@@ -92,10 +97,10 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
         return panel;
     }
 
-    /** The builder in front, or null when the active tab is not a {@code .cgui}. */
+    /** The builder on screen that was last in front, or null while none is. @see EditorService#follow */
     @Nullable
     public BuilderContext builder() {
-        return BuilderEditor.inFront(workbench.editors());
+        return builder;
     }
 
     @Override

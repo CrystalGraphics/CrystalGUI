@@ -10,19 +10,20 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.workbench.view.TitleActionsContributor;
 
 /**
- * The <b>Hierarchy</b> tool window: the tree of whatever {@code .cgui} is in front.
+ * The <b>Hierarchy</b> tool window: the tree of the {@code .cgui} on screen that was last in front.
  *
- * <p>One panel for the whole workbench, re-pointed as the active tab changes — the same shape the
- * Inspector takes, and for the same reason. A panel per open document would mean the dock cached one
- * hierarchy per file and showed whichever it built first.</p>
+ * <p>One panel for the whole workbench, re-pointed as that changes — the same shape the Inspector takes, and for
+ * the same reason. A panel per open document would mean the dock cached one hierarchy per file and showed whichever
+ * it built first. Focusing a CSS file beside the canvas keeps the tree: it has nothing to say about CSS, and the
+ * canvas is still there to edit. @see EditorService#follow</p>
  *
- * <p>It empties rather than disappearing when the active tab is not a builder. A tool window that comes
- * and goes moves everything beside it, and "the panel I docked has gone" is indistinguishable from a
- * bug.</p>
+ * <p>It empties rather than disappearing when no builder is on screen. A tool window that comes and goes moves
+ * everything beside it, and "the panel I docked has gone" is indistinguishable from a bug.</p>
  */
 public final class HierarchyToolWindow extends UIElement implements TitleActionsContributor, FocusableView {
 
@@ -42,11 +43,7 @@ public final class HierarchyToolWindow extends UIElement implements TitleActions
         super(NAME);
         this.workbench = workbench;
         addClass(PANEL_CLASS);
-        // WHICH TAB, and then WHETHER ITS CONTENT IS IN -- a tab is announced before the read behind it
-        // lands, so the first answer has an active tab with no editor on it yet.
-        whileConnected(() -> workbench.editors().onDidChangeActive.connect(tab -> follow()));
-        whileConnected(() -> workbench.editors().onDidLoad.connect(tab -> follow()));
-        onConnected(this::follow);
+        whileConnected(() -> workbench.editors().follow(BuilderEditor.class, this::show));
     }
 
     /** The current hierarchy's tree, or null while no builder is in front. */
@@ -68,15 +65,15 @@ public final class HierarchyToolWindow extends UIElement implements TitleActions
         return titleActions;
     }
 
-    /** The hierarchy currently shown, or null when the tab in front is not a {@code .cgui}. */
+    /** The hierarchy currently shown, or null while no {@code .cgui} is on screen. */
     @Nullable
     public HierarchyPanel hierarchy() {
         return hierarchy;
     }
 
-    /** Points the panel at whatever builder is in front, and rebuilds only when that changed. */
-    public void follow() {
-        BuilderContext builder = BuilderEditor.inFront(workbench.editors());
+    /** Shows {@code editor}'s tree, rebuilding only when the builder changed; empty with none. */
+    private void show(@Nullable BuilderEditor editor) {
+        BuilderContext builder = editor == null ? null : editor.surface();
         if (builder == shown) return;
         shown = builder;
         removeAll();

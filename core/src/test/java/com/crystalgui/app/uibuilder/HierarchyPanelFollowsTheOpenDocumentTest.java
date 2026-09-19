@@ -48,6 +48,7 @@ import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.extension.InspectorExtension;
 import com.crystalgui.workbench.WorkbenchSession;
 import com.crystalgui.workbench.dock.DockGroup;
+import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
@@ -361,6 +362,36 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         assertEquals("a restored backup took the front from the tab on screen",
                 Resource.of(FILE), workbench.editors().active() == null ? null : workbench.editors().active().resource());
         assertNotNull("the panel is empty with the session's .cgui in front", panel().hierarchy());
+    }
+
+    /**
+     * <b>Focusing a file it cannot describe beside a canvas keeps the tree.</b> The Hierarchy follows the {@code .cgui}
+     * on screen that was last in front, not the tab with focus: a CSS file in the other split has no tree, and the
+     * canvas is still there to edit. It empties when that {@code .cgui} leaves the screen.
+     */
+    @Test
+    public void aFileInAnotherSplitDoesNotEmptyIt() {
+        workbench.open(DockInput.of(workbench.refFor(FILE)));
+        for (int i = 0; i < 16; i++) frameAndPump();
+        assertNotNull("never came up at all", panel().hierarchy());
+
+        DockPanelRef page = workbench.refFor(FILE);
+        DockPanelRef notes = workbench.refFor(OTHER);
+        workbench.dock().layout().drop(workbench.dock().layout().leafContaining(page), DockDropZone.SPLIT_RIGHT,
+                new DockLeaf(notes));
+        workbench.dock().requestRebuild();
+        for (int i = 0; i < 16; i++) frameAndPump();
+        assertTrue(workbench.dock().activatePanel(notes));
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        assertEquals("the split's file is not in front", OTHER.toString(),
+                String.valueOf(workbench.activeResource()));
+        assertEquals("both editors are on screen", 2, workbench.editors().visible().size());
+        assertNotNull("focusing the text file beside it emptied the tree", panel().hierarchy());
+
+        workbench.dock().closePanel(page);
+        for (int i = 0; i < 12; i++) frameAndPump();
+        assertNull("the .cgui left the screen and the tree stayed", panel().hierarchy());
     }
 
     /** With nothing open it is empty, which is the state it must not be stuck in. */
