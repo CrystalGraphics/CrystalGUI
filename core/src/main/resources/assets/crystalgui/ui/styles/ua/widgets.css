@@ -468,14 +468,14 @@ tabview .__strip__.__clipped-end__ > .__strip-fade__.__end__ {
 /* AN EQUAL SHARE, capped at the tab's natural width -- IntelliJ's compressible row. A share rather than shrinking in
  * proportion to content: in proportion, a tab whose content grew (its close button appearing on hover) took width
  * from every other. A share does not move until it reaches the cap, and a tab at its cap has room to spare. */
-tabview.__tabs-squeeze__ tab {
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab {
     flex-grow: 1;
     flex-shrink: 1;
     flex-basis: 0;
     min-width: 24px;
     max-width: max-content;
 }
-tabview.__tabs-squeeze__ tab::part(label) {
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab::part(label) {
     flex-shrink: 1;
     min-width: 0;
     white-space: nowrap;
@@ -484,21 +484,21 @@ tabview.__tabs-squeeze__ tab::part(label) {
 /* ...AND ITS CLOSE BUTTON TAKES NO ROOM UNTIL IT IS SHOWN, as IntelliJ's squeezed tabs' does. Everywhere else its space
  * is always paid for so a hover moves nothing (see THE CLOSE BUTTON); a squeezed tab has none to pay with, and its
  * share is what keeps a hover from moving anything here: shown, the button takes its room from the tab's own label. */
-tabview.__tabs-squeeze__ tab .__close__,
-tabview.__tabs-squeeze__ tab::part(close) {
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab .__close__,
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab::part(close) {
     display: none;
 }
-tabview.__tabs-squeeze__ tab:hover .__close__,
-tabview.__tabs-squeeze__ tab:checked .__close__,
-tabview.__tabs-squeeze__ tab:hover::part(close),
-tabview.__tabs-squeeze__ tab:checked::part(close) {
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab:hover .__close__,
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab:checked .__close__,
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab:hover::part(close),
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab:checked::part(close) {
     display: flex;
 }
-tabview.__tabs-wrap__ .__rail__ {
+tabview.__tabs-wrap__ > .__strip__ > .__rail__ {
     flex-wrap: wrap;
 }
-tabview.__tabs-squeeze__ .__rail__,
-tabview.__tabs-wrap__ .__rail__ {
+tabview.__tabs-squeeze__ > .__strip__ > .__rail__,
+tabview.__tabs-wrap__ > .__strip__ > .__rail__ {
     overflow: hidden;
 }
 
@@ -514,21 +514,21 @@ tabview .__strip-actions__ {
 }
 
 /* A column of tabs scrolls vertically, so its fades are across the top and bottom. */
-tabview.__left__ .__strip-fade__,
-tabview.__right__ .__strip-fade__ {
+tabview.__left__ > .__strip__ > .__strip-fade__,
+tabview.__right__ > .__strip__ > .__strip-fade__ {
     left: 0;
     right: 0;
     width: auto;
     height: 16px;
 }
-tabview.__left__ .__strip-fade__.__start__,
-tabview.__right__ .__strip-fade__.__start__ {
+tabview.__left__ > .__strip__ > .__strip-fade__.__start__,
+tabview.__right__ > .__strip__ > .__strip-fade__.__start__ {
     top: 0;
     bottom: auto;
     background: linear-gradient(to top, transparent, var(--tab-strip-bg, #2A2A2A));
 }
-tabview.__left__ .__strip-fade__.__end__,
-tabview.__right__ .__strip-fade__.__end__ {
+tabview.__left__ > .__strip__ > .__strip-fade__.__end__,
+tabview.__right__ > .__strip__ > .__strip-fade__.__end__ {
     top: auto;
     bottom: 0;
     background: linear-gradient(to bottom, transparent, var(--tab-strip-bg, #2A2A2A));
