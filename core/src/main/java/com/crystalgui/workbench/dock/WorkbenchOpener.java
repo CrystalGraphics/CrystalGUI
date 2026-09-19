@@ -75,7 +75,7 @@ public final class WorkbenchOpener {
         if (holding != null) {
             DockLeaf existing = holding.layout().leafContaining(ref);
             if (options.activates()) {
-                holding.activatePanel(ref);
+                workbench.dock.activatePanel(ref);
                 holding.focusPanel(ref);
             } else {
                 existing.activate(ref);
@@ -135,9 +135,12 @@ public final class WorkbenchOpener {
         return placed;
     }
 
-    /** Opens into the central work area and brings it forward — what opening a file means. */
+    /**
+     * Opens into the active group and brings it forward — what opening a file means: the group you were last
+     * working in, whichever window it is in, as VS Code's {@code ACTIVE_GROUP}. @see DockArea#activeArea
+     */
     public DockLeaf open(DockInput input) {
-        return open(input, DockPlacement.central(), DockOpenOptions.ACTIVATE);
+        return open(input, DockPlacement.active(), DockOpenOptions.ACTIVATE);
     }
 
     /**
@@ -244,15 +247,12 @@ public final class WorkbenchOpener {
      * @return whether the ref was there, so a caller knows not to open anything
      */
     private boolean bringToFront(DockPanelRef ref) {
-        for (DockLeaf leaf : workbench.dock.layout().leaves()) {
-            if (leaf.indexOf(ref) < 0) continue;
-            leaf.activate(ref);
-            workbench.dock.syncGroups();
-            workbench.dock.setActiveGroup(workbench.dock.groupFor(leaf));
-            workbench.dock.focusPanel(ref);
-            return true;
-        }
-        return false;
+        // IN WHICHEVER WINDOW HOLDS IT, which comes forward with it.
+        DockArea holding = workbench.dock.areaHolding(ref);
+        if (holding == null) return false;
+        workbench.dock.activatePanel(ref);
+        holding.focusPanel(ref);
+        return true;
     }
 
     /**
@@ -429,11 +429,7 @@ public final class WorkbenchOpener {
         });
     }
 
-    private DockLeaf centralLeaf() {
-        return centralLeaf(workbench.dock);
-    }
-
-    /** The central leaf of {@code in} — which is not always this workbench's own dock. @see #activeDock */
+    /** The central leaf of {@code in} — which is not always this workbench's own dock. @see DockArea#activeArea */
     private static DockLeaf centralLeaf(DockArea in) {
         for (DockLeaf leaf : in.layout().leaves()) {
             if (leaf.isCentral()) return leaf;

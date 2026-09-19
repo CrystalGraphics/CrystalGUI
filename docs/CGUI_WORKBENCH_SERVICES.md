@@ -1071,7 +1071,7 @@ new DockWindow(dock, layout, title);   // joins dock's home, with its registry, 
 **One opener, and it is the dock's.**
 
 ```java
-workbench.open(input);                                              // central, activated
+workbench.open(input);                                              // the active group, activated
 workbench.open(input, DockPlacement.with(me), DockOpenOptions.ACTIVATE);
 workbench.open(input, DockPlacement.side(SPLIT_RIGHT),
                DockOpenOptions.INACTIVE.withShare(0.28f));
