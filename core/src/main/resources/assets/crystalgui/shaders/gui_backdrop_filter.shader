@@ -39,10 +39,14 @@ Queue = "Overlay"
 Properties {
     _MainTex   ("Blurred backdrop", sampler2D) = "white"
     _SharpTex  ("Sharp backdrop",   sampler2D) = "white"
-    // WHERE THIS ELEMENT SITS IN THEM. Both backdrops are the whole surface, captured and blurred ONCE
-    // for every consumer on the frame, so each one crops itself rather than owning a texture.
-    // (u0, vBottom, u1, vTop) -- v is inverted because GL framebuffers are bottom-left origin.
-    _BackdropRect ("u0,v0,u1,v1", vec4) = (0.0, 0.0, 1.0, 1.0)
+    // WHERE THIS ELEMENT SITS IN THEM. One capture, blurred once, cropped by every consumer on the frame
+    // rather than owned by any of them. An AFFINE MAP, not a rect: the element's uv origin lands at
+    // _BackdropOrigin and its width and height step by the two axes, so a rotated element reads a rotated
+    // patch and the backdrop stays on the screen behind it. v is inverted because GL framebuffers are
+    // bottom-left origin, which is why the y axis points the other way.
+    _BackdropOrigin ("uv of the element's origin", vec2) = (0.0, 1.0)
+    _BackdropAxisX  ("uv step across its width",   vec2) = (1.0, 0.0)
+    _BackdropAxisY  ("uv step down its height",    vec2) = (0.0, -1.0)
     // WHAT IT MAY SAMPLE, (u0, vBottom, u1, vTop): its rect padded by the lens's reach and bounded by its clip.
     _CaptureRect  ("u0,v0,u1,v1", vec4) = (0.0, 0.0, 1.0, 1.0)
 
@@ -146,7 +150,9 @@ Pass {
     }
 
     /**
-     * Element uv -> backdrop uv. The y flip lives here, so callers work in element space.
+     * Element uv -> backdrop uv, through the element's own pose. The y flip lives in the map, so callers
+     * work in element space -- and so does a lens displacement, which the axes carry into the backdrop
+     * along the element's own directions.
      *
      * <p>MIRRORED AT THE SAMPLEABLE RECT, NOT CLAMPED TO THE ELEMENT: a refracted tap lands past the element's
      * edge, and clamping it to the element repeated the edge's own pixels across the bezel -- text crossing the
@@ -155,8 +161,7 @@ Pass {
      * held: a bezel wider than the whole clip folded the backdrop over and over into stripes.</p>
      */
     vec2 cg_backdropUv(vec2 uv) {
-        vec2 b = vec2(mix(_BackdropRect.x, _BackdropRect.z, uv.x),
-                      mix(_BackdropRect.w, _BackdropRect.y, uv.y));
+        vec2 b = _BackdropOrigin + _BackdropAxisX * uv.x + _BackdropAxisY * uv.y;
         vec2 lo = _CaptureRect.xy;
         vec2 size = max(_CaptureRect.zw - lo, vec2(1e-6));
         vec2 t = clamp((b - lo) / size, -1.0, 2.0);

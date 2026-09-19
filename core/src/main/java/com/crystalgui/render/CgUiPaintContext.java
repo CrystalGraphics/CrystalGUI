@@ -2199,8 +2199,21 @@ public final class CgUiPaintContext {
      * refraction samples past the element's edge — clamped to the element it repeated the edge's own pixels
      * across the bezel, and unbounded it bent in whatever the clip was hiding.</p>
      */
+    /**
+     * The frame's captured backdrop, and where one element sits in it.
+     *
+     * <p>The placement is an AFFINE MAP, not a rect: {@code (u0,v0)} is where the element's own uv origin
+     * lands, and {@code (ux,vx)} / {@code (uy,vy)} are the steps across its width and down its height. A
+     * rotated or skewed element therefore reads a rotated patch, so what is behind it stays where it is on
+     * screen rather than turning with the glass — an element is a window onto the backdrop, not a surface
+     * carrying a picture of it. A rect can only be the bounding box, which is the same thing as mapping the
+     * capture onto the element's own quad.</p>
+     *
+     * <p>{@code cu0..cv1} is the axis-aligned rect it may sample at all — its bounds padded by the blur's
+     * and the lens's reach, cut to its clip — which stays a rect because the capture is one.</p>
+     */
     public record Backdrop(CgTexture2D sharp, CgTexture2D blurred,
-                           float u0, float v0, float u1, float v1,
+                           float u0, float v0, float ux, float vx, float uy, float vy,
                            float cu0, float cv0, float cu1, float cv1) {}
 
     /**
