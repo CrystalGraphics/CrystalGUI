@@ -100,7 +100,16 @@ public final class Preferences {
 
     /** Opens it centred and <b>not</b> modal. Escape closes it while focus is inside — see {@link Dialog}. */
     public static Preferences open(UIDocument window, Settings settings) {
+        return open(window, settings, null);
+    }
+
+    /**
+     * As {@link #open(UIDocument, Settings)}, on {@code page} — a category id such as {@code "editor.tabs"} — for a
+     * command about one part of the settings. Null, or a page nothing declares, opens on the first.
+     */
+    public static Preferences open(UIDocument window, Settings settings, @Nullable String page) {
         Preferences preferences = new Preferences(settings);
+        if (page != null && SettingsCategory.isPage(page)) preferences.navigator.navigateTo(page);
         Dialog dialog = preferences.dialog;
         window.addOverlay(dialog, null);
         dialog.show();
