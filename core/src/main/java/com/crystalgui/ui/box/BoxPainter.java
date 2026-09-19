@@ -15,6 +15,8 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.api.PoseStack;
 import dev.vfyjxf.taffy.geometry.FloatRect;
+import java.util.ArrayList;
+import java.util.List;
 import javax.annotation.Nullable;
 import org.joml.Matrix4f;
 
@@ -33,9 +35,16 @@ import org.joml.Matrix4f;
  * CSS stacks them), then the node's {@link UIElement#paintContent content}, the children, the node's
  * {@link UIElement#paintDecoration decoration}, {@code overlay}, and {@code outline} last. A fractional
  * {@code opacity} or a rounded {@code overflow: hidden} routes the whole box through the paint
- * context's layer-FBO path exactly as before; a square clip is a scissor. The drawables, the SDF
- * rounded rect and the compositing are the backend's and unchanged — this class only decides what
- * is drawn where.</p>
+ * context's layer-FBO path; a square clip is a scissor. The drawables, the SDF rounded rect and the
+ * compositing are the backend's — this class only decides what is drawn where.</p>
+ *
+ * <h3>The children are painted in CSS's stacking order</h3>
+ *
+ * <p>A {@linkplain Box#isStackingContext stacking context} paints, after its own background, its negative
+ * {@code z-index} boxes, then its normal flow, then its {@code auto}/{@code 0} and positive boxes (CSS 2.1
+ * Appendix E, from its {@link StackingOrder}). A box that is not one paints its normal flow alone: its z-ordered
+ * descendants are the context's to paint, clipped on the way by every box between the two. Hit-testing searches
+ * the same order backwards. @see Box#hitTest</p>
  */
 public final class BoxPainter {
 
@@ -49,7 +58,7 @@ public final class BoxPainter {
         Box root = tree.root();
         if (root == null) return;
         Matrix4f base = new Matrix4f(ctx.getPoseStack().last().pose());
-        paintBox(root, ctx, base);
+        paintBox(root, ctx, base, true);
     }
 
     /**
@@ -69,10 +78,15 @@ public final class BoxPainter {
         Matrix4f base = new Matrix4f(ctx.getPoseStack().last().pose());
         // @see CgUiPaintContext#withoutRetention -- a copy drawn at other coordinates must not become
         // what the live tree thinks it last painted.
-        ctx.withoutRetention(() -> paintBox(box, ctx, base));
+        // AS A CONTEXT whether or not it is one: a subtree drawn on its own paints everything under it.
+        ctx.withoutRetention(() -> paintBox(box, ctx, base, true));
     }
 
-    private static void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base) {
+    /**
+     * One box and what it paints. {@code asContext}: its stacking context's lists as well as its normal flow — true
+     * for a stacking context and for the root of a paint.
+     */
+    private static void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext) {
         float opacity = box.opacity();
         if (opacity <= 0f) return;
         // NOTHING OF IT CAN LAND: a row scrolled past its list's edge draws nothing the scissor would keep.
@@ -127,7 +141,7 @@ public final class BoxPainter {
             if (!needsLayer) {
                 paintSelf(box, style, ctx, radii);
                 node.paintContent(ctx, box);
-                paintChildren(box, ctx, base, scissor);
+                paintChildren(box, ctx, base, scissor, asContext);
                 node.paintDecoration(ctx, box);
                 paintOverlay(box, style, ctx);
                 paintOutline(box, style, ctx);
@@ -168,7 +182,7 @@ public final class BoxPainter {
             node.paintContent(ctx, box);
             if (mask) {
                 CgFrameBuffer childrenFbo = ctx.beginLayerFbo(inside);
-                paintChildren(box, ctx, inner, false);
+                paintChildren(box, ctx, inner, false, asContext);
                 CgFrameBuffer maskFbo = ctx.beginLayerFbo(inside);
                 paintMask(box, style, ctx);
                 ctx.endLayerFbo();
@@ -176,7 +190,7 @@ public final class BoxPainter {
                 ctx.endLayerFbo();
                 ctx.blitLayer(childrenFbo, 1f, inside);
             } else {
-                paintChildren(box, ctx, inner, scissor);
+                paintChildren(box, ctx, inner, scissor, asContext);
             }
             node.paintDecoration(ctx, box);
             paintOverlay(box, style, ctx);
@@ -272,21 +286,104 @@ public final class BoxPainter {
     /** {@link #inkThrough}'s answer. Read immediately: the frame thread paints one box at a time. */
     private static final float[] INK = new float[4];
 
-    private static void paintChildren(Box box, CgUiPaintContext ctx, Matrix4f base, boolean scissor) {
+    /**
+     * What {@code box} hosts, inside its clip: its negative {@code z-index} boxes, its normal flow and its other
+     * z-ordered boxes when it paints as a context, and its normal flow alone otherwise.
+     */
+    private static void paintChildren(Box box, CgUiPaintContext ctx, Matrix4f base, boolean scissor,
+                                      boolean asContext) {
         if (box.children().isEmpty()) return;
         if (scissor) {
             // The PADDING box, as CSS clips: border excluded, padding included. In this box's own
             // space, and the context quantises it once in physical pixels through the pose.
-            FloatRect b = box.border();
-            ctx.pushScissor(b.left, b.top,
-                    Math.max(0f, box.width() - b.left - b.right),
-                    Math.max(0f, box.height() - b.top - b.bottom));
+            pushPaddingScissor(box, ctx);
         }
         try {
-            for (Box child : box.children()) paintBox(child, ctx, base);
+            StackingOrder order = asContext ? box.stackingOrder() : null;
+            if (order != null) paintLifted(order.negative, box, ctx, base);
+            for (Box child : box.children()) {
+                if (!child.isZOrdered()) paintBox(child, ctx, base, false);
+            }
+            if (order != null) {
+                paintLifted(order.zero, box, ctx, base);
+                paintLifted(order.positive, box, ctx, base);
+                paintLifted(order.top, box, ctx, base);
+            }
         } finally {
             if (scissor) ctx.popScissor();
         }
+    }
+
+    private static void pushPaddingScissor(Box box, CgUiPaintContext ctx) {
+        FloatRect b = box.border();
+        ctx.pushScissor(b.left, b.top,
+                Math.max(0f, box.width() - b.left - b.right),
+                Math.max(0f, box.height() - b.top - b.bottom));
+    }
+
+    /** A context's list, each box painted through the clips of every box between it and {@code context}. */
+    private static void paintLifted(List<Box> lifted, Box context, CgUiPaintContext ctx, Matrix4f base) {
+        for (Box box : lifted) {
+            // CULLED BEFORE THE WALK UP: a context lists every realised row of every virtualised list under it.
+            if (CgUiPaintContext.CULL) {
+                inkThrough(box, base);
+                if (ctx.outsideClip(INK[0], INK[1], INK[2], INK[3])) continue;
+            }
+            List<Box> clips = clipsBetween(box, context);
+            paintClipped(box, clips, clips.size() - 1, ctx, base);
+        }
+    }
+
+    /** The boxes between {@code lifted} and {@code context} that clip, innermost first; empty without allocating. */
+    private static List<Box> clipsBetween(Box lifted, Box context) {
+        List<Box> clips = List.of();
+        for (Box between = lifted.host(); between != null && between != context; between = between.host()) {
+            if (!between.clips()) continue;
+            if (clips.isEmpty()) clips = new ArrayList<>(2);
+            clips.add(between);
+        }
+        return clips;
+    }
+
+    /**
+     * {@code lifted} under {@code clips[0..at]}, outermost applied first: a square clip as a scissor in its own
+     * space, a rounded one as a mask layer, as the box would have masked it had the lifted box stayed in its flow.
+     */
+    private static void paintClipped(Box lifted, List<Box> clips, int at, CgUiPaintContext ctx, Matrix4f base) {
+        if (at < 0) {
+            paintBox(lifted, ctx, base, lifted.isStackingContext());
+            return;
+        }
+        Box clip = clips.get(at);
+        ComputedStyle style = clip.node().computedStyle();
+        PoseStack pose = ctx.getPoseStack();
+        if (radiiOf(style, clip.width(), clip.height()).isZero()) {
+            pose.pushPose();
+            pose.last().pose().set(base).mul(clip.localToWorld());
+            pushPaddingScissor(clip, ctx);
+            pose.popPose();
+            try {
+                paintClipped(lifted, clips, at - 1, ctx, base);
+            } finally {
+                ctx.popScissor();
+            }
+            return;
+        }
+        LayerRegion region = regionOf(lifted, ctx, base);
+        if (region.isEmpty()) return;
+        Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
+        LayerRegion inside = region.atOrigin();
+        CgFrameBuffer content = ctx.beginLayerFbo(region);
+        paintClipped(lifted, clips, at - 1, ctx, inner);
+        CgFrameBuffer mask = ctx.beginLayerFbo(inside);
+        pose.pushPose();
+        pose.last().pose().set(inner).mul(clip.localToWorld());
+        paintMask(clip, style, ctx);
+        pose.popPose();
+        ctx.endLayerFbo();
+        ctx.compositeMask(content, mask, inside);
+        ctx.endLayerFbo();
+        ctx.blitLayer(content, 1f, region);
     }
 
     // ── Background ───────────────────────────────────────────────────────────

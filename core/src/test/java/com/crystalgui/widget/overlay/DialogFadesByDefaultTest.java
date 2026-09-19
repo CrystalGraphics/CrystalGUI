@@ -131,8 +131,8 @@ public class DialogFadesByDefaultTest extends UiDocumentTestBase {
         // body's outline that lands on the caption's last row. Without it the header and the body are
         // ruled apart, which says they are two surfaces when they are one window.
         assertTrue("the caption has to paint after the body",
-                dialog.getTitleBar().getStyle().getGeneralGroup().zIndex()
-                        > dialog.getContent().getStyle().getGeneralGroup().zIndex());
+                dialog.getTitleBar().getStyle().getGeneralGroup().zIndex().orZero()
+                        > dialog.getContent().getStyle().getGeneralGroup().zIndex().orZero());
     }
 
     /**

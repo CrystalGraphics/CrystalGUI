@@ -607,13 +607,13 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         UIElement preview = Desktop.of(document).windowLayer()
                                    .querySelector("." + Desktop.SNAP_PREVIEW_CLASS);
         assertNotNull("the preview was never built", preview);
-        int previewZ = preview.getStyle().getGeneralGroup().zIndex();
+        int previewZ = preview.getStyle().getGeneralGroup().zIndex().orZero();
 
         assertTrue("the preview draws under a document it is describing — it would be invisible behind"
                         + " anything already filling that zone",
-                previewZ > other.getStyle().getGeneralGroup().zIndex());
+                previewZ > other.getStyle().getGeneralGroup().zIndex().orZero());
         assertTrue("the preview draws OVER the document being dragged, greying out what is in your hand",
-                previewZ < frame.getStyle().getGeneralGroup().zIndex());
+                previewZ < frame.getStyle().getGeneralGroup().zIndex().orZero());
     }
 
     /** Drags {@code target} by its caption into the work area's left edge and releases. */
