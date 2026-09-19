@@ -749,7 +749,7 @@ public class ProjectFileTree extends UIElement
     }
 
     /** Not empty, not {@code .} or {@code ..}, and no path separator, which would create the entry in another directory. */
-    static boolean isWellFormedName(String name) {
+    public static boolean isWellFormedName(String name) {
         if (name.isEmpty() || ".".equals(name) || "..".equals(name)) return false;
         return name.indexOf('/') < 0 && name.indexOf('\\') < 0;
     }

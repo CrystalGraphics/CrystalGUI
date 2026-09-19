@@ -1060,7 +1060,18 @@ dock.rebuildPanel(ref);      // a placeholder whose document has landed, restore
 dock.activeArea();           // where the next file opens
 dock.windows();              // what the session saves
 dock.setTabOverflow(WRAP);   // every group's tab strip, windows and later groups included
+dock.openInNewWindow(ref);   // a tab torn out by command -- Open Tab in New Window
 new DockWindow(dock, layout, title);   // joins dock's home, with its registry, close guard, icon, application
+```
+
+**A tab command takes its tab from `DockTab.of(context)`**: the tab its menu was opened on, else the active group's
+front tab, so one command serves the tab's right-click menu (`MenuId.EDITOR_TAB_CONTEXT`), the keyboard and the main
+menu. Across a split, `layout.opposite(leaf)` is the neighbouring group and `layout.unsplit(leaf)` folds the split back.
+
+```java
+registry.register(Command.of("mymod.pin", "Pin Tab")
+        .menu(MenuId.EDITOR_TAB_CONTEXT, "4_window", 5)
+        .run(context -> { DockTab tab = DockTab.of(context); if (tab != null) pin(tab.panel()); }));
 ```
 
 - **`activeArea()` is the dock whose group was last made active**, not the desktop's active window:

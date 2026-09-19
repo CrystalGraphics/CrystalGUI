@@ -1549,6 +1549,28 @@ public class DockArea extends UIElement {
     private void tearOutToWindow(DockDragPayload payload, float mx, float my) {
         UIDocument window = document();
         if (window == null) return;
+        var pointer = window.input().pointer();
+        var local = window.toLocal(pointer.x(), pointer.y());
+        openWindow(payload, local.x(), local.y());
+    }
+
+    /**
+     * Opens {@code panel} in a window of its own — IntelliJ's Open Tab in New Window — a little below and right of the
+     * group it leaves, in whichever window of this home holds it.
+     */
+    public void openInNewWindow(DockPanelRef panel) {
+        DockArea holding = areaHolding(panel);
+        DockLeaf leaf = holding == null ? null : holding.layout.leafContaining(panel);
+        DockGroup group = leaf == null ? null : holding.groupFor(leaf);
+        Box box = group == null ? null : group.box();
+        if (box == null) return;
+        holding.openWindow(DockDragPayload.ofPanel(holding, leaf, panel), box.worldX() + 32f, box.worldY() + 32f);
+    }
+
+    /** The window a drag out of this dock opens, at {@code (left, top)} in the desktop's space. */
+    private void openWindow(DockDragPayload payload, float left, float top) {
+        UIDocument window = document();
+        if (window == null) return;
         DockNode moved = detach(payload);
         if (moved == null) return;
 
@@ -1557,10 +1579,7 @@ public class DockArea extends UIElement {
                 : DockLayout.of((DockBranch) moved, DockOrientation.HORIZONTAL);
         String title = payload.panel() != null ? registry.windowTitleOf(payload.panel()) : "";
         DockWindow frame = new DockWindow(this, torn, title);
-
-        var pointer = window.input().pointer();
-        var local = window.toLocal(pointer.x(), pointer.y());
-        frame.moveTo(local.x(), local.y());
+        frame.moveTo(left, top);
         Desktop.of(window).addWindow(frame);
         requestRebuild();
     }

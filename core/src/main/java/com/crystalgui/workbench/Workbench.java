@@ -628,6 +628,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     @Override
     protected void registerCommands(CommandRegistry registry) {
         ExplorerCommands.register();
+        EditorTabCommands.register();
         // THE PROJECT INDEX IS *NOT* CONTRIBUTED HERE, and it was, and that was the whole of S4 being
         // dead on arrival. This method runs from UIElement's INSTANCE INITIALISER -- before the Workbench
         // constructor body -- so `projectIndex` was still null, and `contribute` opens with

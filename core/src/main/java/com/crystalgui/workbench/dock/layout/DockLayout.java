@@ -287,6 +287,48 @@ public final class DockLayout {
         return leaves.isEmpty() ? null : leaves.get(0);
     }
 
+    // ── Across a split ──────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The group across the split {@code leaf} is in — IntelliJ's opposite group: the next child of its branch, or the
+     * previous when it is the last, and the first group of that child when it is split itself. Null when unsplit.
+     */
+    @Nullable
+    public DockLeaf opposite(DockLeaf leaf) {
+        DockBranch parent = leaf.parent;
+        if (parent == null || parent.childCount() < 2) return null;
+        int index = parent.indexOf(leaf);
+        DockNode across = parent.child(index + 1 < parent.childCount() ? index + 1 : index - 1);
+        List<DockLeaf> leaves = new ArrayList<>();
+        across.collectLeaves(leaves);
+        return leaves.isEmpty() ? null : leaves.get(0);
+    }
+
+    /**
+     * Folds the split {@code into} is in back into it — IntelliJ's Unsplit: every panel of every group under that branch
+     * joins {@code into}, which keeps the one it was showing in front, and the other groups go.
+     */
+    public void unsplit(DockLeaf into) {
+        DockBranch parent = into.parent;
+        if (parent == null) return;
+        List<DockLeaf> under = new ArrayList<>();
+        parent.collectLeaves(under);
+        DockPanelRef shown = into.activePanel();
+        for (DockLeaf other : under) {
+            if (other == into) continue;
+            for (DockPanelRef panel : other.panels()) {
+                if (into.indexOf(panel) < 0) into.add(panel);
+            }
+            // THE WORK AREA SURVIVES AS `into`, since a central leaf cannot be removed.
+            if (other.isCentral()) {
+                other.setCentral(false);
+                into.setCentral(true);
+            }
+            remove(other);
+        }
+        if (shown != null) into.activate(shown);
+    }
+
     // ── Removal and collapse ────────────────────────────────────────────────────────────────────
 
     /**

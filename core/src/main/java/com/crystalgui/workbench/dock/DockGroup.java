@@ -4,6 +4,7 @@ import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.ui.dom.Name;
@@ -22,6 +23,7 @@ import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.dnd.InsertionMarker;
 import com.crystalgui.widget.layout.TabView;
@@ -116,8 +118,7 @@ public class DockGroup extends UIElement {
         append(tabs);
         tabs.setTabOverflow(area.tabOverflow());
 
-        // IntelliJ's ⋮ AT THE END OF THE TAB ROW. Pressing it makes this the active group, as any press in the group
-        // does, so the verbs in it act here.
+        // IntelliJ's ⋮ AT THE END OF THE TAB ROW.
         ActionButton options = ActionButton.menu("Options", MenuId.EDITOR_GROUP_OPTIONS).icon("crystalgui:more-vertical");
         options.setDropdownMark(false);
         options.context(this);
@@ -216,7 +217,7 @@ public class DockGroup extends UIElement {
     }
 
     @Nullable
-    private DockPanelRef panelOf(Tab tab) {
+    DockPanelRef panelOf(Tab tab) {
         for (Map.Entry<DockPanelRef, Tab> entry : tabByPanel.entrySet()) {
             if (entry.getValue() == tab) return entry.getKey();
         }
@@ -339,6 +340,9 @@ public class DockGroup extends UIElement {
                 tab.setClosable(true);
                 tab.onCloseRequested.connect(() -> area.closePanel(panel));
             }
+            // ITS OWN MENU, on the tab rather than the group: a listener outside the strip would see the press
+            // retargeted to the tab view and could not tell which tab it was. @see DockTab
+            ContextMenu.attach(tab, CommandRegistry.global(), pressed -> ContextMenu.of(MenuId.EDITOR_TAB_CONTEXT));
             // AND NO CONTENT. See showContent: a tab is a title until it is looked at.
             tabByPanel.put(panel, tab);
             area.installTabDrag(this, panel, tab);

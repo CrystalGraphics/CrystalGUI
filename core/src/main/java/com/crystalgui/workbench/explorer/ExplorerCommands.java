@@ -17,6 +17,7 @@ import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.overlay.InputDialog;
 
 import com.crystalgui.workbench.Workbench;
+import com.crystalgui.workbench.WorkbenchSettings;
 import com.crystalgui.workbench.chrome.palette.CommandPalette;
 import com.crystalgui.workbench.search.GoToFile;
 import java.util.List;
@@ -73,6 +74,9 @@ public final class ExplorerCommands {
 
     /** The preferences window. VS Code's Ctrl+, — IntelliJ uses Ctrl+Alt+S, which is less universal. */
     public static final String PREFERENCES = "workbench.preferences";
+
+    /** The preferences window, on its Editor Tabs page. */
+    public static final String CONFIGURE_EDITOR_TABS = "workbench.configureEditorTabs";
 
     private ExplorerCommands() {
     }
@@ -157,12 +161,12 @@ public final class ExplorerCommands {
 
         registry.register(Command.of(COPY_PATH, "Copy Path")
                 .menu(MenuId.EXPLORER_CONTEXT, "3_paths", 10)
-                .run(context -> copy(workbenchFor(context), target(context), false))
+                .run(context -> copyPath(target(context), false))
                 .enabledWhen(context -> workbenchFor(context) != null && target(context) != null));
 
         registry.register(Command.of(COPY_RELATIVE_PATH, "Copy Relative Path")
                 .menu(MenuId.EXPLORER_CONTEXT, "3_paths", 20)
-                .run(context -> copy(workbenchFor(context), target(context), true))
+                .run(context -> copyPath(target(context), true))
                 .enabledWhen(context -> workbenchFor(context) != null && target(context) != null));
 
         // EVERYTHING LISTED, not the selected row's folder.
@@ -180,30 +184,12 @@ public final class ExplorerCommands {
         // workbench's, and because this is where the global keymap is already being written.
         registry.register(Command.of(PREFERENCES, "Preferences…")
                 .binding("Alt+Shift+S")
-                .run(context -> {
-                    UIDocument window = context.data().get(CommandPalette.SURFACE);
-                    if (window == null) return;
-                    // THE STORE THE APPLICATION SAYS IT LISTENS ON -- asked, not derived.
-                    //
-                    // This used to be `window.settings()`, on the reasoning that settings
-                    // resolve outward so writing at the root is what makes a preference reach every panel
-                    // rather than one subtree. The reasoning is right and the expression stopped matching
-                    // it: with a window compositor the editor opens as a WINDOW, so the root element is
-                    // the desktop's and the editor's own store is several levels below it.
-                    //
-                    // Both halves then still looked correct. The value was written, and it RESOLVED
-                    // correctly too -- the walk goes outward, so a value at the root is visible from
-                    // inside. What never happened is the notification: `WorkbenchSettings.install`
-                    // subscribes to the editor's store, which nothing had written to, so `apply` never
-                    // ran. Picking a theme stored the choice, changed nothing on screen, and lost it on
-                    // restart, because `savePreferences` writes the editor store's user layer.
-                    //
-                    // Invisible in the harness, whose scene is `new UIDocument(Ui.of(editor))` -- there the
-                    // editor IS the root element and the two expressions are the same object.
-                    Settings host = context.data().get(UiDataKeys.SETTINGS_HOST);
-                    Preferences.open(window,
-                            host != null ? host : window.settings());
-                }));
+                .run(context -> openPreferences(context, null)));
+
+        registry.register(Command.of(CONFIGURE_EDITOR_TABS, "Configure Editor Tabs…")
+                .menu(MenuId.EDITOR_GROUP_OPTIONS, "9_configure", 10)
+                .menu(MenuId.EDITOR_TAB_CONTEXT, "4_window", 20)
+                .run(context -> openPreferences(context, WorkbenchSettings.EDITOR_TABS_PAGE)));
 
         registry.register(Command.of(SELECT_OPENED_FILE, "Select Opened File")
                 // IntelliJ's locate button: expands to the active file, selects it and scrolls it in.
@@ -415,7 +401,7 @@ public final class ExplorerCommands {
      * anything that resolves paths, and a project-relative one for a message to somebody else. VS Code
      * ships both, with a separate separator setting for each.</p>
      */
-    private static void copy(Workbench workbench, @Nullable CgPath path, boolean relative) {
+    public static void copyPath(@Nullable CgPath path, boolean relative) {
         if (path == null) return;
         String text = relative ? path.path() : path.toString();
         CgPlatform.input().setClipboard(text);
@@ -425,5 +411,30 @@ public final class ExplorerCommands {
     /** Every command id this set owns, for a host building its own menus. */
     public static List<String> ids() {
         return List.of(NEW_FILE, NEW_FOLDER, COPY_PATH, COPY_RELATIVE_PATH, REFRESH, GO_TO_FILE, SELECT_OPENED_FILE);
+    }
+
+    /** The preferences window, on {@code page} or the first. */
+    private static void openPreferences(CommandContext context, @Nullable String page) {
+        UIDocument window = context.data().get(CommandPalette.SURFACE);
+        if (window == null) return;
+        // THE STORE THE APPLICATION SAYS IT LISTENS ON -- asked, not derived.
+        //
+        // This used to be `window.settings()`, on the reasoning that settings
+        // resolve outward so writing at the root is what makes a preference reach every panel
+        // rather than one subtree. The reasoning is right and the expression stopped matching
+        // it: with a window compositor the editor opens as a WINDOW, so the root element is
+        // the desktop's and the editor's own store is several levels below it.
+        //
+        // Both halves then still looked correct. The value was written, and it RESOLVED
+        // correctly too -- the walk goes outward, so a value at the root is visible from
+        // inside. What never happened is the notification: `WorkbenchSettings.install`
+        // subscribes to the editor's store, which nothing had written to, so `apply` never
+        // ran. Picking a theme stored the choice, changed nothing on screen, and lost it on
+        // restart, because `savePreferences` writes the editor store's user layer.
+        //
+        // Invisible in the harness, whose scene is `new UIDocument(Ui.of(editor))` -- there the
+        // editor IS the root element and the two expressions are the same object.
+        Settings host = context.data().get(UiDataKeys.SETTINGS_HOST);
+        Preferences.open(window, host != null ? host : window.settings(), page);
     }
 }
