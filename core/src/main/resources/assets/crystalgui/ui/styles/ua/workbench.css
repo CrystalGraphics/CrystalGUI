@@ -47,6 +47,10 @@ dockarea {
 dockgroup {
     flex-direction: column;
     background: var(--dock-bg, #2B2B2B);
+    /* HOW SMALL AN EDITOR GROUP MAY BE DRAGGED. A split's divider stops here, and a split of splits adds its
+     * groups' floors up. @see SplitView#minimumSize */
+    min-width: 110px;
+    min-height: 70px;
 
     /* THE ISLAND. Rounding here is FREE, and the reason is worth stating because it is the whole
      * feasibility argument for this look: resolveOverflowClip() only reaches the FBO-mask path when

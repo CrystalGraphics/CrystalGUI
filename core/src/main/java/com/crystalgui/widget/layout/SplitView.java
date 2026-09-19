@@ -84,7 +84,7 @@ import java.util.List;
  * weights are written at {@code IMPORTANT} origin with no transition declared, and a theme should
  * not add one.</p>
  */
-public class SplitView extends UIElement {
+public class SplitView extends UIElement implements MinimumSize {
 
     public static final Name NAME = Name.of("splitview");
 
@@ -752,11 +752,51 @@ public class SplitView extends UIElement {
         // FOLDED, not "the wrapper otherwise the content": a pane has to satisfy both at once, so the
         // binding minimum is the larger and the binding maximum the smaller.
         for (UIElement child : pane.element.children()) {
+            // A NESTED SPLIT'S FLOOR is its panes' added up, which no min-width of its own states.
+            if (minimum && child instanceof MinimumSize sized) folded = Math.max(folded, sized.minimumSize(vertical));
             Float value = resolveLimit(child, property, pairPx);
             if (value == null) continue;
             folded = minimum ? Math.max(folded, value) : Math.min(folded, value);
         }
         return folded;
+    }
+
+    /**
+     * The smallest this split may be: its panes' floors added up along its own axis with the dividers between
+     * them, and the largest of them across it — VS Code's {@code BranchNode.minimumSize}.
+     */
+    @Override
+    public float minimumSize(boolean vertical) {
+        boolean along = vertical == isVertical();
+        float size = 0f;
+        for (Pane pane : panes) {
+            float floor = cssLimitPx(pane, 0f, vertical, true, 0f);
+            // A PANE'S OWN LIMIT is on the split's axis only.
+            if (along) floor = Math.max(floor, pane.minPx);
+            size = along ? size + floor : Math.max(size, floor);
+        }
+        if (along) {
+            for (UIElement divider : dividers) {
+                Box dividerBox = divider.box();
+                if (dividerBox != null) size += vertical ? dividerBox.height() : dividerBox.width();
+            }
+        }
+        return Math.max(size, ownMinimum(this, vertical));
+    }
+
+    /**
+     * The floor {@code element} states: its own {@code min-width} or {@code min-height} in pixels, and what it says
+     * as a {@link MinimumSize}, whichever is larger. Zero when it states neither.
+     */
+    public static float minimumOf(UIElement element, boolean vertical) {
+        float floor = ownMinimum(element, vertical);
+        return element instanceof MinimumSize sized ? Math.max(floor, sized.minimumSize(vertical)) : floor;
+    }
+
+    /** {@code element}'s own {@code min-width} or {@code min-height} in pixels, or zero. */
+    private static float ownMinimum(UIElement element, boolean vertical) {
+        Float own = resolveLimit(element, vertical ? LayoutProperties.MIN_HEIGHT : LayoutProperties.MIN_WIDTH, 0f);
+        return own == null ? 0f : own;
     }
 
     /** One element's limit in pixels, or null when it declares none this class can resolve. */
