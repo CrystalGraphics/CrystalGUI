@@ -10,6 +10,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.layout.Tab;
@@ -58,7 +59,7 @@ import java.util.Objects;
  * rule it produced is that a widget must never rebuild the elements it is being clicked or dragged on.
  * Every structural change here therefore sets a flag and the ticker does the work on the next frame.</p>
  */
-public class DockArea extends UIElement {
+public class DockArea extends UIElement implements MinimumSize {
     /** The dock's layout, drawn. `ua/workbench.css` names the tag. */
     public static final Name NAME = Name.of("dockarea");
 
@@ -936,6 +937,14 @@ public class DockArea extends UIElement {
                     (now - phaseNanos) / 1_000_000);
         }
         phaseNanos = now;
+    }
+
+    /** What the groups need: a region divider stops before squeezing the editor area below it. @see MinimumSize */
+    @Override
+    public float minimumSize(boolean vertical) {
+        float floor = 0f;
+        for (UIElement built : content.children()) floor = Math.max(floor, SplitView.minimumOf(built, vertical));
+        return floor;
     }
 
     private void rebuild() {
