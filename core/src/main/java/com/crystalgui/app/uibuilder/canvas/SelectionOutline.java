@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -61,7 +62,12 @@ public final class SelectionOutline extends UIElement {
         // geometry is, and a transformed element draws somewhere other than it measures: outlining the
         // drawn bounds put the selection on the render size while the handles sat on the real one, so
         // one piece of chrome contradicted the other.
-        List<UIElement> selected = builder.builderSelection().nodes();
+        // AND WHERE THIS PANE DRAWS IT: the selection holds document nodes, which have no box of their own.
+        List<UIElement> selected = new ArrayList<>();
+        for (UIElement node : builder.builderSelection().nodes()) {
+            UIElement drawn = builder.shown(node);
+            if (drawn != null) selected.add(drawn);
+        }
         if (selected.isEmpty()) return;
 
         int accent = getStyle().computed().get(StylePropertyRegistry.COLOR);

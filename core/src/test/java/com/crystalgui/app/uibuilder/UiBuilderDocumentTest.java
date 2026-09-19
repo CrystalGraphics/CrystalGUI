@@ -3,6 +3,8 @@ package com.crystalgui.app.uibuilder;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -13,7 +15,7 @@ import org.junit.Test;
 import com.google.gson.JsonPrimitive;
 
 import com.crystalgui.app.uibuilder.canvas.Artboard;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.net.mirror.DocumentExtras;
@@ -165,7 +167,7 @@ public class UiBuilderDocumentTest {
         UIElementRegistry.bootstrap();
         UIDocument window = new UIDocument();
         window.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        BuilderEditor editor = new BuilderEditor(open());
+        UIBuilderView editor = new UIBuilderView(open());
         window.append(editor.view());
 
         window.update(1200f, 800f);
@@ -194,15 +196,17 @@ public class UiBuilderDocumentTest {
         assertEquals(1, document.diagnostics().all().size());
     }
 
-    /** The tab: an artboard on a surface, holding the document's own tree. */
+    /** The tab: an artboard on a surface, holding the pane's copy of the document's tree — never the tree itself. */
     @Test
     public void theEditorPutsTheDocumentOnAnArtboard() {
         UiBuilderDocument document = open();
-        BuilderEditor editor = new BuilderEditor(document);
+        UIBuilderView editor = new UIBuilderView(document);
 
         Artboard board = editor.artboard();
         assertEquals(List.of(board), editor.surface().surface().items());
-        assertEquals(document.root(), board.children().get(0));
+        assertSame("the artboard shows this pane's copy", editor.shownTree().root(), board.children().get(0));
+        assertNotSame("and never the document's own tree, which one pane would take from another",
+                document.root(), board.children().get(0));
         assertEquals(800f, board.boardWidth(), 0.001f);
 
         editor.disposeView();

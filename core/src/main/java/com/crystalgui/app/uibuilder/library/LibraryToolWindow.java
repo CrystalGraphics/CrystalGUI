@@ -7,7 +7,7 @@ import javax.annotation.Nullable;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.style.StyleGroup;
@@ -15,7 +15,6 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.workbench.WorkbenchContext;
-import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.workbench.view.TitleActionsContributor;
 
@@ -53,7 +52,7 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
         append(panel);
         panel.onPlace.connect(this::place);
         // THE BUILDER ON SCREEN, as the Hierarchy follows it. @see EditorService#follow
-        whileConnected(() -> workbench.editors().follow(BuilderEditor.class, this::show));
+        whileConnected(() -> workbench.editors().follow(UIBuilderView.class, this::show));
         // THE USER'S GROUPS AND VIEW, from the extension's store -- read on the first attach, NOT here: extensions
         // activate inside the Workbench constructor, and the application supplies the stores only after it, so
         // asked now the store is always null and every group was the session's alone. A host with no store
@@ -72,7 +71,7 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
     private BuilderContext builder;
 
     /** Shows the panel while a builder is on screen, and nothing otherwise. */
-    private void show(@Nullable BuilderEditor editor) {
+    private void show(@Nullable UIBuilderView editor) {
         BuilderContext next = editor == null ? null : editor.surface();
         builder = next;
         boolean shown = next != null;

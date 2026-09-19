@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.style.SheetDocuments;
 import com.crystalgui.app.uibuilder.library.LibraryActions;
@@ -61,7 +61,7 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                 .revealsToolWindows(HIERARCHY_PANEL, InspectorExtension.TYPE)
                 .model((resource, bytes) -> new UiBuilderDocument(bytes, resource.toString()))
                 // The store is asked per editor: stores are supplied after extensions activate.
-                .editor(document -> new BuilderEditor((UiBuilderDocument) document.model(), workbench.extensionStore(ID),
+                .editor(document -> new UIBuilderView((UiBuilderDocument) document.model(), workbench.extensionStore(ID),
                         // A SHEET IN THE PROJECT IS A DOCUMENT: opened here, so this canvas and an editor
                         // tab on the same .css are one buffer and one history.
                         new SheetDocuments(workbench.documents()::open, resource -> workbench.editors().open(resource),

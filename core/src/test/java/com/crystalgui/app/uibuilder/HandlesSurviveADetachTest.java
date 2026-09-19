@@ -5,9 +5,9 @@ import static org.junit.Assert.assertSame;
 
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.Test;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -36,7 +36,7 @@ public class HandlesSurviveADetachTest extends UiDocumentTestBase {
         UIElementRegistry.bootstrap();
         UiBuilderDocument model = new UiBuilderDocument(
                 UiBuilderDocument.EMPTY.getBytes(StandardCharsets.UTF_8), "probe:x.cgui");
-        BuilderEditor editor = new BuilderEditor(model);
+        UIBuilderView editor = new UIBuilderView(model);
         UIElement first = new UIElement().layout(l -> l.width(40).height(20));
         UIElement second = new UIElement().layout(l -> l.width(40).height(20));
         model.root().append(first, second);
@@ -49,7 +49,7 @@ public class HandlesSurviveADetachTest extends UiDocumentTestBase {
         editor.selection().selectOnly(first);
         document.update(W, H);
         assertSame("the handles never followed the selection at all",
-                first, editor.handles().target());
+                editor.shownTree().shown(first), editor.handles().target());
 
         // OUT OF THE TREE AND BACK IN, which is what a dock does to an editor it stops showing.
         editor.view().removeSelf();
@@ -60,7 +60,7 @@ public class HandlesSurviveADetachTest extends UiDocumentTestBase {
         editor.selection().selectOnly(second);
         document.update(W, H);
         assertSame("the handles stopped following the selection after a detach",
-                second, editor.handles().target());
+                editor.shownTree().shown(second), editor.handles().target());
 
         editor.selection().selectOnly(null);
         document.update(W, H);

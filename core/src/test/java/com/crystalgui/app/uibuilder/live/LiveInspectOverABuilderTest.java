@@ -13,7 +13,7 @@ import org.junit.Test;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.app.uibuilder.BuilderSelection;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.Transform2D;
@@ -39,13 +39,13 @@ public class LiveInspectOverABuilderTest extends UiDocumentTestBase {
             + " \"state\": { \"text\": \"bao\" } } ] }\n"
             + "}\n";
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private UIElement elsewhere;
 
     @Before
     public void openTheDocument() {
         UIElementRegistry.bootstrap();
-        editor = new BuilderEditor(new UiBuilderDocument(
+        editor = new UIBuilderView(new UiBuilderDocument(
                 SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
         UIElement root = new UIElement().layout(l -> l.width(800).height(400));
         root.append(editor.view());
@@ -61,7 +61,7 @@ public class LiveInspectOverABuilderTest extends UiDocumentTestBase {
 
     /** What the inspector reads, asked exactly as the inspector asks it. */
     private BuilderSelection asTheInspectorAsks() {
-        return DataContext.from(editor.view()).get(BuilderEditor.BUILDER_SELECTION);
+        return DataContext.from(editor.view()).get(UIBuilderView.BUILDER_SELECTION);
     }
 
     /** <b>The report.</b> A pick lands where the inspector will look for it. */

@@ -1,5 +1,9 @@
 package com.crystalgui.app.uibuilder;
 
+import com.google.gson.JsonElement;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
+import com.crystalgui.serialization.JsonOps;
+import com.crystalgui.serialization.style.InlineStyleCodec;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -18,7 +22,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.canvas.Artboard;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.canvas.ResizeHandles.Spot;
 import com.crystalgui.app.uibuilder.canvas.TreePolicy;
 import com.crystalgui.core.cursor.Cursor;
@@ -62,7 +66,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 public class FreeTransformTest extends UiDocumentTestBase {
 
     private UiBuilderDocument model;
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private UIElement node;
     private UIElement host;
     private Disposable commands;
@@ -76,7 +80,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         node = new UIElement().layout(l -> l.width(100).height(50));
         model.root().append(node);
 
-        editor = new BuilderEditor(model);
+        editor = new UIBuilderView(model);
         host = new UIElement().layout(l -> l.width(400).height(300));
         host.append(editor.view());
         document.append(host);
@@ -87,6 +91,12 @@ public class FreeTransformTest extends UiDocumentTestBase {
     @After
     public void releaseCommands() {
         if (commands != null) commands.dispose();
+    }
+
+    /** Where a document node is drawn in the pane; anything else is itself. */
+    private UIElement drawn(UIElement node) {
+        UIElement shown = editor.shownTree().shown(node);
+        return shown != null ? shown : node;
     }
 
     private TransformBox box() {
@@ -282,7 +292,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         enterFreeTransform();
 
         assertTrue("the box did not open", box().isActive());
-        assertSame(node, box().target());
+        assertSame(drawn(node), box().target());
         assertEquals(FreeTransformTool.ID, editor.surface().modes().currentId());
     }
 
@@ -302,7 +312,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
 
         assertEquals("a preview must not touch the document", clean, model.version());
         assertNotNull("the preview is the box override, so it has to be on the box",
-                node.box().transform());
+                drawn(node).box().transform());
         assertTrue("nothing should have reached the cascade yet",
                 written() == null || written().isIdentity());
     }
@@ -320,7 +330,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         assertFalse(box().isActive());
         assertEquals("cancel put a step in the history", clean, model.version());
         assertTrue("the override outlived the gesture that needed it",
-                node.box().transform().isIdentity());
+                drawn(node).box().transform().isIdentity());
     }
 
     /** Commit writes the transform once, and the box goes down. */
@@ -335,7 +345,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
 
         assertFalse(box().isActive());
         assertTrue("the box is down, so its override has to be withdrawn",
-                node.box().transform().equals(written()));
+                drawn(node).box().transform().equals(written()));
         Transform committed = written();
         assertNotNull("nothing reached the cascade", committed);
         assertFalse("the commit wrote an identity", committed.isIdentity());
@@ -360,8 +370,8 @@ public class FreeTransformTest extends UiDocumentTestBase {
     public void aScaleIsRenderedNotLaidOut() {
         UIElement child = new UIElement().layout(l -> l.width(20).height(10));
         node.append(child);
-        document.update(W, H);
-        float laidOut = node.box().width();
+        frame();
+        float laidOut = drawn(node).box().width();
         float childBefore = worldWidth(child);
 
         enterFreeTransform();
@@ -371,16 +381,16 @@ public class FreeTransformTest extends UiDocumentTestBase {
         document.update(W, H);
 
         assertEquals("a transform must never reflow — this is the resize handles' job, not this one",
-                laidOut, node.box().width(), 0.01f);
+                laidOut, drawn(node).box().width(), 0.01f);
         assertEquals("the subtree did not scale, so nothing was rendered through the transform",
                 childBefore * 2f, worldWidth(child), 0.5f);
     }
 
     /** How wide a node is ON SCREEN, which is where a transform shows up and the layout box does not. */
-    private static float worldWidth(UIElement element) {
-        Matrix4f world = element.box().localToWorld();
+    private float worldWidth(UIElement element) {
+        Matrix4f world = drawn(element).box().localToWorld();
         Vector3f left = world.transformPosition(new Vector3f(0f, 0f, 0f));
-        Vector3f right = world.transformPosition(new Vector3f(element.box().width(), 0f, 0f));
+        Vector3f right = world.transformPosition(new Vector3f(drawn(element).box().width(), 0f, 0f));
         return right.x - left.x;
     }
 
@@ -396,25 +406,25 @@ public class FreeTransformTest extends UiDocumentTestBase {
     public void aScaleReachesAWidgetsOwnBoxAndItsShadowParts() {
         Button button = new Button("Save");
         model.root().append(button);
-        document.update(W, H);
+        frame();
         editor.selection().selectOnly(button);
 
         float ownBefore = worldWidth(button);
-        UIElement label = button.shadowRoot().composedChildren().isEmpty()
-                ? null : button.shadowRoot().composedChildren().get(0);
+        UIElement label = drawn(button).shadowRoot().composedChildren().isEmpty()
+                ? null : drawn(button).shadowRoot().composedChildren().get(0);
         assertNotNull("a Button should have a shadow part to measure", label);
         float labelBefore = worldWidth(label);
-        float laidOut = button.box().width();
+        float laidOut = drawn(button).box().width();
 
         enterFreeTransform();
         box().gesture().press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
-        box().gesture().scaleTo(new Vector2f(button.box().width() * 2f,
-                button.box().height() * 2f), false, false);
+        box().gesture().scaleTo(new Vector2f(drawn(button).box().width() * 2f,
+                drawn(button).box().height() * 2f), false, false);
         box().preview();
         document.update(W, H);
 
         assertEquals("a transform must never reflow the widget",
-                laidOut, button.box().width(), 0.01f);
+                laidOut, drawn(button).box().width(), 0.01f);
         assertEquals("the widget's own box did not scale",
                 ownBefore * 2f, worldWidth(button), 0.5f);
         assertEquals("the shadow part did not scale, so the label would stay its own size",
@@ -514,14 +524,14 @@ public class FreeTransformTest extends UiDocumentTestBase {
         Button button = new Button("Save");
         row.append(label, button);
         model.root().append(row);
-        document.update(W, H);
+        frame();
         editor.selection().selectOnly(button);
 
-        float rowHeight = row.box().height();
-        float rowWidth = row.box().width();
-        float buttonWidth = button.box().width();
-        float buttonHeight = button.box().height();
-        float labelX = label.box().x();
+        float rowHeight = drawn(row).box().height();
+        float rowWidth = drawn(row).box().width();
+        float buttonWidth = drawn(button).box().width();
+        float buttonHeight = drawn(button).box().height();
+        float labelX = drawn(label).box().x();
 
         enterFreeTransform();
         document.update(W, H);
@@ -532,13 +542,13 @@ public class FreeTransformTest extends UiDocumentTestBase {
         document.update(W, H);
 
         assertEquals("the button's own layout width changed — that is a resize",
-                buttonWidth, button.box().width(), 0.01f);
+                buttonWidth, drawn(button).box().width(), 0.01f);
         assertEquals("the button's own layout height changed — that is a resize",
-                buttonHeight, button.box().height(), 0.01f);
-        assertEquals("the row reflowed around it", rowHeight, row.box().height(), 0.01f);
-        assertEquals(rowWidth, row.box().width(), 0.01f);
+                buttonHeight, drawn(button).box().height(), 0.01f);
+        assertEquals("the row reflowed around it", rowHeight, drawn(row).box().height(), 0.01f);
+        assertEquals(rowWidth, drawn(row).box().width(), 0.01f);
         assertEquals("a sibling moved, so the layout saw the transform",
-                labelX, label.box().x(), 0.01f);
+                labelX, drawn(label).box().x(), 0.01f);
         assertTrue("nothing was scaled at all", box().gesture().scaleX() > 1f);
     }
 
@@ -583,7 +593,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
      */
     @Test
     public void aPressOnChromeIsNotRedirectedIntoTheDocument() {
-        Artboard artboard = new Artboard(model);
+        Artboard artboard = new Artboard(model, model.root());
         document.append(artboard);
         UIElement inside = new UIElement().layout(l -> l.width(40f).height(20f));
         model.root().append(inside);
@@ -614,7 +624,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
         enterFreeTransform();
         document.update(W, H);
         Vector2f corner = box().handleAt(Spot.BOTTOM_RIGHT);
-        Vector2f centre = box().toViewport(node.box().width() / 2f, node.box().height() / 2f);
+        Vector2f centre = box().toViewport(drawn(node).box().width() / 2f, drawn(node).box().height() / 2f);
         assertNotNull(corner);
         assertNotNull(centre);
 
@@ -837,7 +847,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
      */
     @Test
     public void aModalToolClaimsPressesOffThePage() {
-        Artboard artboard = new Artboard(model);
+        Artboard artboard = new Artboard(model, model.root());
         document.append(artboard);
         UIElement offThePage = new UIElement().layout(l -> l.width(4f).height(4f));
         document.append(offThePage);
@@ -907,8 +917,8 @@ public class FreeTransformTest extends UiDocumentTestBase {
         TransformOptionsBar bar = editor.options();
 
         box().press(new Grip(Kind.SCALE, Spot.BOTTOM_RIGHT));
-        box().gesture().scaleTo(new Vector2f(node.box().width() * 2f,
-                node.box().height() * 2f), false, false);
+        box().gesture().scaleTo(new Vector2f(drawn(node).box().width() * 2f,
+                drawn(node).box().height() * 2f), false, false);
         box().release();
         document.frame(0f, W, H);
         assertEquals("the bar has to show what the drag did",
@@ -1142,7 +1152,7 @@ public class FreeTransformTest extends UiDocumentTestBase {
     public void transformAgainRepeatsTheLastCommit() {
         UIElement second = new UIElement().layout(l -> l.width(60f).height(30f));
         model.root().append(second);
-        document.update(W, H);
+        frame();
 
         assertFalse("nothing committed yet", box().hasSomethingToRepeat());
         enterFreeTransform();
@@ -1175,20 +1185,23 @@ public class FreeTransformTest extends UiDocumentTestBase {
      */
     @Test
     public void convertToSizeRewritesAScaleAsABox() {
+        // AS AN EDIT, which is how a document node's style changes: the pane follows the document, not the node.
+        JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
         StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(),
                 g -> g.transform(Transform.scale(2f, 3f)));
+        model.apply(new BuilderEdit.SetInlineStyle(node, before, InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
         document.update(W, H);
-        float width = node.box().width();
-        float height = node.box().height();
+        float width = drawn(node).box().width();
+        float height = drawn(node).box().height();
 
-        assertTrue(TransformBox.isScaleStandingInForSize(node));
+        assertTrue(TransformBox.isScaleStandingInForSize(drawn(node)));
         assertTrue(box().convertToSize(node));
         document.update(W, H);
 
-        assertEquals("the size the scale was faking", width * 2f, node.box().width(), 0.5f);
-        assertEquals(height * 3f, node.box().height(), 0.5f);
+        assertEquals("the size the scale was faking", width * 2f, drawn(node).box().width(), 0.5f);
+        assertEquals(height * 3f, drawn(node).box().height(), 0.5f);
         assertTrue("and the transform is gone", written() == null || written().isIdentity());
-        assertFalse("so there is nothing left to convert", TransformBox.isScaleStandingInForSize(node));
+        assertFalse("so there is nothing left to convert", TransformBox.isScaleStandingInForSize(drawn(node)));
     }
 
     /** A rotation is not a size standing in for anything, so it is left alone. */

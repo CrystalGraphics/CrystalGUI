@@ -7,9 +7,9 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.Test;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -22,7 +22,7 @@ import com.crystalgui.ui.dom.UIElementRegistry;
 public class BuilderNavigationTest extends UiDocumentTestBase {
 
     private UiBuilderDocument model;
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private UIElement parent;
     private UIElement first;
     private UIElement second;
@@ -48,7 +48,7 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
         parent.append(first, second, third);
         model.root().append(parent);
 
-        editor = new BuilderEditor(model);
+        editor = new UIBuilderView(model);
         UIElement host = new UIElement().layout(l -> l.width(400).height(300));
         host.append(editor.view());
         document.append(host);
@@ -230,16 +230,18 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
     }
 
     private void press(com.crystalgui.widget.surface.mode.Tool tool, UIElement node, boolean shift) {
+        UIElement drawn = editor.shownTree().shown(node);
         org.joml.Vector2f at = com.crystalgui.core.data.Transform2D.apply(
-                node.box().localToWorld(), node.box().width() * 0.5f, node.box().height() * 0.5f);
+                drawn.box().localToWorld(), drawn.box().width() * 0.5f, drawn.box().height() * 0.5f);
         tool.pointerDown(at.x(), at.y(), com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON,
                 shift ? com.crystalgraphics.platform.input.CgModifiers.SHIFT : 0);
         document.update(W, H);
     }
 
     private void release(com.crystalgui.widget.surface.mode.Tool tool, UIElement node) {
+        UIElement drawn = editor.shownTree().shown(node);
         org.joml.Vector2f at = com.crystalgui.core.data.Transform2D.apply(
-                node.box().localToWorld(), node.box().width() * 0.5f, node.box().height() * 0.5f);
+                drawn.box().localToWorld(), drawn.box().width() * 0.5f, drawn.box().height() * 0.5f);
         tool.pointerUp(at.x(), at.y(), com.crystalgraphics.platform.input.CgMouseCodes.LEFT_BUTTON, 0);
         document.update(W, H);
     }
@@ -311,7 +313,7 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
         // Found by walking OUT from whatever was pressed, so it covers the handles and every widget on
         // the page rather than a list of individual controls that would go stale.
         boolean foundFromChild = false;
-        for (UIElement at = first; at != null; at = at.parentElement()) {
+        for (UIElement at = editor.shownTree().shown(first); at != null; at = at.parentElement()) {
             if (Boolean.TRUE.equals(at.get(com.crystalgui.ui.dom.Attribute.KEEPS_MODIFIER_PRESS))) {
                 foundFromChild = true;
                 break;

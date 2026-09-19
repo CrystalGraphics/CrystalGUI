@@ -5,10 +5,10 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.core.data.Transform2D;
@@ -35,14 +35,14 @@ public class BuilderTakesFocusOnClickTest extends UiDocumentTestBase {
             + " \"state\": { \"text\": \"mao\" } } ] }\n"
             + "}\n";
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
 
     @Before
     public void openTheDocument() {
         UIElementRegistry.bootstrap();
         UiBuilderDocument model =
                 new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page");
-        editor = new BuilderEditor(model);
+        editor = new UIBuilderView(model);
         UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor.view());
         document.append(root);

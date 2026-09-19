@@ -7,13 +7,13 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.joml.Vector2f;
 import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.Transform2D;
@@ -42,14 +42,14 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
             + "    ] }\n"
             + "}\n";
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private UIElement first;
     private UIElement second;
 
     @Before
     public void openTheDocument() {
         UIElementRegistry.bootstrap();
-        editor = new BuilderEditor(new UiBuilderDocument(
+        editor = new UIBuilderView(new UiBuilderDocument(
                 SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
         UIElement root = new UIElement().layout(l -> l.width(800).height(500));
         root.append(editor.view());
@@ -85,7 +85,7 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
         clickOn(first);
 
         BuilderSelection seen =
-                DataContext.from(editor.view()).get(BuilderEditor.BUILDER_SELECTION);
+                DataContext.from(editor.view()).get(UIBuilderView.BUILDER_SELECTION);
         assertSame(first, seen.node());
     }
 
@@ -100,16 +100,17 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
     public void selectingThroughTheBuilderReachesTheEngine() {
         editor.selection().selectOnly(second);
 
-        assertTrue("the engine's item set followed", editor.surface().selection().contains(second));
+        assertTrue("the engine's item set followed, with what the pane draws",
+                editor.surface().selection().contains(drawn(second)));
         assertEquals(1, editor.surface().selection().size());
     }
 
     /** And a canvas click reaches the builder's, without the two answering each other forever. */
     @Test
     public void theBridgeSettlesRatherThanEchoing() {
-        editor.surface().selection().selectOnly(first);
+        editor.surface().selection().selectOnly(drawn(first));
 
-        assertSame(first, editor.selection().node());
+        assertSame("the builder selects the document node the drawing stands for", first, editor.selection().node());
         assertEquals(1, editor.surface().selection().size());
         assertEquals(1, editor.selection().size());
     }
@@ -225,7 +226,7 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
     public void aClickOnTheEmptyPlaneSelectsTheCanvas() {
         // A SMALL PAGE, so there is plane around it to click -- the fixture's page fills its surface.
         document.removeAll();
-        BuilderEditor small = new BuilderEditor(new UiBuilderDocument(("{ \"cgui\": 1, \"preview\": { \"sizes\": [[200, 100]] },"
+        UIBuilderView small = new UIBuilderView(new UiBuilderDocument(("{ \"cgui\": 1, \"preview\": { \"sizes\": [[200, 100]] },"
                 + " \"root\": { \"kind\": \"element\", \"id\": \"root\", \"style\": { \"width\": \"100%\", \"height\": \"100%\" } } }")
                 .getBytes(StandardCharsets.UTF_8), "test:small"));
         UIElement host = new UIElement().layout(l -> l.width(800).height(500));
@@ -310,8 +311,14 @@ public class DesignModeAndSelectionTest extends UiDocumentTestBase {
         frame();
     }
 
+    /** Where a document node is drawn in the pane; anything else is itself. */
+    private UIElement drawn(UIElement node) {
+        UIElement shown = editor.shownTree().shown(node);
+        return shown != null ? shown : node;
+    }
+
     private Vector2f centre(UIElement element) {
-        var box = element.box();
+        var box = drawn(element).box();
         return Transform2D.apply(box.localToWorld(), box.width() * 0.5f, box.height() * 0.5f);
     }
 }

@@ -33,7 +33,7 @@ public class HoverReachesInsideAWidgetTest extends UiDocumentTestBase {
         UIElementRegistry.bootstrap();
         UiBuilderDocument model = new UiBuilderDocument(
                 UiBuilderDocument.EMPTY.getBytes(StandardCharsets.UTF_8), "probe:x.cgui");
-        Artboard board = new Artboard(model);
+        Artboard board = new Artboard(model, model.root());
         TreePolicy policy = new TreePolicy(board);
 
         Slider slider = new Slider();
@@ -59,7 +59,7 @@ public class HoverReachesInsideAWidgetTest extends UiDocumentTestBase {
         UIElementRegistry.bootstrap();
         UiBuilderDocument model = new UiBuilderDocument(
                 UiBuilderDocument.EMPTY.getBytes(StandardCharsets.UTF_8), "probe:x.cgui");
-        Artboard board = new Artboard(model);
+        Artboard board = new Artboard(model, model.root());
         TreePolicy policy = new TreePolicy(board);
 
         Slider slider = new Slider();

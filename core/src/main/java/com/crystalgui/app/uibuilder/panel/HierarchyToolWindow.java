@@ -5,12 +5,11 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
 import com.crystalgui.workbench.WorkbenchContext;
-import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.view.FocusableView;
 import com.crystalgui.workbench.view.TitleActionsContributor;
 
@@ -43,7 +42,7 @@ public final class HierarchyToolWindow extends UIElement implements TitleActions
         super(NAME);
         this.workbench = workbench;
         addClass(PANEL_CLASS);
-        whileConnected(() -> workbench.editors().follow(BuilderEditor.class, this::show));
+        whileConnected(() -> workbench.editors().follow(UIBuilderView.class, this::show));
     }
 
     /** The current hierarchy's tree, or null while no builder is in front. */
@@ -72,7 +71,7 @@ public final class HierarchyToolWindow extends UIElement implements TitleActions
     }
 
     /** Shows {@code editor}'s tree, rebuilding only when the builder changed; empty with none. */
-    private void show(@Nullable BuilderEditor editor) {
+    private void show(@Nullable UIBuilderView editor) {
         BuilderContext builder = editor == null ? null : editor.surface();
         if (builder == shown) return;
         shown = builder;

@@ -15,7 +15,7 @@ import org.junit.Test;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.insert.BuilderInsert;
 import com.crystalgui.app.uibuilder.insert.InsertTarget;
@@ -37,7 +37,7 @@ import com.crystalgui.widget.surface.insert.Insertable;
 public class BuilderInsertTest extends UiDocumentTestBase {
 
     private UiBuilderDocument model;
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private UIElement parent;
     private UIElement first;
     private UIElement second;
@@ -59,7 +59,7 @@ public class BuilderInsertTest extends UiDocumentTestBase {
         parent.append(first, second);
         model.root().append(parent);
 
-        editor = new BuilderEditor(model, store);
+        editor = new UIBuilderView(model, store);
         UIElement host = new UIElement().layout(l -> l.width(W).height(H));
         host.append(editor.view());
         document.append(host);
@@ -136,7 +136,7 @@ public class BuilderInsertTest extends UiDocumentTestBase {
     @Test
     public void rightClickOnBlankPageInsertsAtThePointer() {
         open();
-        int[] page = centreOf(model.root());
+        int[] page = centreOf(editor.artboard().shownRoot());
         press(page[0], page[1], CgMouseCodes.RIGHT_BUTTON);
         release(page[0], page[1], CgMouseCodes.RIGHT_BUTTON);
         document.update(W, H);
@@ -155,8 +155,8 @@ public class BuilderInsertTest extends UiDocumentTestBase {
     @Test
     public void rightClickBelowTheContentInsertsAtTheEndOfThePage() {
         open();
-        int[] page = centreOf(model.root());
-        float below = boxOf(model.root()).height() + 40f;
+        int[] page = centreOf(editor.artboard().shownRoot());
+        float below = boxOf(editor.artboard().shownRoot()).height() + 40f;
         press(page[0], page[1] + below, CgMouseCodes.RIGHT_BUTTON);
         release(page[0], page[1] + below, CgMouseCodes.RIGHT_BUTTON);
         document.update(W, H);

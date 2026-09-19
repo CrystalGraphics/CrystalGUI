@@ -13,7 +13,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.app.uibuilder.BuilderSelection;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -48,7 +48,7 @@ public class PickModeTest extends UiDocumentTestBase {
 
         clickOn(target);
 
-        BuilderSelection selection = DataContext.from(target).get(BuilderEditor.BUILDER_SELECTION);
+        BuilderSelection selection = DataContext.from(target).get(UIBuilderView.BUILDER_SELECTION);
         assertNotNull("the window answers for the pick", selection);
         assertSame("and it is what was under the pointer", target, selection.node());
     }
@@ -130,7 +130,7 @@ public class PickModeTest extends UiDocumentTestBase {
         PickMode picker = PickMode.start(document);
         clickOn(target);
 
-        BuilderSelection selection = DataContext.from(target).get(BuilderEditor.BUILDER_SELECTION);
+        BuilderSelection selection = DataContext.from(target).get(UIBuilderView.BUILDER_SELECTION);
         assertNotNull(selection);
         assertSame("the sheet is a picture, and the pick went through it",
                 target, selection.node());

@@ -11,6 +11,7 @@ import static org.junit.Assert.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import org.joml.Vector2f;
 import org.junit.After;
 import org.junit.Before;
@@ -19,7 +20,6 @@ import org.junit.Test;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.canvas.DropIndicator;
 import com.crystalgui.app.uibuilder.canvas.DropResolver;
 import com.crystalgui.app.uibuilder.canvas.ReorderInFlow;
@@ -46,7 +46,7 @@ import com.crystalgui.widget.text.UIText;
 public class ReorderInFlowTest extends UiDocumentTestBase {
 
     private UiBuilderDocument model;
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private Disposable commands;
 
     private UIElement groupA;
@@ -70,7 +70,7 @@ public class ReorderInFlowTest extends UiDocumentTestBase {
         groupB.append(b1, b2);
         model.root().append(groupA, groupB);
 
-        editor = new BuilderEditor(model);
+        editor = new UIBuilderView(model);
         UIElement host = new UIElement().layout(l -> l.width(400).height(300));
         host.append(editor.view());
         document.append(host);
@@ -87,9 +87,15 @@ public class ReorderInFlowTest extends UiDocumentTestBase {
         return editor.reorderGesture();
     }
 
-    /** A world point at fractions of {@code node}'s layout box. */
-    private static float[] at(UIElement node, float fx, float fy) {
-        Box box = node.box();
+    /** Where a document node is drawn in this pane; anything else is itself. */
+    private UIElement drawn(UIElement node) {
+        UIElement shown = editor.shownTree().shown(node);
+        return shown != null ? shown : node;
+    }
+
+    /** A world point at fractions of where {@code node} is drawn. */
+    private float[] at(UIElement node, float fx, float fy) {
+        Box box = drawn(node).box();
         Vector2f world = Transform2D.apply(box.localToWorld(), box.width() * fx, box.height() * fy);
         return new float[] {world.x, world.y};
     }
@@ -146,12 +152,12 @@ public class ReorderInFlowTest extends UiDocumentTestBase {
         pickUp(a1);
         moveTo(intoGroupBAtTheEnd());
 
-        assertEquals(ReorderInFlow.CARRIED_OPACITY, a1.box().opacity(), 0.001f);
+        assertEquals(ReorderInFlow.CARRIED_OPACITY, drawn(a1).box().opacity(), 0.001f);
         assertSame("nothing moves before the release", groupA, a1.parentElement());
         assertEquals("a second copy was put in the tree", 3, groupA.children().size() + groupB.children().size());
 
         releaseAt(intoGroupBAtTheEnd());
-        assertEquals("the dimming outlived the drag", 1f, a1.box().opacity(), 0.001f);
+        assertEquals("the dimming outlived the drag", 1f, drawn(a1).box().opacity(), 0.001f);
     }
 
     @Test
@@ -196,7 +202,7 @@ public class ReorderInFlowTest extends UiDocumentTestBase {
 
         assertSame(groupA, a1.parentElement());
         assertEquals(depth, model.history().undoDepth());
-        assertEquals(1f, a1.box().opacity(), 0.001f);
+        assertEquals(1f, drawn(a1).box().opacity(), 0.001f);
         assertNull("the indicator stayed up", editor.surface().dropIndicator().drop());
     }
 
@@ -231,9 +237,9 @@ public class ReorderInFlowTest extends UiDocumentTestBase {
         UIText label = new UIText("label");
         label.layout(l -> l.width(100).height(40));
         groupB.append(label);
-        document.update(W, H);
+        frame();
 
-        DropResolver.Drop drop = new DropResolver(model.root(), editor.surface().dropIndicator())
+        DropResolver.Drop drop = DropResolver.forPane(editor.surface())
                 .resolve(List.of(a1), at(label, 0.5f, 0.5f)[0], at(label, 0.5f, 0.5f)[1]);
         assertNotNull(drop);
         assertSame(groupB, drop.target());

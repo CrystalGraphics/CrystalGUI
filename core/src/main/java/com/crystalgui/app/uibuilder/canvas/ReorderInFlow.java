@@ -93,9 +93,14 @@ public final class ReorderInFlow extends UIElement {
         ghost.parkIn(this);
     }
 
-    /** Whether a press on {@code node} starts this gesture: a laid-out, in-flow document node other than the root. */
-    public static boolean isReorderable(UIElement root, @Nullable UIElement node) {
-        return TreeDropRules.isSource(root, node) && node.box() != null && !MoveOutOfFlow.isMovable(node);
+    /**
+     * Whether {@code node} — a document node — is one this gesture carries: in-flow and laid out in {@code ctx}'s pane,
+     * and not the root.
+     */
+    public static boolean isReorderable(BuilderContext ctx, @Nullable UIElement node) {
+        UIElement drawn = ctx.shown(node);
+        return TreeDropRules.isSource(ctx.getDocument().root(), node) && drawn != null && drawn.box() != null
+                && !MoveOutOfFlow.isMovable(drawn);
     }
 
     /** What is being carried, or empty. */
@@ -115,9 +120,10 @@ public final class ReorderInFlow extends UIElement {
      * @return whether one was armed — false for a node this gesture does not carry
      */
     public boolean begin(@Nullable UIElement pressed, float rawX, float rawY) {
-        UIElement root = document.root();
-        if (!isReorderable(root, pressed)) return false;
-        List<UIElement> sources = sourcesFor(root, pressed);
+        // A PRESS LANDS ON WHAT THE PANE DRAWS; what is carried is the document node it stands for.
+        if (ctx.sourceOf(pressed) != null) pressed = ctx.sourceOf(pressed);
+        if (!isReorderable(ctx, pressed)) return false;
+        List<UIElement> sources = sourcesFor(pressed);
         UIDocument window = document();
         if (sources.isEmpty() || window == null) return false;
         activated = false;
@@ -166,7 +172,7 @@ public final class ReorderInFlow extends UIElement {
         // RE-APPLIED EVERY UPDATE: an override lives on a box, and a box is rebuilt whenever its subtree
         // is restructured -- which a pan or a hover highlight can cause.
         for (UIElement node : carried) {
-            Box box = node.box();
+            Box box = drawnBox(node);
             if (box != null) box.setOpacity(CARRIED_OPACITY);
         }
         boolean copy = CgModifiers.hasAlt(modifiers);
@@ -174,7 +180,7 @@ public final class ReorderInFlow extends UIElement {
             duplicating = copy;
             ghost.text(labelFor(carried, copy));
         }
-        drop = new DropResolver(document.root(), ctx.dropIndicator()).resolve(carried, rawX, rawY);
+        drop = DropResolver.forPane(ctx).resolve(carried, rawX, rawY);
         ctx.dropIndicator().show(drop);
         UIDocument window = document();
         if (window != null) {
@@ -202,7 +208,7 @@ public final class ReorderInFlow extends UIElement {
 
     private void finish() {
         for (UIElement node : carried) {
-            Box box = node.box();
+            Box box = drawnBox(node);
             if (box != null) box.setOpacity(null);
         }
         carried = List.of();
@@ -216,7 +222,7 @@ public final class ReorderInFlow extends UIElement {
     }
 
     /** The selection when the press was on or inside a selected node, else the pressed node — outermost, carriable. */
-    private List<UIElement> sourcesFor(UIElement root, UIElement pressed) {
+    private List<UIElement> sourcesFor(UIElement pressed) {
         List<UIElement> selected = ctx.builderSelection().nodes();
         boolean withSelection = false;
         for (UIElement node : selected) {
@@ -228,7 +234,7 @@ public final class ReorderInFlow extends UIElement {
         List<UIElement> candidates = withSelection ? selected : List.of(pressed);
         List<UIElement> sources = new ArrayList<>();
         for (UIElement node : TreeMoves.outermost(candidates)) {
-            if (isReorderable(root, node)) sources.add(node);
+            if (isReorderable(ctx, node)) sources.add(node);
         }
         return sources;
     }
@@ -246,6 +252,13 @@ public final class ReorderInFlow extends UIElement {
             what = nodes.size() + " elements";
         }
         return copy ? "+ " + what : what;
+    }
+
+    /** Where {@code node} is drawn in this pane: dimming a carried node is this pane's business, not the file's. */
+    @Nullable
+    private Box drawnBox(UIElement node) {
+        UIElement drawn = ctx.shown(node);
+        return drawn == null ? null : drawn.box();
     }
 
     private Vector2f toRaw(float x, float y) {

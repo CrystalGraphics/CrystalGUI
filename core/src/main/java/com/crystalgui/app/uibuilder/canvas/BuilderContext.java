@@ -3,6 +3,9 @@ package com.crystalgui.app.uibuilder.canvas;
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.ui.dom.UIElement;
+
+import javax.annotation.Nullable;
 import com.crystalgui.widget.surface.SurfaceContext;
 
 /**
@@ -17,7 +20,7 @@ import com.crystalgui.widget.surface.SurfaceContext;
  * }</pre>
  *
  * <p>The builder's half of the same rule the graph follows: a feature reaches the canvas through this and
- * never through {@link BuilderEditor} or {@code BuilderSurface}, so a feature package cannot reach a
+ * never through {@link UIBuilderView} or {@code BuilderSurface}, so a feature package cannot reach a
  * method the builder did not mean to offer, and cannot be the reason the canvas cannot change.</p>
  *
  * <p><b>Deliberately small.</b> This is the L2 stub — the document and the artboard, which is what
@@ -52,7 +55,7 @@ public interface BuilderContext extends SurfaceContext {
      * Where a gesture shows where a drop would land — and the space it resolves the drop in.
      *
      * <pre>{@code
-     * ctx.dropIndicator().show(new DropResolver(root, ctx.dropIndicator()).resolve(sources, rawX, rawY));
+     * ctx.dropIndicator().show(DropResolver.forPane(ctx).resolve(sources, rawX, rawY));
      * ctx.dropIndicator().clear();   // when the gesture ends
      * }</pre>
      */
@@ -80,4 +83,20 @@ public interface BuilderContext extends SurfaceContext {
 
     /** Fires after design mode is switched, however it was switched. */
     Signal.Value<Boolean> onDidChangeDesignMode();
+
+    /**
+     * Where a document node is drawn on THIS canvas, or null. The document's own tree is never on screen, so its
+     * nodes have no box and no computed style: anything measuring or reading the cascade asks about this instead.
+     *
+     * <pre>{@code
+     * UIElement drawn = ctx.shown(ctx.builderSelection().node());
+     * Box box = drawn == null ? null : drawn.box();
+     * }</pre>
+     */
+    @Nullable
+    UIElement shown(@Nullable UIElement node);
+
+    /** The document node a node of this canvas stands for, or null — what a hit on the canvas is about. */
+    @Nullable
+    UIElement sourceOf(@Nullable UIElement drawn);
 }

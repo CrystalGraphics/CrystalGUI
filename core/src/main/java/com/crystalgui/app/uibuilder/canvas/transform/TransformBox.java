@@ -338,6 +338,7 @@ public final class TransformBox extends UIElement {
      * @return whether it opened — false for a node with no laid-out box, which has nothing to transform
      */
     public boolean begin(@Nullable UIElement node) {
+        node = drawnOf(node);
         Box box = node == null ? null : node.box();
         if (box == null) return false;
         target = node;
@@ -654,6 +655,7 @@ public final class TransformBox extends UIElement {
      * @return whether anything was written
      */
     public boolean transformAgain(@Nullable UIElement node) {
+        node = drawnOf(node);
         Again repeat = again;
         if (repeat == null || node == null || node.box() == null) return false;
         JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
@@ -694,6 +696,7 @@ public final class TransformBox extends UIElement {
      * @return whether anything was written
      */
     public boolean convertToSize(@Nullable UIElement node) {
+        node = drawnOf(node);
         if (!isScaleStandingInForSize(node)) return false;
         Box box = node.box();
         Transform transform = node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM);
@@ -714,6 +717,16 @@ public final class TransformBox extends UIElement {
         if (after.equals(was)) return false;
         document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
         return true;
+    }
+
+    /**
+     * Where {@code node} is drawn in this pane — a gesture measures and previews on the drawing. A node that is
+     * already a drawing answers itself.
+     */
+    @Nullable
+    private UIElement drawnOf(@Nullable UIElement node) {
+        UIElement drawn = ctx.shown(node);
+        return drawn != null ? drawn : node;
     }
 
     private static float fraction(float pixels, float extent) {

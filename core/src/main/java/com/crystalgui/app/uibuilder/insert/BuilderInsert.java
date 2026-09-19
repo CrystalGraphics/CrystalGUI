@@ -100,7 +100,7 @@ public final class BuilderInsert implements InsertSource {
      */
     public boolean openAtPointer(float rawX, float rawY) {
         UIElement root = surface.getDocument().root();
-        DropResolver.Drop drop = new DropResolver(root, surface.dropIndicator()).resolve(List.of(), rawX, rawY);
+        DropResolver.Drop drop = DropResolver.forPane(surface).resolve(List.of(), rawX, rawY);
         // THE ROOT IS CONTENT-SIZED, so most of a fresh page is outside it, and that is where a first node goes.
         targets = drop == null ? InsertTarget.around(root, root, null) : InsertTarget.around(root, drop.target(), drop);
         Vector2f world = surface.surface().toWorld(rawX, rawY);
@@ -120,7 +120,8 @@ public final class BuilderInsert implements InsertSource {
         targets = InsertTarget.around(root, anchor, null);
         // UNDER THE ANCHOR'S LEADING EDGE, where a menu about it is looked for.
         UIElement viewport = surface.surface().element();
-        float[] rect = CanvasRects.ofLayout(anchor, viewport);
+        // MEASURED WHERE THIS PANE DRAWS IT: the anchor is the document's node, which has no box.
+        float[] rect = CanvasRects.ofLayout(surface.shown(anchor), viewport);
         Vector2f world = rect == null ? new Vector2f() : surface.surface().viewportToWorld(rect[0], rect[1] + rect[3]);
         return open(world.x, world.y);
     }
@@ -179,7 +180,7 @@ public final class BuilderInsert implements InsertSource {
             StyleGroup.inlinePipeline(part.getStyle().getLayoutGroup(),
                     l -> l.display(several ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         }
-        surface.dropIndicator().show(new DropResolver(surface.getDocument().root(), surface.dropIndicator())
+        surface.dropIndicator().show(DropResolver.forPane(surface)
                 .at(place.parent(), place.index()));
     }
 

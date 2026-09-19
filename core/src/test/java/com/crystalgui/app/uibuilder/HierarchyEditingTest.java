@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder;
 
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 
 import com.crystalgui.ui.dom.Attribute;
@@ -19,7 +20,6 @@ import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
 import com.crystalgui.app.uibuilder.document.NodeSelectors;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.panel.HierarchyActions;
@@ -62,7 +62,7 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
             + "    ] }\n"
             + "}\n";
 
-    private BuilderEditor editor;
+    private UIBuilderView editor;
     private UIElement root, title, group, note;
     private HierarchyPanel hierarchy;
     private TreeEditing<UIElement> editing;
@@ -71,7 +71,7 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
     @Before
     public void openTheDocument() {
         UIElementRegistry.bootstrap();
-        editor = new BuilderEditor(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
+        editor = new UIBuilderView(new UiBuilderDocument(SOURCE.getBytes(StandardCharsets.UTF_8), "test:page"));
         UIElement host = new UIElement().layout(l -> l.width(800).height(500));
         host.append(editor.view());
         document.append(host);

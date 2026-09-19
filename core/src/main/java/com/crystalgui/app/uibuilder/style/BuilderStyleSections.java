@@ -6,7 +6,7 @@ import java.util.Locale;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.MatchedRules;
 import com.crystalgui.core.config.ConfigDescriptor;
@@ -75,18 +75,18 @@ public final class BuilderStyleSections {
 
     @Nullable
     private static BuilderSelection selection(DataContext context) {
-        return context.get(BuilderEditor.BUILDER_SELECTION);
+        return context.get(UIBuilderView.BUILDER_SELECTION);
     }
 
+    /** @see UIBuilderView#drawnSelection */
     @Nullable
     private static UIElement node(DataContext context) {
-        BuilderSelection selection = selection(context);
-        return selection == null ? null : selection.node();
+        return UIBuilderView.drawnSelection(context);
     }
 
     @Nullable
     private static SheetDocuments sheets(DataContext context) {
-        BuilderEditor editor = context.get(BuilderEditor.UI_BUILDER);
+        UIBuilderView editor = context.get(UIBuilderView.UI_BUILDER);
         return editor == null ? null : editor.sheets();
     }
 
@@ -107,7 +107,7 @@ public final class BuilderStyleSections {
      */
     @Nullable
     public static StyleFields styleFields(DataContext context, @Nullable UIElement node) {
-        UiBuilderDocument document = context.get(BuilderEditor.UI_DOCUMENT);
+        UiBuilderDocument document = context.get(UIBuilderView.UI_DOCUMENT);
         return node == null || document == null ? null : StyleFields.on(document, chosen(context), node);
     }
 
@@ -192,7 +192,7 @@ public final class BuilderStyleSections {
                 }));
                 if (writing.isInline() && !StyleFields.on(null, writing, node).declared().isEmpty()) {
                     chips.append(action("Extract class", TARGET_ACTION_CLASS, () -> RuleActions.extractClass(
-                            sheet, context.get(BuilderEditor.UI_DOCUMENT), node, classNameFor(node))));
+                            sheet, context.get(UIBuilderView.UI_DOCUMENT), node, classNameFor(node))));
                 }
             }
 
@@ -241,7 +241,7 @@ public final class BuilderStyleSections {
             UIElement node = node(context);
             if (node == null || !(form instanceof PanelForm panelForm)) return;
             StyleTarget target = chosen(context);
-            UiBuilderDocument document = context.get(BuilderEditor.UI_DOCUMENT);
+            UiBuilderDocument document = context.get(UIBuilderView.UI_DOCUMENT);
             StyleFields fields = StyleFields.on(document, target, node);
             form.custom(new DeclarationList(panelForm.panel(), fields, node));
 

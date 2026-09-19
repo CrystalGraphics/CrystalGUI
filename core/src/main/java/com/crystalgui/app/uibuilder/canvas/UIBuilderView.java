@@ -21,17 +21,18 @@ import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.surface.mode.ToolKind;
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
+import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.widget.surface.mode.SelectExtension;
 
 /**
- * The view onto a {@code .cgui}: one artboard on a pan-and-zoom surface, holding the document's real
- * tree.
+ * One pane onto a {@code .cgui}: an artboard on a pan-and-zoom surface, holding this pane's copy of the document's
+ * tree. Two panes onto one file edit one document — one tree, one history — each with its own camera, selection and
+ * laid-out copy. @see ShownTree
  *
  * <p>What a tab shows. Built by the document kind, one per open document; the surface underneath is the
  * shared editing engine, so selection, marquee and the tool stack are the same ones the shader graph
@@ -40,17 +41,17 @@ import com.crystalgui.widget.surface.mode.SelectExtension;
  * <pre>{@code
  * DocumentKind.of("cgui.file", "UI Document")
  *         .model((resource, bytes) -> new UiBuilderDocument(bytes, resource.toString()))
- *         .editor(document -> new BuilderEditor((UiBuilderDocument) document.model()));
+ *         .editor(document -> new UIBuilderView((UiBuilderDocument) document.model()));
  * }</pre>
  *
  * <p>The tree on the artboard is the document's own, laid out by the ordinary engine at the artboard's
  * size — so what is on screen is what a player gets, not a picture of it.</p>
  */
-public final class BuilderEditor implements DocumentEditor {
+public final class UIBuilderView implements DocumentEditor {
 
     /** This builder, for a command that acts on one. */
-    public static final DataKey<BuilderEditor> UI_BUILDER =
-            DataKey.create("uiBuilder", BuilderEditor.class);
+    public static final DataKey<UIBuilderView> UI_BUILDER =
+            DataKey.create("uiBuilder", UIBuilderView.class);
 
     /** The tree being edited. */
     public static final DataKey<UiBuilderDocument> UI_DOCUMENT =
@@ -68,6 +69,7 @@ public final class BuilderEditor implements DocumentEditor {
     private static final String SCALE = "uiScale";
 
     private final UiBuilderDocument document;
+    private final ShownTree shownTree;
     private final SheetDocuments sheets;
     private final Artboard artboard;
     private final BuilderSurface surface;
@@ -86,12 +88,12 @@ public final class BuilderEditor implements DocumentEditor {
     private final BuilderPane pane;
     private final BuilderInsert insert;
 
-    public BuilderEditor(UiBuilderDocument document) {
+    public UIBuilderView(UiBuilderDocument document) {
         this(document, null, null);
     }
 
     /** @param store the UI builder's extension store, where the Insert menu keeps recent picks; null for none */
-    public BuilderEditor(UiBuilderDocument document, @Nullable ConfigStorage store) {
+    public UIBuilderView(UiBuilderDocument document, @Nullable ConfigStorage store) {
         this(document, store, null);
     }
 
@@ -100,12 +102,13 @@ public final class BuilderEditor implements DocumentEditor {
      * @param sheets where the document's stylesheets come from — null for none, which leaves the canvas
      *               styled by the engine's own sheet alone
      */
-    public BuilderEditor(UiBuilderDocument document, @Nullable ConfigStorage store,
+    public UIBuilderView(UiBuilderDocument document, @Nullable ConfigStorage store,
                          @Nullable SheetDocuments sheets) {
         this.document = document;
         this.sheets = sheets != null ? sheets : new SheetDocuments(null, null);
-        this.artboard = new Artboard(document);
-        this.surface = new BuilderSurface(document, artboard,
+        this.shownTree = new ShownTree(document);
+        this.artboard = new Artboard(document, shownTree.root());
+        this.surface = new BuilderSurface(document, artboard, shownTree,
                 List.of(SelectExtension.ID, BuilderOverlaysExtension.ID));
         surface.ownedBy(this);
         surface.surface().place(artboard, 0f, 0f);
@@ -139,7 +142,7 @@ public final class BuilderEditor implements DocumentEditor {
         this.reorderGesture = new ReorderInFlow(surface, document);
         surface.surface().addOverlay(reorderGesture);
         surface.reordersWith(reorderGesture);
-        this.textEditing = new TextEditGesture(document);
+        this.textEditing = new TextEditGesture(surface, document);
         surface.surface().addOverlay(textEditing);
         // A LIBRARY CARD DROPPED ON THE PLANE, which a hit in design mode always reaches: the artboard takes none.
         new NewNodeDrop(surface).installOn(surface);
@@ -183,11 +186,15 @@ public final class BuilderEditor implements DocumentEditor {
         // The document's own sheets, once there is a window to put them on. Installing them here would
         // reach a file from a constructor that a server also runs.
         surface.onDidConnect.connect(this::installSheets);
-        // A RELOAD REPLACES THE TREE, and the frame is holding the old one. `adopt` mints a new root,
-        // so everything reading document.root() -- the hierarchy above all -- moves to a tree the canvas
-        // is not showing. resync() is a no-op unless the root instance actually changed, which is why it
-        // can hang off the ordinary change signal.
-        document.onChanged().connect(this::adoptNewTree);
+        // THE CANVAS FOLLOWS THE DOCUMENT: on every change, and once a frame for anything that reached the tree
+        // without one -- which costs one empty check when nothing did.
+        document.onChanged().connect(this::followDocument);
+        // AND ON AN UNDO'S STEP, which the document marks as touched only once the step has been taken.
+        document.history().onDidStep.connect(step -> followDocument());
+        artboard.onConnected(() -> artboard.document().animation().every(artboard, delta -> {
+            followDocument();
+            return true;
+        }));
         // AND THE SHEETS IT NAMES: the Document tab edits the list, and a sheet added there has to restyle the
         // canvas it is shown beside.
         document.onChanged().connect(() -> {
@@ -204,7 +211,7 @@ public final class BuilderEditor implements DocumentEditor {
      * Selects what an undo or redo changed. A gesture that changed several nodes is one step holding several
      * edits — a drop, a duplicate — and selects every node they name that is still in the tree.
      *
-     * @see #BuilderEditor the note on the history's step signal
+     * @see #UIBuilderView the note on the history's step signal
      */
     private void selectWhatStepped(Edit edit) {
         List<UIElement> stepped = new ArrayList<>();
@@ -227,6 +234,25 @@ public final class BuilderEditor implements DocumentEditor {
         UIElement node = edit instanceof BuilderEdit builderEdit ? builderEdit.node() : null;
         if (node == null || into.contains(node)) return;
         if (document.root().contains(node) || node == document.root()) into.add(node);
+    }
+
+    /** This pane's copy of the document's tree — where a document node is drawn here. */
+    public ShownTree shownTree() {
+        return shownTree;
+    }
+
+    /**
+     * Where the selected node is drawn in the builder {@code context} names, else the node itself — what a panel
+     * describing the selection reads a box or a computed style from. The document's own tree has neither; a write
+     * through the document resolves a drawn node back to its own. @see UiBuilderDocument#resolve
+     */
+    @Nullable
+    public static UIElement drawnSelection(DataContext context) {
+        BuilderSelection selection = context.get(BUILDER_SELECTION);
+        UIElement node = selection == null ? null : selection.node();
+        UIBuilderView builder = context.get(UI_BUILDER);
+        UIElement drawn = builder == null ? null : builder.shownTree.shown(node);
+        return drawn != null ? drawn : node;
     }
 
     public UiBuilderDocument document() {
@@ -292,6 +318,8 @@ public final class BuilderEditor implements DocumentEditor {
      */
     @Nullable
     public ContextMenu menuFor(@Nullable UIElement item) {
+        // WHAT WAS POINTED AT IS DRAWN; what the menu acts on is the document node it stands for.
+        if (item != null && shownTree.isShown(item)) item = shownTree.source(item);
         // BLANK PAGE OR PLANE: nothing to act on, so the one thing to do there is put something there.
         if (item == null || item == document.root()) {
             UIDocument window = surface.document();
@@ -386,18 +414,19 @@ public final class BuilderEditor implements DocumentEditor {
 
     @Override
     public void disposeView() {
+        shownTree.close();
         surface.dispose();
         sheets.dispose();
     }
 
     /**
-     * Re-points the canvas at the document's current root, and drops a selection that no longer exists.
-     *
-     * <p>The stale selection is not a detail: it holds elements from the replaced tree, which are in no
-     * document and have no boxes, so everything drawn from it points at nothing.</p>
+     * Brings this pane's copy up to date, and on a reopen shows the new one and drops a selection that no longer
+     * exists: it holds nodes of the replaced tree, which are in no document, so everything drawn from it would point
+     * at nothing.
      */
-    private void adoptNewTree() {
-        if (!artboard.resync()) return;
+    private void followDocument() {
+        if (!shownTree.sync()) return;
+        artboard.show(shownTree.root());
         selection().clear();
         surface.selection().clear();
     }

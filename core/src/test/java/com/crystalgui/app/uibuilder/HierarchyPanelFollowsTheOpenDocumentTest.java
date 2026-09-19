@@ -18,7 +18,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.app.crystaleditor.CrystalEditor;
-import com.crystalgui.app.uibuilder.canvas.BuilderEditor;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
@@ -228,30 +228,32 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         workbench.open(DockInput.of(workbench.refFor(FILE)));
         for (int i = 0; i < 16; i++) frameAndPump();
 
-        BuilderEditor editor = builder();
+        UIBuilderView editor = builder();
         UIElement title = editor.document().root().children().get(0);
+        // WHAT IS CLICKED is where the pane draws it; what is selected is the document's node.
+        UIElement drawn = editor.shownTree().shown(title);
 
-        clickOn(title);
+        clickOn(drawn);
         assertSame("first click selected nothing", title, editor.selection().node());
-        assertSame(title, editor.handles().target());
+        assertSame(drawn, editor.handles().target());
 
         // BLANK PAGE, well below the content: #root is exactly as tall as its one text child, so there
         // is no root-only area to aim at -- the honest "click away" is the artboard's own empty space.
         clickBlankPage(editor);
         assertNull("clicking blank canvas should deselect", editor.selection().node());
 
-        clickOn(title);
+        clickOn(drawn);
         assertSame("the second click on the element did nothing -- input is stuck",
                 title, editor.selection().node());
-        assertSame("the handles came off and never came back", title, editor.handles().target());
+        assertSame("the handles came off and never came back", drawn, editor.handles().target());
     }
 
-    private BuilderEditor builder() {
+    private UIBuilderView builder() {
         DocumentEditor view = workbench.editors().active().editor();
-        return (BuilderEditor) view;
+        return (UIBuilderView) view;
     }
 
-    private void clickBlankPage(BuilderEditor editor) {
+    private void clickBlankPage(UIBuilderView editor) {
         Box board = editor.artboard().box();
         Vector2f at = Transform2D.apply(board.localToWorld(),
                 board.width() * 0.5f, board.height() * 0.8f);
