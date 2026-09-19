@@ -129,6 +129,12 @@ texteditor .__line__ {
  * rather than start at it. Colour and stacking remain a theme's business. */
 texteditor {
     caret-width: 1px;
+    /* THE STACK ABOVE IS THE EDITOR'S OWN, and without a context of its own every one of those z-indices is
+     * ordered against the whole document instead. A positioned box that is not a stacking context lends its
+     * z-ordered descendants upward, so the gutter painted over the dock's drop overlay -- an editor's line
+     * numbers on top of the wash marking where a dragged tab would land -- and `__selection__` at -1 was one
+     * ancestor away from sliding under the panel behind it. Same reason `desktop .__windows__` isolates. */
+    isolation: isolate;
 }
 
 texteditor .__caret__ {
