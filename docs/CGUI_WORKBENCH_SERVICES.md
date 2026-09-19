@@ -629,7 +629,7 @@ at all. A field is discoverable by autocomplete and impossible to publish to fro
 |---|---|---|
 | `onDidChangeActive` | `EditorService` | the Hierarchy panel's per-frame poll, and the Inspector's three-source workaround |
 | `onDidChangeActivePanel` | `DockArea` | three per-frame polls at once |
-| `onDidChangeShownPanels` | `DockArea` | nothing — a group other than the focused one had no way to say what it showed |
+| `onDidChangeShownPanels` | `DockArea` | nothing — a group other than the focused one had no way to say what it showed. Includes every torn-out window that is not minimised |
 | `onDidChangeVisible`, `follow` | `EditorService` | the Hierarchy and the Library following the ACTIVE tab, and emptying whenever a file they could not describe took focus beside a canvas still on screen |
 | `onDidClosePanel` | `DockArea` | nothing — the fact nobody could state |
 | `onDidOpenDocument` / `onDidCloseDocument` | `Workbench` | `onDocumentLoaded`, and its missing half |
@@ -1041,6 +1041,29 @@ reaching through the dock and the layout to ask what the dock knows about itself
 `DockService.open()` is not here: opening needs the insertion logic in `Workbench.openPanel*`, and folding
 that into the dock only removes duplication once panes exist.
 
+### Torn-out windows — one set of editors
+
+A tab dragged out of the dock lands in a `DockWindow`, whose dock belongs to the **home** it came from.
+The home answers for all of its windows, so nothing that asks the workbench's dock needs to know windows
+exist:
+
+```java
+DockArea dock = workbench.dock();
+dock.activePanel();          // front panel of the area the user last worked in, whichever window
+dock.shownPanels();          // every group's front panel on screen; a minimised window's are not
+dock.allPanels();            // every tab, minimised windows included
+dock.activatePanel(ref);     // in whichever window holds it, brought forward and restored
+dock.activeArea();           // where the next file opens
+dock.windows();              // what the session saves
+new DockWindow(dock, layout, title);   // joins dock's home, with its registry, close guard, icon, application
+```
+
+- **`activeArea()` is the dock whose group was last made active**, not the desktop's active window:
+  clicking bare desktop or a tool window activates no editor group, and the editor you were in stays the
+  one you were in. Minimising or closing that window hands it back to the home.
+- **`activeGroup()` stays per area** — it is what a command dispatched inside that window acts on.
+- **Both announcements come from the home**; a torn-out area forwards, so a listener subscribes once.
+
 ---
 
 ## Opening things
@@ -1064,8 +1087,10 @@ overload and no way to ask.** That is why VS Code's is `openEditor(input, option
 
 ### Rules
 
-- **"Already open" wins over placement**, in one place rather than in two of three overloads. Re-opening
-  something on screen means "show me that one", never "make a second copy somewhere else".
+- **"Already open" wins over placement**, in one place rather than in two of three overloads, and in
+  whichever window holds it. Re-opening something on screen means "show me that one", never "make a second
+  copy somewhere else".
+- **Anything new opens in `dock.activeArea()`** — the last editor group you were in, torn-out or not.
 - **A ref is a panel's identity**, so the same ref cannot be opened twice. Two tabs on one file means two
   panel *types* over one path, which is what the release guard checks for.
 - `open` returns the leaf it landed in, so a caller acts on it rather than searching for it again.

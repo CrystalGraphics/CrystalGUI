@@ -12,7 +12,6 @@ import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
-import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 
 /**
  * A window hosting a dock area of its own — where an editor tab lands when it is torn out (W9).
@@ -25,6 +24,17 @@ import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
  * while a torn-out document is a second place to work — a peer. Clicking one should bury the other,
  * exactly as two document windows do on every desktop, and IntelliJ's detached editor and VS Code's
  * auxiliary window are both independent for the same reason.</p>
+ *
+ * <h3>Its editors are still the workbench's</h3>
+ *
+ * <p>Independent as a window, not as a set of editors: its dock belongs to the {@linkplain DockArea#home() home}
+ * it was torn from, which answers what is active, what is on screen and where the next file opens across every
+ * window at once. It takes the home's registry, close guard, icon and application for the same reason.</p>
+ *
+ * <pre>{@code
+ * DockWindow window = new DockWindow(workbench.dock(), layout, "notes.md");
+ * Desktop.of(document).addWindow(window);
+ * }</pre>
  *
  * <h3>It needed almost no new machinery, and that is the Design B payoff</h3>
  *
@@ -72,14 +82,21 @@ public class DockWindow extends WindowFrame {
 
     private final DockArea area;
 
-    public DockWindow(DockPanelRegistry<UIElement> registry, DockLayout layout, String title) {
+    /** @param from the dock it was torn out of; it joins that dock's home */
+    public DockWindow(DockArea from, DockLayout layout, String title) {
         super(title);
         addClass(DOCK_WINDOW_CLASS);
         // DESTROY, not hide: a torn-out window's content is documents the store owns, and
         // the window itself holds nothing worth keeping once its last tab has gone.
         setPolicy(WindowPolicy.DESTROY_ON_CLOSE);
 
-        this.area = new DockArea(registry, layout);
+        this.area = new DockArea(from, layout);
+        DockArea home = area.home();
+        // STILL THE PRODUCT IT CAME FROM, and only the home was told which that is. @see DockArea#tornWindowIcon
+        if (home.tornWindowIcon() != null) setIcon(home.tornWindowIcon());
+        if (home.tornWindowApplication() != null) setApplication(home.tornWindowApplication());
+        home.adopt(this);
+        onDestroyed.connect(() -> home.release(this));
         StyleGroup.defaultPipeline(area.getStyle().getLayoutGroup(),
                 l -> l.widthPercent(100f).height(0).flexGrow(1f));
         setContent(area);

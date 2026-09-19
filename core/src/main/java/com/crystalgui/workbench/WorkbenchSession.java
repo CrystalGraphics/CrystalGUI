@@ -13,7 +13,6 @@ import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.DockWindow;
-import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.panel.DockPanelKind;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
@@ -327,7 +326,7 @@ public final class WorkbenchSession {
 
         // BESIDE the dock for the same reason, one step further out: a torn-out window's tree is not in
         // the main layout at all -- tearOut removed it. @see #KEY_WINDOWS
-        out.putList(KEY_WINDOWS, tornOutWindows(), WorkbenchSession::writeDockWindow);
+        out.putList(KEY_WINDOWS, workbench.dock().windows(), WorkbenchSession::writeDockWindow);
 
         // Every opted-in widget in the tree, over the top of what came in. Reading the LIVE elements is
         // what makes a dragged divider survive; keeping the entries nobody built is what stops a session
@@ -415,29 +414,6 @@ public final class WorkbenchSession {
      */
     // ── Torn-out windows ────────────────────────────────────────────────────────────────────────
 
-    /**
-     * Every torn-out editor window belonging to <b>this</b> workbench, in the desktop's open order.
-     *
-     * <p>Matched by <b>panel-registry identity</b>, not by walking the tree from here: a
-     * {@code DockWindow} is a top-level desktop citizen and is not under the workbench at all, which is
-     * the whole point of it. What ties it back is that its dock builds content from this workbench's
-     * registry — so anything it holds is this project's, and anything holding another registry is
-     * somebody else's window that happens to share a desktop.</p>
-     */
-    private List<DockWindow> tornOutWindows() {
-        UIDocument window = workbench.document();
-        // desktopIfPresent, never desktop(): the latter BUILDS one, and a save must not create a
-        // compositor in a window that never had a window open in it.
-        Desktop desktop = Desktop.ifPresent(window);
-        if (desktop == null) return List.of();
-        List<DockWindow> out = new ArrayList<>();
-        for (WindowFrame frame : desktop.registry().windows()) {
-            if (frame instanceof DockWindow dock && dock.area().registry() == workbench.panels()) {
-                out.add(dock);
-            }
-        }
-        return out;
-    }
 
     /**
      * One torn-out window: where it was, and the whole dock tree inside it.
@@ -521,12 +497,7 @@ public final class WorkbenchSession {
         List<TornOutWindow> opening = new ArrayList<>(pendingWindows);
         pendingWindows.clear();
         for (TornOutWindow record : opening) {
-            DockWindow frame = new DockWindow(workbench.panels(), record.layout(), record.title());
-            // A REOPENED TORN-OUT WINDOW IS THE SAME WINDOW. @see DockArea#tornWindowIcon
-            String tornIcon = workbench.dock().tornWindowIcon();
-            if (tornIcon != null) frame.setIcon(tornIcon);
-            var tornApp = workbench.dock().tornWindowApplication();
-            if (tornApp != null) frame.setApplication(tornApp);
+            DockWindow frame = new DockWindow(workbench.dock(), record.layout(), record.title());
             // BEFORE the open, so it appears at the size and place it is meant to be rather than flying
             // in at a default and jumping -- Desktop.addWindow's own note, from the other side.
             frame.resizeTo(record.width(), record.height());
