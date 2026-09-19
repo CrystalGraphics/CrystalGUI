@@ -378,6 +378,36 @@ public final class ElementStyle {
         }
         return cast(best);
     }
+    /**
+     * The value {@code p} settles to: the cascade's winner ignoring a transition in flight, else the parent's for an
+     * inheritable property, else the initial value.
+     *
+     * <p>What an editor compares against, where {@link #getComputed} answers what is DISPLAYED: on the frame a value is
+     * written, a transition has not started, so the displayed value is still the old one whatever was written.</p>
+     */
+    public <T> T getSettled(StyleProperty<T> p) {
+        StyleSlot<T> slot = computeCandidateSlot(p, true);
+        if (slot != null) return slot.value();
+        if (p.isInheritable()) {
+            var parent = host.inheritsFrom();
+            if (parent != null) return parent.getStyle().getSettled(p);
+        }
+        return p.initialValue;
+    }
+
+    /** The winning candidate at {@code origin} alone, or null when there is none there. */
+    @Nullable
+    public <T> StyleSlot<T> candidateAt(StyleProperty<T> p, StyleOrigin origin) {
+        List<StyleSlot<?>> list = candidates.get(p);
+        if (list == null) return null;
+        StyleSlot<?> best = null;
+        for (var slot : list) {
+            if (slot.origin() != origin) continue;
+            if (best == null || StyleSlot.compare(best, slot) < 0) best = slot;
+        }
+        return cast(best);
+    }
+
     public <T> T computeCandidate(StyleProperty<T> p) {
         var slot = computeCandidateSlot(p);
         if (slot != null) return slot.value();

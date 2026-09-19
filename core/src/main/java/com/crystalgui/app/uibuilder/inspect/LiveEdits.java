@@ -122,10 +122,13 @@ public final class LiveEdits {
         ElementStyle style = element.getStyle();
         // A VALUE HOLDING A SWITCHED-OFF LAYER is not a copy of what the sheets say, whatever its live layers are.
         if (style.inlineText(property) != null) return false;
-        T inline = style.getComputed(property);
+        StyleSlot<T> inline = style.candidateAt(property, StyleOrigin.INLINE);
+        // SETTLED, not displayed: on the frame of the write a transition has not started, so the displayed value is the
+        // old one either way and every edit to a transitioning property read as redundant and was thrown away.
+        T with = style.getSettled(property);
         clearInline(element, property);
-        if (Objects.equals(inline, style.computed().get(property))) return true;
-        style.replaceOrPutCandidate(property, StyleSlot.of(property, StyleOrigin.INLINE, SPECIFICITY, 0L, inline));
+        if (Objects.equals(with, style.getSettled(property))) return true;
+        style.replaceOrPutCandidate(property, inline);
         return false;
     }
 
