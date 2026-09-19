@@ -266,6 +266,8 @@ dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__strip-actions__ {
  * since a custom property here is one sheet-wide value and cannot vary by selector. */
 dockgroup > tabview > .__strip__ > .__strip-fade__.__start__ {
     background: linear-gradient(to left, transparent, var(--dock-bg, #2B2B2B));
+    /* THE ISLAND'S OWN CORNER: the fade sits in it, and a square one filled the rounding with the panel's colour. */
+    border-radius: var(--radius-panel, 0px) 0px 0px 0px;
 }
 dockgroup > tabview > .__strip__ > .__strip-fade__.__end__ {
     background: linear-gradient(to right, transparent, var(--dock-bg, #2B2B2B));
