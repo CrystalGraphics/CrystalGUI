@@ -1,6 +1,7 @@
 package com.crystalgui.app.uibuilder.canvas.transform;
 
 import java.util.List;
+import java.util.Objects;
 
 import javax.annotation.Nullable;
 
@@ -347,9 +348,7 @@ public final class TransformBox extends UIElement {
         // this runs -- its own note says switching tools from inside it re-enters the mode stack -- so a
         // false return leaves the tool live with no target, swallowing every click on the canvas. The
         // guard belongs where entry is DECIDED. @see BuilderCommands#canFreeTransform
-        gesture.reset(box.width(), box.height(),
-                node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM),
-                resolvedOriginX(node, box), resolvedOriginY(node, box));
+        seed(node, box);
         active = true;
         setDisplayed(true);
         preview();
@@ -449,6 +448,53 @@ public final class TransformBox extends UIElement {
     @Nullable
     private Matrix4f frame() {
         return CanvasRects.layoutFrame(target, this);
+    }
+
+    /** What the gesture last started from, so an edit made elsewhere is noticed. @see #followOutsideEdits */
+    @Nullable
+    private Seed seeded;
+
+    private record Seed(@Nullable Transform transform, float originX, float originY, float width, float height) {
+    }
+
+    /** Starts the gesture from what {@code node} computes now. */
+    private void seed(UIElement node, Box box) {
+        Transform transform = node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM);
+        float originX = resolvedOriginX(node, box);
+        float originY = resolvedOriginY(node, box);
+        gesture.reset(box.width(), box.height(), transform, originX, originY);
+        seeded = new Seed(transform, originX, originY, box.width(), box.height());
+    }
+
+    /**
+     * Starts over from an edit made elsewhere while the box is up — the Inspector switching the transform off,
+     * typing a width — so the canvas shows it rather than a gesture seeded before it. Between drags only: a drag
+     * is the gesture's own. The box's steps are dropped with it, and the undo baseline moves to the edit, which is
+     * already in the document's history.
+     */
+    private void followOutsideEdits() {
+        UIElement node = target;
+        Box box = node == null ? null : node.box();
+        if (!active || dragging || box == null || seeded == null) return;
+        Transform transform = node.getStyle().computed().get(StylePropertyRegistry.TRANSFORM);
+        if (Objects.equals(transform, seeded.transform())
+                && resolvedOriginX(node, box) == seeded.originX() && resolvedOriginY(node, box) == seeded.originY()
+                && box.width() == seeded.width() && box.height() == seeded.height()) {
+            return;
+        }
+        before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        history.clear();
+        seed(node, box);
+        preview();
+    }
+
+    @Override
+    protected void connected() {
+        super.connected();
+        document().animation().afterLayout(this, delta -> {
+            followOutsideEdits();
+            return true;
+        });
     }
 
     private static float resolvedOriginX(UIElement node, Box box) {
