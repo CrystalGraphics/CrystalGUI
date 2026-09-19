@@ -126,6 +126,20 @@ public class TabView extends UIElement {
     public static final String RAIL_CLASS = "__rail__";
     /** The strip's scrollbar — a normal flex item, not an overlay. */
     public static final String STRIP_BAR_CLASS = "__strip-bar__";
+
+    /**
+     * The fade over each end of the rail, hidden until tabs are scrolled out past it — IntelliJ's tab row, where a
+     * clipped tab fades out rather than being sliced. {@link #FADE_START_CLASS} or {@link #FADE_END_CLASS} says
+     * which end; the sheet gives it its width and colour, and shows it under {@link #CLIPPED_START_CLASS} /
+     * {@link #CLIPPED_END_CLASS} on the strip.
+     */
+    public static final String FADE_CLASS = "__strip-fade__";
+    public static final String FADE_START_CLASS = "__start__";
+    public static final String FADE_END_CLASS = "__end__";
+
+    /** On the strip while tabs are scrolled out before the rail's start, or past its end. */
+    public static final String CLIPPED_START_CLASS = "__clipped-start__";
+    public static final String CLIPPED_END_CLASS = "__clipped-end__";
     public static final String PANES_CLASS = "__panes__";
 
     /** One of these is present on the root at all times, so CSS can write
@@ -208,6 +222,14 @@ public class TabView extends UIElement {
             }
         });
         this.strip.append(this.bar);
+        // AFTER THE RAIL AND THE BAR, so they paint over the tabs; they take no clicks, so a tab under one still does.
+        for (String end : new String[]{FADE_START_CLASS, FADE_END_CLASS}) {
+            UIElement fade = new UIElement();
+            fade.addClass(FADE_CLASS);
+            fade.addClass(end);
+            fade.setHitTest(false);
+            this.strip.append(fade);
+        }
 
         this.panes = new UIElement();
         this.panes.addClass(PANES_CLASS);
@@ -667,6 +689,10 @@ public class TabView extends UIElement {
 
             StyleGroup.inlinePipeline(bar.getStyle().getLayoutGroup(),
                     l -> l.display(max > 0f ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+            float scrolled = vertical ? rail.scrollTop() : rail.scrollLeft();
+            // HALF A PIXEL OF SLACK, or a rail scrolled to its end by a fractional amount keeps its fade.
+            setClass(strip, CLIPPED_START_CLASS, max > 0f && scrolled > 0.5f);
+            setClass(strip, CLIPPED_END_CLASS, max > 0f && scrolled < max - 0.5f);
             if (max <= 0f) return;
 
             bar.setVisibleRatio(content <= 0f ? 1f : client / content);
@@ -674,6 +700,16 @@ public class TabView extends UIElement {
             bar.setValue((vertical ? rail.scrollTop() : rail.scrollLeft()) / max);
         } finally {
             syncingBar = false;
+        }
+    }
+
+    /** Adds or removes {@code name} only when that changes something, since this runs every frame. */
+    private static void setClass(UIElement node, String name, boolean on) {
+        if (node.hasClass(name) == on) return;
+        if (on) {
+            node.addClass(name);
+        } else {
+            node.removeClass(name);
         }
     }
 
