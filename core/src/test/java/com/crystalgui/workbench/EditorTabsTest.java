@@ -36,8 +36,11 @@ import com.crystalgui.workbench.dock.DockCommands;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 
-/** <b>An editor tab's menu</b> acts on the tab it was opened on, not the one in front. */
-public class EditorTabMenuTest extends UiDocumentTestBase {
+/**
+ * <b>Editor tabs</b>: their menu acts on the tab it was opened on, not the one in front, and a tab keeps the keyboard
+ * when the document behind it finishes loading.
+ */
+public class EditorTabsTest extends UiDocumentTestBase {
 
     private static final String PROJECT = "scratch";
     private static final CgPath TOP = CgPath.of(PROJECT, "top.txt");
@@ -172,5 +175,21 @@ public class EditorTabMenuTest extends UiDocumentTestBase {
         CommandRegistry.global().run(DockCommands.CLOSE_OTHERS, CommandContext.of(workbench.dock()));
         frames(4);
         assertEquals(List.of(workbench.refFor(NEXT)), open());
+    }
+
+    /** A document's view landing swaps the panel's content; the tab just clicked keeps the keyboard through it. */
+    @Test
+    public void aFocusedTabKeepsTheKeyboardWhenItsDocumentLands() {
+        openThree();
+        DockPanelRef ref = workbench.refFor(NEXT);
+        UIElement tab = workbench.dock().groupFor(leafOf(NEXT)).tabFor(ref);
+        document.focus().requestPointerFocus(tab);
+        frames(2);
+        assertSame(tab, document.focus().focused());
+
+        workbench.dock().rebuildPanel(ref);
+        frames(6);
+        assertSame("rebuilding one panel's content detached the tab that held the keyboard",
+                tab, document.focus().focused());
     }
 }
