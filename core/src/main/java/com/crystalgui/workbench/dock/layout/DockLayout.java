@@ -459,6 +459,12 @@ public final class DockLayout {
      */
     public DockLayout normalise() {
         normaliseBranch(root);
+        // AND AN EMPTY CENTRAL LEAF BESIDE A SIBLING GOES WITH THEM. normaliseBranch keeps every central
+        // leaf, which is right when it is the last one and wrong otherwise -- and a session SAVED while
+        // one half of a split was empty restores exactly the blank band it was saved with, because
+        // nothing is ever going to close that half again. @see #closeEmptied
+        DockLeaf central = centralLeaf();
+        if (central != null && central.isEmpty()) closeEmptied(central);
         while (root.childCount() == 1 && !root.child(0).isLeaf()) {
             DockNode sole = root.child(0);
             root.removeChild(0);
@@ -492,8 +498,9 @@ public final class DockLayout {
     /**
      * Closes a panel, and the leaf with it if that was the last one.
      *
-     * <p>A central leaf is kept even when empty — it is the guarantee that the main work area still
-     * exists, and an empty one shows a watermark rather than disappearing.</p>
+     * <p>A central leaf is kept when empty only while it is the LAST one — that is the guarantee the main
+     * work area still exists, and an empty one shows a watermark rather than disappearing. Beside a
+     * sibling it hands the central role on and goes. @see #closeEmptied</p>
      */
     public boolean closePanel(DockPanelRef panel) {
         return closePanel(leafContaining(panel), panel);
