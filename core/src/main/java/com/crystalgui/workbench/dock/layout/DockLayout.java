@@ -339,7 +339,10 @@ public final class DockLayout {
      */
     public DockNode remove(DockNode node) {
         if (node == root) return null;
-        if (node instanceof DockLeaf && ((DockLeaf) node).isCentral()) return null;
+        // THE CENTRAL ROLE MOVES RATHER THAN PINNING THE LEAF. Refusing outright is right only for the
+        // LAST work area; anywhere else it left the emptied half on screen holding its weight, as a blank
+        // band -- after a close, after a tab was dragged to the other half, after a tear-out.
+        if (!handOverCentral(node)) return null;
 
         DockBranch parent = node.parent;
         if (parent == null) return null;
@@ -521,43 +524,51 @@ public final class DockLayout {
         if (source == target) return source.move(source.indexOf(panel), index);
         source.remove(panel);
         target.add(panel, index);
-        // NOT closeEmptied: the panel is going somewhere else, so the main editor area stays even when it
-        // is what just emptied -- and a tear-out is a move whose target leaves the tree, which would hand
-        // the central role to the leaf on its way out. @see DockArea#tearOutToWindow
-        if (source.isEmpty() && !source.isCentral()) remove(source);
+        closeEmptied(source);
         return true;
     }
 
     /**
-     * Drops a leaf whose last panel was just CLOSED, handing the central role on rather than leaving a band.
+     * Drops a leaf whose last panel has left, however it left.
      *
      * <p><b>A central leaf that is the last one standing stays</b> — there is always an editor area, and an
      * empty one means nothing is open. Beside a sibling it must not: the half just emptied keeps its weight
-     * and sits there blank, which is what closing one side of a split editor looked like. VS Code closes the
-     * group and lets another become the main one, and so does this.</p>
-     *
-     * <p><b>Closing only.</b> A move empties its source as a side effect of the panel going somewhere else,
-     * and the main editor area outlives that; a tear-out is a move whose target then leaves the tree, so
-     * handing it the central role would hand it to the leaf on its way out.</p>
+     * and sits there blank. VS Code closes the group and lets another become the main one, and so does this
+     * — for a close, for a tab dragged into the other half, and for a tear-out alike, because an empty
+     * region on screen does not care which of them emptied it.</p>
      */
     private void closeEmptied(DockLeaf leaf) {
-        if (!leaf.isEmpty()) return;
-        if (!leaf.isCentral()) {
-            remove(leaf);
-            return;
+        if (leaf.isEmpty()) remove(leaf);
+    }
+
+    /**
+     * Hands the central role to a leaf that outlives {@code going}, or refuses when there is none.
+     *
+     * <p>{@code going} may be a whole branch, so the question is whether the central leaf is inside it
+     * rather than whether it IS it — and the heir has to be looked for outside that subtree, or the role
+     * lands on a leaf leaving in the same breath.</p>
+     *
+     * @return whether {@code going} may now be removed
+     */
+    private boolean handOverCentral(DockNode going) {
+        DockLeaf central = centralLeaf();
+        if (central == null || !isWithin(going, central)) return true;
+        for (DockLeaf leaf : leaves()) {
+            if (isWithin(going, leaf)) continue;
+            central.setCentral(false);
+            leaf.setCentral(true);
+            return true;
         }
-        DockLeaf heir = null;
-        for (DockLeaf other : leaves()) {
-            if (other != leaf) {
-                heir = other;
-                break;
-            }
+        // NOBODY TO HAND IT TO: this is the last work area and it cannot leave the tree.
+        return false;
+    }
+
+    /** Whether {@code node} is {@code ancestor} or sits under it. */
+    private static boolean isWithin(DockNode ancestor, DockNode node) {
+        for (DockNode walk = node; walk != null; walk = walk.parent) {
+            if (walk == ancestor) return true;
         }
-        // THE LAST ONE STANDING has nobody to hand it to, and an empty editor area is the resting state.
-        if (heir == null) return;
-        leaf.setCentral(false);
-        heir.setCentral(true);
-        remove(leaf);
+        return false;
     }
 
     // ── Invariants ──────────────────────────────────────────────────────────────────────────────

@@ -1195,7 +1195,9 @@ public class DockArea extends UIElement implements MinimumSize {
         DockPanelRef panel = payload.panel();
         if (panel == null || sourceLeaf.indexOf(panel) < 0) return null;
         sourceLeaf.remove(panel);
-        if (sourceLeaf.isEmpty() && !sourceLeaf.isCentral()) source.layout.remove(sourceLeaf);
+        // THE CENTRAL GUARD IS DockLayout.remove's NOW, and it hands the role on rather than keeping an
+        // emptied leaf on screen as a blank band. It still refuses when this is the last work area.
+        if (sourceLeaf.isEmpty()) source.layout.remove(sourceLeaf);
         source.requestRebuild();
         return new DockLeaf(panel);
     }
@@ -1207,7 +1209,7 @@ public class DockArea extends UIElement implements MinimumSize {
             if (holding == null) continue;
             DockLeaf leaf = holding.layout.leafContaining(panel);
             leaf.remove(panel);
-            if (leaf.isEmpty() && !leaf.isCentral()) holding.layout.remove(leaf);
+            if (leaf.isEmpty()) holding.layout.remove(leaf);
             holding.requestRebuild();
         }
         return new DockLeaf(panels.toArray(new DockPanelRef[0]));
