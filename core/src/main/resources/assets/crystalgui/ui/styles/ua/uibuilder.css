@@ -570,6 +570,11 @@ librarypanel .__library-row__ > .__label__ {
     text-overflow: ellipsis;
 }
 
+/* THE TREE SCROLLS SIDEWAYS, so a label keeps its width: see the Hierarchy's rule above. */
+librarypanel .__h-scroll__ .__library-row__ > .__label__ {
+    flex-shrink: 0;
+}
+
 /* A heading over the cards, so it reads as one: the tree's own colour, bold. */
 .__library-folder__ > .__label__ {
     color: var(--tree-fg, #FFFFFF);
