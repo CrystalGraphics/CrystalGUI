@@ -452,9 +452,10 @@ public final class StyleLab {
 
     private static String readable(@Nullable String value) {
         if (value == null || value.isBlank()) return "—";
-        // HOW THE CHIP BREAKS IT, which is one definition rather than two: a layer or a function to a line, a long
-        // call opened onto its arguments. A line a function made the glass lab's footer fourteen lines tall, and a
-        // second reading of what a layer is made a transform's readout invent commas.
+        // A LAYER A LINE, AND NOTHING ELSE BROKEN: the footer is as wide as the lab and wraps, so a run of functions
+        // fills it. The chip breaks one to a line because its column is narrow; here that put the ten functions of a
+        // full glass on ten lines, most of them a third full.
+        if (!CssValues.isCommaList(value)) return CssValues.readable(value);
         List<CssValues.Line> lines = CssValues.lines(value);
         if (lines.size() < 2) return CssValues.readable(value);
         StringBuilder out = new StringBuilder();
