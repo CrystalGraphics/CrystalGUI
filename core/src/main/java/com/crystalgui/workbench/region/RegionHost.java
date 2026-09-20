@@ -2,6 +2,7 @@ package com.crystalgui.workbench.region;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.widget.layout.SplitView;
 
 import javax.annotation.Nullable;
@@ -41,7 +42,7 @@ import java.util.Map;
  * rule the uncloseable central leaf already states: a region that vanished when empty could never be
  * reopened, because there would be nothing left for {@code Ctrl+B} to toggle. The same goes for a half.</p>
  */
-public class RegionHost extends UIElement {
+public class RegionHost extends UIElement implements MinimumSize {
     /** One region, as a node. */
     public static final Name NAME = Name.of("regionhost");
 
@@ -163,6 +164,28 @@ public class RegionHost extends UIElement {
         showing.remove(side);
         halves.get(side).setOnlyChild(null);
         sync();
+    }
+
+    /**
+     * <b>What is in here decides how small the region may be dragged</b> — {@link MinimumSize}, and the top
+     * link of a chain that was built from the bottom up and never joined.
+     *
+     * <p>A {@code SplitView} asks a pane's DIRECT children and goes no further, deliberately: a deep
+     * descendant's minimum need not force its ancestor to grow. Here it does, and every link below was
+     * already saying so — a half states {@code min-height}, a container states its own — but the pane's
+     * direct child is this host, which said nothing. So the frame's divider had no floor, the region was
+     * dragged under what it holds, and the half simply overflowed it. With {@code overflow: hidden} on
+     * this host that overflow is CUT, which is what a panel losing its bottom corners actually was: the
+     * island was the right shape and its lower rounding was below the region's edge.</p>
+     *
+     * <p>Delegated rather than stated, so one half and two are both right without a number here: with two,
+     * the child is the split and answers with its own panes' floors — added up along its axis and the
+     * largest of them across it, so halves SIDE BY SIDE each need the height, not twice it.</p>
+     */
+    @Override
+    public float minimumSize(boolean vertical) {
+        List<UIElement> mounted = children();
+        return mounted.isEmpty() ? 0f : SplitView.minimumOf(mounted.get(0), vertical);
     }
 
     /** Empties both halves. */

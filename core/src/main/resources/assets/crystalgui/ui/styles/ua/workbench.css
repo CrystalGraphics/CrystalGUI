@@ -144,6 +144,12 @@ dockgroup .__missing__ {
     /* Matched to the group's, so this container's own fill cannot square off the island's corners.
      * Nothing clips here either — see dockgroup — so it is a shader change, not a layer. */
     border-radius: var(--radius-panel, 0px);
+
+    /* HOW SMALL A TOOL WINDOW MAY BE, and it stated nothing at all until now -- the editor group beside
+     * it has said `min-height: 70px` since it was written. The same number the half around it takes, so
+     * the inner box can never be the one that overflows the outer. @see RegionHost#minimumSize for how
+     * either of them reaches a divider at all. */
+    min-height: var(--tool-window-min-h, 60px);
 }
 
 /* KEYED ON THE HEADER, not on the container around it. `__header__` is shared by three widgets, so the
@@ -176,6 +182,14 @@ dockgroup .__missing__ {
  * sheet's job, and a theme that wants taller chrome can still override the two rules below. */
 * {
     --panel-header-h: 22px;
+
+    /* HOW SMALL A TOOL WINDOW MAY BE MADE, wherever it is. A half stated 40 and a container stated
+     * nothing, so the two boxes that have to survive the same drag disagreed and the inner one
+     * overflowed the outer. 60px = the floating form's 80 (`.__window__.__tool-window__` in
+     * ua/desktop.css) less the 20px caption a window carries and a docked panel does not -- so one
+     * panel has ONE floor, docked or torn out. It also clears 2 x --radius-panel, below which an
+     * island's top and bottom corners meet and it stops reading as rounded. */
+    --tool-window-min-h: 60px;
 }
 
 /* ── THE RAIL FILLS ITS STRIP ────────────────────────────────────────────────────────────────────
@@ -443,6 +457,20 @@ dockgroup > tabview > .__panes__,
     width: 100%;
     height: 0;
     flex-grow: 1;
+
+    /* AND IT CLIPS, which is the other half of the container's `min-height`: a floor stops the body being
+     * squeezed to nothing, and this stops what it holds from leaving it whatever it is squeezed to.
+     *
+     * The fill idiom gives this box `height: 0` and leaves `flex-shrink` at the engine's 0, so a squeezed
+     * panel's content keeps its own height as a FLOOR and simply paints wherever that lands. An EmptyState
+     * is centred, so in a body shorter than itself it paints half of itself ABOVE its own origin -- across
+     * the header, which is where it was seen: the Library's note reading through the word `Library`.
+     * Anything content-sized does the same, so the boundary is the body's to hold and not each panel's.
+     *
+     * A SQUARE clip, so it stays on the cheap scissor path and the island's rounding stays free -- see
+     * dockgroup, where the whole feasibility argument for this look is written down. A popover opened from
+     * a panel is unaffected: the top layer is outside this box entirely. */
+    overflow: hidden;
 }
 
 /* THE STRETCH BETWEEN THE TWO GROUPS, which is what pushes the bottom one to the foot of the rail.
@@ -1593,10 +1621,14 @@ workbench splitview.__vertical__ > .__divider__ {
 }
 
 
-/* And the same floor one level down, so a region's two halves cannot squeeze each other out either. */
+/* And the same floor one level down, so a region's two halves cannot squeeze each other out either.
+ *
+ * THE SAME NUMBER as the container inside it, which is the point: this was 40 against a container that
+ * stated nothing, and a floor only binds where something reads it -- RegionHost#minimumSize is what
+ * carries either of them out to the frame's divider, and until it existed neither did anything. */
 .__region-half__ {
     min-width: 0px;
-    min-height: 40px;
+    min-height: var(--tool-window-min-h, 60px);
 }
 
 /* A region's two halves and the split between them. Both are pane children, so both fill by height --
