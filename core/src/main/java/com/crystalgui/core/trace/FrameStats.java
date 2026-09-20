@@ -7,6 +7,7 @@ import com.crystalgraphics.trace.CgTraceSnapshot;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -153,7 +154,7 @@ public final class FrameStats {
         }
         long[] sorted = new long[kept.size()];
         for (int i = 0; i < kept.size(); i++) sorted[i] = kept.get(i).wallNanos();
-        java.util.Arrays.sort(sorted);
+        Arrays.sort(sorted);
         cached = kept;
         cachedSorted = sorted;
         cachedAt = written;

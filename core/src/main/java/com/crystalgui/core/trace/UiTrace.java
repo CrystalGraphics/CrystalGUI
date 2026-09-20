@@ -139,6 +139,9 @@ public final class UiTrace {
         out.append("{\n  \"run\": \"").append(CgTraceLog.runId()).append("\",\n");
         out.append("  \"frames\": ").append(CgTrace.frameCount()).append(",\n");
         out.append("  \"droppedLines\": ").append(CgTraceLog.dropped()).append(",\n");
+        // AND DROPPED ZONES, which nothing surfaced until this review. A reader who cannot see that
+        // the arena overflowed will read a short frame as a fast one.
+        out.append("  \"droppedZones\": ").append(CgTrace.droppedZones()).append(",\n");
         out.append("  \"recording\": [");
         List<String> on = CgTrace.enabledNames();
         for (int i = 0; i < on.size(); i++) {

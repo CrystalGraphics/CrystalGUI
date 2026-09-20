@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.stream.Stream;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -34,7 +35,7 @@ public class UiTraceRunTest {
         CgTrace.resetForTesting();
         CgTraceLog.resetForTesting();
         if (Files.isDirectory(ROOT)) {
-            try (java.util.stream.Stream<Path> walk = Files.walk(ROOT)) {
+            try (Stream<Path> walk = Files.walk(ROOT)) {
                 List<Path> all = walk.toList();
                 for (int i = all.size() - 1; i >= 0; i--) Files.deleteIfExists(all.get(i));
             }
