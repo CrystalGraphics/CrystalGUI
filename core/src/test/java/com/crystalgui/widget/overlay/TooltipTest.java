@@ -9,6 +9,7 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.testsupport.UiDocumentTestBase;
+import com.crystalgui.ui.service.AnchoredPlacement;
 import org.joml.Vector2f;
 import org.junit.Test;
 
@@ -146,6 +147,27 @@ public class TooltipTest extends UiDocumentTestBase {
     }
 
     // ── Placement ───────────────────────────────────────────────────────────
+
+    @Test
+    public void aTipBesideItsAnchorIsCentredOnIt() {
+        // A RAIL BUTTON: square, and smaller than the words that name it.
+        UIElement anchor = new UIElement().layout(l -> l.width(20).height(20).marginLeft(10).marginTop(60));
+        newRoot().append(anchor);
+        attach();
+        Tooltip tip = tooltipOn(anchor);
+
+        tip.setSide(AnchoredPlacement.Side.RIGHT);
+        tip.showFor(anchor);
+        settle();
+        settle();
+
+        float anchorCentre = y(anchor) + anchor.box().height() / 2f;
+        float tipCentre = y(tip) + tip.box().height() / 2f;
+        assertEquals("centred on the button rather than sharing its top edge",
+                anchorCentre, tipCentre, 0.5f);
+        assertTrue("and the sheet is told, so the gap stops being a vertical margin",
+                tip.hasClass(Tooltip.BESIDE_CLASS));
+    }
 
     @Test
     public void showingPlacesItBelowTheAnchor() {

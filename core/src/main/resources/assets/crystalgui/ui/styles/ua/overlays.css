@@ -85,7 +85,8 @@ textfield:disabled {
  * `margin-top` is load-bearing, not decoration: Java positions the tooltip flush against the
  * anchor's bottom edge and this is what creates the visual gap. Widgets write structure, the
  * cascade writes geometry — so the gap is tunable here, per theme, without touching Java.
- * A theme that flips a tooltip above its anchor will want margin-bottom instead. */
+ * A theme that flips a tooltip above its anchor will want margin-bottom instead, and one placed BESIDE
+ * its anchor wants neither -- see `tooltip.__beside__` below. */
 
 tooltip {
     /* INSTANT BY DEFAULT, and the wait is opted into by whatever needs it (tooltip.__wait__ below).
@@ -147,6 +148,14 @@ tooltip::part(description) {
  * describes, so `.__window__ .__title-bar__ .__controls__ tooltip` can never match -- and both this
  * sheet's siblings had been written that way, asking for two seconds and getting whatever the rule
  * above said. */
+/* BESIDE ITS ANCHOR, where the gap is horizontal and the top margin is simply an offset: it would put
+ * the words below the thing they name, which is what the activity bar's labels were doing. The gap on
+ * this axis is the placement's own `gap` argument, which is the caller's to set -- a rail passes one.
+ * @see Tooltip#BESIDE_CLASS */
+tooltip.__beside__ {
+    margin-top: 0px;
+}
+
 tooltip.__wait__ {
     tooltip-delay: 0.5;
 }

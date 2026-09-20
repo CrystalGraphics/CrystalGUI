@@ -99,6 +99,14 @@ public class Tooltip extends UIElement {
      */
     private AnchoredPlacement.Side side = AnchoredPlacement.Side.BOTTOM;
 
+    /**
+     * On a tooltip placed to the LEFT or RIGHT of its anchor rather than above or below it.
+     *
+     * <p>What the sheet needs to know to stop applying the gap as a vertical margin. Written from the
+     * side actually used, not the preference, since {@link AnchoredPlacement} flips.</p>
+     */
+    public static final String BESIDE_CLASS = "__beside__";
+
     /** Distance from the anchor's edge, in logical pixels. Zero for the flush look a label wants. */
     private float gap;
 
@@ -802,7 +810,23 @@ public class Tooltip extends UIElement {
         // the pointer moves from label to icon without ever leaving the anchor, and the ticker calls
         // resolveRegion() immediately before this.
         UIElement against = activeRegion == null ? anchor : activeRegion.placedAgainst;
-        AnchoredPlacement.place(this, against, side, gap);
+        // CENTRED WHEN IT SITS BESIDE ITS ANCHOR, and left-aligned when it sits under one.
+        //
+        // The default hangs a popup from the anchor's leading edge, which is right for a dropdown and
+        // right for a tooltip UNDER a button -- the anchor is the wider of the two, so the tip reads as
+        // belonging to its left end, and two tests pin exactly that. Beside a 20px rail button it is the
+        // other way round: the tip is TALLER than the button, so a shared top edge puts the words below
+        // the icon they name. The short axis is the one where the two sizes differ, so it is the one
+        // that has to be centred.
+        AnchoredPlacement.CrossAlign cross = side.isVertical()
+                ? AnchoredPlacement.CrossAlign.START
+                : AnchoredPlacement.CrossAlign.CENTER;
+        // AND THE SHEET IS TOLD WHICH IT IS. `tooltip` carries a `margin-top` that IS the gap under an
+        // anchor -- the sheet says so, and says a theme flipping one above would want margin-bottom. It
+        // is neither when the tip sits BESIDE its anchor: there the top margin is not a gap at all but a
+        // shove down the cross axis, which is what put the rail's labels below the icons they name.
+        toggleClass(BESIDE_CLASS, !side.isVertical());
+        AnchoredPlacement.place(this, against, side, gap, cross);
     }
 
     /**

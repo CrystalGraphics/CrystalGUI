@@ -38,10 +38,10 @@ import com.crystalgui.core.data.Transform2D;
  * popup that jumped sides as the pointer crossed a midpoint would be far more distracting than one
  * that slides. That is also what {@code position-try-fallbacks: flip-block} does in practice.</p>
  *
- * <p><b>It LEFT-ALIGNS on the cross axis; it does not centre.</b> Correct for what it was written for —
- * a dropdown hangs from its button's left edge — and wrong for anything that is a label for the thing
- * beneath it. A consumer wanting a centred panel centres it after resolving and re-clamps; never here,
- * because every menu in the engine depends on this.</p>
+ * <p><b>It LEFT-ALIGNS on the cross axis by default; it does not centre.</b> Correct for what it was
+ * written for — a dropdown hangs from its button's left edge — and wrong for anything that is a label
+ * for the thing it points at. {@link CrossAlign#CENTER} is the opt-in, and it is an argument rather
+ * than a new default because every menu in the engine depends on the alignment staying as it is.</p>
  */
 public final class AnchoredPlacement {
 
@@ -57,7 +57,8 @@ public final class AnchoredPlacement {
     public enum Side {
         BOTTOM, TOP, RIGHT, LEFT;
 
-        boolean isVertical() {
+        /** Whether the popup is placed above or below rather than beside. */
+        public boolean isVertical() {
             return this == BOTTOM || this == TOP;
         }
 
@@ -86,11 +87,26 @@ public final class AnchoredPlacement {
      * error.</p>
      */
     public static void place(UIElement popup, @Nullable UIElement anchor, Side preferred, float gap) {
+        place(popup, anchor, preferred, gap, CrossAlign.START);
+    }
+
+    /** As {@link #place(UIElement, UIElement, Side, float)}, choosing how the cross axis lines up. */
+    public static void place(UIElement popup, @Nullable UIElement anchor, Side preferred, float gap,
+                             CrossAlign cross) {
         UIDocument document = popup.document();
         if (anchor == null || document == null || anchor.document() != document) return;
         Rect rect = anchorRectInRoot(anchor, document);
-        if (rect != null) placeInRect(popup, rect, preferred, gap);
+        if (rect != null) placeInRect(popup, rect, preferred, gap, cross);
     }
+
+    /**
+     * How the popup lines up on the axis it is NOT placed along.
+     *
+     * <p>{@link #START} hangs it from the anchor's leading edge, which is what a dropdown wants. {@link
+     * #CENTER} centres it, which is what a LABEL wants: a tooltip beside a 20px rail button is taller
+     * than the button, so a leading edge shared with it puts the words visibly low.</p>
+     */
+    public enum CrossAlign { START, CENTER }
 
     /**
      * Places {@code popup} at a <b>point</b> in document space — a zero-sized anchor.
@@ -104,6 +120,12 @@ public final class AnchoredPlacement {
 
     /** Places {@code popup} against an explicit rect. The other two entry points funnel into this. */
     public static void placeInRect(UIElement popup, Rect anchor, Side preferred, float gap) {
+        placeInRect(popup, anchor, preferred, gap, CrossAlign.START);
+    }
+
+    /** As {@link #placeInRect(UIElement, Rect, Side, float)}, choosing how the cross axis lines up. */
+    public static void placeInRect(UIElement popup, Rect anchor, Side preferred, float gap,
+                                   CrossAlign cross) {
         UIDocument document = popup.document();
         if (document == null) return;
         Box self = popup.box();
@@ -111,7 +133,7 @@ public final class AnchoredPlacement {
         if (self == null || root == null) return;
 
         Vector2f resolved = resolve(anchor, self.width(), self.height(),
-                root.width(), root.height(), preferred, gap);
+                root.width(), root.height(), preferred, gap, cross);
 
         final float left = resolved.x();
         final float top = resolved.y();
@@ -130,6 +152,13 @@ public final class AnchoredPlacement {
      */
     public static Vector2f resolve(Rect anchor, float selfW, float selfH,
                                    float availableW, float availableH, Side preferred, float gap) {
+        return resolve(anchor, selfW, selfH, availableW, availableH, preferred, gap, CrossAlign.START);
+    }
+
+    /** As above, choosing how the cross axis lines up. @see CrossAlign */
+    public static Vector2f resolve(Rect anchor, float selfW, float selfH,
+                                   float availableW, float availableH, Side preferred, float gap,
+                                   CrossAlign cross) {
         float x;
         float y;
         if (preferred.isVertical()) {
@@ -146,7 +175,9 @@ public final class AnchoredPlacement {
             y = side == Side.BOTTOM
                     ? anchor.y() + anchor.height() + gap
                     : anchor.y() - selfH - gap;
-            x = anchor.x();
+            x = cross == CrossAlign.CENTER
+                    ? anchor.x() + (anchor.width() - selfW) / 2f
+                    : anchor.x();
         } else {
             float roomRight = availableW - (anchor.x() + anchor.width());
             float roomLeft = anchor.x();
@@ -157,7 +188,9 @@ public final class AnchoredPlacement {
             x = side == Side.RIGHT
                     ? anchor.x() + anchor.width() + gap
                     : anchor.x() - selfW - gap;
-            y = anchor.y();
+            y = cross == CrossAlign.CENTER
+                    ? anchor.y() + (anchor.height() - selfH) / 2f
+                    : anchor.y();
         }
 
         // Clamp both axes into the containing block. The main axis is clamped too, AFTER flipping: if
