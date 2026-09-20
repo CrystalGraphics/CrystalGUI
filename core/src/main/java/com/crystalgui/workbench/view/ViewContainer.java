@@ -110,6 +110,9 @@ public class ViewContainer extends UIElement implements WindowChrome, DataProvid
     private final TabView tabs = new TabView();
     private final Button hide;
     private final UIElement titleActions = new UIElement();
+
+    /** The right-aligned row: the actions, ⋮ and Hide. @see #captionActions() */
+    private final UIElement trailing = new UIElement();
     private final ActionButton options;
 
     /** The mounted view's rows for the top of the ⋮ menu. @see TitleActionsContributor#optionsMenu */
@@ -144,7 +147,6 @@ public class ViewContainer extends UIElement implements WindowChrome, DataProvid
 
         // ONE RIGHT-ALIGNED ROW for the view's actions, ⋮ and Hide, so one spacing rule governs every icon on the
         // line and the auto margin that pushes them to the edge lives in one place.
-        UIElement trailing = new UIElement();
         trailing.addClass(TITLE_TRAILING_CLASS);
         titleActions.addClass(TITLE_ACTIONS_CLASS);
         trailing.append(titleActions);
@@ -333,6 +335,33 @@ public class ViewContainer extends UIElement implements WindowChrome, DataProvid
     @Override
     public UIElement captionChrome() {
         return header;
+    }
+
+    /**
+     * The view's own controls, for a caption's button strip.
+     *
+     * <p>In a region they sit at the right of this panel's header; in a frame the whole header is adopted
+     * into the caption, where it shrink-wraps to its title — it may not grow, because the emptied label
+     * after it is the window's only pointer-transparent element and therefore its entire drag region. So
+     * the actions would sit against the title with the caption's width between them and the window
+     * buttons. Adopted separately, they land where they belong: immediately left of Dock, pin and
+     * minimise.</p>
+     *
+     * <p>The whole trailing row, not {@link #titleActions} alone: the ⋮ and the hide mark are its
+     * siblings, and leaving them behind would split one strip of icons across both ends of the caption.
+     * The hide mark is already suppressed while adopted, since the frame draws its own.</p>
+     */
+    @Override
+    public UIElement captionActions() {
+        // AND IT STILL ANSWERS TO THIS CONTAINER. An ActionButton resolves its command against the element
+        // it is TOLD about, or against itself when nothing named one -- and a view that named nothing was
+        // perfectly correct while the button sat in its own header. Adopted into a caption, "itself" climbs
+        // into the window frame instead and every action quietly resolved against the wrong subtree: the
+        // buttons drew, hovered and pressed, and did nothing. The opener is the engine's own answer to a
+        // node lent somewhere it does not belong -- the same reason a popup has one -- so the walk outward
+        // steps back in here whatever the row is currently parented to.
+        trailing.setOpener(this);
+        return trailing;
     }
 
     /**
