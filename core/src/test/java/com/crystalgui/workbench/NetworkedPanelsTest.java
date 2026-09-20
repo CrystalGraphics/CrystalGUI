@@ -45,7 +45,6 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
-import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
 
@@ -213,17 +212,16 @@ public class NetworkedPanelsTest extends UiDocumentTestBase {
 
         DockPanelRef ref = refs().stream()
                 .filter(r -> r.typeId().equals(NetPanel.TYPE.id())).findFirst().orElseThrow();
-        DockLeaf from = workbench.dock().layout().leaves().stream()
-                .filter(leaf -> leaf.indexOf(ref) >= 0).findFirst().orElseThrow();
 
-        // A LEAF OF ITS OWN, which is the structural half of a tear-out: DockArea.tearOutToWindow moves
-        // the panel into a new leaf and hands that leaf to a DockWindow. A layout will not give up its
-        // last leaf, so a tab that is alone has to be split out before it can be taken out.
-        DockLeaf into = workbench.dock().layout()
-                .drop(from, DockDropZone.SPLIT_RIGHT, new DockLeaf());
-        assertTrue("the panel moved to its own leaf",
-                workbench.dock().layout().movePanel(ref, into, 0));
-        workbench.dock().layout().tearOut(into);
+        // THE PRODUCT'S OWN TEAR-OUT, which is what a drag off the tab strip ends in and what IntelliJ
+        // calls Open Tab in New Window. It detaches through the same `detach` a drop uses, so the source
+        // collapses exactly as it would have if the panel had landed in another dock.
+        //
+        // This drove split/move/tearOut by hand, which re-implemented that -- and the re-implementation
+        // rested on the emptied source leaf LINGERING to keep the layout above its one-leaf floor. The
+        // day an emptied central leaf stopped lingering, a test about the wire went red for a reason
+        // that had nothing to do with the wire.
+        workbench.dock().openInNewWindow(ref);
         workbench.dock().requestRebuild();
         settle();
 
