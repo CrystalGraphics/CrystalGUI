@@ -1,121 +1,12 @@
 /* ua/search.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
  *
- * The main menu bar, the explorer's inline editor, the tree find bar, the search box, the editor's find & replace bar.
+ * The explorer's inline editor, the tree find bar, the search box, the editor's find & replace bar.
  *
  * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
  * one sheet the engine loads — rule order across files is as load-bearing as within one
  * (:disabled after :hover ties), so files split at section boundaries and never reorder.
  * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
  * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
-
-/* ── The main menu bar ──────────────────────────────────────────────────────────────────────────
- *
- * A row of titles above everything, and — like the status bar — it must keep its height at every
- * window size, or opening a menu would reflow every region below it. `flex-shrink: 0` is what states
- * that; nothing here is positioned. */
-.__menu-bar__ {
-    flex-direction: row;
-    align-items: center;
-    flex-shrink: 0;
-    height: 22px;
-    padding-left: 24px;
-    background-color: var(--menubar-bg, #3C3F41);
-}
-
-.__menu-bar__ .__menu-title__ {
-    flex-direction: row;
-    align-items: center;
-    flex-shrink: 0;
-    height: 22px;
-    padding-left: 4px;
-    padding-right: 4px;
-    color: var(--menubar-fg, #BBBBBB);
-    cursor: pointer;
-}
-
-/* THE SIZE GOES ON THE TEXT ELEMENT, NEVER ON THE TITLE, and this is not a style preference.
- *
- * `* { font-size: 10 }` at the top of this file gives EVERY element a candidate at STYLESHEET origin --
- * and inheritance only applies where there is no candidate at any origin. So font-size does not
- * inherit anywhere in this engine, whatever `setInheritable(true)` says on the property. Declared on
- * the title it computes correctly on the title and the label beside it still renders at 10.
- *
- * `statusbarview .__status-item__` works only because the status item IS its text element; a widget that
- * wraps its label -- as this one does, to give the title padding and a hover fill -- has to say it twice
- * or say it here.
- *
- * SMALLER THAN THE MENU IT OPENS, deliberately, which is the one thing here that looks like a mistake
- * and is not. It was 10 to match `menuitem`, on the reasoning that a title and its rows are one
- * control. But the bar is not read the way a menu is: a menu is a list you scan once it is open,
- * while the bar is permanent chrome sitting above the work area all the time, and at the same size as
- * the rows it opens it competed with the panel titles beside it. Both references set the bar below
- * their menu body for the same reason. The rows stay at 10 -- nothing about this rule reaches them. */
-.__menu-bar__ .__menu-title__ text {
-    font-size: 8;
-}
-
-.__menu-bar__ .__menu-title__:hover {
-    background-color: var(--menubar-hover-bg, #4C5052);
-}
-
-/* THE OPEN TITLE STAYS LIT while its menu is down, which is the only thing on screen tying the popup
- * to the word it came from. A class rather than `:active`, which means "pressed" and would go out the
- * moment the button came up. */
-.__menu-bar__ .__menu-title__.__open__ {
-    background-color: var(--menubar-hover-bg, #4C5052);
-    color: var(--menubar-open-fg, #FFFFFF);
-}
-
-/* THE MNEMONIC UNDERLINE, drawn only while Alt is held. A text range rather than three elements: a
- * split label would reflow the bar on every Alt press, and — worse — would re-shape across two span
- * boundaries, so every title would shift by a fraction of a pixel. `::highlight()` exists precisely so
- * a range can be styled without being wrapped. */
-::highlight(mnemonic) {
-    text-decoration-line: underline;
-    /* NO font-size HERE, and not by oversight: a highlight takes only properties that cannot affect
-     * layout (CSS Pseudo-Elements 4), so that marking a range can never reflow the text it marks --
-     * this engine warns and ignores. The rule follows the ORIGINATING text's metrics, so it is already
-     * an 8px underline the moment `.__menu-title__ text` is 8px. Size the word, not the mark. */
-}
-
-/* THE BURGER — the collapsed bar. Boxes rather than a ☰ glyph: the bundled Minecraft fonts have no
- * U+2630 and it renders as tofu, the same trap UIText records for U+2026 and ViewContainer for its
- * close mark. Geometry, so it works with no theme loaded, and every part is still themeable.
- *
- * 14px, DOWN FROM 22, and the caption is why: `.__window__ > .__title-bar__` is `min-height: 20px`, so a
- * 22px button was the tallest thing in the row and grew the caption around itself — the bar was setting
- * the height of the window chrome it was adopted into. 14 leaves 3px above and below, and matches the
- * window's own icon beside it, which is the other 14px thing in this row.
- *
- * The MARK inside it is 10 wide and four bars tall — the count IntelliJ's has: at 2px bars and 3px gaps
- * it read as a control rather than a glyph, and heavier than the tile next to it. Four hairlines at 1px
- * with 2px between them is 10px of mark, square, in a 14px button. */
-.__menu-bar__ .__burger__ {
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    flex-shrink: 0;
-    width: 14px;
-    height: 14px;
-    gap: 2px;
-    border-radius: var(--radius-control, 3px);
-    cursor: pointer;
-}
-
-/* NO OPEN STATE, and it is not an omission: pressing the burger REVEALS THE BAR, so there is never a
- * frame where the burger is on screen with a menu of its own up. The bar standing where the button was
- * is the feedback, and a lit button underneath it would be a second one for the same thing.
- * @see MenuBarView#toggleMainMenu */
-.__menu-bar__ .__burger__:hover {
-    background-color: var(--menubar-hover-bg, #4C5052);
-}
-
-.__menu-bar__ .__burger-bar__ {
-    width: 10px;
-    height: 1px;
-    flex-shrink: 0;
-    background-color: var(--menubar-burger-fg, #BBBBBB);
-}
 
 /* ── The explorer's inline editor ───────────────────────────────────────────────────────────────
  *
