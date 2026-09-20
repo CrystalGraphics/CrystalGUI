@@ -432,6 +432,7 @@ editor scheme's.
 | `--menu-separator` | `var(--border-base)` | base.css |
 | `--menubar-bg` | `var(--surface-base)` | base.css |
 | `--menubar-burger-fg` | `var(--fg-secondary)` | base.css |
+| `--menubar-burger-hover-fg` | `var(--fg)` | base.css |
 | `--menubar-disabled-fg` | `var(--fg-disabled)` | base.css |
 | `--menubar-fg` | `var(--fg)` | base.css |
 | `--menubar-hover-bg` | `var(--hover-bg)` | base.css |
