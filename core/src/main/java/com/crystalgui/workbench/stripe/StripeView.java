@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.stripe;
 
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
@@ -563,7 +564,13 @@ public class StripeView extends UIElement {
         List<ItemButton> primary = slotButtons(rail.topRegion(), RegionSide.PRIMARY);
         List<ItemButton> secondary = slotButtons(rail.topRegion(), RegionSide.SECONDARY);
         wanted.addAll(primary);
-        if (!primary.isEmpty() && !secondary.isEmpty()) wanted.add(separator);
+        // ALWAYS, even when nothing is shown there. The separator used to be added and REMOVED as the halves
+        // filled and emptied, and a child that comes and goes cannot be an anchor: the empty lower slot is
+        // placed relative to it, so on the frame it was not yet in the tree the marker fell back to the
+        // start of the parent and the slot flashed at the top of the rail. It is a permanent child whose
+        // APPEARANCE changes -- see refreshSeparator -- which also keeps the child order stable, so a drag
+        // never re-parents anything.
+        wanted.add(separator);
         wanted.addAll(secondary);
         // ALWAYS PRESENT, always between the groups -- see SPACER_CLASS. It is placed even when the bottom
         // group is empty, so opening one during a drag does not have to re-derive where the stretch goes.
@@ -580,9 +587,7 @@ public class StripeView extends UIElement {
             }
             previous = index;
         }
-        // THE SEPARATOR MAY NOT BE WANTED AT ALL, and an element left in the tree from a previous layout
-        // would sit wherever it was appended. Taken out first, put back only if `wanted` names it.
-        if (!wanted.contains(separator)) remove(separator);
+        refreshSeparator();
         if (correct) return;
         for (UIElement element : wanted) {
             remove(element);
@@ -641,23 +646,79 @@ public class StripeView extends UIElement {
      * end, which is usually near the top, so everything between it and the middle of the window read as
      * PRIMARY and a button dragged just below the separator went back where it came from.</p>
      *
+     * <p>{@code railY} is in THIS RAIL'S OWN SPACE, not surface pixels: {@code worldY()} is a surface
+     * coordinate while {@code height()} is logical, so comparing one against the other puts the boundary
+     * at a fraction of where it belongs the moment uiScale is not 1 -- which is exactly how this read as
+     * "the drag decides immediately and will not come down".</p>
+     *
      * <p>The boundary is the last upper button's bottom edge, which is where the separator is drawn; with
      * nothing above it, the first lower button's top edge instead, so an empty upper half stays reachable.
      * Below every button is the lower half, which is the gesture that CREATES one.</p>
      */
     @Nullable
-    public RegionSide sideAt(DockRegion region, float screenY) {
+    public RegionSide sideAt(DockRegion region, float railY) {
+        // THE BOUNDARY AS IT WAS WHEN THE DRAG STARTED, on the rail carrying it. Withdrawing a button
+        // reflows the rail, so a boundary read live MOVES as a side effect of picking something up: drag
+        // an UPPER button and the upper group shrinks by a slot, the boundary rises past the pointer that
+        // has not gone anywhere, and the gesture reads as "below the separator" from the first frame.
+        // Dragging UP never showed it, because withdrawing a lower button leaves the upper group alone --
+        // which is exactly the asymmetry it was reported as.
+        float boundary = boundaryFor(region);
+        if (Float.isNaN(boundary)) return null;
+        return railY < boundary ? RegionSide.PRIMARY : RegionSide.SECONDARY;
+    }
+
+    /**
+     * The line between the halves, in this rail's space — <b>the separator's own middle</b> whenever it is
+     * on screen.
+     *
+     * <p><b>It has to be the same line the marker's own walk uses, or the seam swallows a slot on each
+     * side.</b> The index within a half comes from the midpoint of its buttons; if the side comes from
+     * somewhere else, the two disagree exactly where they meet — the last place in the upper half and the
+     * first in the lower both become unreachable, which is symmetric and is how it was reported. The
+     * separator is a real slot sitting between the two runs, so measuring the side from its middle makes
+     * "past the last upper button" and "before the first lower one" the same question asked once.</p>
+     *
+     * <p>The fallbacks are for the opening frame only, before the preview has given the separator a box:
+     * the arrangement at drag start, then the live upper edge. Reading the LIVE edge alone is what made
+     * dragging down fail originally — withdrawing an upper button shrinks that half, so the line rose past
+     * a pointer that had not moved.</p>
+     */
+    private float boundaryFor(DockRegion region) {
+        Box rail = box();
+        Box line = separator.box();
+        if (rail != null && line != null && region == rail().topRegion()) {
+            return Box.originIn(line, rail).y + line.height() / 2f;
+        }
+        if (region == dragBoundaryRegion && !Float.isNaN(dragBoundary)) return dragBoundary;
+        return boundaryOf(region);
+    }
+
+    /**
+     * Where the upper half ends, in this rail's own space — the last upper button's bottom edge, which is
+     * where the separator is drawn. With nothing above it, the first lower button's top edge instead, so
+     * an empty upper half stays reachable. {@code NaN} when neither half has anything to measure.
+     */
+    private float boundaryOf(DockRegion region) {
+        Box rail = box();
+        if (rail == null) return Float.NaN;
         ItemButton last = lastOf(slotButtons(region, RegionSide.PRIMARY));
         if (last != null) {
             Box box = last.box();
-            return box == null ? null : screenY < box.worldY() + box.height()
-                    ? RegionSide.PRIMARY : RegionSide.SECONDARY;
+            return box == null ? Float.NaN : Box.originIn(box, rail).y + box.height();
         }
         ItemButton first = firstOf(slotButtons(region, RegionSide.SECONDARY));
-        if (first == null) return null;   // neither half has anything to measure a boundary from
+        if (first == null) return Float.NaN;
         Box box = first.box();
-        return box == null ? null : screenY < box.worldY() ? RegionSide.PRIMARY : RegionSide.SECONDARY;
+        return box == null ? Float.NaN : Box.originIn(box, rail).y;
     }
+
+    /** @see #sideAt */
+    private float dragBoundary = Float.NaN;
+
+    /** @see #sideAt */
+    @Nullable
+    private DockRegion dragBoundaryRegion;
 
     /** The last button that still has a box — the one being carried is hidden and measures nothing. */
     @Nullable
@@ -707,6 +768,7 @@ public class StripeView extends UIElement {
         // children include a stretch and a separator, so "the start of the parent" is right for the top
         // group and puts the bottom group's slot at the wrong end of the rail.
         if (targets.isEmpty()) prepareEmptySlot(region, side);
+        previewing(region == rail.topRegion() ? side : null);
         return insertion.showFor(this, targets, screenX, screenY);
     }
 
@@ -745,13 +807,54 @@ public class StripeView extends UIElement {
         // whole test.
         if (region == DockRegion.PANEL) return spacer;
         if (side == RegionSide.PRIMARY) return null;
-        List<ItemButton> primary = slotButtons(rail.topRegion(), RegionSide.PRIMARY);
-        return primary.isEmpty() ? null : primary.get(primary.size() - 1);
+        // THE SEPARATOR, always: it is a permanent child sitting exactly between the halves, so it is the
+        // one anchor that is valid on every frame of a drag and means the same thing whichever button was
+        // picked up. The last upper BUTTON was tried and is not: drag the lowest one down and the anchor is
+        // the button being carried -- withdrawn, boxless -- so the slot jumped to the top of the rail.
+        return separator;
     }
 
     void hideInsertion() {
+        previewing(null);
         insertion.hide();
     }
+
+    /**
+     * Records which half a live drag is aiming at, and shows the separator for a half that is still empty
+     * so the threshold you just crossed is something you can SEE.
+     *
+     * <p>Applied AT ONCE rather than through {@link #requestSync()}: it is a style write, which is safe
+     * inside the gesture that caused it, where re-parenting is not. Deferring it to the next frame is what
+     * made crossing the line flicker -- for one frame the rail had the old arrangement and the new
+     * answer.</p>
+     */
+    private void previewing(@Nullable RegionSide side) {
+        if (previewSide == side) return;
+        previewSide = side;
+        refreshSeparator();
+    }
+
+    /**
+     * Shows the separator when it has something to separate: both halves occupied, or a live drag aiming at
+     * the one that is still empty.
+     *
+     * <p>{@code display}, so a hidden separator is out of layout entirely and takes no room -- while
+     * staying a CHILD, which is what lets the empty lower slot anchor to it on every frame.</p>
+     */
+    private void refreshSeparator() {
+        List<ItemButton> primary = slotButtons(rail.topRegion(), RegionSide.PRIMARY);
+        List<ItemButton> secondary = slotButtons(rail.topRegion(), RegionSide.SECONDARY);
+        // FOR THE WHOLE DRAG, not only when the half being aimed at is empty: it is the line the side is
+        // measured from, so it has to be on screen and laid out the entire time the question is being
+        // asked -- and showing the user the boundary they are crossing is the point of it.
+        boolean show = previewSide != null || (!primary.isEmpty() && !secondary.isEmpty());
+        StyleGroup.defaultPipeline(separator.getStyle().getLayoutGroup(),
+                l -> l.display(show ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+    }
+
+    /** @see #previewing */
+    @Nullable
+    private RegionSide previewSide;
 
     /**
      * Takes the button out of the rail for the duration of a drag, and opens the gap where it was.
@@ -763,6 +866,10 @@ public class StripeView extends UIElement {
     private void beginDrag(ItemButton button) {
         if (button.typeId.equals(dragging)) return;
         ToolWindowManager toolWindows = workbench.toolWindowManager();
+        // BEFORE `dragging` is set and before the withdraw below, so the boundary still counts the button
+        // being picked up: it holds still under the pointer that grabbed it. @see #sideAt
+        dragBoundaryRegion = toolWindows.regionOf(button.typeId);
+        dragBoundary = boundaryOf(dragBoundaryRegion);
         dragging = button.typeId;
         suppressActivation = true;
         insertion.withdraw(this,
@@ -774,6 +881,9 @@ public class StripeView extends UIElement {
     private void endDrag() {
         if (dragging == null) return;
         dragging = null;
+        dragBoundary = Float.NaN;
+        dragBoundaryRegion = null;
+        previewing(null);
         insertion.restore();
     }
 
