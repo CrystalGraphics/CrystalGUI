@@ -431,7 +431,8 @@ editor scheme's.
 | `--menu-mark` | `var(--fg)` | base.css |
 | `--menu-separator` | `var(--border-base)` | base.css |
 | `--menubar-bg` | `var(--surface-base)` | base.css |
-| `--menubar-fg` | `var(--fg-secondary)` | base.css |
+| `--menubar-burger-fg` | `var(--fg-secondary)` | base.css |
+| `--menubar-fg` | `var(--fg)` | base.css |
 | `--menubar-hover-bg` | `var(--hover-bg)` | base.css |
 | `--menubar-open-fg` | `var(--fg)` | base.css |
 | `--modified` | `#E2C08D` | crystal-dark.css |
