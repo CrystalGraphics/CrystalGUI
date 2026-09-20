@@ -247,10 +247,14 @@ public class RegionDropOverlay extends UIElement {
             if (stripe.rail() != StripeRail.of(target.region(), target.side())) continue;
             Box box = stripe.box();
             if (box == null) continue;
-            float localX = position.x() - box.worldX();
-            float localY = position.y() - box.worldY();
-            if (localX < 0f || localY < 0f || localX > box.width() || localY > box.height()) continue;
-            RegionSide side = stripe.sideAt(target.region(), position.y());
+            // THE RAIL'S OWN SPACE, both the containment test and the boundary. `toLocal` puts the rail's
+            // origin at zero and its units are the LOGICAL ones `width()` and `height()` are in; a
+            // surface coordinate measured against those is a different number at every uiScale but one.
+            Vector2f local = stripe.toLocal(position.x(), position.y());
+            if (local.x() < 0f || local.y() < 0f || local.x() > box.width() || local.y() > box.height()) {
+                continue;
+            }
+            RegionSide side = stripe.sideAt(target.region(), local.y());
             return side == null || side == target.side()
                     ? target : new RegionDropZones.Target(target.region(), side);
         }
