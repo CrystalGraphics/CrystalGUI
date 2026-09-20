@@ -79,6 +79,10 @@ public class MenuBarViewTest extends UiDocumentTestBase {
 
         bar = new MenuBarView(registry);
         bar.addMenu(fileMenu, "&File").addMenu(editMenu, "&Edit");
+        // EXPANDED FOR THE AFFORDANCE TESTS, because the shipped default is the burger and most of what
+        // is below is about what a title does once you can see it. The default itself is pinned by
+        // theBarIsABurgerByDefault, which builds its own bar so this line cannot hide it.
+        bar.setCollapsed(false);
         root.append(bar);
         frame();
     }
@@ -97,6 +101,14 @@ public class MenuBarViewTest extends UiDocumentTestBase {
      * first — indexing straight into the children silently pressed the burger and every affordance test
      * failed at once.</p>
      */
+    /** The collapsed bar's one button. */
+    private UIElement burger() {
+        for (UIElement child : bar.children()) {
+            if (child.hasClass(MenuBarView.BURGER_CLASS)) return child;
+        }
+        throw new AssertionError("no burger");
+    }
+
     private UIElement titleAt(int index) {
         List<UIElement> found = new ArrayList<>();
         for (UIElement child : bar.children()) {
@@ -503,12 +515,135 @@ public class MenuBarViewTest extends UiDocumentTestBase {
                 bar.openMenu());
     }
 
+    /**
+     * <b>Pressing the burger puts the BAR back, with its first menu open.</b>
+     *
+     * <p>Not a menu of menus. IntelliJ's burger reveals the bar and hands the interaction straight back
+     * to it, which is what makes hover-switching, the mnemonics and Left/Right go on working — none of
+     * them knows the state exists.</p>
+     */
     @Test
-    public void anExplicitChoiceSurvivesAWidthThatWouldNotHaveCollapsed() {
+    public void pressingTheBurgerRevealsTheBarWithItsFirstMenuOpen() {
         bar.setCollapsed(true);
         frame();
+        rawPress(burger());
         frame();
-        assertTrue("the automatic check must not undo a user's answer", bar.isCollapsed());
+
+        assertEquals("File opened", fileMenu, bar.openMenu());
+        assertTrue("and the titles are back", widthOf(titleAt(0)) > 0f);
+        assertEquals("while the burger stands down", 0f, widthOf(burger()), 0.01f);
+        assertTrue("the standing decision is untouched -- this is a reveal, not an expansion",
+                bar.isCollapsed());
+    }
+
+    /** And closing it puts the burger back, since the reveal lasts exactly as long as the menu. */
+    @Test
+    public void closingTheRevealedMenuPutsTheBurgerBack() {
+        bar.setCollapsed(true);
+        frame();
+        rawPress(burger());
+        frame();
+        bar.close();
+        frame();
+
+        assertNull(bar.openMenu());
+        assertTrue("the burger is back", widthOf(burger()) > 0f);
+        assertEquals("and the titles are gone again", 0f, widthOf(titleAt(0)), 0.01f);
+    }
+
+    /**
+     * <b>Switching menus inside a revealed bar does not collapse it.</b>
+     *
+     * <p>The regression this exists for: switching is close-then-open, and while the close also ended
+     * the reveal, the first hover onto Edit put the burger back under the menu it was opening — which
+     * left File open and anchored to a title that had just been hidden. Pressing the burger appeared to
+     * do nothing at all.</p>
+     */
+    @Test
+    public void switchingInsideARevealedBarKeepsItRevealed() {
+        bar.setCollapsed(true);
+        frame();
+        rawPress(burger());
+        frame();
+
+        hover(titleAt(1));
+        frame();
+
+        assertEquals("the switch happened", editMenu, bar.openMenu());
+        assertTrue("and the bar is still on screen", widthOf(titleAt(1)) > 0f);
+        assertEquals("with no burger under it", 0f, widthOf(burger()), 0.01f);
+    }
+
+    /**
+     * <b>Hovering a title with nothing under it leaves the open menu alone.</b>
+     *
+     * <p>Switching is close-then-open, and while the close ran BEFORE the new menu was built, passing
+     * over an empty title — Graph, with no graph loaded — dismissed the open one and then opened
+     * nothing. That left {@code openTitle} null, and since hover-switching is guarded on it the bar went
+     * inert: every further hover did nothing, and only a fresh click could arm it again.</p>
+     */
+    @Test
+    public void anEmptyTitleNeitherOpensNorCloses() {
+        MenuId empty = MenuId.of("bar/empty/" + counter++);
+        bar.addMenu(empty, "&Graph");
+        frame();
+
+        rawPress(titleAt(0));
+        assertEquals(fileMenu, bar.openMenu());
+
+        hover(titleAt(2));
+        frame();
+        assertEquals("the empty title changed nothing", fileMenu, bar.openMenu());
+
+        hover(titleAt(1));
+        frame();
+        assertEquals("and the chain still switches afterwards", editMenu, bar.openMenu());
+    }
+
+    /**
+     * <b>A press on the bar's own blank space closes, and takes the reveal with it.</b>
+     *
+     * <p>Titles and the burger consume their presses, so one that reaches the bar landed on nothing at
+     * all: with a menu open on a revealed bar, clicking the strip beside File left the menu up and the
+     * burger gone, which reads as the chrome having broken.</p>
+     */
+    @Test
+    public void pressingTheBarsBlankSpaceClosesAndRestoresTheBurger() {
+        bar.setCollapsed(true);
+        frame();
+        rawPress(burger());
+        frame();
+        assertEquals(fileMenu, bar.openMenu());
+
+        rawPress(bar);
+        frame();
+
+        assertNull("the menu is gone", bar.openMenu());
+        assertTrue("and the burger is back", widthOf(burger()) > 0f);
+    }
+
+    /**
+     * <b>A bar is a burger unless its host says otherwise.</b>
+     *
+     * <p>Its own bar, not the fixture's: {@code setUp} expands that one so the affordance tests can
+     * reach a title, and a default asserted against a bar somebody already changed asserts nothing.</p>
+     */
+    @Test
+    public void theBarIsABurgerByDefault() {
+        MenuBarView fresh = new MenuBarView(registry);
+        fresh.addMenu(fileMenu, "&File");
+        root.append(fresh);
+        frame();
+
+        assertTrue(fresh.isCollapsed());
+        for (UIElement child : fresh.children()) {
+            if (child.hasClass(MenuBarView.TITLE_CLASS)) {
+                assertEquals("a title takes no space until the burger is pressed", 0f, widthOf(child), 0.01f);
+            }
+            if (child.hasClass(MenuBarView.BURGER_CLASS)) {
+                assertTrue("and the burger is what is on screen", widthOf(child) > 0f);
+            }
+        }
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────

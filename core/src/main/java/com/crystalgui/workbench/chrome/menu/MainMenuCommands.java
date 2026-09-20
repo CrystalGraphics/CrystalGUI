@@ -25,28 +25,22 @@ public final class MainMenuCommands {
     private MainMenuCommands() {
     }
 
-    /** Collapses the menu bar to a burger, or expands it. IntelliJ's New UI option. */
-    public static final String TOGGLE_BURGER = "view.menuBarAsBurger";
+    /** Opens the main menu under the burger. F10, as in IntelliJ and every Windows menu bar. */
+    public static final String SHOW_MAIN_MENU = "view.mainMenu";
 
     public static final String ABOUT = "help.about";
     public static final String DOCUMENTATION = "help.documentation";
 
     static void register(CommandRegistry registry) {
-        registry.register(Command.of(TOGGLE_BURGER, "Main Menu as Burger")
-                .menu(MenuId.MAIN_VIEW, "1_appearance", 20)
-                // The bar comes from the DATA CONTEXT, never captured: two windows would otherwise share
-                // one bar's state, which is the same reason Workbench.SHOW_PROBLEMS reads WORKBENCH rather
-                // than closing over a workbench.
-                .toggledWhereData(data -> {
-                    MenuBarView bar = data.get(MenuBarView.MENU_BAR);
-                    return bar != null && bar.isCollapsed();
-                })
+        // A COMMAND, so the burger is reachable by key and findable in the palette. Every title beside it
+        // is a word with a mnemonic; the burger is a picture, and a picture that only answers the mouse is
+        // the one control in the caption with no name at all.
+        registry.register(Command.of(SHOW_MAIN_MENU, "Main Menu")
+                .binding("F10")
                 .enabledWhereData(data -> data.get(MenuBarView.MENU_BAR) != null)
                 .runWithData(data -> {
                     MenuBarView bar = data.get(MenuBarView.MENU_BAR);
-                    // An explicit Boolean, which is what turns the automatic width check OFF -- a user who
-                    // asks for a burger must keep it when the window is widened again.
-                    if (bar != null) bar.setCollapsed(!bar.isCollapsed());
+                    if (bar != null) bar.toggleMainMenu();
                 }));
 
         registry.register(Command.of(ABOUT, "About")
