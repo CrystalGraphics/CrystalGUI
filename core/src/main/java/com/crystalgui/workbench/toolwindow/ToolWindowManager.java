@@ -435,6 +435,7 @@ public final class ToolWindowManager {
         if (wasOpen) hidePanel(typeId);
         toolWindows.put(placementOf(typeId).withRegion(region).withSide(side));
         if (wasOpen) showPanel(typeId);
+        if (!promoting) promoteLoneHalves();
         // NOT ANNOUNCED HERE: the `put` above does it, and it does so EVEN WHEN THE PANEL WAS CLOSED --
         // which is the property this call site existed for. A closed tool window still has a button, and
         // moving that button is the ordinary way to say where it should open next time.
@@ -457,7 +458,10 @@ public final class ToolWindowManager {
      */
     public void moveTo(String typeId, DockRegion region, RegionSide side, int index) {
         moveTo(typeId, region, side);
-        if (index < 0) return;
+        if (index < 0) {
+            promoteLoneHalves();
+            return;
+        }
 
         List<String> group = groupOf(region, side);
         group.remove(typeId);
@@ -469,6 +473,44 @@ public final class ToolWindowManager {
             // permanently. The symptom is precise and was reported as such: nothing can be dropped BELOW
             // the last button until that button has itself been moved once and earned a real order.
             toolWindows.put(placementOf(group.get(at)).withOrder(at));
+        }
+        promoteLoneHalves();
+    }
+
+    /**
+     * Gives a region's lower half back to its upper one when the upper has emptied.
+     *
+     * <p><b>A lower half with nothing above it is not a lower half.</b> The two stack, so with the upper
+     * one empty the lower renders at the top of the rail anyway — the arrangement is indistinguishable from
+     * "everything in the upper half", except for a separator with nothing above it and, worse, a default:
+     * a tool window opening for the first time lands in the UPPER half, so it would appear above the lot
+     * and split the rail nobody asked to split.</p>
+     *
+     * <p>Only when the upper half is EMPTY, which is what keeps this from undoing the gesture it looks
+     * like it should. Dragging a button down out of a populated upper half is a real split and survives;
+     * dragging the last one down is a move to a place that does not exist yet, and it comes back.</p>
+     */
+    /** Re-entrancy guard: the promotion moves panels, and a move asks for a promotion. */
+    private boolean promoting;
+
+    private void promoteLoneHalves() {
+        if (promoting) return;
+        promoting = true;
+        try {
+            for (DockRegion region : DockRegion.values()) {
+                if (region == DockRegion.EDITOR) continue;
+                if (!groupOf(region, RegionSide.PRIMARY).isEmpty()) continue;
+                for (String typeId : groupOf(region, RegionSide.SECONDARY)) {
+                    // HIDDEN FIRST, then repointed, then shown -- the discipline moveTo already keeps,
+                    // because an open panel repointed in place stays mounted in the half it has left.
+                    boolean wasOpen = isPanelOpen(typeId);
+                    if (wasOpen) hidePanel(typeId);
+                    toolWindows.put(placementOf(typeId).withSide(RegionSide.PRIMARY));
+                    if (wasOpen) showPanel(typeId);
+                }
+            }
+        } finally {
+            promoting = false;
         }
     }
 
