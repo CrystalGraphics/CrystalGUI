@@ -1,6 +1,7 @@
 package com.crystalgui.core.trace;
 
 import com.crystalgraphics.trace.CgTrace;
+import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgui.core.CrystalGuiCore;
 
 import java.util.ArrayList;
@@ -118,7 +119,7 @@ public final class FrameProfile {
         // THE FILE IS REASON ENOUGH. The line used to require the property because the property was
         // the only thing that made it affordable; now that it goes to a queue rather than a console,
         // a run with a log open wants it whether or not anybody is watching a terminal.
-        if (frameStart == 0L || (!ENABLED && !com.crystalgraphics.trace.CgTraceLog.isOpen())) return;
+        if (frameStart == 0L || (!ENABLED && !CgTraceLog.isOpen())) return;
         logSlowFrame();
     }
 
@@ -129,7 +130,7 @@ public final class FrameProfile {
         if (!timing()) return;
         long now = System.nanoTime();
         CgTrace.zoneDone(UiTrace.FRAME, bucket, now - nanos, now);
-        if (ENABLED) PHASES.merge(bucket, nanos, Long::sum);
+        PHASES.merge(bucket, nanos, Long::sum);
     }
 
     /** Starts a timing for {@link #end}; returns 0 when nothing is recording, so a caller needs no branch. */
@@ -141,8 +142,12 @@ public final class FrameProfile {
     public static void end(long started, String bucket) {
         if (started == 0L) return;
         long now = System.nanoTime();
+        // MERGED WHENEVER THE FRAME IS TIMED, not only when the property is set. The slow-frame line
+        // goes to the run's file now, so it is written whenever a log is open -- and gated on ENABLED
+        // this map stayed empty, which printed `[frame] 35ms` with no breakdown at all. The breakdown
+        // is the only part of that line worth reading.
         CgTrace.zoneDone(UiTrace.FRAME, bucket, started, now);
-        if (ENABLED) PHASES.merge(bucket, now - started, Long::sum);
+        PHASES.merge(bucket, now - started, Long::sum);
     }
 
     /** Records a count worth seeing beside the times — how many elements, rows, marks. */

@@ -1413,12 +1413,18 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                service; it names no GL and no loader
   .trace                       WHAT A FRAME COST, and who asked. UiTrace (CrystalGUI's three channels —
                                `crystalgui.frame` for phases and counters, `.flow` for chains that
-                               outlive a frame, `.blame` for the stack walk), FrameProfile (the API 275
+                               outlive a frame, `.blame` for the stack walk — plus `useCacheRoot`, the
+                               run directory, `export()` and `writeMeta()`), FrameProfile (the API 275
                                call sites use, a FORWARDER onto CrystalGraphics' CgTrace since T3) and
                                FrameStats (the readout's model — a VIEW over the ring, with no storage
                                of its own). The capture engine itself is CrystalGraphics'
                                `com.crystalgraphics.trace`, in its PLATFORM module rather than core, so
                                a dedicated server and `headlessTest` can both reach it.
+                               **A run writes `cache/trace/latest/`** — `trace.log` (off the frame
+                               thread, on a bounded queue that drops and COUNTS), `trace.json` (Chrome's
+                               format, which ui.perfetto.dev opens) and `meta.json` (which channels were
+                               and were not recording). NOTHING goes to the game console unless
+                               `-Dcrystalgui.frameprofile=true`, which adds it rather than replacing it.
                                plan/platform-trace-engine.md
   .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
                                DOCUMENT, never per window
