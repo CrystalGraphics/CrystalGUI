@@ -66,6 +66,10 @@ public final class LanguageLifecycle {
         // init it has the whole world load to arrive in. @see PlatformMappings#start
         PlatformMappings.start();
 
+        // THE SCRIPTING PROBES, which this era did not have. Off unless the unattended run is, so it
+        // costs an ordinary launch one boolean. @see LanguageProbeModern
+        LanguageProbeModern.register();
+
         announce();
     }
 

@@ -219,8 +219,8 @@ abstract class ProdSmoke : DefaultTask() {
         // no live GL context the screen's render returns at once, and outside a level Minecraft never
         // clears the colour buffer -- so the frame still holds the previous screen and a photograph of
         // the main menu passed every check above. The autotest states which it was; a stated `false` is
-        // a failure however convincing the PNG looks. Absence is not: 1.7.10 captures from INSIDE its
-        // paint method, so there is nothing there for a flag to add.
+        // a failure however convincing the PNG looks. ABSENCE IS NOT A FAILURE -- an older client, or a
+        // capture written before the desktop was reached, says nothing either way.
         if (logSays(target, "desktop painted: false")) {
             return "DID NOT PAINT: the capture is a stale frame, not this engine's" + logTail(target)
         }

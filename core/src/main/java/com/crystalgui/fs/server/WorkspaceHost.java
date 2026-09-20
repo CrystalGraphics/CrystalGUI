@@ -130,6 +130,17 @@ public final class WorkspaceHost {
     private WatchHub hub;
     private float untilPoll = POLL_SECONDS;
 
+    /**
+     * The id for a host that serves <b>one</b> workspace project, which is every host today.
+     *
+     * <p>It is part of a saved {@code Resource} — a project path keeps its exact text — so two hosts
+     * answering it differently means a document saved on one does not resolve on the other. They did:
+     * {@code minecraft.workspace} on 1.7.10 and {@code workspace} on 1.20.x, each internally consistent
+     * and so invisible to every test. A record naming the old id is discarded rather than migrated,
+     * which is this project's standing policy for an arrangement nobody chose.</p>
+     */
+    public static final String DEFAULT_PROJECT_ID = "workspace";
+
     public WorkspaceHost(String projectId, String displayName, Host host) {
         this(projectId, displayName, DEFAULT_EXCLUDES, host);
     }

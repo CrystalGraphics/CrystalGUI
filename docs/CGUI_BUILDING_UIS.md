@@ -916,7 +916,8 @@ if (connection != null) {
 }
 ```
 
-`mc/example/MachineExample` and `MachineExampleClient` are this pattern end to end, on F8.
+`com.crystalgui.app.machine.MachineExample` is this pattern end to end, on F8. Each loader adds a
+key binding and a tick (`MachineExample1710`, `MachineExampleModern`) and decides nothing else.
 
 The server always decides. That is deliberate — it is the same reason Minecraft opens containers
 server-side.
