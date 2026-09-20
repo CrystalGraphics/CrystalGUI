@@ -2,6 +2,7 @@ package com.crystalgui.core.trace;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceLog;
+import com.crystalgraphics.trace.CgTraceReport;
 
 import org.junit.After;
 import org.junit.Before;
@@ -107,6 +108,25 @@ public class UiTraceRunTest {
         List<String> log = Files.readAllLines(dir.resolve("trace.log"), StandardCharsets.UTF_8);
         assertTrue("nothing reached the file", log.size() >= 2);
         assertTrue(log.get(0), log.get(0).contains("open file"));
+    }
+
+    @Test
+    public void theRunWritesTheReportAnAgentReads() throws Exception {
+        record();
+        Path written = UiTrace.writeReport(CgTraceReport.Tier.VERDICT);
+        FrameStats.get().release();
+        CgTraceLog.stop();
+
+        assertNotNull("no report written", written);
+        String report = new String(Files.readAllBytes(written), StandardCharsets.UTF_8);
+        assertTrue(report, report.contains("VERDICT"));
+        assertTrue("no zone tree", report.contains("paint:tree"));
+        // JUMPABLE: the line that opened the zone, which is the difference between a fact and a step.
+        assertTrue("no source location", report.contains("UiTraceRunTest.java:"));
+        assertTrue("no counters", report.contains("drawcalls=31"));
+        // TIERED: the verdict is read first and must stay readable.
+        assertTrue("the verdict ran to " + report.split("\n", -1).length + " lines",
+                report.split("\n", -1).length <= 25);
     }
 
     @Test
