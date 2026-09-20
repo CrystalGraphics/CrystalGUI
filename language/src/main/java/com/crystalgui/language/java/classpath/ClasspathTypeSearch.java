@@ -1,7 +1,7 @@
 package com.crystalgui.language.java.classpath;
 
 import com.crystalgui.language.java.JavaLanguageServices;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.text.lang.TypeSearch;
 import com.crystalgui.text.lang.TypeSearchRegistry;
 

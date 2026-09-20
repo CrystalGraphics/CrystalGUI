@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.explorer;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;

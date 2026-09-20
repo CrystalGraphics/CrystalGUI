@@ -1,6 +1,6 @@
 package com.crystalgui.widget.text;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;

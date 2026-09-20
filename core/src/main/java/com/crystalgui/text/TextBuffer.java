@@ -1,7 +1,7 @@
 package com.crystalgui.text;
 
 import java.util.ArrayList;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;

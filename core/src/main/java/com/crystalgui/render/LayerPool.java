@@ -1,7 +1,7 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

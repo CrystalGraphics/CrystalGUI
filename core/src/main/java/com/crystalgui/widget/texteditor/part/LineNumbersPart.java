@@ -1,6 +1,6 @@
 package com.crystalgui.widget.texteditor.part;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.ui.box.Box;

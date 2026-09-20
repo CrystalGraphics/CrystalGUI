@@ -26,7 +26,7 @@ import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.asset.FileIconTheme;

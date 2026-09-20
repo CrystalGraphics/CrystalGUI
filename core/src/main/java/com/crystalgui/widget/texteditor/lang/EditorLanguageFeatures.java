@@ -1,6 +1,6 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.decoration.TrackedRange;

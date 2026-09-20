@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.dock;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.style.StyleGroup;

@@ -4,6 +4,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.trace.FrameProfile;
 
 import java.util.ArrayList;
 import java.util.Comparator;
