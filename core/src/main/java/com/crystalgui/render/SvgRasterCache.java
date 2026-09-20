@@ -62,6 +62,22 @@ public final class SvgRasterCache {
     private static final int MARGIN = 1;
 
     /**
+     * The smallest raster this will build, across the document's longer side, in atlas pixels.
+     *
+     * <p><b>A raster is never built at the size it will be DRAWN at, only at or above this.</b> The scale
+     * a thumbnail asks for is a fifth of life size or less, and at that scale an icon is two atlas texels:
+     * there is no arrangement of two texels that is a recognisable icon, so what came back was a bright
+     * blob the size of the cell -- every icon in a taskbar preview and a switcher tile, reported as
+     * "broken white icons".</p>
+     *
+     * <p>Eight, then drawn minified, which is what every renderer does with a texture it is shrinking and
+     * what the direct path cannot do at all. It also COARSENS THE KEY at small sizes -- every scale below
+     * this shares one raster -- so a canvas zooming out stops building a fresh one per frame, which the
+     * sub-pixel note in {@link #accepts} had flagged as the cost of accepting those scales.</p>
+     */
+    private static final float MIN_RASTER_PX = 8f;
+
+    /**
      * How far past its half-width a stroke's coverage reaches, per unit of half-width: a square cap's corner, at
      * {@code sqrt(2)}. The bounds already hold one half-width. @see #rasterise
      */
@@ -144,9 +160,14 @@ public final class SvgRasterCache {
     public void draw(SvgDocument document, int op, float x, float y, float scale, int argb, boolean flat,
                      float halfWidth) {
         float device = ctx.deviceScale();
-        float rasterScale = scale * device;
+        // FLOORED, so the atlas always holds an icon rather than a smudge. @see #MIN_RASTER_PX
+        float span = Math.max(1f, Math.max(document.width(), document.height()));
+        float rasterScale = Math.max(scale * device, MIN_RASTER_PX / span);
+        // Atlas pixels per LOGICAL pixel, which is `device` exactly while nothing is floored -- and is
+        // what every conversion below has to read once the two can differ.
+        float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
         boolean stroke = !document.ops().get(op).fill();
-        float override = stroke && halfWidth > 0f ? halfWidth * device : 0f;
+        float override = stroke && halfWidth > 0f ? halfWidth * atlasPerLogical : 0f;
         Key key = new Key(document, op, Float.floatToIntBits(rasterScale), flat, Float.floatToIntBits(override));
         Entry entry = entries.get(key);
         if (entry == null) {
@@ -154,8 +175,12 @@ public final class SvgRasterCache {
             entries.put(key, entry);
         }
 
-        float left = x + entry.originX / device, top = y + entry.originY / device;
-        float width = entry.width / device, height = entry.height / device;
+        // LOGICAL PIXELS PER ATLAS PIXEL. Was `/ device`, which is the same number until the raster is
+        // floored and silently the wrong one after: a raster built larger than it is drawn has to be
+        // scaled DOWN by the ratio it was floored by, or it lands at the size it was rasterised at.
+        float perAtlasPx = 1f / atlasPerLogical;
+        float left = x + entry.originX * perAtlasPx, top = y + entry.originY * perAtlasPx;
+        float width = entry.width * perAtlasPx, height = entry.height * perAtlasPx;
         float u0 = (float) entry.x / ATLAS_SIZE, u1 = (float) (entry.x + entry.width) / ATLAS_SIZE;
         // V flipped: the atlas is drawn into under the same inverted ortho as the frame, so its row 0 is
         // at the bottom of the texture -- the convention drawLayer already documents.
