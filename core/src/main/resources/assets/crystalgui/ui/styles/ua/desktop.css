@@ -492,7 +492,10 @@ taskbar .__entry__.__busy__ .__progress__ {
  * legible everywhere except on the entry that was active. A neutral that clears the bar, the hover
  * fill, the active fill, the preview's acrylic and the switcher's is a needle no grey threads — the
  * seventh hue does, and the letter goes on-accent with it. */
-.__window-icon__ .__monogram__,
+/* THE PART SPELLING IS THE ONLY ONE. WindowIcon builds the monogram into its OWN shadow tree, so a
+ * descendant selector never reaches it however the icon itself was matched -- this carried a
+ * `.__window-icon__ .__monogram__` twin for months and that half matched nothing anywhere. The twins
+ * the taskbar's tile keeps are a different case: BOTH spellings of a pre-icon genuinely occur. */
 .__window-icon__::part(monogram) {
     color: var(--window-icon-mono-fg, #FFFFFF);
 }
@@ -1294,9 +1297,11 @@ menu.__jump-list__.__rising__ {
     border-radius: 4px;
 }
 
-.__window-preview__ .__pre-icon__ .__monogram__ {
-    font-size: 8;
-}
+/* NO PER-CONTEXT SIZE FOR THIS ONE, and it cannot be given one: the tile is a Button's `pre-icon`, so
+ * the monogram is a part under a part, which `::part()` has no spelling for. It had a `font-size: 8`
+ * rule that never matched. The bare `::part(monogram)` near the top of this file is the single lever
+ * every unscoped monogram takes, which is why the caption's, the preview's and the switcher's small
+ * tiles all wear the same letter -- the right answer here anyway, since all three are the same tile. */
 
 /* ELIDED, and the font-size is on the TEXT rather than the header -- `font-size` does not effectively
  * inherit here, because default.css opens with a universal rule, so a declaration on a wrapper computes
@@ -1398,7 +1403,11 @@ menu.__jump-list__.__rising__ {
     border-radius: 8px;
 }
 
-.__window-preview__ > .__thumbnail__ .__placeholder__ .__monogram__ {
+/* A PLACEHOLDER IS A WindowIcon TOO, so its letter is a part and not a child -- this was
+ * `.__placeholder__ .__monogram__` and matched nothing, which left a card-sized tile drawing the
+ * 9px letter meant for a 14px one. Reachable because the placeholder is a light child of the
+ * thumbnail; the small tiles above are not, and say so. */
+.__window-preview__ > .__thumbnail__ .__placeholder__::part(monogram) {
     font-size: 15;
 }
 
@@ -1564,9 +1573,9 @@ menu.__jump-list__.__rising__ {
     border-radius: 4px;
 }
 
-.__switcher-entry__ .__icon__ .__monogram__ {
-    font-size: 8;
-}
+/* No size here either, for the reason the preview's twin above carries: this host IS reachable
+ * (`.__icon__` is a light child, not a part), but a switcher entry and a hover preview show the same
+ * 14px tile, and scoping one of them alone is how two views of one window come to disagree. */
 
 /* ELIDED, and the font-size is on the TEXT and not the header: `font-size` does not effectively inherit
  * here, because default.css opens with a universal rule, so a declaration on a wrapper computes on the
@@ -1604,7 +1613,8 @@ menu.__jump-list__.__rising__ {
     border-radius: 11px;
 }
 
-.__switcher-entry__ > .__thumbnail__ .__placeholder__ .__monogram__ {
+/* The same correction as the preview's placeholder, and the same reason. */
+.__switcher-entry__ > .__thumbnail__ .__placeholder__::part(monogram) {
     font-size: 22;
 }
 
