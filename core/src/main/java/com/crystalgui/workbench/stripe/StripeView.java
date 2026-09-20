@@ -12,7 +12,11 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.input.keymap.KeyChord;
+import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.ui.service.AnchoredPlacement;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Drag;
@@ -26,6 +30,10 @@ import org.joml.Vector2f;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.dnd.InsertionMarker;
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.widget.overlay.MenuBuilder;
+import com.crystalgui.widget.overlay.MenuItem;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.workbench.dock.DockArea;
@@ -164,6 +172,33 @@ public class StripeView extends UIElement {
      */
     public static final String SEPARATOR_CLASS = "__stripe-separator__";
 
+    /**
+     * The tool window a rail button stands for — what its context menu's commands resolve against.
+     *
+     * <p>Provided by the button itself, so a press anywhere inside one (the badge, the glyph) answers it:
+     * {@code DataContext} walks outward and stops at the first provider, which is the button.</p>
+     */
+    public static final DataKey<String> BUTTON_TYPE = DataKey.create("stripeButton", String.class);
+
+    /** On the rail while it labels its buttons. @see ToolWindowManager#isShowingNames() */
+    public static final String NAMES_CLASS = "__with-names__";
+
+    /** The ⋯ button that lists what has been hidden. @see #more */
+    public static final String MORE_CLASS = "__more__";
+
+    /** What ⋯ says on hover — IntelliJ's wording. */
+    private static final String MORE_TOOLTIP = "More tool windows";
+
+    /**
+     * On ⋯ while its menu is up.
+     *
+     * <p>A button that opened something stays lit until it closes — otherwise the menu is on screen with
+     * nothing saying what put it there, and the pointer moving off the button makes it look dismissed. It
+     * is the same affordance {@code :checked} gives a rail button whose panel is open, said as a class
+     * because the menu's lifetime is not a cascade state.</p>
+     */
+    public static final String MORE_OPEN_CLASS = "__menu-open__";
+
     /** Command ids are {@code view.} plus the panel type — {@code view.project}, {@code view.problems}. */
     public static final String COMMAND_PREFIX = "view.";
 
@@ -187,6 +222,19 @@ public class StripeView extends UIElement {
 
     /** The rule between the anchor's two halves. @see #SEPARATOR_CLASS */
     private final UIElement separator = new UIElement();
+
+    /**
+     * <b>More tool windows</b> — IntelliJ's ⋯, listing every tool window whose button has been hidden.
+     *
+     * <p>On the LEFT rail alone: the list is the whole workbench's, so a second copy on the right would be
+     * a second door to one room. Picking a row opens that tool window, and opening is what brings its
+     * button back ({@code ToolWindowManager.showPanel}) — IntelliJ words that as a property of opening
+     * rather than of this menu, which is the reading that also covers a shortcut and the palette.</p>
+     */
+    private final Button more = new Button("");
+
+    /** The ⋯ menu while it is up, so a second press closes what the first opened. @see #openMore */
+    private final List<Menu> moreLive = new ArrayList<>();
 
     /** The gap a drag opens where the button would land. @see InsertionMarker */
     private final InsertionMarker insertion =
@@ -226,6 +274,10 @@ public class StripeView extends UIElement {
 
     @Nullable
     private Connection placementSubscription;
+
+    /** @see ToolWindowManager#isShowingNames() */
+    @Nullable
+    private Connection namesSubscription;
     private Connection focusSubscription;
 
     /** The registry a deferred sync runs against. @see #requestSync */
@@ -252,6 +304,22 @@ public class StripeView extends UIElement {
         separator.addClass(SEPARATOR_CLASS);
         separator.setHitTest(false);
         append(separator);
+        StripeCommands.register();
+        more.addClass(MORE_CLASS);
+        more.setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
+        applyIcon(more, "crystalgui:more-vertical");
+        more.setDisplayed(false);
+        more.attachListener(this::openMore);
+        Tooltip.attach(more, MORE_TOOLTIP)
+                .setSide(rail == StripeRail.RIGHT ? AnchoredPlacement.Side.LEFT
+                                                  : AnchoredPlacement.Side.RIGHT)
+                .setGap(TOOLTIP_GAP);
+        append(more);
+        // ON THE RAIL, so it opens on the blank space below the buttons as well as on one -- "right-click a
+        // tool window bar" is how IntelliJ words the gesture, and Show Tool Window Names is the bar's
+        // setting rather than any button's. The builder is handed whatever was pressed, so a press ON a
+        // button gets the fuller menu.
+        ContextMenu.attach(this, CommandRegistry.global(), this::contextMenuFor);
         // NO DROP TARGET HERE. It used to accept drops on the rail itself, which meant landing a drag on a
         // twenty-pixel stripe -- aiming at the control rather than at the place. The whole workbench is
         // the target now; see RegionDropOverlay.
@@ -259,6 +327,104 @@ public class StripeView extends UIElement {
 
     public StripeRail rail() {
         return rail;
+    }
+
+    /**
+     * Drops down ⋯, or closes it.
+     *
+     * <p><b>Against the WINDOW's registry</b>, never the global one: a rail's per-window commands are
+     * registered there on purpose — a second workbench sharing one global command would toggle a panel in
+     * a window nobody is looking at — and {@code ActionButton} fixes its registry at construction, which
+     * is why this is a plain button presenting its own menu.</p>
+     */
+    private void openMore() {
+        UIDocument window = document();
+        if (window == null || commands == null) return;
+        // A SECOND PRESS CLOSES what the first opened: this button is the menu's invoker, so light dismiss
+        // leaves the menu to it. ActionButton does exactly this.
+        if (!moreLive.isEmpty()) {
+            more.removeClass(MORE_OPEN_CLASS);
+            MenuBuilder.discard(moreLive);
+            return;
+        }
+        Menu built = moreMenu();
+        if (built.getItemCount() == 0) return;
+        UIElement before = window.focus().focused();
+        moreLive.addAll(MenuBuilder.present(built, more, window));
+        more.addClass(MORE_OPEN_CLASS);
+        built.onClosed.connect(() -> {
+            more.removeClass(MORE_OPEN_CLASS);
+            MenuBuilder.discard(moreLive);
+            // THE KEYS GO BACK where they were: the menu took them for its rows, and a detached row is
+            // nowhere a keymap can resolve from. ActionButton and ContextMenu.attach both do this.
+            if (before != null && before.document() != null && window.focus().focusable(before)) {
+                window.focus().requestPointerFocus(before);
+            }
+        });
+        // AND OPEN IT. `present` only APPENDS the chain to the overlay host -- a Menu is a Popover and
+        // starts closed, so without this the rows existed, were parented and were laid out off-screen,
+        // and the press looked like it had done nothing at all.
+        built.showFor(more, more);
+    }
+
+    /**
+     * What ⋯ drops down: every tool window whose button is hidden, named and iconed as the rail would
+     * draw it.
+     *
+     * <p><b>Built from the DESCRIPTORS, not from the commands.</b> A command row takes its label and its
+     * icon from the {@code Command}, and the rail's per-window commands carry neither — they are
+     * {@code view.<typeId>} with a title and nothing else, so the menu came out as a column of raw ids
+     * with no glyphs. The descriptor is where a tool window's name and icon actually live, and it is what
+     * the rail reads to draw the button this row stands in for.</p>
+     *
+     * <p>The accelerator still comes from the keymap, so a row names the same chord the button's tooltip
+     * does.</p>
+     */
+    private Menu moreMenu() {
+        Menu menu = new Menu();
+        ToolWindowManager toolWindows = workbench.toolWindowManager();
+        for (String typeId : toolWindows.hidden()) {
+            DockPanelDescriptor descriptor = toolWindows.descriptorOf(typeId);
+            if (descriptor == null) continue;
+            MenuItem item = menu.addItem(descriptor.title());
+            item.setIcon(descriptor.icon(), null);
+            KeyChord chord = Keymap.acceleratorFor(this, commandIdFor(typeId));
+            if (chord != null) item.setAccelerator(chord.toString());
+            // OPENING IS WHAT RESTORES IT -- showPanel puts the button back, which is IntelliJ's rule
+            // stated where it belongs rather than here. @see ToolWindowManager#showPanel
+            item.attachListener(() -> toolWindows.showPanel(typeId));
+        }
+        return menu;
+    }
+
+    /**
+     * The bar's context menu — the fuller one on a button, the bar's own setting anywhere else.
+     *
+     * <p>{@code Move to} lists every slot rather than only the other three: the one it is already in comes
+     * back checked, which is how a menu says where you are as well as where you could go.</p>
+     */
+    private ContextMenu contextMenuFor(UIElement pressed) {
+        if (buttonOf(pressed) == null) return ContextMenu.builder().item(StripeCommands.SHOW_NAMES);
+        return ContextMenu.builder()
+                .item(StripeCommands.HIDE)
+                .submenu("Move to", move -> {
+                    for (DockRegion region : StripeCommands.REGIONS) {
+                        for (RegionSide side : RegionSide.values()) {
+                            move.item(StripeCommands.moveTo(region, side));
+                        }
+                    }
+                })
+                .separator()
+                .item(StripeCommands.SHOW_NAMES);
+    }
+
+    /** The rail button {@code pressed} is in, or null for the bar itself. */
+    @Nullable
+    private ItemButton buttonOf(@Nullable UIElement pressed) {
+        for (UIElement walk = pressed; walk != null && walk != this; walk = walk.parentElement()) {
+            if (walk instanceof ItemButton button) return button;
+        }
+        return null;
     }
 
     /** The rail builds its own buttons; it holds nothing a caller puts there. */
@@ -396,6 +562,10 @@ public class StripeView extends UIElement {
             placementSubscription = workbench.toolWindowManager().onDidChangePlacement
                     .connect(typeId -> requestSync());
         }
+        if (namesSubscription == null) {
+            // BOTH RAILS, one setting -- each re-asks rather than being told, exactly as a move is handled.
+            namesSubscription = workbench.toolWindowManager().onDidChangeNames().connect(this::requestSync);
+        }
         // Re-attaching a workbench to a second window calls this again, and the previous subscription
         // would otherwise still be live -- syncing the OLD window's registry forever. Connections are
         // Disposable now, so dropping the last one is one line rather than a flag.
@@ -453,6 +623,7 @@ public class StripeView extends UIElement {
         if (panelSubscription != null) panelSubscription.disconnect();
         if (badgeSubscription != null) badgeSubscription.disconnect();
         if (placementSubscription != null) placementSubscription.disconnect();
+        if (namesSubscription != null) namesSubscription.disconnect();
         // AND THE WINDOW'S OWN FOCUS SIGNAL, which is the one that outlives everything else here: it
         // belongs to the SURFACE, so a rail that never let go of it kept its workbench alive for as long
         // as the desktop existed, whatever else was cleaned up.
@@ -460,6 +631,7 @@ public class StripeView extends UIElement {
         panelSubscription = null;
         badgeSubscription = null;
         placementSubscription = null;
+        namesSubscription = null;
         focusSubscription = null;
     }
 
@@ -489,7 +661,10 @@ public class StripeView extends UIElement {
             DockRegion region = toolWindows.regionOf(typeId);
             RegionSide side = toolWindows.sideOf(typeId);
             ItemButton existing = buttons.get(typeId);
-            if (StripeRail.of(region, side) != rail) {
+            // A HIDDEN BUTTON IS TREATED AS NOT THIS RAIL'S, which is the same answer for the same reason:
+            // the rail does not carry it. Filtering in reorder() instead would leave the element appended
+            // and unordered, drawn wherever it happened to land.
+            if (StripeRail.of(region, side) != rail || !toolWindows.isStripeButtonShown(typeId)) {
                 if (existing != null) {
                     // removeInternalChild, never removeSelf: removeChild deliberately REFUSES an internal
                     // child, silently and by returning false, so the button would stay in the tree while
@@ -512,6 +687,21 @@ public class StripeView extends UIElement {
         }
         reorder();
         refresh();
+        refreshNames();
+    }
+
+    /**
+     * Labels the buttons, or stops — IntelliJ's <i>Show Tool Window Names</i>.
+     *
+     * <p>A CLASS on the rail plus each button's own text: the sheet decides what a labelled rail looks
+     * like, and the buttons carry a name whether or not one is being drawn, so turning it on is a style
+     * change rather than a rebuild.</p>
+     */
+    private void refreshNames() {
+        boolean names = workbench.toolWindowManager().isShowingNames();
+        if (names) addClass(NAMES_CLASS);
+        else removeClass(NAMES_CLASS);
+        for (ItemButton button : buttons.values()) button.setText(names ? button.title : "");
     }
 
     private ItemButton buildButton(DockPanelDescriptor descriptor, String commandId,
@@ -572,6 +762,14 @@ public class StripeView extends UIElement {
         // never re-parents anything.
         wanted.add(separator);
         wanted.addAll(secondary);
+        // AFTER THE TOP GROUP, which is where IntelliJ puts it -- the rail's own overflow, not one of the
+        // tool windows. Shown only when it would have something to list, and only on the LEFT: it lists
+        // the whole workbench's hidden windows, so a second copy on the right would be a second door to
+        // one room -- and IntelliJ's sits on the left for the same reason.
+        boolean anyHidden = rail == StripeRail.LEFT
+                && !workbench.toolWindowManager().hidden().isEmpty();
+        more.setDisplayed(anyHidden);
+        if (anyHidden) wanted.add(more);
         // ALWAYS PRESENT, always between the groups -- see SPACER_CLASS. It is placed even when the bottom
         // group is empty, so opening one during a drag does not have to re-derive where the stretch goes.
         wanted.add(spacer);
@@ -1081,11 +1279,18 @@ public class StripeView extends UIElement {
      * already documents. {@link #revalidate()} therefore compares against the last answer and invalidates
      * only on a change — so a settled frame costs one boolean comparison per button and touches nothing.</p>
      */
-    private static final class ItemButton extends Button {
+    private static final class ItemButton extends Button implements DataProvider {
 
         private final Workbench workbench;
         private final String typeId;
         private final String title;
+
+        /** What a context menu opened on this button acts on. @see StripeView#BUTTON_TYPE */
+        @Override
+        @Nullable
+        public Object getData(DataKey<?> key) {
+            return key == BUTTON_TYPE ? typeId : null;
+        }
         private boolean lastKnownOpen;
         private boolean lastKnownFocused;
 

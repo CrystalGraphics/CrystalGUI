@@ -273,6 +273,11 @@ public final class ToolWindowManager {
         // NOTHING REGISTERED, NOTHING SHOWN: a record naming a kind no extension contributes -- renamed,
         // or its extension off -- built a container titled with the raw id and holding nothing.
         if (registry.descriptor(typeId) == null) return false;
+        // AND ITS BUTTON COMES BACK. IntelliJ states this as a property of OPENING rather than of the menu
+        // that opened it -- "when a tool window is selected, it is opened and its button appears on the
+        // stripe" -- which is the reading that also covers a shortcut and the command palette. A panel on
+        // screen with nothing on any rail to close it by is the one state hiding must not be able to reach.
+        setStripeButtonShown(typeId, true);
         ToolWindowType type = typeOf(typeId);
         if (type.isWindowed()) return showInFrame(typeId, type, focus);
         DockRegion region = regionOf(typeId);
@@ -353,6 +358,81 @@ public final class ToolWindowManager {
      * {@code StripeButtonSeparator} between them — so an insertion index only means something inside one
      * half.</p>
      */
+    /** Whether {@code typeId} has a button on its stripe at all — IntelliJ's {@code show_stripe_button}. */
+    public boolean isStripeButtonShown(String typeId) {
+        return placementOf(typeId).showStripeButton();
+    }
+
+    /**
+     * Takes a tool window's button off its stripe, or puts it back — IntelliJ's <i>Hide</i> on a stripe
+     * button, undone from <i>More tool windows</i>.
+     *
+     * <p><b>The tool window itself is untouched.</b> Hiding a button is about the rail, not about the
+     * window: it keeps its region, its side, its order and its size, so putting the button back restores
+     * the place it had rather than appending it to the end of a group. That is the whole reason the flag
+     * lives on the placement record beside them.</p>
+     *
+     * <p>A hidden button's tool window is closed with it. Leaving it open would strand a panel on screen
+     * with nothing on any rail to close it by, which is the one state this must not be able to produce.</p>
+     */
+    public void setStripeButtonShown(String typeId, boolean shown) {
+        if (typeId == null) return;
+        if (placementOf(typeId).showStripeButton() == shown) return;
+        if (!shown && isPanelOpen(typeId)) hidePanel(typeId);
+        // RE-READ AFTER THE HIDE, never a record captured before it. hidePanel writes its own placement,
+        // so a state read first and put back here carries `visible: true` over the top of it -- and a
+        // window that still claims to be visible is one the next applyVisibility opens again, which
+        // restores the very button this call was taking away. The symptom is the ⋯ vanishing while
+        // something is plainly hidden.
+        toolWindows.put(placementOf(typeId).withShowStripeButton(shown));
+    }
+
+    /**
+     * Every tool window whose button is hidden — what <i>More tool windows</i> lists.
+     *
+     * <p><b>One list, not one per rail.</b> IntelliJ's ⋯ shows "tool windows not yet present on any of the
+     * tool window stripes", which is a statement about the whole workbench rather than about a side — and
+     * a window is put back by OPENING it, which restores it to wherever its placement says it lives. So a
+     * list per rail would be two doors to one room, and the one on the right would be empty most of the
+     * time.</p>
+     */
+    public List<String> hidden() {
+        List<String> found = new ArrayList<>();
+        for (DockPanelDescriptor descriptor : registry.descriptors()) {
+            if (!descriptor.isSingleton()) continue;
+            if (!isStripeButtonShown(descriptor.typeId())) found.add(descriptor.typeId());
+        }
+        found.sort((a, b) -> Integer.compare(orderOf(a), orderOf(b)));
+        return found;
+    }
+
+    /** Raised when {@link #isShowingNames()} flips — the rails' cue to re-ask. */
+    public Signal.Action onDidChangeNames() {
+        return toolWindows.onDidChangeNames;
+    }
+
+    /**
+     * The descriptor for a tool window, from <b>this manager's own registry</b>.
+     *
+     * <p>Exposed so a caller listing what {@link #hiddenFrom} answered reads the names and icons out of the
+     * same registry the list came from. Looking them up somewhere else is a silent mismatch: every entry
+     * resolves to null and the menu comes out empty while the button that opens it is plainly there.</p>
+     */
+    @Nullable
+    public DockPanelDescriptor descriptorOf(String typeId) {
+        return registry.descriptor(typeId);
+    }
+
+    /** @see ToolWindowLayout#showNames() */
+    public boolean isShowingNames() {
+        return toolWindows.showNames();
+    }
+
+    /** @see ToolWindowLayout#showNames() */
+    public void setShowingNames(boolean value) {
+        toolWindows.setShowNames(value);
+    }
+
     public List<String> groupOf(DockRegion region, RegionSide side) {
         // FROM THE REGISTRY, not from the stored placements. A tool window only gets a ToolWindowState the
         // first time something asks where it is, so a group read from the states alone omits every member

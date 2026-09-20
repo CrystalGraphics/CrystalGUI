@@ -1207,7 +1207,30 @@ the platform source. An anchor's two halves share one stripe, separated by a rul
 | Where in its stripe run? | `orderOf(typeId)` |
 | Who else is in that run? | `groupOf(region, side)` |
 | Move it | `moveTo(typeId, region, side)` / `moveTo(typeId, region, side, index)` |
+| Is it on a stripe at all? | `isStripeButtonShown(typeId)` / `setStripeButtonShown(typeId, shown)` |
+| What has been hidden? | `hidden()` |
+| Do the stripes label their buttons? | `isShowingNames()` / `setShowingNames(b)` / `onDidChangeNames()` |
+| What kind of panel is it? | `descriptorOf(typeId)` |
 | Tell me when any of that changes | `onDidChangePlacement` |
+
+### Hiding a button is about the RAIL, not the window
+
+`show_stripe_button` is IntelliJ's flag and ours, stored on the placement beside the region and the
+order — so a hidden button comes back exactly where it was rather than at the end of a run. It rides in
+the project session, not in settings: which buttons you keep is a property of the project you keep them
+for.
+
+- **Hiding closes the panel.** A panel on screen with nothing on any rail to close it by is the one
+  state this must not be able to reach.
+- **Opening restores the button** — in `showPanel`, not in the menu that opened it, which is how
+  IntelliJ words it ("when a tool window is selected, it is opened and its button appears on the
+  stripe") and the only reading that also covers a shortcut and the palette.
+- **`hidden()` is one list for the whole workbench**, which is what *More tool windows* shows. A list
+  per rail would be two doors to one room, since opening restores a window to wherever its placement
+  says it lives.
+- The context menu on either rail — *Hide*, *Move to* ▸, *Show Tool Window Names* — is
+  `StripeCommands`, resolved from `StripeView.BUTTON_TYPE` (the button that was pressed) and
+  `Workbench.WORKBENCH`, the same shape `ToolWindowCommands` takes for the ⋮ menu.
 
 **`groupOf` walks the registry, not the stored placements.** A tool window has no `ToolWindowState`
 until something asks where it is, so a group read from the states alone omits every member nobody has
