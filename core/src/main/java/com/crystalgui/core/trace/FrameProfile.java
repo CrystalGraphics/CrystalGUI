@@ -88,6 +88,11 @@ public final class FrameProfile {
      * next one. @see CgTrace#frameBegin()</p>
      */
     public static void frameBegin() {
+        // FLUSHED BEFORE THE BOUNDARY MOVES, not only at frameEnd. A frame that is begun and never
+        // ended -- a host that threw mid-frame, a paint that returned early -- would otherwise have its
+        // counters cleared below and lost, and a missing counter reads as "nothing happened" rather
+        // than as "nothing was written down".
+        flushCounts();
         CgTrace.frameBegin();
         if (!timing()) return;
         PHASES.clear();
@@ -110,7 +115,10 @@ public final class FrameProfile {
         flushCounts();
         flushBlame();
         CgTrace.frameEnd();
-        if (!ENABLED || frameStart == 0L) return;
+        // THE FILE IS REASON ENOUGH. The line used to require the property because the property was
+        // the only thing that made it affordable; now that it goes to a queue rather than a console,
+        // a run with a log open wants it whether or not anybody is watching a terminal.
+        if (frameStart == 0L || (!ENABLED && !com.crystalgraphics.trace.CgTraceLog.isOpen())) return;
         logSlowFrame();
     }
 
@@ -145,11 +153,20 @@ public final class FrameProfile {
         COUNTS.merge(what, howMany, Integer::sum);
     }
 
+    /**
+     * Writes this frame's accumulated counts to the ring, once.
+     *
+     * <p><b>Clears as it goes</b>, which is what makes it safe to call from both ends of a frame: the
+     * boundary at {@link #frameBegin} is a backstop for a frame whose {@link #frameEnd} never ran, and
+     * without the clear it would write every counter a second time. Measured as exactly that: 480
+     * counter events in an export that should have had 240.</p>
+     */
     private static void flushCounts() {
         if (COUNTS.isEmpty()) return;
         for (Map.Entry<String, Integer> entry : COUNTS.entrySet()) {
             CgTrace.counter(UiTrace.FRAME, entry.getKey(), entry.getValue());
         }
+        COUNTS.clear();
     }
 
     // ── The flow API: a chain, not a frame ──────────────────────────────────────────────────
@@ -165,12 +182,8 @@ public final class FrameProfile {
     public static void step(long started, String what) {
         if (started == 0L) return;
         CgTrace.spanDone(UiTrace.FLOW, what, started);
-        if (ENABLED) {
-            long took = System.nanoTime() - started;
-            if (took >= STEP_FLOOR) {
-                CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, took / 1_000L);
-            }
-        }
+        long took = System.nanoTime() - started;
+        if (took >= STEP_FLOOR) emit("[step] " + indent() + what + ' ' + took / 1_000L + "us");
     }
 
     /**
@@ -182,15 +195,13 @@ public final class FrameProfile {
         if (nanos <= 0L) return;
         long now = System.nanoTime();
         CgTrace.spanDone(UiTrace.FLOW, what, now - nanos);
-        if (ENABLED && nanos >= STEP_FLOOR) {
-            CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, nanos / 1_000L);
-        }
+        if (nanos >= STEP_FLOOR) emit("[step] " + indent() + what + ' ' + nanos / 1_000L + "us");
     }
 
     /** Notes a step that has no duration worth timing — an entry point, a decision, a count. */
     public static void note(String what) {
         CgTrace.marker(UiTrace.FLOW, what);
-        if (ENABLED) CrystalGuiCore.LOGGER.info("[step] {}. {}", indent(), what);
+        emit("[step] " + indent() + ". " + what);
     }
 
     /**
@@ -201,21 +212,29 @@ public final class FrameProfile {
      */
     public static long enter(String what) {
         long span = CgTrace.spanBegin(UiTrace.FLOW, what);
-        if (ENABLED) {
-            CrystalGuiCore.LOGGER.info("[step] {}> {}", indent(), what);
-            depth++;
-            if (span < 0L) return System.nanoTime();
-        }
+        emit("[step] " + indent() + "> " + what);
+        depth++;
         return span;
     }
 
     /** Closes an {@link #enter} and reports what the whole of it cost. */
     public static void leave(long span, String what) {
-        if (ENABLED) {
-            depth = Math.max(0, depth - 1);
-            CrystalGuiCore.LOGGER.info("[step] {}< {}", indent(), what);
-        }
+        depth = Math.max(0, depth - 1);
+        emit("[step] " + indent() + "< " + what);
         if (span >= 0L) CgTrace.spanEnd(span);
+    }
+
+    /**
+     * Where a line goes: this run's {@code trace.log}, and the console only if the property asked.
+     *
+     * <p>The file is the default and the console is the exception, which is the inversion T4 exists
+     * for. {@link com.crystalgraphics.trace.CgTraceLog#line} queues and returns; the logger does not,
+     * and on a Minecraft host it is a synchronous hop to a console appender. A probe that reports a
+     * slow frame by blocking the frame thread on terminal I/O has changed what it was measuring.</p>
+     */
+    private static void emit(String line) {
+        UiTrace.log(line);
+        if (ENABLED) CrystalGuiCore.LOGGER.info(line);
     }
 
     private static String indent() {
@@ -376,7 +395,7 @@ public final class FrameProfile {
             }
             line.append(']');
         }
-        CrystalGuiCore.LOGGER.info(line.toString());
+        emit(line.toString());
         if (!SITES.isEmpty()) {
             List<Map.Entry<String, Integer>> sites = new ArrayList<>(SITES.entrySet());
             sites.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
@@ -388,7 +407,7 @@ public final class FrameProfile {
                 blamed.append("  ").append(sites.get(i).getKey())
                         .append(" x").append(sites.get(i).getValue());
             }
-            CrystalGuiCore.LOGGER.info(blamed.toString());
+            emit(blamed.toString());
         }
         SITES.clear();
         blamesThisFrame = 0;
