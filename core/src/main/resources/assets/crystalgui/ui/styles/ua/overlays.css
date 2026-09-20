@@ -1363,6 +1363,15 @@ framestats .__head__ {
  * it, or past twice it. The threshold is the engine's so every host agrees what a 40ms frame is; the
  * colour is here so a theme can say it differently. Last, so a verdict beats the headline's own colour
  * at equal specificity. */
+/* HIDDEN, for the plate and for a row the readout has stopped needing. A row is hidden rather than
+ * removed so the tree stops churning, and the engine sets a CLASS rather than writing display into the
+ * cascade -- EngineBoundaryTest forbids the second, and a sheet that could not override the first
+ * would be a sheet that cannot theme the readout at all. */
+framestats.__hidden__,
+framestats .__hidden__ {
+    display: none;
+}
+
 /* THE FRAME-TIME BARS. Green like the verdict rows above, because they answer the same question about
  * the same budget -- a second neutral colour here would read as a second kind of statement. The two
  * highlights below then say which columns were not.

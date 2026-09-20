@@ -10,9 +10,19 @@ import org.junit.Test;
 
 import java.util.List;
 
+import com.crystalgraphics.trace.CgTrace;
+
 /**
  * The arithmetic behind the readout, on synthetic frames — the only way to assert on a distribution,
  * since a real one is whatever the machine running the suite happened to do.
+ *
+ * <p>Frames and zones are fed at explicit times through {@link CgTrace}'s own clock-taking overloads,
+ * so every number below is exact. That {@code FrameStats} keeps no storage of its own is the point of
+ * the rewrite, and it is why these drive the engine rather than the readout.</p>
+ *
+ * <p><b>This runs headlessly</b>, which is an assertion in itself: the trace engine lives in
+ * CrystalGraphics' {@code platform} module, the one a dedicated server genuinely has. In {@code core}
+ * it would be unreachable here and unusable on a server.</p>
  */
 public class FrameStatsTest {
 
@@ -37,8 +47,8 @@ public class FrameStatsTest {
     /** One frame lasting {@code wallMs}, of which {@code cpuMs} was work. */
     private void frame(double wallMs, double cpuMs) {
         clock += (long) (wallMs * 1_000_000d);
-        stats.frameBegan(clock);
-        stats.frameEnded(clock + (long) (cpuMs * 1_000_000d));
+        CgTrace.frameBegin(clock);
+        CgTrace.frameEnd(clock + (long) (cpuMs * 1_000_000d));
     }
 
     private void frames(int howMany, double wallMs) {
@@ -47,7 +57,7 @@ public class FrameStatsTest {
 
     /**
      * A frame's wall time is the interval to the NEXT one, so the last frame fed is always still open —
-     * this closes it. @see FrameStats#frameBegan
+     * this closes it. @see CgTrace#frameBegin(long)
      */
     private void settle(double wallMs, double cpuMs) {
         frame(wallMs, cpuMs);
@@ -58,11 +68,29 @@ public class FrameStatsTest {
         settle(8d, 4d);
     }
 
+    /** Phases for the frame that is open now, laid end to end from its start. */
+    private void phases(long styleUs, long layoutUs, long paintUs) {
+        long at = clock;
+        at = zone("style", at, styleUs);
+        at = zone("layout", at, layoutUs);
+        zone("paint", at, paintUs);
+    }
+
+    private long zone(String name, long startNanos, long micros) {
+        long end = startNanos + micros * 1_000L;
+        CgTrace.zoneDone(UiTrace.FRAME, name, startNanos, end);
+        return end;
+    }
+
+    private void counts() {
+        CgTrace.counter(UiTrace.FRAME, "drawcalls", 143);
+    }
+
     @Test
     public void aSingleFrameHasNoRateToReport() {
         frame(10d, 5d);
-        // THE FIRST FRAME IS AN INTERVAL SHORT. Charging it the gap since the collector was switched on
-        // would put one enormous sample into every window it appears in.
+        // THE FIRST FRAME IS AN INTERVAL SHORT. It is not committed until the next one begins, because
+        // its wall time is the gap to that one.
         assertEquals(0, stats.sampleCount());
         assertTrue(stats.lines().get(0).contains("warming up"));
     }
@@ -95,11 +123,9 @@ public class FrameStatsTest {
         assertEquals(8f, stats.bestMs(), 0.5f);
         assertEquals(8f, stats.percentileMs(0.5), 0.5f);
         assertTrue("1% low was " + stats.lowOnePercentFps(), stats.lowOnePercentFps() < 60f);
-        // THE TWO VERDICTS DISAGREE, which is the point of having both: the rate is fine and one frame
-        // was not, and a readout that coloured itself by the average alone would be green through it.
-        // AND BOTH STAY GREEN, which is the whole of the threshold question: one outlier in three
-        // hundred frames is what a healthy run looks like, and a verdict it turned red would be red for
-        // the entire life of the readout. The spike is shown; it is not the judgement.
+        // THE VERDICTS ALL STAY GREEN, which is the whole of the threshold question: one outlier in
+        // three hundred frames is what a healthy run looks like, and a verdict it turned red would be
+        // red for the entire life of the readout. The spike is shown; it is not the judgement.
         assertEquals(FrameStats.Health.GOOD, stats.rateHealth());
         assertEquals(FrameStats.Health.GOOD, stats.spreadHealth());
         assertEquals(FrameStats.Health.GOOD, stats.missHealth());
@@ -134,22 +160,16 @@ public class FrameStatsTest {
         assertEquals(FrameStats.Health.GOOD, stats.missHealth());
     }
 
-    /** What a frame's phase map looks like, in the order FrameProfile fills it. */
-    private void phases(long styleUs, long layoutUs, long paintUs) {
-        java.util.Map<String, Long> timed = new java.util.LinkedHashMap<>();
-        timed.put("style", styleUs * 1_000L);
-        timed.put("layout", layoutUs * 1_000L);
-        timed.put("paint", paintUs * 1_000L);
-        java.util.Map<String, Integer> counted = new java.util.LinkedHashMap<>();
-        counted.put("drawcalls", 143);
-        stats.describeFrame(timed, counted);
-    }
-
     @Test
     public void theSummaryKeepsThePhasesOnOneLine() {
         frames(10, 8d);
-        settle();
+        settle(20d, 12d);
         phases(6000, 3000, 1000);
+        counts();
+        // LONG ENOUGH TO CONTAIN ITS OWN ZONES. A zone is attributed to the frame its start falls
+        // inside, so a frame whose wall time is shorter than the phases laid inside it loses the tail.
+        settle(20d, 4d);
+
         List<FrameStats.Row> rows = stats.rows(FrameStats.Detail.SUMMARY);
         // Three verdicts, the bars, one phase line, one counts line.
         assertEquals(6, rows.size());
@@ -160,13 +180,18 @@ public class FrameStatsTest {
     @Test
     public void fullDetailGivesEachPhaseItsOwnRowAndItsShare() {
         frames(10, 8d);
-        settle();
+        settle(20d, 12d);
         phases(6000, 3000, 1000);
+        counts();
+        // LONG ENOUGH TO CONTAIN ITS OWN ZONES. A zone is attributed to the frame its start falls
+        // inside, so a frame whose wall time is shorter than the phases laid inside it loses the tail.
+        settle(20d, 4d);
+
         List<FrameStats.Row> rows = stats.rows(FrameStats.Detail.FULL);
         assertEquals(9, rows.size());
         assertTrue(rows.get(4).text(), rows.get(4).text().contains("phases 10.0ms"));
         // THE SHARE IS OF THE PHASES' OWN TOTAL, so the column adds up to 100 rather than to whatever
-        // fraction of the frame happened to be marked. @see FrameStats#addPhaseRows
+        // fraction of the frame happened to be marked.
         assertTrue(rows.get(5).text(), rows.get(5).text().contains("style") && rows.get(5).text().endsWith("60%"));
         assertTrue(rows.get(6).text(), rows.get(6).text().endsWith("30%"));
         assertTrue(rows.get(7).text(), rows.get(7).text().endsWith("10%"));
@@ -180,10 +205,41 @@ public class FrameStatsTest {
     public void aFrameWithNoPhasesSaysSoRatherThanShowingNothing() {
         frames(10, 8d);
         settle();
-        // A host that frames without painting records no phases -- the row says that, rather than being
-        // absent, which would read as "no time was spent anywhere".
+        // A host that frames without recording a phase -- the row says so, rather than being absent,
+        // which would read as "no time was spent anywhere".
         assertTrue(stats.phasesByCost().isEmpty());
         assertTrue(stats.lines().stream().anyMatch(line -> line.contains("none recorded")));
+    }
+
+    @Test
+    public void theBreakdownShownIsTheSlowestFramesAndNotTheLastOnes() {
+        frames(10, 8d);
+        settle(60d, 55d);
+        phases(50000, 3000, 1000);      // the spike's own breakdown
+        settle(60d, 4d);
+        phases(100, 50, 10);            // and a cheap frame after it
+        settle();
+
+        // The LAST frame's breakdown is the cheap one, which is what a live one-line hint should show...
+        assertTrue(stats.phasesByCost().get(0).getValue() < 1_000_000L);
+        // ...and what the expanded readout shows is the spike's. A readout refreshes ten times a second
+        // and the frame worth reading is never the one still on screen by the time an eye reaches it.
+        assertEquals("style", stats.peakPhasesByCost().get(0).getKey());
+        assertEquals(55f, stats.peakCpuMs(), 0.5f);
+    }
+
+    @Test
+    public void aPeakOutsideTheWindowIsNoLongerThePeak() {
+        settle(60d, 55d);
+        phases(50000, 3000, 1000);
+        frames(400, 10d);       // four seconds, so the spike is well outside a three-second window
+        settle(8d, 4d);
+        phases(100, 50, 10);
+        settle();
+        // OR THE BREAKDOWN WOULD BE STARTUP'S FOREVER: the first frames of any scene carry every lazy
+        // allocation and every shader's first compile, and nothing afterwards would ever beat them.
+        // The window bounds it now; nothing has to decay a held copy.
+        assertTrue("peak was " + stats.peakCpuMs() + "ms", stats.peakCpuMs() < 10f);
     }
 
     @Test
@@ -207,34 +263,6 @@ public class FrameStatsTest {
         FrameStats.Spark spark = stats.spark(30);
         long bad = spark.health().stream().filter(each -> each == FrameStats.Health.BAD).count();
         assertEquals("one spike is one red column", 1, bad);
-    }
-
-    @Test
-    public void theBreakdownShownIsTheSlowestFramesAndNotTheLastOnes() {
-        frames(10, 8d);
-        settle(60d, 55d);
-        phases(50000, 3000, 1000);
-        settle(8d, 4d);
-        phases(100, 50, 10);
-
-        // The last frame's breakdown is the cheap one, which is what a live one-line hint should show...
-        assertTrue(stats.phasesByCost().get(0).getValue() < 1_000_000L);
-        // ...and what the expanded readout shows is the spike's. A readout refreshes ten times a second
-        // and the frame worth reading is never the one still on screen by the time an eye reaches it.
-        assertEquals("style", stats.peakPhasesByCost().get(0).getKey());
-        assertEquals(55f, stats.peakCpuMs(), 0.5f);
-    }
-
-    @Test
-    public void aPeakOlderThanTheWindowIsForgotten() {
-        settle(60d, 55d);
-        phases(50000, 3000, 1000);
-        frames(400, 10d);       // four seconds, so the spike is well outside a three-second window
-        settle(8d, 4d);
-        phases(100, 50, 10);
-        // OR THE BREAKDOWN WOULD BE STARTUP'S FOREVER: the first frames of any scene carry every lazy
-        // allocation and every shader's first compile, and nothing afterwards would ever beat them.
-        assertEquals(4f, stats.peakCpuMs(), 0.5f);
     }
 
     @Test
