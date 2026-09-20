@@ -513,7 +513,15 @@ menuitem {
  * saturated blue highlight on an otherwise grayscale popup was the one part of the whole widget that
  * still looked like a leftover accent colour. Lighter than the #4B4B4B menu surface is what still reads
  * as "raised" without reaching for hue. */
-menuitem:focus {
+menuitem:focus,
+/* AND UNDER THE POINTER. The highlight was focus-only, so a menu lit up for the keyboard and gave a
+ * pointer no feedback at all until the click landed -- which reads as the rows not being clickable. Every
+ * native menu, IntelliJ's and VS Code's included, highlight the row the cursor is on.
+ *
+ * THE SAME COLOUR as :focus deliberately: they are one state arriving two ways, and two shades would read
+ * as two different kinds of selection. `menuitem:disabled` follows this rule and so still wins, which is
+ * what keeps an unavailable row from lighting up. */
+menuitem:hover {
     background: var(--menu-item-focus-bg, #606060);
 }
 /* A row that leads somewhere: label left, arrow hard right, and a gap so the two never touch on a short
@@ -663,8 +671,8 @@ menu.__has-checkable__ menuitem {
 menu.__has-icons__ menuitem .__mark__,
 menu.__has-icons__ menuitem::part(pre-icon),
 menu.__has-icons__ menuitem::part(mark) {
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     flex-grow: 0;
     flex-shrink: 0;
     align-self: center;
