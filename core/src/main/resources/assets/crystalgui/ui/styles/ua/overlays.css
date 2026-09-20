@@ -1313,3 +1313,56 @@ dialog.__paste-attributes__ button::part(label) {
     min-width: 76;
     justify-content: center;
 }
+
+/* ── Frame stats ────────────────────────────────────────────────────────────────────────────────
+ * The debug readout (`FrameStatsOverlay`): promoted, so the insets place it against the surface's
+ * own corner rather than a panel's.
+ *
+ * MONOSPACED, and that is not taste: every number here is rewritten ten times a second, and in a
+ * proportional face each rewrite shifts everything to its right — which reads as the readout
+ * flickering rather than as the digits changing.
+ */
+framestats {
+    top: 2px;
+    right: 80px;
+    padding: 4px 6px;
+    background-color: var(--framestats-bg, #0C0C0C96);
+    border-radius: 3px;
+    /* A CAP, because the readout is drawn OVER the application: the rows are cut to a width in
+     * FrameStats, and this is the guard that keeps a row nobody cut from growing the plate across the
+     * menu bar. A row past it WRAPS, which is ugly and visible -- the two ways of making it not wrap
+     * are both worse, see the row rule below. */
+    max-width: 300px;
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    color: var(--framestats-fg, #C3CCD4);
+}
+
+/* THE SIZE GOES ON THE ROW, NOT ON THE BOX, and that is the engine's own rule rather than a style
+ * preference: `default.css` opens with `* { font-size: 10 }`, so font-size does not effectively
+ * inherit -- every row already has a candidate of its own and a size on the container reaches none of
+ * them. Stated here because the container rule LOOKS like it works: the headline carries its own size
+ * and reads correct while every row below it silently keeps the universal 10. */
+/* NO `white-space: nowrap` HERE, AND NO `overflow: clip` ON THE PLATE -- together they make the whole
+ * readout disappear, which is how this was found. A non-wrapping UIText measures ZERO width by design
+ * (it draws one line however long, past its own box, and truncates at paint), so the plate's
+ * max-content width collapses to its padding and the clip then hides every row that is drawn outside
+ * it. Either alone is merely untidy; the pair is invisible. The rows are cut to a character budget in
+ * FrameStats instead, which is the one place that knows what it is about to write. */
+framestats .__row__ {
+    font-size: 7;
+}
+
+/* The headline row - the rate, read at a glance. After the row rule, since the two carry equal
+ * specificity and this is the one that must win. */
+framestats .__head__ {
+    font-size: 8;
+    color: var(--framestats-head-fg, #F0F4F8);
+}
+
+/* GREEN / AMBER / RED, and the row decides which by asking FrameStats.Health -- inside the budget, past
+ * it, or past twice it. The threshold is the engine's so every host agrees what a 40ms frame is; the
+ * colour is here so a theme can say it differently. Last, so a verdict beats the headline's own colour
+ * at equal specificity. */
+framestats .__good__ { color: var(--framestats-good, #7FD08C); }
+framestats .__warn__ { color: var(--framestats-warn, #E8C061); }
+framestats .__bad__  { color: var(--framestats-bad,  #E86A5C); }

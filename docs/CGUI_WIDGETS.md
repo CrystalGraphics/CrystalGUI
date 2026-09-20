@@ -1362,6 +1362,69 @@ final class NodeModel implements TreeEditModel<Node> {
 
 ---
 
+## 12f. The frame readout — `FrameStatsOverlay` over `FrameStats`
+
+`com.crystalgui.widget.display` / `com.crystalgui.core.async` · tag `framestats` · `cgui-desktop` (F7 shows, F8 expands)
+
+How fast the last few seconds ran, drawn over whatever is being measured. The collector is headless and
+the overlay is one call, so the same readout serves a harness scene, the editor and a Minecraft screen.
+
+```java
+FrameStatsOverlay hud = FrameStatsOverlay.attach(document);   // top-right, promoted, hit-tests nothing
+hud.toggle();                                                 // the host binds a key
+hud.toggleDetail();                                           // a row per phase, with its share
+hud.stats().setBudgetMs(1000f / 144f).setWindowSeconds(5f);   // this host's refresh rate
+```
+
+```
+117 fps   9.0ms wall   2.7ms cpu                 <- the rate, and what it cost to produce
+3s: best 2.2  p50 8.0  p95 9.5  worst 37.1       <- the spread behind that average
+1% low 28 fps   over 16.7ms: 6/350   GC 2ms      <- the stutter, the misses, the collector
+style 2.10ms  layout 1.44ms  paint 1.21ms        <- where it went; expands to a row each
+drawcalls=143 rematched=18
+```
+
+Expanded (`toggleDetail`), the phase line becomes a column — the question after the summary has said
+there is one:
+
+```
+phases 12.9ms of 13.1ms cpu
+  style                 6.20ms  48%
+  layout                3.11ms  24%
+  paint                 2.40ms  19%
+  gl:draw               1.18ms   9%
+```
+
+- **Wall and CPU are different questions.** Wall is the interval between frame starts, vsync included —
+  what the rate is made of. CPU is what the frame spent working. Under vsync the first sits at the
+  refresh rate while the second says how much headroom is left, so a readout with only the first reports
+  60fps right up until it collapses.
+- **A frame's sample is committed at the NEXT frame's start**, because its wall time is the interval to
+  it. That also means a document framed without being painted still reports a rate: the end of a frame
+  is the painter's last line, and a HUD that waited for one said "warming up" forever in a test.
+- **Green/amber/red is a verdict, and every verdict is about the typical case.** The rate row judges the
+  window's average frame, the spread row its **p95** and the miss row the **share** that missed. Judging
+  the worst frame instead makes the row permanently red — measured at a steady 117fps, every three-second
+  window holds a frame over twice the budget. The worst frame is shown; it is not the judgement.
+- **A row that states rather than judges gets no colour** (`Health.NONE`) — the phase breakdown has no
+  budget of its own to be measured against, and green on it reads as "this part is fine".
+- **The thresholds are the engine's and the colours are the sheet's**: a row wears `__good__` /
+  `__warn__` / `__bad__` and `ua/overlays.css` says what those look like.
+- **Collecting is held, not switched.** `hold()`/`release()` are counted, the overlay takes one while it
+  is showing and in a tree, and with no holder the per-frame cost is one boolean read.
+- **The phase rows are `FrameProfile`'s**, and they follow the READOUT rather than its property:
+  `FrameProfile` times its phases whenever something is collecting, while
+  `-Dcrystalgui.frameprofile=true` adds the per-slow-frame LOGGING and the invalidation blame on top.
+  The split is deliberate — needing a restart with a property is exactly when a stall is least
+  reproducible. A second timer around the same code would be a second answer to one question.
+- **A share is of the phases' own total, not of the frame.** Phases nest and the gaps between them are
+  nobody's, so a column measured against the frame would sum to 140% one frame and 60% the next, which
+  reads as a broken profiler rather than an honest total.
+- Monospaced deliberately: every number is rewritten ten times a second, and in a proportional face each
+  rewrite shifts the rest of the line.
+
+---
+
 ## 13. Harness scenes
 
 ```bash
