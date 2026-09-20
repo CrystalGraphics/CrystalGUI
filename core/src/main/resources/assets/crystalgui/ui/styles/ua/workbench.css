@@ -2380,6 +2380,14 @@ projectfiletree .__project-row__ text {
 projectfiletree .__project-row__ {
     width: 100%;
     min-width: 0px;
+
+    /* A SELECTION BAND IS A ROUNDED BAR, the same object the menu's highlight and the activity rail's
+     * button are. IntelliJ rounds every one of them and a square band is the odd one out -- it reads as
+     * a table cell rather than as the one row the keys will act on.
+     *
+     * On the ROW rather than on `.__selected__`, so the active and inactive fills and any future state
+     * are one shape. A row with no fill draws nothing, so this costs an unselected row nothing. */
+    border-radius: var(--radius-control, 4px);
 }
 
 /* UNLESS THE LIST SCROLLS SIDEWAYS, in which case the label must NOT give way — it is the thing being
@@ -2936,6 +2944,54 @@ navigatorview .__nav-node__.__collapsed__ > .__nav-arrow__ {
 navigatorview .__nav-node__.__expanded__ > .__nav-arrow__ {
     overlay: shape("chevron-down");
     color: var(--nav-arrow-fg, #B0B0B0);
+}
+
+/* EVERY TREE ROW, not just the project's -- the band is the same object wherever a tree is. Scoped to
+ * `treeview` so it reaches a tree in any panel and nothing that merely borrows `__row__`. */
+treeview .__row__ {
+    border-radius: var(--radius-control, 4px);
+}
+
+/* ── A RUN OF SELECTED ROWS IS ONE BLOCK ────────────────────────────────────────────────────────
+ *
+ * Rounding every selected row independently beads along the edges they share: three selected files drew
+ * three separate lozenges stacked touching, which reads as three selections rather than one. IntelliJ
+ * rounds the top of the first row and the bottom of the last and squares everything between.
+ *
+ * SQUARE FIRST, THEN ROUND THE ENDS, because this engine has no `:not()` -- "a selected row that is not
+ * the top of its run" cannot be said, so the default for a selected row is square and the two ends add
+ * their corners back. ListView marks them: it is the only thing that knows whether the NEIGHBOURING
+ * index is selected, which no selector can ask. @see ListView#RUN_TOP_CLASS
+ *
+ * The corner longhands come in -x/-y pairs because a radius here is elliptical; there is no per-corner
+ * shorthand to collapse them into. */
+treeview .__row__.__selected__ {
+    border-radius: 0px;
+}
+
+treeview .__row__.__selected__.__run-top__ {
+    border-top-left-radius-x: var(--radius-control, 4px);
+    border-top-left-radius-y: var(--radius-control, 4px);
+    border-top-right-radius-x: var(--radius-control, 4px);
+    border-top-right-radius-y: var(--radius-control, 4px);
+}
+
+treeview .__row__.__selected__.__run-bottom__ {
+    border-bottom-left-radius-x: var(--radius-control, 4px);
+    border-bottom-left-radius-y: var(--radius-control, 4px);
+    border-bottom-right-radius-x: var(--radius-control, 4px);
+    border-bottom-right-radius-y: var(--radius-control, 4px);
+}
+
+/* A TREE KEEPS A TIGHTER GUTTER THAN THE SHARED ONE. The shared 7px is right for the inspector, whose
+ * bands run the full width of the panel; a tree's rows are already indented and against that the same
+ * clearance reads loose. 6px, measured.
+ *
+ * ALL THREE SELECTORS ARE NEEDED to outrank `.__scroll-view__.__v-gutter__` in ua/editor.css: that is
+ * two classes (20), so a tag plus one class (11) would lose however late this file comes. Tag plus both
+ * classes is 21. @see ScrollerView#V_GUTTER_CLASS */
+treeview.__scroll-view__.__v-gutter__ {
+    padding-right: 6px;
 }
 
 navigatorview treeview .__row__:hover {

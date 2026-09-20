@@ -306,9 +306,6 @@ public class Menu extends Popover {
         // through a menu is the noise :focus-visible exists to avoid.
         item.onMouseEnter.attachListener((el, event) -> {
             if (!isOpen()) return;
-            UIDocument window = document();
-            if (window != null) window.focus().requestPointerFocus(item);
-
             if (item.hasSubmenu()) {
                 scheduleSubmenu(item);
             } else {
@@ -317,6 +314,16 @@ public class Menu extends Popover {
                 cancelPendingSubmenu();
                 closeSubmenus();
             }
+            // FOCUS IS TAKEN AFTER THE SUBMENU IS CLOSED, and the order is the whole of it.
+            //
+            // A Popover hands focus back to whatever it was opened from -- `focusBeforeOpen`, the same
+            // restore Dialog does. So closing a submenu refocuses the row that opened it. Taking focus
+            // first meant that restore landed AFTER us and put it back on the parent row: the row under
+            // the pointer kept :hover, the parent regained :focus, and a menu showed two highlighted rows
+            // at once. Closing first lets the restore happen while nobody is claiming anything, and this
+            // claim is then the last word. @see MenuOneHighlightTest
+            UIDocument window = document();
+            if (window != null) window.focus().requestPointerFocus(item);
         }, false, false);
 
         item.attachListener(() -> {

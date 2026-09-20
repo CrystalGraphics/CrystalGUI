@@ -358,6 +358,17 @@ dropdown::part(menu) {
      * the stylesheet owns durations — drop this line and popovers snap in, with nothing broken. */
     opacity: 0;
     transition: opacity 120ms ease;
+    /* ONE, AND THE BORDER TAKES IT. An `outline` is painted INSET over the box's own last pixel -- the
+     * rule the window caption records for its close button -- so this pixel is the border's and the
+     * highlight begins immediately after it. There is no surface between the two by design: measured
+     * against IntelliJ, what looks like a gap there is the border itself.
+     *
+     * It was 2 for one round, which leaves a pixel of surface showing, and that read as the bar floating.
+     * The row adds nothing either way -- it used to pull in 4px more, so the highlight sat 6px inside a
+     * popup that looked like a wide box around a narrow list.
+     *
+     * Vertical is NOT this number: `menu { padding-top/bottom }` below states it separately, because the
+     * vertical inset is tied to the row rhythm (row padding + gap) and the horizontal one is not. */
     padding: 2px;
     flex-direction: column;
     /* A long menu must scroll rather than run off the screen. AnchoredPlacement clamps the BOX into the
@@ -439,8 +450,16 @@ menu::part(separator) {
     flex-shrink: 0;
     margin-top: 3px;
     margin-bottom: 3px;
-    margin-left: 6px;
-    margin-right: 6px;
+    /* AS WIDE AS A ROW, which is what it divides -- these track `menuitem`'s own margins above and are
+     * not free numbers. At 6 the rule was inset further than the highlight it sits between, so a menu
+     * read as two different widths stacked: a bar running nearly to the border, and a short line
+     * floating above the next one.
+     *
+     * Still inset rather than edge to edge: a rule touching both borders reads as the BOTTOM of the
+     * menu rather than as a divider inside it, which is why Windows insets its own. Matching the rows
+     * keeps that and takes the disagreement out. */
+    margin-left: 2px;
+    margin-right: 2px;
     background: var(--menu-separator, #6E6E6E);
 }
 
@@ -458,10 +477,13 @@ menu::part(separator) {
  * `setPostIcon`, so it sits in the Button's shadow tree where a descendant selector cannot go. Without
  * this the label shrank to 8 and the shortcut beside it stayed at the universal 10 -- the one pair in
  * the row that the comment above says stays the same size as each other for free. */
+/* A PIXEL UNDER THE BAR'S OWN TITLES, which is the relation IntelliJ has: the titles are chrome you aim
+ * at and a row is a line you read, and at the same size the menu read as heavier than the bar that
+ * opened it. The accelerator and the chevron take it too -- they are the row's, not the label's. */
 menuitem text,
 menuitem::part(label),
 menuitem::part(post-icon) {
-    font-size: 8;
+    font-size: 7;
 }
 
 menuitem {
@@ -488,7 +510,11 @@ menuitem {
     padding-bottom: 1px;
     min-height: 11px;
     padding-left: 6px;
-    padding-right: 6px;
+    /* ASYMMETRIC, because the two sides hold different things: the left is the label's inset and the
+     * right is where a chevron or an accelerator ENDS. `margin-left: auto` puts the arrow at the end of
+     * the CONTENT box, so this padding is its distance from the row's edge -- and on top of it the shape
+     * sits inset inside its own 9px box, which is why a 6 here read as the arrow stopping well short. */
+    padding-right: 4px;
     justify-content: flex-start;
     background: #00000000;
 
@@ -496,11 +522,16 @@ menuitem {
      * modern menu since. The highlight is a rounded BAR sitting inside the popup's padding rather
      * than a strip running edge to edge, which is what stops a menu reading as a table of cells.
      *
-     * Two halves, and it only works with both: this radius, and the horizontal margin below that
-     * pulls the bar in from the popup's border. A rounded highlight flush to the edge looks like a
-     * rendering mistake, because its corners get cut by the popup's own rounding. */
-    border-radius: var(--radius-control, 0px);
-    margin-left: 4px;
+     * The radius is the whole of it. The bar used to be pulled in 4px from the popup's padding as well,
+     * on the reasoning that a rounded highlight flush to the edge has its corners cut by the popup's own
+     * rounding -- true when the popup's inset was zero, and not the shape IntelliJ actually draws: there
+     * the bar runs to within a pixel of the border and the popup's 1px of padding is what keeps the two
+     * radii apart. Six pixels of gap either side made the rows read as a list inside a box. */
+    /* A PIXEL UNDER --radius-control, and deliberately not the token: a control's 4px arc is drawn on
+     * something with a border and a fill of its own, while this is a bar of colour inside a rounded
+     * popup, and at 4 it read as noticeably softer than the menu it sits in. 3 is IntelliJ's. */
+    border-radius: 3px;
+    margin-left: 2px;
     margin-right: 4px;
 }
 /* The active row is highlighted by :focus and DELIBERATELY NOT by :hover.
@@ -560,13 +591,39 @@ menuitem:hover {
 menuitem .__submenu-arrow__,
 menuitem.__has-submenu__::part(post-icon) {
     margin-left: auto;
-    width: 8px;
-    height: 8px;
+    /* 9, not 8: measured against IntelliJ's, which is a pixel bigger than ours was and reads as an
+     * affordance rather than as punctuation at the end of the label. */
+    width: 9px;
+    height: 9px;
+    /* AND NOT THE ACCELERATOR'S 24px GUTTER. `menuitem::part(post-icon)` in ua/workbench.css reserves
+     * that so a shortcut cannot touch its label -- and an arrow is the SAME slot, so it took the gutter
+     * too. Padding cannot be compressed, so the 9px box grew to 24 and the chevron, fitted and centred
+     * in it, drew a dozen pixels short of the row's end: measured at 24px wide with a zero content box.
+     * It reads as an arrow that gave up before the edge, which is exactly what it was. */
+    padding-left: 0px;
     flex-grow: 0;
     flex-shrink: 0;
     color: var(--menu-arrow, #A8B0B8);
     overlay: shape("chevron-right");
 }
+/* A SUBMENU ROW RESERVES ITS TRAILING GAP, and it has to be a fixed margin on the LABEL rather than
+ * anything on the arrow.
+ *
+ * `margin-left: auto` on the arrow absorbs FREE space, and a menu is content-sized: a popup holding one
+ * short row has none, so the chevron came to rest against the last letter of the word. That is the trap
+ * the accelerator's own 24px records -- an auto margin contributes nothing to min-content, so the row
+ * that sets the menu's width is exactly the row that ends up with nothing between its two halves.
+ *
+ * The arrow cannot carry it as padding: padding cannot be compressed, so the box grows to it and the
+ * shape, fitted and centred, stops short of the end -- which is the bug above this one. A fixed margin
+ * on the label does contribute to min-content, so a narrow menu widens to fit, while a wide one is
+ * unchanged because the auto margin still collects everything left over at the arrow.
+ *
+ * 24px: the accelerator's gutter, so a menu holding both kinds of row reserves one trailing column. */
+menuitem.__has-submenu__::part(label) {
+    margin-right: 24px;
+}
+
 menuitem:focus-visible {
     outline: 0;
 }

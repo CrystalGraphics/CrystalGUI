@@ -367,12 +367,27 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         if (!horizontal) return sizeStrategy.totalSize(model.size());
         if (!horizontalScrolling) return -1f;
         Box box = box();
-        return Math.max(box == null ? 0f : box.clientWidth(), widestRealised);
+        // THE CONTENT BOX, NOT clientWidth: clientWidth is the PADDING box, so it includes the scrollbar
+        // gutter the scroller reserves (ScrollerView.V_GUTTER_CLASS) and every row came out exactly as
+        // wide as the viewport plus that gutter -- which is the band running under the bar this was
+        // supposed to stop. A row wider than the content box still wins the max and still passes under
+        // the bar, which is right: there is nothing to reserve once the row is overflowing anyway.
+        return Math.max(box == null ? 0f : box.contentBoxWidth(), widestRealised);
     }
 
     /** @see #widestRealised */
     private void measureWidestRealisedRow() {
-        if (!horizontalScrolling) return;
+        if (!horizontalScrolling) {
+            // A LIST THAT DOES NOT SCROLL SIDEWAYS STILL HAS TO RE-WRITE ITS ROWS, because their width is
+            // a pixel measurement now rather than a percentage -- see rowWidth. This is the resize path:
+            // nothing else notices that the viewport's content box moved.
+            float inner = rowWidth();
+            if (inner > 0f && Math.abs(inner - appliedRowWidth) >= 0.5f) {
+                appliedRowWidth = inner;
+                applyRowWidths();
+            }
+            return;
+        }
         float widest = widestRealised;
         // A ROW'S OWN getScrollWidth, which is the furthest right edge of its children -- so it reports
         // the label's true extent even while the row itself is clamped narrower. Anything a row pins to
@@ -403,10 +418,32 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      * would keep the width they were born with and the fills would end in a ragged edge.</p>
      */
     private void applyRowWidth(UIElement row) {
+        final float inner = rowWidth();
         StyleGroup.inlinePipeline(row.getStyle().getLayoutGroup(), l -> {
             if (horizontalScrolling) l.width(scrollExtent(true));
+            else if (inner > 0f) l.width(inner);
+            // Before the first layout there is no box to measure. The percentage is the same answer
+            // while no gutter is reserved, and the write above replaces it on the next pass.
             else l.widthPercent(100f);
         });
+    }
+
+    /**
+     * How wide a row should be when the list does not scroll sideways — <b>the viewport's CONTENT box</b>.
+     *
+     * <h3>Why not 100%</h3>
+     *
+     * <p>Rows are absolutely positioned, and a percentage on an absolute box resolves against the
+     * containing block's BORDER box — so `width: 100%` spans the scroller's full width and ignores any
+     * padding it carries. That is the scrollbar gutter (see {@code ScrollerView.V_GUTTER_CLASS}): the
+     * inspector's headers are ordinary flow children and were inset by it immediately, while a tree's
+     * rows sailed straight under the bar and were cut off by it.</p>
+     *
+     * <p>Zero while the list has no box yet, which the caller reads as "keep the percentage".</p>
+     */
+    private float rowWidth() {
+        Box box = box();
+        return box == null ? 0f : box.contentBoxWidth();
     }
 
     /** Scrolls so the row at {@code index} is visible. The element-based {@code scrollIntoView} cannot
@@ -1203,9 +1240,25 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     }
 
     private void applySelectionClass(UIElement row, int index) {
-        if (selected.contains(index)) row.addClass(SELECTED_CLASS);
+        boolean isSelected = selected.contains(index);
+        if (isSelected) row.addClass(SELECTED_CLASS);
         else row.removeClass(SELECTED_CLASS);
+        // A RUN OF SELECTED ROWS IS ONE BLOCK, so the sheet is told where each row sits in its run and
+        // squares off the edges it shares with a neighbour. Selecting three files otherwise drew three
+        // rounded bands stacked touching, which beads along its shared edges instead of reading as one
+        // selection -- IntelliJ rounds only the top of the first row and the bottom of the last.
+        row.toggleClass(RUN_TOP_CLASS, isSelected && !selected.contains(index - 1));
+        row.toggleClass(RUN_BOTTOM_CLASS, isSelected && !selected.contains(index + 1));
     }
+
+    /**
+     * On a selected row whose predecessor is <b>not</b> selected — the top of a run, so it keeps its
+     * upper corners. A single selected row carries this and {@link #RUN_BOTTOM_CLASS} both.
+     */
+    public static final String RUN_TOP_CLASS = "__run-top__";
+
+    /** On a selected row whose successor is not selected — the bottom of a run. @see #RUN_TOP_CLASS */
+    public static final String RUN_BOTTOM_CLASS = "__run-bottom__";
 
     // ── Keyboard, per the ARIA listbox pattern ──────────────────────────────
 

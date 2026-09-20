@@ -154,6 +154,23 @@ public class ScrollerView extends UIElement {
     /** The square where the two bars meet — a browser's {@code ::-webkit-scrollbar-corner}. */
     public static final String CORNER_PART = "corner";
 
+    /**
+     * On the view while its <b>vertical</b> bar is showing — the sheet's cue to reserve a gutter for it.
+     *
+     * <h3>Why the sheet needs telling at all</h3>
+     *
+     * <p>The bars are absolutely positioned, so they take no room and content runs underneath them: a
+     * tree's selection band and the inspector's section headers both ran under the bar and were cut off
+     * by it. The web's answer is {@code scrollbar-gutter}, and this is the state that property needs —
+     * whether a bar is actually there. It cannot be derived in CSS, because "is this overflowing" is not
+     * a thing a selector can ask.</p>
+     *
+     * <p>Only while the bar is SHOWING, so a panel with nothing to scroll does not carry a dead margin
+     * down its right-hand edge. That makes the gutter appear with the bar, which is what every stable
+     * gutter trades away — and the trade is right here, where most panels never scroll at all.</p>
+     */
+    public static final String V_GUTTER_CLASS = "__v-gutter__";
+
     private final ShadowRoot shadow;
     private final UISlot viewport;
     private final Scroller verticalScroller;
@@ -473,6 +490,8 @@ public class ScrollerView extends UIElement {
             float maxTop = maxScrollTop();
             float maxLeft = maxScrollLeft();
 
+            boolean showsVertical = scrollbarsVisible && overflow.showsScrollbar(maxTop > 0f);
+            toggleClass(V_GUTTER_CLASS, showsVertical);
             updateBar(verticalScroller, overflow, maxTop > 0f,
                     clientHeight(), scrollHeight(), maxTop > 0f ? scrollTop() / maxTop : 0f);
             updateBar(horizontalScroller, overflow, maxLeft > 0f,

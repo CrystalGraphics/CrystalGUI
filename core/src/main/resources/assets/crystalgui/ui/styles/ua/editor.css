@@ -877,6 +877,10 @@ tableview .__cell__ {
  * where the two are visibly next to each other rather than 90 lines apart. */
 * {
     --scrollbar-size: 4px;
+    /* THE ROOM RESERVED FOR IT, which is deliberately MORE than the bar is wide: at exactly the bar's
+     * width a selection band ends where the bar begins and the two read as touching. The bar keeps its
+     * own thickness; this is the column the content stays out of. @see `.__scroll-view__.__v-gutter__` */
+    --scrollbar-gutter: 7px;
     --scrollbar-radius: 3px;
 }
 
@@ -1001,6 +1005,35 @@ texteditor .__corner__ {
     left: 0;
     right: 0;
     bottom: 0;
+}
+
+/* ── THE GUTTER THE VERTICAL BAR SITS IN ────────────────────────────────────────────────────────
+ *
+ * The bars are absolutely positioned, so they take no room and CONTENT RUNS UNDERNEATH THEM. Every
+ * full-width thing inside a scroller was cut off by the bar: a tree's selection band, the inspector's
+ * section headers, and whatever gets written next. This is the web's `scrollbar-gutter: stable`, and it
+ * belongs here beside the width it reserves rather than in each widget that noticed.
+ *
+ * PADDING ON THE HOST, and it needs no compensation: measured, this engine resolves an absolute inset
+ * against the BORDER box, so a scroller with 20px of right padding still had its bar flush at the right
+ * edge while the content box shrank to 180. In a CSS engine that resolved against the padding box the
+ * bar would have come in with the content and this would need undoing again.
+ *
+ * ONLY WHILE THE BAR IS SHOWING -- ScrollerView adds the class -- so a panel with nothing to scroll
+ * carries no dead margin. That is what a stable gutter normally trades away, and the trade is right here
+ * because most panels never scroll. @see ScrollerView#V_GUTTER_CLASS
+ *
+ * Content WIDER than the viewport still passes under the bar, which is correct: there is no room to
+ * reserve when the row is already overflowing, and a narrow panel should use every pixel it has.
+ *
+ * KEYED ON THE CLASS, NOT THE TAG, which is the whole reason the first attempt did nothing. A kind's tag
+ * is the NAME constant on the class it names, and every scroller worth gutting declares its own --
+ * `listview`, `treeview`, `projectfiletree` -- so a `scrollerview` type selector matches the base class
+ * and nothing that actually scrolls a list. ScrollerView stamps `__scroll-view__` on itself in its
+ * constructor for exactly this: it is what "every scroller, whatever it calls itself" is spelled as. The
+ * same reasoning as the hostless `::part(v-scroller)` above, which needs no list of subclasses either. */
+.__scroll-view__.__v-gutter__ {
+    padding-right: var(--scrollbar-gutter, 7px);
 }
 
 /* ── AN EDITOR OPENED AS A DOCUMENT FILLS ITS PANE ───────────────────────────────────────────────

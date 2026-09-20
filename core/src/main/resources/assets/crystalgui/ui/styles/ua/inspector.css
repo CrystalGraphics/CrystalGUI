@@ -550,6 +550,39 @@
 .__configurator-group__ {
     flex-direction: column;
 }
+
+/* ── THE SCROLLBAR GUTTER IS THIS PANEL'S BAND'S, NOT THIS PANEL'S ──────────────────────────────
+ *
+ * The shared gutter (`.__scroll-view__.__v-gutter__` in ua/editor.css) reserves the bar's column as
+ * PADDING on the scroller. That is right everywhere else and wrong here, for the reason stated on
+ * `.__configurator-panel__` above: this panel deliberately carries no horizontal padding, because its
+ * bands are full-bleed and its insets live on the rows' own parts.
+ *
+ * It also cannot afford one. The control column has a floor (--cfg-ctrl-min), so the content has a
+ * min-content width of its own: measured at 289.7 in a 293.4 panel, which is 3.8px of slack. A gutter
+ * wider than that overflows, and a full-bleed band drawn at the content width then runs UNDER the bar
+ * -- which is why 6px, 7px and 10px all looked identical and all looked like touching.
+ *
+ * So the panel takes none, and the band stops short of the bar itself. A POSITIVE margin is safe here;
+ * the negative one the panel's note warns about is what stopped a heading widening its row. */
+configuratorpanel.__scroll-view__.__v-gutter__ {
+    padding-right: 0px;
+}
+
+/* THE BAND STOPS SHORT OF THE BAR, and this is the knob for it.
+ *
+ * The bar is `--scrollbar-size` (4px) of the panel's right edge, so anything up to 4 here still sits
+ * under it and only the excess is visible gap: at 6 there are 2px of surface between the band and the
+ * bar. Only while a bar is showing, so a panel with nothing to scroll keeps the full-bleed band the
+ * rule above it describes.
+ *
+ * Right only, deliberately: the left edge is where the band's own text column is measured from, and
+ * moving it moves `Size` and `Text` out of line with the `width` and `color` labels underneath. */
+.__v-gutter__ .__configurator-group__ > .__head__ {
+    margin-right: 6px;
+}
+
+
 /* THE BAND. A group header is a SEPARATOR, not another row — it has to say "everything below me
  * belongs to me" before you read a word of it, and on a flat panel the only thing that says that is a
  * change of surface. Originally Unity's own #383838-on-#2E2E2E (a hair lighter); the panel moved to
