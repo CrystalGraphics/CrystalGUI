@@ -513,13 +513,29 @@ private void show(@Nullable Thing thing) {
 ```
 
 `of` records the note on the panel (`EmptyState.NOTE`) and lines it up as a list; it starts vacant. A
-line that changes is rewritten on the same note: `empty.setLine(0, "— Press Run (" + key + ")")`.
-Outside a container, `new EmptyState(...)`, append it and `setDisplayed` it yourself — it fills its
-parent absolutely and takes no pointer, so the parent needs a size.
+line that changes is rewritten on the same note. Outside a container, `new EmptyState(...)`, append it
+and `setDisplayed` it yourself — it fills its parent absolutely and takes no pointer, so the parent
+needs a size.
 
-- Tag `emptystate` · parts `lines`, `heading`, `line` · token `--empty-state-fg`
-- Declared by `RunPanel`, `HierarchyToolWindow`, `LibraryToolWindow`, `Inspector`
-- Scenes: `cgui-desktop` (open the Run, Hierarchy or Library panel with no `.cgui` in front)
+**A line may end in a key chord**, which the sheet dims against the words it belongs to — the words are
+the instruction and the chord is how to perform it, so painting them alike makes the chord read as part
+of the sentence. Pass the chord separately rather than concatenating it, and pass `null` when a command
+has no binding rather than inventing one:
+
+```java
+KeyChord chord = Keymap.acceleratorFor(this, ExplorerCommands.GO_TO_FILE);
+empty.setLine(0, "— Go to File", chord == null ? null : chord.toString());
+```
+
+- Tag `emptystate` · parts `lines`, `heading`, `line`, `chord` · tokens `--empty-state-fg`,
+  `--empty-state-chord-fg`
+- Declared by `RunPanel`, `HierarchyToolWindow`, `LibraryToolWindow`, `Inspector`, and `DockGroup` for
+  the empty editor's watermark — whose copy is the DOCK's (`DockArea.setWatermark`), because naming an
+  application's ways in is the application's business and a dock is a widget other products build with
+- The watermark reads larger and brighter than a panel's note (`dockgroup emptystate::part(line)`,
+  `--editor-watermark-fg`): it owns the whole work area and is read rather than glanced at
+- Scenes: `cgui-desktop` (open the Run, Hierarchy or Library panel with no `.cgui` in front; close every
+  editor tab for the watermark)
 
 ## 7. `Scroller` and `ScrollerView`
 

@@ -1,6 +1,8 @@
 package com.crystalgui.workbench;
 
 
+import com.crystalgui.workbench.explorer.ExplorerCommands;
+import com.crystalgui.workbench.chrome.menu.ChromeCommands;
 import com.crystalgui.workbench.extension.ProjectExtension;
 import com.crystalgui.workbench.extension.ProblemsExtension;
 import com.crystalgui.workbench.extension.NotificationsExtension;
@@ -887,6 +889,15 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         opener.contribute(TextFileKind.declare(this));
 
         dock = new DockArea(registry, defaultLayout());
+        // WHAT AN EMPTY EDITOR SAYS, named here because these are THIS application's ways in -- the dock is
+        // a widget other products build with, and one carrying these ids would offer a shader graph's
+        // editor a Project View it does not have. @see DockArea#setWatermark
+        dock.setWatermark("To open something:",
+                new DockArea.WatermarkLine("— Go to File", ExplorerCommands.GO_TO_FILE),
+                new DockArea.WatermarkLine("— All Commands", ChromeCommands.SHOW_COMMANDS),
+                new DockArea.WatermarkLine("— Project View",
+                        StripeView.commandIdFor(ProjectExtension.TYPE)),
+                new DockArea.WatermarkLine("— Or drop files here", null));
 
         // ASKED BEFORE ANYTHING IS DISCARDED. Ctrl+W on an edited file used to throw the work away with no
         // warning at all -- the tab marker said it was modified and nothing acted on that.

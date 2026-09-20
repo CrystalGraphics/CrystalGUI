@@ -162,6 +162,45 @@ public class DockArea extends UIElement implements MinimumSize {
         registerDropHandling();
     }
 
+    /**
+     * One line of the empty editor's watermark: what to say, and the command whose chord says it.
+     *
+     * <p>A command id rather than a chord, because a binding is a live thing — the group resolves it
+     * against the keymap where it sits, and a line whose command has no binding is simply words.</p>
+     */
+    public record WatermarkLine(String text, @Nullable String commandId) {
+    }
+
+    /**
+     * What an editor area with nothing open says.
+     *
+     * <p><b>Set by whoever composes the dock, never authored here.</b> The copy names an application's own
+     * ways in — its file finder, its palette, its project tree — and a dock is a widget that other products
+     * build with: one hardcoding this workbench's commands would be telling the shader graph's editor to
+     * offer a Project View it does not have. A dock nobody sets one on shows none, which is the right
+     * default for a dock that is not an editor area.</p>
+     *
+     * @see DockGroup#refreshWatermark
+     */
+    public DockArea setWatermark(String heading, WatermarkLine... lines) {
+        this.watermarkHeading = heading;
+        this.watermarkLines = List.of(lines);
+        return this;
+    }
+
+    /** @see #setWatermark */
+    public String watermarkHeading() {
+        return watermarkHeading;
+    }
+
+    /** @see #setWatermark */
+    public List<WatermarkLine> watermarkLines() {
+        return watermarkLines;
+    }
+
+    private String watermarkHeading = "";
+    private List<WatermarkLine> watermarkLines = List.of();
+
     /** The tree is built from the layout; content comes from the registry. */
 
     public DockPanelRegistry<UIElement> registry() {

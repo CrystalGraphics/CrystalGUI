@@ -238,7 +238,7 @@ editor scheme's.
 | `--dock-active-border` | `var(--accent-soft)` | base.css |
 | `--dock-bg` | `var(--surface-panel)` | base.css |
 | `--dock-drop-overlay` | `#4A88C766` | crystal-dark.css |
-| `--dock-empty-bg` | `var(--surface-base)` | base.css |
+| `--dock-empty-bg` | `var(--surface-panel)` | base.css |
 | `--dock-floating-bg` | `#1E1E1EF0` | crystal-dark.css |
 | `--dock-insertion-bg` | `#7EB6FF30` | crystal-dark.css |
 | `--dock-insertion-border` | `var(--accent)` | base.css |
@@ -262,6 +262,7 @@ editor scheme's.
 | `--editor-ruler` | `#2B2D30` | dark-plus.css |
 | `--editor-selection-bg` | `#2C5A8C` | dark-plus.css |
 | `--editor-selection-occurrence-bg` | `#2E3236` | dark-plus.css |
+| `--editor-watermark-fg` | `var(--fg)` | base.css |
 | `--editor-whitespace` | `#454C57` | dark-plus.css |
 | `--editor-zoom-bg` | `#2B303B` | dark-plus.css |
 | `--editor-zoom-fg` | `#C8CDD4` | dark-plus.css |
@@ -269,6 +270,7 @@ editor scheme's.
 | `--editor-zoom-link-pressed` | `#2F7FD8` | dark-plus.css |
 | `--editorfind-bg` | `var(--surface-panel)` | base.css |
 | `--editorfind-border` | `var(--surface-base)` | base.css |
+| `--empty-state-chord-fg` | `var(--fg-hint)` | base.css |
 | `--empty-state-fg` | `var(--fg-hint)` | base.css |
 | `--error` | `#F14C4C` | crystal-dark.css |
 | `--error-icon` | `#E55765` | crystal-dark.css |
