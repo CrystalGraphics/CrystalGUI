@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.widget.control.Button;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
 import org.joml.Vector2f;
@@ -187,7 +188,16 @@ final class WindowMove {
      */
     private boolean captionPressIsAControl(@Nullable UIElement target) {
         for (UIElement walk = target; walk != null && walk != bar; walk = walk.parentElement()) {
-            if (walk.focusPolicy().isFocusable()) return true;
+            // FOCUSABLE **OR A BUTTON**, and focusability alone is not the question. A toolbar button
+            // REFUSES focus on purpose -- FocusPolicy.NONE, so it cannot take the keys from the view it
+            // acts on -- and an adopted panel's title actions are exactly that. They answered "not a
+            // control", so the press started a window move, the move captured the pointer, and the
+            // release that would have activated the button went to the move instead: the actions drew,
+            // hovered, and did nothing.
+            //
+            // A LABEL still starts a move, which is what this guard is for: an adopted header's title is
+            // an ordinary hittable UIText and dragging a window by its own name has to keep working.
+            if (walk.focusPolicy().isFocusable() || walk instanceof Button) return true;
         }
         return false;
     }
