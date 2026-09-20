@@ -1311,6 +1311,21 @@ emptystate.__start-aligned__::part(lines) {
     align-items: flex-start;
 }
 
+/* EXCEPT THE HEADING, which is a title for the list rather than a member of it. Left-aligning the block
+ * is about the DASHES lining up; the sentence introducing them is not a dash and reads as a ragged first
+ * row when it takes the same edge. Centred over whatever the widest line turns out to be, which is what
+ * `align-self` on a column child means and why this needs no width anywhere. */
+emptystate.__start-aligned__::part(heading) {
+    align-self: center;
+}
+
+/* EXCEPT THE EDITOR'S WATERMARK, which is the one note that is not a caption over a list: it owns the
+ * whole work area, the lines under it are the ways IN rather than examples of one thing, and the
+ * sentence opening them belongs on the same edge -- IntelliJ's watermark is flush left end to end. */
+dockgroup emptystate.__start-aligned__::part(heading) {
+    align-self: flex-start;
+}
+
 /* Each line states its own size: `* { font-size: 10 }` is a candidate on every element, so a rule on the
  * block would not inherit. */
 emptystate::part(heading),
