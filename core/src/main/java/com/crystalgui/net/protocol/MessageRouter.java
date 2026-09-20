@@ -99,6 +99,33 @@ public final class MessageRouter<T> {
         return this;
     }
 
+    /**
+     * Withdraws a handler, so a subsystem that is finished with a method can hand it back.
+     *
+     * <pre>{@code
+     * router.onNotify("ui/openWindow", mine);
+     * // ...later, when this subsystem is done with the connection:
+     * router.offNotify("ui/openWindow", mine);   // somebody else may now claim it
+     * }</pre>
+     *
+     * <p><b>It takes the handler, not just the method, and that is the whole safety of it.</b> A
+     * by-method removal lets any caller drop any other subsystem's registration — the same class of
+     * mistake the duplicate check above exists to refuse, arriving from the other side. Passing the
+     * handler means a caller can only withdraw what it put there.</p>
+     *
+     * <p>Handlers are lambdas, so this matches by identity. Keep the reference you registered.</p>
+     *
+     * @return whether that handler was registered for that method and has now been removed
+     */
+    public boolean offNotify(String method, NotificationHandler<T> handler) {
+        return notificationHandlers.remove(method, handler);
+    }
+
+    /** @see #offNotify */
+    public boolean offRequest(String method, RequestHandler<T> handler) {
+        return requestHandlers.remove(method, handler);
+    }
+
     // ── Sending ─────────────────────────────────────────────────────────────
 
     /**

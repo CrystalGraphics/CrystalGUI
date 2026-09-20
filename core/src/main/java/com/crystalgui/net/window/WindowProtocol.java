@@ -1,7 +1,9 @@
 package com.crystalgui.net.window;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
+import com.crystalgui.probe.ConnectionProbe;
 
 /**
  * Wires the window lifecycle onto every connection — <b>the one call that turns this on</b>.
@@ -36,6 +38,23 @@ public final class WindowProtocol {
         if (registered) return;
         registered = true;
         Protocols.server("ui", ServerWindows::install);
+
+        // THE CLIENT HALF STANDS DOWN FOR THE CONNECTION PROBE, and only that half.
+        //
+        // ClientWindows and a plain ClientUiSession both want `ui/openWindow`, and ClientUiSessions
+        // says so in its own javadoc: the two are mutually exclusive, and the router refuses the
+        // second registration. The probe opens ONE window on a connection it does not own -- the
+        // single-session case -- so with this installed it died on a duplicate handler before a single
+        // check ran, which is how the session probe this replaces had been broken since the window
+        // host landed. Nobody noticed, because it needed a person to load a world.
+        //
+        // The SERVER half stays: nothing on that side collides, and a probe that stopped the server
+        // lifecycle would be testing a configuration production never has.
+        if (ConnectionProbe.enabled()) {
+            CrystalGuiCore.LOGGER.warn("[cgui] the client window host is NOT installed -- the connection"
+                    + " probe owns ui/openWindow while -D" + ConnectionProbe.PROPERTY + " is set");
+            return;
+        }
         Protocols.client("ui", ClientWindows::install);
     }
 

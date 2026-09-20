@@ -43,7 +43,7 @@ dependencies {
 //
 // `main` is on lang's compile classpath and NOT the reverse, so the main jar cannot name the language
 // stack — the compiler enforces the split rather than an import guard noticing it afterwards. Its own
-// package (`com.crystalgui.mc.lang`) because the two source sets end up in two JARS, and two jars
+// package (`com.crystalgui.mc.modern.lang`) because the two source sets end up in two JARS, and two jars
 // sharing a package is a split package that fails module resolution on Forge and NeoForge.
 val lang: SourceSet by sourceSets.creating {
     compileClasspath += sourceSets["main"].compileClasspath + sourceSets["main"].output

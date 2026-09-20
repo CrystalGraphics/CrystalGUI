@@ -2,6 +2,7 @@ import org.gradle.process.CommandLineArgumentProvider
 import java.io.File
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
 import xyz.wagyourtail.jvmdg.gradle.task.ShadeJar
+import java.time.Duration
 
 plugins {
     id("cg-java17")
@@ -665,3 +666,75 @@ tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
 }
 
 tasks.named("check") { dependsOn("checkThinJar") }
+
+// ── The connection probe, registered once for every 1.20.x loader ────────────────────────────────
+//
+//     ./gradlew :runtime:mc:modern:forge:connectionProbe
+//
+// Drives a client into a world, runs every check that needs a real connection, writes a verdict and
+// quits — the client-side twin of `serverSmoke`, and the same discipline: an absent report is a
+// failure with a message, never a pass.
+//
+// 1.20.x gets here at all because the probe lives in `core`. The six classes it came from were
+// 1.7.10's alone, so the session handshake, tree and state deltas, fan-out and the workspace had never
+// been exercised over a connection on this era.
+//
+// `--quickPlaySingleplayer` rather than driving the menu: vanilla loads the named save itself. It is
+// NOT passed for a role, because the two-client checks join a dedicated server instead.
+val connectionProbeRequested = gradle.startParameter.taskNames.any {
+    it == "connectionProbe" || it.endsWith(":connectionProbe")
+}
+val connectionProbeReport = layout.buildDirectory.file("connectionProbe/result.txt")
+val connectionProbeRole = providers.gradleProperty("cgProbeRole").orNull
+
+tasks.withType<JavaExec>().matching { it.name == "runClient" }.configureEach {
+    if (!connectionProbeRequested && !providers.gradleProperty("cgProbe").isPresent) return@configureEach
+
+    systemProperty("crystalgui.probe.connection", "true")
+    systemProperty("crystalgui.probe.report", connectionProbeReport.get().asFile.absolutePath)
+    connectionProbeRole?.let { systemProperty("crystalgui.probe.role", it) }
+
+    if (connectionProbeRole == null) {
+        argumentProviders.add(CommandLineArgumentProvider {
+            logger.lifecycle("[cgui] connection probe: loading '{}'", cgProbeWorld)
+            listOf("--quickPlaySingleplayer", cgProbeWorld)
+        })
+        // AND THE SAME NAME TO THE FALLBACK. quickPlay is what normally gets there, but the probe asks
+        // its host to enter a world too -- and that path reads this property. Without it the host says
+        // "no save" on a run that has one, which is a misleading line in a passing log.
+        systemProperty("crystalgui.autotest.world", cgProbeWorld)
+    }
+
+
+    // AND A HARD STOP, so a client that never reaches a verdict is killed rather than left running.
+    // Gradle interrupts the task at this and the run below then finds no report, which is a failure
+    // with a message. Without it a stalled probe holds file handles on the vanilla jars and the NEXT
+    // build fails naming an unrelated task. Three minutes: a run that has not reached a verdict by then is stuck, not slow.
+    timeout.set(Duration.ofMinutes(3))
+
+    // Deleted BEFORE the run, so a stale report cannot pass for this one.
+    doFirst { connectionProbeReport.get().asFile.delete() }
+}
+
+tasks.register("connectionProbe") {
+    group = "crystalgui"
+    description = "Drives a client into a world, checks everything that needs a real connection, quits."
+    dependsOn(tasks.named("runClient"))
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val file = connectionProbeReport.get().asFile
+        if (!file.isFile) {
+            throw GradleException(
+                "The client produced no probe report at " + file.absolutePath + ".\n" +
+                    "It never reached a verdict, so NO check ran -- this is not a pass. Look above " +
+                    "for the reason: a crash during startup, or a save named '" + cgProbeWorld +
+                    "' that does not exist. Use -PcgWorld=<name> to name another.")
+        }
+        val verdict = file.readLines().firstOrNull()?.trim().orEmpty()
+        if (verdict != "PASS") {
+            throw GradleException("Connection probe FAILED:\n" + file.readText())
+        }
+        logger.lifecycle(file.readText())
+    }
+}

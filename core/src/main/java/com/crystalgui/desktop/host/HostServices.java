@@ -89,6 +89,26 @@ public interface HostServices {
     float uiScale();
 
     /**
+     * The surface, in <b>device</b> pixels — the raw framebuffer, never a scaled or logical size.
+     *
+     * <pre>{@code
+     * public int surfaceWidth()  { return minecraft.getWindow().getWidth(); }
+     * public int surfaceHeight() { return minecraft.getWindow().getHeight(); }
+     * }</pre>
+     *
+     * <p>Divided by {@link #uiScale()} wherever a logical size is wanted, which is the one conversion
+     * and lives above this seam. Answer {@code 0} when there is no surface yet rather than guessing:
+     * a session sizing its first window reads these, and zero is refused where a made-up number is
+     * silently honoured.</p>
+     *
+     * <p>Re-asked rather than cached, so a resized game window reaches the next thing that measures.</p>
+     */
+    int surfaceWidth();
+
+    /** @see #surfaceWidth() */
+    int surfaceHeight();
+
+    /**
      * Which desktop this is, for the arrangement record.
      *
      * <p>Two hosts in one installation — a game client and a dedicated tool — keep separate window

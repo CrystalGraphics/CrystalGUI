@@ -1,5 +1,6 @@
 import java.util.zip.ZipFile
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
+import java.time.Duration
 
 plugins {
     id("com.gtnewhorizons.gtnhconvention")
@@ -231,6 +232,22 @@ tasks.named<DowngradeJar>("downgradeJar") {
 // build where the namespace probe answers "obfuscated" and the mapping path actually executes. Wiring the
 // harness to `runClient` alone would leave the last mile verifiable only by hand, which is precisely the
 // loop the harness exists to remove.
+// ── The connection probe as a build task ──────────────────────────────────────────────
+//
+//     ./gradlew :runtime:mc:1710:connectionProbe
+//
+// Drives a client into a world, runs every check that means anything on an integrated server, writes a
+// verdict and quits. Same shape as `serverSmoke`, and for the same reason: the probes this replaces all
+// needed somebody to load a world by hand, which is exactly why none of them could ever be a build task.
+//
+// The task name is read out of the start parameters because a Gradle PROPERTY cannot be set by a task
+// dependency -- so `connectionProbe` and `runClient -PcgProbe` are the same run, spelled twice.
+val connectionProbeRequested = gradle.startParameter.taskNames.any {
+    it == "connectionProbe" || it.endsWith(":connectionProbe")
+}
+
+val connectionProbeReport = layout.buildDirectory.file("connectionProbe/result.txt")
+
 listOf("runClient", "runObfClient").forEach { runTask ->
 tasks.named<JavaExec>(runTask) {
     if (providers.gradleProperty("cgNoDedup").isPresent) {
@@ -295,15 +312,6 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.frameprofile", "true")
     }
 
-    // -PcgNetProbe runs BOTH in-game network probes, in order. CgUiNetProbe echoes raw frames
-    // client->server->client over the Forge channel; CgUiSessionProbe then runs a real
-    // Server/ClientUiSession pair over the same wire and checks the description handshake, a state
-    // delta, an event and a server->client call. The headless tests cover everything above
-    // CgNetworkChannel and nothing below it, so neither layer is proven without this.
-    if (providers.gradleProperty("cgNetProbe").isPresent) {
-        systemProperty("crystalgui.net.probe", "true")
-    }
-
     // -PcgGlassProbe reports, once every 120 frames, what the backdrop material actually costs: the
     // frame PERIOD, the CPU time inside the capture and the blur, how many consumers asked, how often
     // the capture had to be retaken, and the size of the region it covered against the size of the
@@ -317,50 +325,46 @@ tasks.named<JavaExec>(runTask) {
         systemProperty("crystalgui.glass.probe", "true")
     }
 
-    // -PcgSessionProbe runs a real Server/ClientUiSession pair over the connections CgUiConnections
-    // opens on player join -- the path that ships. SEPARATE from -PcgNetProbe on purpose: a channel
-    // takes one inbound handler, so the raw transport probe owns it and the lifecycle stands down while
-    // that flag is set. One tests the engine, the other tests the wiring.
-    if (providers.gradleProperty("cgSessionProbe").isPresent) {
-        systemProperty("crystalgui.session.probe", "true")
+    // -PcgProbe runs THE in-game connection probe -- everything that needs a real connection, in
+    // one class. It was six flags and six classes, each hard-wiring one (topology, check-set) pair:
+    // net, session, wire, remote-workspace, editor-open and two-client. Topology is a parameter now,
+    // so the probe reads where it is and reports the checks that mean nothing there as SKIPPED with a
+    // reason rather than declining to run.
+    //
+    //   runClient -PcgProbe                     the integrated server
+    //   runClient -PcgProbe -PcgJoin=host:port  a real socket, and the server's own disk
+    //   ...plus -PcgProbeRole=watcher|writer on two clients, watcher started first
+    if (providers.gradleProperty("cgProbe").isPresent || connectionProbeRequested) {
+        systemProperty("crystalgui.probe.connection", "true")
+        systemProperty("crystalgui.probe.report", connectionProbeReport.get().asFile.absolutePath)
+
+    // AND A HARD STOP, so a client that never reaches a verdict is killed rather than left running.
+    // Gradle interrupts the task at this and the run below then finds no report, which is a failure
+    // with a message. Without it a stalled probe holds file handles on the vanilla jars and the NEXT
+    // build fails naming an unrelated task. Three minutes: a run that has not reached a verdict by then is stuck, not slow.
+    timeout.set(Duration.ofMinutes(3))
+
+        // Deleted BEFORE the run, so a stale report from a previous one cannot pass for this one.
+        doFirst { connectionProbeReport.get().asFile.delete() }
     }
 
-    // -PcgWireProbe moves 4 MB each way over a REAL socket and reports the rate. The frame ceiling is
-    // asymmetric by a factor of 64 on 1.7.10 -- 32,766 bytes up, 2,097,050 down -- so an upload and a
-    // download of one file are not the same transfer, and no in-JVM test can show the difference.
-    // Pair with -PcgJoin against a running :runtime:mc:1710:runServer.
-    if (providers.gradleProperty("cgWireProbe").isPresent) {
-        systemProperty("crystalgui.wire.probe", "true")
-    }
-
-    // -PcgEditorProbe opens the editor and then works through it, on the INTEGRATED server. That
-    // configuration is the one a player actually runs and the one no other probe covers: every other
-    // probe here closes the GUI or never opens one, which is how a `doesGuiPauseGame` returning true
-    // took the whole workspace down in single-player with nothing in the log. A dedicated server
-    // cannot be paused by a client GUI, so this deliberately refuses to run in multiplayer.
-    if (providers.gradleProperty("cgEditorProbe").isPresent) {
-        systemProperty("crystalgui.editor.probe", "true")
-    }
-
-    // -PcgTwoClientProbe=writer|watcher, run on BOTH of two clients joined to one runServer. The
-    // watcher subscribes and reports what reached it; the writer creates a file and then edits it.
-    // Everything the watcher, presence and the conflict path exist for is a statement about a SECOND
-    // client, and one client is the fixture that passes against all of it.
-    providers.gradleProperty("cgTwoClientProbe").orNull?.let { role ->
-        systemProperty("crystalgui.twoclient.probe", role)
+    // The two-client check, which one client is exactly the fixture that passes against: a change you
+    // made yourself needs no notification to be on screen. Run on BOTH clients.
+    providers.gradleProperty("cgProbeRole").orNull?.let { role ->
+        systemProperty("crystalgui.probe.role", role)
     }
 
     // -PcgJoin=host[:port] makes the client connect straight to a server instead of the main menu.
     // 1.7.10's own Main parses --server/--port, and Minecraft.startGame goes to GuiConnecting when
     // serverName is set -- so this needs no code of ours, only the arguments.
     //
-    // With -PcgRemoteProbe it is the whole point: the integrated server shares a JVM and a filesystem,
-    // so "the workspace lives on the server" is untestable in single player. Two processes is the test.
+    // With -PcgProbe it is the whole point: the integrated server shares a JVM and a filesystem, so
+    // "the workspace lives on the server" is untestable in single player. Two processes is the test --
+    // and the probe reads the topology off the client rather than off a second flag.
     providers.gradleProperty("cgJoin").orNull?.let { target ->
         val host = target.substringBefore(':')
         val port = target.substringAfter(':', "25565")
         args("--server", host, "--port", port)
-        systemProperty("crystalgui.remote.probe", "true")
     }
 
     if (providers.gradleProperty("cgAutoTest").isPresent) {
@@ -435,6 +439,17 @@ tasks.named<JavaExec>("runServer") {
     if (serverSmokeRequested || providers.gradleProperty("cgServerSmoke").isPresent) {
         systemProperty("crystalgui.server.smoke", "true")
         systemProperty("crystalgui.server.smoke.report", serverSmokeReport.get().asFile.absolutePath)
+
+        // WHERE THE CLIENT PACKAGE IS, so the never-loaded set is enumerated rather than hand-written.
+        // The list this replaces had rotted in both directions: it named a class W3 deleted -- a name
+        // nothing can load is a guard that passes for ever -- while CgUiHud, CgUiOverlayInput and
+        // CgUiAutoTest arrived after it was written and were never checked at all.
+        //
+        // No -Xlog:class+load here, unlike the 1.20.x task: that is a Java 9+ flag and this run is on
+        // the GTNH toolchain. It needs none -- LaunchWrapper puts no module in the way, so the
+        // reflective findLoadedClass route the probe falls back to actually works here.
+        systemProperty("crystalgui.server.smoke.classdir",
+                sourceSets["main"].output.classesDirs.asPath)
 
         // --nogui because the dedicated server otherwise opens a Swing console and blocks on it; a check
         // that needs a window closed is not a check a pipeline can run.
@@ -627,7 +642,7 @@ afterEvaluate {
 //
 // `main` is on lang's compile classpath and NOT the reverse, and `:language` is declared HERE rather
 // than in dependencies.gradle, so a language import in `main` is a compile error rather than
-// something an import guard notices afterwards. Its own package (`com.crystalgui.mc.lang`) because
+// something an import guard notices afterwards. Its own package (`com.crystalgui.mc.v1710.lang`) because
 // the two source sets end up in two JARS, and two jars sharing a package is a split package.
 val lang: SourceSet by sourceSets.creating {
     compileClasspath += sourceSets["main"].compileClasspath + sourceSets["main"].output
@@ -781,3 +796,29 @@ tasks.named("assemble") { dependsOn(reobfThinJar) }
 // namespace is here, and `ScriptService1710` already states its coordinates.
 // The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
 // into all four instances, and this one could only ever install the fat `reobfJar` nothing ships.
+
+
+tasks.register("connectionProbe") {
+    group = "crystalgui"
+    description = "Drives a client into a world, checks everything that needs a real connection, quits."
+    dependsOn(tasks.named("runClient"))
+    outputs.upToDateWhen { false }
+
+    // THE HALF THAT MAKES IT SOUND. The probe quits with a verdict when it runs, which covers "ran and
+    // failed"; nothing covers "never ran" -- a world that never loaded, a mod that refused, a crash
+    // during startup. An absent report is a failure with a message, never a pass. @see ConnectionProbe
+    doLast {
+        val file = connectionProbeReport.get().asFile
+        if (!file.isFile) {
+            throw GradleException(
+                "The client produced no probe report at " + file.absolutePath + ".\n" +
+                    "It never reached a verdict, so NO check ran -- this is not a pass. Look above " +
+                    "for the reason: a crash during startup, or a world that never loaded.")
+        }
+        val verdict = file.readLines().firstOrNull()?.trim().orEmpty()
+        if (verdict != "PASS") {
+            throw GradleException("Connection probe FAILED:\n" + file.readText())
+        }
+        logger.lifecycle(file.readText())
+    }
+}
