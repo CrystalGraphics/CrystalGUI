@@ -618,6 +618,11 @@ quickpick {
     outline-width: 1px;
     outline-color: var(--palette-border, #454545);
     padding: 4px;
+    /* AND THE POPUP CLIPS TOO, not only the content box inside it. That one's own comment says why the
+     * guard is worth having -- rows painted past a popup's edge sit over the editor and are still
+     * hit-testable -- but it can only catch what overflows ITSELF. A content box taller than the popup
+     * overflows the POPUP, one level further out, where nothing was watching. */
+    overflow: hidden;
 }
 
 /* CHILD combinator, not descendant: "__content__" is a shared structural class -- CanvasView uses it
@@ -695,6 +700,12 @@ quickpick .__content__ {
      * box, so a zero basis would collapse the whole popup; with one, there is free space and this takes
      * it. Growth alone is correct in both states, which is why it is unconditional. */
     flex-grow: 1;
+    /* AND IT MUST BE ABLE TO SHRINK. `flex-shrink` defaults to 0 in this engine, so a box whose content
+     * is taller than the space it was given keeps its content height as a FLOOR and overflows its parent
+     * -- the trap FlexShrinkOverflowTest pins. Growing was unconditional and shrinking was not, so the
+     * moment the list asked for more rows than the popup had room for, this box simply grew past it and
+     * took the rows with it, out through the popup's edge. */
+    flex-shrink: 1;
 }
 
 quickpick .__qp-header__ {
