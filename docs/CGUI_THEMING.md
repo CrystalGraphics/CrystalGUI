@@ -598,7 +598,6 @@ editor scheme's.
 | `--squiggle-info` | `var(--info)` | base.css |
 | `--squiggle-warning` | `var(--warning)` | base.css |
 | `--statusbar-bg` | `var(--surface-base)` | base.css |
-| `--statusbar-border` | `var(--divider)` | base.css |
 | `--statusbar-crumb-fg` | `var(--fg-hint)` | base.css |
 | `--statusbar-error-fg` | `var(--error)` | base.css |
 | `--statusbar-fg` | `var(--fg-secondary)` | base.css |

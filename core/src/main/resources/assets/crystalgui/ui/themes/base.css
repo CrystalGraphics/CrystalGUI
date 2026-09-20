@@ -615,7 +615,6 @@ theme {
     --squiggle-warning: var(--warning);
 
     --statusbar-bg: var(--surface-base);
-    --statusbar-border: var(--divider);
     --statusbar-crumb-fg: var(--fg-hint);
     --statusbar-error-fg: var(--error);
     --statusbar-fg: var(--fg-secondary);

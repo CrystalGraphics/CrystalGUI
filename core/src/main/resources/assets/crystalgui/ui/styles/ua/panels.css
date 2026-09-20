@@ -43,11 +43,14 @@ statusbarview {
     overflow: hidden;
     /* THE SAME SURFACE AS THE RAILS, which is what makes it read as chrome rather than as the bottom of
      * whichever panel happens to sit above it. Without a band of its own the line looked like loose text
-     * lying on the panel -- which is exactly how it first shipped. */
+     * lying on the panel -- which is exactly how it first shipped.
+     *
+     * AND NO RULE ABOVE IT. It carried a 1px --divider along its top edge, from when the band was the only
+     * thing separating it from a panel. The chrome around it IS this surface now -- the rails, the window
+     * and this bar are all --surface-base -- so the line was drawn across the middle of one continuous
+     * plane, cutting the workbench in half for no boundary that exists. The band does the separating. */
     background: var(--statusbar-bg, #2B2B2B);
     color: var(--statusbar-fg, #9DA0A8);
-    border-top-width: 1px;
-    border-top-color: var(--statusbar-border, #1E1E1E);
 }
 
 statusbarview .__left__,
