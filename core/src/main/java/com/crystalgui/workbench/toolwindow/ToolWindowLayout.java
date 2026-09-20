@@ -48,6 +48,7 @@ public final class ToolWindowLayout {
     private static final String KEY_ORDER = "order";
     private static final String KEY_ACTIVE = "active";
     private static final String KEY_STRIPE = "stripe";
+    private static final String KEY_SHOW_NAMES = "stripeNames";
     private static final String KEY_TYPE = "type";
     private static final String KEY_FLOAT_X = "fx";
     private static final String KEY_FLOAT_Y = "fy";
@@ -96,6 +97,31 @@ public final class ToolWindowLayout {
      */
     public final Signal.Value<String> onDidChange = new Signal.Value<>();
 
+    /**
+     * Whether the stripes label their buttons — IntelliJ's <i>Show Tool Window Names</i>.
+     *
+     * <p>Per PROJECT, which is why it lives here rather than in {@code WorkbenchSettings}: it rides in the
+     * same session record as the placements it describes, so a project whose rails are full of long names
+     * can show them without every other project widening its rails to match. IntelliJ keeps it in
+     * application settings; the two are defensible and this one follows the placements.</p>
+     */
+    public boolean showNames() {
+        return showNames;
+    }
+
+    /** @see #showNames() */
+    public ToolWindowLayout setShowNames(boolean value) {
+        if (showNames == value) return this;
+        showNames = value;
+        onDidChangeNames.emit();
+        return this;
+    }
+
+    private boolean showNames;
+
+    /** Raised when {@link #showNames()} flips. Separate from {@link #onDidChange}, which names a window. */
+    public final Signal.Action onDidChangeNames = new Signal.Action();
+
     public ToolWindowLayout put(ToolWindowState state) {
         ToolWindowState previous = states.put(state.typeId(), state);
         // ONLY WHEN SOMETHING ACTUALLY MOVED. `put` is how every hide, show and capture records itself,
@@ -140,6 +166,9 @@ public final class ToolWindowLayout {
 
     /** Writes every placement into {@code out} under {@code key}, as a list. */
     public <T> void encodeInto(StateMap<T> out, String key) {
+        // BESIDE the list rather than in it: it describes the STRIPES, not any one tool window. Additive,
+        // so an older record simply reads false and no version moves.
+        out.putBool(KEY_SHOW_NAMES, showNames);
         out.putList(key, ordered(), (entry, state) -> {
             entry.putString(KEY_ID, state.typeId());
             entry.putBool(KEY_VISIBLE, state.visible());
@@ -185,6 +214,7 @@ public final class ToolWindowLayout {
      */
     public static <T> ToolWindowLayout decodeFrom(StateMap<T> in, String key) {
         ToolWindowLayout layout = new ToolWindowLayout();
+        layout.showNames = in.getBool(KEY_SHOW_NAMES, false);
         for (ToolWindowState state : in.getList(key, entry -> decodeOne(entry, layout.states.size()))) {
             if (state != null) layout.put(state);
         }

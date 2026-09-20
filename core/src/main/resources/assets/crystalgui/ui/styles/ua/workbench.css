@@ -598,9 +598,10 @@ floatingdock {
     min-height: 120px;
 }
 
-/* An empty group, which only the central one can be. It is the guarantee that the work area still
- * exists rather than a pane that failed to collapse -- so it says so, instead of reading as a dead
- * grey box. VS Code draws a shortcut watermark here; a recessed panel is the same idea, cheaper. */
+/* An empty group, which only the central one can be. It is the guarantee that the work area still exists
+ * rather than a pane that failed to collapse -- so it SAYS so: DockGroup puts a watermark here naming the
+ * ways in, which is what VS Code and IntelliJ both draw. It keeps the ordinary panel surface while it does,
+ * because a note floating on the window's own background reads as the editor having gone missing. */
 dockgroup.__empty__ {
     background: var(--dock-empty-bg, #232323);
 }
@@ -1752,6 +1753,12 @@ workbench splitview.__vertical__ > .__divider__ {
  * header), so a definition here is visible to every part after it in the manifest. */
 * {
     --activity-bar-w: 20px;
+    /* The labelled rail, which is a different piece of functional geometry rather than a scale of the
+     * icon-only one: it is as wide as a tool window's NAME needs, not as wide as its glyph. At 6px a
+     * nine-letter name is about thirty of these, so this is the name plus its tile's inset -- anything
+     * wider is width the editor loses for nothing, which is the complaint the New UI's stripe answers.
+     * `width: auto` still lets a genuinely long name push it out; this is where the ordinary case sits. */
+    --activity-bar-named-w: 44px;
 }
 workbench .__activity-bar__ {
     width: var(--activity-bar-w, 20px);
@@ -1821,6 +1828,105 @@ workbench .__activity-item__ {
     align-items: center;
     background: none;
     border-radius: 2px;
+}
+
+/* MORE TOOL WINDOWS -- IntelliJ's overflow, listing the buttons that have been hidden. Sized as an item
+ * rather than as a panel-header action: those rules are scoped through `.__panel-header__` and this is on
+ * a rail. The glyph is the ⋮ asset given a quarter turn, which is the honest way to get ⋯ rather than a
+ * second nearly-identical file; the button is square, so rotating it moves no edge and no hit box. */
+workbench .__activity-bar__ .__more__ {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    margin-bottom: 2px;
+    padding: 2px;
+    color: var(--activitybar-item-fg, #9A9A9A);
+    /* NO background-color HERE. It is a TINT over the drawable, not a fill beside it, so `transparent`
+     * multiplies the :hover fill below away and the button never lights up. `background: none` is the one
+     * that clears the resting fill. Same trap as the labelled items, one rule apart. */
+    background: none;
+    border-radius: 2px;
+    overlay-origin: content-box;
+    overlay-size: contain;
+    border-width: 0px;
+    transform: rotate(90deg);
+}
+
+/* THE ITEM'S OWN HOVER, not a paler version of it -- the ⋯ sits in the same column and any difference
+ * reads as one of them being broken. */
+/* AND ITS GLYPH, without which the button is a 16px hole: applyIcon hands the icon to the button as its
+ * `pre-icon` PART, and a part has no size of its own -- the item's own rule sizes the items' icons and
+ * reaches nothing here, so ⋯ hit-tested, tooltipped and drew nothing at all. */
+workbench .__activity-bar__ .__more__::part(pre-icon),
+workbench .__activity-bar__ .__more__ .__pre-icon__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    overlay-size: contain;
+    overlay-origin: content-box;
+}
+
+workbench .__activity-bar__ .__more__:hover,
+/* AND WHILE ITS MENU IS UP. The same fill, because it is the same statement -- this button is what you
+ * are in -- and letting it go dark the moment the pointer moves onto the menu reads as the menu having
+ * been dismissed. @see StripeView#MORE_OPEN_CLASS */
+workbench .__activity-bar__ .__more__.__menu-open__ {
+    background: var(--activitybar-item-hover-bg, #3574F0);
+}
+
+/* SHOW TOOL WINDOW NAMES -- IntelliJ's, toggled by right-clicking the bar. The rail widens and each button
+ * becomes a column of icon over label.
+ *
+ * The label is the button's OWN text, written by refreshNames and empty while this is off -- so turning it
+ * on is a style change over a tree that already holds the words, rather than a rebuild of the rail. */
+workbench .__activity-bar__.__with-names__ {
+    width: auto;
+    min-width: var(--activity-bar-named-w, 44px);
+    padding-left: 2px;
+    padding-right: 2px;
+    /* The icon-only rail's 4px is measured against a 16px glyph; against a two-line tile it reads as the
+     * column having been nudged down. */
+    padding-top: 2px;
+}
+
+workbench .__activity-bar__.__with-names__ .__activity-item__ {
+    width: 100%;
+    height: auto;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    /* TIGHT. The tile is already as wide as a word, so generous vertical padding makes a rail of three
+     * buttons look like a rail of six -- IntelliJ's labelled stripe is a dense column and reads as one
+     * control per row rather than as separated cards. The label's own line box carries most of the
+     * height, so these are the gap AROUND it rather than the gap it needs. */
+    padding-top: 2px;
+    padding-bottom: 2px;
+    margin-bottom: 1px;
+    gap: 1px;
+    /* NOT `background`, and NOT `background-color`. A name makes a Button `__labelled__`, which is what
+     * `workbench button.__labelled__` dresses as an outlined control -- so every rail button grew the 1px
+     * border that rule's own comment warns about ("an outline around each turns the frame into a grid of
+     * empty boxes"). Only the border is taken back: its transparent fill is what the rail wants at rest,
+     * and :hover and :checked are more specific than it, so their fills still land.
+     *
+     * background-color was tried and is a TINT over the drawable, not a fill beside it -- transparent
+     * multiplied the hover and checked fills away and left the rail looking dead. */
+    border-width: 0px;
+    /* Rounder than the icon-only rail's 2px: the highlight is a tile the size of a word now, not a square
+     * the size of a glyph, and a 2px corner on a 50px box reads as an accident. */
+    border-radius: 6px;
+}
+
+/* 7px: the names are a reminder of what the glyph is, not a column of body text,
+ * and IntelliJ sets them a step below the UI font for the same reason. Never wrapped -- a two-line entry
+ * would move every button below it, so a long name is clipped as the tab strip's are. */
+workbench .__activity-bar__.__with-names__ .__activity-item__::part(label),
+workbench .__activity-bar__.__with-names__ .__activity-item__ .__label__ {
+    font-size: 6px;
+    text-align: center;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--activitybar-item-fg, #9A9A9A);
 }
 
 /* AND THE PART TWIN, without which this reaches nothing: an activity item is a Button and its icon is
