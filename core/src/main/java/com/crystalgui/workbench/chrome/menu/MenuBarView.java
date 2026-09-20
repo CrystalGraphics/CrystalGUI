@@ -132,6 +132,10 @@ public class MenuBarView extends UIElement {
         // bar that was a burger by every other measure still laid its titles out beside it. Harmless
         // while the default was the full bar, and the whole of the default once it was not.
         applyVisibility();
+        // AND THIS ONE TITLE IS ASKED, not all of them: a title added after the bar is attached would
+        // otherwise keep the default answer until the next reveal. One build rather than a full pass,
+        // which during construction would be a build per title per title added.
+        refreshOpenable(title);
         return this;
     }
 
@@ -461,6 +465,7 @@ public class MenuBarView extends UIElement {
      */
     private void reveal(Runnable then) {
         revealed = true;
+        refreshOpenable();
         applyVisibility();
         UIDocument window = document();
         if (window == null) return;
@@ -468,6 +473,34 @@ public class MenuBarView extends UIElement {
             then.run();
             return false;
         });
+    }
+
+    /**
+     * <b>Marks the titles that have nothing under them</b>, so they can be drawn as what they are.
+     *
+     * <p>Graph with no graph open contributes no rows, and a title that cannot be opened looked exactly
+     * like one that could — you press it, nothing happens, and the bar reads as broken rather than as
+     * the menu being empty.</p>
+     *
+     * <p>Computed HERE rather than per frame, because emptiness is only knowable by asking the registry
+     * for the rows and that answer depends on the live context. The bar is a burger by default, so the
+     * titles are on screen only while revealed and one answer per reveal covers their whole visible
+     * life; an always-expanded host gets the same answer on attach.</p>
+     */
+    private void refreshOpenable() {
+        UIDocument window = document();
+        if (window == null) return;
+        UIElement source = contextSource(window);
+        for (Title title : titles) {
+            title.setOpenable(MenuBuilder.build(title.id, registry, source).getItemCount() > 0);
+        }
+    }
+
+    /** One title's answer. Skipped while detached: there is no context to resolve against yet. */
+    private void refreshOpenable(Title title) {
+        UIDocument window = document();
+        if (window == null) return;
+        title.setOpenable(MenuBuilder.build(title.id, registry, contextSource(window)).getItemCount() > 0);
     }
 
     /** Opens the first title that has anything in it — File, unless File is empty. */
@@ -581,6 +614,7 @@ public class MenuBarView extends UIElement {
     @Override
     protected void connected() {
         close();
+        refreshOpenable();
         UIDocument current = document();
         if (current == null) return;
         // CAPTURE PHASE ON THE ROOT, which is the only way Alt+F can work from anywhere: a menu bar is
@@ -732,6 +766,30 @@ public class MenuBarView extends UIElement {
             onMouseEnter.attachListener((element, event) -> {
                 if (openTitle != null && openTitle != Title.this) show(Title.this);
             }, false, true);
+        }
+
+        /** Whether the registry had any rows for this title, as of the last {@link #refreshOpenable}. */
+        private boolean openable = true;
+
+        /**
+         * Drives {@code menutitle:disabled} — the engine's own idiom, so no class and no CSS bookkeeping.
+         *
+         * <p>A CACHED answer, and it has to be: the cascade asks this on every match, and the real
+         * question ("does the registry contribute any row to this menu, in this context") builds a menu
+         * to answer. @see MenuBarView#refreshOpenable</p>
+         */
+        @Override
+        public boolean isEnabled() {
+            return openable;
+        }
+
+        void setOpenable(boolean value) {
+            if (openable == value) return;
+            openable = value;
+            onStyleChanged();
+            // Descendants too, so `menutitle:disabled text` restyles the label and not just the box --
+            // the pair Tab.setSelected and Checkbox.setChecked both use.
+            invalidateStyleMatch();
         }
 
         /**

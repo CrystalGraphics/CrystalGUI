@@ -623,6 +623,32 @@ public class MenuBarViewTest extends UiDocumentTestBase {
     }
 
     /**
+     * <b>A title with nothing under it reports itself disabled</b>, so a sheet can draw it as what it is.
+     *
+     * <p>{@code menutitle:disabled} rather than a class: the engine gives a pseudo-class for free to
+     * anything that overrides the getter, and the answer is cached because the cascade asks on every
+     * match while the real question builds a menu.</p>
+     */
+    @Test
+    public void aTitleWithNoRowsIsDisabled() {
+        MenuId empty = MenuId.of("bar/empty/" + counter++);
+        bar.addMenu(empty, "&Graph");
+        frame();
+
+        assertFalse("nothing contributes to it", titleAt(2).isEnabled());
+        assertTrue("while the ones that do are untouched", titleAt(0).isEnabled());
+
+        // And it follows the registry: contribute a row, and the next reveal asks again.
+        registry.register(Command.of("g.node", "New Node").menu(empty, "1_new", 10).run(c -> { }));
+        bar.setCollapsed(true);
+        frame();
+        rawPress(burger());
+        frame();
+
+        assertTrue("the reveal asked again", titleAt(2).isEnabled());
+    }
+
+    /**
      * <b>A bar is a burger unless its host says otherwise.</b>
      *
      * <p>Its own bar, not the fixture's: {@code setUp} expands that one so the affordance tests can
