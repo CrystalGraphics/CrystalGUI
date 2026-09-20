@@ -7,6 +7,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.async.FrameStats;
 import com.crystalgui.style.StyleGroup;
+import com.crystalgui.text.TextRange;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -52,6 +53,22 @@ public class FrameStatsOverlay extends UIElement {
 
     /** The headline row, which a theme draws larger. */
     public static final String HEAD_CLASS = "__head__";
+
+    /** The frame-time bars. Its own class so a sheet can style the one row made of characters. */
+    public static final String SPARK_CLASS = "__spark__";
+
+    /**
+     * The two highlight names the bars are coloured through.
+     *
+     * <p>{@code ::highlight(name)} rather than a node per bar: forty-six characters would be forty-six
+     * Taffy nodes rebuilt ten times a second, which is the cost the Custom Highlight API exists to
+     * avoid — and it is being paid inside the thing that measures cost.</p>
+     *
+     * <p>There is no name for a healthy bar. Good is the row's own colour, so the common case registers
+     * nothing at all and a clean run costs one highlight lookup that finds nothing.</p>
+     */
+    public static final String WARN_HIGHLIGHT = "framestats-warn";
+    public static final String BAD_HIGHLIGHT = "framestats-bad";
 
     /**
      * What a row's numbers are worth — inside the budget, past it, or past twice it.
@@ -118,6 +135,47 @@ public class FrameStatsOverlay extends UIElement {
         document.append(overlay);
         document.promote(overlay);
         return overlay;
+    }
+
+    /**
+     * The readout already over {@code document}, or null — the non-attaching read.
+     *
+     * <p>A document's own children, because {@link #attach} appends there and promotion records top-layer
+     * membership on the node rather than moving it.</p>
+     */
+    @Nullable
+    public static FrameStatsOverlay of(UIDocument document) {
+        for (UIElement child : document.children()) {
+            if (child instanceof FrameStatsOverlay overlay) return overlay;
+        }
+        return null;
+    }
+
+    /**
+     * Shows the readout over {@code document}, or hides the one already there — what a host binds a key
+     * to, and the whole of what a Minecraft screen or an editor needs to offer it.
+     *
+     * <p>Hidden rather than removed on the way back, which is what stops the collector: a hidden readout
+     * releases its {@link FrameStats#hold()} and costs one boolean read a frame, so there is nothing to
+     * be gained by tearing the node out and everything to be lost — the next press would rebuild it and
+     * start the window over.</p>
+     */
+    public static FrameStatsOverlay toggleOn(UIDocument document) {
+        FrameStatsOverlay existing = of(document);
+        return existing == null ? attach(document) : existing.toggle();
+    }
+
+    /**
+     * Expands the readout over {@code document} into a row per phase, showing it first if it was hidden.
+     *
+     * <p>Never a hidden expansion: the key that asks for the breakdown is pressed by somebody who wants
+     * to see it, and a press that silently changed the shape of an invisible panel would read as the key
+     * doing nothing.</p>
+     */
+    public static FrameStatsOverlay expandOn(UIDocument document) {
+        FrameStatsOverlay hud = of(document);
+        if (hud == null) hud = attach(document);
+        return hud.setShowing(true).toggleDetail();
     }
 
     public FrameStats stats() {
@@ -226,9 +284,52 @@ public class FrameStatsOverlay extends UIElement {
                 if (!other.equals(health)) row.removeClass(other);
             }
             if (health != null && !row.hasClass(health)) row.addClass(health);
+            paintBars(row, wanted.barHealth());
             StyleGroup.importantPipeline(row.getStyle().getLayoutGroup(),
                     l -> l.display(wanted.text().isEmpty() ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
         }
+    }
+
+    /**
+     * Colours {@code row}'s characters by what each bar is worth, or clears that if it is not the bars.
+     *
+     * <p>Set AFTER the text, always: a range is a pair of offsets into the string that is there now, and
+     * a row that just shrank would be carrying ranges off the end of it.</p>
+     */
+    private void paintBars(UIText row, @Nullable List<FrameStats.Health> bars) {
+        if (bars == null) {
+            // `remove` only fires a change when there was something to remove, so an ordinary row pays
+            // nothing for being asked every refresh.
+            if (row.hasClass(SPARK_CLASS)) row.removeClass(SPARK_CLASS);
+            row.highlights().remove(WARN_HIGHLIGHT).remove(BAD_HIGHLIGHT);
+            return;
+        }
+        if (!row.hasClass(SPARK_CLASS)) row.addClass(SPARK_CLASS);
+        row.highlights().set(WARN_HIGHLIGHT, runsOf(bars, FrameStats.Health.WARN));
+        row.highlights().set(BAD_HIGHLIGHT, runsOf(bars, FrameStats.Health.BAD));
+    }
+
+    /**
+     * The stretches of {@code bars} that are {@code wanted}, as ranges over the row's characters.
+     *
+     * <p>RUNS RATHER THAN A RANGE PER BAR, for two reasons and both are hard: a highlight's own ranges
+     * may not overlap or touch ambiguously, and every range boundary is a shaping-run boundary — so
+     * forty-six single-character ranges would re-shape the row as forty-six runs. A steady scene has one
+     * run or none.</p>
+     */
+    private static List<TextRange> runsOf(List<FrameStats.Health> bars, FrameStats.Health wanted) {
+        List<TextRange> out = new ArrayList<>();
+        int start = -1;
+        for (int i = 0; i < bars.size(); i++) {
+            boolean here = bars.get(i) == wanted;
+            if (here && start < 0) start = i;
+            else if (!here && start >= 0) {
+                out.add(TextRange.of(start, i));
+                start = -1;
+            }
+        }
+        if (start >= 0) out.add(TextRange.of(start, bars.size()));
+        return out;
     }
 
     /** A row the readout has stopped needing — hidden rather than removed, so the tree stops churning. */

@@ -1846,6 +1846,9 @@ public final class CgUiPaintContext {
                 FrameProfile.count(fresh ? "layers-reused" : "layers-repainted", 1);
                 return layer;
             }
+            // COUNTED APART FROM A FIRST SIGHTING: a layer whose element resizes every frame keeps
+            // starting over as a candidate and never settles, which is a different finding.
+            FrameProfile.count("retain-resized", 1);
             drop(key, layer);
         }
 
@@ -1858,12 +1861,20 @@ public final class CgUiPaintContext {
         Candidate seen = candidates.get(key);
         if (seen == null || seen.revision() != revision || !seen.region().equals(region)) {
             candidates.put(key, new Candidate(revision, region, frameId));
+            // NOT YET, rather than no: the subtree has to be seen unchanged once. A frame where this
+            // dominates is one where everything is moving, and no cache would have helped.
+            FrameProfile.count("retain-settling", 1);
             return null;
         }
 
         int width = bucket(region.width()), height = bucket(region.height());
         long bytes = (long) width * height * 4L;
-        if (retainedBytes + bytes > RETAINED_BUDGET_BYTES && !evictUntil(bytes)) return null;
+        if (retainedBytes + bytes > RETAINED_BUDGET_BYTES && !evictUntil(bytes)) {
+            // THE BUDGET IS SPENT, which is the one refusal a bigger budget would fix -- and the only
+            // way to tell it from the others is to count it.
+            FrameProfile.count("retain-nobudget", 1);
+            return null;
+        }
         candidates.remove(key);
 
         CgFrameBuffer fbo = CgFrameBuffer.createOwned("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);

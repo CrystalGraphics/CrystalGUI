@@ -153,13 +153,22 @@ public final class BoxPainter {
             // pose, already intersected with whatever is clipping -- so an element wholly scrolled out
             // of its container costs nothing at all here, and one that is 20px wide costs 20px rather
             // than a screen.
+            // WHAT THE LAYER IS FOR. `layers=17` is a number nobody can act on: a mask layer is two
+            // targets and a composite, an opacity layer is one, and the two are removed by different
+            // things -- a radius that need not clip, or an opacity that could fold.
+            FrameProfile.count(mask ? "layers-mask" : "layers-opacity", 1);
             LayerRegion region = regionOf(box, ctx, base);
             if (region.isEmpty()) return;
 
             // AND IF NOTHING UNDER IT MOVED, THE PICTURE IS STILL THERE. The whole of what a frame owes
             // an unchanged subtree is one composited quad; the clear, the walk and every draw beneath
             // are the difference between two frames, and there is none.
-            RetainedLayer keep = box.retainable() ? ctx.retain(box, region, box.subtreeRevision()) : null;
+            // THE REFUSAL IS COUNTED AS WELL AS THE HIT. A readout showing seventeen layers and no
+            // reuse reads as a broken cache; most of the time nothing asked it, because a subtree that
+            // repaints itself may not be kept. @see Box#retainable
+            RetainedLayer keep = null;
+            if (box.retainable()) keep = ctx.retain(box, region, box.subtreeRevision());
+            else FrameProfile.count("retain-dynamic", 1);
             if (keep != null && keep.isFresh()) {
                 // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
                 ctx.notePainted(IDENTITY, region.x(), region.y(), region.x() + region.width(),
