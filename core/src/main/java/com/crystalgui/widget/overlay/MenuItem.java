@@ -147,7 +147,45 @@ public class MenuItem extends Button {
         } else if (document() != null) {
             drawIcon();
         }
+        reserveIconColumn();
         return this;
+    }
+
+    /**
+     * Draws a deferred icon once the row is on a surface.
+     *
+     * <p>{@link #setIcon} reads the file only when there is a document, and says why: an SVG is read
+     * through CrystalGraphics, which a menu may be assembled without. <b>Something has to pick the
+     * deferral up, and nothing did.</b> A menu is built and only THEN presented — that is the order every
+     * caller uses, {@code MenuBuilder.row} included — so at the moment an icon is named the row is never
+     * in a document, and the glyph was dropped on the floor every time. The column was reserved, the row
+     * carried its class, and the slot was empty.</p>
+     */
+    @Override
+    protected void connected() {
+        super.connected();
+        drawIcon();
+        reserveIconColumn();
+    }
+
+    /**
+     * Tells the menu one of its rows draws an icon, so every row reserves the column.
+     *
+     * <p><b>Here rather than only in {@code MenuBuilder}</b>, which is where it lived and where it is one
+     * caller's job to remember. A row's mark is {@code width: 0} until the menu carries
+     * {@link Menu#HAS_ICONS_CLASS} — that is what keeps an ordinary menu from reserving a gutter for a
+     * checkmark no row can show — so a menu assembled by hand resolved its glyphs, set them on the mark,
+     * and drew every one of them into a zero-width box. The icon is the row's own business and so is
+     * saying so.</p>
+     */
+    private void reserveIconColumn() {
+        if (iconId == null) return;
+        for (UIElement walk = parentElement(); walk != null; walk = walk.parentElement()) {
+            if (walk instanceof Menu menu) {
+                menu.addClass(Menu.HAS_ICONS_CLASS);
+                return;
+            }
+        }
     }
 
     private void drawIcon() {
