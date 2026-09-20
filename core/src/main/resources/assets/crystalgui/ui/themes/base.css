@@ -365,7 +365,16 @@ theme {
     --menu-separator: var(--border-base);
 
     --menubar-bg: var(--surface-base);
-    --menubar-fg: var(--fg-secondary);
+    /* FULL STRENGTH, not the secondary tier. A menu bar is a row of NAMES you read and aim at, not a
+     * caption about something else -- and at 8px, a step down from the body size, the dimmer tier read
+     * as disabled rather than as chrome. --menubar-open-fg stays as the knob for a theme that wants the
+     * open one to separate again. */
+    --menubar-fg: var(--fg);
+    /* THE BURGER IS QUIETER THAN THE WORDS, and it is its own token because it is its own judgement.
+     * It took --menubar-fg while that was the secondary tier, and followed the text up to full strength
+     * when the text moved -- where four white bars in a 14px square read as a much heavier mark than the
+     * word `File` does, because a glyph is mostly space and this is mostly ink. */
+    --menubar-burger-fg: var(--fg-secondary);
     --menubar-hover-bg: var(--hover-bg);
     --menubar-open-fg: var(--fg);
 

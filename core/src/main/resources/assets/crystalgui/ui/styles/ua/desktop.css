@@ -687,7 +687,10 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
 .__menu-bar__.__caption-adopted__ {
     background: none;
     background-color: transparent;
-    padding-left: 2px;
+    /* THE GAP AFTER THE WINDOW'S OWN TILE. On the BAR and not on the burger, so the burger and `File`
+     * begin at the same x -- put it on the burger and the row would shift sideways every time the bar
+     * collapsed, which is a wobble in the chrome rather than a gap in it. */
+    padding-left: 4px;
 }
 
 /* An ellipsized title — the web's canonical truncation recipe, and every part of it is load-bearing.
