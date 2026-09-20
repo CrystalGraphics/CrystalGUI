@@ -1,6 +1,6 @@
 package com.crystalgui.language.java.fix;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.java.classpath.TypeIndex;
 import com.crystalgui.text.lang.CodeAction;
@@ -11,7 +11,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import com.crystalgui.language.engine.bridge.CodeActionContext;
 
 /**
  * The engine's half of {@link CodeActionProvider} — everything Java can offer about a problem.

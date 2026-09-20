@@ -1,6 +1,6 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.Resource;

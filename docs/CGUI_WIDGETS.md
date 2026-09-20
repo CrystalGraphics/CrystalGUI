@@ -1410,7 +1410,7 @@ final class NodeModel implements TreeEditModel<Node> {
 
 ## 12f. The frame readout — `FrameStatsOverlay` over `FrameStats`
 
-`com.crystalgui.widget.display` / `com.crystalgui.core.async` · tag `framestats` · `cgui-desktop` (F7 shows, F8 expands)
+`com.crystalgui.widget.display` / `com.crystalgui.core.trace` · tag `framestats` · `cgui-desktop` (F7 shows, F8 expands)
 
 How fast the last few seconds ran, drawn over whatever is being measured. The collector is headless and
 the overlay is one call, so the same readout serves a harness scene, the editor and a Minecraft screen.
@@ -1483,12 +1483,18 @@ slowest 13.1ms cpu: phases 12.9ms
 - **The thresholds are the engine's and the colours are the sheet's**: a row wears `__good__` /
   `__warn__` / `__bad__` and `ua/overlays.css` says what those look like.
 - **Collecting is held, not switched.** `hold()`/`release()` are counted, the overlay takes one while it
-  is showing and in a tree, and with no holder the per-frame cost is one boolean read.
-- **The phase rows are `FrameProfile`'s**, and they follow the READOUT rather than its property:
-  `FrameProfile` times its phases whenever something is collecting, while
-  `-Dcrystalgui.frameprofile=true` adds the per-slow-frame LOGGING and the invalidation blame on top.
-  The split is deliberate — needing a restart with a property is exactly when a stall is least
-  reproducible. A second timer around the same code would be a second answer to one question.
+  is showing and in a tree, and with no holder the per-frame cost is one mask test. A hold enables
+  CrystalGUI's trace channels — `crystalgui.frame` and `crystalgui.flow`, but never `crystalgui.blame`,
+  which walks a stack per invalidation and is asked for by name.
+- **`FrameStats` keeps no storage of its own.** It is a view over `CgTrace`'s frame ring
+  (`plan/platform-trace-engine.md`), which is why the expanded breakdown can be the *slowest* frame's:
+  every frame's zones are still there, so there is no peak to hold and no decay to get right.
+- **The phase rows are `FrameProfile`'s**, and it is a forwarder onto that engine — `begin`/`end`
+  becomes a zone, `count` a counter, and `step`/`enter`/`leave` a **span**, because a chain that
+  outlives a frame is not a phase. Recording follows the channel mask rather than a property, so a
+  readout can ask for the phases without a restart, which is exactly when a stall is least
+  reproducible; `-Dcrystalgui.frameprofile=true` adds the per-slow-frame LOGGING on top and nothing
+  else.
 - **A share is of the phases' own total, not of the frame.** Phases nest and the gaps between them are
   nobody's, so a column measured against the frame would sum to 140% one frame and 60% the next, which
   reads as a broken profiler rather than an honest total.
@@ -1498,8 +1504,9 @@ slowest 13.1ms cpu: phases 12.9ms
 
 ### Reading the counts
 
-The count rows are `FrameProfile.count(...)` calls, and since phase timing follows the readout they all
-reach the HUD with no property set. The layer ones answer the question a paint-bound frame actually
+The count rows are `FrameProfile.count(...)` calls — accumulated per frame and flushed once, since
+`count("drawcalls", 1)` fires once per draw. Phase timing follows the channel mask, so they all reach
+the HUD with no property set. The layer ones answer the question a paint-bound frame actually
 raises — *why are there seventeen layers?* — and they account for every one:
 
 | Count | Means |

@@ -1,4 +1,4 @@
-package com.crystalgui.core.async;
+package com.crystalgui.core.trace;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceChannel;

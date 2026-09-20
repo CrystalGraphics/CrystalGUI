@@ -1,9 +1,11 @@
-package com.crystalgui.core.async;
+package com.crystalgui.core.trace;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.crystalgui.core.trace.FrameStats;
+import com.crystalgui.core.trace.UiTrace;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

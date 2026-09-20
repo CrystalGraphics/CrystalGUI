@@ -2,7 +2,7 @@ package com.crystalgui.ui.box;
 
 import com.crystalgui.render.InkOverflow;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.LayerRegion;
 import com.crystalgui.render.RetainedLayer;

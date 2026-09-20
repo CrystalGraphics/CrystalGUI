@@ -1053,7 +1053,7 @@ int value types.
 | `TextField` | `textfield` | `cgui-textfield` |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
 | `EmptyState` | `emptystate` | `cgui-desktop` — any vacant panel |
-| `FrameStatsOverlay` | `framestats` | `cgui-desktop` — F7 shows, F8 expands. The frame readout over `core.async.FrameStats`: rate, spread, misses, a coloured sparkline of the window, and the SLOWEST frame's phase breakdown. `DesktopCommands` binds F7/F8 on every surface with a desktop, so the editor and a Minecraft screen get it too; `FrameStatsOverlay.toggleOn(document)` is the one call |
+| `FrameStatsOverlay` | `framestats` | `cgui-desktop` — F7 shows, F8 expands. The frame readout over `core.trace.FrameStats`: rate, spread, misses, a coloured sparkline of the window, and the SLOWEST frame's phase breakdown. `DesktopCommands` binds F7/F8 on every surface with a desktop, so the editor and a Minecraft screen get it too; `FrameStatsOverlay.toggleOn(document)` is the one call |
 | `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
 | `Dialog` | `dialog` | `cgui-gallery` (Dialog page, modal page) |
 | `Popover` | `popover` | `cgui-gallery` (menus page) |
@@ -1411,6 +1411,15 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                CursorService (+ its CgService slot). Was CrystalGraphics' `platform.input`
                                / `platform.service` until CgService gave CrystalGUI a way to own a
                                service; it names no GL and no loader
+  .trace                       WHAT A FRAME COST, and who asked. UiTrace (CrystalGUI's three channels —
+                               `crystalgui.frame` for phases and counters, `.flow` for chains that
+                               outlive a frame, `.blame` for the stack walk), FrameProfile (the API 275
+                               call sites use, a FORWARDER onto CrystalGraphics' CgTrace since T3) and
+                               FrameStats (the readout's model — a VIEW over the ring, with no storage
+                               of its own). The capture engine itself is CrystalGraphics'
+                               `com.crystalgraphics.trace`, in its PLATFORM module rather than core, so
+                               a dedicated server and `headlessTest` can both reach it.
+                               plan/platform-trace-engine.md
   .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
                                DOCUMENT, never per window
   .window                      WindowState, WindowPolicy, DesktopPresentation — three types BOTH engines

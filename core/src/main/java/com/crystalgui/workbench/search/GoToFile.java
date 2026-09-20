@@ -9,7 +9,7 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.lang.TypeSearch;
 import com.crystalgui.text.lang.TypeSearchRegistry;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.chrome.palette.QuickPick;

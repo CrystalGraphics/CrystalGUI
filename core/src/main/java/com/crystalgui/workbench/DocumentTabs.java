@@ -1,6 +1,6 @@
 package com.crystalgui.workbench;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.document.DocumentState;
@@ -10,19 +10,16 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.render.texture.asset.FileIconTheme;
-import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.workbench.decoration.FileDecoration;
 import com.crystalgui.workbench.decoration.FileDecorations;
 import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.DockGroup;
-import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
-import java.util.ArrayList;
+
 import java.util.List;
 import javax.annotation.Nullable;
 

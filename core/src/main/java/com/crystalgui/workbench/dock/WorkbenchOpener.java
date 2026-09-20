@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.document.DocumentKind;

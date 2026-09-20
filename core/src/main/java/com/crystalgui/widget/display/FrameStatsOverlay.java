@@ -5,7 +5,8 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.async.FrameStats;
+import com.crystalgui.core.trace.FrameStats;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.text.TextRange;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
@@ -22,7 +23,7 @@ import com.crystalgui.widget.text.UIText;
  * }</pre>
  *
  * <p>It reads {@link FrameStats}, which takes its frame boundary from
- * {@link com.crystalgui.core.async.FrameProfile} — so the same overlay works in a harness scene, in the
+ * {@link FrameProfile} — so the same overlay works in a harness scene, in the
  * editor and on a Minecraft screen, and measures the whole frame rather than its own subtree. The phase
  * breakdown follows the readout rather than a property: {@code FrameProfile} times its phases whenever
  * something is collecting, and {@code -Dcrystalgui.frameprofile=true} adds the LOGGING on top.</p>

@@ -1,6 +1,6 @@
 package com.crystalgui.language.java.assist;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.language.java.classpath.ClassFileParameterNames;
 
 import javax.annotation.Nullable;
