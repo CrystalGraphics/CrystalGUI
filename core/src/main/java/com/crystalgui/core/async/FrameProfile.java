@@ -1,5 +1,6 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
 
 import java.util.ArrayList;
@@ -8,42 +9,54 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * What a slow frame actually spent its time on — a <b>probe</b>, enabled by a system property.
+ * What a frame spent its time on — now a <b>forwarder onto {@link CgTrace}</b>, and still the API every
+ * call site in this module uses.
  *
- * <h3>Why this exists rather than more measuring in tests</h3>
+ * <h3>Two APIs in one class, and only one of them is frames</h3>
  *
- * <p>Two rounds of this investigation were spent measuring components in isolation and fixing what they
- * showed, and the report kept coming back unchanged. Isolated measurement can only ever confirm a
- * suspicion; it cannot say what a real frame in a real workbench is doing, because a test cannot build
- * the dock, the tab strip, the breadcrumbs, the status bar, the problems panel and the file tree around
- * the editor. The measured evidence for that gap is already in hand: a 7-line README costs about 1.7ms a
- * frame in the application, while a 7-row editor on its own costs 317µs.</p>
+ * <p>That was invisible from the name and is the whole shape of this class. The tell is in the numbers:
+ * 112 {@code begin()} calls against 44 {@code end()}, because sixty-two of them feed {@code step()},
+ * which logs a chain rather than accumulating a phase.</p>
  *
- * <p>So this reports from the running application, names the phase, and — for the cascade, which is the
- * phase most able to be quietly enormous — names <b>which elements</b> are being re-matched. "Style is
- * slow" is not actionable; "2,143 elements re-matched this frame, 2,000 of them {@code __error-stripe__}"
- * is a fix.</p>
+ * <table border="1">
+ *   <caption>Where each half goes</caption>
+ *   <tr><th></th><th>The frame API</th><th>The flow API</th></tr>
+ *   <tr><td>Calls</td><td>{@link #begin}/{@link #end}, {@link #count}</td>
+ *       <td>{@link #begin}/{@link #step}, {@link #enter}/{@link #leave}, {@link #note}</td></tr>
+ *   <tr><td>Lifetime</td><td>Within one frame</td><td>A chain across frames, or outside any</td></tr>
+ *   <tr><td>Records as</td><td>Zones and counters on {@link UiTrace#FRAME}</td>
+ *       <td>Spans and markers on {@link UiTrace#FLOW}</td></tr>
+ * </table>
  *
- * <h3>Off unless asked for</h3>
+ * <h3>Why the signatures did not change</h3>
  *
- * <p>{@code -Dcrystalgui.frameprofile=true}. Unlike {@link UiBudget}, which is always on because it costs
- * two clock reads and reports once per operation, this samples several phases per frame and prints a line
- * per slow frame — the sort of thing that is worth its cost while somebody is looking at it and not
- * otherwise. Rate-limited regardless, because a sustained bad patch would otherwise write faster than a
- * log can be read.</p>
+ * <p>275 call sites across 29 files. Keeping the shapes — a {@code long} token from {@link #begin()},
+ * a bucket name at {@link #end}, an {@code enter}/{@code leave} pair — meant none of them moved, and
+ * the rewrite went live everywhere the moment these bodies changed.</p>
+ *
+ * <h3>{@code begin()/end()} is an additive bucket, not a stack</h3>
+ *
+ * <p>So it records through {@link CgTrace#zoneDone} rather than push/pop: a start stamp taken here and
+ * a duration attributed there never had a nesting discipline, and imposing one would invent structure.
+ * A completed zone lands at whatever depth is open, so these nest correctly the moment an enclosing
+ * bracket becomes a real zone and read as siblings until then.</p>
+ *
+ * <h3>The property still governs LOGGING, and nothing else</h3>
+ *
+ * <p>{@code -Dcrystalgui.frameprofile=true} writes a line per slow frame, which is a probe somebody is
+ * watching a log for. Recording is governed by the channel mask instead, so a readout can ask for the
+ * phases without a restart — which is exactly when a stall is least reproducible.</p>
  */
 public final class FrameProfile {
 
     private FrameProfile() {
     }
 
-    /** {@code -Dcrystalgui.frameprofile=true}. Read once — a probe that could turn on mid-run is a probe
-     * whose numbers cannot be compared. */
+    /** {@code -Dcrystalgui.frameprofile=true} — the LOG, not the recording. @see UiTrace */
     public static final boolean ENABLED = Boolean.getBoolean("crystalgui.frameprofile");
 
     /**
-     * Report a frame only if it cost more than this. 120Hz is 8.3ms, so the default is "missed the
-     * budget".
+     * Report a frame only if it cost more than this. 120Hz is 8.3ms, so the default is "missed".
      *
      * <p>{@code -Dcrystalgui.frameprofile.floor=0} reports every frame the rate limit allows, which is
      * what a COMPARISON wants: a change that made frames fast enough to stop being reported is
@@ -52,165 +65,157 @@ public final class FrameProfile {
     private static final long SLOW_NANOS =
             Long.getLong("crystalgui.frameprofile.floor", 8L) * 1_000_000L;
 
-    /** At most one report per this many nanos, however many frames are slow. */
     /**
      * At most one report per this many nanos, however many frames are slow.
      *
      * <p>{@code -Dcrystalgui.frameprofile.every=0} reports every frame, which is what a statistic wants:
-     * one sample a second is a dozen frames out of fifteen hundred, and a median taken from a dozen
-     * samples of a distribution this skewed carries an error as large as the difference being measured.
-     * It costs a log line per frame, so it is for a measured run rather than for watching.</p>
+     * one sample a second is a dozen frames out of fifteen hundred.</p>
      */
     private static final long REPORT_EVERY_NANOS =
             Long.getLong("crystalgui.frameprofile.every", 1000L) * 1_000_000L;
 
-    private static final Map<String, Long> PHASES = new LinkedHashMap<>();
-    private static final Map<String, Integer> COUNTS = new LinkedHashMap<>();
-
-    private static long frameStart;
-    private static long lastMark;
-    private static long lastReport;
-
-    /**
-     * Whether this frame's phases are being TIMED — the flag, or a readout asking for them.
-     *
-     * <h3>Two consumers, and only one of them logs</h3>
-     *
-     * <p>{@link #ENABLED} answers "write a line per slow frame", which is a probe somebody is watching a
-     * log for. A {@link FrameStats} holder answers "somebody is looking at a HUD", and that wants the
-     * same phase timings and none of the logging — so the timing gate is this and the reporting gate
-     * stays the flag. Without the split, the on-screen breakdown could only be had by restarting the
-     * application with a property, which is exactly when a stall is least reproducible.</p>
-     *
-     * <p>What is NOT behind this: {@link #blame}, which walks a stack per invalidation, and the
-     * {@code step}/{@code enter}/{@code leave} log lines. Those cost enough to be worth asking for.</p>
-     */
+    /** Whether phases are being recorded at all — the log property, or somebody holding the channel. */
     private static boolean timing() {
-        return ENABLED || FrameStats.isCollecting();
+        return ENABLED || CgTrace.isEnabled(UiTrace.FRAME);
     }
 
-    /** Called at the very top of a frame. */
+    // ── The frame boundary ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Called at the very top of a frame.
+     *
+     * <p>The engine commits the PREVIOUS frame here, because a frame's wall time is the interval to the
+     * next one. @see CgTrace#frameBegin()</p>
+     */
     public static void frameBegin() {
-        // THE FRAME BOUNDARY IS THIS CLASS'S, so a readout takes it from here rather than timing its own
-        // -- one boolean read when nobody is collecting. @see FrameStats
-        if (FrameStats.isCollecting()) FrameStats.get().frameBegan(System.nanoTime());
+        CgTrace.frameBegin();
         if (!timing()) return;
         PHASES.clear();
         COUNTS.clear();
         // SITES IS NOT CLEARED HERE, and that was a bug in this probe rather than in the engine.
-        //
-        // A frame reported 243 elements re-matched with only 15 blamed callers, which read as an
-        // invalidation route that bypassed markDirty -- it is not. Input dispatch and paint both run
-        // AFTER advanceFrame, so an invalidation raised by a click or by a ticker during frame N is
-        // drained by frame N+1; clearing at the top of N+1 threw the evidence away moments before
-        // reporting the work it explained. Cleared at the end of frameEnd instead, so the window the
-        // blame covers is the same window whose drain is being reported.
+        // Input dispatch and paint both run AFTER advanceFrame, so an invalidation raised during frame
+        // N is drained by N+1; clearing at the top of N+1 threw the evidence away moments before
+        // reporting the work it explained. Cleared at the end of frameEnd instead.
         frameStart = System.nanoTime();
-        lastMark = frameStart;
-        gcAtFrameStart = gcMillis();
+        gcAtFrameStart = FrameStats.gcMillis();
     }
 
     /**
-     * Total time this JVM has spent collecting, in milliseconds.
+     * Called at the very end of a frame.
      *
-     * <h3>Why a frame profiler has to know about the collector</h3>
-     *
-     * <p>A GC pause stops every thread, so it is charged to whatever call happened to be executing --
-     * and the longest-running phase absorbs it. That makes it indistinguishable from that phase being
-     * slow. Measured in a client while a decompiler ran on a worker: {@code gl:draw 11594us} and
-     * {@code gl:end 9814us} slow in the SAME frame with every CPU phase under 600us, which is not a
-     * shape any single expensive operation can produce -- but is exactly what a pause looks like.</p>
-     *
-     * <p>Without this the next hours go into the GL path, which is where the numbers point and not
-     * necessarily where the cost is. A background job that allocates heavily can take the frame rate
-     * down without appearing anywhere in the frame's own accounting.</p>
+     * <p>Flushes this frame's counters and blame to the ring, gives the engine its CPU mark, and logs
+     * if the property is set and the frame was slow.</p>
      */
-    private static long gcMillis() {
-        return FrameStats.gcMillis();
+    public static void frameEnd() {
+        flushCounts();
+        flushBlame();
+        CgTrace.frameEnd();
+        if (!ENABLED || frameStart == 0L) return;
+        logSlowFrame();
     }
 
-    private static long gcAtFrameStart;
-
-    /** Attributes everything since the previous mark (or the frame start) to {@code phase}. */
-    public static void mark(String phase) {
-        if (!timing()) return;
-        long now = System.nanoTime();
-        PHASES.merge(phase, now - lastMark, Long::sum);
-        lastMark = now;
-    }
+    // ── Phases ──────────────────────────────────────────────────────────────────────────────
 
     /** Adds {@code nanos} to a named bucket — for work that is not a whole phase. */
     public static void add(String bucket, long nanos) {
         if (!timing()) return;
-        PHASES.merge(bucket, nanos, Long::sum);
+        long now = System.nanoTime();
+        CgTrace.zoneDone(UiTrace.FRAME, bucket, now - nanos, now);
+        if (ENABLED) PHASES.merge(bucket, nanos, Long::sum);
     }
 
-    /** Starts a timing for {@link #add}; returns 0 when disabled so a caller needs no branch. */
+    /** Starts a timing for {@link #end}; returns 0 when nothing is recording, so a caller needs no branch. */
     public static long begin() {
         return timing() ? System.nanoTime() : 0L;
     }
 
     /** Ends a {@link #begin} timing into {@code bucket}. */
     public static void end(long started, String bucket) {
-        if (!timing() || started == 0L) return;
-        add(bucket, System.nanoTime() - started);
+        if (started == 0L) return;
+        long now = System.nanoTime();
+        CgTrace.zoneDone(UiTrace.FRAME, bucket, started, now);
+        if (ENABLED) PHASES.merge(bucket, now - started, Long::sum);
     }
 
+    /** Records a count worth seeing beside the times — how many elements, rows, marks. */
+    public static void count(String what, int howMany) {
+        if (!timing()) return;
+        // ACCUMULATED AND FLUSHED ONCE A FRAME. `count("drawcalls", 1)` fires once per draw, so writing
+        // each call through as its own counter value would be a hundred rows a frame saying 1.
+        COUNTS.merge(what, howMany, Integer::sum);
+    }
+
+    private static void flushCounts() {
+        if (COUNTS.isEmpty()) return;
+        for (Map.Entry<String, Integer> entry : COUNTS.entrySet()) {
+            CgTrace.counter(UiTrace.FRAME, entry.getKey(), entry.getValue());
+        }
+    }
+
+    // ── The flow API: a chain, not a frame ──────────────────────────────────────────────────
+
     /**
-     * Logs ONE step of a flow as it happens, rather than aggregating it into a frame.
+     * Records ONE step of a flow as it happens, rather than aggregating it into a frame.
      *
-     * <h3>Why a second shape</h3>
-     *
-     * <p>{@link #mark} answers "where did this frame go", which is the right question for a sustained
+     * <p>{@link #end} answers "where did this frame go", which is the right question for a sustained
      * cost and the wrong one for a sequence. Opening a file is a chain — a command, a picker, a search
      * per keystroke, an accept, a dock open, a read, a parse — and what matters is the ORDER and where
-     * the chain stalls. Aggregating that into per-frame buckets loses exactly the part being asked
-     * about, and several of these steps do not happen during a frame at all.</p>
-     *
-     * <p>Logged immediately, in sequence, with a depth indent so nesting reads. Everything over
-     * {@link #STEP_FLOOR} — deliberately low, because a step that is fast is itself a finding when the
-     * next one is not.</p>
+     * the chain stalls. Several of those steps happen in no frame at all.</p>
      */
     public static void step(long started, String what) {
-        if (!ENABLED || started == 0L) return;
-        long took = System.nanoTime() - started;
-        if (took < STEP_FLOOR) return;
-        CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, took / 1_000L);
+        if (started == 0L) return;
+        CgTrace.spanDone(UiTrace.FLOW, what, started);
+        if (ENABLED) {
+            long took = System.nanoTime() - started;
+            if (took >= STEP_FLOOR) {
+                CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, took / 1_000L);
+            }
+        }
     }
 
     /**
-     * Logs a duration that was <b>accumulated</b> rather than measured from a single start.
+     * Records a duration that was <b>accumulated</b> rather than measured from a single start.
      *
-     * <p>{@link #step} takes a start stamp, which cannot express a total summed across a loop — and
-     * {@link #add} can, but a bucket only ever surfaces inside a reported {@code [frame]} line, and the
-     * frame that opens a document is routinely suppressed by the rate limit. The first attempt at
-     * splitting a per-row cost that way printed nothing at all and read as the code not having run.</p>
+     * <p>{@link #step} takes a start stamp, which cannot express a total summed across a loop.</p>
      */
     public static void report(long nanos, String what) {
-        if (!ENABLED || nanos < STEP_FLOOR) return;
-        CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, nanos / 1_000L);
+        if (nanos <= 0L) return;
+        long now = System.nanoTime();
+        CgTrace.spanDone(UiTrace.FLOW, what, now - nanos);
+        if (ENABLED && nanos >= STEP_FLOOR) {
+            CrystalGuiCore.LOGGER.info("[step] {}{} {}us", indent(), what, nanos / 1_000L);
+        }
     }
 
     /** Notes a step that has no duration worth timing — an entry point, a decision, a count. */
     public static void note(String what) {
-        if (!ENABLED) return;
-        CrystalGuiCore.LOGGER.info("[step] {}. {}", indent(), what);
+        CgTrace.marker(UiTrace.FLOW, what);
+        if (ENABLED) CrystalGuiCore.LOGGER.info("[step] {}. {}", indent(), what);
     }
 
-    /** Opens a nesting level, so a chain reads as a chain. Always paired with {@link #leave}. */
+    /**
+     * Opens a nesting level, so a chain reads as a chain. Always paired with {@link #leave}.
+     *
+     * @return what {@link #leave} takes back — a span id now, where it used to be a start stamp. Both
+     *         are a {@code long} the caller only passes on, which is why no call site changed.
+     */
     public static long enter(String what) {
-        if (!ENABLED) return 0L;
-        CrystalGuiCore.LOGGER.info("[step] {}> {}", indent(), what);
-        depth++;
-        return System.nanoTime();
+        long span = CgTrace.spanBegin(UiTrace.FLOW, what);
+        if (ENABLED) {
+            CrystalGuiCore.LOGGER.info("[step] {}> {}", indent(), what);
+            depth++;
+            if (span < 0L) return System.nanoTime();
+        }
+        return span;
     }
 
-    /** Closes a {@link #enter} and reports what the whole of it cost. */
-    public static void leave(long started, String what) {
-        if (!ENABLED || started == 0L) return;
-        depth = Math.max(0, depth - 1);
-        CrystalGuiCore.LOGGER.info("[step] {}< {} {}us",
-                indent(), what, (System.nanoTime() - started) / 1_000L);
+    /** Closes an {@link #enter} and reports what the whole of it cost. */
+    public static void leave(long span, String what) {
+        if (ENABLED) {
+            depth = Math.max(0, depth - 1);
+            CrystalGuiCore.LOGGER.info("[step] {}< {}", indent(), what);
+        }
+        if (span >= 0L) CgTrace.spanEnd(span);
     }
 
     private static String indent() {
@@ -224,11 +229,7 @@ public final class FrameProfile {
 
     private static int depth;
 
-    /** Records a count worth seeing beside the times — how many elements, rows, marks. */
-    public static void count(String what, int howMany) {
-        if (!timing()) return;
-        COUNTS.merge(what, howMany, Integer::sum);
-    }
+    // ── Blame ───────────────────────────────────────────────────────────────────────────────
 
     /**
      * Blames the CALLER for one occurrence of {@code what} — the probe that names a churn source.
@@ -237,15 +238,14 @@ public final class FrameProfile {
      * the first frame outside the packages doing the bookkeeping and counts that, so a report reads
      * {@code Tooltip.reposition:214=280} rather than {@code rematched=300}.</p>
      *
-     * <p><b>A probe, and priced like one.</b> Capturing a stack is microseconds and this runs per
-     * invalidation; that is affordable while somebody is watching a log and nowhere else, which is why
-     * the whole class is behind a property.</p>
+     * <p><b>Priced like the probe it is.</b> Capturing a stack is microseconds and this runs per
+     * invalidation, so it lives on {@link UiTrace#BLAME} — its own channel, asked for by name.</p>
      */
     public static void blame(String what, String... ignorePackages) {
-        if (!ENABLED) return;
-        // A STACK WALK PER CALL, and a frame that re-matches two thousand elements makes two thousand of them: the
-        // probe was a quarter of the frames it measured. Every call is attributed up to a cap, then one in a stride
-        // stands for the stride, so the totals hold and the cost does not grow with them.
+        if (!ENABLED && !CgTrace.isEnabled(UiTrace.BLAME)) return;
+        // A STACK WALK PER CALL, and a frame that re-matches two thousand elements makes two thousand
+        // of them: the probe was a quarter of the frames it measured. Every call is attributed up to a
+        // cap, then one in a stride stands for the stride, so the totals hold and the cost does not.
         int nth = blamesThisFrame++;
         int weight = 1;
         if (nth >= BLAME_EXACTLY) {
@@ -272,40 +272,43 @@ public final class FrameProfile {
         SITES.merge(what + "(unattributed)", weight, Integer::sum);
     }
 
+    /**
+     * Writes this frame's blame as markers, top sites first.
+     *
+     * <p>ONE marker per SITE rather than one per invalidation: two thousand markers in a frame would
+     * fill the ring with the evidence for a single finding and evict everything else.</p>
+     */
+    private static void flushBlame() {
+        if (SITES.isEmpty() || !CgTrace.isEnabled(UiTrace.BLAME)) return;
+        List<Map.Entry<String, Integer>> sites = new ArrayList<>(SITES.entrySet());
+        sites.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+        for (int i = 0; i < Math.min(MAX_BLAME_MARKERS, sites.size()); i++) {
+            CgTrace.marker(UiTrace.BLAME, "invalidated-by",
+                    sites.get(i).getKey() + " x" + sites.get(i).getValue());
+        }
+    }
+
+    /** Past this the list is a log rather than a finding. */
+    private static final int MAX_BLAME_MARKERS = 10;
+
     private static final Map<String, Integer> SITES = new LinkedHashMap<>();
 
-    /** How many invalidations {@link #blame} attributes one by one each frame, and how it samples after that. */
+    /** How many invalidations {@link #blame} attributes one by one each frame, and its stride after. */
     private static final int BLAME_EXACTLY = 256;
     private static final int BLAME_STRIDE = 16;
 
     private static int blamesThisFrame;
 
-    /**
-     * Whether this frame gets past the rate limit.
-     *
-     * <h3>The limit was hiding the one frame worth reporting</h3>
-     *
-     * <p>A flat "at most one report a second" is right for a sustained cost — a stretch of 12ms frames
-     * needs one line, not sixty. It is exactly wrong for a <b>stall</b>, which is what this probe exists
-     * for: the frames around a stall are also slow, so whichever mildly-slow frame happens to arrive
-     * first claims the second and the 237ms one that follows is discarded without a word. Measured: an
-     * automated run whose own summary reported a worst frame of <b>236.6ms</b> contained no report of any
-     * frame over 50ms, so the log described the wrong frame entirely and read as if the stall had been
-     * fixed.</p>
-     *
-     * <p>So a frame also reports when it is <b>substantially worse than the last one reported</b>. The
-     * limit still holds against a plateau — a run of equally slow frames is not each other's escalation
-     * — while the peak, which is the whole finding, always gets through.</p>
-     */
-    private static boolean worthReporting(long total, long now) {
-        // Comfortably past the limit: an ordinary periodic report.
-        if (now - lastReport >= REPORT_EVERY_NANOS) return true;
-        // Otherwise only an ESCALATION, so a plateau still reports once. Twice as expensive is the
-        // threshold because at 8ms it takes 16ms to qualify, which is already the next budget down.
-        return total >= lastReportedTotal * 2;
-    }
+    // ── The log, which the property still governs ───────────────────────────────────────────
 
-    /** What the last reported frame cost, so {@link #worthReporting} can tell an escalation from a plateau. */
+    private static final Map<String, Long> PHASES = new LinkedHashMap<>();
+    private static final Map<String, Integer> COUNTS = new LinkedHashMap<>();
+
+    private static long frameStart;
+    private static long lastReport;
+    private static long gcAtFrameStart;
+
+    /** What the last reported frame cost, so an escalation can be told from a plateau. */
     private static long lastReportedTotal = SLOW_NANOS;
 
     private static int framesSinceReport;
@@ -313,19 +316,23 @@ public final class FrameProfile {
     private static long worstSinceReport;
 
     /**
+     * Whether this frame gets past the rate limit.
+     *
+     * <p>A flat "at most one report a second" is right for a sustained cost and exactly wrong for a
+     * <b>stall</b>: the frames around one are also slow, so whichever mildly-slow frame arrives first
+     * claims the second and the 237ms one that follows is discarded without a word. So a frame also
+     * reports when it is substantially worse than the last one reported.</p>
+     */
+    private static boolean worthReporting(long total, long now) {
+        if (now - lastReport >= REPORT_EVERY_NANOS) return true;
+        return total >= lastReportedTotal * 2;
+    }
+
+    /**
      * How many frames since the last report missed the budget — <b>"a spike" or "a plateau"</b>.
      *
-     * <h3>Without it, one line cannot tell those apart, and they need opposite fixes</h3>
-     *
-     * <p>The rate limit means one printed line stands for every frame in that second. So {@code [frame]
-     * 25ms} is equally a single hiccup nobody would notice and forty consecutive 25ms frames, which is a
-     * steady <b>40fps</b> — and 120-to-40 is exactly the report this probe exists to serve. Reading a
-     * plateau as a spike sends the next round after whatever happened to be biggest in that one frame,
-     * which is how a stall gets chased through code that was only ever slow once.</p>
-     *
-     * <p>Cheap enough to be unconditional: three counters, incremented before the rate limit is even
-     * consulted, so the census covers frames that are never printed. That is the whole point — the
-     * printed frame is a sample, and this says what it is a sample OF.</p>
+     * <p>One printed line otherwise stands for both, and they need opposite fixes: {@code [frame] 25ms}
+     * is equally one hiccup nobody would notice and forty consecutive 25ms frames, which is 40fps.</p>
      */
     private static String census() {
         String out = "(" + slowFramesSinceReport + "/" + framesSinceReport + " over budget, worst "
@@ -336,25 +343,17 @@ public final class FrameProfile {
         return out;
     }
 
-    /** Called at the very end of a frame; reports if the frame was slow and the rate limit allows. */
-    public static void frameEnd() {
-        if (FrameStats.isCollecting()) {
-            FrameStats.get().frameEnded(System.nanoTime());
-            FrameStats.get().describeFrame(PHASES, COUNTS);
-        }
-        if (!ENABLED || frameStart == 0L) return;
+    private static void logSlowFrame() {
         long now = System.nanoTime();
         long total = now - frameStart;
-        // COUNTED BEFORE ANYTHING IS DECIDED, so the census covers every frame rather than the reported
-        // ones. @see #census
+        // COUNTED BEFORE ANYTHING IS DECIDED, so the census covers every frame rather than the
+        // reported ones.
         framesSinceReport++;
         if (total >= SLOW_NANOS) slowFramesSinceReport++;
         if (total > worstSinceReport) worstSinceReport = total;
         if (total < SLOW_NANOS || !worthReporting(total, now)) {
-            // STILL CLEARED. @see #frameBegin -- the blame window has to advance every frame, or a quiet
-            // stretch accumulates into the next report and blames it for work it never did.
             SITES.clear();
-        blamesThisFrame = 0;
+            blamesThisFrame = 0;
             return;
         }
         lastReport = now;
@@ -364,13 +363,11 @@ public final class FrameProfile {
         phases.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
         StringBuilder line = new StringBuilder();
         line.append("[frame] ").append(total / 1_000_000L).append("ms ").append(census()).append("  ");
-        // THE COLLECTOR'S SHARE OF THIS FRAME, when it took one. @see #gcMillis
-        long collected = gcMillis() - gcAtFrameStart;
+        long collected = FrameStats.gcMillis() - gcAtFrameStart;
         if (collected > 0) line.append("GC ").append(collected).append("ms  ");
         for (Map.Entry<String, Long> phase : phases) {
             if (phase.getValue() < 200_000L) continue;
-            line.append(phase.getKey()).append(' ')
-                    .append(phase.getValue() / 1_000L).append("us  ");
+            line.append(phase.getKey()).append(' ').append(phase.getValue() / 1_000L).append("us  ");
         }
         if (!COUNTS.isEmpty()) {
             line.append("  [");

@@ -6,14 +6,11 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.async.FrameStats;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.TextRange;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
-
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 /**
  * The frame rate, and what is behind it, drawn over whatever is being measured — a debug HUD.
@@ -56,6 +53,14 @@ public class FrameStatsOverlay extends UIElement {
 
     /** The frame-time bars. Its own class so a sheet can style the one row made of characters. */
     public static final String SPARK_CLASS = "__spark__";
+
+    /**
+     * What a hidden readout, or a row the readout has stopped needing, wears.
+     *
+     * <p>A class rather than an inline {@code display: none} because the engine may not write into the
+     * cascade — see {@code EngineBoundaryTest}. The sheet says what hidden means.</p>
+     */
+    public static final String HIDDEN_CLASS = "__hidden__";
 
     /**
      * The two highlight names the bars are coloured through.
@@ -190,9 +195,11 @@ public class FrameStatsOverlay extends UIElement {
     public FrameStatsOverlay setShowing(boolean value) {
         if (showing == value) return this;
         showing = value;
-        // IMPORTANT, so a sheet cannot leave a hidden HUD drawn -- the same channel Tab hides a pane on.
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
-                l -> l.display(value ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        // A CLASS, NOT A CASCADE WRITE. `EngineBoundaryTest` forbids the engine writing style at
+        // IMPORTANT origin, and it is right to: a widget that pushes its own geometry in is the habit
+        // the three-tree rewrite exists to end. The sheet decides what hidden looks like.
+        if (value) removeClass(HIDDEN_CLASS);
+        else addClass(HIDDEN_CLASS);
         applyCollection();
         return this;
     }
@@ -285,8 +292,9 @@ public class FrameStatsOverlay extends UIElement {
             }
             if (health != null && !row.hasClass(health)) row.addClass(health);
             paintBars(row, wanted.barHealth());
-            StyleGroup.importantPipeline(row.getStyle().getLayoutGroup(),
-                    l -> l.display(wanted.text().isEmpty() ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
+            // Same rule as the plate itself: a retired row wears the class and the sheet hides it.
+            if (wanted.text().isEmpty()) row.addClass(HIDDEN_CLASS);
+            else row.removeClass(HIDDEN_CLASS);
         }
     }
 
