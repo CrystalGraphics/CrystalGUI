@@ -38,6 +38,7 @@ import com.crystalgui.widget.config.inspector.Inspector;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.display.EmptyState;
+import com.crystalgui.widget.display.FrameStatsOverlay;
 import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.composite.RadarChart;
 import com.crystalgui.widget.control.Slider;
@@ -174,6 +175,10 @@ public final class Widgets implements NodeKinds {
         // matching by accident and ToolWindowFrame matching nothing at all.
         // A PANEL'S NOTE, placed by its container: nothing a document holds, so the Library does not list it.
         UIElementRegistry.register(EmptyState.NAME, () -> new EmptyState(""), NodeContract.INERT, KindInfo.hidden());
+        // A DEBUG READOUT, never part of a document: hidden from the Library, registered so `framestats`
+        // is a real tag the UA sheet can size and colour.
+        UIElementRegistry.register(FrameStatsOverlay.NAME, FrameStatsOverlay::new, NodeContract.INERT,
+                KindInfo.hidden());
         UIElementRegistry.register(SymbolIcon.NAME, SymbolIcon::new, NodeContract.INERT,
                 KindInfo.named("Symbol Icon").glyph(GlyphRole.TEXT).inCategory(DISPLAY)
                         .synonyms("icon", "image", "glyph").describedAs("A small icon drawn in the text color.")

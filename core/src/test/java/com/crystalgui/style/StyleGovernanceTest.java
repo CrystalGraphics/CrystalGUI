@@ -60,7 +60,10 @@ public class StyleGovernanceTest {
      * it once and quietly deleted its derivation.</p>
      */
     private static final List<String> FALLBACK_ONLY_PREFIXES =
-            List.of("--filetype-", "--graph-port-");
+            // `--framestats-`: a debug readout drawn on its own dark plate, so green/amber/red and the
+            // plate they sit on are palette constants rather than shades of any theme's surface -- a
+            // light theme inheriting these is the correct outcome, not an oversight.
+            List.of("--filetype-", "--graph-port-", "--framestats-");
     private static final Set<String> FALLBACK_ONLY_EXCEPTIONS =
             Set.of("--graph-port-label-hover-fg");
     private static final Set<String> FALLBACK_ONLY_EXACT = Set.of(

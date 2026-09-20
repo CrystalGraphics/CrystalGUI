@@ -196,7 +196,7 @@ rendering from everything else. What it cannot see is anything that crosses the 
 | `cgui-nineslice` | `CgUiNineSliceScene` | `CgUiSprite` 9-slice |
 | `cgui-ore-theme` | `CgUiOreThemeScene` | `ore.css` + sprite registry end-to-end |
 | `cgui-visual-layers` | `CgUiVisualLayersScene` | FBO layer opacity + masking |
-| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, and **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area). *Grows with `plan/shell-windowing.md`: every W with something visible adds its demonstration here in the same commit* |
+| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area) and **the frame readout** (F7, F8 to expand its phases). *Grows with `plan/shell-windowing.md`: every W with something visible adds its demonstration here in the same commit* |
 | `cgui-snapshot-probe` | `CgUiSnapshotProbeScene` | **DIAGNOSTIC, exits on its own** — photographs a window (`WindowSnapshot`, the real minimise path) and draws the photograph 1:1 beside the live window; writes `live` and `snapshot` PNGs to `harness-output/cgui-snapshot-probe/`. The window holds every path a photograph has to survive: rounded islands with `overflow: hidden` (mask layer), `overflow: clip`, an `opacity` layer, a scroller (scissor), text. **Any difference between the two PNGs is the render target's, since one subtree drew both** — it found three target-size assumptions in one run that six screenshots had not |
 | `cgui-gradient-probe` | `CgUiGradientProbeScene` | **DIAGNOSTIC, exits on its own** — every claim `gui_gradient.shader` makes on one screen: the taskbar's glow, a 16-level ramp across the width (the banding torture), a `to bottom right` on a rounded box (gradient line + corner mask), ten stops (two draws, one seam), a fade to `transparent` over white (premultiplied), a hard stop. One PNG in `harness-output/cgui-gradient-probe/`; the readback that verified it counted levels, run lengths and the fade's hue against the straight-lerp prediction |
 | `cgui-library` | `CgUiLibraryScene` | The UI builder's Library: every placeable kind as a live card, every category open, Button selected. Writes `top`/`bottom` captures once every sample is built; `-Dcrystalgui.harness.library.width=140` docks it narrow, `-Dcrystalgui.harness.library.bench=scroll|resize|search` runs that workload forever and prints frame-time percentiles |
@@ -995,6 +995,7 @@ int value types.
 | `TextField` | `textfield` | `cgui-textfield` |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
 | `EmptyState` | `emptystate` | `cgui-desktop` — any vacant panel |
+| `FrameStatsOverlay` | `framestats` | `cgui-desktop` — F7 shows, F8 expands the phases. The frame readout over `core.async.FrameStats`; attach it to any document |
 | `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
 | `Dialog` | `dialog` | `cgui-gallery` (Dialog page, modal page) |
 | `Popover` | `popover` | `cgui-gallery` (menus page) |

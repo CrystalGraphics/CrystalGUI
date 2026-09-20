@@ -2,9 +2,6 @@ package com.crystalgui.core.async;
 
 import com.crystalgui.core.CrystalGuiCore;
 
-import java.lang.management.GarbageCollectorMXBean;
-import java.lang.management.ManagementFactory;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -74,9 +71,30 @@ public final class FrameProfile {
     private static long lastMark;
     private static long lastReport;
 
+    /**
+     * Whether this frame's phases are being TIMED — the flag, or a readout asking for them.
+     *
+     * <h3>Two consumers, and only one of them logs</h3>
+     *
+     * <p>{@link #ENABLED} answers "write a line per slow frame", which is a probe somebody is watching a
+     * log for. A {@link FrameStats} holder answers "somebody is looking at a HUD", and that wants the
+     * same phase timings and none of the logging — so the timing gate is this and the reporting gate
+     * stays the flag. Without the split, the on-screen breakdown could only be had by restarting the
+     * application with a property, which is exactly when a stall is least reproducible.</p>
+     *
+     * <p>What is NOT behind this: {@link #blame}, which walks a stack per invalidation, and the
+     * {@code step}/{@code enter}/{@code leave} log lines. Those cost enough to be worth asking for.</p>
+     */
+    private static boolean timing() {
+        return ENABLED || FrameStats.isCollecting();
+    }
+
     /** Called at the very top of a frame. */
     public static void frameBegin() {
-        if (!ENABLED) return;
+        // THE FRAME BOUNDARY IS THIS CLASS'S, so a readout takes it from here rather than timing its own
+        // -- one boolean read when nobody is collecting. @see FrameStats
+        if (FrameStats.isCollecting()) FrameStats.get().frameBegan(System.nanoTime());
+        if (!timing()) return;
         PHASES.clear();
         COUNTS.clear();
         // SITES IS NOT CLEARED HERE, and that was a bug in this probe rather than in the engine.
@@ -108,19 +126,14 @@ public final class FrameProfile {
      * down without appearing anywhere in the frame's own accounting.</p>
      */
     private static long gcMillis() {
-        long total = 0;
-        for (GarbageCollectorMXBean collector : ManagementFactory.getGarbageCollectorMXBeans()) {
-            long spent = collector.getCollectionTime();
-            if (spent > 0) total += spent;
-        }
-        return total;
+        return FrameStats.gcMillis();
     }
 
     private static long gcAtFrameStart;
 
     /** Attributes everything since the previous mark (or the frame start) to {@code phase}. */
     public static void mark(String phase) {
-        if (!ENABLED) return;
+        if (!timing()) return;
         long now = System.nanoTime();
         PHASES.merge(phase, now - lastMark, Long::sum);
         lastMark = now;
@@ -128,18 +141,18 @@ public final class FrameProfile {
 
     /** Adds {@code nanos} to a named bucket — for work that is not a whole phase. */
     public static void add(String bucket, long nanos) {
-        if (!ENABLED) return;
+        if (!timing()) return;
         PHASES.merge(bucket, nanos, Long::sum);
     }
 
     /** Starts a timing for {@link #add}; returns 0 when disabled so a caller needs no branch. */
     public static long begin() {
-        return ENABLED ? System.nanoTime() : 0L;
+        return timing() ? System.nanoTime() : 0L;
     }
 
     /** Ends a {@link #begin} timing into {@code bucket}. */
     public static void end(long started, String bucket) {
-        if (!ENABLED || started == 0L) return;
+        if (!timing() || started == 0L) return;
         add(bucket, System.nanoTime() - started);
     }
 
@@ -213,7 +226,7 @@ public final class FrameProfile {
 
     /** Records a count worth seeing beside the times — how many elements, rows, marks. */
     public static void count(String what, int howMany) {
-        if (!ENABLED) return;
+        if (!timing()) return;
         COUNTS.merge(what, howMany, Integer::sum);
     }
 
@@ -325,6 +338,10 @@ public final class FrameProfile {
 
     /** Called at the very end of a frame; reports if the frame was slow and the rate limit allows. */
     public static void frameEnd() {
+        if (FrameStats.isCollecting()) {
+            FrameStats.get().frameEnded(System.nanoTime());
+            FrameStats.get().describeFrame(PHASES, COUNTS);
+        }
         if (!ENABLED || frameStart == 0L) return;
         long now = System.nanoTime();
         long total = now - frameStart;
