@@ -1213,6 +1213,18 @@ the platform source. An anchor's two halves share one stripe, separated by a rul
 | What kind of panel is it? | `descriptorOf(typeId)` |
 | Tell me when any of that changes | `onDidChangePlacement` |
 
+### What an empty editor says
+
+`DockArea.setWatermark(heading, lines…)` — a `WatermarkLine` is a line of text plus the command id whose
+chord annotates it. The central group renders it when the whole area holds no panels, resolving each
+chord against the live keymap where it sits and leaving a line as words alone when its command has no
+binding.
+
+**The copy belongs to whoever composes the dock, never to the dock.** It names an application's own ways
+in — its file finder, its palette, its project tree — and a dock is a widget other products build with:
+one carrying this workbench's command ids would offer a shader graph's editor a Project View it does not
+have. A dock nobody sets one on shows none, which is right for a dock that is not an editor area.
+
 ### Hiding a button is about the RAIL, not the window
 
 `show_stripe_button` is IntelliJ's flag and ours, stored on the placement beside the region and the

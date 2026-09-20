@@ -27,10 +27,13 @@ import com.crystalgui.widget.text.UIText;
  * }
  * }</pre>
  *
- * <p>A line that changes, such as one naming a key binding, is rewritten on the same note:</p>
+ * <p>A line that changes is rewritten on the same note. A key binding goes in the line's own chord slot
+ * rather than into its words, so the sheet can dim it — and so a command with no binding simply has
+ * none:</p>
  *
  * <pre>{@code
- * empty.setLine(0, "— Open a java file and press Run (" + accelerator + ")");
+ * KeyChord chord = Keymap.acceleratorFor(this, RunCommands.RUN);
+ * empty.setLine(0, "— Open a java file and press Run", chord == null ? null : chord.toString());
  * }</pre>
  *
  * <ul>
@@ -56,6 +59,16 @@ public class EmptyState extends UIElement {
     public static final String HEADING_PART = "heading";
     public static final String LINE_PART = "line";
 
+    /**
+     * The key chord a line may end with, so a sheet can dim it against the words it belongs to.
+     *
+     * <p>A separate part rather than text in the line, because the two are read differently: the words are
+     * the instruction and the chord is how to say it, and a note that paints them the same weight makes
+     * the reader parse the chord as part of the sentence. Every watermark that names bindings -- IntelliJ's,
+     * VS Code's -- dims the chord for exactly this.</p>
+     */
+    public static final String CHORD_PART = "chord";
+
     /** On the host while its lines share a left edge. @see #setCentred */
     public static final String START_ALIGNED_CLASS = "__start-aligned__";
 
@@ -63,7 +76,7 @@ public class EmptyState extends UIElement {
     // start-aligned list needs, since one container can only centre each line on its own.
     private final UIElement lines = new UIElement();
     private final UIText heading = new UIText("");
-    private final List<UIText> rows = new ArrayList<>();
+    private final List<Row> rows = new ArrayList<>();
 
     /** The panel this note stands in for, or null for one placed by hand. */
     @Nullable
@@ -131,13 +144,11 @@ public class EmptyState extends UIElement {
 
     /** Replaces the lines under the heading. */
     public EmptyState setLines(String... texts) {
-        while (rows.size() > texts.length) lines.remove(rows.remove(rows.size() - 1));
+        while (rows.size() > texts.length) lines.remove(rows.remove(rows.size() - 1).row);
         while (rows.size() < texts.length) {
-            UIText row = new UIText("");
-            row.set(Attribute.PART, LINE_PART);
-            row.setHitTest(false);
+            Row row = new Row();
             rows.add(row);
-            lines.append(row);
+            lines.append(row.row);
         }
         for (int i = 0; i < texts.length; i++) setLine(i, texts[i]);
         return this;
@@ -145,14 +156,56 @@ public class EmptyState extends UIElement {
 
     /** Rewrites one line; an unchanged text costs a comparison, so this may run every frame. */
     public EmptyState setLine(int index, String text) {
-        UIText row = rows.get(index);
-        if (!text.equals(row.getText())) row.setText(text);
+        return setLine(index, text, null);
+    }
+
+    /**
+     * As {@link #setLine(int, String)}, ending the line with a key chord the sheet dims.
+     *
+     * <pre>{@code
+     * KeyChord chord = Keymap.acceleratorFor(this, ExplorerCommands.GO_TO_FILE);
+     * empty.setLine(0, "— Go to File", chord == null ? null : chord.toString());
+     * }</pre>
+     *
+     * <p>A null or empty chord leaves the line as words alone — which is what a caller should pass when a
+     * command has no binding here, rather than inventing one.</p>
+     */
+    public EmptyState setLine(int index, String text, @Nullable String chord) {
+        Row row = rows.get(index);
+        if (!text.equals(row.label.getText())) row.label.setText(text);
+        String shown = chord == null ? "" : chord;
+        if (!shown.equals(row.chord.getText())) row.chord.setText(shown);
+        row.chord.setDisplayed(!shown.isEmpty());
         return this;
     }
 
     public List<String> lines() {
         List<String> out = new ArrayList<>(rows.size());
-        for (UIText row : rows) out.add(row.getText());
+        for (Row row : rows) out.add(row.label.getText());
         return out;
+    }
+
+    /**
+     * One line: its words, and the chord they are performed with.
+     *
+     * <p>A row rather than a bare {@code UIText} so the two can be coloured apart. {@link #LINE_PART} stays
+     * on the ROW, which is what the sheet's spacing and font rules were already written against; the chord
+     * carries its own part and inherits everything it does not override.</p>
+     */
+    private static final class Row {
+        private final UIElement row = new UIElement();
+        private final UIText label = new UIText("");
+        private final UIText chord = new UIText("");
+
+        Row() {
+            row.set(Attribute.PART, LINE_PART);
+            row.setHitTest(false);
+            label.setHitTest(false);
+            chord.set(Attribute.PART, CHORD_PART);
+            chord.setHitTest(false);
+            chord.setDisplayed(false);
+            row.append(label);
+            row.append(chord);
+        }
     }
 }

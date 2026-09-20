@@ -1315,9 +1315,39 @@ emptystate.__start-aligned__::part(lines) {
  * block would not inherit. */
 emptystate::part(heading),
 emptystate::part(line) {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--empty-state-fg, #6B6B6B);
     white-space: nowrap;
+}
+
+/* THE EDITOR'S WATERMARK, which is not a panel's note and should not read like one: it has the whole work
+ * area to itself and is the only thing on screen, so it takes the readable foreground and the larger of
+ * the two sizes. Everything else about it -- the chord's dimming, the row layout -- is shared. */
+dockgroup emptystate::part(heading),
+dockgroup emptystate::part(line) {
+    font-size: 10px;
+    color: var(--editor-watermark-fg, #DFE1E5);
+}
+
+/* A LINE IS A ROW NOW -- words, then the chord they are performed with. Direction stated because the
+ * engine's default is COLUMN, which would stack the chord under its own instruction. */
+emptystate::part(line) {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 5px;
+}
+
+/* THE WORDS READ, THE CHORD RECEDES. They are two kinds of thing on one line -- an instruction and the
+ * key that performs it -- and painting them the same weight makes the chord parse as part of the
+ * sentence. IntelliJ's watermark and VS Code's both dim it. */
+emptystate::part(chord) {
+    font-size: 9px;
+    color: var(--empty-state-chord-fg, #6B6B6B);
+    white-space: nowrap;
+}
+
+dockgroup emptystate::part(chord) {
+    font-size: 10px;
 }
 
 /* The ring's eviction notice. Never hidden when non-empty: a transcript that quietly begins in the

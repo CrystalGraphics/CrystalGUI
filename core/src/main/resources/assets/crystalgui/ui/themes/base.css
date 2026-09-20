@@ -153,7 +153,12 @@ theme {
 
     --dock-active-border: var(--accent-soft);
     --dock-bg: var(--surface-panel);
-    --dock-empty-bg: var(--surface-base);
+    /* THE PANEL SURFACE, not a recess. It derived from --surface-base while an empty editor group was a
+     * blank area and a darker well was the honest way to say "nothing here" -- but it carries a watermark
+     * now, and a note floating on the window's own background reads as the workbench having lost its
+     * editor rather than as an editor with nothing open. Every other panel keeps its surface when empty;
+     * so does this one. Still its own token, so a theme that wants the recess back has the knob. */
+    --dock-empty-bg: var(--surface-panel);
     --dock-insertion-border: var(--accent);
     --dock-missing-bg: var(--surface-raised);
 
@@ -495,8 +500,15 @@ theme {
      * so the two greens cannot drift apart again — which they had, having been chosen weeks apart. */
     --run-live-fg: var(--success-icon);
     /* A panel's empty-state note. The SAME hint tone as the Run console's eviction notice: both are a
-     * panel talking about itself, and a second grey for one voice is how two of them come to disagree. */
+     * panel talking about itself, and a second grey for one voice is how two of them come to disagree.
+     * A HINT because the note sits in a small box the user is already looking at for another reason,
+     * where anything louder competes with the panel beside it. */
     --empty-state-fg: var(--fg-hint);
+    /* A chord is a footnote to the words it follows, wherever the note is. @see EmptyState#CHORD_PART */
+    --empty-state-chord-fg: var(--fg-hint);
+    /* THE EDITOR'S WATERMARK is the exception, and the difference is what it is FOR: it owns the whole
+     * work area, it is the only thing on screen, and it is read rather than glanced at. */
+    --editor-watermark-fg: var(--fg);
     /* The line that opens a run — the accent, because that is this vocabulary's "look here" and a run
      * boundary is the one thing in a transcript you scroll to find. It reads against the output around
      * it (the scheme's own foreground) and against the faded grey of the line that CLOSES a run, which

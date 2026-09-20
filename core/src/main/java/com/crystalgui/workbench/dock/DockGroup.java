@@ -1,5 +1,8 @@
 package com.crystalgui.workbench.dock;
 
+import com.crystalgui.ui.input.keymap.KeyChord;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.serialization.StateMap;
@@ -131,6 +134,12 @@ public class DockGroup extends UIElement {
         overlay.setHitTest(false);
         hideDropPreview();
         append(overlay);
+        // THE WATERMARK, in the GROUP rather than in the area around it -- IntelliJ's editor watermark is
+        // the empty editor group's, and it has to be, or it draws over the other half of a split. The
+        // group keeps its own surface underneath it, which is what an empty editor should still look
+        // like: a panel with nothing in it, not a hole in the window.
+        empty.setCentred(false);
+        empty.placeIn(this);
 
 
         // PARKED IN THE RAIL, not in the group: an in-flow gap is a SIBLING of the things it makes room
@@ -256,11 +265,52 @@ public class DockGroup extends UIElement {
      */
     private boolean syncing;
 
+    /**
+     * What an editor group with nothing in it says — IntelliJ's watermark, whose job is to name the ways
+     * IN rather than to report that the group is empty.
+     *
+     * <p>The COPY is the dock's ({@link DockArea#setWatermark}), because naming an application's ways in is
+     * the application's business; this renders it and resolves its chords, which needs the element the
+     * keymap is asked from.</p>
+     *
+     * <p>Only the CENTRAL group shows it: every other leaf is a group somebody opened and can close, and a
+     * note offering "go to file" inside a tool window's own pane would be answering a question nobody
+     * asked there.</p>
+     */
+    private final EmptyState empty = new EmptyState("");
+
+    /** @see #empty */
+    private void refreshWatermark(boolean nothingOpen) {
+        List<DockArea.WatermarkLine> lines = area.watermarkLines();
+        boolean show = nothingOpen && leaf.isCentral() && !lines.isEmpty();
+        if (show) {
+            empty.setHeading(area.watermarkHeading());
+            String[] texts = new String[lines.size()];
+            for (int i = 0; i < lines.size(); i++) texts[i] = lines.get(i).text();
+            empty.setLines(texts);
+            // CHORDS FROM THE LIVE KEYMAP, written once per sync rather than per frame: a note naming a
+            // binding somebody has rebound is worse than one naming none.
+            for (int i = 0; i < lines.size(); i++) {
+                empty.setLine(i, lines.get(i).text(), chordFor(lines.get(i).commandId()));
+            }
+        }
+        empty.setVacant(show);
+    }
+
+    /** {@code "Ctrl+P"}, or null when the command has no binding here — never an invented one. */
+    @Nullable
+    private String chordFor(@Nullable String commandId) {
+        if (commandId == null) return null;
+        KeyChord chord = Keymap.acceleratorFor(this, commandId);
+        return chord == null ? null : chord.toString();
+    }
+
     void sync() {
         boolean wasSyncing = syncing;
         syncing = true;
         try {
             List<DockPanelRef> wanted = leaf.panels();
+            refreshWatermark(wanted.isEmpty());
             if (wanted.isEmpty() != hasClass(EMPTY_CLASS)) {
                 if (wanted.isEmpty()) {
                     addClass(EMPTY_CLASS);
