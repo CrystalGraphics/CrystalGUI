@@ -596,7 +596,18 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    padding-left: 6px;
+    /* AND THE ICON SLOT IS THE ACTIVITY RAIL'S COLUMN, which is the left-hand twin of the derivation on
+     * `.__controls__` below: the close block IS that column on the right, so the X sits over the
+     * auxiliary rail's glyphs. This padding is what puts the caption's tile over the LEFT rail's, and
+     * it is the only lever that can -- a WindowIcon has no inner tile to centre, the element itself is
+     * the tile, so the column has to be built around it out of padding.
+     *
+     * 3px = (20px rail - 14px tile) / 2, and with the icon's own 3px right margin the three add to the
+     * rail's full 20, so whatever follows the icon starts exactly at the rail's right edge. This engine
+     * has no `calc()`, so the pair is maintained by hand: change --activity-bar-w or the tile and both
+     * numbers move. It was 6px against a 12px tile, which centred it at 12 against the rail's 10 -- near
+     * enough to read as a misalignment rather than a different measurement, which is what it was. */
+    padding-left: 4px;
     /* NO CLEARANCE, because there is no longer a border to clear.
      *
      * This was `padding-right: 1px`, and it was earned: `window` carried a 1px `outline`, outlines are
@@ -689,18 +700,24 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
  * gives it something to draw; the title bar has no `gap`, so a hidden slot occupies nothing at all.
  *
  * THE SIZE IS THIS CONTEXT'S and only the size: what a tile IS lives on `.__window-icon__` above. The
- * padding is the inset the glyph sits at from the tile's edge (it is what the overlay's `content-box`
- * origin measures against), and 2 and 3 against a 12px slot are the strip's 3 and 5 against its 18,
- * scaled — so the caption reads as the same object at caption size. The FOOTPRINT is unchanged at 12px,
- * which is why the glyph inside it is now 8: a tile needs its inset, and growing the slot instead would
- * move every title in the application. */
+ * padding is the inset the glyph sits at from the tile's edge — what the overlay's `content-box`
+ * origin measures against — so a 14px tile draws a 10px mark.
+ *
+ * AND IT IS THE HEADER-SIZE TILE, the same three numbers as the window preview's and the switcher's
+ * rather than a third set: a caption, a hover preview and a switcher entry are all a window wearing its
+ * name at label scale, and the taskbar's 18/3/5 strip is the one place that genuinely is not. It was
+ * 12/2/3, which made the sheet carry three sizes for two jobs and left a caption's tile reading smaller
+ * than the preview of the very same window.
+ *
+ * The right margin is the other half of the caption's left column -- 3 + 14 + 3 is the rail's 20 -- so
+ * it is not a gap that can be tuned on its own. See the padding on the caption rule. */
 .__window__ > .__title-bar__ > .__icon__ {
-    width: 12px;
-    height: 12px;
+    width: 13px;
+    height: 13px;
     padding: 2px;
-    border-radius: 3px;
+    border-radius: 4px;
     flex-shrink: 0;
-    margin-right: 4px;
+    margin-right: 3px;
 }
 
 /* ── A TORN-OUT TAB'S OWN WINDOW ───────────────────────────────────────────────────────────────
