@@ -16,6 +16,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.MenuBuilder;
+import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -102,7 +103,7 @@ public class MenuBarView extends UIElement {
     private Title openTitle;
 
     /** Whether the mnemonic underlines are currently drawn — the last answer {@link #tickFrame} saw. */
-    private boolean altShown;
+    private boolean mnemonicsShown;
 
     public MenuBarView(CommandRegistry registry) {
         super(NAME);
@@ -126,6 +127,11 @@ public class MenuBarView extends UIElement {
         Title title = new Title(id, label);
         titles.add(title);
         append(title);
+        // THE NEW TITLE TAKES THE BAR'S CURRENT PRESENTATION. The burger is built in the constructor and
+        // every title arrives after it, so the collapse applied at construction saw an empty list -- a
+        // bar that was a burger by every other measure still laid its titles out beside it. Harmless
+        // while the default was the full bar, and the whole of the default once it was not.
+        applyVisibility();
         return this;
     }
 
@@ -167,6 +173,28 @@ public class MenuBarView extends UIElement {
      * it. Every close path has to end at one place or the chain outlives what opened it.</p>
      */
     public void close() {
+        closeMenu();
+        // AND THE BURGER COMES BACK, but only HERE -- see closeMenu for the half that must not.
+        if (revealed) {
+            revealed = false;
+            applyVisibility();
+        }
+    }
+
+    /**
+     * Closes the open menu and <b>leaves a reveal standing</b>.
+     *
+     * <p>The difference between this and {@link #close()} is the whole of what makes a revealed bar
+     * usable. Switching menus is close-then-open — hovering Edit with File open, Left/Right along the
+     * bar, a mnemonic while another is up — and if that close also put the burger back, the very first
+     * switch collapsed the bar under the menu it was opening. It did: the menu opened correctly and was
+     * anchored to a title that had just been hidden again, so pressing the burger appeared to do
+     * nothing at all.</p>
+     *
+     * <p>So the reveal ends where the INTERACTION ends — a dismissal, Escape, a second press, an item
+     * chosen — and every one of those goes through {@link #close()}.</p>
+     */
+    private void closeMenu() {
         Title closing = openTitle;
         // CLEARED FIRST, so the onClosed hook below sees no open title and does not re-enter. The same
         // ordering MenuBuilder.discard uses on the chain, and for the same reason.
@@ -182,11 +210,22 @@ public class MenuBarView extends UIElement {
     }
 
     private void show(Title title, boolean fromPress) {
+        // A COLLAPSED BAR REVEALS ITSELF FIRST, so every way in agrees: the burger, Alt+F and open(id)
+        // all end with the bar on screen and one of its titles open. Deferred a frame because the title
+        // has no box until it has been laid out. @see #reveal
+        if (collapsed && !revealed) {
+            reveal(() -> show(title, false));
+            return;
+        }
         UIDocument window = document();
         if (window == null) return;
         if (openTitle == title) return;
-        close();
 
+        // BUILT BEFORE ANYTHING IS CLOSED, because an empty menu must not be able to close the one that
+        // is open. Closing first meant hovering a title with nothing under it -- Graph, with no graph
+        // loaded -- dismissed the open menu and then opened nothing, which left openTitle null. The
+        // hover-switch guard is `openTitle != null`, so the bar went inert: every further hover did
+        // nothing and only a fresh CLICK could arm it again.
         Menu menu = MenuBuilder.build(title.id, registry, contextSource(window));
         // EVERY BAR MENU RESERVES THE MARK GUTTER, whether or not it holds a toggle.
         //
@@ -203,8 +242,13 @@ public class MenuBarView extends UIElement {
         // AN EMPTY MENU IS NOT OPENED. A top-level title whose commands are all contributed by a feature
         // that is not loaded would otherwise open a zero-height popover -- which reads as the bar being
         // broken rather than as the menu being empty, because there is nothing on screen to see.
+        //
+        // AND IT CHANGES NOTHING ELSE: whatever was open stays open, the way passing over a dead title
+        // does in every native bar. See the build above for what closing first cost.
         if (menu.getItemCount() == 0) return;
 
+        // THE NARROW ONE: this is a SWITCH, and a switch must not undo the reveal it is switching inside.
+        closeMenu();
         openTitle = title;
         title.addClass(OPEN_CLASS);
         live.addAll(MenuBuilder.present(menu, this, window));
@@ -224,6 +268,11 @@ public class MenuBarView extends UIElement {
         // Only from a press: hover-switching and Alt must not leave a menu that the next stray release
         // anywhere would activate. @see Menu#armForRelease
         if (fromPress) menu.armForRelease();
+        // THE BURGER IS THE ANCHOR WHILE COLLAPSED, because the title is not on screen: applyCollapsed
+        // sets every one of them to `display: none`, and a box() of null is not a place. Alt+F still
+        // reaches here when the bar is a burger -- the mnemonics do not collapse with the labels -- so
+        // this anchored a popup to nothing, which AnchoredPlacement can only answer with the origin.
+        // That is the top-left-corner bug, arriving through a path no hover test covers.
         menu.showFor(title, title);
         onDidChangeOpenMenu.emit(title.id);
     }
@@ -233,8 +282,11 @@ public class MenuBarView extends UIElement {
     /** On the single button that replaces the titles when the bar is collapsed. */
     public static final String BURGER_CLASS = "__burger__";
 
-    /** One of the three bars inside it. Geometry, so it works with no theme loaded. */
+    /** One of the four bars inside it. Geometry, so it works with no theme loaded. */
     public static final String BURGER_BAR_CLASS = "__burger-bar__";
+
+    /** How many bars the glyph is drawn from. @see #buildBurger */
+    private static final int BURGER_BARS = 4;
 
     /** On the bar itself while collapsed, so a theme can restyle the whole row at once. */
     public static final String COLLAPSED_CLASS = "__collapsed__";
@@ -243,19 +295,26 @@ public class MenuBarView extends UIElement {
 
     private boolean collapsed;
 
-    /** null means "decide from the width"; non-null is a caller overriding that. @see #setCollapsed */
-    @Nullable
-    private Boolean collapseOverride;
-
-    /** The width the titles need, measured the last time they were laid out expanded. */
-    private float naturalWidth;
+    /**
+     * <b>Collapsed, but showing its titles because the burger was pressed.</b>
+     *
+     * <p>Pressing the burger does not open a menu OF menus — it puts the bar back, with the first menu
+     * already open, and takes it away again when that menu closes. IntelliJ's, and the reason its burger
+     * feels like a menu bar rather than a popup: everything a bar does is then simply what it does.
+     * Hover-switching, mnemonics and Left/Right all work while revealed because none of them knows this
+     * state exists.</p>
+     *
+     * <p>Separate from {@link #collapsed}, which is the standing presentation. A reveal must not
+     * overwrite it, or dismissing the menu would leave the bar expanded.</p>
+     */
+    private boolean revealed;
 
     private void buildBurger() {
         burger.addClass(BURGER_CLASS);
-        // THREE ELEMENTS, not a glyph and not a new CgUiShape kind. The bundled fonts have no ☰ and it
-        // renders as tofu -- the trap UIText records for U+2026 and ViewContainer for its close mark --
-        // and three styled boxes need no renderer change while staying entirely themeable.
-        for (int i = 0; i < 3; i++) {
+        // ELEMENTS, not a glyph and not a new CgUiShape kind. The bundled fonts have no ☰ and it renders
+        // as tofu -- the trap UIText records for U+2026 and ViewContainer for its close mark -- and
+        // styled boxes need no renderer change while staying entirely themeable.
+        for (int i = 0; i < BURGER_BARS; i++) {
             UIElement stripe = new UIElement();
             stripe.addClass(BURGER_BAR_CLASS);
             stripe.setHitTest(false);
@@ -263,23 +322,66 @@ public class MenuBarView extends UIElement {
         }
         burger.onMouseDown.attachListener((element, event) -> {
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
-            toggleBurgerMenu();
+            toggleMainMenu();
             event.stopPropagation();
         }, false, true);
+        // REACHABLE AND NAMED. The titles beside it are FocusPolicy.NONE and can be: each one is a word
+        // you can read. A burger is a picture standing for the whole menu, so the two things that say
+        // what it is -- a tooltip, and a key that opens it -- are the whole of its discoverability.
+        //
+        // CLICK_NOT_TABBABLE, the same as the rail's overflow button: a caption is furniture and putting
+        // it in the Tab sequence would land there on the way into the content. F10 is the way in, which
+        // is what IntelliJ and every Windows menu bar use.
+        burger.setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
+        // WAITS HALF A SECOND. The burger sits where the pointer passes on its way into the window, so a
+        // tip with no delay flashes at people who were going somewhere else. A CLASS and not a rule on
+        // the anchor: a tooltip is a child of the DOCUMENT, so no selector describing where its anchor
+        // lives can reach it -- which is what ua/overlays.css records after both its siblings tried.
+        Tooltip.attach(burger, BURGER_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
+        burger.onKeyDown.attachListener((element, event) -> {
+            int key = event.getKeyCode();
+            if (key != CgKeyCodes.KEY_RETURN && key != CgKeyCodes.KEY_SPACE) return;
+            toggleMainMenu();
+            event.stopPropagation();
+            event.preventDefault();
+        }, false, true);
         append(burger);
-        applyCollapsed(false);
+        // THE BURGER IS THE DEFAULT, which is the whole of what "collapsed" means now. A workbench's
+        // menu lives in a caption beside the window's own furniture, and a row of words there is the
+        // second header client-side decorations exist to remove. @see #setCollapsed
+        collapsed = true;
+        applyCollapsed(true);
+
+        // THE BAR'S OWN BLANK SPACE CLOSES, which is what a native bar does and what nothing here did.
+        // A title and the burger each consume their press, so a press arriving at the bar itself landed
+        // on none of them -- and with a menu open and the bar REVEALED, falling through meant the menu
+        // stayed up and the burger never came back. Clicking the strip beside File looked like it had
+        // broken the chrome.
+        onMouseDown.attachListener((element, event) -> {
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
+            close();
+        }, false, true);
     }
 
+    /** What the burger's tooltip says. IntelliJ's wording for the same button. */
+    private static final String BURGER_TOOLTIP = "Main Menu";
+
     /**
-     * Collapses the bar to a single burger, or expands it — IntelliJ's New UI behaviour.
+     * <b>Burger or full bar — the presentation, chosen by whoever builds the bar.</b> The burger is the
+     * default and the workbench keeps it.
      *
-     * <p>Calling this <b>overrides the automatic width check</b>, permanently for this bar. Pass null to
-     * hand it back. Both are wanted: the automatic collapse is what a narrow window needs, and a user who
-     * has chosen "always a burger" must not have it undone the moment the window is widened.</p>
+     * <h3>What used to decide this, and why nothing does now</h3>
+     *
+     * <p>The bar measured its titles every frame and collapsed itself when they stopped fitting, with
+     * hysteresis so a window dragged to the boundary did not flicker, and a nullable override so a user's
+     * explicit choice survived being widened again. All of it existed to move BETWEEN the two
+     * presentations at runtime; with the burger the standing answer there is nothing left to move, and a
+     * width check that can only ever disagree with the default is a way to lose it.</p>
+     *
+     * <p>So this is a construction-time choice now: a host that wants the full bar says so, once.</p>
      */
-    public MenuBarView setCollapsed(@Nullable Boolean value) {
-        this.collapseOverride = value;
-        applyCollapsed(value != null ? value : shouldAutoCollapse());
+    public MenuBarView setCollapsed(boolean value) {
+        applyCollapsed(value);
         return this;
     }
 
@@ -287,85 +389,99 @@ public class MenuBarView extends UIElement {
         return collapsed;
     }
 
-    /**
-     * Collapses when the titles no longer fit.
-     *
-     * <h3>Why this cannot oscillate</h3>
-     *
-     * <p>The bar is a stretched row, so its own width is the window's and <b>collapsing does not change
-     * it</b> — which is what makes the comparison stable. The other half is that {@link #naturalWidth} is
-     * only ever recorded while expanded: read while collapsed it would be zero (the titles are
-     * {@code display: none}) and the bar could never decide to expand again.</p>
-     */
-    /**
-     * A standing post-layout hook, which is what the {@code onLayoutChanged} override became.
-     *
-     * <p>Layout is one pass with no feedback into it here, so anything that READS a measured box goes
-     * after it. Registered from {@link #connected} and owned by this node, so it is dropped when the
-     * bar leaves the tree.</p>
-     */
-    private boolean measureNaturalWidth(float deltaSeconds) {
-        if (!collapsed) {
-            float measured = 0;
-            for (Title title : titles) measured += title.laidOutWidth();
-            if (measured > 0) naturalWidth = measured;
-        }
-        if (collapseOverride == null) applyCollapsed(shouldAutoCollapse());
-        return true;
-    }
-
-    private boolean shouldAutoCollapse() {
-        if (naturalWidth <= 0) return false;
-        // The `<= 0` guard below is what an unmeasured bar means, and a null box is the same: hold
-        // whatever collapse state we already had rather than deciding from nothing.
-        Box box = box();
-        float available = box == null ? 0f : box.contentBoxWidth();
-        if (available <= 0) return collapsed;
-        // Hysteresis: expanding needs a little more room than collapsing gave up, so a window dragged to
-        // exactly the boundary does not flicker between the two on every frame.
-        return collapsed ? available < naturalWidth + 8f : available < naturalWidth;
-    }
-
     private void applyCollapsed(boolean value) {
+        // ONLY ON A CHANGE does this close what is open.
+        boolean changed = value != collapsed;
         this.collapsed = value;
+        // A REAL EXPANSION ENDS A REVEAL, since there is nothing left to reveal into.
+        if (!value) revealed = false;
         if (value) addClass(COLLAPSED_CLASS);
         else removeClass(COLLAPSED_CLASS);
-        // IMPORTANT origin, like every other Java-written geometry here: this is structure, not theme, and
-        // a sheet must not be able to leave a collapsed bar showing both.
-        StyleGroup.inlinePipeline(burger.getStyle().getLayoutGroup(),
-                l -> l.display(value ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
-        for (Title title : titles) {
-            StyleGroup.inlinePipeline(title.getStyle().getLayoutGroup(),
-                    l -> l.display(value ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
-        }
-        if (value) close();
+        applyVisibility();
+        if (changed && value) close();
     }
 
     /**
-     * The burger's menu: every top-level menu, as a submenu.
+     * Burger or titles, from {@link #collapsed} and {@link #revealed} together.
      *
-     * <p>The same {@link MenuBuilder} calls the titles make, so a collapsed bar and an expanded one cannot
-     * show different things — which is the whole reason the collapse is a <em>presentation</em> rather
-     * than a second menu structure.</p>
+     * <p>IMPORTANT origin, like every other Java-written geometry here: this is structure, not theme, and
+     * a sheet must not be able to leave a bar showing both.</p>
      */
-    private void toggleBurgerMenu() {
+    private void applyVisibility() {
+        boolean showTitles = !collapsed || revealed;
+        StyleGroup.inlinePipeline(burger.getStyle().getLayoutGroup(),
+                l -> l.display(showTitles ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
+        for (Title title : titles) {
+            StyleGroup.inlinePipeline(title.getStyle().getLayoutGroup(),
+                    l -> l.display(showTitles ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        }
+    }
+
+    /**
+     * <b>Puts the bar back, with its first menu open</b> — or takes it away again. What a press on the
+     * burger and {@link MainMenuCommands#SHOW_MAIN_MENU} both do.
+     *
+     * <h3>Why it is not a menu of menus</h3>
+     *
+     * <p>The burger used to open one {@link Menu} holding every title as a SUBMENU. It is the obvious
+     * reading of "the bar does not fit" and it is not what a burger is: File became a row you hover to
+     * get a second popup beside it, so every item in the application moved one level deeper and the
+     * menu bar's own vocabulary — hover to switch, Left/Right between menus, a mnemonic per title —
+     * described something that was no longer on screen.</p>
+     *
+     * <p>IntelliJ's burger reveals the bar instead, with File already open, and hands the interaction
+     * straight back to it. Everything below this line then works because none of it knows the state
+     * exists: hover-switching is a title's, the mnemonics are the bar's, and closing is
+     * {@link #close()}'s — which puts the burger back.</p>
+     */
+    public void toggleMainMenu() {
         UIDocument window = document();
         if (window == null) return;
-        if (!live.isEmpty()) {
-            MenuBuilder.discard(live);
+        // A SECOND PRESS CLOSES, and `revealed` is part of the test: the chain can be empty for a moment
+        // while the reveal waits for a layout, and a press in that gap must not open a second one.
+        if (revealed || !live.isEmpty()) {
+            close();
             return;
         }
-        Menu menu = new Menu();
-        for (Title title : titles) {
-            Menu child = MenuBuilder.build(title.id, registry, contextSource(window));
-            if (child.getItemCount() == 0) continue;
-            menu.addSubmenu(title.text.getText(), child);
+        if (!collapsed) {
+            openFirstTitle();
+            return;
         }
-        if (menu.getItemCount() == 0) return;
-        live.addAll(MenuBuilder.present(menu, this, window));
-        menu.onClosed.connect(() -> MenuBuilder.discard(live));
-        menu.armForRelease();
-        menu.showFor(burger, burger);
+        reveal(() -> openFirstTitle());
+    }
+
+    /**
+     * Shows the titles and runs {@code then} once they have been laid out.
+     *
+     * <p><b>The wait is not a nicety.</b> A title that was {@code display: none} has no box until the next
+     * layout, and this engine lays out once per frame with no feedback into it — so opening a menu in the
+     * same breath as revealing the bar anchors it to a box that does not exist yet, which
+     * {@code AnchoredPlacement} can only answer with the origin. That is the corner-of-the-screen popup,
+     * and it is the same one-frame rule {@code Animation.afterLayout} exists for.</p>
+     */
+    private void reveal(Runnable then) {
+        revealed = true;
+        applyVisibility();
+        UIDocument window = document();
+        if (window == null) return;
+        window.animation().afterLayout(this, delta -> {
+            then.run();
+            return false;
+        });
+    }
+
+    /** Opens the first title that has anything in it — File, unless File is empty. */
+    private void openFirstTitle() {
+        for (Title title : titles) {
+            show(title);
+            if (openTitle == title) return;
+        }
+        // NOTHING OPENED, so do not sit there revealed: an empty bar with no menu is a burger that
+        // vanished when it was pressed.
+        if (collapsed && revealed) {
+            revealed = false;
+            applyVisibility();
+        }
     }
 
     // ── Keyboard across the bar ─────────────────────────────────────────────────────────────────
@@ -465,7 +581,6 @@ public class MenuBarView extends UIElement {
     @Override
     protected void connected() {
         close();
-        document().animation().afterLayout(this, this::measureNaturalWidth);
         UIDocument current = document();
         if (current == null) return;
         // CAPTURE PHASE ON THE ROOT, which is the only way Alt+F can work from anywhere: a menu bar is
@@ -525,7 +640,15 @@ public class MenuBarView extends UIElement {
     }
 
     private void onKeyDown(KeyboardEvent.Down event) {
-        if (!CgModifiers.hasAlt(event.getModifiers())) return;
+        // ALT, OR A BAR THAT IS ALREADY OPEN. Alt is how you reach a bar that is merely sitting there;
+        // once it has been invoked the letters are drawn (see tickFrame) and a drawn mnemonic that does
+        // nothing is worse than none at all -- which is what this was the moment the underlines stopped
+        // needing Alt to appear.
+        //
+        // An open Menu is focused and sees the key FIRST, and its own bare-letter type-ahead matches its
+        // rows; a letter it does not want falls through to here and switches menus. That is the split
+        // every native bar makes, and it needs no arbitration because focus already made it.
+        if (!revealed && !CgModifiers.hasAlt(event.getModifiers())) return;
         // NOT WHILE SOMEBODY IS TYPING. A mnemonic is a global affordance and a focused text field is a
         // local one, and the local one wins -- otherwise Alt+E in the editor's find bar opens the Edit menu
         // instead of toggling Preserve Case, and no per-field workaround can fix it because this listener
@@ -547,18 +670,25 @@ public class MenuBarView extends UIElement {
     }
 
     /**
-     * Shows and hides the mnemonic underlines with the Alt key.
+     * Shows and hides the mnemonic underlines — <b>while Alt is held, or while the bar is revealed</b>.
+     *
+     * <p>Alt is the rule for a bar that is simply THERE: the letters are an affordance for a keyboard
+     * user and clutter for everyone else, so they appear when that user announces themselves. A revealed
+     * bar is the other case — it exists only because the burger was pressed, which is already the
+     * announcement, and a keyboard user who reached it that way has no second key to hold to find out
+     * what the letters are. Windows does the same thing when a menu is opened from the keyboard.</p>
      *
      * <p>Polled rather than driven by key events, because the interesting transition is the key going
      * <em>up</em> while focus is somewhere else entirely — and a key-up listener on the root would have to
      * be right about every path that can swallow one. Two integer reads a frame, and no state to get out
-     * of step.</p>
+     * of step. The reveal folds into the same comparison for the same reason: one place decides, so the
+     * two cannot disagree about what is currently drawn.</p>
      */
     public boolean tickFrame(float deltaSeconds) {
-        boolean alt = CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers());
-        if (alt == altShown) return true;
-        altShown = alt;
-        for (Title title : titles) title.showMnemonic(alt);
+        boolean want = revealed || CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers());
+        if (want == mnemonicsShown) return true;
+        mnemonicsShown = want;
+        for (Title title : titles) title.showMnemonic(want);
         return true;
     }
 
@@ -602,12 +732,6 @@ public class MenuBarView extends UIElement {
             onMouseEnter.attachListener((element, event) -> {
                 if (openTitle != null && openTitle != Title.this) show(Title.this);
             }, false, true);
-        }
-
-        /** Its settled width, or zero while it has no box — a collapsed title has none. */
-        float laidOutWidth() {
-            Box box = box();
-            return box == null ? 0f : box.width();
         }
 
         /**

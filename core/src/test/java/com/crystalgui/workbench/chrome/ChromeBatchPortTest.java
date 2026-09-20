@@ -77,7 +77,8 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
                 .run(() -> {
                 }));
 
-        MenuBarView bar = new MenuBarView(registry).addMenu(edit, "Edit");
+        // EXPANDED: the shipped default is the burger, and these press a TITLE.
+        MenuBarView bar = new MenuBarView(registry).addMenu(edit, "Edit").setCollapsed(false);
         layout(bar, l -> l.widthPercent(100f).height(22f));
         document.append(bar);
 
@@ -169,7 +170,8 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
         registry.register(Command.of("test.zoom", "Zoom In").menu(view, "zoom", 0).run(() -> {
         }));
 
-        MenuBarView bar = new MenuBarView(registry).addMenu(view, "View");
+        // EXPANDED: the shipped default is the burger, and these press a TITLE.
+        MenuBarView bar = new MenuBarView(registry).addMenu(view, "View").setCollapsed(false);
         layout(bar, l -> l.widthPercent(100f).height(22f));
         document.append(bar);
         frame();
@@ -260,7 +262,8 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
         registry.register(Command.of("test.new", "New").menu(file, "io", 0).run(() -> {
         }));
 
-        MenuBarView bar = new MenuBarView(registry).addMenu(file, "File");
+        // EXPANDED: the shipped default is the burger, and these press a TITLE.
+        MenuBarView bar = new MenuBarView(registry).addMenu(file, "File").setCollapsed(false);
         layout(bar, l -> l.widthPercent(100f).height(22f));
         document.append(bar);
         frame();
