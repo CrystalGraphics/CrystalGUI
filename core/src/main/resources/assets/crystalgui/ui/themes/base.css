@@ -375,6 +375,10 @@ theme {
      * when the text moved -- where four white bars in a 14px square read as a much heavier mark than the
      * word `File` does, because a glyph is mostly space and this is mostly ink. */
     --menubar-burger-fg: var(--fg-secondary);
+    /* A title with nothing under it. The system's disabled tier, because that is exactly what it is --
+     * `Graph` with no graph open contributes no rows, and a menu you cannot open should say so before
+     * you press it rather than by doing nothing when you do. */
+    --menubar-disabled-fg: var(--fg-disabled);
     --menubar-hover-bg: var(--hover-bg);
     --menubar-open-fg: var(--fg);
 

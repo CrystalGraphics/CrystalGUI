@@ -693,8 +693,17 @@ dockgroup.__empty__ .__strip__ {
     font-size: 8;
 }
 
-.__menu-bar__ .__menu-title__:hover {
+/* NOT THE EMPTY ONES. A hover fill is a promise that pressing does something, and `menutitle:disabled`
+ * is precisely the title where it does not -- so the greying and the missing fill say the same thing
+ * twice, which is what every native bar does with a dead top-level entry. */
+.__menu-bar__ .__menu-title__:hover:enabled {
     background-color: var(--menubar-hover-bg, #4C5052);
+}
+
+/* A TITLE WITH NOTHING UNDER IT, drawn as what it is. The pseudo-class comes from Title.isEnabled --
+ * no class, no bookkeeping here. @see MenuBarView#refreshOpenable */
+.__menu-bar__ .__menu-title__:disabled {
+    color: var(--menubar-disabled-fg, #6F737A);
 }
 
 /* THE OPEN TITLE STAYS LIT while its menu is down, which is the only thing on screen tying the popup
