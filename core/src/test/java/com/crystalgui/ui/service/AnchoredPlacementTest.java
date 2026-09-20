@@ -121,4 +121,30 @@ public class AnchoredPlacementTest {
         assertEquals(70f, at.x(), 0.01f);
         assertEquals(40f, at.y(), 0.01f);
     }
+
+    // ── Cross-axis alignment ────────────────────────────────────────────────
+
+    /**
+     * <b>CENTER centres on the axis the popup is NOT placed along.</b>
+     *
+     * <p>What a tooltip beside a rail button needs: the tip is taller than the 20px button, so the
+     * default shared top edge puts the words below the icon they name.</p>
+     */
+    @Test
+    public void centringASideAnchoredPopupSplitsTheDifference() {
+        var at = AnchoredPlacement.resolve(anchor(10f, 40f, 20f, 20f), 60f, 24f, W, H,
+                Side.RIGHT, 4f, AnchoredPlacement.CrossAlign.CENTER);
+
+        assertEquals("beside it, past the gap", 34f, at.x(), 0.01f);
+        assertEquals("and centred on it: 40 + (20 - 24) / 2", 38f, at.y(), 0.01f);
+    }
+
+    /** And START is untouched, which every menu in the engine depends on. */
+    @Test
+    public void theDefaultStillHangsFromTheLeadingEdge() {
+        var at = AnchoredPlacement.resolve(anchor(10f, 40f, 20f, 20f), 60f, 24f, W, H, Side.RIGHT, 4f);
+
+        assertEquals(34f, at.x(), 0.01f);
+        assertEquals("the anchor's own top", 40f, at.y(), 0.01f);
+    }
 }
