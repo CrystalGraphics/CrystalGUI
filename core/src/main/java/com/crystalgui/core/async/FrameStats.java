@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import javax.annotation.Nullable;
+
 /**
  * How fast the last few seconds actually ran — frame rate, the spread behind it, and what the profiler
  * blamed the last frame on.
@@ -43,7 +45,8 @@ import java.util.Map;
  *
  * <p>No phase breakdown of its own: {@link FrameProfile} already times the phases, and a second timer
  * around the same code would be a second answer to one question. The phases here are that probe's, which
- * is why they are empty unless {@code -Dcrystalgui.frameprofile=true}.</p>
+ * are empty in a host that frames without painting, and in nothing else: that probe times its phases
+ * whenever something is collecting, so the breakdown follows this readout rather than a property.</p>
  */
 public final class FrameStats {
 
@@ -111,6 +114,24 @@ public final class FrameStats {
     private final Map<String, Long> phases = new LinkedHashMap<>();
     private final Map<String, Integer> counts = new LinkedHashMap<>();
 
+    /**
+     * The slowest frame's own breakdown, held until it ages out of the window.
+     *
+     * <h3>The breakdown of the last frame is a breakdown of nothing in particular</h3>
+     *
+     * <p>A readout refreshes ten times a second and a scene runs at a hundred, so the frame whose phases
+     * are on screen is one arbitrary frame in ten — and the one worth reading is the spike, which is
+     * never the one still showing by the time an eye reaches it. Holding the peak is what turns "worst
+     * 56.2" into "56.2, and it was style".</p>
+     *
+     * <p>Peak by CPU rather than by wall time, because wall includes waiting: under vsync the slowest
+     * wall frame is usually the one that waited longest, and there is nothing in it to fix.</p>
+     */
+    private final Map<String, Long> peakPhases = new LinkedHashMap<>();
+    private final Map<String, Integer> peakCounts = new LinkedHashMap<>();
+    private long peakCpuNanos;
+    private long peakAt;
+
     public float windowSeconds() {
         return windowSeconds;
     }
@@ -139,6 +160,7 @@ public final class FrameStats {
         pendingCpu = 0L;
         phases.clear();
         counts.clear();
+        forgetPeak();
     }
 
     // ── Collection ──────────────────────────────────────────────────────────────────────────────
@@ -184,6 +206,29 @@ public final class FrameStats {
         phases.putAll(timedPhases);
         counts.clear();
         counts.putAll(countedThings);
+        holdPeak(timedPhases, countedThings);
+    }
+
+    /** Keeps this frame's breakdown if it is the worst one the window still holds. @see #peakPhases */
+    private void holdPeak(Map<String, Long> timedPhases, Map<String, Integer> countedThings) {
+        // A PEAK THAT NEVER DECAYS IS A PEAK FROM STARTUP. The first frames of any scene carry every
+        // lazy allocation and every shader's first compile, so a breakdown held for the life of the
+        // readout would describe a frame nobody can reproduce and nothing else would ever beat it.
+        if (peakAt != 0L && frameStart - peakAt > (long) (windowSeconds * 1_000_000_000L)) forgetPeak();
+        if (pendingCpu < peakCpuNanos) return;
+        peakCpuNanos = pendingCpu;
+        peakAt = frameStart;
+        peakPhases.clear();
+        peakPhases.putAll(timedPhases);
+        peakCounts.clear();
+        peakCounts.putAll(countedThings);
+    }
+
+    private void forgetPeak() {
+        peakCpuNanos = 0L;
+        peakAt = 0L;
+        peakPhases.clear();
+        peakCounts.clear();
     }
 
     /** Total time this JVM has spent collecting. @see FrameProfile — a pause is charged to whatever ran. */
@@ -305,6 +350,73 @@ public final class FrameStats {
         return total == 0L ? 0f : worst * 1_000_000_000f / total;
     }
 
+    /**
+     * The window's frame times as one row of bars, oldest on the left — the shape, where every number
+     * above is a summary.
+     *
+     * <p>A steady 60 and an alternating 30/90 have the same average, the same median and the same worst
+     * frame, and they feel nothing alike. So does a GC saw-tooth against a single hitch: both report
+     * {@code worst 56.2} and only one of them is going to happen again in a second.</p>
+     *
+     * <p>Scaled to the worst frame in the window <b>or the budget, whichever is larger</b> — against the
+     * worst alone a flawless run is drawn as full-height noise, since the scale would be the difference
+     * between its best and second-best frame.</p>
+     */
+    public String sparkline(int columns) {
+        return spark(columns).bars();
+    }
+
+    /**
+     * The bars, and what each column is worth — the row, ready to be coloured a column at a time.
+     *
+     * <h3>Height is relative and colour is absolute, which is why colouring adds anything</h3>
+     *
+     * <p>A bar's height is its share of the window's own worst frame, so the tallest bar in a flawless
+     * run is as tall as the tallest bar in a terrible one. The colour is the same verdict every other
+     * row is judged by — {@link #healthOf} against {@link #budgetMs()} — so between them a glance
+     * answers both questions at once: <em>which</em> frames were the slow ones, and whether slow here
+     * means anything at all.</p>
+     */
+    public Spark spark(int columns) {
+        int kept = windowStart();
+        if (kept < 2 || columns < 1) return Spark.NONE;
+        long ceiling = Math.max((long) (budgetMs * 1_000_000f), 1L);
+        for (int i = 0; i < kept; i++) ceiling = Math.max(ceiling, at(i, wallNanos));
+        StringBuilder bars = new StringBuilder(columns);
+        List<Health> health = new ArrayList<>(columns);
+        for (int column = 0; column < columns; column++) {
+            int from = (int) ((long) column * kept / columns);
+            int to = Math.min(kept, Math.max(from + 1, (int) ((long) (column + 1) * kept / columns)));
+            long worst = 0L;
+            // THE MAX OF THE BUCKET, NEVER ITS MEAN. A spike is one frame in thirty, and averaging a
+            // bucket is precisely what erases it -- which is the one thing this row exists not to do.
+            // It is also what the colour has to be taken from: a bucket holding one missed frame is a
+            // bucket worth colouring, however many good ones it holds beside it.
+            for (int i = from; i < to; i++) worst = Math.max(worst, at(kept - 1 - i, wallNanos));
+            int level = (int) (worst * BARS.length / ceiling);
+            bars.append(BARS[Math.max(0, Math.min(BARS.length - 1, level))]);
+            health.add(healthOf(worst / 1_000_000f));
+        }
+        return new Spark(bars.toString(), health);
+    }
+
+    /** {@link #spark}'s answer: the bars, and one verdict per bar. */
+    public record Spark(String bars, List<Health> health) {
+
+        /** Nothing to draw yet — fewer than two frames. */
+        public static final Spark NONE = new Spark("", List.of());
+    }
+
+    /**
+     * The bars, lightest first.
+     *
+     * <p>A short bar rather than a space for the fastest frames: a gap reads as a frame that did not
+     * happen. Every one of these is in {@code JetBrainsMono-Regular.ttf}, which is the face the readout
+     * asks for — checked against the font's own character map, not assumed.</p>
+     */
+    private static final char[] BARS = {'\u2581', '\u2582', '\u2583', '\u2584',
+                                        '\u2585', '\u2586', '\u2587', '\u2588'};
+
     /** How many frames in the window missed {@link #budgetMs()}. */
     public int framesOverBudget() {
         int kept = windowStart();
@@ -323,16 +435,33 @@ public final class FrameStats {
         return at(0, gcTotalMillis) - at(kept - 1, gcTotalMillis);
     }
 
-    /** The last frame's phases, slowest first. Empty unless {@code -Dcrystalgui.frameprofile=true}. */
+    /** The last frame's phases, slowest first. @see #peakPhasesByCost() — the one worth reading. */
     public List<Map.Entry<String, Long>> phasesByCost() {
         List<Map.Entry<String, Long>> out = new ArrayList<>(phases.entrySet());
         out.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
         return out;
     }
 
-    /** The last frame's counts — draw calls, re-matched elements. Same condition as {@link #phasesByCost()}. */
+    /** The last frame's counts — draw calls, layers, re-matched elements. @see #peakCounts() */
     public Map<String, Integer> counts() {
         return new LinkedHashMap<>(counts);
+    }
+
+    /** The slowest frame in the window, slowest phase first — what the expanded readout shows. */
+    public List<Map.Entry<String, Long>> peakPhasesByCost() {
+        List<Map.Entry<String, Long>> out = new ArrayList<>(peakPhases.entrySet());
+        out.sort((a, b) -> Long.compare(b.getValue(), a.getValue()));
+        return out;
+    }
+
+    /** That same frame's counts — the draw calls and layers of the frame that cost, not of this one. */
+    public Map<String, Integer> peakCounts() {
+        return new LinkedHashMap<>(peakCounts);
+    }
+
+    /** What the slowest frame in the window spent working. Zero when nothing has described a frame. */
+    public float peakCpuMs() {
+        return peakCpuNanos / 1_000_000f;
     }
 
     // ── How healthy that is ─────────────────────────────────────────────────────────────────────
@@ -415,8 +544,21 @@ public final class FrameStats {
 
     // ── As text ─────────────────────────────────────────────────────────────────────────────────
 
-    /** One line of the readout, and how bad what it says is. @see #rows */
-    public record Row(String text, Health health) {
+    /**
+     * One line of the readout, and how bad what it says is.
+     *
+     * <p>{@code barHealth} is null for every row but the sparkline, where it carries a verdict per
+     * CHARACTER — so a renderer that can colour a text range (this engine's {@code ::highlight}) paints
+     * the spike red inside an otherwise green row, and one that cannot ignores it and loses nothing but
+     * the colour.</p>
+     *
+     * @see #rows
+     */
+    public record Row(String text, Health health, @Nullable List<Health> barHealth) {
+
+        public Row(String text, Health health) {
+            this(text, health, null);
+        }
     }
 
     /**
@@ -498,8 +640,16 @@ public final class FrameStats {
         long gc = gcMillisInWindow();
         if (gc > 0) third.append(String.format(Locale.ROOT, "   GC %dms", gc));
         out.add(new Row(third.toString(), missHealth()));
+        Spark spark = spark(ROW_CHARS);
+        // THE ROW ITSELF IS NEUTRAL and its characters are not: a verdict on the whole row would be a
+        // fourth answer to a question the three rows above have already answered three ways.
+        out.add(new Row(spark.bars(), Health.NONE, spark.health()));
 
-        List<Map.Entry<String, Long>> byCost = phasesByCost();
+        // EXPANDED, THE BREAKDOWN IS THE SLOWEST FRAME'S. Collapsed it is the last frame's, which is
+        // what a live one-line hint should be; the moment somebody expands it the question has changed
+        // from "what is this frame doing" to "what went wrong", and that frame is already gone.
+        List<Map.Entry<String, Long>> byCost =
+                detail == Detail.FULL ? peakPhasesByCost() : phasesByCost();
         if (byCost.isEmpty()) {
             // Only a host that frames without painting gets here now -- the phases follow the readout
             // rather than the property. @see FrameProfile
@@ -508,7 +658,7 @@ public final class FrameStats {
         }
         if (detail == Detail.FULL) addPhaseRows(out, byCost);
         else addPhaseLine(out, byCost);
-        addCountRows(out, detail);
+        addCountRows(out, detail, detail == Detail.FULL ? peakCounts : counts);
         return out;
     }
 
@@ -524,14 +674,14 @@ public final class FrameStats {
      * measuring, so the rows are cut to {@link #ROW_CHARS} here rather than left to a sheet — wrapping is
      * the one thing a fixed-width readout must never do, since a wrapped row moves every row under it.</p>
      */
-    private void addCountRows(List<Row> out, Detail detail) {
-        if (counts.isEmpty()) return;
+    private void addCountRows(List<Row> out, Detail detail, Map<String, Integer> from) {
+        if (from.isEmpty()) return;
         int limit = detail == Detail.FULL ? MAX_COUNT_ROWS : 1;
         StringBuilder row = new StringBuilder();
         int written = 0;
         // INSERTION ORDER, which is the order the frame recorded them in -- stable from frame to frame,
         // where sorting by value would shuffle the rows under the eye reading them.
-        for (Map.Entry<String, Integer> count : counts.entrySet()) {
+        for (Map.Entry<String, Integer> count : from.entrySet()) {
             String each = count.getKey() + '=' + count.getValue();
             if (row.length() > 0 && row.length() + each.length() + 1 > ROW_CHARS) {
                 out.add(new Row(row.toString(), Health.NONE));
@@ -580,8 +730,10 @@ public final class FrameStats {
         long total = 0L;
         for (Map.Entry<String, Long> phase : byCost) total += phase.getValue();
         if (total <= 0L) return;
-        out.add(new Row(String.format(Locale.ROOT, "phases %.1fms of %.1fms cpu",
-                total / 1_000_000f, lastCpuMs()), Health.NONE));
+        // NAMED, because this is no longer the frame on screen: a breakdown that silently described a
+        // different frame from the row above it would be read as the row above it.
+        out.add(new Row(String.format(Locale.ROOT, "slowest %.1fms cpu: phases %.1fms",
+                peakCpuMs(), total / 1_000_000f), Health.NONE));
         for (int i = 0; i < Math.min(MAX_PHASE_ROWS, byCost.size()); i++) {
             Map.Entry<String, Long> phase = byCost.get(i);
             if (phase.getValue() < PHASE_FLOOR_NANOS) break;

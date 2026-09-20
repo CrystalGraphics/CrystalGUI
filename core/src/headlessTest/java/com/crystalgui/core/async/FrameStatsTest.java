@@ -151,10 +151,10 @@ public class FrameStatsTest {
         settle();
         phases(6000, 3000, 1000);
         List<FrameStats.Row> rows = stats.rows(FrameStats.Detail.SUMMARY);
-        // Three verdicts, one phase line, one counts line.
-        assertEquals(5, rows.size());
-        assertTrue(rows.get(3).text(), rows.get(3).text().startsWith("style 6.00ms"));
-        assertEquals("drawcalls=143", rows.get(4).text());
+        // Three verdicts, the bars, one phase line, one counts line.
+        assertEquals(6, rows.size());
+        assertTrue(rows.get(4).text(), rows.get(4).text().startsWith("style 6.00ms"));
+        assertEquals("drawcalls=143", rows.get(5).text());
     }
 
     @Test
@@ -163,13 +163,13 @@ public class FrameStatsTest {
         settle();
         phases(6000, 3000, 1000);
         List<FrameStats.Row> rows = stats.rows(FrameStats.Detail.FULL);
-        assertEquals(8, rows.size());
-        assertTrue(rows.get(3).text(), rows.get(3).text().startsWith("phases 10.0ms"));
+        assertEquals(9, rows.size());
+        assertTrue(rows.get(4).text(), rows.get(4).text().contains("phases 10.0ms"));
         // THE SHARE IS OF THE PHASES' OWN TOTAL, so the column adds up to 100 rather than to whatever
         // fraction of the frame happened to be marked. @see FrameStats#addPhaseRows
-        assertTrue(rows.get(4).text(), rows.get(4).text().contains("style") && rows.get(4).text().endsWith("60%"));
-        assertTrue(rows.get(5).text(), rows.get(5).text().endsWith("30%"));
-        assertTrue(rows.get(6).text(), rows.get(6).text().endsWith("10%"));
+        assertTrue(rows.get(5).text(), rows.get(5).text().contains("style") && rows.get(5).text().endsWith("60%"));
+        assertTrue(rows.get(6).text(), rows.get(6).text().endsWith("30%"));
+        assertTrue(rows.get(7).text(), rows.get(7).text().endsWith("10%"));
         // A breakdown is never a verdict: nothing here knows what a phase SHOULD cost.
         for (FrameStats.Row row : rows.subList(3, rows.size())) {
             assertEquals(row.text(), FrameStats.Health.NONE, row.health());
@@ -184,6 +184,57 @@ public class FrameStatsTest {
         // absent, which would read as "no time was spent anywhere".
         assertTrue(stats.phasesByCost().isEmpty());
         assertTrue(stats.lines().stream().anyMatch(line -> line.contains("none recorded")));
+    }
+
+    @Test
+    public void theBarsAreJudgedAgainstTheBudgetAndNotAgainstEachOther() {
+        frames(60, 8d);
+        settle();
+        FrameStats.Spark spark = stats.spark(20);
+        assertEquals(20, spark.bars().length());
+        assertEquals(20, spark.health().size());
+        // A FLAWLESS RUN IS GREEN THROUGHOUT however tall its bars are drawn -- height is a share of the
+        // window's own worst frame, and at a steady rate that worst frame is a good one.
+        for (FrameStats.Health each : spark.health()) assertEquals(FrameStats.Health.GOOD, each);
+    }
+
+    @Test
+    public void aSpikeColoursItsOwnColumnAndNoOther() {
+        frames(150, 8d);
+        frame(200d, 190d);
+        frames(150, 8d);
+        settle();
+        FrameStats.Spark spark = stats.spark(30);
+        long bad = spark.health().stream().filter(each -> each == FrameStats.Health.BAD).count();
+        assertEquals("one spike is one red column", 1, bad);
+    }
+
+    @Test
+    public void theBreakdownShownIsTheSlowestFramesAndNotTheLastOnes() {
+        frames(10, 8d);
+        settle(60d, 55d);
+        phases(50000, 3000, 1000);
+        settle(8d, 4d);
+        phases(100, 50, 10);
+
+        // The last frame's breakdown is the cheap one, which is what a live one-line hint should show...
+        assertTrue(stats.phasesByCost().get(0).getValue() < 1_000_000L);
+        // ...and what the expanded readout shows is the spike's. A readout refreshes ten times a second
+        // and the frame worth reading is never the one still on screen by the time an eye reaches it.
+        assertEquals("style", stats.peakPhasesByCost().get(0).getKey());
+        assertEquals(55f, stats.peakCpuMs(), 0.5f);
+    }
+
+    @Test
+    public void aPeakOlderThanTheWindowIsForgotten() {
+        settle(60d, 55d);
+        phases(50000, 3000, 1000);
+        frames(400, 10d);       // four seconds, so the spike is well outside a three-second window
+        settle(8d, 4d);
+        phases(100, 50, 10);
+        // OR THE BREAKDOWN WOULD BE STARTUP'S FOREVER: the first frames of any scene carry every lazy
+        // allocation and every shader's first compile, and nothing afterwards would ever beat them.
+        assertEquals(4f, stats.peakCpuMs(), 0.5f);
     }
 
     @Test

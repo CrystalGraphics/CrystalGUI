@@ -1,13 +1,17 @@
 package com.crystalgui.widget.display;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+
+import java.util.List;
 
 import org.junit.Test;
 
 import com.crystalgui.core.async.FrameStats;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.widget.text.UIText;
 
 /**
  * <b>The readout has to be driven by the engine's own frame</b>, not by its own timer: it exists to say what a
@@ -52,6 +56,24 @@ public class FrameStatsOverlayTest extends UiDocumentTestBase {
         // THE COLLECTOR IS A SINGLETON, so a test that drops its document without detaching leaves a
         // hold behind and the next one sees collection it did not ask for. Detaching is what a real
         // host does when the HUD closes; a discarded document never detaches anything.
+        hud.removeSelf();
+    }
+
+    @Test
+    public void onlyTheBarsRowIsHighlighted() {
+        withDefaultStyles();
+        FrameStatsOverlay hud = FrameStatsOverlay.attach(document);
+        frames(4);
+
+        List<UIText> rows = hud.rows();
+        int bars = 0;
+        for (UIText row : rows) {
+            if (row.hasClass(FrameStatsOverlay.SPARK_CLASS)) bars++;
+            // THE CLEAR IS THE HALF THAT ROTS. Ranges are offsets into the string that is there now, so
+            // a row that stopped being the bars and kept theirs would colour whatever text replaced it.
+            else assertTrue("a plain row kept highlights: " + row.getText(), row.highlights().isEmpty());
+        }
+        assertEquals("exactly one row is made of bars", 1, bars);
         hud.removeSelf();
     }
 

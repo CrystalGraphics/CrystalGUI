@@ -1363,6 +1363,22 @@ framestats .__head__ {
  * it, or past twice it. The threshold is the engine's so every host agrees what a 40ms frame is; the
  * colour is here so a theme can say it differently. Last, so a verdict beats the headline's own colour
  * at equal specificity. */
+/* THE FRAME-TIME BARS. Green like the verdict rows above, because they answer the same question about
+ * the same budget -- a second neutral colour here would read as a second kind of statement. The two
+ * highlights below then say which columns were not.
+ *
+ * The bars are block glyphs (U+2581..U+2588) and the font is asked for by the plate; JetBrains Mono
+ * carries all eight, which was checked against the file's own character map rather than assumed. */
+framestats .__spark__ {
+    color: var(--framestats-good, #7FD08C);
+}
+
+/* A COLUMN AT A TIME, through the Custom Highlight API -- the alternative is a node per bar, forty-six
+ * of them rebuilt ten times a second, inside the readout that exists to measure that sort of thing.
+ * Colour only: `::highlight()` allows it, and nothing here wants to move a glyph. */
+.__spark__::highlight(framestats-warn) { color: var(--framestats-warn, #E8C061); }
+.__spark__::highlight(framestats-bad)  { color: var(--framestats-bad,  #E86A5C); }
+
 framestats .__good__ { color: var(--framestats-good, #7FD08C); }
 framestats .__warn__ { color: var(--framestats-warn, #E8C061); }
 framestats .__bad__  { color: var(--framestats-bad,  #E86A5C); }

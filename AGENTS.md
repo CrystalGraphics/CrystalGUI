@@ -995,7 +995,7 @@ int value types.
 | `TextField` | `textfield` | `cgui-textfield` |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
 | `EmptyState` | `emptystate` | `cgui-desktop` — any vacant panel |
-| `FrameStatsOverlay` | `framestats` | `cgui-desktop` — F7 shows, F8 expands the phases. The frame readout over `core.async.FrameStats`; attach it to any document |
+| `FrameStatsOverlay` | `framestats` | `cgui-desktop` — F7 shows, F8 expands. The frame readout over `core.async.FrameStats`: rate, spread, misses, a coloured sparkline of the window, and the SLOWEST frame's phase breakdown. `DesktopCommands` binds F7/F8 on every surface with a desktop, so the editor and a Minecraft screen get it too; `FrameStatsOverlay.toggleOn(document)` is the one call |
 | `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
 | `Dialog` | `dialog` | `cgui-gallery` (Dialog page, modal page) |
 | `Popover` | `popover` | `cgui-gallery` (menus page) |

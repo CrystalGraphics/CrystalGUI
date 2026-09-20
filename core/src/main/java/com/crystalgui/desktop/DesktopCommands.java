@@ -8,6 +8,7 @@ import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.display.FrameStatsOverlay;
 
 import javax.annotation.Nullable;
 
@@ -41,6 +42,8 @@ public final class DesktopCommands {
     public static final String SWITCH_WINDOW_BACK = "desktop.switchWindowBack";
     public static final String SHOW_DESKTOP = "desktop.showDesktop";
     public static final String TASKBAR_DESIGNER = "desktop.taskbarDesigner";
+    public static final String FRAME_STATS = "desktop.frameStats";
+    public static final String FRAME_STATS_DETAIL = "desktop.frameStatsDetail";
 
     private static boolean registered;
 
@@ -100,6 +103,48 @@ public final class DesktopCommands {
                 })
                 .enabledWhen(context -> desktopFor(context) != null));
 
+        // THE DIAGNOSTIC BELONGS TO THE DESKTOP, NOT TO THE HARNESS. It shipped attachable only from a
+        // harness scene, which is the one place a frame is already understood -- the frames worth
+        // measuring are an editor's and a Minecraft client's, and neither could reach it. One command
+        // here gives both, since every surface that has windows has a desktop.
+        //
+        // F7 AND F8 ARE THE HARNESS SCENE'S OWN KEYS, deliberately: a gesture learned while profiling a
+        // scene should be the gesture in game. Both are free in every bundle -- F2, F5, F10, F11 and
+        // Shift+F4 are the F-keys this engine binds.
+        //
+        // NO MENU ENTRY, against this file's own rule for SHOW_DESKTOP. That rule is about a feature
+        // nobody can find; a frame readout is not a feature of the application but an instrument turned
+        // on it, and the palette plus a documented key is where every other one lives (F3 in Minecraft,
+        // F12 in a browser). A row in the window menu would be offering to profile the thing to somebody
+        // who has no use for the answer.
+        registry.register(Command.of(FRAME_STATS, "Toggle Frame Stats")
+                .binding("F7")
+                .run(context -> {
+                    UIDocument window = documentFor(context);
+                    if (window != null) FrameStatsOverlay.toggleOn(window);
+                })
+                .toggledWhen(context -> {
+                    UIDocument window = documentFor(context);
+                    if (window == null) return false;
+                    FrameStatsOverlay hud = FrameStatsOverlay.of(window);
+                    return hud != null && hud.isShowing();
+                })
+                .enabledWhen(context -> documentFor(context) != null));
+
+        registry.register(Command.of(FRAME_STATS_DETAIL, "Frame Stats: Phase Breakdown")
+                .binding("F8")
+                .run(context -> {
+                    UIDocument window = documentFor(context);
+                    if (window != null) FrameStatsOverlay.expandOn(window);
+                })
+                .toggledWhen(context -> {
+                    UIDocument window = documentFor(context);
+                    if (window == null) return false;
+                    FrameStatsOverlay hud = FrameStatsOverlay.of(window);
+                    return hud != null && hud.isShowing() && hud.isDetailed();
+                })
+                .enabledWhen(context -> documentFor(context) != null));
+
         registry.register(Command.of(SHOW_DESKTOP, "Show Desktop")
                 .menu(MenuId.TASKBAR_CONTEXT, "1_desktop", 10)
                 // AND ON THE DESKTOP ITSELF, which is where Windows also puts it and the only
@@ -154,5 +199,18 @@ public final class DesktopCommands {
     private static Desktop desktopFor(CommandContext context) {
         UIElement element = UIElement.sourceOf(context);
         return element == null ? null : Desktop.ifPresent(element.document());
+    }
+
+    /**
+     * The surface the command was invoked on.
+     *
+     * <p>Not {@link #desktopFor}: the frame readout measures a <em>document</em>, and asking for a
+     * compositor first would make it unavailable on a surface that has a frame and no windows — which is
+     * every Minecraft screen before the first one opens, and exactly when a frame cost is worth reading.</p>
+     */
+    @Nullable
+    private static UIDocument documentFor(CommandContext context) {
+        UIElement element = UIElement.sourceOf(context);
+        return element == null ? null : element.document();
     }
 }

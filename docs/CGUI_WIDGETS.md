@@ -1370,25 +1370,33 @@ How fast the last few seconds ran, drawn over whatever is being measured. The co
 the overlay is one call, so the same readout serves a harness scene, the editor and a Minecraft screen.
 
 ```java
+FrameStatsOverlay.toggleOn(document);                         // F7 — find-or-attach, then show/hide
+FrameStatsOverlay.expandOn(document);                         // F8 — show, and expand the phases
 FrameStatsOverlay hud = FrameStatsOverlay.attach(document);   // top-right, promoted, hit-tests nothing
-hud.toggle();                                                 // the host binds a key
-hud.toggleDetail();                                           // a row per phase, with its share
+FrameStatsOverlay.of(document);                               // the one already there, or null
 hud.stats().setBudgetMs(1000f / 144f).setWindowSeconds(5f);   // this host's refresh rate
 ```
 
+**Every surface with a desktop already has it on a key.** `DesktopCommands` registers
+`desktop.frameStats` (**F7**) and `desktop.frameStatsDetail` (**F8**) — the harness scene's own keys, so
+a gesture learned while profiling a scene is the gesture in the editor and in game. They carry no menu
+entry on purpose: a frame readout is an instrument turned on the application rather than a feature of
+it, and it lives where every other one does — a documented key and the command palette.
+
 ```
-117 fps   9.0ms wall   2.7ms cpu                 <- the rate, and what it cost to produce
-3s: best 2.2  p50 8.0  p95 9.5  worst 37.1       <- the spread behind that average
-1% low 28 fps   over 16.7ms: 6/350   GC 2ms      <- the stutter, the misses, the collector
-style 2.10ms  layout 1.44ms  paint 1.21ms        <- where it went; expands to a row each
-drawcalls=143 rematched=18
+116 fps   8.3ms wall   8.1ms cpu                 <- the rate, and what it cost to produce
+3s: best 5.7  p50 8.1  p95 9.6  worst 35.1       <- the spread behind that average
+1% low 29 fps   over 16.7ms: 6/348   GC 4ms      <- the stutter, the misses, the collector
+▁▁▂▁▁█▁▂▁▁▁▃▁▁▁▂▁▁▁▁▁▁▂▁▁▁▁▁▁▂▁▁▁▁▁▁▁▂▁▁▁▁▁▁    <- the shape: oldest left, one bar per column
+paint:tree 6.31ms  frame:layout 1.01ms           <- where it went; expands to a row each
+jobs-busy=0 drawcalls=31 svg-raster-draws=153
 ```
 
 Expanded (`toggleDetail`), the phase line becomes a column — the question after the summary has said
 there is one:
 
 ```
-phases 12.9ms of 13.1ms cpu
+slowest 13.1ms cpu: phases 12.9ms
   style                 6.20ms  48%
   layout                3.11ms  24%
   paint                 2.40ms  19%
@@ -1408,6 +1416,24 @@ phases 12.9ms of 13.1ms cpu
   window holds a frame over twice the budget. The worst frame is shown; it is not the judgement.
 - **A row that states rather than judges gets no colour** (`Health.NONE`) — the phase breakdown has no
   budget of its own to be measured against, and green on it reads as "this part is fine".
+- **The bars carry a verdict per character, and that is not the same verdict as their height.** A bar's
+  height is its share of the window's own worst frame, so the tallest bar in a flawless run is as tall
+  as the tallest bar in a terrible one; the colour is `healthOf` against the budget, the same judgement
+  the three rows above are making. Between them one glance answers both questions — *which* frames were
+  the slow ones, and whether slow here means anything. A column is the **worst** frame in its bucket and
+  never the mean, since averaging a bucket is exactly what erases a spike.
+  `FrameStats.spark(columns)` hands back both; `Row.barHealth()` carries them to a renderer that can
+  colour a text range, and a renderer that cannot ignores it and loses only the colour. The overlay
+  colours them through `::highlight(framestats-warn|bad)` over **runs** — a node per bar would be
+  forty-six Taffy nodes rebuilt ten times a second, inside the thing that measures that sort of cost.
+- **Expanded, the breakdown is the SLOWEST frame's in the window, not the last one's.** The readout
+  refreshes ten times a second against a scene running at a hundred, so the frame whose phases are on
+  screen is one arbitrary frame in ten — and the one worth reading is the spike, which is never the one
+  still showing by the time an eye reaches it. The peak is held by **CPU** rather than wall time (wall
+  includes waiting, and there is nothing in a vsync wait to fix) and it **decays with the window**, or
+  the breakdown would describe startup forever: the first frames of any scene carry every lazy
+  allocation and every shader's first compile, and nothing afterwards would ever beat them. The
+  collapsed one-line hint stays the live frame's.
 - **The thresholds are the engine's and the colours are the sheet's**: a row wears `__good__` /
   `__warn__` / `__bad__` and `ua/overlays.css` says what those look like.
 - **Collecting is held, not switched.** `hold()`/`release()` are counted, the overlay takes one while it
@@ -1421,7 +1447,27 @@ phases 12.9ms of 13.1ms cpu
   nobody's, so a column measured against the frame would sum to 140% one frame and 60% the next, which
   reads as a broken profiler rather than an honest total.
 - Monospaced deliberately: every number is rewritten ten times a second, and in a proportional face each
-  rewrite shifts the rest of the line.
+  rewrite shifts the rest of the line. The bars are block glyphs U+2581–U+2588, which
+  `JetBrainsMono-Regular.ttf` carries — checked against the font's own character map, not assumed.
+
+### Reading the counts
+
+The count rows are `FrameProfile.count(...)` calls, and since phase timing follows the readout they all
+reach the HUD with no property set. The layer ones answer the question a paint-bound frame actually
+raises — *why are there seventeen layers?* — and they account for every one:
+
+| Count | Means |
+|---|---|
+| `layers-opacity` · `layers-mask` | What the layer is **for**. A mask layer is two targets and a composite; an opacity layer is one, and the two are removed by different things |
+| `layers-elided` · `masks-elided` | A layer that was **not** opened — an opacity folded into the draw, a rounded box with no children to clip |
+| `layers-reused` | The picture was still good: one composited quad for a whole subtree |
+| `layers-repainted` | Retained, but the subtree changed or moved |
+| `retain-dynamic` | Never **asked**, because the subtree repaints itself (`backdrop-filter`, or a node overriding a paint hook). A readout showing many layers and no reuse usually means this, not a broken cache |
+| `retain-settling` | Not yet: a subtree must be seen unchanged once before it earns a texture |
+| `retain-resized` | It had one and its element changed size. Every frame means it never settles |
+| `retain-nobudget` | The 48MB retention budget is spent — the one refusal a bigger budget would fix |
+| `svg-raster-draws` · `svg-direct` | An icon drawn as one tinted quad from the atlas, against one drawn cell-by-cell. A frame full of the second is a finding |
+| `layer-clear-kpx` · `layer-blit-kpx` | Kilopixels cleared and composited. Megapixels here beside a two-digit `drawcalls` is the shape of a frame that is layer-bound, not draw-bound |
 
 ---
 

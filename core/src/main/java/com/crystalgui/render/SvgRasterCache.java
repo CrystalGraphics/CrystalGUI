@@ -125,6 +125,15 @@ public final class SvgRasterCache {
      * serves. When it is not, the caller draws the cells directly.
      */
     public boolean accepts(SvgDocument document, float x, float y, float scale) {
+        boolean served = decide(document, x, y, scale);
+        // THE DIRECT PATH IS THE EXPENSIVE ONE -- a draw per scanline cell against one textured quad --
+        // so a frame full of them is a finding rather than a detail. Counted here and not at the two
+        // call sites, because there are five ways to refuse and a caller can tell none of them apart.
+        if (!served) FrameProfile.count("svg-direct", 1);
+        return served;
+    }
+
+    private boolean decide(SvgDocument document, float x, float y, float scale) {
         if (!ENABLED || !ctx.isPoseAxisAligned()) return false;
         Matrix4f m = ctx.getPoseStack().last().pose();
         // Uniform and unflipped: the raster is built at one scale and drawn 1:1.
