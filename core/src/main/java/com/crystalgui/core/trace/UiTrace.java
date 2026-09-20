@@ -4,6 +4,8 @@ import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceExport;
 import com.crystalgraphics.trace.CgTraceLog;
+import com.crystalgraphics.trace.CgTraceNames;
+import com.crystalgraphics.trace.CgTraceReport;
 import com.crystalgui.core.CrystalGuiCore;
 
 import java.io.IOException;
@@ -53,6 +55,16 @@ public final class UiTrace {
 
     /** Who asked for the work — a stack walk per invalidation, so it is opted into on its own. */
     public static final CgTraceChannel BLAME = CgTrace.channel("crystalgui.blame");
+
+    static {
+        // FIRST, and before any name is interned: FrameProfile forwards, so without this every zone it
+        // records is attributed to FrameProfile's own line rather than to the call site that asked --
+        // which makes the one column that turns a report into a next step say the same thing 275 times.
+        CgTraceNames.addForwarder(FrameProfile.class.getName());
+        // And HERE, because this class is loaded by anything that records a CrystalGUI zone -- so the
+        // accusations exist wherever the counters do, without a host being told to install them.
+        UiHints.install();
+    }
 
     /** Whether anything in CrystalGUI is recording. */
     public static boolean isRecording() {
@@ -124,6 +136,38 @@ public final class UiTrace {
             return null;
         }
         return file;
+    }
+
+    /**
+     * Writes the tiered text report beside the log, and says where it went.
+     *
+     * <p><b>The surface an agent reads.</b> The loop is: run the scene, read one file, edit, run again,
+     * {@code diff} — which needs a path that does not change, and {@link CgTraceLog#LATEST} is it.</p>
+     *
+     * @return the file written, or null when no run directory was given
+     */
+    @Nullable
+    public static Path writeReport(CgTraceReport.Tier tier) {
+        Path dir = CgTraceLog.dir();
+        if (dir == null) return null;
+        String text = CgTraceReport.of(CgTrace.snapshot())
+                .budget(FrameStats.get().budgetMs())
+                .render(tier);
+        CgTraceLog.write("report.txt", text);
+        return dir.resolve("report.txt");
+    }
+
+    /** {@link #writeReport} at the tier {@code -Dcrystalgraphics.trace.report} names, if it names one. */
+    public static void writeReportIfAsked() {
+        String asked = System.getProperty("crystalgraphics.trace.report");
+        if (asked == null || asked.isEmpty()) return;
+        for (CgTraceReport.Tier tier : CgTraceReport.Tier.values()) {
+            if (tier.name().equalsIgnoreCase(asked)) {
+                writeReport(tier);
+                return;
+            }
+        }
+        writeReport(CgTraceReport.Tier.VERDICT);
     }
 
     /**
