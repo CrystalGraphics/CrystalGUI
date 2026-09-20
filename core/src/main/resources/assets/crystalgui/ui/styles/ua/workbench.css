@@ -726,28 +726,30 @@ dockgroup.__empty__ .__strip__ {
      * an 8px underline the moment `.__menu-title__ text` is 8px. Size the word, not the mark. */
 }
 
-/* THE BURGER — the collapsed bar. Boxes rather than a ☰ glyph: the bundled Minecraft fonts have no
- * U+2630 and it renders as tofu, the same trap UIText records for U+2026 and ViewContainer for its
- * close mark. Geometry, so it works with no theme loaded, and every part is still themeable.
+/* THE BURGER — the collapsed bar, drawn as an ICON.
  *
- * 14px, DOWN FROM 22, and the caption is why: `.__window__ > .__title-bar__` is `min-height: 20px`, so a
- * 22px button was the tallest thing in the row and grew the caption around itself — the bar was setting
- * the height of the window chrome it was adopted into. 14 leaves 3px above and below, and matches the
- * window's own icon beside it, which is the other 14px thing in this row.
+ * It was four styled boxes for years, because the bundled Minecraft fonts have no U+2630 and a glyph
+ * would render as tofu. That is an argument against a GLYPH, not for boxes: a box can only be a whole
+ * number of LOGICAL pixels, so at 2x every thickness and gap doubled and the mark could not be put on
+ * the device grid at all. The SVG is rasterised to the pixels it will actually occupy, and its
+ * proportions -- four 11x1.2 bars, 1.6 apart, in a 16 box -- live in the file rather than in four rules
+ * that have to agree.
  *
- * The MARK inside it is 10 wide and four bars tall — the count IntelliJ's has: at 2px bars and 3px gaps
- * it read as a control rather than a glyph, and heavier than the tile next to it. Four hairlines at 1px
- * with 2px between them is 10px of mark, square, in a 14px button. */
+ * 16px, DOWN FROM 22, and the caption is why: `.__window__ > .__title-bar__` is `min-height: 20px`, so a
+ * 22px button was the tallest thing in the row and grew the caption around itself -- the bar was setting
+ * the height of the window chrome it was adopted into. 16 leaves 2px above and below. The BOX is the
+ * hover target, not the mark: the icon's own ink is 11 wide inside a 16 viewBox, so what reads on screen
+ * is narrower than the window's 14px tile beside it, which is the right way round -- a tile is artwork
+ * and this is a mark. */
 .__menu-bar__ .__burger__ {
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
     flex-shrink: 0;
-    width: 14px;
-    height: 14px;
-    gap: 2px;
+    width: 16px;
+    height: 16px;
     border-radius: var(--radius-control, 3px);
     cursor: pointer;
+    overlay: icon("crystalgui:menu");
+    overlay-size: contain;
+    color: var(--menubar-burger-fg, #9DA0A8);
 }
 
 /* NO OPEN STATE, and it is not an omission: pressing the burger REVEALS THE BAR, so there is never a
@@ -756,13 +758,8 @@ dockgroup.__empty__ .__strip__ {
  * @see MenuBarView#toggleMainMenu */
 .__menu-bar__ .__burger__:hover {
     background-color: var(--menubar-hover-bg, #4C5052);
-}
-
-.__menu-bar__ .__burger-bar__ {
-    width: 10px;
-    height: 1px;
-    flex-shrink: 0;
-    background-color: var(--menubar-burger-fg, #BBBBBB);
+    /* The mark brightens with the fill, as the window's own controls do. @see --menubar-burger-hover-fg */
+    color: var(--menubar-burger-hover-fg, #DFE1E5);
 }
 
 /* ── Quick pick / command palette ──────────────────────────────────────────────────────────────

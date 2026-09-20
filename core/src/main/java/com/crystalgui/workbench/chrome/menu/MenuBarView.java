@@ -286,12 +286,6 @@ public class MenuBarView extends UIElement {
     /** On the single button that replaces the titles when the bar is collapsed. */
     public static final String BURGER_CLASS = "__burger__";
 
-    /** One of the four bars inside it. Geometry, so it works with no theme loaded. */
-    public static final String BURGER_BAR_CLASS = "__burger-bar__";
-
-    /** How many bars the glyph is drawn from. @see #buildBurger */
-    private static final int BURGER_BARS = 4;
-
     /** On the bar itself while collapsed, so a theme can restyle the whole row at once. */
     public static final String COLLAPSED_CLASS = "__collapsed__";
 
@@ -315,15 +309,14 @@ public class MenuBarView extends UIElement {
 
     private void buildBurger() {
         burger.addClass(BURGER_CLASS);
-        // ELEMENTS, not a glyph and not a new CgUiShape kind. The bundled fonts have no ☰ and it renders
-        // as tofu -- the trap UIText records for U+2026 and ViewContainer for its close mark -- and
-        // styled boxes need no renderer change while staying entirely themeable.
-        for (int i = 0; i < BURGER_BARS; i++) {
-            UIElement stripe = new UIElement();
-            stripe.addClass(BURGER_BAR_CLASS);
-            stripe.setHitTest(false);
-            burger.append(stripe);
-        }
+        // THE MARK IS AN ICON, drawn by the sheet as `overlay: icon("crystalgui:menu")`.
+        //
+        // It was four styled boxes, on the reasoning that the bundled fonts have no U+2630 and it would
+        // render as tofu -- true, and an argument against a GLYPH rather than for boxes. Boxes can only
+        // express whole LOGICAL pixels, so the bar thickness and the three gaps between them could not be
+        // put on the device grid at all: at 2x every number was doubled, and asking for a 2px gap got 4.
+        // An SVG is rasterised to the device pixels it will actually occupy (SvgRasterCache), so the mark
+        // is the same shape at any scale and its proportions live in one file instead of four rules.
         burger.onMouseDown.attachListener((element, event) -> {
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             toggleMainMenu();
