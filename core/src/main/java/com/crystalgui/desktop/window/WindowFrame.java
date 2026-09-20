@@ -460,6 +460,11 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
     private UIElement chromeOrigin;
     private int chromeOriginIndex = -1;
 
+    /** @see WindowChrome#captionActions() */
+    private UIElement adoptedActions;
+    private UIElement actionsOrigin;
+    private int actionsOriginIndex = -1;
+
     private boolean maximized;
     /** The maximise button's tooltip, kept because its text follows the state. @see #MAXIMIZE_TOOLTIP */
     private final Tooltip maximizeTooltip;
@@ -822,10 +827,21 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // AND THE CLASS, which is what a sheet must key its caption styling off. @see ADOPTED_CHROME_CLASS
         chrome.addClass(ADOPTED_CHROME_CLASS);
         captionChrome.setDisplayed(true);
+
+        // AND ITS CAPTION ACTIONS, at the FRONT of the control strip -- so they sit left of this window's
+        // own buttons rather than outside them, where they would read as one of them.
+        UIElement actions = provider.captionActions();
+        if (actions == null) return;
+        actionsOrigin = actions.parentElement();
+        actionsOriginIndex = actionsOrigin == null ? -1 : actionsOrigin.indexOf(actions);
+        adoptedActions = actions;
+        controls.insertAt(0, actions);
+        actions.addClass(ADOPTED_CHROME_CLASS);
     }
 
     /** Puts adopted chrome back where it came from. Safe to call when there is none. */
     public void releaseChrome() {
+        releaseActions();
         if (adoptedChrome == null) return;
         UIElement chrome = adoptedChrome;
         adoptedChrome = null;
@@ -841,6 +857,21 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         int index = Math.max(0, Math.min(chromeOriginIndex, chromeOrigin.children().size()));
         chromeOrigin.insertAt(index, chrome);
         chromeOrigin = null;
+    }
+
+    /** Puts adopted caption actions back. Split from the chrome only so each can be absent. */
+    private void releaseActions() {
+        if (adoptedActions == null) return;
+        UIElement actions = adoptedActions;
+        adoptedActions = null;
+        actions.removeClass(ADOPTED_CHROME_CLASS);
+        if (actionsOrigin == null) {
+            controls.remove(actions);
+            return;
+        }
+        int index = Math.max(0, Math.min(actionsOriginIndex, actionsOrigin.children().size()));
+        actionsOrigin.insertAt(index, actions);
+        actionsOrigin = null;
     }
 
     /** What this window is currently hosting in its caption, or null. */

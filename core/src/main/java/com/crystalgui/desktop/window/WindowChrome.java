@@ -52,4 +52,21 @@ public interface WindowChrome {
      */
     @Nullable
     UIElement captionChrome();
+
+    /**
+     * Controls for the caption's own button strip, or {@code null} for none.
+     *
+     * <p>Adopted beside {@link #captionChrome()} and released with it, but into a different place: the
+     * chrome slot sits at the START of a caption and this goes at the END, immediately left of the
+     * window's own buttons — which is where every toolkit puts an application's caption actions, and
+     * where IntelliJ puts a floating tool window's.</p>
+     *
+     * <p><b>The ROW is adopted, not the buttons in it.</b> A provider rebuilds its actions whenever its
+     * content changes, and it rebuilds them into this element — so moving the element keeps every later
+     * rebuild landing in the caption, where moving the children would silently send the next one back.</p>
+     */
+    @Nullable
+    default UIElement captionActions() {
+        return null;
+    }
 }

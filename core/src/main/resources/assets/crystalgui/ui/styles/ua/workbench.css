@@ -357,8 +357,14 @@ dockgroup > tabview > .__panes__,
  *
  * NO FILL AT REST. `button` gives every button a background, and inherited here it drew the mark as a
  * grey chip in the corner of every header — read as a control that was already pressed. */
+/* ...AND WHEREVER THAT HEADER'S TRAILING ROW HAS BEEN ADOPTED TO. A floating tool window moves the row
+ * into its caption's button strip (WindowChrome.captionActions), and every rule here is scoped through
+ * `.__panel-header__`, which it is then no longer inside: the buttons lost their 14px box, their padding
+ * and their glyph fitting all at once and came out as a squashed huddle. Widened rather than copied --
+ * two definitions of a control's size is how the two drift. */
 .__panel-header__ .__hide__,
-.__panel-header__ .__action-button__ {
+.__panel-header__ .__action-button__,
+.__title-trailing__.__caption-adopted__ .__action-button__ {
     width: 14px;
     height: 14px;
     flex-shrink: 0;
@@ -387,7 +393,9 @@ dockgroup > tabview > .__panes__,
  * relative to its font, so the icons sit evenly and tight against the edge. Hide's minus fills its 14px box.
  * The dropdown gutter still spans the whole box, so it sits in the button's corner rather than the glyph's. */
 .__panel-header__ .__title-trailing__,
-.__panel-header__ .__title-actions__ {
+.__panel-header__ .__title-actions__,
+.__title-trailing__.__caption-adopted__,
+.__title-trailing__.__caption-adopted__ .__title-actions__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
@@ -400,12 +408,20 @@ dockgroup > tabview > .__panes__,
 
 .__view-container__:hover .__header__ .__hide__,
 .__view-container__:hover .__header__ .__action-button__,
-.__header__.__caption-adopted__ .__action-button__ {
+.__header__.__caption-adopted__ .__action-button__,
+.__title-trailing__.__caption-adopted__ .__action-button__ {
     opacity: 1;
 }
 
+/* Centred in the caption strip. The window's own buttons stretch to its full height; these keep the 14px
+ * box they have in a header, so they are centred against them rather than stretched to match. */
+.__title-trailing__.__caption-adopted__ {
+    align-self: center;
+}
+
 .__panel-header__ .__hide__:hover,
-.__panel-header__ .__action-button__:hover {
+.__panel-header__ .__action-button__:hover,
+.__title-trailing__.__caption-adopted__ .__action-button__:hover {
     color: var(--panel-header-icon-hover, #E0E0E0);
     background: none;
     background-color: var(--panel-header-icon-hover-bg, #393B40);
