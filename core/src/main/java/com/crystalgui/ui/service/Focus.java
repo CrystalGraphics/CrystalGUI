@@ -344,6 +344,11 @@ public final class Focus {
 
         UIElement focusTarget = target;
         while (focusTarget != null && !focusTarget.focusPolicy().focusesOnClick()) {
+            // A RETAINING ANCESTOR ENDS THE WALK WITH FOCUS UNTOUCHED. Reached only when nothing between
+            // the press and here was click-focusable, so a row inside a retaining popup still takes focus
+            // and still selects -- this catches the scenery, whose only effect otherwise is to clear the
+            // owner and leave the keyboard dead. @see Attribute#RETAINS_FOCUS
+            if (focusTarget.retainsFocus()) return;
             focusTarget = focusTarget.composedParent();
         }
         if (focusTarget == focused) return;

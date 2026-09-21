@@ -1006,6 +1006,21 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         return get(Attribute.HIT_TEST);
     }
 
+    /**
+     * Whether a press on scenery inside this subtree leaves focus alone. @see Attribute#RETAINS_FOCUS
+     *
+     * <pre>{@code
+     * popup.setRetainsFocus(true);   // clicking its caption does not take the caret out of its field
+     * }</pre>
+     */
+    public UIElement setRetainsFocus(boolean retains) {
+        return set(Attribute.RETAINS_FOCUS, retains);
+    }
+
+    public final boolean retainsFocus() {
+        return get(Attribute.RETAINS_FOCUS);
+    }
+
     /** The HTML {@code inert} attribute: keeps its box, stops being interactive. Subtree-wide. */
     public UIElement setInert(boolean inert) {
         return set(Attribute.INERT, inert);

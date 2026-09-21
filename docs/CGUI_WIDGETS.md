@@ -152,6 +152,31 @@ programmatic focus, false after a mouse click — except on elements that take t
 `CGUI_STYLE_RENDER_PIPELINE.md` §2. Note hyphenated names resolve via `PseudoClasses.lookup`, not
 `valueOf`.
 
+### A surface that owns a caret says so — `setRetainsFocus`
+
+A press that finds no click-focusable ancestor **clears** the focus owner. That is the web's rule —
+Blink's `HandleMouseFocus`, and why clicking a bare `<div>` blurs the input beside it — and for
+ordinary chrome it is right. For a widget whose whole point is one field it is not: pressing a prompt's
+caption, its divider or its padding blurred the field and focused *nothing*, so the window had no focus
+owner and the next keystroke went nowhere.
+
+```java
+popup.setRetainsFocus(true);   // a press on scenery in here leaves the caret where it is
+```
+
+Subtree-wide, and it still **defers to anything click-focusable inside it**: a `ListView` row still
+takes its own press and still selects, because that list drives selection *from* focus. What it catches
+is the scenery, whose only effect on focus otherwise is to destroy it.
+
+Two things to know when you reach for it:
+
+- The web's own escape hatch is `preventDefault()` on the mousedown, and it does not work here: focus
+  is assigned *before* dispatch, so no handler can object in time. The opt-out is on the element
+  instead, which is Swing's `setRequestFocusEnabled(false)` in shape though not in scope.
+- Handing focus back afterwards is **`requestPointerFocus`**, never `requestFocus`. The latter is the
+  DOM's `element.focus()`: it rings and it scrolls its target into view, and that reveal scrolls the
+  popup itself — the divider and every row shift together, which reads as the popup jumping on click.
+
 ### Listeners, tickers, tags
 
 - **`attachListener(l, capture, bubble)` always subscribes the target phase.** The two booleans are
