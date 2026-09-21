@@ -288,6 +288,7 @@ public class ProjectFileTree extends UIElement
         // and a rebuild now would replace the element that dispatch is still walking. The kit also takes
         // the list's Cut/Copy/Paste, which would otherwise be a row-text copier. @see ListView#setClipboardActions
         this.editing = new TreeEditing<>(tree, this, this::itemForRow, this::requestRefresh, CLIPBOARD);
+
         find.build();
     }
 
@@ -725,9 +726,12 @@ public class ProjectFileTree extends UIElement
         RowEditing<CgPath> rows = editing.rows();
         // ENDED FIRST: an open edit's own ending withdraws the placeholder, which would take the new one.
         rows.cancel();
-        // EXPANDED, or the placeholder is a child of a folded folder and nothing appears at all.
-        if (!tree.isExpanded(parent)) tree.setExpanded(parent, true);
+        // THE PLACEHOLDER FIRST, THEN THE EXPAND. `setExpanded(open)` refuses an item the source says has
+        // no children, so an EMPTY folder could not be opened at all and the row being edited was
+        // invisible inside it -- which is every "new file in a folder you just made". Once the
+        // placeholder exists the folder has a child, so it opens.
         CgPath placeholder = source.beginPendingNew(parent, directory);
+        if (!tree.isExpanded(parent)) tree.setExpanded(parent, true);
         rows.begin(RowEditing.Edit.of(placeholder, "", onCommit)
                 .accepting(ProjectFileTree::isWellFormedName)
                 .conflicting(directory ? "folder" : "file", typed -> freeNameFor(placeholder, typed))

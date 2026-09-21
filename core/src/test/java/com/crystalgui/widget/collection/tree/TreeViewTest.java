@@ -654,4 +654,53 @@ public class TreeViewTest extends UiDocumentTestBase {
         }
         throw new AssertionError("no row for " + item);
     }
+
+    /**
+     * <b>An explicit {@code setExpanded} beats a toggle queued in the same frame.</b>
+     *
+     * <p>A queued fold is a request made <em>before</em> the decision, and it applies by flipping
+     * whatever it finds — so left in the queue it undoes the set on the next frame rather than agreeing
+     * with it. That is what made creating a file in a folder open it and then shut it again a frame
+     * later, reported as the new file folding the folder.</p>
+     */
+    @Test
+    public void anExplicitExpandDropsAToggleQueuedInTheSameFrame() {
+        tree = build();
+        assertFalse(tree.isExpanded("a"));
+
+        // The press that folded it, queued during dispatch as a renderer's twisty does it...
+        tree.requestToggle("a");
+        // ...and then something decides, in the same frame, that it must be open.
+        tree.setExpanded("a", true);
+        for (int i = 0; i < 4; i++) frame();
+
+        assertTrue("the queued toggle must not undo the explicit set", tree.isExpanded("a"));
+    }
+
+    /** The other direction holds too: a set to CLOSED is not re-opened by a stale queued toggle. */
+    @Test
+    public void anExplicitCollapseAlsoWins() {
+        tree = build();
+        tree.setExpanded("a", true);
+        for (int i = 0; i < 4; i++) frame();
+
+        tree.requestToggle("a");
+        tree.setExpanded("a", false);
+        for (int i = 0; i < 4; i++) frame();
+
+        assertFalse(tree.isExpanded("a"));
+    }
+
+    /** A queue with nothing competing still works — the drop must not break ordinary folding. */
+    @Test
+    public void aQueuedToggleStillFoldsOnItsOwn() {
+        tree = build();
+        tree.setExpanded("a", true);
+        for (int i = 0; i < 4; i++) frame();
+
+        tree.requestToggle("a");
+        for (int i = 0; i < 4; i++) frame();
+
+        assertFalse("a queued toggle alone still applies", tree.isExpanded("a"));
+    }
 }
