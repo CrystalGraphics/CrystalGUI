@@ -127,7 +127,8 @@ public final class InputDialog {
         });
         cancel.onPressed.connect(dialog::close);
 
-        window.addOverlay(dialog, from);
+        // Window-level for the same reason the prompt above is. @see #prompt
+        window.addOverlay(dialog, null);
         dialog.removeWhenClosed();
         dialog.showModal();
         // AFTER showModal, per Dialog's own instruction: the focusing steps take the first focusable
@@ -198,14 +199,25 @@ public final class InputDialog {
             onNo.run();
         });
 
-        window.addOverlay(dialog, from);
+        // Window-level for the same reason the prompt above is. @see #prompt
+        window.addOverlay(dialog, null);
         dialog.removeWhenClosed();
         dialog.showModal();
         window.focus().requestFocus(yes);
     }
 
     /** The shared shell: one caption, promoted and light-dismissable. */
-    private static Popover prompt(UIDocument window, @Nullable UIElement from, String title) {
+    /**
+     * The chrome every prompt here shares: a titled popover, attached and shown, restoring focus when it
+     * closes.
+     *
+     * <p>Public so a prompt that cannot live in this class can still be one of these rather than a
+     * lookalike. {@code widget.overlay} sits below {@code widget.collection} in the layering, so a prompt
+     * needing a {@code ListView} — the explorer's New Java Class — has to be declared above both; what it
+     * must not do is grow its own caption and its own placement, which is how two dialogs end up a
+     * pixel apart.</p>
+     */
+    public static Popover prompt(UIDocument window, @Nullable UIElement from, String title) {
         Popover popup = new Popover();
         popup.addClass(PROMPT_CLASS);
 
@@ -213,7 +225,22 @@ public final class InputDialog {
         caption.addClass(CAPTION_CLASS);
         popup.append(caption);
 
-        window.addOverlay(popup, from);
+        // NULL, NOT `from` -- THE DOCUMENT HOSTS IT, not the panel the command came from.
+        //
+        // `overlayHost` walks up from what it is given for the nearest node that accepts children, which
+        // for a command invoked from the file tree is a TREE ROW. That made every prompt a DOM
+        // descendant of the row it was raised over, and everything the row listens for it heard first:
+        // double-clicking anywhere in the New Java Class popup opened the file behind it, or folded the
+        // folder, and a press that travelled started the row's own drag -- the open editor's tab chip
+        // flying around under the dialog.
+        //
+        // Nothing here wanted that parentage. It buys an overlay the panel's inherited colours and the
+        // panel's lifetime, which is right for a context menu -- and `overlayHost`'s own javadoc says as
+        // much, noting that a command palette passes null. A prompt is the palette case: it is CENTRED
+        // ON THE WINDOW two lines below, so hosting it inside a panel was already at odds with where it
+        // is put, and its surface is stated outright rather than inherited.
+        window.addOverlay(popup, null);
+
         popup.showAt(0f, 0f, null);
         restoreFocusOnClose(window, popup, from);
         return popup;
@@ -268,7 +295,8 @@ public final class InputDialog {
     /** On a prompt that has been shown but not yet placed. {@code opacity: 0} lives in the sheet. */
     public static final String PLACING_CLASS = "__placing__";
 
-    private static void centre(UIDocument window, Popover popup) {
+    /** Puts {@code popup} in the middle of {@code window}, once it has a measured size. @see #prompt */
+    public static void centre(UIDocument window, Popover popup) {
         // A CLASS, not an IMPORTANT write. The engine may not write into the cascade here at all, and
         // the reason is the same one the standing row gives: a resting value written from Java outranks
         // every rule that would ever want to restyle it, so the hiding belongs in the sheet
