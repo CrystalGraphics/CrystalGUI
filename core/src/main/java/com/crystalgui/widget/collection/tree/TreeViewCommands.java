@@ -3,6 +3,7 @@ package com.crystalgui.widget.collection.tree;
 import java.util.List;
 
 import com.crystalgui.core.collection.tree.TreeRow;
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataContext;
@@ -17,7 +18,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
  *
  * <pre>{@code
  * ActionButton.command(TreeViewCommands.COLLAPSE_ALL)
- *         .icon("crystalgui:general/action/collapseAll")
+ *         .icon(ActionIcons.COLLAPSE_ALL)
  *         .context(tree);
  * }</pre>
  */

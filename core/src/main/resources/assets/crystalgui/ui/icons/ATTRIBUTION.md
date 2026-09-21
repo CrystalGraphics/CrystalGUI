@@ -1,8 +1,13 @@
 # Icon attribution
 
-Two sets ship here, under two licences. Both are **verbatim** — no file has been edited, recoloured or
-re-exported. That is worth stating plainly because Apache 2.0 requires modifications to be declared, and
-"we changed nothing" is the cheapest possible way to satisfy it.
+Two sets ship here, under two licences. Most files are **verbatim**; the ones that are not are named
+below, per directory, under a **Modified** heading. Apache 2.0 § 4(b) requires modifications to be
+declared, so the split is the point of this file rather than a detail of it.
+
+> This paragraph used to say every file was verbatim. That stopped being true the first time a
+> hard-coded grey was swapped for `currentColor`, and the Modified lists below had already grown around
+> it — a summary line contradicting the detail it summarises, which is the one thing a notice file must
+> not do.
 
 ## `filetypes/`, `toolwindows/` and `general/` — IntelliJ Platform icons
 
@@ -134,6 +139,13 @@ kind, named after the kind's tag (`button.svg`, `tabview.svg`), plus the layout 
 `toolwindows/library.svg`, `general/action/viewRows.svg` and `general/action/viewCards.svg` are ours too,
 drawn the same way for the Library's stripe button and the two faces of its view toggle.
 
+`general/action/freeTransform.svg` is ours as well — the Platform set has no free-transform mark. It is
+the bounding box with its four corner handles, which is what Photoshop, Illustrator and Figma have all
+drawn for this since the 1990s, and what the builder's own selection draws on the canvas. Single-tone
+`currentColor`, so it needs no `_dark` companion. The handles are deliberately chunky at 3 units on a
+16 box: `menu.__has-icons__` renders a mark at **10px**, so everything here is seen at 0.625 scale and a
+2-unit detail would come through at a pixel and a quarter.
+
 ## Trademarks
 
 Neither licence grants trademark rights — Apache 2.0 § 6 says so outright. The file-type icons above are
@@ -143,8 +155,9 @@ in `core/src/test/resources/` and not here: it is the SVG renderer's torture tes
 ## `general/action/` — IntelliJ Platform (Apache 2.0)
 
 `intentionBulb`, `add`, `addDirectory`, `addFile`, `collapseAll`, `copy`, `cut`, `delete`, `edit`,
-`expandAll`, `locate`, `paste`, `pin`, `pinHovered`, `pinSelected`, `reformatCode`, `refresh`, `run`,
-`rerun`, `save`, `scrollDown`, `softWrap`, `stop` — action icons from the IntelliJ
+`expandAll`, `locate`, `paste`, `pin`, `pinHovered`, `pinSelected`, `redo`, `reformatCode`, `refresh`,
+`reset`, `run`, `rerun`, `save`, `scrollDown`, `settings`, `softWrap`, `stop`, `undo` — action icons
+from the IntelliJ
 Platform, © 2000-2023 JetBrains s.r.o. and contributors, used under the Apache License 2.0.
 
 **`link-2.svg` is not one of them.** It is Feather's, under the MIT notice above, filed here beside the
@@ -154,18 +167,37 @@ The line this directory is split along is **whether the colour carries meaning**
 `general/search/` sits on the far side of.
 
 **Unmodified**, shipped with their `*_dark.svg` variants: `intentionBulb`, `addDirectory`, `addFile`,
-`copy`, `cut`, `edit`, `paste`, `pin`, `pinSelected`, `reformatCode`, `refresh`, `run`, `rerun`,
-`save`, `stop`. These carry
-meaning in their colour — the bulb's amber glass says "there is something to do here", Stop's red says the
-button is live — and recolouring them from CSS would throw away what they are. `icon()` resolves the
+`pin`, `pinSelected`, `reformatCode`, `run`, `rerun`, `stop`. These carry
+meaning in their colour — the bulb's amber glass says "there is something to do here", the blue `+` on
+`addFile`/`addDirectory` is what makes them *new* rather than *open*, Stop's red says the button is
+live — and recolouring them from CSS would throw away what they are. The three a menu row names are
+listed in `ActionIcons.COLOURED`, which is what exempts them from the cascade check in
+`CommandIconsResolveTest`. `icon()` resolves the
 light/dark pair through `CgUiSvg.ofIcon`.
 
 **Modified**, which Apache 2.0 § 4(b) requires stating:
 
-- `delete`, `scrollDown`, `softWrap` — every hard-coded `fill="#6C707E"` replaced with
-  `fill="currentColor"`. They are chrome marks in a console's control stripe, not coloured symbols, so
-  they have to follow the theme and dim when their action is unavailable. Same change and same reason as
-  `general/search/`.
+- `undo`, `redo`, `reset`, `settings`, `cut`, `copy`, `paste`, `save`, `refresh`, `edit` — every hard-coded
+  `fill`/`stroke="#6C707E"` replaced with `currentColor`. These are the **menu** marks (`Command.icon`),
+  and a menu row's glyph has to do what its label does: dim with `menuitem:disabled`, and take the
+  theme's foreground rather than a grey chosen for JetBrains' own background. `Undo` greyed out with a
+  black arrow beside it is the case that makes the point.
+
+  **Both halves of each pair are converted**, and the twin is not the redundant one: `CgUiSvg.ofIcon`
+  resolves a name through `FileIconTheme.withVariant`, whose default is `Variant.DARK`, so
+  `general/action/undo` loads `undo_dark.svg`. Converting only the light file changes nothing a menu
+  can see — which is what the four above avoid by dropping their twins, since `withVariant` falls back
+  to the base name when no dark drawing exists. These keep theirs, so both files carry `currentColor`
+  and either resolution draws the same mark.
+
+- `delete`, `scrollDown`, `softWrap` — every hard-coded `fill` replaced with `currentColor`, **in both
+  the light file and its `_dark` twin**. They are chrome marks in a console's control stripe, not
+  coloured symbols, so they have to follow the theme and dim when their action is unavailable. Same
+  change and same reason as `general/search/`.
+
+  For a long time only the light file was converted, which achieved nothing: `withVariant` defaults to
+  `Variant.DARK`, so the twin is the file that loads and all three went on painting a fixed `#CED0D6`.
+  `CommandIconsResolveTest` is what surfaced it, the first time a command named `delete`.
 - `add`, `collapseAll`, `expandAll`, `locate` — every `fill`/`stroke="#6C707E"` replaced with `currentColor`,
   and their `_dark` twins dropped: they are a tool window's title actions, drawn in the header's icon colour
   and dimmed while their command is unavailable.

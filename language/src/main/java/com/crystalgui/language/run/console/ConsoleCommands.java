@@ -1,5 +1,6 @@
 package com.crystalgui.language.run.console;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -77,6 +78,7 @@ public final class ConsoleCommands {
                 .run(() -> panel.view().scrollToEnd()));
 
         registry.register(Command.of(REMOVE, "Remove")
+                .icon(ActionIcons.DELETE)
                 .menu(RAIL_CONTEXT, "2_edit", 10)
                 // GREYED FOR A LIVE SCRIPT rather than absent. @see RunPanel#canRemoveContextScript
                 .enabledWhen(context -> panel.canRemoveContextScript())

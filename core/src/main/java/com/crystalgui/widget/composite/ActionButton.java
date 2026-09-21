@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -31,12 +32,12 @@ import com.crystalgui.widget.overlay.Tooltip;
  * <pre>{@code
  * // runs a command against the tree, however far the button is from it
  * ActionButton collapse = ActionButton.command(TreeViewCommands.COLLAPSE_ALL)
- *         .icon("crystalgui:general/action/collapseAll")
+ *         .icon(ActionIcons.COLLAPSE_ALL)
  *         .context(tree);
  *
  * // drops a menu down, and wears the dropdown gutter saying so
  * ActionButton add = ActionButton.menu("New File or Directory…", MenuId.EXPLORER_NEW)
- *         .icon("crystalgui:general/action/add")
+ *         .icon(ActionIcons.ADD)
  *         .context(tree);
  * }</pre>
  *
@@ -130,7 +131,7 @@ public class ActionButton extends Button {
         onConnected(this::drawIcon);
     }
 
-    /** Draws {@code iconName} — {@code "crystalgui:general/action/add"} — as the button's glyph. */
+    /** Draws {@code iconName} — {@code ActionIcons.ADD} — as the button's glyph. */
     public ActionButton icon(String iconName) {
         this.iconName = iconName;
         if (document() != null) drawIcon();
@@ -176,8 +177,8 @@ public class ActionButton extends Button {
      * toggled, so the button shows what a press switches to.
      *
      * <pre>{@code
-     * ActionButton.command(TOGGLE_ROWS).icon("crystalgui:general/action/viewRows")          // "Show as Rows"
-     *         .whenToggled("crystalgui:general/action/viewCards", "Show as Cards");
+     * ActionButton.command(TOGGLE_ROWS).icon(ActionIcons.VIEW_ROWS)          // "Show as Rows"
+     *         .whenToggled(ActionIcons.VIEW_CARDS, "Show as Cards");
      * }</pre>
      *
      * <p>Followed on the button's refresh, a few times a second; a command that is not checkable never shows it.</p>

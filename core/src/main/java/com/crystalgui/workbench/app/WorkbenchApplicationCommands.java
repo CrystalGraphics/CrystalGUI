@@ -2,6 +2,7 @@ package com.crystalgui.workbench.app;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -69,6 +70,7 @@ public final class WorkbenchApplicationCommands {
 
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(SAVE_FILE, "Save File")
+                .icon(ActionIcons.SAVE)
                 .binding("Mod+S")
                 .menu(MenuId.MAIN_FILE, "3_save", 10)
                 .run(context -> applicationFor(context).workbench().saveActiveFile())

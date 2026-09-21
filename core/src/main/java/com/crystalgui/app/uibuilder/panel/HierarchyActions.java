@@ -10,6 +10,7 @@ import com.crystalgui.app.uibuilder.document.NodeSelectors;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.app.uibuilder.library.LibraryCatalog;
 import com.crystalgui.app.uibuilder.library.LibraryGroups;
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -126,13 +127,13 @@ public final class HierarchyActions {
     public static List<ActionButton> titleActions(Supplier<UIElement> tree) {
         return List.of(
                 ActionButton.menu("New Element", HierarchyPanel.NEW_MENU)
-                        .icon("crystalgui:general/action/add").context(tree),
+                        .icon(ActionIcons.ADD).context(tree),
                 ActionButton.command(SELECT_IN_HIERARCHY)
-                        .icon("crystalgui:general/action/locate").context(tree),
+                        .icon(ActionIcons.LOCATE).context(tree),
                 ActionButton.command(TreeViewCommands.EXPAND_SELECTED)
-                        .icon("crystalgui:general/action/expandAll").context(tree)
+                        .icon(ActionIcons.EXPAND_ALL).context(tree)
                         .hint(TreeViewCommands.EXPAND_ALL, "Press {} to expand all nodes"),
                 ActionButton.command(TreeViewCommands.COLLAPSE_ALL)
-                        .icon("crystalgui:general/action/collapseAll").context(tree));
+                        .icon(ActionIcons.COLLAPSE_ALL).context(tree));
     }
 }

@@ -201,19 +201,30 @@ public final class MenuBuilder {
         String label = labelOverride != null ? labelOverride
                 : resolved != null ? resolved.getLabel() : commandId;
 
-        MenuItem item = checkable ? menu.addCheckableItem(label) : menu.addItem(label);
+        // A TOGGLE THAT NAMES ITS ACTION IS AN ORDINARY ROW: the mark and the tick are one column, and
+        // declaring a second presentation is what chooses the mark. @see Command#whenToggled
+        boolean marksState = resolved != null && resolved.hasToggledPresentation();
+        boolean ticks = checkable && !marksState;
+
+        // The context the row's presentation is read against -- built here rather than below, since the
+        // LABEL depends on it too once a command has two of them.
+        CommandContext presentation = CommandContext.of(source);
+        if (marksState && labelOverride == null) label = resolved.labelFor(presentation);
+
+        MenuItem item = ticks ? menu.addCheckableItem(label) : menu.addItem(label);
         item.setEnabled(enabled);
-        if (checkable) item.setSelected(checked);
+        if (ticks) item.setSelected(checked);
 
         KeyChord chord = Keymap.acceleratorFor(source, commandId);
         item.setAccelerator(chord == null ? null : chord.toString());
 
         if (resolved == null) return item;
-        if (resolved.getIcon() != null && !checkable) {
-            item.setIcon(resolved.getIcon(), resolved.getIconClass());
+        CommandContext context = presentation;
+        String mark = resolved.iconFor(context);
+        if (mark != null && !ticks) {
+            item.setIcon(mark, resolved.getIconClass());
             menu.addClass(Menu.HAS_ICONS_CLASS);
         }
-        CommandContext context = CommandContext.of(source);
         item.attachListener(() -> {
             // RE-CHECKED at activation, and run THROUGH THE REGISTRY where the id is known. The menu may
             // have been open while something changed under it, and going through the registry is what a

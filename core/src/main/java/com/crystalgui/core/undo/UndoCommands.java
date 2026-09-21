@@ -1,5 +1,6 @@
 package com.crystalgui.core.undo;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
@@ -80,6 +81,7 @@ public final class UndoCommands {
                         // THE MENU BAR IS A QUERY, so a command states where it appears and the bar never
                         // hears about it. One line here is the whole of "Edit > Undo existing".
                         .menu(MenuId.MAIN_EDIT, "1_undo", 10)
+                        .icon(ActionIcons.UNDO)
                         .enabledWhereData(context -> {
                             UndoStack history = context.get(UiDataKeys.UNDO_STACK);
                             return history != null && history.canUndo();
@@ -88,6 +90,7 @@ public final class UndoCommands {
         registry.register(Command.of(REDO, "Redo")
                         .binding(REDO_CHORD, REDO_CHORD_ALT)
                         .menu(MenuId.MAIN_EDIT, "1_undo", 20)
+                        .icon(ActionIcons.REDO)
                         .enabledWhereData(context -> {
                             UndoStack history = context.get(UiDataKeys.UNDO_STACK);
                             return history != null && history.canRedo();

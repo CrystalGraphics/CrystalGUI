@@ -5,6 +5,7 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -60,6 +61,7 @@ public final class SurfaceCommands {
 
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(DELETE, "Delete")
+                .icon(ActionIcons.DELETE)
                 .run(context -> with(context, SurfaceCommands::delete))
                 .enabledWhen(context -> hasSelection(surfaceOf(context))));
         registry.register(Command.of(SELECT_ALL, "Select All")

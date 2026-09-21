@@ -9,6 +9,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.config.ConfigDescriptor;
@@ -160,14 +161,21 @@ public final class LayerStack extends ValueControl<List<String>> {
                 .enabledWhereData(data -> layer(data) >= 0 && layer(data) < data.get(STACK).size() - 1
                         && data.get(STACK).reorderable)
                 .runWithData(data -> data.get(STACK).moveTo(layer(data), data.get(STACK).size() - 1)));
-        registry.register(Command.of(VISIBLE, "Visible")
+        // THE ROW NAMES THE ACTION, NOT THE STATE: over a hidden layer it offers Show, over a visible one
+        // Hide -- which is why the base label is "Show" and the toggled one is "Hide", and not the other
+        // way round. `Visible` with a tick said which state the layer was in and left the reader to work
+        // out what pressing it would do.
+        registry.register(Command.of(VISIBLE, "Show")
+                .icon(ActionIcons.SHOW)
+                .whenToggled(ActionIcons.HIDE, "Hide")
                 .enabledWhereData(data -> layer(data) >= 0 && data.get(STACK).hideable)
                 .toggledWhereData(data -> layer(data) >= 0 && !data.get(STACK).isOff(layer(data)))
                 .runWithData(data -> data.get(STACK).toggleVisible(layer(data))));
         registry.register(Command.of(DUPLICATE, "Duplicate")
                 .enabledWhereData(data -> layer(data) >= 0)
                 .runWithData(data -> data.get(STACK).duplicate(layer(data))));
-        registry.register(Command.of(REMOVE, "Remove")
+        registry.register(Command.of(REMOVE, "Delete")
+                .icon(ActionIcons.DELETE)
                 .enabledWhereData(data -> layer(data) >= 0)
                 .runWithData(data -> data.get(STACK).remove(layer(data))));
     }
