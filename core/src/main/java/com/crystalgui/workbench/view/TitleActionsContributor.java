@@ -4,6 +4,7 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.widget.composite.ActionButton;
 
@@ -14,11 +15,11 @@ import com.crystalgui.widget.composite.ActionButton;
  * <pre>{@code
  * public List<ActionButton> titleActions() {
  *     return List.of(
- *             ActionButton.menu("New…", NEW_MENU).icon("crystalgui:general/action/add").context(tree),
+ *             ActionButton.menu("New…", NEW_MENU).icon(ActionIcons.ADD).context(tree),
  *             ActionButton.command(TreeViewCommands.EXPAND_SELECTED)
- *                     .icon("crystalgui:general/action/expandAll").context(tree),
+ *                     .icon(ActionIcons.EXPAND_ALL).context(tree),
  *             ActionButton.command(TreeViewCommands.COLLAPSE_ALL)
- *                     .icon("crystalgui:general/action/collapseAll").context(tree));
+ *                     .icon(ActionIcons.COLLAPSE_ALL).context(tree));
  * }
  *
  * public MenuId optionsMenu() {

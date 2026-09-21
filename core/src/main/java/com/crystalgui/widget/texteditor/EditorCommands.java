@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.data.CommandTarget;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgraphics.platform.CgPlatform;
@@ -260,6 +261,7 @@ public final class EditorCommands {
         registry.register(editorCommand(PREFIX + "selectLine", "Select Line")
                 .run(on(TextEditor::selectLine)));
         registry.register(Command.of(PREFIX + "deleteLines", "Delete Line")
+                .icon(ActionIcons.DELETE)
                 .run(on(TextEditor::deleteLines)).enabledWhen(whenEditable()));
         registry.register(Command.of(PREFIX + "moveLineUp", "Move Line Up")
                 .run(on(editor -> editor.moveLines(-1))).enabledWhen(whenEditable()));
@@ -391,6 +393,7 @@ public final class EditorCommands {
                 .run(on(editor -> editor.zoomBy(-1)))
                 .enabledWhen(when(editor -> editor.getFontSize() > TextEditor.MIN_FONT_SIZE)));
         registry.register(editorCommand(PREFIX + "zoomReset", "Reset Zoom")
+                .icon(ActionIcons.RESET)
                 .menu(MenuId.MAIN_VIEW, "3_editor", 30)
                 .run(on(TextEditor::resetZoom)));
 

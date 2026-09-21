@@ -1885,6 +1885,7 @@ better and does not go stale when it changes.
 | `CGUI_SERVER_AND_SERIALIZATION.md` | Codecs, descriptions, content hashing, sessions and RPC — and the headless contract underneath them |
 | `CGUI_NETWORKING_PRIMER.md` | Networking from the bottom up, ELI5 first: what a frame, a session and a peer each are, how a `ProtocolConnection` is established, and how to define a packet contract on both halves |
 | `CGUI_THEMING.md` | Themes, editor colour schemes, the token vocabulary. Its token table is generated and machine-checked — regenerate it from the failing test, never by hand |
+| `CGUI_COMMANDS.md` | Every command the codebase declares, by area, with its menus and keys — the sweep behind the menu-icon pass. **A snapshot, not a contract**: it is regenerated, not maintained, so trust the code where the two disagree |
 | `CGUI_NEW_ENGINE.md` | Reading a commit or a comment that still names the old engine: what replaced what, and the six habits that are now wrong |
 | `CGUI_MODERN_UI_RENDERING_RESEARCH.md` | The primary sources behind glass, blur, gradients and the taskbar, with their exact numbers. **Read the relevant section before touching any of them** — each was first built from memory and each was wrong in a way only the source showed |
 

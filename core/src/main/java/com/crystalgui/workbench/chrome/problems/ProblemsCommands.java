@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.chrome.problems;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -44,6 +45,7 @@ public final class ProblemsCommands {
     public static void register() {
         CommandRegistry.global().contribute(ProblemsCommands.class, registry -> {
             registry.register(Command.of(SHOW_QUICK_FIXES, "Show Quick-Fixes")
+                    .icon(ActionIcons.INTENTION_BULB)
                     .binding("Alt+Enter")
                     .run(context -> {
                         ProblemsPanel panel = panelOf(context);
@@ -52,6 +54,7 @@ public final class ProblemsCommands {
                     .enabledWhen(ProblemsCommands::hasProblemRow));
 
             registry.register(Command.of(JUMP_TO_SOURCE, "Jump to Source")
+                    .icon(ActionIcons.EDIT)
                     .binding("F5")
                     .run(context -> {
                         ProblemsPanel panel = panelOf(context);

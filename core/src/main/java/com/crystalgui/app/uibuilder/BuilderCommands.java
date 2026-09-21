@@ -7,6 +7,7 @@ import com.crystalgui.app.uibuilder.canvas.ReorderInFlow;
 import com.crystalgui.app.uibuilder.canvas.TextEditGesture;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture;
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
@@ -217,12 +218,14 @@ public final class BuilderCommands {
                 .enabledWhen(BuilderCommands::canShift));
 
         registry.register(Command.of(INSERT, "Insert…")
+                .icon(ActionIcons.ADD)
                 .run(context -> builderOf(context).insert().openForSelection())
                 .enabledWhen(context -> hasBuilder(context) && builderOf(context).surface().isDesignMode()));
 
         // ONE NODE, AND A LAID-OUT ONE. The tool cannot refuse a bad selection from inside `activated`
         // without re-entering the mode stack mid-change, so the gate is here where it costs nothing.
         registry.register(Command.of(FREE_TRANSFORM, "Free Transform")
+                .icon(ActionIcons.FREE_TRANSFORM)
                 .run(context -> builderOf(context).surface().modes().use(FreeTransformTool.ID))
                 .enabledWhen(BuilderCommands::canFreeTransform));
 
@@ -233,11 +236,13 @@ public final class BuilderCommands {
                         && selectionOf(context) != null));
 
         registry.register(Command.of(COPY_ATTRIBUTES, "Copy Attributes")
+                .icon(ActionIcons.COPY)
                 .run(context -> AttributeClipboard.put(
                         new StyleAttributes(selectionOf(context)).copyAttributes()))
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
 
         registry.register(Command.of(PASTE_ATTRIBUTES, "Paste Attributes")
+                .icon(ActionIcons.PASTE)
                 .run(BuilderCommands::pasteAttributes)
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null
                         && AttributeClipboard.pending(StyleAttributes.DOMAIN) != null));

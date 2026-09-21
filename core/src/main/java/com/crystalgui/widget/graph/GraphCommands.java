@@ -1,5 +1,6 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.data.DataContext;
@@ -94,6 +95,7 @@ public final class GraphCommands {
 
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(DELETE, "Delete")
+                .icon(ActionIcons.DELETE)
                 .menu(MenuId.MAIN_GRAPH, "1_nodes", 20)
                 .run(context -> withGraph(context, GraphView::deleteSelection))
                 .enabledWhen(context -> {

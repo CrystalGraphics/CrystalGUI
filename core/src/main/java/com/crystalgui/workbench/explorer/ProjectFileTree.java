@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.explorer;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
@@ -827,14 +828,14 @@ public class ProjectFileTree extends UIElement
         if (titleActions == null) {
             titleActions = List.of(
                     ActionButton.menu("New File or Directory…", MenuId.EXPLORER_NEW)
-                            .icon("crystalgui:general/action/add").context(tree),
+                            .icon(ActionIcons.ADD).context(tree),
                     ActionButton.command(ExplorerCommands.SELECT_OPENED_FILE)
-                            .icon("crystalgui:general/action/locate").context(tree),
+                            .icon(ActionIcons.LOCATE).context(tree),
                     ActionButton.command(TreeViewCommands.EXPAND_SELECTED)
-                            .icon("crystalgui:general/action/expandAll").context(tree)
+                            .icon(ActionIcons.EXPAND_ALL).context(tree)
                             .hint(TreeViewCommands.EXPAND_ALL, "Press {} to expand all nodes"),
                     ActionButton.command(TreeViewCommands.COLLAPSE_ALL)
-                            .icon("crystalgui:general/action/collapseAll").context(tree));
+                            .icon(ActionIcons.COLLAPSE_ALL).context(tree));
         }
         return titleActions;
     }

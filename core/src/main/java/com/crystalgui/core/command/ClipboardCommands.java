@@ -37,6 +37,7 @@ public final class ClipboardCommands {
 
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(CUT, "Cut")
+                .icon(ActionIcons.CUT)
                 .menu(MenuId.MAIN_EDIT, "2_clipboard", 10)
                 .enabledWhereData(where(ClipboardActions::canCut))
                 .runWithData(data -> {
@@ -47,6 +48,7 @@ public final class ClipboardCommands {
                 }));
 
         registry.register(Command.of(COPY, "Copy")
+                .icon(ActionIcons.COPY)
                 .menu(MenuId.MAIN_EDIT, "2_clipboard", 20)
                 .enabledWhereData(where(ClipboardActions::canCopy))
                 .runWithData(data -> {
@@ -55,6 +57,7 @@ public final class ClipboardCommands {
                 }));
 
         registry.register(Command.of(PASTE, "Paste")
+                .icon(ActionIcons.PASTE)
                 .menu(MenuId.MAIN_EDIT, "2_clipboard", 30)
                 .enabledWhereData(where(ClipboardActions::canPaste))
                 .runWithData(data -> {

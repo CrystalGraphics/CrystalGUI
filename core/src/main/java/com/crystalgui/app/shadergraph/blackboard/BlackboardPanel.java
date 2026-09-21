@@ -1,5 +1,6 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
@@ -1197,7 +1198,9 @@ public class BlackboardPanel extends UIElement implements DataProvider {
         // The row menu is DECLARED here, not built in openRowMenu. Group `1_modify` acts on what is
         // there; `2_create` makes something new, which is why Duplicate is separated -- Unity splits it
         // the same way, and the separator falls out of the group boundary rather than being asked for.
-        registry.register(Command.of(DELETE_COMMAND, "Delete Property").binding("Delete", "Backspace")
+        registry.register(Command.of(DELETE_COMMAND, "Delete Property")
+                .icon(ActionIcons.DELETE)
+                .binding("Delete", "Backspace")
                 .menu(MenuId.BLACKBOARD_CONTEXT, "1_modify", 20)
                 .run(context -> withBoard(context, BlackboardPanel::removeSelected))
                 .enabledWhen(BlackboardPanel::isActionable));

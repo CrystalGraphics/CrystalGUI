@@ -73,14 +73,79 @@ public final class Command {
      * Draws {@code iconId} before this command's label wherever a menu shows it.
      *
      * <pre>{@code
-     * Command.of("edit.copy", "Copy").icon("crystalgui:general/action/copy");
+     * Command.of("edit.copy", "Copy").icon(ActionIcons.COPY);
      * Command.of("new.button", "Button").icon("crystalgui:nodes/ui/button", GlyphRole.CONTROL.cssClass());
      * }</pre>
      *
-     * <p>A menu holding any row with an icon reserves the column on every row, so labels stay aligned.</p>
+     * <p>A menu holding any row with an icon reserves the column on every row, so labels stay aligned —
+     * which is what lets a menu mark five rows out of thirty and still read as one column.</p>
+     *
+     * <p>Prefer a constant from {@link ActionIcons}: an id naming no file draws an empty column and
+     * reports nothing. A kind glyph is still named directly, since those come from a registry.</p>
      */
     public Command icon(@Nullable String iconId) {
         return icon(iconId, null);
+    }
+
+    /** The label a {@link #whenToggled} command shows while toggled. Null unless one was declared. */
+    @Nullable private String labelWhenToggled;
+
+    /** The mark a {@link #whenToggled} command shows while toggled. */
+    @Nullable private String iconWhenToggled;
+
+    /**
+     * How this command presents itself <b>while it is toggled on</b> — a second label and mark, so the
+     * row names the action it will perform rather than the state it is in.
+     *
+     * <pre>{@code
+     * Command.of(VISIBLE, "Show")                            // what it offers while the layer is hidden
+     *         .icon(ActionIcons.SHOW)
+     *         .toggledWhereData(data -> !stack(data).isOff(layer(data)))
+     *         .whenToggled(ActionIcons.HIDE, "Hide");        // ...and while it is visible
+     * }</pre>
+     *
+     * <p><b>Named and ordered to match {@code ActionButton.whenToggled}</b>, which has always done this
+     * for a toolbar button. One concept answered twice under two names, with the arguments the other way
+     * round, is how a reader learns the wrong one.</p>
+     *
+     * <h3>An action, not a state</h3>
+     *
+     * <p>A checkable row answers "is this on?", and a row like that reads `✓ Visible`. This answers
+     * "what happens if I press it?", which is what a menu is for — so over a visible layer the row says
+     * <i>Hide</i> and draws the struck-through eye. Presenting the state instead is the inversion it
+     * looks like: an open eye offering to open an eye.</p>
+     *
+     * <p><b>The mark and the tick are one slot</b> — {@code menu.__has-icons__} and
+     * {@code menu.__has-checkable__} reserve the same column, which is why {@code MenuBuilder} refuses an
+     * icon on a checkable row. Declaring this spends the slot on the mark, and the alternating label
+     * carries the state that the tick used to.</p>
+     *
+     * <p>{@link #isCheckable} stays true, so the palette and every other reader see the toggle they
+     * always did. Only the menu row trades its tick for a mark.</p>
+     */
+    public Command whenToggled(@Nullable String iconName, String label) {
+        this.iconWhenToggled = iconName;
+        this.labelWhenToggled = label;
+        return this;
+    }
+
+    /** Whether {@link #whenToggled} declared a second face, so a row draws a mark instead of a tick. */
+    public boolean hasToggledPresentation() {
+        return labelWhenToggled != null;
+    }
+
+    /** The label for this command's current state — {@link #getLabel} unless {@link #whenToggled} applies. */
+    public String labelFor(CommandContext context) {
+        return labelWhenToggled != null && isToggled(context) ? labelWhenToggled : label;
+    }
+
+    /**
+     * The mark for this command's current state — {@link #getIcon} unless {@link #whenToggled} applies.
+     */
+    @Nullable
+    public String iconFor(CommandContext context) {
+        if (labelWhenToggled != null && isToggled(context)) return iconWhenToggled;
+        return icon;
     }
 
     /** As {@link #icon(String)}, with a class on the icon a sheet colours it by. */

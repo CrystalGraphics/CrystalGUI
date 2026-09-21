@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -49,12 +50,21 @@ public final class TreeEditCommands {
     }
 
     private static void declare(CommandRegistry registry) {
-        registry.register(command(CUT, "Cut", TreeEditing::canCut, TreeEditing::cut));
-        registry.register(command(COPY, "Copy", TreeEditing::canCopy, TreeEditing::copy));
-        registry.register(command(PASTE, "Paste", TreeEditing::canPaste, TreeEditing::paste));
+        // Five of the six carry marks. Rename is the one without: the set has no rename glyph, and
+        // `edit`'s pencil already means "open this for editing" on Jump to Source.
+        //
+        // These six reach EVERY tree's menu through TreeEditing.contributeMenu -- the explorer, the
+        // Hierarchy, the Library -- so this is one edit for every panel rather than one per panel.
+        registry.register(command(CUT, "Cut", TreeEditing::canCut, TreeEditing::cut)
+                .icon(ActionIcons.CUT));
+        registry.register(command(COPY, "Copy", TreeEditing::canCopy, TreeEditing::copy)
+                .icon(ActionIcons.COPY));
+        registry.register(command(PASTE, "Paste", TreeEditing::canPaste, TreeEditing::paste)
+                .icon(ActionIcons.PASTE));
         registry.register(command(DUPLICATE, "Duplicate", TreeEditing::canDuplicate, TreeEditing::duplicate));
         registry.register(command(RENAME, "Rename…", TreeEditing::canRename, TreeEditing::renameSelected));
-        registry.register(command(DELETE, "Delete", TreeEditing::canDelete, TreeEditing::delete));
+        registry.register(command(DELETE, "Delete", TreeEditing::canDelete, TreeEditing::delete)
+                .icon(ActionIcons.DELETE));
     }
 
     @SuppressWarnings("rawtypes")

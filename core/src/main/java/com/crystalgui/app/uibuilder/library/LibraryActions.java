@@ -6,6 +6,7 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -112,6 +113,7 @@ public final class LibraryActions {
                                     UserLibrary.pathIn(group.parent(), name)));
                 }));
         registry.register(Command.of(DELETE_GROUP, "Delete Group")
+                .icon(ActionIcons.DELETE)
                 .enabledWhereData(data -> userGroup(data) != null)
                 .run(context -> {
                     LibraryCatalog.Group group = userGroup(context.data());
@@ -126,6 +128,7 @@ public final class LibraryActions {
                             () -> panel.userLibrary().deleteGroup(group.label()), () -> { });
                 }));
         registry.register(Command.of(REMOVE_FROM_GROUP, "Remove from Group")
+                .icon(ActionIcons.DELETE)
                 .enabledWhereData(data -> {
                     LibraryCatalog.Group group = groupToRemoveFrom(data);
                     LibraryCatalog.Entry card = cardToRemove(data);
@@ -205,11 +208,11 @@ public final class LibraryActions {
             return library == null ? null : library.tree();
         };
         return List.of(
-                ActionButton.command(TOGGLE_ROWS).icon("crystalgui:general/action/viewRows")
-                        .whenToggled("crystalgui:general/action/viewCards", "Show as Cards").context(panel::get),
+                ActionButton.command(TOGGLE_ROWS).icon(ActionIcons.VIEW_ROWS)
+                        .whenToggled(ActionIcons.VIEW_CARDS, "Show as Cards").context(panel::get),
                 ActionButton.command(TreeViewCommands.EXPAND_ALL)
-                        .icon("crystalgui:general/action/expandAll").context(tree),
+                        .icon(ActionIcons.EXPAND_ALL).context(tree),
                 ActionButton.command(TreeViewCommands.COLLAPSE_ALL)
-                        .icon("crystalgui:general/action/collapseAll").context(tree));
+                        .icon(ActionIcons.COLLAPSE_ALL).context(tree));
     }
 }

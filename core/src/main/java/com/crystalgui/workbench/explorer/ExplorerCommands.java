@@ -1,6 +1,7 @@
 package com.crystalgui.workbench.explorer;
 
 import com.crystalgui.core.async.FrameProfile;
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 
@@ -121,6 +122,7 @@ public final class ExplorerCommands {
 
     private static void declare(CommandRegistry registry) {
         registry.register(Command.of(NEW_FILE, "New File…")
+                .icon(ActionIcons.ADD_FILE)
                 .menu(MenuId.EXPLORER_NEW, "1_new", 10)
                 // TWO PLACEMENTS, ONE COMMAND. The explorer's New acts on the right-clicked folder and
                 // the main menu's on the project root, but that difference is already inside
@@ -135,6 +137,7 @@ public final class ExplorerCommands {
                                 destinationFor(workbenchFor(context), context))));
 
         registry.register(Command.of(NEW_FOLDER, "New Folder…")
+                .icon(ActionIcons.ADD_DIRECTORY)
                 .menu(MenuId.EXPLORER_NEW, "1_new", 20)
                 .menu(MenuId.MAIN_FILE_NEW, "1_new", 20)
                 .run(context -> promptNew(workbenchFor(context), context, true))
@@ -183,6 +186,7 @@ public final class ExplorerCommands {
         // Registered here rather than in a chrome-only place because the settings it shows are the
         // workbench's, and because this is where the global keymap is already being written.
         registry.register(Command.of(PREFERENCES, "Preferences…")
+                .icon(ActionIcons.SETTINGS)
                 .binding("Alt+Shift+S")
                 .run(context -> openPreferences(context, null)));
 
@@ -239,6 +243,7 @@ public final class ExplorerCommands {
                 .enabledWhen(context -> hasProject(workbenchFor(context))));
 
         registry.register(Command.of(REFRESH, "Reload from Disk")
+                .icon(ActionIcons.REFRESH)
                 .menu(MenuId.EXPLORER_CONTEXT, "5_refresh", 10)
                 .binding("F5")
                 .run(context -> {
