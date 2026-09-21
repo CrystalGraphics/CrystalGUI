@@ -41,6 +41,41 @@ public final class Attribute<T> {
             .describedAs("Whether a click can land on it or on anything inside it.");
 
     /**
+     * A press inside this subtree leaves the focus owner alone.
+     *
+     * <p><b>The engine's default is the web's</b>: {@code Focus.pressed} walks up from what was hit for
+     * the nearest click-focusable ancestor and, finding none, <em>clears</em> focus — which is Blink's
+     * {@code HandleMouseFocus}, and why clicking a bare {@code <div>} blurs the input beside it. The web
+     * cancels that by calling {@code preventDefault()} on the mousedown, because there focus assignment
+     * is the press's default action and therefore runs after dispatch.</p>
+     *
+     * <p>Here it runs <em>before</em> dispatch, so no handler can object in time, and
+     * {@code preventDefault()} already means several other things on a press across this codebase —
+     * fourteen mouse-down handlers call it for drags and scrubs that do want focus. Making focus the
+     * press's default action would silently stop focus at all of them, so the opt-out is declared on the
+     * element instead.</p>
+     *
+     * <h3>This name is ours</h3>
+     *
+     * <p><b>The web has no declarative form of this</b>, which is worth saying plainly because the
+     * neighbours here do: {@code inert} is HTML's, and {@code hit-test} is {@code pointer-events} under
+     * another name. There is no attribute that means "a click in here must not move focus" — on the web
+     * that is only expressible as behaviour, through {@code preventDefault()} above.</p>
+     *
+     * <p>The nearest prior art is <b>Swing's</b> {@code JComponent.setRequestFocusEnabled(false)}, which
+     * is a hint that a click should not focus the component — cited from memory rather than from a
+     * checkout, and it differs in scope either way: Swing's answers for one component, this answers for
+     * a subtree and defers to any focusable inside it. So it is the same intent, not a port.</p>
+     *
+     * <p>Subtree-wide, but only for what is <b>not</b> click-focusable itself: the walk stops at the
+     * first focusable ancestor as it always did, so a list row inside a retaining popup still takes
+     * focus and still selects. What it catches is the caption, the divider, the padding — the parts
+     * that are scenery, and whose only effect on focus today is to destroy it.</p>
+     */
+    public static final Attribute<Boolean> RETAINS_FOCUS = of("retains-focus", Boolean.class, false)
+            .describedAs("A press on scenery inside it leaves the focus owner where it is.");
+
+    /**
      * Never the answer to a hit test, though everything inside it still is.
      *
      * <p>Distinct from {@link #HIT_TEST}, and the distinction is the whole point: {@code hit-test:
