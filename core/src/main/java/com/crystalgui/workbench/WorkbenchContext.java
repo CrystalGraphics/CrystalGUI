@@ -19,6 +19,7 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
+import com.crystalgui.document.NewDocumentKinds;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
@@ -97,6 +98,9 @@ public interface WorkbenchContext extends SettingsScope {
 
     /** Every kind of document this workbench can open. @see #contribute */
     DocumentKinds kinds();
+
+    /** What <b>New ▸</b> can make here — where a contributor registers its own document. */
+    NewDocumentKinds newDocuments();
 
     /** The tabs over those documents — the one open lane. */
     EditorService editors();

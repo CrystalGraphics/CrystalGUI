@@ -75,13 +75,16 @@ public class CommandIconsResolveTest {
      * foreground — and the only mechanism for that is {@code currentColor}, which the engine leaves
      * unresolved in its cached ops and binds at draw time. An icon shipped with the upstream
      * {@code #6C707E} baked in renders the same grey on every background and in every row state.
+     *
+     * <p>A kind glyph is exempt and says so through {@link ActionIcons#carriesItsOwnPalette}: a file-type
+     * or node badge is a drawing of a <i>thing</i>, and Java's red-brown is how it is recognised.</p>
      */
     @Test
     public void everyIconACommandNamesTakesItsColourFromTheCascade() {
         List<String> baked = new ArrayList<>();
         for (Command command : CommandRegistry.global().all()) {
             for (String mark : marksOf(command)) {
-                if (ActionIcons.COLOURED.contains(mark)) continue;
+                if (ActionIcons.carriesItsOwnPalette(mark)) continue;
                 CgUiSvg glyph = CgUiSvg.ofIcon(mark);
                 if (glyph == null) continue;           // reported by the test above
                 SvgDocument document = glyph.getDocument();

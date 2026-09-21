@@ -10,6 +10,9 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
+import com.crystalgui.document.NewDocumentContext;
+import com.crystalgui.document.NewDocumentKind;
+import com.crystalgui.document.NewDocumentKinds;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.UIElement;
@@ -22,6 +25,12 @@ import com.crystalgui.workbench.WorkbenchSettings;
 import com.crystalgui.workbench.chrome.palette.CommandPalette;
 import com.crystalgui.workbench.search.GoToFile;
 import java.util.List;
+import com.crystalgui.core.command.MenuEntry;
+import com.crystalgui.fs.project.SourceRoots;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 import com.crystalgui.core.settings.Settings;
@@ -48,8 +57,17 @@ import com.crystalgui.workbench.chrome.preferences.Preferences;
  */
 public final class ExplorerCommands {
 
+    /** What a seeded template writes between lines. Java source, so LF regardless of host. */
+    private static final String NL = "\n";
+
     public static final String NEW_FILE = "explorer.newFile";
     public static final String NEW_FOLDER = "explorer.newFolder";
+
+    /** The New ▸ presets, offered only where they make sense. @see #contributeNewMenu */
+    public static final String NEW_PACKAGE = "explorer.newPackage";
+    public static final String NEW_JAVA_CLASS = "explorer.newJavaClass";
+    public static final String NEW_PACKAGE_INFO = "explorer.newPackageInfo";
+    public static final String NEW_JS_FILE = "explorer.newJavaScriptFile";
     public static final String COPY_PATH = "explorer.copyPath";
     public static final String COPY_RELATIVE_PATH = "explorer.copyRelativePath";
     public static final String REFRESH = "explorer.refresh";
@@ -121,14 +139,15 @@ public final class ExplorerCommands {
     }
 
     private static void declare(CommandRegistry registry) {
+        // FIRST, and it is load-bearing: `CommandRegistry.all()` is registration order and
+        // `declaredBindings()` is built by walking it, so the two Mod+N presets have to reach the
+        // resolver before `explorer.newFile`'s catch-all. @see #declareNewPresets
+        declareNewPresets(registry);
         registry.register(Command.of(NEW_FILE, "New File…")
                 .icon(ActionIcons.ADD_FILE)
-                .menu(MenuId.EXPLORER_NEW, "1_new", 10)
-                // TWO PLACEMENTS, ONE COMMAND. The explorer's New acts on the right-clicked folder and
-                // the main menu's on the project root, but that difference is already inside
-                // destinationFor -- so the same command legitimately appears in both, which is exactly
-                // what a list of placements is for.
-                .menu(MenuId.MAIN_FILE_NEW, "1_new", 10)
+                // NO DECLARED PLACEMENT AT ALL. Both New menus are contributed, because both depend on
+                // where the new thing would land -- a placement is fixed at registration and cannot ask.
+                // @see #contributeNewMenu
                 .binding("Mod+N")
                 .run(context -> promptNew(workbenchFor(context), context, false))
                 .enabledWhen(context -> workbenchFor(context) != null
@@ -138,8 +157,6 @@ public final class ExplorerCommands {
 
         registry.register(Command.of(NEW_FOLDER, "New Folder…")
                 .icon(ActionIcons.ADD_DIRECTORY)
-                .menu(MenuId.EXPLORER_NEW, "1_new", 20)
-                .menu(MenuId.MAIN_FILE_NEW, "1_new", 20)
                 .run(context -> promptNew(workbenchFor(context), context, true))
                 .enabledWhen(context -> workbenchFor(context) != null
                         && destinationFor(workbenchFor(context), context) != null
@@ -256,6 +273,200 @@ public final class ExplorerCommands {
                 // No target needed any more -- it reloads the whole tree, so the only thing that could make
                 // it meaningless is having no project open at all.
                 .enabledWhen(context -> hasProject(workbenchFor(context))));
+
+        contributeNewMenu(registry);
+    }
+
+    // ── New ▸, and the two shapes it takes ──────────────────────────────────────────────────────
+
+    /**
+     * The commands a CHORD can name, and nothing else.
+     *
+     * <p>Every New row is a {@link NewDocumentKind} now, and the menu builds a row for each without a
+     * command having to exist — so the only reason to register one is that something outside the menu
+     * has to name it. That is {@code Mod+N} and the palette. Each looks its kind up in the workbench's
+     * registry rather than carrying a template of its own. @see BuiltInNewDocuments</p>
+     */
+    private static void declareNewPresets(CommandRegistry registry) {
+        registry.register(chordCommand(NEW_JAVA_CLASS, "Java Class", ActionIcons.JAVA_CLASS)
+                // MOD+N MAKES WHATEVER THE MENU'S FIRST ROW MAKES -- a Java class in a java source root,
+                // a script in a js one, and a plain file everywhere else, where `explorer.newFile`'s own
+                // declared binding takes over.
+                //
+                // THREE COMMANDS, ONE CHORD, AND THE RESOLVER SORTS IT: a binding whose command is
+                // disabled does not consume the stroke, so at most one can answer -- and enablement is
+                // `offeredHere`, which asks the very registry the menu draws from. Declared rather than
+                // bound onto the tree, so the chord also works with focus in the EDITOR, where the
+                // destination is the open file's own directory.
+                .binding("Mod+N"));
+        registry.register(chordCommand(NEW_JS_FILE, "JavaScript File", ActionIcons.JAVASCRIPT_FILE)
+                .binding("Mod+N"));
+    }
+
+    /** A registered command for a built-in kind, resolved from the registry when it runs. */
+    private static Command chordCommand(String id, String label, String icon) {
+        return Command.of(id, label)
+                .icon(icon)
+                .run(context -> {
+                    Workbench workbench = workbenchFor(context);
+                    if (workbench != null) create(workbench, context, workbench.newDocuments().byId(id));
+                })
+                .enabledWhen(context -> offeredHere(context, id));
+    }
+
+    private static void contributeNewMenu(CommandRegistry registry) {
+        // BOTH New MENUS, ONE CATALOGUE. `File > New` was two declared rows while the explorer's was
+        // computed, so the same command offered a Java class from a right-click and a bare file from the
+        // menu bar -- for the same directory. They ask the same question now, and `MenuBarView` already
+        // resolves its source to the FOCUS OWNER, so the bar's answer follows whichever of the editor or
+        // the project panel you were last working in.
+        for (MenuId menu : List.of(MenuId.EXPLORER_NEW, MenuId.MAIN_FILE_NEW)) {
+            contributeCatalogue(registry, menu);
+        }
+    }
+
+    private static void contributeCatalogue(CommandRegistry registry, MenuId into) {
+        registry.contributeMenu(into, (menu, context) -> {
+            List<MenuEntry> rows = new ArrayList<>();
+            for (NewDocumentKind kind : kindsAt(context)) {
+                Command command = registry.get(kind.id());
+                // A KIND WITH NO REGISTERED COMMAND STILL GETS A ROW. A contributor registers a kind, not
+                // a command -- which is the point of the seam -- so the row is a Command built for the
+                // life of this menu, exactly as a recent-file row is. @see MenuBuilder
+                if (command == null) command = commandFor(kind);
+                rows.add(new MenuEntry.Item(command, kind.group(), kind.order(),
+                        command.isEnabled(context), false, false));
+            }
+            return rows;
+        });
+    }
+
+    /**
+     * Which kinds this click offers, asked of the registry.
+     *
+     * <p>The explorer decides nothing here any more: it resolves WHERE the new thing would land and
+     * hands that to {@link NewDocumentKinds#offeredAt}, which asks every registered kind. What used to
+     * be two hard-coded catalogues and a java/js branch is now each kind's own {@code where}.</p>
+     */
+    private static List<NewDocumentKind> kindsAt(CommandContext context) {
+        Workbench workbench = workbenchFor(context);
+        if (workbench == null) return List.of();
+        return workbench.newDocuments().offeredAt(placeFor(workbench, context));
+    }
+
+    /** Where a new thing would land, as a kind is asked about it. */
+    private static NewDocumentContext placeFor(Workbench workbench, CommandContext context) {
+        CgPath at = destinationFor(workbench, context);
+        if (at == null) return new NewDocumentContext(null, null);
+        List<String> roots = workbench.projectListing().sourceRootsOf(at.project());
+        return new NewDocumentContext(at, SourceRoots.rootOf(at, roots));
+    }
+
+    /**
+     * Runs {@code kind} — the one path every New row takes, built in and contributed alike.
+     *
+     * <p>Three shapes, and which one is read off the declaration rather than branched on by name: a kind
+     * that makes a DIRECTORY takes a name and makes directories; one with VARIANTS asks for a name and a
+     * variant together; anything else takes a name and is seeded from its template.</p>
+     */
+    public static void create(Workbench workbench, CommandContext context, NewDocumentKind kind) {
+        if (workbench == null || kind == null) return;
+        CgPath parent = destinationFor(workbench, context);
+        if (parent == null) return;
+
+        if (kind.isDirectory()) {
+            promptNewDirectories(workbench, context, parent);
+            return;
+        }
+        if (!kind.variants().isEmpty()) {
+            NewDocumentPrompt.ask(UIElement.sourceOf(context), kind,
+                    (typed, variant) -> write(workbench, parent, kind, typed, variant));
+            return;
+        }
+        // NO NAME TO ASK FOR when the suffix IS the whole name -- package-info.java is one per package
+        // and already called that, so a prompt would be a question with one answer.
+        if (kind.label().endsWith(kind.suffix()) && !kind.suffix().isEmpty()) {
+            write(workbench, parent, kind, kind.label(), null);
+            return;
+        }
+        promptFor(workbench, context, parent, typed -> write(workbench, parent, kind, typed, null));
+    }
+
+    /** Creates the file and opens it, which is what makes New File feel like it did something. */
+    private static void write(Workbench workbench, CgPath parent, NewDocumentKind kind,
+                              String typed, @Nullable NewDocumentKind.Variant variant) {
+        String name = typed.endsWith(kind.suffix()) ? typed : typed + kind.suffix();
+        CgPath file = parent.resolve(name);
+        NewDocumentKind.Target target =
+                new NewDocumentKind.Target(parent, name, packageOf(workbench, file));
+        byte[] body = kind.contentFor(target, variant).getBytes(StandardCharsets.UTF_8);
+        workbench.files().create(Resource.of(file), body).then(etag -> workbench.openFile(file));
+    }
+
+    /** The inline row edit where there is a tree, and a dialog where there is not. */
+    private static void promptFor(Workbench workbench, CommandContext context, CgPath parent,
+                                  Consumer<String> onName) {
+        ProjectFileTree tree = treeFor(context);
+        if (tree != null && tree.document() != null) {
+            tree.beginNew(parent, false, onName);
+            return;
+        }
+        InputDialog.ask(UIElement.sourceOf(context), "New File", "Name", "", onName);
+    }
+
+    /** A row for a kind nothing registered a command for. @see #contributeCatalogue */
+    private static Command commandFor(NewDocumentKind kind) {
+        return Command.of(kind.id(), kind.label())
+                .icon(kind.icon())
+                .run(context -> create(workbenchFor(context), context, kind))
+                .enabledWhen(ExplorerCommands::canCreateHere);
+    }
+
+    private static boolean offeredHere(CommandContext context, String id) {
+        if (!canCreateHere(context)) return false;
+        for (NewDocumentKind kind : kindsAt(context)) {
+            if (kind.id().equals(id)) return true;
+        }
+        return false;
+    }
+
+    private static boolean canCreateHere(CommandContext context) {
+        Workbench workbench = workbenchFor(context);
+        if (workbench == null) return false;
+        CgPath at = destinationFor(workbench, context);
+        return at != null && mayWrite(workbench, at);
+    }
+
+    private static void promptNewDirectories(@Nullable Workbench workbench, CommandContext context,
+                                             @Nullable CgPath into) {
+        if (workbench == null) return;
+        CgPath parent = into != null ? into : destinationFor(workbench, context);
+        if (parent == null) return;
+        Consumer<String> create = typed -> makeDirectories(workbench, parent, typed.split("[.]"), 0);
+        ProjectFileTree tree = treeFor(context);
+        if (tree != null && tree.document() != null) {
+            tree.beginNew(parent, true, create);
+            return;
+        }
+        InputDialog.ask(UIElement.sourceOf(context), "New Package", "Name", "", create);
+    }
+
+    private static void makeDirectories(Workbench workbench, CgPath parent, String[] segments, int at) {
+        if (at >= segments.length) return;
+        String segment = segments[at].trim();
+        if (segment.isEmpty()) {
+            makeDirectories(workbench, parent, segments, at + 1);
+            return;
+        }
+        CgPath directory = parent.resolve(segment);
+        workbench.files().mkdir(Resource.of(directory))
+                .then(etag -> makeDirectories(workbench, directory, segments, at + 1));
+    }
+
+    private static String packageOf(Workbench workbench, CgPath file) {
+        SourceRoots.Located located =
+                SourceRoots.locate(file, workbench.projectListing().sourceRootsOf(file.project()));
+        return located == null ? "" : located.packageName();
     }
 
     private static boolean hasProject(@Nullable Workbench workbench) {
@@ -342,6 +553,19 @@ public final class ExplorerCommands {
     private static CgPath destinationFor(Workbench workbench, CommandContext context) {
         CgPath selected = target(context);
         if (selected != null) return newParentFor(workbench, selected);
+        // THEN THE EDITOR YOU ARE IN, which is what Mod+N means with focus in the code rather than in the
+        // panel: the new type goes beside the one you are looking at. IntelliJ's behaviour, and the
+        // reason it is worth having is the catalogue -- a class opened from `src/main/java` puts you in
+        // that source root, so the chord offers a Java class without a trip to the tree to say so.
+        //
+        // AFTER the tree's selection and not before it. The selection is only in the data context when
+        // focus is inside the explorer, so the two can never both answer -- but if they ever did, the
+        // panel you are looking at is the one you meant.
+        if (workbench != null) {
+            CgPath open = workbench.activeFilePath();
+            if (open != null) return newParentFor(workbench, open);
+        }
+
         // NO TREE IS NO DESTINATION, and this must not throw: it is reached from `enabledWhen`, which the
         // command palette runs for EVERY command each time it opens. With focus anywhere but the explorer
         // -- a builder canvas, an editor -- nothing answers PROJECT_TREE, and the palette died on

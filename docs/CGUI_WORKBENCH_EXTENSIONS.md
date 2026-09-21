@@ -325,6 +325,65 @@ and `.status(document -> ...)` adds a status-bar contribution while that documen
 
 ---
 
+### Making one from `New ▸`
+
+A `DocumentKind` says how to **open** your format. A `NewDocumentKind` says how to **make** one, and
+puts a row in the explorer's `New ▸` and in `File ▸ New`:
+
+```java
+@Override
+public Disposable activate(WorkbenchContext workbench) {
+    return Disposable.of(
+            workbench.kinds().register(KIND),
+            workbench.newDocuments().register(NewDocumentKind.of(ID, "Notes")
+                    .icon("crystalgui:file-text")
+                    .suffix(".notes")
+                    // What a brand new one starts out as. Omit it and the file is empty.
+                    .template(target -> "# " + target.typeName() + "\n")));
+}
+```
+
+The two are separate because they answer different questions: most openable things cannot be conjured
+from nothing — an image, a decompiled class — and some creatable things are not documents at all, such
+as a folder.
+
+**Where it is offered** is yours to decide, and it is asked per click rather than once at
+registration:
+
+```java
+.where(at -> at.sourceRootHolds("java"))     // only in the Java source tree
+.where(NewDocumentContext::outsideSourceRoots) // only where sources are not
+.where(at -> at.directory().name().equals("shaders"))
+```
+
+A kind that says nothing is offered everywhere, which is right for a plain file and wrong for a Java
+class. `NewDocumentContext` carries the destination directory and the source root containing it — no
+workbench, no tree and no selection — so a kind declared in a jar that has never heard of the explorer
+can still say where it belongs.
+
+**Asking a second question.** Declare variants and the engine gives you IntelliJ's name-and-kind
+prompt — a name field, and a list to pick from — with no widget of your own:
+
+```java
+NewDocumentKind.of("mymod:entity", "Entity")
+        .suffix(".entity")
+        .variant("mob",   "Mob",   "mymod:nodes/mob",   target -> mobTemplate(target.typeName()))
+        .variant("block", "Block", "mymod:nodes/block", target -> blockTemplate(target.typeName()));
+```
+
+The first variant is the one the prompt opens on. A kind with no variants gets the plain name prompt,
+and one that makes a `directory()` takes a name and no template at all.
+
+**What the template is handed** is a `NewDocumentKind.Target`: the directory, the file name, and the
+package the file lands in — `typeName()` is the name without its extension, and `inDefaultPackage()`
+is how a Java template knows to omit its `package` line rather than write an empty one.
+
+> **Ordering.** Rows sort by group, then by order. Orders below `NewDocumentKind.RESERVED` are the
+> engine's — the plain file, the folder, the document types CrystalGUI ships — and a contributor's
+> default order *is* that value, so anything you register lands after all of them without having to
+> know the numbers. Nothing enforces it: a product assembling its own workbench may well want its own
+> document at the top, and a thrown exception there would be a rule about taste.
+
 ## 5. Commands, menus and shortcuts
 
 A command is one declaration that a keybinding, a menu row and the palette all point at.

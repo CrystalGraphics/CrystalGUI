@@ -2597,6 +2597,154 @@ popover.__prompt__ textfield {
     padding-left: 2px;
 }
 
+/* ── New Java Class (the explorer's New ▸ Java Class) ────────────────────────────────────────────
+ *
+ * Inherits `popover.__prompt__` above -- same surface, same caption, same centring -- and then undoes
+ * three of its choices, because this prompt is a LIST and that one is a line of text.
+ *
+ * The rows reuse `SymbolIcon`, so the glyph beside `Record` is the completion list's own drawing at the
+ * completion list's own size: `.__completion-icon__` in ua/editor.css already sizes and spaces it, and
+ * a second set of numbers under a new class would be one to keep level with the first. */
+/* THE SURFACE IS --surface-base, not the darker --surface-panel every other prompt sits on. Stated on
+ * this popup rather than by moving --prompt-bg, so the rename and confirm dialogs keep the surface they
+ * were tuned against; if they should follow, the token is the one line to change instead of these. */
+popover.__new-class__ {
+    background: var(--surface-base, #26282B);
+    /* SIZED AGAINST OUR OWN COMPLETION POPUP, not measured off a screenshot. That list is the one
+     * surface in this engine already tuned row by row against IntelliJ's -- 16px rows, a 12px icon, the
+     * 10px UI font -- so matching it is how this prompt gets IntelliJ's density without a second set of
+     * numbers arrived at by eye. Built at 20px rows it sat nearer the command palette's 22, which is a
+     * full-width surface where air is wanted; here it read as bulky. */
+    width: 160px;
+    /* NO PADDING ON THE POPUP, so the selected row can run edge to edge. The padding the prompt would
+     * have applied moves onto the caption and the name row, which are the two things that want it --
+     * a selection band inset by 10px on each side reads as a chip rather than as a selected row, which
+     * is the single loudest difference from the reference. */
+    padding: 0px;
+    gap: 0px;
+    padding-top: 6px;
+    /* AND 3 UNDER THE LAST ROW, which is the 4px gutter the band already has on its left and right
+     * minus the 1px border. With the list sized to exactly six rows there is nothing between the band
+     * and the popup's edge, so a selected Exception drew hard against it -- which reads as the band
+     * overflowing rather than as the list ending. Even air on three sides is what stops it. */
+    padding-bottom: 4px;
+}
+
+/* ON THE TEXT, NEVER ON THE ROW, for every size below: `* { font-size: 10 }` in ua/core.css is a
+ * candidate at STYLESHEET origin on EVERY element, and inheritance only applies where there is no
+ * candidate at any origin -- so a size declared on a container computes to 10 on the text inside it and
+ * changes nothing. The same rule `menuitem` records about its own label. */
+popover.__new-class__ .__prompt-caption__ {
+    padding-bottom: 4px;
+    font-size: 8px;
+    font-weight: bold;
+}
+
+/* The name, with the chosen kind's mark in front of it. */
+popover.__new-class__ .__new-class-name__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 18px;
+    padding-left: 8px;
+    padding-right: 8px;
+    /* ON THE ROW, so the strip behind the name is the popup's surface end to end. Setting it on the
+     * field alone leaves the row transparent and the field inset by this padding, which draws exactly
+     * the dark band under the icon that the recessed well did. */
+    background: var(--surface-base, #26282B);
+}
+
+/* NO BOX AND NO RING. The prompt's field already drops its border; what stays is the global
+ * `:focus-visible` outline, and on a field that holds focus for the whole life of the popup that ring
+ * is permanent furniture rather than a focus cue -- it was the loudest thing on the surface. The caret
+ * says where typing goes, which is what the reference relies on too. */
+popover.__new-class__ .__new-class-name__ textfield,
+popover.__new-class__ .__new-class-name__ textfield:focus-visible {
+    width: 100%;
+    height: 16px;
+    /* THE POPUP'S SURFACE, not the recessed one an InputDialog field sits in. There the field is the
+     * only control and a well tells you where to type; here it is one of two stacked regions, and a
+     * well under the top one draws a box the reference does not have. */
+    background: var(--surface-base, #26282B);
+    border-width: 0px;
+    outline-width: 0px;
+    padding-left: 0px;
+    font-size: 8px;
+}
+
+/* EDGE TO EDGE, unlike a menu's separator, and for the same reason that one is inset: a rule reads as
+ * the bottom of the surface when it touches the border of something that ENDS there, and as a divider
+ * when it crosses something that continues. The list below runs the full width, so the rule does too --
+ * inset, it would float above rows wider than itself. */
+popover.__new-class__ .__new-class-divider__ {
+    width: 100%;
+    height: 1px;
+    min-height: 1px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    /* EVEN AIR EITHER SIDE. The name row centres a 16px field in 20px, so it already carries two of its
+     * own above the rule; matching margins keep the rule looking placed between the halves rather than
+     * hung off the bottom of the field. */
+    margin-top: 3px;
+    margin-bottom: 3px;
+    background: var(--border-base, #4A4A4A);
+}
+
+popover.__new-class__ .__new-class-kinds__ {
+    width: 100%;
+    /* SIX ROWS, ALL OF THEM: the list is fixed and short, so showing every kind means the scrollbar
+     * never appears and the arrows never scroll -- the whole choice is on screen while you type the
+     * name. Paired with NewJavaClassPrompt.ROW_HEIGHT, as CompletionPopup pairs its own: a virtualised
+     * list turns an index into an offset in Java and cannot read the cascade. */
+    /* EXACTLY SIX ROWS -- 6 x NewJavaClassPrompt.ROW_HEIGHT and not a pixel more, or the list draws a
+     * strip of empty substrate under the last kind that reads as stray bottom padding on the popup. */
+    height: 96px;
+    padding: 0px;
+    /* THE BAND STOPS SHORT OF THE BORDER. Inset on the LIST rather than as a margin on each row, so the
+     * gutter belongs to the column and every row -- selected or not -- starts at the same x. A margin
+     * per row would move the band and leave the labels where they were. */
+    padding-left: 4px;
+    padding-right: 4px;
+    /* The popup's own surface, not a panel of its own. A darker well under the list makes it read as a
+     * second widget dropped into the prompt rather than as the prompt's own rows. */
+    background: var(--surface-base, #26282B);
+}
+
+.__new-class-kind__ {
+    height: 16px;
+    flex-direction: row;
+    align-items: center;
+    /* 4, not 8: the list's own 4px gutter above supplies the rest, so the icon still sits 8px from the
+     * popup's edge and only the band moved. */
+    padding-left: 4px;
+    padding-right: 4px;
+    overflow: hidden;
+}
+
+/* SQUARE AND FULL WIDTH, which is what the popup's zero padding above is for. The workbench's own
+ * selection rather than the completion popup's indigo: that one is deliberately IntelliJ's and scoped
+ * to the single surface being held beside IntelliJ's own. */
+.__new-class-kind__.__selected__ {
+    background-color: var(--list-selected-bg, #2E436E);
+}
+
+/* 10px, DOWN FROM THE COMPLETION LIST'S 12, because the text here is 8px rather than 10.
+ *
+ * That rule sized its icon to hold roughly a 1.2x icon-to-text ratio -- JetBrains draws these for a
+ * ~13px UI font, so the native 16 reads 1.6x against ours and stops being a hint. The ratio is what
+ * matters, not the number: at 8px text a 12px icon is 1.5x and the loudness comes straight back. 10
+ * restores it, and it is a whole number of logical pixels so the raster still lands on the grid. */
+popover.__new-class__ .__completion-icon__,
+popover.__new-class__ ::part(pre-icon).__completion-icon__ {
+    width: 10px;
+    height: 10px;
+}
+
+.__new-class-label__ {
+    color: var(--prompt-field-fg, #DDDDDD);
+    font-size: 8px;
+}
+
 /* ── Conflict dialog (5.5) ────────────────────────────────────────────────────────
  *
  * Somebody else changed the file. Every route out of this loses something, which is why it interrupts.
