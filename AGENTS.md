@@ -406,7 +406,7 @@ divided into:
 | Subscriptions | `whileConnected(supplier)` and `onConnected(runnable)` — **declare them in the constructor**; the engine re-subscribes on every attach and drops them on every detach |
 | Styleable | everything the cascade asks: id/classes/type, the light parent and the COMPOSED parent (two different questions), nine state predicates, the shadow host and part name |
 | Interaction state | `setFocused`/`setHovered`/`setPressed` — the services write it, the cascade reads it |
-| Focus | `setFocusPolicy`, `focusable()`, `tabbable()`, `delegatesFocus` |
+| Focus | `setFocusPolicy`, `focusable()`, `tabbable()`, `delegatesFocus`, and `setRetainsFocus` — a subtree a press may not take focus OUT of. The engine's default is the web's: a press that finds no click-focusable ancestor CLEARS the owner, so pressing a dialog's caption left the window with no focus at all. It still defers to anything click-focusable inside, so a list row keeps taking its own press |
 | Querying | `querySelector`/`querySelectorAll`/`getElementById`/`getElementsByClassName` — the light tree, and they STOP at a shadow boundary, as on the web |
 | Scroll | `scrollTo`/`scrollTop`/`scrollLeft`/`scrollExtent`/`setScrollExempt` — per NODE, not per box, so it survives a box being rebuilt |
 | Coordinates | `toLocal` — puts the node's OWN origin at zero (see the invariants; the old method did not) |
@@ -1396,7 +1396,11 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                from), MenuEntry (Item/Submenu, sealed; an Item carries enabled/checkable/
                                checked so the RENDERER decides), MenuContributor (rows computed at open
                                time — the Window menu's editor list). CommandRegistry.sections() is the
-                               one query every menu renderer reads; menu() is its deprecated flat view
+                               one query every menu renderer reads; menu() is its deprecated flat view.
+                               ActionIcons is the VOCABULARY of marks a row may draw -- a constant per
+                               shipped icon, since an id naming no file draws an empty column and
+                               reports nothing -- and carriesItsOwnPalette() is the line between a
+                               chrome mark that follows the cascade and artwork that must not be tinted
   .cursor                      CursorService (a CLASS, one static method -- resolves a keyword to a
                                picture and hands it to CrystalGraphics' CgCursorService, whose LWJGL
                                adapters know no keywords), Cursor (the keyword set — CSS UI 4's, plus three the web never named:
@@ -1674,7 +1678,17 @@ com.crystalgui.document        WHAT AN OPEN DOCUMENT IS, headless and below `wid
                                type here that names an element, and it names UIElement), Documents +
                                DocumentReference (open by Resource, disposed by the LAST holder — never
                                by a tab closing, which is the "Parser is closed" defect inverted),
-                               DocumentState, EditorInput, RecentFiles
+                               DocumentState, EditorInput, RecentFiles.
+                               Plus the CREATION side, a separate question from opening:
+                               NewDocumentKind (one row of New -- suffix, where it is offered, its
+                               template, and VARIANTS, declaring which is what gets a contributor
+                               IntelliJ's name-and-kind prompt with no widget of its own),
+                               NewDocumentContext (where a New would land: the directory and the
+                               source root holding it, asked per CLICK rather than at registration)
+                               and NewDocumentKinds (the registry, per workbench, reached through
+                               WorkbenchContext.newDocuments()). Most openable things cannot be
+                               conjured from nothing and some creatable things are not documents, so
+                               the two registries do not merge
 
 com.crystalgui.fs              FOUR classes, and each is vocabulary every tier below names: Resource
                                (a tab's input, whether or not it is a file — the project scheme keeps
