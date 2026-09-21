@@ -12,6 +12,7 @@ import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.workbench.dock.WorkbenchOpener;
 import com.crystalgui.workbench.editor.TextFileKind;
+import com.crystalgui.workbench.explorer.BuiltInNewDocuments;
 import com.crystalgui.workbench.explorer.*;
 import com.crystalgui.workbench.extension.WorkbenchExtension;
 import com.crystalgui.workbench.extension.WorkbenchExtensions;
@@ -31,6 +32,7 @@ import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
+import com.crystalgui.document.NewDocumentKinds;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.document.RecentFiles;
@@ -223,6 +225,15 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     /** Every kind of document this workbench can open. An instance, so two workbenches differ. */
     public final DocumentKinds kinds = new DocumentKinds();
+
+    /**
+     * What <b>New ▸</b> can make here — the creation-side twin of {@link #kinds}.
+     *
+     * <p>Separate from it because the two answer different questions: a {@link DocumentKinds} entry says
+     * how to OPEN something that already exists, and most of those cannot be conjured from nothing (an
+     * image, a decompiled class). A kind here says what a new one starts out as. @see NewDocumentKinds
+     */
+    public final NewDocumentKinds newDocuments = new NewDocumentKinds();
 
     /** The open documents, and the wire underneath them. */
     public final WorkspaceDocuments documents;
@@ -887,6 +898,9 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         registry.setDecorationProvider(documentTabs::tabDecorationFor);
 
         opener.contribute(TextFileKind.declare(this));
+        // THE NEW MENU'S OWN BUILT-INS, through the seam a contributor uses. A workbench with none of
+        // these registered has an empty New menu, which is the honest test of the seam.
+        BuiltInNewDocuments.registerInto(newDocuments);
 
         dock = new DockArea(registry, defaultLayout());
         // WHAT AN EMPTY EDITOR SAYS, named here because these are THIS application's ways in -- the dock is
@@ -1870,6 +1884,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     }
 
     /** Every kind of document this workbench can open. @see #contribute */
+    public NewDocumentKinds newDocuments() {
+        return newDocuments;
+    }
+
     public DocumentKinds kinds() {
         return kinds;
     }

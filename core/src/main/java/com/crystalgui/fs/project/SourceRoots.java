@@ -136,17 +136,14 @@ public final class SourceRoots {
      */
     @Nullable
     public static Located locate(@Nullable CgPath path, @Nullable List<String> roots) {
-        if (path == null || roots == null || roots.isEmpty()) return null;
+        if (path == null) return null;
         String within = path.path();
         if (within == null || within.isEmpty()) return null;
-
-        String best = null;
-        for (String root : roots) {
-            String normalised = normalise(root);
-            if (normalised == null || !contains(normalised, within)) continue;
-            if (best == null || normalised.length() > best.length()) best = normalised;
-        }
+        String best = rootOf(path, roots);
         if (best == null) return null;
+        // THE ROOT ITSELF IS NOT IN ONE. rootOf now answers for it -- see containsOrIs -- and the
+        // remainder below would be a substring past the end of the string.
+        if (within.equals(best)) return null;
 
         // The remainder after the root, which is the package path plus the file name.
         String relative = best.isEmpty() ? within : within.substring(best.length() + 1);
@@ -154,6 +151,43 @@ public final class SourceRoots {
         String fileName = lastSlash < 0 ? relative : relative.substring(lastSlash + 1);
         String packagePath = lastSlash < 0 ? "" : relative.substring(0, lastSlash);
         return new Located(best, packagePath.replace('/', '.'), stem(fileName));
+    }
+
+    /**
+     * The declared root that contains {@code path} — the longest, where roots nest — or null.
+     *
+     * <p><b>Answers for a directory as readily as for a file</b>, which is what separates it from
+     * {@link #locate}: that one reads the last segment as a file name, so asked about the directory
+     * {@code src/main/java/com/example} it reports package {@code com} and stem {@code example}. The
+     * root it picks is right either way, and a caller that only wants the root should not have to know
+     * that the rest of the answer is not for it.</p>
+     */
+    @Nullable
+    public static String rootOf(@Nullable CgPath path, @Nullable List<String> roots) {
+        if (path == null || roots == null || roots.isEmpty()) return null;
+        String within = path.path();
+        if (within == null || within.isEmpty()) return null;
+        String best = null;
+        for (String root : roots) {
+            String normalised = normalise(root);
+            if (normalised == null || !containsOrIs(normalised, within)) continue;
+            if (best == null || normalised.length() > best.length()) best = normalised;
+        }
+        return best;
+    }
+
+    /**
+     * {@link #contains}, and the root itself counts.
+     *
+     * <p>The difference is the whole reason this is separate: {@code contains} is written for
+     * {@link #locate}, which is asking where a FILE sits inside a root and so wants a strict
+     * descendant — {@code src/main/java} is not in a package of its own. "Which root is this path in"
+     * is a different question, and for the root itself the answer is itself. Sharing the strict test
+     * made a right-click on {@code src/main/java} report no root at all, so the New menu offered the
+     * catalogue for somewhere outside every source root.</p>
+     */
+    private static boolean containsOrIs(String root, String path) {
+        return root.isEmpty() || path.equals(root) || contains(root, path);
     }
 
     /**

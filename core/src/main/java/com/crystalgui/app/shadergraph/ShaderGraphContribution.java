@@ -8,6 +8,8 @@ import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.document.Document;
+import com.crystalgui.document.NewDocumentContext;
+import com.crystalgui.document.NewDocumentKind;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.editor.DerivedView;
@@ -89,6 +91,15 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
     public static Disposable register(WorkbenchContext workbench) {
         // THE FILE IS ONE ShaderGraphDocument AND EACH TAB A ShaderGraphView OF IT, so a split shows one graph twice:
         // one history and one compile, each pane with its own camera and panels.
+        // AND THE ROW THAT MAKES ONE -- the graph's own declaration now, not the explorer's. A
+        // starter graph (an output node, a couple of inputs) goes in `template`, which is handed the
+        // file's name and its directory. @see NewDocumentKind
+        workbench.newDocuments().register(NewDocumentKind.of("shadergraph:new", "Shader Graph")
+                .icon("crystalgui:filetypes/shader")
+                .suffix(".shadergraph")
+                .where(NewDocumentContext::outsideSourceRoots)
+                .at("2_kinds", 20));
+
         workbench.contribute(DocumentKind.of(GRAPH_TYPE, "Shader Graph")
                 .files(DocumentKind.FilePatterns.extension("shadergraph"))
                 .model((resource, bytes) -> {

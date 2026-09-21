@@ -75,6 +75,14 @@ public final class ActionIcons {
     public static final String SHOW = "crystalgui:general/show";
     public static final String HIDE = "crystalgui:general/hide";
 
+    // Kind glyphs — what a row CREATES rather than what it does to it. Artwork; see carriesItsOwnPalette.
+    /** The FILE — what package-info.java is. A row that makes a type wants {@link #JAVA_CLASS}. */
+    public static final String JAVA_FILE = "crystalgui:filetypes/java";
+    /** The TYPE, as a completion list and a structure view draw it. */
+    public static final String JAVA_CLASS = "crystalgui:nodes/java/class";
+    public static final String JAVASCRIPT_FILE = "crystalgui:filetypes/javaScript";
+    public static final String PACKAGE = "crystalgui:nodes/java/package";
+
     /**
      * Marks whose palette is the meaning, and which therefore may <b>not</b> be tinted.
      *
@@ -89,6 +97,25 @@ public final class ActionIcons {
      */
     public static final java.util.Set<String> COLOURED =
             java.util.Set.of(INTENTION_BULB, ADD_FILE, ADD_DIRECTORY);
+
+    /**
+     * Whether {@code iconId} supplies its own colours, so the cascade must leave it alone.
+     *
+     * <p>Two groups, and the line between them is the one {@code ui/icons/ATTRIBUTION.md} draws:
+     * <b>whether the colour carries meaning</b>. An action mark is chrome and follows the row; a kind
+     * glyph — anything under {@code filetypes/} or {@code nodes/} — is a drawing of a <i>thing</i>, and
+     * Java's red-brown circle and the shader's magenta are how it is recognised. {@link #COLOURED} is
+     * the short list of action marks on the artwork side of that line.</p>
+     *
+     * <p>Derived rather than enumerated for the glyph directories, because they grow every time an icon
+     * is pulled from the index and a list here would be the copy that goes stale.</p>
+     */
+    public static boolean carriesItsOwnPalette(String iconId) {
+        return iconId != null
+                && (COLOURED.contains(iconId)
+                || iconId.startsWith("crystalgui:filetypes/")
+                || iconId.startsWith("crystalgui:nodes/"));
+    }
 
     private ActionIcons() {
     }

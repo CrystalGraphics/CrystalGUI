@@ -1177,6 +1177,58 @@ editors.focusView(content);    // the workbench calls this as focus moves betwee
   pane draws to its own, so no write site has to know which it holds. Anything reading a box or a computed style
   asks the drawing: `BuilderContext.shown(node)`, `UIBuilderView.drawnSelection(context)`.
 
+## Making things — `NewDocumentKinds`
+
+`DocumentKind` says how to **open** a format; `NewDocumentKind` says how to **make** one. Both hang off
+the workbench, and the split is not ceremony: most openable things cannot be conjured from nothing — an
+image, a decompiled class — and some creatable things are not documents at all, such as a folder.
+
+```java
+workbench.newDocuments().register(NewDocumentKind.of("mymod:notes", "Notes")
+        .icon("crystalgui:file-text")
+        .suffix(".notes")
+        .where(NewDocumentContext::outsideSourceRoots)
+        .template(target -> "# " + target.typeName() + "\n"));
+```
+
+| | |
+|---|---|
+| `NewDocumentKind` | the declaration: id, label, icon, suffix, placement, `where`, `template`, variants |
+| `NewDocumentContext` | where a New would land — the directory and the source root containing it |
+| `NewDocumentKinds` | the registry, per workbench. `register` answers a `Disposable`; a duplicate id is refused |
+| `WorkbenchContext.newDocuments()` | how an extension reaches it |
+
+**The id is a command id.** A row is invocable like anything else, so the id is what a keymap and a
+session may name — namespace it, and never rename one casually.
+
+**`where` is asked per click, not once at registration**, which is what makes the menu contextual.
+`NewDocumentContext` answers `inSourceRoot()`, `outsideSourceRoots()` and `sourceRootHolds("java")`,
+the last read off the root's own final segment — `SourceRoots.CONVENTION` is literally
+`src/main/java` and `src/main/js`, and nothing carries a language beside them. A root named after
+neither answers no to every language, which leaves a project's own `src/main/resources` with the plain
+rows rather than a guess.
+
+**Variants are how one row asks a second question.** A kind carrying them gets the name-and-kind prompt
+— IntelliJ's New Class dialog — rendered from whatever it declared, so a contributor needs no widget of
+its own. The first variant is the default; a kind with none gets the plain name prompt.
+
+**Ordering** is group, then order, with `NewDocumentKind.RESERVED` as the engine's ceiling and a
+contributor's default. See the extensions guide for the reasoning.
+
+> **The built-ins are registered through this same seam** — `BuiltInNewDocuments` for the file, the
+> folder, Java classes and packages; `UiBuilderContribution` and `ShaderGraphContribution` for their own
+> documents. A workbench with none registered has an empty `New ▸`, which is the honest test of it: the
+> explorer used to know what a Java class was, and a first-party path more capable than the public one
+> is how an extension API rots.
+
+### `SourceRoots.rootOf`
+
+`rootOf(path, roots)` answers **which declared root contains a path**, the root itself included. It is
+not `locate`, which asks where a *file* sits inside one and so wants a strict descendant — asked about
+the directory `src/main/java` that one answers null, and asked about `src/main/java/com/example` it
+reports package `com` and stem `example`, because it reads the last segment as a file name. A caller
+that only wants the root should not have to know that the rest of the answer is not for it.
+
 ## `UINode.setOnlyChild`
 
 **"Show one of several things in this slot", done correctly.** Not

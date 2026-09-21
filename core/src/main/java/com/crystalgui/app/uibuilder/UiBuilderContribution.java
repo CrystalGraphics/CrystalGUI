@@ -9,6 +9,8 @@ import com.crystalgui.app.uibuilder.panel.HierarchyActions;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.document.NewDocumentContext;
+import com.crystalgui.document.NewDocumentKind;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.region.DockRegion;
@@ -54,6 +56,16 @@ public final class UiBuilderContribution implements WorkbenchExtension {
 
     @Override
     public Disposable activate(WorkbenchContext workbench) {
+        // AND THE ROW THAT MAKES ONE. The explorer used to carry this -- it knew what a .cgui was and
+        // where one belongs -- so a document kind could be opened, edited and saved by a jar of its own
+        // and still not be something you could MAKE without editing the explorer. It starts empty for
+        // now; `template` is where a starter document goes. @see NewDocumentKind
+        workbench.newDocuments().register(NewDocumentKind.of("uibuilder:new", "UI Document")
+                .icon("crystalgui:filetypes/cgui")
+                .suffix(".cgui")
+                .where(NewDocumentContext::outsideSourceRoots)
+                .at("2_kinds", 10));
+
         workbench.contribute(DocumentKind.of(DOCUMENT_TYPE, "UI Document")
                 .files(DocumentKind.FilePatterns.extension("cgui"))
                 .icon("crystalgui:filetypes/cgui")

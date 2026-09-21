@@ -4,6 +4,11 @@ Every command this codebase declares, swept on 2026-09-21 so icons can be assign
 
 **188 commands, across 28 files. 30 of them carry an icon.**
 
+> **New ▸'s rows are not in this list**, and that is not an omission: each is a
+> `NewDocumentKind` registered with `WorkbenchContext.newDocuments()` rather than a `Command.of`
+> call site, so this sweep cannot see them. A kind's id IS a command id and a menu row is built for
+> it either way -- see `docs/CGUI_WORKBENCH_SERVICES.md` § Making things.
+
 `Command.icon(String iconId)` was already read by `MenuBuilder` and already styled by
 `menu.__has-icons__` in `ua/overlays.css` — the whole path existed and had simply never been
 called. Wiring it up was a data pass, not a feature.
@@ -273,8 +278,8 @@ are bound; the 89 external sites are the older idiom the `binding` javadoc warns
 | `explorer.copyRelativePath` | Copy Relative Path | EXPLORER_CONTEXT |  |
 | `explorer.find` | Find in Project View | — |  |
 | `explorer.goToFile` | Go to File… | MAIN_FILE | `Mod+P` |
-| `explorer.newFile` | New File… | EXPLORER_NEW, MAIN_FILE_NEW | `Mod+N` |
-| `explorer.newFolder` | New Folder… | EXPLORER_NEW, MAIN_FILE_NEW |  |
+| `explorer.newFile` | New File… | — | `Mod+N` |
+| `explorer.newFolder` | New Folder… | — |  |
 | `explorer.refresh` | Reload from Disk | EXPLORER_CONTEXT | `F5` |
 | `explorer.restoreDeleted` | Restore Deleted File… | EXPLORER_CONTEXT |  |
 | `explorer.selectOpenedFile` | Select Opened File | — |  |
