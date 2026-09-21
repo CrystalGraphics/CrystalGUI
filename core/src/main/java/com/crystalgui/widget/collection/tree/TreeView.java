@@ -259,6 +259,12 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
 
     public TreeView<T> setExpanded(T item, boolean open) {
         if (item == null) return this;
+        // AN EXPLICIT SET BEATS A TOGGLE QUEUED IN THE SAME FRAME, and dropping it is the whole fix: a
+        // queued fold is a REQUEST made before this decision and it applies by flipping whatever it
+        // finds, so it would undo this one on the next frame rather than agree with it. Opening a folder
+        // to put a new file in it and watching it shut again a frame later is that, and it reads as the
+        // create having folded the folder.
+        pendingToggles.remove(item);
         if (open && !source.hasChildren(item)) return this;
         boolean changed = open ? expanded.add(item) : expanded.remove(item);
         if (!changed) return this;
