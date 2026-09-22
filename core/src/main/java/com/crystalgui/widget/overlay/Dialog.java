@@ -16,6 +16,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UINode;
+import java.util.ArrayList;
 import java.util.List;
 import com.crystalgui.ui.event.CloseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -231,6 +232,7 @@ public class Dialog extends UIElement {
         setFocusPolicy(FocusPolicy.FOCUSABLE);
         applyOpenState();
         installEscapeToClose();
+        installArrowsBetweenButtons();
     }
 
     /**
@@ -255,6 +257,36 @@ public class Dialog extends UIElement {
         onKeyDown.attachListener((element, event) -> {
             if (!open || event.getKeyCode() != CgKeyCodes.KEY_ESCAPE) return;
             if (requestClose()) event.stopPropagation();
+        }, false, true);
+    }
+
+    /**
+     * Left and Right move focus between the buttons of a row — the answers at the foot of a dialog —
+     * wrapping at either end, as a Windows message box and a Swing option pane both do.
+     *
+     * <p>Only while a BUTTON holds focus, so a field in the dialog keeps its caret keys; and only among
+     * that button's siblings, so the title bar's close control is never one of the answers. The
+     * focused element is read from {@code Focus} rather than the event target, which is retargeted to
+     * this dialog for a button inside its structure.</p>
+     */
+    private void installArrowsBetweenButtons() {
+        onKeyDown.attachListener((element, event) -> {
+            int code = event.getKeyCode();
+            if (!open || (code != CgKeyCodes.KEY_LEFT && code != CgKeyCodes.KEY_RIGHT)) return;
+            UIDocument document = document();
+            if (document == null) return;
+            if (!(document.focus().focused() instanceof Button focused) || focused == closeButton) return;
+            UINode row = focused.parent();
+            if (row == null) return;
+            List<Button> answers = new ArrayList<>();
+            for (UINode candidate : row.children()) {
+                if (candidate instanceof Button button && document.focus().focusable(button)) answers.add(button);
+            }
+            int at = answers.indexOf(focused);
+            if (at < 0 || answers.size() < 2) return;
+            int step = code == CgKeyCodes.KEY_RIGHT ? 1 : -1;
+            document.focus().requestFocus(answers.get((at + step + answers.size()) % answers.size()));
+            event.stopPropagation();
         }, false, true);
     }
 
