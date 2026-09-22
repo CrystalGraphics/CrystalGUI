@@ -154,6 +154,7 @@ theme {
 
     --syntax-comment-style: italic;
     --syntax-constant-style: italic;
+    --syntax-attribute-style: normal;
     --syntax-keyword-weight: normal;
     --syntax-constant-weight: normal;
     --syntax-bracket-weight: bold;

@@ -632,8 +632,10 @@ texteditor .__indent-guide__ {
     color: var(--syntax-property, #9CDCFE);
 }
 
+/* SLANTED where a scheme says so: Eclipse Dark's ANNOTATION_NAME is FONT_TYPE 2. */
 .__syntax__::highlight(attribute) {
     color: var(--syntax-attribute, #9CDCFE);
+    font-style: var(--syntax-attribute-style, normal);
 }
 
 .__syntax__::highlight(tag) {

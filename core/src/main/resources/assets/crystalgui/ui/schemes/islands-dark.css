@@ -180,6 +180,7 @@ theme {
      * this, every reference scheme does this, and the engine refused to express it until now. */
     --syntax-comment-style: italic;
     --syntax-constant-style: italic;
+    --syntax-attribute-style: normal;
     --syntax-keyword-weight: normal;
     --syntax-constant-weight: normal;
     --syntax-bracket-weight: bold;

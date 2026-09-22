@@ -195,8 +195,9 @@ theme {
     --syntax-parameter-reassigned-underline: #707D95;
 
     --syntax-property: #66E1F8;
-    /* ANNOTATION_NAME a0a0a0 — grey, where most schemes make an annotation loud. Italic and underlined
-     * in IntelliJ; the vocabulary carries neither for this capture. */
+    /* ANNOTATION_NAME a0a0a0 — grey, where most schemes make an annotation loud. Italic, via
+     * --syntax-attribute-style below; its EFFECT_TYPE names an underline with no EFFECT_COLOR, which
+     * IntelliJ does not draw. */
     --syntax-attribute: #A0A0A0;
     --syntax-tag: #CC6C1D;
     /* JAVASCRIPT ONLY, and the class colour is right there for a reason that does not generalise: the
@@ -234,6 +235,7 @@ theme {
      * both channels — STATIC_FINAL_FIELD carries FONT_TYPE 3, and 3 is 1|2. */
     --syntax-comment-style: normal;
     --syntax-constant-style: italic;
+    --syntax-attribute-style: italic;
     --syntax-keyword-weight: bold;
     --syntax-constant-weight: bold;
     --syntax-bracket-weight: bold;
