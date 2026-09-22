@@ -78,6 +78,12 @@ public final class DocumentTabs {
             // longer exists, which comes back as the "__missing__" placeholder.
             workbench.dock.removePanel(workbench.refForResource(resource));
         });
+        // AND WITH THE TAB, which is sooner. A document outlives its tab whenever something else holds it
+        // -- the Problems panel, the index -- so waiting for the DOCUMENT left a deleted file's tab on
+        // screen after `closeDeleted` had closed it. A tab closed from the dock has already left it, and
+        // removing it again is a no-op.
+        workbench.editors.onDidClose.connect(tab ->
+                workbench.dock.removePanel(workbench.refForResource(tab.resource())));
         workbench.documents.onDidOpen.connect(document -> document.onDidChangeResource.connect((from, to) -> {
             // In place, so the tab keeps its position and its selection. A remove-then-add would send the
             // renamed file to the end of the strip and, if it was active, hand the selection to a
