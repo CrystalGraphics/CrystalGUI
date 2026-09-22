@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Paths;
 import java.util.List;
@@ -17,6 +18,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.workbench.editor.EditorService;
@@ -151,5 +153,28 @@ public class WorkbenchWatchesProjectRootsTest extends UiDocumentTestBase {
 
         assertNull("the tab went with the file",
                 workbench.editors.tabFor(EditorInput.of(main)));
+    }
+
+    /**
+     * <b>A deleted file's tab leaves the dock even while something else holds its document</b> -- the
+     * Problems panel or the index, which is the ordinary state of a Java file. The dock used to wait for
+     * the DOCUMENT to close, so the editor service had closed the tab and the strip still showed it.
+     */
+    @Test
+    public void aDeletedFileLeavesTheDockWhileItsDocumentIsStillHeld() {
+        for (int i = 0; i < 8; i++) frameAndPump();
+        Resource main = Resource.of(CgPath.of(PROJECT, "Main.java"));
+        workbench.openFile(main.asPath());
+        for (int i = 0; i < 8; i++) frameAndPump();
+        DocumentReference held = workbench.documents.reference(main);
+        assertNotNull("a second holder, as the Problems panel is", held);
+        assertTrue("the file is in the dock", workbench.dock.allPanels().contains(workbench.refForResource(main)));
+
+        workbench.editors.closeDeleted(main);
+        for (int i = 0; i < 4; i++) frameAndPump();
+
+        assertFalse("the tab left the dock with the editor",
+                workbench.dock.allPanels().contains(workbench.refForResource(main)));
+        held.dispose();
     }
 }
