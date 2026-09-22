@@ -60,6 +60,20 @@ public final class CgUiSvg implements CgUiDrawable {
     private FileIconTheme.Variant resolvedFor;
 
     /**
+     * The path this was loaded from by {@link #of}, otherwise null — kept so a reload can re-resolve it
+     * exactly as {@link #iconName} is re-resolved.
+     */
+    @Nullable
+    private String path;
+
+    /**
+     * {@link SvgDocument#generation} when {@link #document} was resolved. <b>A reload is late-bound the way
+     * the variant is</b>, and for the reason written on {@link #iconName}: a menu built once at construction
+     * kept drawing an edited icon's old picture after every Ctrl+R, because nothing it holds was told.
+     */
+    private int resolvedAtGeneration = SvgDocument.generation();
+
+    /**
      * The document to draw, re-resolved if the icon variant has moved under us.
      *
      * <p>Only ever does work for a drawable built from an icon NAME. One built from a path is a fixed
@@ -95,10 +109,18 @@ public final class CgUiSvg implements CgUiDrawable {
 
     @Nullable
     private SvgDocument document() {
-        if (iconName == null) return document;
+        boolean reloaded = resolvedAtGeneration != SvgDocument.generation();
+        if (reloaded) resolvedAtGeneration = SvgDocument.generation();
+        if (iconName == null) {
+            if (reloaded && path != null) {
+                SvgDocument fresh = SvgDocument.of(path);
+                if (fresh != null) document = fresh;
+            }
+            return document;
+        }
         FileIconTheme.Variant current =
                 variantOverride != null ? variantOverride : FileIconTheme.getVariant();
-        if (current != resolvedFor) {
+        if (current != resolvedFor || reloaded) {
             resolvedFor = current;
             document = SvgDocument.of(
                     FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName, current)));
@@ -132,7 +154,10 @@ public final class CgUiSvg implements CgUiDrawable {
     @Nullable
     public static CgUiSvg of(String path) {
         SvgDocument document = SvgDocument.of(path);
-        return document == null ? null : new CgUiSvg(document);
+        if (document == null) return null;
+        CgUiSvg svg = new CgUiSvg(document);
+        svg.path = path;
+        return svg;
     }
 
     /**
