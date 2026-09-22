@@ -38,6 +38,8 @@ import com.crystalgui.ui.dom.GlyphRole;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.widget.collection.tree.TreeEditModel;
 import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
@@ -345,5 +347,15 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
             if (hierarchy.tree().rowAt(realised.getKey()).item() == node) return realised.getValue();
         }
         throw new AssertionError("no row for " + node);
+    }
+
+    /**
+     * <b>Ctrl+Shift+C copies a selector in the Hierarchy</b> -- bound on the tree rather than declared,
+     * because the same chord is Inspect Element everywhere else and an element's keymap is asked first.
+     */
+    @Test
+    public void ctrlShiftCCopiesASelectorInTheHierarchy() {
+        assertEquals(KeyChord.parse("Ctrl+Shift+C"),
+                Keymap.acceleratorFor(hierarchy.tree(), HierarchyActions.COPY_SELECTOR));
     }
 }
