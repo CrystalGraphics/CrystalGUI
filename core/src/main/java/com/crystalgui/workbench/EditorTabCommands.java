@@ -2,6 +2,7 @@ package com.crystalgui.workbench;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -66,6 +67,7 @@ public final class EditorTabCommands {
                 .enabledWhen(context -> pathOf(context) != null));
 
         registry.register(Command.of(RENAME_FILE, "Rename File…")
+                .icon(ActionIcons.RENAME)
                 .menu(MenuId.EDITOR_TAB_CONTEXT, "5_file", 10)
                 .run(context -> {
                     CgPath path = pathOf(context);

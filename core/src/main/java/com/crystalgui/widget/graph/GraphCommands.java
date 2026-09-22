@@ -180,6 +180,7 @@ public final class GraphCommands {
                         && hasClip()));
 
         registry.register(Command.of(DUPLICATE, "Duplicate")
+                .icon(ActionIcons.DUPLICATE)
                 .menu(MenuId.MAIN_GRAPH, "1_nodes", 30)
                 .run(context -> withGraph(context, graph -> pasteInto(graph, graph.clipboard().copy())))
                 .enabledWhen(context -> hasNodes(graphFor(context))));

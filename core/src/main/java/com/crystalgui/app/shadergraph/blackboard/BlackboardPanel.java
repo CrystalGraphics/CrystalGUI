@@ -1059,8 +1059,8 @@ public class BlackboardPanel extends UIElement implements DataProvider {
         if (window == null) return;
         if (categoryMenu == null) {
             categoryMenu = new Menu();
-            categoryMenu.addItem(RENAME_LABEL);
-            categoryMenu.addItem(DELETE_LABEL);
+            categoryMenu.addItem(RENAME_LABEL).setIcon(ActionIcons.RENAME, null);
+            categoryMenu.addItem(DELETE_LABEL).setIcon(ActionIcons.DELETE, null);
             categoryMenu.onItemActivated.connect(item -> {
                 String target = menuCategory;
                 if (target == null) return;
@@ -1205,10 +1205,12 @@ public class BlackboardPanel extends UIElement implements DataProvider {
                 .run(context -> withBoard(context, BlackboardPanel::removeSelected))
                 .enabledWhen(BlackboardPanel::isActionable));
         registry.register(Command.of(DUPLICATE_COMMAND, "Duplicate Property").binding("Mod+D")
+                .icon(ActionIcons.DUPLICATE)
                 .menu(MenuId.BLACKBOARD_CONTEXT, "2_create", 10)
                 .run(context -> withBoard(context, BlackboardPanel::duplicateSelected))
                 .enabledWhen(BlackboardPanel::isActionable));
         registry.register(Command.of(RENAME_COMMAND, "Rename Property").binding("F2")
+                .icon(ActionIcons.RENAME)
                 .menu(MenuId.BLACKBOARD_CONTEXT, "1_modify", 10)
                 .run(context -> withBoard(context, BlackboardPanel::renameSelected))
                 .enabledWhen(BlackboardPanel::isActionable));

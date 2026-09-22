@@ -1,5 +1,6 @@
 package com.crystalgui.core.command;
 
+import com.crystalgui.core.command.ActionIcons;
 /**
  * The names of the shipped action marks — what {@link Command#icon} and {@code ActionButton.icon} take.
  *
@@ -66,6 +67,13 @@ public final class ActionIcons {
 
     /** The transform box with its corner handles — ours; the set has no free-transform mark. */
     public static final String FREE_TRANSFORM = ACTION + "freeTransform";
+
+    /** A text field with its caret — ours; the set has no rename mark. */
+    public static final String RENAME = ACTION + "rename";
+    /** Copy's two sheets with a plus on the front one — ours. */
+    public static final String DUPLICATE = ACTION + "duplicate";
+    /** A selector's braces, full height and heavy enough for a 12px menu mark. Ours. */
+    public static final String COPY_SELECTOR = ACTION + "copySelector";
 
     // The Library's two view faces.
     public static final String VIEW_ROWS = ACTION + "viewRows";
