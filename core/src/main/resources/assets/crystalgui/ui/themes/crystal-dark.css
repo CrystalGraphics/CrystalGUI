@@ -221,7 +221,8 @@ theme {
     --region-drop-bg: #3574F055;
 
     --tooltip-bg: #2B2D30;
-    --tooltip-border: #43454A;
+    /* THE MENUS' EDGE: a tooltip is the same kind of popup, and the two outlines side by side read as one. */
+    --tooltip-border: #323438;
 
     --scrollbar-thumb: #8C8C8C55;
     --scrollbar-thumb-hover: #8C8C8C99;
@@ -239,6 +240,11 @@ theme {
      * the acrylic shows through it; an opaque grey here was a slab over the backdrop. @see base.css */
     --switcher-entry-hover-bg: #FFFFFF0F;
     --activitybar-item-checked-bg: #46484b;
+    /* A MENU'S OUTLINE AND ITS SEPARATORS, a step darker than --border-base: the popup's edge reads as a
+     * seam rather than a frame, and the rules inside it match. Every Menu draws both -- the bar's drops,
+     * context menus, dropdowns and submenus. */
+    --menu-border: #323438;
+    --menu-separator: #323438;
 
     /* -- Differences -----------------------------------------------------------
      *

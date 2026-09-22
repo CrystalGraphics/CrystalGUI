@@ -200,6 +200,10 @@ theme {
 
     --activitybar-item-hover-bg: #D5D5DB;
     --activitybar-item-checked-bg: #DCDCE2;
+    /* --border-base, unchanged: the dark theme takes its menu outline and separators a step darker, and
+     * this pair must define the same keys. */
+    --menu-border: #C4C4C8;
+    --menu-separator: #C4C4C8;
 
     /* The switcher's selection ring, and the INVERSE of the dark theme's rather than a lighter version
      * of it. It sits over a grid of arbitrary window pictures, so what it has to beat is a screenshot of
