@@ -208,6 +208,22 @@ public class JavaSignatureTest {
     }
 
     /**
+     * <b>An annotation type reads as the editor draws it</b> -- the {@code @} in the annotation colour,
+     * {@code interface} as the keyword, the name as ANNOTATION_NAME. {@code extends Annotation} stays,
+     * as IntelliJ's popup shows it.
+     */
+    @Test
+    public void anAnnotationTypeRendersAsItIsWritten() {
+        String source = "public @interface Marker { }\n";
+        Signature signature = signatureAt(source, "Marker");
+
+        assertEquals("public @interface Marker extends Annotation", signature.text());
+        assertEquals("attribute", captureOf(signature, "@"));
+        assertEquals("keyword", captureOf(signature, "interface"));
+        assertEquals("attribute", captureOf(signature, "Marker"));
+    }
+
+    /**
      * {@code extends Object} is on every class and in no source file, so printing it back would show a
      * declaration nobody wrote in a box that claims to show what they did.
      */
