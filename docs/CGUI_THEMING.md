@@ -639,6 +639,7 @@ editor scheme's.
 | `--switcher-glow` | `#3574F033` | crystal-dark.css |
 | `--switcher-selected-ring` | `var(--fg)` | base.css |
 | `--syntax-attribute` | `#9CDCFE` | dark-plus.css |
+| `--syntax-attribute-style` | `normal` | dark-plus.css |
 | `--syntax-boolean` | `#569CD6` | dark-plus.css |
 | `--syntax-bracket` | `#4EC9A0` | dark-plus.css |
 | `--syntax-bracket-weight` | `normal` | dark-plus.css |

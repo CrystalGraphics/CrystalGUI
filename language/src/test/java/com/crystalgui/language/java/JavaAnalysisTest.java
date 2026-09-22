@@ -206,10 +206,12 @@ public class JavaAnalysisTest {
      * capture. It was yellow in the documentation popup the entire time, because {@code JavaSignatures}
      * knows the name came from an annotation and says so; only the editor was wrong.</p>
      *
-     * <p>The declaration is still a type, which is why this cannot be decided from the binding alone.</p>
+     * <p>So is the name an annotation type DECLARES, as IntelliJ draws it: {@code @interface Marker}
+     * reads as the annotation it defines. Its {@code @} is metadata and {@code interface} a keyword --
+     * the grammar has one token for the pair, so the {@code @} is this layer's to mark.</p>
      */
     @Test
-    public void anAnnotationUseIsMetadataWhileItsDeclarationIsAType() {
+    public void anAnnotationIsMetadataWhereverItsNameAppears() {
         String source = ""
                 + "public class Script {\n"
                 + "    @SuppressWarnings(\"unused\")\n"
@@ -222,6 +224,17 @@ public class JavaAnalysisTest {
             // marker in the default colour beside a yellow name -- and the `@` is precisely what makes
             // the name metadata rather than a type reference.
             assertEquals("attribute", captureAt(tokens, source, "@SuppressWarnings"));
+        } finally {
+            analysis.close();
+        }
+
+        String declared = "public @interface Marker { }\n";
+        analysis = analyze(declared);
+        try {
+            List<SyntaxToken> tokens = analysis.semanticTokens();
+            assertEquals("the declared name", "attribute", captureAt(tokens, declared, "Marker"));
+            assertEquals("the @ alone, leaving `interface` to the grammar's keyword", "attribute",
+                    captureAtIndex(tokens, declared.indexOf('@'), 1));
         } finally {
             analysis.close();
         }

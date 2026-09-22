@@ -19,6 +19,12 @@
 
 "@" @operator
 
+; An annotation type's own name is metadata too (IntelliJ's ANNOTATION_NAME). The at-sign and the
+; keyword are ONE token here, so they cannot be split; the engine marks the at-sign separately.
+(annotation_type_declaration
+  name: (identifier) @attribute)
+"@interface" @keyword
+
 ; Types
 
 (type_identifier) @type

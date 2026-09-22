@@ -23,6 +23,7 @@ import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jdt.internal.compiler.env.INameEnvironment;
 import org.eclipse.jdt.core.dom.ASTVisitor;
 import org.eclipse.jdt.core.dom.Annotation;
+import org.eclipse.jdt.core.dom.AnnotationTypeDeclaration;
 import org.eclipse.jdt.core.dom.AbstractTypeDeclaration;
 import org.eclipse.jdt.core.dom.AnonymousClassDeclaration;
 import org.eclipse.jdt.core.dom.Assignment;
@@ -644,6 +645,19 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             // into `type.interface`/`type.class`/`type.enum`. No second resolver, no doc-specific
             // machinery: the answer was already there and nobody was walking to it.
             resolved.accept(new ASTVisitor(true) {
+                /**
+                 * The {@code @} of {@code @interface}, as metadata -- IntelliJ draws it in the annotation
+                 * colour and {@code interface} as the keyword it is. The grammar has ONE token for the
+                 * pair, so it cannot split them; this marks the {@code @} alone and the grammar's keyword
+                 * keeps the rest.
+                 */
+                @Override
+                public boolean visit(AnnotationTypeDeclaration declaration) {
+                    int at = source.lastIndexOf('@', declaration.getName().getStartPosition());
+                    if (at >= declaration.getStartPosition()) tokens.add(new SyntaxToken(at, at + 1, "attribute"));
+                    return true;
+                }
+
                 @Override
                 public boolean visit(SimpleName name) {
                     // A `@param`'s SUBJECT NAMES A DECLARATION; it does not reference one. `@param n`
@@ -862,10 +876,15 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
             // grammar's own `@attribute` capture. It was yellow in the documentation popup the whole time,
             // because JavaSignatures knows the name came from an annotation and says so.
             //
-            // Positional rather than kind-based, and it has to be: `@interface Nullable { }` DECLARES a
-            // type and is drawn as one, while `@Nullable` USES it as metadata. Same binding, same
-            // SymbolKind, two colours -- so the parent chain is the only thing that can tell them apart.
+            // Positional rather than kind-based: the binding is the annotation's TYPE either way, so the
+            // parent chain is what says whether this name is metadata.
             if (isAnnotationName(name)) return "attribute";
+            // AND THE NAME AN ANNOTATION TYPE DECLARES, which IntelliJ draws as ANNOTATION_NAME too:
+            // `@interface Nullable` reads as the annotation it defines, not as a class.
+            if (name.getParent() instanceof AnnotationTypeDeclaration declaration
+                    && declaration.getName() == name) {
+                return "attribute";
+            }
             if (binding instanceof ITypeBinding) {
                 // A type NAME only. The grammar gets declarations right; what it cannot do is tell that
                 // a bare identifier in an expression is a type rather than a variable.

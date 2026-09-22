@@ -133,6 +133,7 @@ theme {
     --syntax-punctuation-delimiter: #383838;
     --syntax-comment-style: normal;
     --syntax-constant-style: normal;
+    --syntax-attribute-style: normal;
     --syntax-keyword-weight: normal;
     --syntax-constant-weight: normal;
     --syntax-bracket-weight: normal;
