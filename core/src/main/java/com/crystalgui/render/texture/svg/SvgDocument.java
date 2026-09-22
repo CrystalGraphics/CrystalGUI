@@ -120,6 +120,8 @@ public final class SvgDocument {
     private final float[] bounds;
     /** Whether any paint in the file is {@code currentColor} — see {@link #usesCurrentColor}. */
     private final boolean usesCurrentColor;
+    /** The text {@link #load} parsed this from, fingerprinted — what {@link #revalidate} compares. */
+    private long sourceFingerprint;
 
     private SvgDocument(SvgScene scene) {
         this.scene = scene;
@@ -305,8 +307,8 @@ public final class SvgDocument {
      * <p>Cached, so drawing the same icon on fifty file-tree rows parses once. Safe to share because a
      * document is immutable and carries no tint: {@code currentColor} is resolved at draw time, which is
      * exactly what lets one cached instance back a selected row and an unselected one in the same frame.
-     * Mirrors {@code StyleSheetRegistry.of}, including its limitation — <b>nothing invalidates this on a
-     * resource reload</b>, so an edited {@code .svg} needs {@link #invalidateCache()} to reappear.</p>
+     * Revalidated on a resource reload by {@code CgUiLifecycle.onReload}: only a file that now reads
+     * differently is parsed again. @see #revalidate</p>
      */
     @Nullable
     public static SvgDocument of(String path) {
@@ -319,9 +321,37 @@ public final class SvgDocument {
         return loaded;
     }
 
-    /** Drops every cached document. Not wired to resource reload yet; see {@link #of}. */
+    /** Drops every cached document. A resource reload wants {@link #revalidate} instead. */
     public static void invalidateCache() {
         CACHE.clear();
+    }
+
+    /**
+     * Drops the cached documents whose file now reads differently, and keeps the rest — what a resource
+     * reload calls.
+     *
+     * <pre>{@code
+     * int dropped = SvgDocument.revalidate();   // F3+T: re-read, re-parse only what moved
+     * }</pre>
+     *
+     * <p>The reload says nothing about WHAT changed, and a path can resolve to other bytes with no file
+     * edited -- a resource pack enabled or reordered -- so each path is read again and compared. Reading
+     * is the cheap half; the parse is what is kept, and so is the document's IDENTITY, which is what
+     * {@code SvgRasterCache} keys on: an unchanged icon keeps its raster. A dropped one is parsed again on
+     * its next use, as on a first draw.</p>
+     *
+     * @return how many were dropped
+     */
+    public static int revalidate() {
+        int dropped = 0;
+        for (Map.Entry<String, SvgDocument> entry : CACHE.entrySet()) {
+            String now = CgIO.loadSource(entry.getKey());
+            if (now == null || fingerprint(now) != entry.getValue().sourceFingerprint) {
+                CACHE.remove(entry.getKey(), entry.getValue());
+                dropped++;
+            }
+        }
+        return dropped;
     }
 
     /**
@@ -402,8 +432,15 @@ public final class SvgDocument {
         }
         try (CgProfiler.Scope ignored = CgProfiler.scope("svg.parse")) {
             CgProfiler.count("svg.parse.count");
-            return parse(source);
+            SvgDocument document = parse(source);
+            document.sourceFingerprint = fingerprint(source);
+            return document;
         }
+    }
+
+    /** Length and hash together: an edit that keeps one of them still moves the other. */
+    private static long fingerprint(String source) {
+        return ((long) source.length() << 32) | (source.hashCode() & 0xFFFFFFFFL);
     }
 
     /**
