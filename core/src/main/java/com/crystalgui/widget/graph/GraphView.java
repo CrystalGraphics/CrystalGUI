@@ -870,7 +870,7 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     // ── Context menus ───────────────────────────────────────────────────────
 
     /**
-     * Right-click on a node or a wire opens its menu, as Unity's graph view does.
+     * Right-click on a node, a wire or the empty canvas opens its menu, as Unity's graph view does.
      *
      * <p>The press SELECTS what it lands on first, so the commands act on what was clicked — unless the
      * node is already part of the selection, in which case all of it stays, as in a file manager. The
@@ -882,6 +882,9 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         ContextMenu.attach(this, CommandRegistry.global(), target -> {
             UIDocument window = document();
             if (window == null || !isEnabled()) return null;
+            // A FLOATING PANEL'S PRESS IS ITS OWN. The Blackboard and the Main Preview open their own menus,
+            // and the canvas menu would open a second one over them.
+            if (isBackgroundGestureExempt(target)) return null;
             GraphNode node = nodeOf(target);
             if (node != null) {
                 if (!getSelection().nodes().contains(node)) selectNode(node, false);
@@ -890,9 +893,9 @@ public class GraphView extends SurfaceEditor implements GraphContext {
             }
             var pointer = window.input().pointer();
             GraphConnection wire = wireAt(pointer.x(), pointer.y());
-            if (wire == null) return null;
-            getSelection().selectOnly(wire);
             window.focus().requestPointerFocus(this);
+            if (wire == null) return ContextMenu.of(MenuId.GRAPH_CONTEXT);
+            getSelection().selectOnly(wire);
             return ContextMenu.of(MenuId.GRAPH_WIRE_CONTEXT);
         });
     }
