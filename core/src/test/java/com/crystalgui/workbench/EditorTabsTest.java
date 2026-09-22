@@ -1,6 +1,7 @@
 package com.crystalgui.workbench;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -142,6 +143,36 @@ public class EditorTabsTest extends UiDocumentTestBase {
         assertTrue("it did not leave", before.indexOf(workbench.refFor(BOTTOM)) < 0);
         assertNotSame(leafOf(TOP), leafOf(BOTTOM));
         assertEquals(3, open().size());
+    }
+
+    /**
+     * <b>A split puts the keyboard in the new pane</b>, as both references do. The rebuild it asks for detaches
+     * whatever held focus, so without this neither pane had it.
+     */
+    @Test
+    public void splittingFocusesTheNewPane() {
+        openThree();
+        DockPanelRef ref = workbench.refFor(BOTTOM);
+        DockArea area = workbench.dock().areaHolding(ref);
+        DockLeaf before = leafOf(BOTTOM);
+        document.focus().requestPointerFocus(document.focus().firstFocusableIn(area.groupFor(before).tabFor(ref).content()));
+
+        CommandRegistry.global().run(DockCommands.SPLIT_RIGHT, onTab(BOTTOM));
+        frames(8);
+
+        DockLeaf split = null;
+        for (DockLeaf leaf : area.layout().leaves()) {
+            if (leaf != before && leaf.indexOf(ref) >= 0) split = leaf;
+        }
+        assertNotNull("the split made a pane showing the file", split);
+        UIElement focused = document.focus().focused();
+        assertNotNull("something holds the keyboard", focused);
+        UIElement group = area.groupFor(split);
+        boolean inside = false;
+        for (UIElement at = focused; at != null; at = at.parentElement()) {
+            if (at == group) inside = true;
+        }
+        assertTrue("and it is the new pane, not the one split from", inside);
     }
 
     @Test

@@ -250,7 +250,11 @@ public final class DockCommands {
         DockLeaf leaf = tab.group().leaf();
         // A PANEL THAT CANNOT BE SHOWN TWICE MOVES, or the new group takes the only view and the old one goes blank.
         if (move || !tab.area().canShowTwice(tab.panel())) leaf.remove(tab.panel());
-        tab.area().layout().drop(leaf, zone, new DockLeaf(tab.panel()));
+        DockLeaf split = new DockLeaf(tab.panel());
+        tab.area().layout().drop(leaf, zone, split);
+        // THE NEW PANE TAKES THE KEYBOARD, as in both references. The rebuild detaches whatever held focus,
+        // so without this neither pane had it.
+        tab.area().focusPanel(tab.panel(), split);
         tab.area().requestRebuild();
     }
 

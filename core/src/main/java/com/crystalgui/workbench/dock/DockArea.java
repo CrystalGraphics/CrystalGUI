@@ -868,10 +868,22 @@ public class DockArea extends UIElement implements MinimumSize {
     /** Whether {@link #pendingFocus} has been brought to the front — once per request, not per retry. */
     private boolean pendingFocusFronted;
 
+    /**
+     * WHICH pane, when the panel is in more than one — a split shows it twice, and the search by panel finds
+     * the pane it came from rather than the one just made. Null lets the search decide.
+     */
+    @Nullable
+    private DockLeaf pendingFocusLeaf;
+
     private void requestPanelFocus(@Nullable DockPanelRef panel, @Nullable UIElement heldBy) {
+        requestPanelFocus(panel, heldBy, null);
+    }
+
+    private void requestPanelFocus(@Nullable DockPanelRef panel, @Nullable UIElement heldBy, @Nullable DockLeaf in) {
         pendingFocus = panel;
         focusAtRequest = heldBy;
         pendingFocusFronted = false;
+        pendingFocusLeaf = in;
     }
 
     /**
@@ -894,8 +906,21 @@ public class DockArea extends UIElement implements MinimumSize {
     }
 
     public void focusPanel(@Nullable DockPanelRef panel) {
+        focusPanel(panel, null);
+    }
+
+    /**
+     * As {@link #focusPanel(DockPanelRef)}, in a named pane — for a panel shown in two.
+     *
+     * <pre>{@code
+     * DockLeaf copy = new DockLeaf(panel);
+     * layout.drop(leaf, DockDropZone.SPLIT_RIGHT, copy);
+     * area.focusPanel(panel, copy);   // the new pane, not the one it was split from
+     * }</pre>
+     */
+    public void focusPanel(@Nullable DockPanelRef panel, @Nullable DockLeaf in) {
         UIDocument window = document();
-        requestPanelFocus(panel, window == null ? null : window.focus().focused());
+        requestPanelFocus(panel, window == null ? null : window.focus().focused(), in);
     }
 
     /**
@@ -922,14 +947,20 @@ public class DockArea extends UIElement implements MinimumSize {
         if (panel == null) return;
         UIDocument window = document();
         if (window == null) return;
+        DockLeaf named = pendingFocusLeaf != null && layout.leaves().contains(pendingFocusLeaf)
+                && pendingFocusLeaf.indexOf(panel) >= 0 ? pendingFocusLeaf : null;
         if (!pendingFocusFronted) {
-            if (!activateHere(panel)) {
+            if (named != null) {
+                named.activate(panel);
+                syncGroups();
+                setActiveGroup(groupFor(named));
+            } else if (!activateHere(panel)) {
                 pendingFocus = null;
                 return;
             }
             pendingFocusFronted = true;
         }
-        DockLeaf leaf = layout.leafContaining(panel);
+        DockLeaf leaf = named != null ? named : layout.leafContaining(panel);
         DockGroup group = leaf == null ? null : groupFor(leaf);
         Tab tab = group == null ? null : group.tabFor(panel);
         UIElement inside = tab == null ? null : window.focus().firstFocusableIn(tab.content());
