@@ -172,6 +172,7 @@ public final class LayerStack extends ValueControl<List<String>> {
                 .toggledWhereData(data -> layer(data) >= 0 && !data.get(STACK).isOff(layer(data)))
                 .runWithData(data -> data.get(STACK).toggleVisible(layer(data))));
         registry.register(Command.of(DUPLICATE, "Duplicate")
+                .icon(ActionIcons.DUPLICATE)
                 .enabledWhereData(data -> layer(data) >= 0)
                 .runWithData(data -> data.get(STACK).duplicate(layer(data))));
         registry.register(Command.of(REMOVE, "Delete")

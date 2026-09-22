@@ -146,6 +146,12 @@ drawn for this since the 1990s, and what the builder's own selection draws on th
 16 box: `menu.__has-icons__` renders a mark at **10px**, so everything here is seen at 0.625 scale and a
 2-unit detail would come through at a pixel and a quarter.
 
+`general/action/rename.svg`, `duplicate.svg` and `copySelector.svg` are ours too; the set has no mark for
+any of them. Rename is a text field with its caret breaking the right edge. Duplicate takes `copy`'s
+two-sheet silhouette and puts a plus on the front sheet. Copy Selector is a selector's `{ }` alone, full
+height at 1.5 units: its first drawing put 1-unit braces inside `copy`'s sheets and was unreadable at a 12px
+menu mark. Single-tone `currentColor`, no `_dark` companion.
+
 ## Trademarks
 
 Neither licence grants trademark rights — Apache 2.0 § 6 says so outright. The file-type icons above are

@@ -101,6 +101,7 @@ public final class HierarchyActions {
                     if (panel != null) panel.revealSelection();
                 }));
         registry.register(Command.of(COPY_SELECTOR, "Copy Selector")
+                .icon(ActionIcons.COPY_SELECTOR)
                 // BETWEEN THE CLIPBOARD AND MODIFY GROUPS, where the explorer's Copy Path sits.
                 .menu(HierarchyPanel.CONTEXT_MENU, "3_paths", 10)
                 .enabledWhereData(data -> {

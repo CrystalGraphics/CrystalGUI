@@ -102,6 +102,7 @@ public final class LibraryActions {
                             "Name", "", name -> panel.userLibrary().createGroup(UserLibrary.pathIn(group.label(), name)));
                 }));
         registry.register(Command.of(RENAME_GROUP, "Rename Group…")
+                .icon(ActionIcons.RENAME)
                 .enabledWhereData(data -> userGroup(data) != null)
                 .run(context -> {
                     LibraryCatalog.Group group = userGroup(context.data());

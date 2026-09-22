@@ -99,6 +99,7 @@ public final class SurfaceCommands {
                 .run(context -> with(context, SurfaceCommands::paste))
                 .enabledWhen(context -> canPaste(surfaceOf(context))));
         registry.register(Command.of(DUPLICATE, "Duplicate")
+                .icon(ActionIcons.DUPLICATE)
                 .run(context -> with(context, surface -> pasteInto(surface, copyOf(surface))))
                 .enabledWhen(context -> canCopy(surfaceOf(context))));
     }

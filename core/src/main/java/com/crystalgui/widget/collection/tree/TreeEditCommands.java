@@ -61,8 +61,10 @@ public final class TreeEditCommands {
                 .icon(ActionIcons.COPY));
         registry.register(command(PASTE, "Paste", TreeEditing::canPaste, TreeEditing::paste)
                 .icon(ActionIcons.PASTE));
-        registry.register(command(DUPLICATE, "Duplicate", TreeEditing::canDuplicate, TreeEditing::duplicate));
-        registry.register(command(RENAME, "Rename…", TreeEditing::canRename, TreeEditing::renameSelected));
+        registry.register(command(DUPLICATE, "Duplicate", TreeEditing::canDuplicate, TreeEditing::duplicate)
+                .icon(ActionIcons.DUPLICATE));
+        registry.register(command(RENAME, "Rename…", TreeEditing::canRename, TreeEditing::renameSelected)
+                .icon(ActionIcons.RENAME));
         registry.register(command(DELETE, "Delete", TreeEditing::canDelete, TreeEditing::delete)
                 .icon(ActionIcons.DELETE));
     }
