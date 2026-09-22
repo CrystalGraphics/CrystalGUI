@@ -3,6 +3,7 @@ package com.crystalgui.desktop.taskbar;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.launcher.LauncherButton;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.SystemMenu;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -101,6 +102,8 @@ public class Taskbar extends UIElement {
      * {@code border-top-width} draws nothing here and the left-hand spelling draws all four edges — the
      * documented trap — and a single edge is how {@code statusbarview} spells its separators too.
      */
+    public static final String START_CLASS = "__start-button__";
+
     public static final String EDGE_CLASS = "__edge__";
     /**
      * The accent glow under the entries — IntelliJ's New UI header gradient, translated: a soft wash of
@@ -110,6 +113,9 @@ public class Taskbar extends UIElement {
     public static final String GLOW_CLASS = "__glow__";
 
     private final UIElement entries;
+
+    /** What CAN run, beside the strip that shows what IS running. @see #start() */
+    private final LauncherButton start;
     /** The glow, kept so the designer can retone it. @see #GLOW_CLASS */
     private final UIElement glow;
 
@@ -188,6 +194,14 @@ public class Taskbar extends UIElement {
         glow.setHitTest(false);
         append(glow);
 
+        // THE START BUTTON, before the entries and outside their island: it is the one thing on this
+        // strip that is NOT a running window, and putting it inside the island would make it cascade,
+        // animate and re-centre along with them. It names no application -- the panel reads the
+        // desktop's own registry -- which is what lets a launcher live in `desktop` at all.
+        start = new LauncherButton();
+        start.addClass(START_CLASS);
+        append(start);
+
         entries = new UIElement();
         entries.addClass(ENTRIES_CLASS);
         append(entries);
@@ -205,6 +219,11 @@ public class Taskbar extends UIElement {
         // exactly what building the previews lazily from createEntry did, since refresh() runs from
         // onWindowChanged. @see UIElement#taffyChildIndex
         previews = new TaskbarPreviews(this);
+    }
+
+    /** The start button, and through it the launcher. */
+    public LauncherButton start() {
+        return start;
     }
 
     /** The hover previews. One panel that moves between entries. @see TaskbarPreviews */

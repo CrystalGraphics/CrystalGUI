@@ -1,5 +1,7 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.desktop.launcher.Launcher;
+import com.crystalgui.desktop.launcher.LauncherButton;
 import com.crystalgui.desktop.window.WindowIcon;
 import com.crystalgui.desktop.taskbar.WindowThumbnail;
 import com.crystalgui.desktop.taskbar.WindowPreview;
@@ -33,6 +35,11 @@ public final class DesktopKinds implements NodeKinds {
         // names either, and both are built by the compositor rather than decoded from a description.
         UIElementRegistry.register(Desktop.NAME, Desktop::new, NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.register(Taskbar.NAME, Taskbar::new, NodeContract.INERT, KindInfo.hidden());
+        // WHAT CAN RUN, beside the strip that shows what IS running. Hidden from the Library because
+        // nobody places a launcher in a document; registered because `launcher` and `launcherbutton`
+        // are what `ua/desktop.css` sizes and colours them through.
+        UIElementRegistry.register(LauncherButton.NAME, LauncherButton::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(Launcher.NAME, Launcher::new, NodeContract.INERT, KindInfo.hidden());
         // A frame takes a title, so it has no no-argument factory: a description that named `window`
         // would have to carry one, and nothing describes a window over a wire today. Registered with a
         // factory that opens an untitled frame rather than left out, so the TAG exists for the cascade.

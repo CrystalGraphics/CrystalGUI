@@ -27,6 +27,8 @@ import com.crystalgui.widget.config.control.HeaderControl;
 import com.crystalgui.widget.config.control.InfoControl;
 import com.crystalgui.widget.config.control.NoteControl;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.launcher.Launcher;
+import com.crystalgui.desktop.launcher.LauncherButton;
 import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowIcon;
@@ -216,6 +218,14 @@ public final class WidgetCensus {
                         + "would be a second answer to the same question.");
         WidgetContracts.localOnly(Taskbar.class, "Compositor chrome: the WindowRegistry, rendered.");
         WidgetContracts.localOnly(WindowSwitcher.class, "Compositor chrome: Mod+Tab, over the same registry.");
+        // THE SAME CATEGORY AS THE TASKBAR, and for the same reason: one shows what is running and the
+        // other what can run, both read live out of a registry this process owns. A document naming a
+        // launcher would be describing the shell it is being opened in.
+        WidgetContracts.localOnly(LauncherButton.class,
+                "Compositor chrome: the way into the launcher, on the taskbar.");
+        WidgetContracts.localOnly(Launcher.class,
+                "Compositor chrome: the ApplicationRegistry, rendered. Its rows are whatever this "
+                        + "process has installed, so there is nothing stable to describe.");
 
         WidgetContracts.localOnly(MenuBarView.class,
                 "Shell chrome, and built from the CommandRegistry -- the menu model is the thing that "
