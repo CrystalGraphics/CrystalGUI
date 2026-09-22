@@ -217,7 +217,7 @@ public final class BuilderCommands {
                 .run(context -> shift(context, true, true))
                 .enabledWhen(BuilderCommands::canShift));
 
-        registry.register(Command.of(INSERT, "Insert…")
+        registry.register(Command.of(INSERT, "Insert Element…")
                 .icon(ActionIcons.ADD)
                 .run(context -> builderOf(context).insert().openForSelection())
                 .enabledWhen(context -> hasBuilder(context) && builderOf(context).surface().isDesignMode()));

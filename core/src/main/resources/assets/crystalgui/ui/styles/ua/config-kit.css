@@ -587,42 +587,6 @@ nodeport:blank .__editor__ { display: flex; }
  * is being drawn by. Its look is the theme's. */
 graphview .__marquee__ { }
 
-/* The create-node menu. A Popover, so dismissal, the top layer and focus restore are already handled --
- * what is left is the geometry it cannot function without: a width, a bounded list that scrolls rather
- * than growing past the screen, and rows tall enough to hit. */
-nodecreationmenu {
-    /* DEFINITE, and forced by the tree rather than chosen: a TreeView is virtualised, so its rows are
-       absolutely positioned and its scroll range comes from the model — it contributes nothing to either
-       intrinsic axis, and a content-sized box around one measures as empty (0 height realises exactly one
-       row). The cost is that the menu can no longer size to its widest row; it opens at a sensible size
-       and is resizable, as Unity's own Create Node window is. */
-    width: 260px;
-    height: 240px;
-    max-width: 320px;
-    /* The drag floor. min-* rather than a clamp in the resizer: those are `resize`'s only spec'd
-       constraints and Taffy already applies them, so a second mechanism could only disagree. */
-    min-width: 170px;
-    min-height: 46px;
-    /* Trailing handles only — Popover refuses the leading four, since AnchoredPlacement owns left/top.
-       `overflow: hidden` is not optional beside `resize`: a resize writes an explicit height, and without
-       a clip the rows paint straight past the border. */
-    resize: both;
-    overflow: hidden;
-    flex-direction: column;
-    padding: 3px;
-    gap: 2px;
-}
-/* The draggable header, Unity's "Create Node". `grab` rather than `pointer`: it moves the window, it
-   does not activate anything, and the two cursors are the web's own distinction. */
-nodecreationmenu .__title-bar__ {
-    width: 100%;
-    height: 12px;
-    flex-direction: row;
-    align-items: center;
-    flex-shrink: 0;
-    padding-left: 4px;
-    cursor: grab;
-}
 /* The search box over the tree, docked or inside a menu. Fills what is left, which is the only thing that
  * gives the virtualised tree inside a viewport. */
 searchtree {
@@ -638,109 +602,6 @@ searchtree > .__items__ {
     height: 0;
     flex-grow: 1;
     flex-shrink: 1;
-}
-nodecreationmenu .__search__ { width: 100%; height: 14px; }
-/* `height: 0` + `flex-grow: 1` — correct only because the parent above has a definite height. A
- * virtualised list has no intrinsic height, so growing into the leftover space is the ONLY thing that
- * gives it a viewport. flex-shrink: 1 (engine default is 0) lets it give way when the menu is dragged
- * shorter, since the list is the part that can scroll. */
-nodecreationmenu .__items__ {
-    width: 100%;
-    height: 0;
-    flex-grow: 1;
-    flex-shrink: 1;
-}
-/* NO `height` and NO `padding-left` — one trap with two faces. A virtualised row's geometry is written
-   FROM JAVA at DEFAULT origin, which every stylesheet origin beats: ListView writes top/height from its
-   ItemSizeStrategy, and TreeView writes padding-left from the row's DEPTH. Setting either here does not
-   adjust the tree, it breaks it (rows the right size with gaps between them; every level flattened to
-   one indent). Row height and indentation belong to the view.
-
-   flex-direction is not optional either — Taffy defaults to COLUMN, so `align-items: center` without it
-   centres labels ACROSS the row. The two read as a pair. */
-nodecreationmenu .__entry__ {
-    width: 100%;
-    flex-direction: row;
-    /* Clears the scroller's own bar, which overlays the row rather than taking layout space — at 4px the
-       category ran under it and "Basic" was sliced down its last letter. Wide enough for the bar plus a
-       gap, so the text stops short of it rather than touching. */
-    padding-right: 14px;
-    justify-content: flex-start;
-    align-items: center;
-    /* A label past the ceiling clips at its own row rather than escaping the menu. */
-    overflow: hidden;
-    cursor: pointer;
-}
-/* The twisty is a real element, because this engine has no ::before to put it in. Fixed width so every
-   label at a given depth starts at the same x whether or not its row can be opened -- a leaf simply
-   draws an empty one rather than shifting left, which is what makes a column of siblings line up.
-   overlay: shape("chevron-right"), not text -- the bundled Minecraft font has no U+25B6/U+25BC, and a
-   missing glyph draws a blank advance rather than failing, which used to read as "the twisty was never
-   added" rather than as a font problem. TreeView already applies __expanded__/__collapsed__/__leaf__ to
-   the row (see TreeView.EXPANDED_CLASS et al.), so the state is driven entirely from CSS below -- no
-   Java decides what a row's twisty looks like. */
-nodecreationmenu .__twisty__ {
-    width: 9px;
-    height: 9px;
-    flex-shrink: 0;
-    overlay: shape("chevron-right");
-}
-/* Rotating the same shape (ConfiguratorGroup's arrow does the identical thing) rather than swapping to
-   a different one keeps open/closed a single drawable state and lets it transition. */
-nodecreationmenu .__expanded__ > .__twisty__ {
-    transform: rotate(90deg);
-}
-/* A leaf keeps its box (so the label column still lines up) but draws nothing. */
-nodecreationmenu .__leaf__ > .__twisty__ {
-    overlay: none;
-}
-/* Clips at the row rather than escaping it, and `text-overflow` has to sit on the TEXT, not on the row:
-   it does not inherit, so on the wrapper it would silently never arrive. */
-nodecreationmenu .__entry__ .__label__ {
-    flex-grow: 1;
-    flex-shrink: 1;
-    width: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-}
-/* The dimmed `Math ▸ Vector` after a search result's label — what makes a match legible.
- *
- * The menu matches a node's CATEGORY as well as its name, so for `vec` most rows (Cross Product,
- * Distance, Dot Product …) matched only through `Math/Vector`. Without the category on the row there was
- * nothing on screen to explain why any of them were there, and a correct result set read as noise.
- *
- * `flex-shrink` and no `flex-grow`: the label owns the slack and ellipsizes first, so the category is the
- * last thing to be given up rather than the first — it is short, and it is the part carrying the
- * explanation. Only drawn while searching; browsing shows the real tree, where the folder above the row
- * already says this. */
-nodecreationmenu .__entry__ .__entry-category__ {
-    flex-direction: row;
-    align-items: center;
-    flex-grow: 0;
-    flex-shrink: 1;
-    padding-left: 6px;
-    overflow: hidden;
-}
-nodecreationmenu .__entry__ .__category-segment__ {
-    flex-shrink: 1;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    color: var(--nodemenu-category-fg, #7A7A7A);
-}
-/* A DRAWN triangle, not a character. `MinecraftRegular.otf` has no U+25B8, and a missing glyph draws a
- * blank advance rather than failing — so a text separator rendered as a mystery gap. `CgUiShape` needs no
- * font at all, and `triangle-right` is already in its catalog (the same one the twisty and the group
- * arrows use). Smaller and dimmer than the segments either side: it is punctuation, not a word. */
-nodecreationmenu .__entry__ .__category-separator__ {
-    width: 10px;
-    height: 10px;
-    flex-shrink: 0;
-    margin-left: 3px;
-    margin-right: 3px;
-    overlay: shape("triangle-right");
-    color: var(--nodemenu-separator-fg, #6E6E6E);
 }
 /* The matched characters, via the CSS Custom Highlight API — `UIText.highlights()` names the ranges in
  * Java, this decides what they look like. That split is the whole reason the tint is not a colour
@@ -800,13 +661,15 @@ searchfield::part(clear) {
     overlay: shape("cross");
     cursor: pointer;
 }
-nodecreationmenu .__empty__ { padding: 4px; }
 
 /* ── Quick input ────────────────────────────────────────────────────────────────────────────────
- * The look a CreateMenu opts into with `__quick-input__` — the surface's Insert menu and the Styles tab's Add
- * property: title, an optional band, search, folders, and a footer describing the highlighted row. It reads
- * like the command palette rather than like the graph's own node menu. Definite size for the same reason as
- * that menu: the tree is virtualised and has no intrinsic height. */
+ * Every CreateMenu's look, keyed on the `__quick-input__` class it always carries — the surface's Insert menu,
+ * the graph's Insert Node, the Styles tab's Add property: title, an optional band, search, folders, and a
+ * footer describing the highlighted row. It reads like the command palette.
+ *
+ * DEFINITE SIZE, and forced by the tree rather than chosen: it is virtualised, so it contributes nothing to
+ * either intrinsic axis, and a content-sized box around it measures as empty. The menu opens at a sensible
+ * size and is resizable instead. */
 .__quick-input__ {
     width: 280px;
     height: 340px;
@@ -866,7 +729,9 @@ nodecreationmenu .__empty__ { padding: 4px; }
 .__quick-input__ .__search__.__focused__ {
     outline-color: var(--insertmenu-field-focus-border, #3574F0);
 }
-/* NO height and NO padding-left: both are the view's, written from Java. See nodecreationmenu above. */
+/* NO `height` and NO `padding-left`, one trap with two faces: a virtualised row's geometry is written FROM
+ * JAVA at DEFAULT origin, which every stylesheet origin beats. ListView writes its height and TreeView its
+ * depth indent; setting either here breaks the tree rather than adjusting it. */
 .__quick-input__ .__entry__ {
     width: 100%;
     flex-direction: row;
@@ -880,7 +745,9 @@ nodecreationmenu .__empty__ { padding: 4px; }
 }
 .__quick-input__ .__entry__:hover { background: var(--insertmenu-hover-bg, #2E3033); }
 .__quick-input__ .__entry__.__selected__ { background: var(--insertmenu-selected-bg, #04395E); }
-/* The Library's twisty: two shapes rather than one rotated, the tree's colours, and its own hover. */
+/* The Library's twisty: two shapes rather than one rotated, the tree's colours, and its own hover. A real
+ * element, since this engine has no ::before, and a fixed width so a leaf's label lines up with a folder's.
+ * A shape and not a glyph: the bundled Minecraft font has no triangles, and a missing glyph draws blank. */
 .__quick-input__ .__twisty__ {
     width: 12px;
     height: 12px;
@@ -947,9 +814,12 @@ nodecreationmenu .__empty__ { padding: 4px; }
     padding: 8px;
     color: var(--insertmenu-hint-fg, #7A7A7A);
 }
+/* SIZED BY ITS TEXT, with equal padding above and below: the footer IS the text element, so a fixed height
+ * left the line at the top of the box. Measured text plus symmetric padding is centred by construction. */
 .__quick-input__ .__insert-footer__ {
     flex-shrink: 0;
-    height: 22px;
+    padding-top: 5px;
+    padding-bottom: 5px;
     padding-left: 10px;
     padding-right: 10px;
     border-top-width: 1px;

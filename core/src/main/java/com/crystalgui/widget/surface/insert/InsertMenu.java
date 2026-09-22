@@ -27,7 +27,6 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.CreateMenu;
 import com.crystalgui.widget.composite.SearchTree;
 import com.crystalgui.widget.surface.SurfaceContext;
-import com.crystalgui.widget.text.UIText;
 
 /**
  * The engine's Add menu: everything the registered {@link InsertSource}s offer, searchable, opened at a point on the
@@ -54,13 +53,6 @@ public final class InsertMenu extends CreateMenu<InsertMenu.Row, Insertable> {
     public static final Name NAME = Name.of("insertmenu");
 
     public static final String HEADER_CLASS = "__insert-header__";
-    public static final String FOOTER_CLASS = "__insert-footer__";
-
-    /** What the footer says with nothing highlighted. */
-    static final String HINTS = "↑↓ to choose · Enter to insert · Esc to close";
-
-    /** A row, tall enough for a 14px mark beside the label: the command palette's rhythm. */
-    private static final float ROW_HEIGHT = 20f;
 
     /** A row: either a folder with children, or one offer. */
     public record Row(String label, @Nullable Insertable offer, List<Row> children) {
@@ -71,7 +63,6 @@ public final class InsertMenu extends CreateMenu<InsertMenu.Row, Insertable> {
 
     private final SurfaceContext ctx;
     private final UIElement header = new UIElement();
-    private final UIText footer = new UIText(HINTS);
 
     private float worldX;
     private float worldY;
@@ -80,19 +71,11 @@ public final class InsertMenu extends CreateMenu<InsertMenu.Row, Insertable> {
     private List<Insertable> offers = List.of();
 
     public InsertMenu(SurfaceContext ctx) {
-        super(NAME, "Insert");
+        super(NAME, "Insert Element");
         this.ctx = ctx;
-        addClass(QUICK_INPUT_CLASS);
         header.addClass(HEADER_CLASS);
-        footer.addClass(FOOTER_CLASS);
-        footer.setHitTest(false);
-        // THE HEADER UNDER THE TITLE and above the search, the footer under the list: where Unity's Create Node
-        // puts its breadcrumb and Blender its hint line.
-        UIElement body = body();
-        remove(body);
-        append(header);
-        append(body);
-        append(footer);
+        // THE HEADER UNDER THE TITLE and above the search: where Unity's Create Node puts its breadcrumb.
+        insertAt(indexOf(body()), header);
         showHeader(false);
 
         setRows(new SearchTree.Rows<Row, Insertable>() {
@@ -152,8 +135,6 @@ public final class InsertMenu extends CreateMenu<InsertMenu.Row, Insertable> {
         }, false, true);
         treeView().onSelectionChanged.connect(indices -> describeHighlighted());
         searchBox().setPlaceholder("Search to insert");
-        // The view's to say, not the sheet's: a virtualised row's height is written from Java.
-        treeView().setItemHeight(ROW_HEIGHT);
     }
 
     /** Opens at a world point, remembering it — what a chosen row is inserted at. */
@@ -196,7 +177,7 @@ public final class InsertMenu extends CreateMenu<InsertMenu.Row, Insertable> {
             TreeRow<Row> row = treeView().rowAt(selected.get(0));
             if (row != null && row.item().offer() != null) description = row.item().offer().description();
         }
-        footer.setText(description == null || description.isEmpty() ? HINTS : description);
+        setFooterText(description);
     }
 
     /**

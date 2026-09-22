@@ -316,7 +316,7 @@ menu.presentInline();                                           // Popover, Menu
 
 ### A search box over a tree — `SearchTree` (`widget.composite`)
 
-The Create Node menu's search-and-tree half as a dockable element: a box that filters while the caret stays
+The Insert Node menu's search-and-tree half as a dockable element: a box that filters while the caret stays
 in it, a categorised tree for a blank query and a ranked flat list for anything else, arrows and Enter
 driving the list. `CreateMenu` wraps one in its popover; the builder's Library embeds one.
 
@@ -328,6 +328,27 @@ search.onChosen.connect(kind -> place(kind));
 
 A row draws an icon when `Rows.icon(node)` names one, wearing `Rows.iconClass(node)` so a theme can tint it
 (`.__entry-icon__`); a category row never does.
+
+### A searchable popover — `CreateMenu` (`widget.composite`)
+
+`SearchTree` under a draggable title, over a footer. **Every one looks alike** — the surface's Insert menu,
+the graph's Insert Node, the Styles tab's Add property — because the look is keyed on the `__quick-input__`
+class the constructor adds, not on a subclass's tag: a new menu gets it by extending, with nothing to opt
+into.
+
+```java
+final class ThingMenu extends CreateMenu<Row, Thing> {
+    ThingMenu() {
+        super(NAME, "Add Thing");
+        setRows(rows);
+        setHints("↑↓ to choose · Enter to add · Esc to close");   // the footer's resting line
+        treeView().onSelectionChanged.connect(i -> setFooterText(describeHighlighted()));
+    }
+}
+```
+
+`setFooterText(null)` puts the hints back. Rows are 20px, set from Java: a virtualised row's height is the
+view's, and a stylesheet `height` on `.__entry__` breaks the tree rather than resizing it.
 
 ### A surface's Add menu — `InsertMenu` (`widget.surface.insert`)
 
