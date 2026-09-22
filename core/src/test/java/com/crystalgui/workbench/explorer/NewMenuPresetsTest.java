@@ -157,7 +157,10 @@ public class NewMenuPresetsTest {
         assertEquals("public record Foo() {\n}\n", java("record", "Foo.java", ""));
         assertEquals("public enum Foo {\n}\n", java("enum", "Foo.java", ""));
         assertEquals("public @interface Foo {\n}\n", java("annotation", "Foo.java", ""));
-        assertEquals("public class Foo extends Exception {\n}\n", java("exception", "Foo.java", ""));
+        assertEquals("public class Foo extends RuntimeException {\n"
+                + "    public Foo(String message) {\n"
+                + "        super(message);\n"
+                + "    }\n}\n", java("exception", "Foo.java", ""));
     }
 
     @Test
