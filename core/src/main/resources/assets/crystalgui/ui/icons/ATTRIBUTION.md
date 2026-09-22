@@ -160,6 +160,11 @@ specific. Single-tone, like the `copy` it comes from, so no `_dark` companion.
 lines are replaced by two sliders, so a style being moved reads as Copy and Paste of something that is
 not content. Same 1-unit bars, single-tone, no `_dark` companion.
 
+`nodes/mesh/*.svg` — sphere, capsule, cylinder, cube, quad and customMesh — are ours; the Platform set has
+no primitive shapes. Line drawings with one or two seams each (an equator, a rim, a cube's three faces) so a
+shape reads as a solid rather than as its outline, and the custom mesh is a faceted gem. Single-tone
+`currentColor`, round caps and joins, no `_dark` companion.
+
 ## Trademarks
 
 Neither licence grants trademark rights — Apache 2.0 § 6 says so outright. The file-type icons above are

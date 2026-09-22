@@ -3,6 +3,7 @@ package com.crystalgui.app.shadergraph.preview;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
+import com.crystalgui.core.command.ActionIcons;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.shadergraph.CgMainPreviewRenderer;
@@ -313,10 +314,12 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
     private void buildMeshMenu() {
         {
             meshMenu = new Menu();
-            for (CgPreviewMesh option : CgPreviewMesh.values()) meshMenu.addItem(option.label());
+            for (CgPreviewMesh option : CgPreviewMesh.values()) {
+                meshMenu.addItem(option.label()).setIcon(iconOf(option), null);
+            }
             // Present but inert, exactly as asked. Listed rather than omitted because an absent entry
             // reads as "this editor cannot do that", where a disabled one reads as "not yet".
-            meshMenu.addItem(CUSTOM_MESH_LABEL).setEnabled(false);
+            meshMenu.addItem(CUSTOM_MESH_LABEL).setIcon(ActionIcons.MESH_CUSTOM, null).setEnabled(false);
 
             // A section of its own, because it is a different KIND of thing: everything above chooses
             // what is being looked at, and this changes where it is looked at from. That is exactly the
@@ -338,6 +341,16 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
             // unparented one has nothing to promote from. Internal, because this panel is a composite.
             append(meshMenu);
         }
+    }
+
+    private static String iconOf(CgPreviewMesh mesh) {
+        return switch (mesh) {
+            case SPHERE -> ActionIcons.MESH_SPHERE;
+            case CAPSULE -> ActionIcons.MESH_CAPSULE;
+            case CYLINDER -> ActionIcons.MESH_CYLINDER;
+            case CUBE -> ActionIcons.MESH_CUBE;
+            case QUAD -> ActionIcons.MESH_QUAD;
+        };
     }
 
     private void openMeshMenu(float screenX, float screenY) {

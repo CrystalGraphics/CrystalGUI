@@ -35,6 +35,8 @@ import com.crystalgui.core.command.ActionIcons;
 public final class ActionIcons {
 
     private static final String ACTION = "crystalgui:general/action/";
+    /** Shapes rather than verbs — the Main Preview's meshes. Ours; the set has none. */
+    private static final String MESH = "crystalgui:nodes/mesh/";
 
     // Clipboard — the three marks a reader already knows, and the only ones IntelliJ puts in a context menu.
     public static final String CUT = ACTION + "cut";
@@ -78,6 +80,15 @@ public final class ActionIcons {
     public static final String COPY_ATTRIBUTES = ACTION + "copyAttributes";
     /** The set's {@code paste} with the same two sliders. */
     public static final String PASTE_ATTRIBUTES = ACTION + "pasteAttributes";
+
+    // The preview meshes, each with one or two seams so it reads as a solid at 12px.
+    public static final String MESH_SPHERE = MESH + "sphere";
+    public static final String MESH_CAPSULE = MESH + "capsule";
+    public static final String MESH_CYLINDER = MESH + "cylinder";
+    public static final String MESH_CUBE = MESH + "cube";
+    public static final String MESH_QUAD = MESH + "quad";
+    /** A faceted gem: some mesh, not a stock shape. */
+    public static final String MESH_CUSTOM = MESH + "customMesh";
 
     // The Library's two view faces.
     public static final String VIEW_ROWS = ACTION + "viewRows";

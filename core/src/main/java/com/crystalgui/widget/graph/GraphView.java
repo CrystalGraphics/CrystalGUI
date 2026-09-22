@@ -1,5 +1,7 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -341,6 +343,7 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         // about where its wires are — left cullable, it would vanish the moment the view left world
         // origin, taking every wire with it. It culls per wire instead, where the endpoints are known.
         setCullExempt(wireLayer, true);
+        installContextMenus();
 
         this.events.getGroup(MouseEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled() || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
@@ -833,6 +836,73 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     /** @see GraphWires#connectionsOf */
     public List<GraphConnection> connectionsOf(NodePort port) {
         return wires.connectionsOf(port);
+    }
+
+    /**
+     * Removes every wire on every selected node, as <b>one</b> undo step — Unity's Disconnect All.
+     *
+     * @return how many wires went
+     */
+    public int disconnectSelection() {
+        if (!selectionHasWires()) return 0;
+        int removed = 0;
+        edits.begin("disconnect");
+        try {
+            for (GraphNode node : getSelection().nodes()) {
+                for (NodePort port : node.getPorts()) removed += disconnectAll(port);
+            }
+        } finally {
+            edits.end();
+        }
+        return removed;
+    }
+
+    /** Whether any selected node has a wire — what {@link #disconnectSelection} would act on. */
+    public boolean selectionHasWires() {
+        for (GraphNode node : getSelection().nodes()) {
+            for (NodePort port : node.getPorts()) {
+                if (!connectionsOf(port).isEmpty()) return true;
+            }
+        }
+        return false;
+    }
+
+    // ── Context menus ───────────────────────────────────────────────────────
+
+    /**
+     * Right-click on a node or a wire opens its menu, as Unity's graph view does.
+     *
+     * <p>The press SELECTS what it lands on first, so the commands act on what was clicked — unless the
+     * node is already part of the selection, in which case all of it stays, as in a file manager. The
+     * graph takes focus too: every graph command resolves its view from the focused element, and a right
+     * press is not one the node's own handler claims. A wire is painted rather than laid out, so it is
+     * found from the pointer rather than from the press's target.</p>
+     */
+    private void installContextMenus() {
+        ContextMenu.attach(this, CommandRegistry.global(), target -> {
+            UIDocument window = document();
+            if (window == null || !isEnabled()) return null;
+            GraphNode node = nodeOf(target);
+            if (node != null) {
+                if (!getSelection().nodes().contains(node)) selectNode(node, false);
+                window.focus().requestPointerFocus(this);
+                return ContextMenu.of(MenuId.GRAPH_NODE_CONTEXT);
+            }
+            var pointer = window.input().pointer();
+            GraphConnection wire = wireAt(pointer.x(), pointer.y());
+            if (wire == null) return null;
+            getSelection().selectOnly(wire);
+            window.focus().requestPointerFocus(this);
+            return ContextMenu.of(MenuId.GRAPH_WIRE_CONTEXT);
+        });
+    }
+
+    @Nullable
+    private GraphNode nodeOf(@Nullable UIElement target) {
+        for (UIElement element = target; element != null && element != this; element = element.parentElement()) {
+            if (element instanceof GraphNode node) return node;
+        }
+        return null;
     }
 
     // ── Marquee ─────────────────────────────────────────────────────────────
