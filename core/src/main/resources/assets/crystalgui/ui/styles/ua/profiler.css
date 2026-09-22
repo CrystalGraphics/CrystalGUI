@@ -1,0 +1,512 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * The frame profiler.
+ *
+ * FOUR THINGS, in the order the eye should meet them: the strip (which frames
+ * missed), the header (what this one cost), the flame chart (what it spent it
+ * on), the tabs (the same, as tables). The toolbar is chrome and is dressed as
+ * chrome -- flat, quiet, out of the way -- so it is not the loudest band on
+ * the window, which it was.
+ *
+ * EVERY RULE STATES ITS OWN font-size. `ua/core.css` opens with
+ * `* { font-size: 10 }`, which is a candidate on every element, so a size set on
+ * a container reaches none of its rows -- and it LOOKS like it works, because
+ * the heading carries its own rule.
+ *
+ * Numbers are monospaced and that is not a preference: these are figures
+ * refreshed while you watch, and in a proportional face every column jitters
+ * sideways as digits change, which reads as the window flickering.
+ * ───────────────────────────────────────────────────────────────────────────── */
+
+frameprofiler {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    gap: 6px;
+    padding: 8px;
+    background-color: var(--profiler-timeline-bg);
+    color: var(--profiler-metric-fg);
+    font-family: "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
+    font-size: 11;
+}
+
+frameprofiler .__spacer__ {
+    width: 0px;
+    flex-grow: 1;
+}
+
+/* ── toolbar ─────────────────────────────────────────────────────────────── */
+
+frameprofiler .__toolbar__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    min-width: 0px;
+    height: 26px;
+    flex-shrink: 0;
+    font-size: 11;
+}
+
+/* FLAT, like every other toolbar in the shell: no face at rest, a quiet fill on hover. Four filled
+ * grey buttons were the loudest thing on the window and said nothing. */
+frameprofiler .__toolbar__ button {
+    height: 24px;
+    min-height: 0px;
+    padding-left: 9px;
+    padding-right: 9px;
+    border-radius: var(--radius-control, 4px);
+    background: none;
+    color: var(--profiler-heading-fg);
+    font-size: 11;
+}
+
+frameprofiler .__toolbar__ button:hover {
+    background: none;
+    background-color: var(--hover-bg);
+    color: var(--profiler-metric-fg);
+}
+
+frameprofiler .__toolbar__ button:active {
+    background: none;
+    background-color: var(--pressed-bg);
+}
+
+/* RECORDING IS A STATE WORTH SEEING: the one toolbar item that is coloured, and only while it is on. */
+frameprofiler .__toolbar__ button.__recording__ {
+    color: var(--profiler-recording-fg);
+}
+
+/* LIVE IS LIT while the window follows the newest frame, and dim while it holds one still. */
+frameprofiler .__toolbar__ button.__following__ {
+    background: none;
+    background-color: var(--profiler-live-bg);
+    color: var(--profiler-live-fg);
+}
+
+/* THE STATS TAKE THE SLACK AND GIVE IT BACK FIRST. `flex-shrink` defaults to 0 in this engine, so a
+ * row of text that cannot shrink sets the panel's minimum width -- and a panel wider than its window
+ * pushed the budget labels, the LIVE badge and half this line off the right edge behind a scrollbar.
+ * Width 0 plus flex-grow means it fills what is left and never asks for more. */
+frameprofiler .__stats__ {
+    width: 0px;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    margin-left: 12px;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--profiler-caption-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+/* ── frame strip ─────────────────────────────────────────────────────────── */
+
+/* RECESSED because it is a well you look into, and it is the one band that must never move.
+ * `color` is the quiet in-budget bar; `border-color` is the accent the selection takes. */
+framestrip {
+    width: 100%;
+    height: 72px;
+    flex-shrink: 0;
+    background-color: var(--profiler-strip-bg);
+    border-radius: var(--radius-panel, 8px);
+    color: var(--profiler-bar-good);
+    border-color: var(--profiler-playhead);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 9;
+}
+
+/* ── the frame header ────────────────────────────────────────────────────── */
+
+frameprofiler .__frame-header__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-width: 0px;
+    height: 32px;
+    flex-shrink: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+    font-size: 11;
+}
+
+/* A LADDER OF THREE: caption small and dim, figure mono and secondary, headline large. The eye reads
+ * the headline first and the rest only if it wants to. */
+frameprofiler .__caption__ {
+    margin-left: 8px;
+    color: var(--profiler-caption-fg);
+    font-size: 10;
+}
+
+frameprofiler .__figure__ {
+    color: var(--profiler-heading-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 11;
+}
+
+frameprofiler .__headline__ {
+    margin-left: 6px;
+    margin-right: 6px;
+    color: var(--profiler-metric-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 18;
+}
+
+frameprofiler .__figure__.__mostly__ {
+    color: var(--profiler-untracked-fg);
+}
+
+/* ABSENT IS NOT ZERO. A GPU timer resolves one to three frames late, and this is the class that says
+ * so instead of printing 0.00ms. */
+frameprofiler .__absent__ {
+    color: var(--profiler-pending);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 11;
+    font-style: italic;
+}
+
+frameprofiler .__badge__ {
+    padding-left: 7px;
+    padding-right: 7px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    border-radius: var(--radius-control, 4px);
+    background-color: var(--profiler-badge-bg);
+    color: var(--profiler-caption-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 9;
+}
+
+frameprofiler .__badge__.__following__ {
+    background-color: var(--profiler-live-bg);
+    color: var(--profiler-live-fg);
+}
+
+/* ── the flame chart ─────────────────────────────────────────────────────── */
+
+/* THE CHART AND THE TABS SHARE THE SLACK, three to two, and neither is a fixed height. The tabs were a
+ * fixed 250 and the chart had a floor of 120, which on a window shorter than their sum pushed the
+ * whole panel past its window and put a scrollbar on the window itself. Every other band is fixed,
+ * so a taller window is spent on the two things there is always more of to read. */
+flamechart {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-height: 60px;
+    gap: 4px;
+    padding: 8px;
+    background-color: var(--profiler-panel-bg);
+    border-radius: var(--radius-panel, 8px);
+    overflow: scroll;
+}
+
+/* The readout names what is under the pointer, indented to sit over the spans rather than over the
+ * thread labels: label slot plus the row's gap. */
+flamechart .__detail__ {
+    height: 16px;
+    flex-shrink: 0;
+    padding-left: 64px;
+    color: var(--profiler-metric-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+flamechart .__detail__.__hint__ {
+    color: var(--profiler-caption-fg);
+    font-family: "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
+    font-size: 10;
+}
+
+flamechart .__thread-row__ {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    flex-shrink: 0;
+}
+
+/* A FIXED SLOT, not a shrink-to-fit one: the labels are what makes the rows read as a stack of
+ * threads rather than as ragged bars, and a long thread name would otherwise push its own chart
+ * narrower than its neighbour's. */
+flamechart .__thread-label__ {
+    width: 56px;
+    flex-shrink: 0;
+    padding-top: 3px;
+    color: var(--profiler-caption-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+timelineruler {
+    width: 0px;
+    flex-grow: 1;
+    color: var(--profiler-caption-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 9;
+}
+
+/* `color` is the text on a zone; `border-color` the ring on the selected one. */
+spantrack {
+    width: 0px;
+    flex-grow: 1;
+    color: var(--profiler-zone-text);
+    border-color: var(--profiler-zone-ring);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+flamechart .__empty__ {
+    color: var(--profiler-pending);
+    padding: 12px;
+    font-size: 11;
+}
+
+/* ── the split between chart and tabs ────────────────────────────────────── */
+
+/* THE SPLIT TAKES THE SLACK; the chart and the tabs inside it are sized by the divider. */
+frameprofiler splitview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+    min-height: 0px;
+}
+
+/* DRESSED AS THE GAP IT REPLACES: invisible at rest, so the window reads as four bands and not as
+ * four bands plus a grey bar, and a quiet line under the pointer so it can be found. A grab handle
+ * that shouts is a control the eye keeps landing on for no reason. */
+frameprofiler splitview.__vertical__ > .__divider__ {
+    height: 6px;
+    background: none;
+    background-color: var(--profiler-timeline-bg);
+}
+
+frameprofiler splitview.__vertical__ > .__divider__:hover,
+frameprofiler splitview.__vertical__ > .__divider__:active {
+    background: none;
+    background-color: var(--profiler-row-hover-bg);
+}
+
+/* ── the detail tabs ─────────────────────────────────────────────────────── */
+
+frameprofiler tabview {
+    width: 100%;
+    height: 100%;
+    min-height: 80px;
+    background-color: var(--profiler-tabs-bg);
+    border-radius: var(--radius-panel, 8px);
+    font-size: 11;
+}
+
+zonestab,
+calltreetab,
+counterstab {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    font-size: 11;
+}
+
+/* SIDE BY SIDE, in a split: callees on the left, callers on the right. Stacked, the two trees halved a
+ * short tab between them and each showed two rows. The tab is wide and short, so the split goes the way
+ * the room does, and the reader moves the divider. */
+calltreetab splitview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+calltreetab .__call-side__ {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0px;
+}
+
+/* A leaf keeps the slot and draws nothing, so every name at a depth starts at the same x. */
+calltreetab .__twisty__ {
+    margin-left: 4px;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--tree-twisty-fg, #FFFFFF);
+}
+
+calltreetab .__twisty__:hover {
+    color: var(--tree-twisty-hover-fg, #FFFFFF);
+}
+
+calltreetab .__collapsed__ > .__twisty__ {
+    overlay: shape("chevron-right");
+}
+
+calltreetab .__expanded__ > .__twisty__ {
+    overlay: shape("chevron-down");
+}
+
+calltreetab .__leaf__ > .__twisty__ {
+    overlay: none;
+}
+
+/* A DEFINITE HEIGHT, or nothing: the table is a virtualised list, and one sized to its content by a
+ * parent that is itself sized to ITS content resolves to zero rows. The call tree's tree view has the
+ * same rule, which is why it drew and this did not. */
+zonestab tableview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+/* THE SELECTED ROW, scoped to this panel as every list here must be: `ListView` marks the row and
+ * leaves the painting to whoever owns it, so a panel with no rule selects perfectly and shows nothing.
+ * Selection wins over hover where both apply, or the pointer resting on the selected row repaints it as
+ * merely hovered. */
+zonestab tableview .__row__:hover,
+calltreetab treeview .__row__:hover {
+    background-color: var(--profiler-row-hover-bg);
+}
+
+zonestab tableview .__row__.__selected__,
+zonestab tableview .__row__.__selected__:hover,
+calltreetab treeview .__row__.__selected__,
+calltreetab treeview .__row__.__selected__:hover {
+    background-color: var(--profiler-row-selected-bg);
+}
+
+zonestab tableview .__cell__ {
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+zonestab tableview .__header-cell__ {
+    color: var(--profiler-caption-fg);
+    font-size: 10;
+}
+
+/* A heading row whose two cost heads sit exactly over the rows' cost columns: same widths, same
+ * right alignment, same right padding. */
+calltreetab .__call-heading__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    flex-shrink: 0;
+    /* Over the names, which start past the twisty's slot: its margin, its width and the row's gap. */
+    padding-left: 24px;
+    /* The row's own right padding plus the tree's scrollbar gutter, which the heading row has no
+     * scrollbar to take up -- without it the heads sat a gutter's width right of their numbers. */
+    padding-right: 18px;
+    padding-top: 6px;
+    padding-bottom: 2px;
+    color: var(--profiler-caption-fg);
+    font-size: 10;
+}
+
+calltreetab .__call-heading__ text {
+    color: var(--profiler-caption-fg);
+    font-size: 10;
+}
+
+calltreetab .__call-title__ {
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+calltreetab treeview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+calltreetab .__call-row__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    padding-right: 4px;
+    gap: 8px;
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+calltreetab .__call-cost__ {
+    width: 72px;
+    text-align: right;
+    color: var(--profiler-caption-fg);
+    flex-shrink: 0;
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+/* ── counters ────────────────────────────────────────────────────────────── */
+
+/* NO HORIZONTAL INSET: a counter row lines up column for column with the strip above it, which is the
+ * whole reason it is drawn on the strip's axis. Padding here slid every spike a few frames right of
+ * the bar it belongs to. */
+counterstab {
+    gap: 3px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    overflow: scroll;
+}
+
+/* The same quiet bar and the same accent selection as the strip, so a counter reads as the strip's
+ * second row rather than as a chart of its own. */
+countertrack {
+    width: 100%;
+    height: 34px;
+    flex-shrink: 0;
+    background-color: var(--profiler-strip-bg);
+    border-radius: var(--radius-control, 4px);
+    color: var(--profiler-bar-good);
+    border-color: var(--profiler-playhead);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 9;
+}
+
+counterstab .__empty__ {
+    color: var(--profiler-pending);
+    padding: 12px;
+    font-size: 11;
+}
+
+/* ── channels ────────────────────────────────────────────────────────────── */
+
+channelscontrol {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 1;
+    min-width: 0px;
+}
+
+channelscontrol maskcontrol .__toggle__ {
+    height: 24px;
+    min-height: 0px;
+    max-width: 200px;
+    padding-left: 9px;
+    padding-right: 9px;
+    border-radius: var(--radius-control, 4px);
+    background: none;
+    color: var(--profiler-heading-fg);
+    font-size: 11;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+channelscontrol maskcontrol .__toggle__::part(label) {
+    min-width: 0px;
+    flex-shrink: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+channelscontrol maskcontrol .__toggle__:hover {
+    background: none;
+    background-color: var(--hover-bg);
+}

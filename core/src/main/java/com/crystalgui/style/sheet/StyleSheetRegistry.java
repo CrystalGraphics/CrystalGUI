@@ -41,6 +41,7 @@ public final class StyleSheetRegistry {
             "crystalgui:ua/search",
             "crystalgui:ua/samples",
             "crystalgui:ua/uibuilder",
+            "crystalgui:ua/profiler",
             // LAST, and deliberately: CrystalOS's window chrome contains widgets from every part above
             // it, so an equal-specificity tie between a frame's own rule and something inside the frame
             // resolves in favour of the frame. Nothing depends on that today -- every rule in the part is

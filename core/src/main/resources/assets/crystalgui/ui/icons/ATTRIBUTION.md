@@ -96,6 +96,7 @@ one file tree is the cost.
 <https://github.com/feathericons/feather>
 
 `folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`, `x.svg`, `more-vertical.svg`,
+`activity.svg` (the frame profiler's mark),
 `general/action/link-2.svg` (the Free Transform bar's W/H chain, filed with the actions it sits among —
 Feather's geometry, with its relative commands written out absolute and its `<line>` as a path, as
 `x.svg`'s are),

@@ -641,6 +641,48 @@ theme {
      * row. Hint rather than disabled: it is legible text nobody needs to read, not an inert control. */
     --statusbar-item-dim-fg: var(--fg-hint);
 
+    /* The frame profiler. Derived rather than pinned, unlike --framestats-*: the HUD is a debug plate
+     * drawn OVER an application and owns its own palette; this is a first-class window sitting among
+     * the others, so it follows the theme like everything else.
+     *
+     * The bars take the -icon roles on purpose. --warning is darkened until a SENTENCE in it reads on
+     * the surface; --warning-icon is the saturated colour a filled MARK wants, and a frame bar is a
+     * filled mark. Taking the text role would wash the bars to olive in a light theme. */
+    --profiler-toolbar-bg: var(--surface-panel);
+    --profiler-strip-bg: var(--surface-recessed);
+    --profiler-timeline-bg: var(--surface-base);
+    --profiler-panel-bg: var(--surface-panel);
+    --profiler-tabs-bg: var(--surface-panel);
+    /* QUIET BY DEFAULT: an in-budget frame is the unremarkable case, and a strip of six hundred
+     * saturated bars gives the eye nowhere to land. Colour is kept for the misses. */
+    --profiler-bar-good: var(--fg-disabled);
+    --profiler-bar-warn: var(--warning-icon);
+    --profiler-bar-bad: var(--error-icon);
+    --profiler-budget-line: var(--divider);
+    --profiler-playhead: var(--accent);
+    --profiler-zone-border: var(--border-base);
+    /* Light text on the zone palette's mid-tones, and a ring in the foreground colour for the one
+     * selected -- never a recolour, which would defeat a zone keeping its colour. */
+    --profiler-zone-text: var(--fg-on-accent);
+    --profiler-zone-ring: var(--fg);
+    /* Time inside a frame no zone covers. Drawn rather than left blank, because blank reads as
+     * "nothing here" when it means "nothing INSTRUMENTED here". */
+    --profiler-gap: var(--fg-disabled);
+    /* A GPU figure that has not resolved yet -- the word "pending", never 0.00ms. */
+    --profiler-pending: var(--fg-hint);
+    --profiler-heading-fg: var(--fg-secondary);
+    --profiler-caption-fg: var(--fg-hint);
+    --profiler-metric-fg: var(--fg);
+    --profiler-badge-bg: var(--surface-raised);
+    --profiler-live-bg: var(--accent-soft);
+    --profiler-live-fg: var(--fg);
+    --profiler-recording-fg: var(--error-icon);
+    --profiler-row-hover-bg: var(--hover-bg);
+    --profiler-row-selected-bg: var(--selection-bg);
+    /* Most of a frame spent outside anything measured -- worth a colour, and the warning one: it is not
+     * an error, it is a reason to look somewhere the chart cannot. */
+    --profiler-untracked-fg: var(--warning-icon);
+
     /* Progress. The track is a hollow, so it derives from the border family rather than a surface --
      * it has to read as an inset against --statusbar-bg, which a surface value would not. */
     --progress-track-bg: var(--border-base);

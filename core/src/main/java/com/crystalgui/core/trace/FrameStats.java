@@ -82,18 +82,30 @@ public final class FrameStats {
             // silently enable nothing if nothing had touched UiTrace yet. @see CgTrace#setEnabled
             //
             // NOT `blame`: it walks a stack per invalidation and is asked for by name.
+            //
+            // REMEMBERED, so release() undoes only what this did. The mask is one global shared with
+            // the profiler window, and a release that switched off channels somebody else had switched
+            // on left that window recording nothing while its button still said it was.
+            enabledFrame = !CgTrace.isEnabled(UiTrace.FRAME);
+            enabledFlow = !CgTrace.isEnabled(UiTrace.FLOW);
             CgTrace.setEnabled(UiTrace.FRAME, true);
             CgTrace.setEnabled(UiTrace.FLOW, true);
         }
     }
 
-    /** Drops one {@link #hold()}. */
+    /** Drops one {@link #hold()}, switching off only the channels that hold switched on. */
     public void release() {
         if (holders > 0 && --holders == 0) {
-            CgTrace.setEnabled(UiTrace.FRAME, false);
-            CgTrace.setEnabled(UiTrace.FLOW, false);
+            if (enabledFrame) CgTrace.setEnabled(UiTrace.FRAME, false);
+            if (enabledFlow) CgTrace.setEnabled(UiTrace.FLOW, false);
+            enabledFrame = false;
+            enabledFlow = false;
         }
     }
+
+    /** Whether the current hold turned each channel on, as opposed to finding it already on. */
+    private boolean enabledFrame;
+    private boolean enabledFlow;
 
     private float windowSeconds = 3f;
 
