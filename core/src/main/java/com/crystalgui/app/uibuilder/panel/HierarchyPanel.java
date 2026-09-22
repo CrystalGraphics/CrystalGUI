@@ -9,6 +9,7 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.BuilderSelection;
 import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.glyph.GlyphView;
@@ -190,6 +191,11 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         // element's own keymap is asked first -- so the chord copies a selector here and picks everywhere
         // else, whichever of the two registered first.
         tree.keymap().bind("Ctrl+Shift+C", HierarchyActions.COPY_SELECTOR);
+        // THE CANVAS'S ATTRIBUTE KEYS, HERE TOO. They were on the canvas keymap alone, which a menu opened
+        // on this tree never walks to -- so the rows showed no shortcut and the keys did nothing here.
+        // The search field's own Alt+C (Match Case) is asked first while it has focus.
+        tree.keymap().bind("Alt+C", BuilderCommands.COPY_ATTRIBUTES);
+        tree.keymap().bind("Alt+V", BuilderCommands.PASTE_ATTRIBUTES);
         tree.setRenderer(new RowRenderer());
         // AFTER the renderer, which it wraps to mark the matched letters in each row's label.
         TreeSearch<UIElement> search = TreeSearch.installOn(tree, content, TreeSearch.byText(HierarchyPanel::describe),

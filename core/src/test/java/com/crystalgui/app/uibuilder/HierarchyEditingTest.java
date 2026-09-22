@@ -358,4 +358,13 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
         assertEquals(KeyChord.parse("Ctrl+Shift+C"),
                 Keymap.acceleratorFor(hierarchy.tree(), HierarchyActions.COPY_SELECTOR));
     }
+
+    /** <b>...and the canvas's attribute keys reach it too</b>, so its menu rows show them and they fire. */
+    @Test
+    public void theAttributeKeysWorkInTheHierarchy() {
+        assertEquals(KeyChord.parse("Alt+C"),
+                Keymap.acceleratorFor(hierarchy.tree(), BuilderCommands.COPY_ATTRIBUTES));
+        assertEquals(KeyChord.parse("Alt+V"),
+                Keymap.acceleratorFor(hierarchy.tree(), BuilderCommands.PASTE_ATTRIBUTES));
+    }
 }
