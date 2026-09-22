@@ -1843,7 +1843,7 @@ registry.register(Command.of("edit.save", "Save File")
 
 | Argument | Meaning |
 |---|---|
-| `MenuId` | Where. The main-menu ids are `MAIN_FILE`, `MAIN_EDIT`, `MAIN_VIEW`, `MAIN_GRAPH`, `MAIN_WINDOW`, `MAIN_HELP`, plus the nested `MAIN_FILE_NEW`, `MAIN_FILE_RECENT`, `MAIN_VIEW_TOOLWINDOWS` |
+| `MenuId` | Where. The main-menu ids are `MAIN_FILE`, `MAIN_EDIT`, `MAIN_VIEW`, `MAIN_WINDOW`, `MAIN_HELP`, plus the nested `MAIN_FILE_NEW`, `MAIN_FILE_RECENT`, `MAIN_VIEW_TOOLWINDOWS` |
 | `group` | The **section**, and the sort key. VS Code's `N_name` convention: `1_new`, `2_open`. **Separators are drawn between groups and never declared** — so adding to an existing section cannot produce a stray rule, and starting a new one cannot fail to |
 | `order` | Position within the section |
 

@@ -73,9 +73,6 @@ public final class MainMenuCommands {
                 .addMenu(MenuId.MAIN_FILE, "&File")
                 .addMenu(MenuId.MAIN_EDIT, "&Edit")
                 .addMenu(MenuId.MAIN_VIEW, "&View")
-                // THE ONE MENU NEITHER REFERENCE HAS. Everything in it is contributed from
-                // com.crystalgui.ui.elements.graph, and the shell imports none of it.
-                .addMenu(MenuId.MAIN_GRAPH, "&Graph")
                 .addMenu(MenuId.MAIN_WINDOW, "&Window")
                 .addMenu(MenuId.MAIN_HELP, "&Help");
     }

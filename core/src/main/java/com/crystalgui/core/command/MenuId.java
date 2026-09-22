@@ -139,8 +139,6 @@ public final class MenuId {
     public static final MenuId MAIN_VIEW_TOOLWINDOWS =
             of("main/view/toolwindows").nestedIn(MAIN_VIEW, "Tool Windows", "2_toolwindows", 0);
 
-    /** Graph — this application's own menu, contributed from the graph package. */
-    public static final MenuId MAIN_GRAPH = of("main/graph");
 
     /** Window — panes, and the computed list of open editors. */
     public static final MenuId MAIN_WINDOW = of("main/window");

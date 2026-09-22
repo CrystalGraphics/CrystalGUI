@@ -122,4 +122,21 @@ public class GraphContextMenuTest extends UiDocumentTestBase {
         assertEquals("one undo brings them all back", 1, graph.connectionsOf(into).size());
         assertEquals(1, graph.connectionsOf(b.getOutputPorts().get(0)).size());
     }
+
+    /** <b>The empty canvas has a menu too</b> -- Insert Node, and the selection and framing the menu bar used to hold. */
+    @Test
+    public void aRightClickOnEmptyCanvasOffersInsertNode() {
+        node("A", 20f, 20f);
+        var box = graph.box();
+        Vector2f at = Transform2D.apply(box.localToWorld(), box.width() - 10f, box.height() - 10f);
+        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(at.x()), Math.round(at.y()), 0, 0, CgMouseCodes.RIGHT_BUTTON, true, 0f, 1L));
+        frame();
+
+        Menu menu = openMenu();
+        assertNotNull("a menu opened", menu);
+        for (String row : new String[]{"Insert Node", "Select All", "Deselect", "Frame Selection", "Frame All"}) {
+            item(menu, row);
+        }
+    }
 }
