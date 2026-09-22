@@ -274,12 +274,19 @@ public final class JavaSignatures {
             // AbstractList<E>`, and getTypeDeclaration is the binding that says so. Both references
             // show the declaration here.
             ITypeBinding type = ((ITypeBinding) binding).getTypeDeclaration();
-            out.word(declarationKeyword(type), "keyword");
+            if (type.isAnnotation()) {
+                // THE `@` IS METADATA, `interface` THE KEYWORD -- as the editor draws the same line.
+                out.append("@", "attribute").word("interface", "keyword");
+            } else {
+                out.word(declarationKeyword(type), "keyword");
+            }
             // NAMED BY THE TYPES IT IS NESTED IN. @see #appendNestedPrefix -- the band above this line
             // carries the PACKAGE, so a bare simple name left nothing anywhere in the popup saying the
             // type was nested at all, and pointed a reader at a package the name is not directly in.
             appendNestedPrefix(out, type);
-            out.append(name, typeCapture(type));
+            // AN ANNOTATION TYPE'S NAME IS ANNOTATION_NAME, as in the editor. Here and not in
+            // typeCapture, which answers for every reference to a type and is a CLASS answer there.
+            out.append(name, type.isAnnotation() ? "attribute" : typeCapture(type));
             appendTypeParameters(out, type);
             appendSupertypes(out, type, broken);
             return out.build();
