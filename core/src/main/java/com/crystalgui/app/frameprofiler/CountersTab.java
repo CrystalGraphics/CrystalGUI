@@ -57,6 +57,23 @@ public class CountersTab extends UIElement {
         return List.copyOf(rows);
     }
 
+    /** The view every row shows — the strip's. @see #showView */
+    private double viewFrom;
+    private double viewSpan;
+    private final List<Runnable> viewListeners = new ArrayList<>(2);
+
+    /** Hears a zoom or pan made on any row, so the strip can follow it. Read the view back from a row. */
+    public void onViewChanged(Runnable listener) {
+        if (listener != null) viewListeners.add(listener);
+    }
+
+    /** Puts every row on the same frames as the strip; {@code span} 0 is the whole ring. */
+    public void showView(double from, double span) {
+        viewFrom = from;
+        viewSpan = span;
+        for (CounterTrack row : rows) row.showView(from, span);
+    }
+
     public void show(Map<String, long[]> series, int selected, int comparableFrom) {
         List<String> order = ordered(series);
         if (!sameNames(order)) {
@@ -72,6 +89,15 @@ public class CountersTab extends UIElement {
                 row.onSelected(index -> {
                     for (IntConsumer listener : listeners) listener.accept(index);
                 });
+                // ONE VIEW FOR EVERY ROW ON THESE COLUMNS: a wheel on a counter moves the strip too.
+                row.onViewChanged(() -> {
+                    viewFrom = row.viewFrom();
+                    viewSpan = row.isZoomed() ? row.visible() : 0d;
+                    for (CounterTrack other : rows) {
+                        if (other != row) other.showView(viewFrom, viewSpan);
+                    }
+                    for (Runnable listener : viewListeners) listener.run();
+                });
                 rows.add(row);
                 append(row);
             }
@@ -80,6 +106,7 @@ public class CountersTab extends UIElement {
             row.setSeries(row.label(), series.get(row.label()));
             row.showSelected(selected);
             row.setComparableFrom(comparableFrom);
+            row.showView(viewFrom, viewSpan);
         }
     }
 

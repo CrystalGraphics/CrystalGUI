@@ -176,6 +176,7 @@ PART	CallTreeTab	call-heading	A	0	proposed	leaf in every rule
 PART	CallTreeTab	call-row	A	0	proposed	leaf in every rule
 PART	CallTreeTab	call-side	A	0	proposed	leaf in every rule
 PART	CallTreeTab	call-title	A	0	proposed	leaf in every rule
+PART	CallTreeTab	twisty	A	0	proposed	leaf in every rule
 PART	CanvasView	content	B	0	confirmed	leaf in every rule
 PART	CanvasView	panning	C	2	confirmed	state adjective
 PART	CategoryHeader	arrow	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
@@ -230,8 +231,8 @@ PART	CompletionPopup	completion-row	B	2	confirmed	leaf in every rule
 PART	ConfigControl	config-control	B	99	confirmed	a rule selects through it (85)
 PART	Configurator	compact	B	9	proposed	a rule selects through it (8)
 PART	Configurator	configurator	B	43	confirmed	a rule selects through it (38)
-PART	Configurator	inline	C	15	confirmed	state adjective
-PART	Configurator	label	B	18	confirmed	leaf in every rule, scoped by an ancestor in 18
+PART	Configurator	inline	C	17	confirmed	state adjective
+PART	Configurator	label	B	19	confirmed	leaf in every rule, scoped by an ancestor in 19
 PART	Configurator	list-row	B	2	proposed	a rule selects through it (1)
 PART	ConfiguratorGroup	arrow	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ConfiguratorGroup	collapsed	C	5	confirmed	state adjective
@@ -561,7 +562,7 @@ PART	NodePort	output	B	3	confirmed	a rule selects through it (1)
 PART	NodeWidgetFactory	unknown-type	C	0	confirmed	state adjective
 PART	NodeWireLayer	wire-layer	B	0	confirmed	leaf in every rule
 PART	NoteControl	note	B	1	proposed	a rule selects through it (1)
-PART	NoteControl	value	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NoteControl	value	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	NotesView	notes	A	0	proposed	leaf in every rule
 PART	NotesView	notes-add	A	0	proposed	leaf in every rule
 PART	NotesView	notes-row	A	0	proposed	leaf in every rule
@@ -653,6 +654,10 @@ PART	ProcessesPopover	label	B	2	confirmed	leaf in every rule, scoped by an ances
 PART	ProcessesPopover	process-row	B	8	confirmed	a rule selects through it (7)
 PART	ProcessesPopover	processes	B	12	confirmed	a rule selects through it (11)
 PART	ProcessesPopover	title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	ProfilerSettingsPage	settings-header	A	0	proposed	leaf in every rule
+PART	ProfilerSettingsPage	settings-summary	A	0	proposed	leaf in every rule
+PART	ProfilerSettingsPage	settings-title	A	0	proposed	leaf in every rule
+PART	ProfilerSettingsPage	settings-titles	A	0	proposed	leaf in every rule
 PART	ProgressBar	indeterminate	A	0	confirmed	leaf in every rule
 PART	ProgressStatusItem	cancel	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	ProgressStatusItem	count	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -994,6 +999,7 @@ PART	WidgetSamples	sample-popover	A	1	proposed	leaf in every rule
 PART	WidgetSamples	sample-title	A	1	proposed	leaf in every rule
 PART	WidgetSamples	sample-twisty	A	1	proposed	leaf in every rule
 PART	WindowFrame	active	C	16	confirmed	state adjective
+PART	WindowFrame	caption-action	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
 PART	WindowFrame	caption-adopted	C	9	confirmed	state adjective
 PART	WindowFrame	caption-chrome	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	WindowFrame	close	B	7	confirmed	leaf in every rule, scoped by an ancestor in 7
@@ -1005,11 +1011,13 @@ PART	WindowFrame	icon	B	1	confirmed	leaf in every rule, scoped by an ancestor in
 PART	WindowFrame	maximize	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	maximized	C	2	confirmed	state adjective
 PART	WindowFrame	minimize	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	WindowFrame	on	C	3	proposed	state adjective
 PART	WindowFrame	pin	B	5	confirmed	leaf in every rule, scoped by an ancestor in 5
 PART	WindowFrame	pinned	C	1	confirmed	state adjective
+PART	WindowFrame	settings	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowFrame	title	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	WindowFrame	title-bar	B	27	confirmed	a rule selects through it (23)
-PART	WindowFrame	window	B	34	confirmed	a rule selects through it (30)
+PART	WindowFrame	title-bar	B	31	confirmed	a rule selects through it (27)
+PART	WindowFrame	window	B	38	confirmed	a rule selects through it (34)
 PART	WindowIcon	branded	C	1	confirmed	state adjective
 PART	WindowIcon	tile-mono	A	1	confirmed	leaf in every rule
 PART	WindowIcon	window-icon	B	10	confirmed	leaf in every rule

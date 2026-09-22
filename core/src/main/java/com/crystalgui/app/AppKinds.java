@@ -5,6 +5,7 @@ import com.crystalgui.app.frameprofiler.ChannelsControl;
 import com.crystalgui.app.frameprofiler.CountersTab;
 import com.crystalgui.app.frameprofiler.FlameChart;
 import com.crystalgui.app.frameprofiler.FrameProfilerPanel;
+import com.crystalgui.app.frameprofiler.ProfilerSettingsPage;
 import com.crystalgui.app.frameprofiler.ZonesTab;
 import com.crystalgui.app.shadergraph.ShaderGraphView;
 import com.crystalgui.app.uibuilder.canvas.Artboard;
@@ -85,5 +86,6 @@ public final class AppKinds implements NodeKinds {
         UIElementRegistry.registerTag(CallTreeTab.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ChannelsControl.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(CountersTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ProfilerSettingsPage.NAME, NodeContract.INERT);
     }
 }

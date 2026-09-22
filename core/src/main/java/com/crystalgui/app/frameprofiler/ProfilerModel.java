@@ -6,7 +6,6 @@ import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceSnapshot;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.widget.display.CounterTrack;
 
 import javax.annotation.Nullable;
@@ -78,7 +77,10 @@ public final class ProfilerModel {
     public void refresh() {
         long was = selected >= 0 && selected < snapshot.frames().size()
                 ? snapshot.frames().get(selected).index() : -1L;
-        snapshot = CgTrace.snapshot();
+        // FRAMES AND COUNTERS ONLY. A full snapshot copies every zone held, which at ten thousand frames
+        // is millions of objects four times a second; zones are fetched for the selection alone.
+        snapshot = CgTrace.frameSnapshot();
+        cachedZonesKey = null;
         List<CgFrameRecord> frames = snapshot.frames();
         if (following || was < 0L) {
             selected = frames.size() - 1;
@@ -215,19 +217,6 @@ public final class ProfilerModel {
     }
 
     /**
-     * The two top-level channels a "Capture" button turns on.
-     *
-     * <p>Named as PREFIXES, so ticking one takes everything beneath it — the engine's hierarchical
-     * names are what make {@code CrystalGraphics | CrystalGUI} the common gesture while a mod's own
-     * channel stays separately reachable.</p>
-     *
-     * <p><b>Not {@code crystalgui.blame}.</b> It walks a stack on every invalidation, which slows the
-     * very frames being measured; it is asked for by name, from the channel menu, when it is wanted.</p>
-     */
-    public static final List<String> DEFAULT_CHANNELS =
-            List.of("crystalgraphics", UiTrace.FRAME.name(), UiTrace.FLOW.name());
-
-    /**
      * Whether any channel that produces data is on.
      *
      * <p>NOT {@code CgTrace.isRecording()}: the engine keeps its own {@code trace} channel on whenever
@@ -251,11 +240,41 @@ public final class ProfilerModel {
     public void toggleRecording() {
         if (isCapturing()) {
             setFrozen(true);
+        } else if (CgTrace.stopReason() != null) {
+            restartAfterStop();
         } else if (isFrozen()) {
             setFrozen(false);
         } else {
             setCapturing(true);
         }
+    }
+
+    /**
+     * Why recording stopped by itself — a full keep-first ring, or the frames after a hitch — or null
+     * while recording or when it was stopped by hand.
+     */
+    @Nullable
+    public String stopReason() {
+        return isCapturing() ? null : CgTrace.stopReason();
+    }
+
+    /**
+     * Records again after the engine stopped by itself, with the channels it had.
+     *
+     * <p>A full keep-first ring is cleared first — it can take nothing more, so resuming without a clear
+     * would stop again on the next frame. After a hitch the ring is kept: resuming carries on from it.</p>
+     */
+    private void restartAfterStop() {
+        List<String> channels = CgTrace.stoppedChannels();
+        if (CgTrace.isFull()) CgTrace.clear();
+        frozenChannels = null;
+        if (channels.isEmpty()) {
+            for (String prefix : ProfilerSettings.channels()) CgTrace.enable(prefix);
+        } else {
+            CgTrace.enableOnly(channels);
+        }
+        setFollowing(true);
+        refresh();
     }
 
     /**
@@ -268,7 +287,7 @@ public final class ProfilerModel {
     public void setCapturing(boolean capturing) {
         frozenChannels = null;
         if (capturing) {
-            for (String prefix : DEFAULT_CHANNELS) CgTrace.enable(prefix);
+            for (String prefix : ProfilerSettings.channels()) CgTrace.enable(prefix);
         } else {
             CgTrace.disableAll();
         }
@@ -436,14 +455,21 @@ public final class ProfilerModel {
      */
     public List<CgTraceSnapshot.ZoneView> zonesOfSelection() {
         List<CgFrameRecord> frames = snapshot.frames();
-        if (frames.isEmpty() || selected < 0) return List.of();
-        if (!hasRange()) return snapshot.zonesIn(frames.get(selected));
-        List<CgTraceSnapshot.ZoneView> all = new ArrayList<>();
-        for (int i = rangeFrom; i <= rangeTo && i < frames.size(); i++) {
-            all.addAll(snapshot.zonesIn(frames.get(i)));
+        if (frames.isEmpty() || selected < 0 || selected >= frames.size()) return List.of();
+        CgFrameRecord first = frames.get(hasRange() ? rangeFrom : selected);
+        CgFrameRecord last = frames.get(hasRange() ? Math.min(rangeTo, frames.size() - 1) : selected);
+        String key = first.index() + ":" + last.index();
+        // ONE FETCH PER SELECTION, not per reader: the chart, both tables and the header each ask.
+        if (!key.equals(cachedZonesKey)) {
+            cachedZones = CgTrace.zonesBetween(first.beginNanos(), last.endNanos());
+            cachedZonesKey = key;
         }
-        return all;
+        return cachedZones;
     }
+
+    @Nullable
+    private String cachedZonesKey;
+    private List<CgTraceSnapshot.ZoneView> cachedZones = List.of();
 
     public List<CgTraceSnapshot.CounterView> countersOfSelection() {
         List<CgFrameRecord> frames = snapshot.frames();

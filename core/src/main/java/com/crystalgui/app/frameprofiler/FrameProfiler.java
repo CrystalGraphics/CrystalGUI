@@ -1,11 +1,14 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.widget.control.Button;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
@@ -50,6 +53,11 @@ public final class FrameProfiler {
             // then declaring a handler for one would put the profiler in "open with" for a file it
             // cannot read, which is worse than not being listed.
             .singleInstance()
+            // IT NEEDS NO SERVER: it measures whatever this process is doing, a title screen included.
+            .standalone()
+            // BEFORE THE FIRST FRAME, whether or not the window is ever opened: the ring's size and
+            // "record from launch" are only worth anything if they apply before anything is recorded.
+            .autostart(context -> ProfilerSettings.atLaunch(context.storage()))
             .launch(context -> new Instance(context.desktop()));
 
     /**
@@ -68,6 +76,10 @@ public final class FrameProfiler {
 
     /** As {@link #open}, given the desktop already. */
     public static WindowFrame openOn(Desktop desktop) {
+        // THE SAME FILE A LAUNCH READS, for a window opened by key rather than through the registry.
+        // A no-op when the desktop's autostart already loaded it.
+        ConfigStorage config = desktop.config();
+        if (config != null) ProfilerSettings.useStorage(config.scoped(StorageLayout.APPS).scoped(ID));
         WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
         if (existing != null) {
             desktop.raise(existing);
@@ -78,7 +90,15 @@ public final class FrameProfiler {
         frame.setPolicy(WindowPolicy.HIDE_ON_CLOSE);
         frame.setApplication(KIND);
         frame.markApplicationMain();
-        frame.setContent(new FrameProfilerPanel());
+        FrameProfilerPanel panel = new FrameProfilerPanel();
+        frame.setContent(panel);
+        // THE GEAR, left of the pin: the settings are the window's own, so they are reached from its
+        // caption rather than from a menu this window does not have.
+        Button gear = frame.addCaptionAction(WindowFrame.SETTINGS_ACTION_CLASS, "Settings", panel::toggleSettings);
+        panel.onSettingsToggled.connect(open -> {
+            if (open) gear.addClass(WindowFrame.ACTION_ON_CLASS);
+            else gear.removeClass(WindowFrame.ACTION_ON_CLASS);
+        });
         desktop.addWindow(frame);
         // AFTER addWindow, which is what places and sizes it -- a size written first is overwritten.
         // Clamped to the work area: the bands below sum to well over a short desktop's height, and a
