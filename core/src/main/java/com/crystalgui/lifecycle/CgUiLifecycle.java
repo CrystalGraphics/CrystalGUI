@@ -79,6 +79,20 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     }
 
     /** Unregisters CrystalGUI from the engine lifecycle. Rarely needed outside tests. */
+    /**
+     * Does what a resource reload does, without one -- a dev host's reload key.
+     *
+     * <pre>{@code
+     * if (ctrl && key == R) CgUiLifecycle.reload();   // edited .css and .svg files reappear
+     * }</pre>
+     *
+     * <p>One definition of "reload" for every host: a key that re-read only the stylesheets left every
+     * edited icon on screen, because the icon caches are this method's to revalidate.</p>
+     */
+    public static void reload() {
+        INSTANCE.onReload();
+    }
+
     public static void unregister() {
         CgGraphicsLifecycle.removeListener(INSTANCE);
         CgAssetReloader.removeListener(INSTANCE);
