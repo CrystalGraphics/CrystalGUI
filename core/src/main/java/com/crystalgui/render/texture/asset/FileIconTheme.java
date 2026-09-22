@@ -94,7 +94,7 @@ public final class FileIconTheme {
         return CACHE.computeIfAbsent(themePath, FileIconTheme::load);
     }
 
-    /** Drops every cached theme. Not wired to resource reload yet, same as {@code SvgDocument.of}. */
+    /** Drops every cached theme and variant lookup — what a resource reload calls. */
     public static void invalidateCache() {
         CACHE.clear();
         DARK_VARIANTS.clear();

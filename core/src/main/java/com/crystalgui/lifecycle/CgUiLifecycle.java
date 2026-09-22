@@ -8,6 +8,8 @@ import com.crystalgraphics.mc.CgReloadListener;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
+import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
@@ -85,9 +87,11 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     /**
      * F3+T, and a resource pack change: re-read what CrystalGUI keeps from disk.
      *
-     * <p>Two caches, and the order between them is load-bearing. Sprite packs are dropped first so
-     * that the restyle below re-resolves every {@code asset(...)} against the JSON as it is now;
-     * doing it the other way round restyles against the packs the previous reload left behind.</p>
+     * <p>The caches go before the stylesheets, and the order is load-bearing: the restyle below
+     * re-resolves every {@code asset(...)} and {@code icon(...)}, and must find the JSON and the
+     * {@code .svg} files as they are now rather than what the previous reload left behind. Only an SVG
+     * whose file changed is dropped (see {@code SvgDocument.revalidate}); the rest keep their parse and,
+     * since {@code SvgRasterCache} keys on the document, their raster.</p>
      *
      * <p>{@code StyleEngine.reloadStylesheets()} is the whole of the CSS half — it refills the sheets
      * in place, so existing registrations stay valid, and re-matches every live window. Its own
@@ -99,8 +103,13 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     @Override
     public void onReload() {
         CgUiSpriteRegistry.clearCache();
+        // REVALIDATED, not cleared: a full clear re-parses every icon ever drawn, seconds at a few
+        // hundred of them, to pick up the one that changed.
+        int icons = SvgDocument.revalidate();
+        FileIconTheme.invalidateCache();
         int sheets = StyleEngine.reloadStylesheets();
-        CrystalGuiCore.LOGGER.info("CrystalGUI resource reload: {} stylesheet(s) re-read", sheets);
+        CrystalGuiCore.LOGGER.info("CrystalGUI resource reload: {} stylesheet(s) re-read, {} icon(s) changed",
+                sheets, icons);
     }
 
     /**
