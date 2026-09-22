@@ -5,6 +5,8 @@ import com.crystalgui.core.async.Reply;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.client.ContentProviders;
 import com.crystalgui.fs.protocol.FsError;
+import com.crystalgui.language.java.classpath.HostClasspath;
+import com.crystalgui.language.java.classpath.TypeIndex;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
@@ -12,7 +14,9 @@ import com.crystalgui.text.lang.SymbolModifier;
 
 import javax.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -111,9 +115,15 @@ public final class ProjectSourceSymbols implements ContentProvider {
     /** The scan. Package-private so a test can drive it without a workspace. */
     @Nullable
     static SymbolInfo declaredIn(String source, String qualifiedName) {
+        return declaredIn(source, qualifiedName, 0);
+    }
+
+    @Nullable
+    private static SymbolInfo declaredIn(String source, String qualifiedName, int depth) {
         if (source == null || source.isEmpty()) return null;
 
         Set<SymbolModifier> modifiers = EnumSet.noneOf(SymbolModifier.class);
+        List<String> imports = new ArrayList<>();
         int at = 0;
         int length = source.length();
         while (at < length) {
@@ -164,7 +174,11 @@ public final class ProjectSourceSymbols implements ContentProvider {
                     modifiers.add(SymbolModifier.STATIC);
                     continue;
                 case "class":
-                    return symbol(SymbolKind.CLASS, modifiers, qualifiedName);
+                    String superclass = superclassAt(source, at);
+                    boolean exception = superclass != null
+                            && isThrowable(superclass, imports, containerOf(qualifiedName), depth);
+                    return symbol(exception ? SymbolKind.EXCEPTION : SymbolKind.CLASS,
+                            modifiers, qualifiedName);
                 case "interface":
                     return symbol(SymbolKind.INTERFACE, modifiers, qualifiedName);
                 case "enum":
@@ -180,6 +194,7 @@ public final class ProjectSourceSymbols implements ContentProvider {
                     // work: `import static java.util.List.of;` puts `static` AFTER the word that was
                     // supposed to guard against it, so the next class in the file reports as static.
                     int semicolon = source.indexOf(';', at);
+                    if (word.equals("import") && semicolon > 0) imports.add(withoutSpace(source, at, semicolon));
                     at = semicolon < 0 ? length : semicolon + 1;
                     modifiers.clear();
                     continue;
@@ -232,6 +247,121 @@ public final class ProjectSourceSymbols implements ContentProvider {
             cursor++;
         }
         return source.length();
+    }
+
+    // -- Whether a class is an exception ----------------------------------------------------------
+
+    /**
+     * Whether {@code written}, a superclass as the source spells it, reaches {@code Throwable}.
+     *
+     * <p>THE SCAN ONLY SAYS WHICH TYPE IS MEANT; whether that type is a throwable is Go to File's
+     * answer, {@link TypeIndex#isThrowable}, which walks the class files. A superclass the project
+     * declares itself has no class file, so it is scanned the same way in turn.</p>
+     *
+     * <p>Candidates in the order the compiler tries them: a single-type import, the file's own package,
+     * an on-demand import, {@code java.lang}.</p>
+     */
+    private static boolean isThrowable(String written, List<String> imports, @Nullable String pkg,
+                                       int depth) {
+        if (depth > MAX_HIERARCHY_HOPS || written.equals("Object") || written.equals("java.lang.Object")) {
+            return false;
+        }
+        TypeIndex index = null;
+        boolean asked = false;
+        for (String candidate : candidatesFor(written, imports, pkg)) {
+            String projectSource = ProjectSourcesRegistry.view().sourceOf(candidate);
+            if (projectSource != null) {
+                SymbolInfo parent = declaredIn(projectSource, candidate, depth + 1);
+                return parent != null && parent.kind() == SymbolKind.EXCEPTION;
+            }
+            if (!asked) {
+                asked = true;
+                // NEVER BUILT HERE: this runs while a tree row binds, and a cold index is a classpath
+                // walk. Opening any Java document builds it, and the row is right on its next bind.
+                index = JavaLanguageServices.existingTypeIndexFor(HostClasspath.detect());
+            }
+            if (index == null) return false;
+            Boolean throwable = index.isThrowable(candidate);
+            if (throwable != null) return throwable;
+        }
+        return false;
+    }
+
+    private static List<String> candidatesFor(String written, List<String> imports, @Nullable String pkg) {
+        List<String> out = new ArrayList<>();
+        int dot = written.indexOf('.');
+        String head = dot < 0 ? written : written.substring(0, dot);
+        String tail = dot < 0 ? "" : written.substring(dot);
+        for (String imported : imports) {
+            if (imported.startsWith("static")) continue;
+            if (imported.equals(head) || imported.endsWith("." + head)) out.add(imported + tail);
+        }
+        if (dot > 0) out.add(written);
+        out.add(pkg == null || pkg.isEmpty() ? written : pkg + "." + written);
+        for (String imported : imports) {
+            if (!imported.startsWith("static") && imported.endsWith(".*")) {
+                out.add(imported.substring(0, imported.length() - 1) + written);
+            }
+        }
+        if (dot < 0) out.add("java.lang." + written);
+        return out;
+    }
+
+    /** Matches {@code TypeIndex}'s own bound on a hierarchy walk. */
+    private static final int MAX_HIERARCHY_HOPS = 8;
+
+    /**
+     * The superclass named by the class declared at {@code at}, as written, or null.
+     *
+     * <p>Type parameters are skipped balanced: {@code class Box<T extends Comparable<T>>} names a
+     * BOUND, and it is the first {@code extends} a naive scan would find.</p>
+     */
+    @Nullable
+    private static String superclassAt(String source, int at) {
+        int cursor = skipSpace(source, pastIdentifier(source, skipSpace(source, at)));
+        if (cursor < source.length() && source.charAt(cursor) == '<') {
+            int depth = 0;
+            for (; cursor < source.length(); cursor++) {
+                char here = source.charAt(cursor);
+                if (here == '<') depth++;
+                else if (here == '>' && --depth == 0) {
+                    cursor++;
+                    break;
+                }
+            }
+            cursor = skipSpace(source, cursor);
+        }
+        if (!source.startsWith("extends", cursor)) return null;
+        cursor = skipSpace(source, cursor + "extends".length());
+        StringBuilder name = new StringBuilder();
+        while (cursor < source.length() && Character.isJavaIdentifierStart(source.charAt(cursor))) {
+            int start = cursor;
+            cursor = pastIdentifier(source, cursor);
+            name.append(source, start, cursor);
+            cursor = skipSpace(source, cursor);
+            if (cursor >= source.length() || source.charAt(cursor) != '.') break;
+            name.append('.');
+            cursor = skipSpace(source, cursor + 1);
+        }
+        return name.length() == 0 ? null : name.toString();
+    }
+
+    private static String withoutSpace(String source, int from, int to) {
+        StringBuilder out = new StringBuilder(to - from);
+        for (int i = from; i < to; i++) {
+            if (!Character.isWhitespace(source.charAt(i))) out.append(source.charAt(i));
+        }
+        return out.toString();
+    }
+
+    private static int skipSpace(String source, int at) {
+        while (at < source.length() && Character.isWhitespace(source.charAt(at))) at++;
+        return at;
+    }
+
+    private static int pastIdentifier(String source, int at) {
+        while (at < source.length() && Character.isJavaIdentifierPart(source.charAt(at))) at++;
+        return at;
     }
 
     /** Whether an identifier starts at the next non-space character. @see #topLevelOf */

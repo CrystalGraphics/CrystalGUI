@@ -252,5 +252,14 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
         return TYPE_INDICES.computeIfAbsent(classpath, TypeIndex::new);
     }
 
+    /**
+     * The index for {@code classpath} if one exists, else null -- for a caller that must not pay for the
+     * scan, such as anything that runs while painting. It may still be mid-build; ask it through a method
+     * that says it does not wait, such as {@link TypeIndex#isThrowable}.
+     */
+    public static synchronized TypeIndex existingTypeIndexFor(List<String> classpath) {
+        return TYPE_INDICES.get(classpath);
+    }
+
     private static final Map<List<String>, TypeIndex> TYPE_INDICES = new HashMap<>();
 }
