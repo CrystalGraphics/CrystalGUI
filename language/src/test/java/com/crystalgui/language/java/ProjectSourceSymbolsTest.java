@@ -1,5 +1,8 @@
 package com.crystalgui.language.java;
 
+import com.crystalgui.language.java.classpath.HostClasspath;
+import com.crystalgui.text.lang.ProjectSources;
+import com.crystalgui.text.lang.ProjectSourcesRegistry;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
@@ -25,6 +28,11 @@ public class ProjectSourceSymbolsTest {
         return ProjectSourceSymbols.declaredIn(source, "com.example.Thing");
     }
 
+    /** What opening a Java document does first: the scan never builds the index itself. */
+    private static void builtIndex() {
+        JavaLanguageServices.typeIndexFor(HostClasspath.detect()).size();
+    }
+
     private static SymbolKind kindOf(String source) {
         SymbolInfo found = declared(source);
         return found == null ? null : found.kind();
@@ -40,6 +48,49 @@ public class ProjectSourceSymbolsTest {
         assertEquals(SymbolKind.RECORD, kindOf("package com.example;\npublic record Thing(int x) { }\n"));
         assertEquals(SymbolKind.ANNOTATION,
                 kindOf("package com.example;\npublic @interface Thing { }\n"));
+    }
+
+    /**
+     * <b>A class extending a throwable is an exception</b> -- the lightning glyph. The scan only says
+     * which type the {@code extends} clause means; whether it is a throwable is the type index's answer,
+     * the same one Go to File draws from, so the index is built first as opening any Java file does.
+     */
+    @Test
+    public void aThrowableSuperclassMakesAnException() {
+        builtIndex();
+        assertEquals(SymbolKind.EXCEPTION, kindOf("public class Thing extends RuntimeException { }\n"));
+        assertEquals(SymbolKind.EXCEPTION, kindOf("class Thing extends java.io.IOException { }\n"));
+        assertEquals("through a single-type import", SymbolKind.EXCEPTION,
+                kindOf("import java.io.UncheckedIOException;\nclass Thing extends UncheckedIOException { }\n"));
+        assertEquals(SymbolKind.CLASS, kindOf("import java.util.ArrayList;\nclass Thing extends ArrayList { }\n"));
+        assertEquals(SymbolKind.CLASS, kindOf("class Thing extends Object { }\n"));
+        assertEquals("a type parameter's bound is not the superclass", SymbolKind.CLASS,
+                kindOf("class Thing<T extends Exception> { }\n"));
+    }
+
+    /** <b>A project's own exception hierarchy</b>, which has no class file to walk: scanned in turn. */
+    @Test
+    public void aProjectSuperclassIsScannedInTurn() {
+        builtIndex();
+        ProjectSources project = new ProjectSources() {
+            @Override
+            public String sourceOf(String qualifiedName) {
+                return qualifiedName.equals("com.example.Failure")
+                        ? "package com.example;\npublic class Failure extends IllegalStateException { }\n" : null;
+            }
+
+            @Override
+            public boolean declaresPackage(String packageName) {
+                return "com.example".startsWith(packageName);
+            }
+        };
+        ProjectSourcesRegistry.contribute(project);
+        try {
+            assertEquals(SymbolKind.EXCEPTION,
+                    kindOf("package com.example;\npublic class Thing extends Failure { }\n"));
+        } finally {
+            ProjectSourcesRegistry.remove(project);
+        }
     }
 
     /** <b>Modifiers ride along</b> — they are what {@code SymbolIcon} stacks its mark layers from. */

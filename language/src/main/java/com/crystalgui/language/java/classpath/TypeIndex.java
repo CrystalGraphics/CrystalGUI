@@ -156,6 +156,9 @@ public final class TypeIndex {
     /** Qualified name to entry, so the hierarchy walk can find an ancestor outside its own container. */
     private final java.util.Map<String, Entry> byName = new java.util.HashMap<>();
 
+    /** Written last by the build, so a reader that sees it true sees {@code byName} whole -- lock-free. */
+    private volatile boolean ready;
+
     public TypeIndex(List<String> classpath) {
         this.classpath = classpath == null ? List.of() : List.copyOf(classpath);
     }
@@ -594,6 +597,22 @@ public final class TypeIndex {
         return kinds.computeIfAbsent(entry.qualifiedName(), name -> readKind(entry));
     }
 
+    /**
+     * Whether the type named {@code qualifiedName} is a throwable, or null when the index does not hold
+     * it -- a project type, which has no class file here, or a name that is not a type at all.
+     *
+     * <p>{@link #kindOf}'s answer, memo and all, so Go to File and a tree row asking "is this an
+     * exception" cannot disagree.</p>
+     *
+     * <p><b>Never builds the index, and never waits for it</b>: null until a build has finished. The
+     * build holds this index's lock for the whole classpath walk, and the caller is painting.</p>
+     */
+    public Boolean isThrowable(String qualifiedName) {
+        if (!ready) return null;
+        Entry entry = byName.get(qualifiedName);
+        return entry == null ? null : kindOf(entry).kind() == SymbolKind.EXCEPTION;
+    }
+
     /** What the icon layer needs: what it is, and whether it is abstract. */
     public record Kind(SymbolKind kind, boolean isAbstract) {
     }
@@ -748,6 +767,7 @@ public final class TypeIndex {
         built.sort(Comparator.comparing(Entry::simpleName));
         for (Entry entry : built) byName.putIfAbsent(entry.qualifiedName(), entry);
         entries = Collections.unmodifiableList(built);
+        ready = true;
     }
 
     /**
