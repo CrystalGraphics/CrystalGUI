@@ -660,6 +660,8 @@ theme {
     --profiler-bar-bad: var(--error-icon);
     --profiler-budget-line: var(--divider);
     --profiler-playhead: var(--accent);
+    /* The strip's scrollbar thumb: the in-budget bars' grey, so it reads as part of the strip. */
+    --profiler-scroll-thumb: var(--fg-disabled);
     --profiler-zone-border: var(--border-base);
     /* Light text on the zone palette's mid-tones, and a ring in the foreground colour for the one
      * selected -- never a recolour, which would defeat a zone keeping its colour. */

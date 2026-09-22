@@ -4,13 +4,15 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
-import com.crystalgui.core.trace.FrameStats;
+import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.display.CounterTrack;
+import com.crystalgui.widget.display.FrameScrollbar;
 import com.crystalgui.widget.display.FrameSeriesTrack;
 import com.crystalgui.widget.display.FrameStripTrack;
 import com.crystalgui.widget.layout.SplitView;
@@ -20,6 +22,7 @@ import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.FlexDirection;
 
 import javax.annotation.Nullable;
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -85,10 +88,19 @@ public class FrameProfilerPanel extends UIElement {
     private final UIText stats = new UIText("");
 
     private final FrameStripTrack strip = new FrameStripTrack();
+    private final FrameScrollbar scrollbar = new FrameScrollbar(strip);
     private final UIElement header = new UIElement();
     private final FlameChart chart = new FlameChart();
 
     private final SplitView split = new SplitView();
+    private UIElement toolbar;
+
+    /** Built on first open. @see #toggleSettings */
+    @Nullable
+    private ProfilerSettingsPage settingsPage;
+
+    /** Whether the settings page is showing — what the caption's gear is drawn pressed from. */
+    public final Signal.Value<Boolean> onSettingsToggled = new Signal.Value<>();
     private final TabView tabs = new TabView();
     private final ZonesTab zones = new ZonesTab();
     private final CallTreeTab callers = new CallTreeTab();
@@ -106,8 +118,11 @@ public class FrameProfilerPanel extends UIElement {
         layout(l -> l.flexDirection(FlexDirection.COLUMN).widthPercent(100f).heightPercent(100f));
         setFocusPolicy(FocusPolicy.CLICK);
 
-        appendStructural(buildToolbar());
+        toolbar = buildToolbar();
+        appendStructural(toolbar);
         appendStructural(strip);
+        // THE WAY ALONG THE RING, under it: a thumb to drag, and ends to drag for a zoom.
+        appendStructural(scrollbar);
         header.addClass(HEADER_CLASS);
         appendStructural(header);
         // A SPLIT THE READER OWNS, not a ratio the sheet fixes. Nesting depth varies by an order of
@@ -132,6 +147,19 @@ public class FrameProfilerPanel extends UIElement {
         strip.onRangeSelected(range -> {
             model.setFollowing(false);
             model.selectRange(range.from(), range.to());
+        });
+        // THE STRIP AND THE COUNTERS SHARE ONE VIEW, whichever of them was wheeled.
+        strip.onViewChanged(() -> {
+            counters.showView(strip.viewFrom(), strip.isZoomed() ? strip.visible() : 0d);
+            // LOOKING AWAY FROM THE NEWEST FRAME PAUSES, as a selection does: a live window would drag
+            // the view straight back to the end on its next refresh.
+            if (model.isFollowing() && strip.isZoomed() && strip.viewFrom() + strip.visible() < strip.frames() - 1) {
+                model.setFollowing(false);
+            }
+        });
+        counters.onViewChanged(() -> {
+            CounterTrack moved = counters.rows().isEmpty() ? null : counters.rows().get(0);
+            if (moved != null) strip.showView(moved.viewFrom(), moved.isZoomed() ? moved.visible() : 0d);
         });
         counters.onFrameSelected(index -> {
             model.setFollowing(false);
@@ -161,23 +189,63 @@ public class FrameProfilerPanel extends UIElement {
         });
     }
 
-    /**
-     * How often a live window re-reads the ring.
-     *
-     * <p>Four times a second: fast enough that the strip visibly fills, slow enough to read, and cheap
-     * enough that the viewer does not become the thing worth profiling.</p>
-     */
-    private static final float REFRESH_SECONDS = 0.25f;
-
     private float sinceRefresh;
+
+    /** How many frames the strip showed last render; fewer now means the recording was cleared. */
+    private int shownFrames;
+
+    /** The selection the strip last scrolled to. @see #render */
+    private int revealedIndex = -1;
 
     private boolean tick(float deltaSeconds) {
         if (!model.isFollowing() || !model.isCapturing()) return true;
         sinceRefresh += deltaSeconds;
-        if (sinceRefresh < REFRESH_SECONDS) return true;
+        // A SETTING, and four times a second by default: fast enough that the strip visibly fills, slow
+        // enough to read, and cheap enough that the viewer does not become the thing worth profiling.
+        if (sinceRefresh < ProfilerSettings.refreshSeconds()) return true;
         sinceRefresh = 0f;
         model.refresh();
         return true;
+    }
+
+    /**
+     * Shows the settings page in place of the profiler, or the profiler again.
+     *
+     * <p>In place, not over: every band is hidden rather than removed, so the chart's zoom and the tables'
+     * selection are where they were when the page closes. Recording carries on underneath.</p>
+     */
+    public void toggleSettings() {
+        setSettingsOpen(!isSettingsOpen());
+    }
+
+    public boolean isSettingsOpen() {
+        return settingsPage != null && settingsPage.isDisplayed();
+    }
+
+    public void setSettingsOpen(boolean open) {
+        if (open == isSettingsOpen()) return;
+        if (open && settingsPage == null) {
+            settingsPage = new ProfilerSettingsPage();
+            settingsPage.onDone(() -> setSettingsOpen(false));
+            appendStructural(settingsPage);
+        }
+        toolbar.setDisplayed(!open);
+        strip.setDisplayed(!open);
+        scrollbar.setDisplayed(!open);
+        header.setDisplayed(!open);
+        split.setDisplayed(!open);
+        if (settingsPage != null) settingsPage.setDisplayed(open);
+        if (!open) {
+            // WHAT CHANGED WHILE IT WAS OPEN: the budget moves the strip's lines, a resize empties the ring.
+            shownKey = null;
+            model.refresh();
+        }
+        onSettingsToggled.emit(open);
+    }
+
+    @Nullable
+    public ProfilerSettingsPage settingsPage() {
+        return settingsPage;
     }
 
     public ProfilerModel model() {
@@ -187,6 +255,10 @@ public class FrameProfilerPanel extends UIElement {
     /** The parts a scripted run drives, and a test reaches past the chrome for. */
     public FrameStripTrack strip() {
         return strip;
+    }
+
+    public FrameScrollbar scrollbar() {
+        return scrollbar;
     }
 
     public FlameChart chart() {
@@ -296,6 +368,8 @@ public class FrameProfilerPanel extends UIElement {
                 model.selectFrame(model.frameCount() - 1);
             }
             case CgKeyCodes.KEY_F -> chart.fit();
+            // THE WHOLE RING across the strip again, after a wheel zoom.
+            case CgKeyCodes.KEY_A -> strip.showWhole();
             case CgKeyCodes.KEY_W -> model.selectWorst();
             case CgKeyCodes.KEY_SPACE -> model.setFollowing(!model.isFollowing());
             default -> {
@@ -327,9 +401,31 @@ public class FrameProfilerPanel extends UIElement {
                     : FrameStripTrack.Health.GOOD;
         }
         strip.setBudgetNanos(budget);
+        // A NEW RECORDING, whether cleared by a resize or by Record again, opens on the newest frames like
+        // the first one did -- not on wherever the last one had been scrolled to.
+        if (frames.size() < shownFrames) strip.resetView();
+        shownFrames = frames.size();
         strip.setFrames(wall, health);
         strip.setGcFrames(gc);
+        // WHERE THE KEPT START ENDS AND THE NEWEST BEGIN: the frames between were not kept, and a strip
+        // drawn edge to edge across the join would read as consecutive frames.
+        int gapAt = -1;
+        for (int i = 1; i < frames.size(); i++) {
+            if (frames.get(i).index() != frames.get(i - 1).index() + 1) {
+                gapAt = i;
+                break;
+            }
+        }
+        strip.setGap(gapAt, gapAt < 0 ? 0L : frames.get(gapAt).index() - frames.get(gapAt - 1).index() - 1);
         strip.showSelected(model.selectedIndex());
+        // A ZOOMED STRIP KEEPS ITS FRAMES IN SIGHT: live, the newest stays at the right edge; paused, a
+        // selection made off-screen (a key, Worst frame, Home) is scrolled to.
+        if (model.isFollowing()) {
+            strip.followEnd();
+        } else if (model.selectedIndex() != revealedIndex) {
+            strip.reveal(model.selectedIndex());
+        }
+        revealedIndex = model.selectedIndex();
         strip.showRange(model.hasRange()
                 ? new FrameSeriesTrack.Range(model.rangeFrom(), model.rangeTo()) : null);
         int comparable = model.comparableFrom();
@@ -371,6 +467,7 @@ public class FrameProfilerPanel extends UIElement {
             refreshTables();
         }
         counters.show(model.counterSeries(), model.selectedIndex(), comparable);
+        counters.showView(strip.viewFrom(), strip.isZoomed() ? strip.visible() : 0d);
     }
 
     private void refreshTables() {
@@ -390,7 +487,7 @@ public class FrameProfilerPanel extends UIElement {
     }
 
     private long budgetNanos() {
-        return (long) (FrameStats.get().budgetMs() * 1_000_000d);
+        return ProfilerSettings.budgetNanos();
     }
 
     @Nullable
@@ -401,7 +498,9 @@ public class FrameProfilerPanel extends UIElement {
 
     private void renderToolbar(long[] wall, long budget) {
         boolean recording = model.isCapturing();
-        record.setText(recording ? "Recording" : model.isFrozen() ? "Resume" : "Record");
+        String stopped = model.stopReason();
+        record.setText(recording ? "Recording" : stopped != null ? "Record again"
+                : model.isFrozen() ? "Resume" : "Record");
         toggleClass(record, RECORDING_CLASS, recording);
 
         // A TOGGLE THAT IS LIT, not a label that flips: "Paused" on a button read as an instruction to
@@ -421,6 +520,9 @@ public class FrameProfilerPanel extends UIElement {
             if (each > budget) over++;
         }
         StringBuilder text = new StringBuilder();
+        // WHY IT STOPPED BY ITSELF, before anything else: a ring that stopped filling looks exactly like
+        // an application that stopped producing frames.
+        if (stopped != null) text.append("Stopped: ").append(stopped).append("  ·  ");
         // DROPPED RECORDS FIRST, and said: a silently short trace is the one thing a profiler may not
         // show, and on the right of a line that ellipsises it would be the first thing cut.
         long dropped = model.snapshot().droppedZones();
@@ -459,6 +561,10 @@ public class FrameProfilerPanel extends UIElement {
             header.append(caption("Frame"));
             header.append(figure("#" + frame.index()));
             header.append(headline(ms(frame.wallNanos())));
+            // WHEN, against the process: frame #0 is the first frame RECORDED, and whether that was the
+            // program's first frame or one an hour in is exactly what this answers.
+            header.append(caption("at"));
+            header.append(figure(sinceLaunch(frame.beginNanos())));
         }
         header.append(caption("CPU"));
         header.append(frame.hasCpu() ? figure(String.format("%.2f ms", frame.cpuMillis())) : absent("—"));
@@ -487,10 +593,29 @@ public class FrameProfilerPanel extends UIElement {
         spacer.addClass(SPACER_CLASS);
         header.append(spacer);
 
-        UIText badge = new UIText(model.isFollowing() ? "LIVE" : "PAUSED");
+        header.append(stateBadge());
+    }
+
+    /** LIVE, PAUSED, or STOPPED when the engine stopped by itself — the toolbar says why. */
+    private UIText stateBadge() {
+        boolean stopped = model.stopReason() != null;
+        UIText badge = new UIText(stopped ? "STOPPED" : model.isFollowing() ? "LIVE" : "PAUSED");
         badge.addClass(BADGE_CLASS);
-        if (model.isFollowing()) badge.addClass(FOLLOWING_CLASS);
-        header.append(badge);
+        if (!stopped && model.isFollowing()) badge.addClass(FOLLOWING_CLASS);
+        return badge;
+    }
+
+    /** The JVM's start on the {@link System#nanoTime} clock the frames are stamped with. */
+    private static final long PROCESS_START_NANOS =
+            System.nanoTime() - ManagementFactory.getRuntimeMXBean().getUptime() * 1_000_000L;
+
+    /** {@code 0.84 s}, {@code 12.4 s}, {@code 3 min 20 s} after the process started. */
+    static String sinceLaunch(long nanos) {
+        double seconds = Math.max(0L, nanos - PROCESS_START_NANOS) / 1_000_000_000d;
+        if (seconds < 10d) return String.format("%.2f s", seconds);
+        if (seconds < 60d) return String.format("%.1f s", seconds);
+        long whole = (long) seconds;
+        return whole / 60 + " min " + whole % 60 + " s";
     }
 
     /**
@@ -551,9 +676,7 @@ public class FrameProfilerPanel extends UIElement {
         UIElement spacer = new UIElement();
         spacer.addClass(SPACER_CLASS);
         header.append(spacer);
-        UIText badge = new UIText("PAUSED");
-        badge.addClass(BADGE_CLASS);
-        header.append(badge);
+        header.append(stateBadge());
     }
 
     private static String shortMs(long nanos) {

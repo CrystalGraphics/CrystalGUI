@@ -117,6 +117,19 @@ framestrip {
     font-size: 9;
 }
 
+/* THE WAY ALONG THE RING. Tucked under the strip, on the same well: `color` is the thumb, `border-color`
+ * the grips' lit state. Negative top margin cancels the column gap, so the bar reads as the strip's own. */
+framescrollbar {
+    width: 100%;
+    height: 12px;
+    flex-shrink: 0;
+    margin-top: -4px;
+    background-color: var(--profiler-strip-bg);
+    border-radius: var(--radius-panel, 8px);
+    color: var(--profiler-scroll-thumb);
+    border-color: var(--profiler-playhead);
+}
+
 /* ── the frame header ────────────────────────────────────────────────────── */
 
 frameprofiler .__frame-header__ {
@@ -509,4 +522,87 @@ channelscontrol maskcontrol .__toggle__::part(label) {
 channelscontrol maskcontrol .__toggle__:hover {
     background: none;
     background-color: var(--hover-bg);
+}
+
+/* ── settings page ───────────────────────────────────────────────────────── */
+
+/* IN PLACE OF THE BANDS, on the same background: a page of this window, not a dialog over it. */
+profilersettings {
+    flex-direction: column;
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+    gap: 8px;
+    font-size: 11;
+}
+
+profilersettings .__settings-header__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    flex-shrink: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+/* The title and the ring's state under it take the slack, so the two buttons sit at the right edge. */
+profilersettings .__settings-titles__ {
+    flex-direction: column;
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
+    gap: 2px;
+}
+
+profilersettings .__settings-title__ {
+    color: var(--profiler-metric-fg);
+    font-size: 15;
+}
+
+profilersettings .__settings-summary__ {
+    color: var(--profiler-caption-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* THE PROFILER'S PANEL, not the inspector's: `background`, because the kit paints its panel through the
+ * shorthand and a `background-color` under it never shows. */
+profilersettings .__configurator-panel__ {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+    min-height: 0px;
+    background: var(--profiler-panel-bg);
+    border-radius: var(--radius-panel, 8px);
+}
+
+/* Wide enough for "Stop after a frame slower than (ms)" on one line. */
+profilersettings .__configurator__ > .__label__ {
+    width: 250px;
+    min-width: 250px;
+}
+
+/* SIZED TO WHAT THEY HOLD: a number field the width of the window reads as a text box, and "300" at the
+ * far left of 900 pixels of field is not where the eye looks for it. */
+profilersettings .__configurator__ > .__inline__ > .__config-control__ {
+    width: 360px;
+    flex-grow: 0;
+}
+
+/* A SETTING'S DESCRIPTION, under its row: dim and smaller than the label, indented to the label's own
+ * text, with room below so each setting reads as one block. As loud as the labels it read as a second
+ * column of settings. */
+profilersettings .__configurator__ > .__inline__ > .__config-control__.__note__ {
+    width: 0px;
+    flex-grow: 1;
+    padding-left: 22px;
+    padding-bottom: 8px;
+}
+
+profilersettings .__config-control__.__note__ .__value__ {
+    color: var(--profiler-caption-fg);
+    font-size: 10;
 }

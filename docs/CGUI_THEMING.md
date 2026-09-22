@@ -528,6 +528,7 @@ editor scheme's.
 | `--profiler-recording-fg` | `var(--error-icon)` | base.css |
 | `--profiler-row-hover-bg` | `var(--hover-bg)` | base.css |
 | `--profiler-row-selected-bg` | `var(--selection-bg)` | base.css |
+| `--profiler-scroll-thumb` | `var(--fg-disabled)` | base.css |
 | `--profiler-strip-bg` | `var(--surface-recessed)` | base.css |
 | `--profiler-tabs-bg` | `var(--surface-panel)` | base.css |
 | `--profiler-timeline-bg` | `var(--surface-base)` | base.css |
