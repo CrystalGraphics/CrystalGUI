@@ -49,6 +49,8 @@ public class FrameStripTrack extends FrameSeriesTrack {
     private long[] wallNanos = new long[0];
     private Health[] health = new Health[0];
     private boolean[] gc = new boolean[0];
+    private int gapAt = -1;
+    private long gapFrames;
     private long budgetNanos = DEFAULT_BUDGET_NANOS;
 
     public FrameStripTrack() {
@@ -78,6 +80,19 @@ public class FrameStripTrack extends FrameSeriesTrack {
         return this;
     }
 
+    /**
+     * Frames were skipped before {@code position} — {@code skipped} of them, recorded and not kept. Drawn as
+     * a break with the count, so the join between the kept start and the newest frames is not read as two
+     * consecutive frames. -1 for none.
+     */
+    public FrameStripTrack setGap(int position, long skipped) {
+        if (position == gapAt && skipped == gapFrames) return this;
+        gapAt = position;
+        gapFrames = skipped;
+        repaint();
+        return this;
+    }
+
     /** The frame budget the scale and the budget line are drawn from. */
     public FrameStripTrack setBudgetNanos(long nanos) {
         budgetNanos = Math.max(1_000_000L, nanos);
@@ -99,11 +114,6 @@ public class FrameStripTrack extends FrameSeriesTrack {
         return index >= 0 && index < wallNanos.length ? wallNanos[index] : 0L;
     }
 
-    /** How many frames the strip is over. */
-    public int frames() {
-        return wallNanos.length;
-    }
-
     @Override
     protected void paintSeries(CgUiPaintContext ctx, Box box) {
         float bottom = box.height() - BASELINE_INSET;
@@ -120,10 +130,6 @@ public class FrameStripTrack extends FrameSeriesTrack {
         ctx.rect().at(0f, TOP_INSET).size(box.width(), 1f).fillColor((quiet & 0x00FFFFFF) | 0x22000000).submit();
 
         int columns = columnCount();
-        float columnWidth = box.width() / columns;
-        // A GAP BETWEEN BARS once they are wide enough to afford one, so a run of frames reads as
-        // separate frames rather than as an area chart.
-        float barWidth = columnWidth >= 4f ? columnWidth - 1f : Math.max(1f, columnWidth - 0.35f);
 
         for (int column = 0; column < columns; column++) {
             int at = extremeIn(columnFrom(column), columnTo(column));
@@ -135,7 +141,12 @@ public class FrameStripTrack extends FrameSeriesTrack {
 
             boolean clipped = worst > ceiling;
             float barHeight = clipped ? usable : Math.max(1.5f, (float) worst / ceiling * usable);
-            float x = column * columnWidth;
+            // A GAP BETWEEN BARS once they are wide enough to afford one, so a run of frames reads as
+            // separate frames rather than as an area chart. @see #barOf
+            float[] bar = barOf(column);
+            if (bar == null) continue;
+            float x = bar[0];
+            float barWidth = bar[1];
             ctx.rect().at(x, bottom - barHeight).size(barWidth, barHeight).fillColor(fill).submit();
             if (collectedIn(columnFrom(column), columnTo(column))) {
                 ctx.rect().at(x, bottom + GC_GAP).size(Math.max(2f, barWidth), GC_TICK).fillColor(GC_COLOR).submit();
@@ -167,11 +178,45 @@ public class FrameStripTrack extends FrameSeriesTrack {
                 .fillColor(plate).submit();
         label(ctx, font, budget, box.width() - labelWidth, budgetY - 12f, 12f, labelWidth, dim);
         label(ctx, font, top, box.width() - labelWidth, TOP_INSET, 12f, labelWidth, dim);
+
+        if (gapAt > 0) {
+            // ON THE BOUNDARY between the last kept-from-the-start frame and the first newest one.
+            float x = slotOf(gapAt)[0];
+            if (x >= 0f && x <= box.width()) {
+                // A BREAK, not a bar: a cut through the well, wide enough to read at a glance, edged on
+                // both sides, with the count of what fell into it.
+                float half = GAP_W * 0.5f;
+                ctx.rect().at(x - half, 0f).size(GAP_W, box.height()).fillColor(0xFF000000).submit();
+                ctx.rect().at(x - half, 0f).size(1f, box.height()).fillColor(dim).submit();
+                ctx.rect().at(x + half - 1f, 0f).size(1f, box.height()).fillColor(dim).submit();
+                String skipped = String.format("%,d not kept", gapFrames);
+                float width = LABEL_ADVANCE * skipped.length();
+                float left = Math.min(x + 4f, box.width() - labelWidth - width - 16f);
+                // HIGH, under the row's own label: along the bottom it covered the very bars beside the break.
+                float y = TOP_INSET + 16f;
+                ctx.rect().at(left, y).size(width + 8f, 12f).fillColor(plate).submit();
+                label(ctx, font, skipped, left + 4f, y, 12f, width, dim);
+            }
+        }
+
+        if (isZoomed()) {
+            // WHICH FRAMES, while zoomed: the edges are gone, so the row says what it is showing.
+            int first = (int) viewFrom() + 1;
+            int last = (int) Math.min(frames(), viewFrom() + visible());
+            String shown = String.format("frames %,d\u2013%,d of %,d", first, last, frames());
+            float width = LABEL_ADVANCE * shown.length();
+            ctx.rect().at(4f, TOP_INSET).size(width + 8f, 12f).fillColor(plate).submit();
+            label(ctx, font, shown, 8f, TOP_INSET, 12f, width, dim);
+        }
     }
+
 
     private static String formatMillis(long nanos) {
         return String.format("%.1f ms", nanos / 1_000_000d);
     }
+
+    /** The break between the kept start and the newest frames, in pixels. */
+    private static final float GAP_W = 8f;
 
     /** Room above the ceiling for a clipped bar's cap. */
     private static final float TOP_INSET = 5f;
@@ -185,7 +230,7 @@ public class FrameStripTrack extends FrameSeriesTrack {
     private static final int GC_COLOR = 0xFFB083F0;
 
     private boolean collectedIn(int from, int to) {
-        for (int i = Math.max(0, from); i <= to && i < gc.length; i++) {
+        for (int i = Math.max(0, from); i < to && i < gc.length; i++) {
             if (gc[i]) return true;
         }
         return false;

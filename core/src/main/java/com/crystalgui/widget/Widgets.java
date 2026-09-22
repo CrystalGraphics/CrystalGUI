@@ -40,6 +40,7 @@ import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.widget.display.FrameStatsOverlay;
 import com.crystalgui.widget.display.CounterTrack;
+import com.crystalgui.widget.display.FrameScrollbar;
 import com.crystalgui.widget.display.FrameStripTrack;
 import com.crystalgui.widget.display.SpanTrack;
 import com.crystalgui.widget.display.TimelineAxis;
@@ -194,6 +195,8 @@ public final class Widgets implements NodeKinds {
         UIElementRegistry.register(CounterTrack.NAME, CounterTrack::new,
                 NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.register(TimelineRuler.NAME, () -> new TimelineRuler(new TimelineAxis()),
+                NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(FrameScrollbar.NAME, () -> new FrameScrollbar(new FrameStripTrack()),
                 NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.register(SymbolIcon.NAME, SymbolIcon::new, NodeContract.INERT,
                 KindInfo.named("Symbol Icon").glyph(GlyphRole.TEXT).inCategory(DISPLAY)
