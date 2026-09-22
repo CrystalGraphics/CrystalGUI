@@ -260,6 +260,24 @@ public class LoadedTabReplacesItsPlaceholderTest extends UiDocumentTestBase {
     }
 
     /**
+     * <b>...and so does one whose read failed while its panel was not built</b> -- a file deleted while
+     * the application was closed. The failure used to be dropped for a panel not on screen, so the tab
+     * stayed FAILED and the panel built later was an empty placeholder with nothing to replace it.
+     */
+    @Test
+    public void aTabWhoseFileIsGoneClosesEvenIfItFailedBeforeItsPanelWasBuilt() {
+        CgPath missing = CgPath.parse(PROJECT + ":nope.java");
+        workbench.editors().open(EditorInput.of(Resource.of(missing)));
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        DockPanelRef ref = workbench.refFor(missing);
+        workbench.open(DockInput.of(ref));
+        for (int i = 0; i < 12; i++) frameAndPump();
+
+        assertFalse("a tab with no subject is dropped however late its panel is built", inTheDock(ref));
+    }
+
+    /**
      * <b>...and a file that is still THERE and could not be read keeps its tab, and its banner.</b>
      *
      * <p>The distinction both references draw, and the reason the discriminator is the {@code FsError}
