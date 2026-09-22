@@ -111,6 +111,7 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
+
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -510,6 +511,31 @@ editor scheme's.
 | `--problems-tree-line-fg` | `var(--fg-hint)` | base.css |
 | `--problems-unnecessary-fg` | `var(--fg-hint)` | base.css |
 | `--problems-warning-fg` | `var(--warning-icon)` | base.css |
+| `--profiler-badge-bg` | `var(--surface-raised)` | base.css |
+| `--profiler-bar-bad` | `var(--error-icon)` | base.css |
+| `--profiler-bar-good` | `var(--fg-disabled)` | base.css |
+| `--profiler-bar-warn` | `var(--warning-icon)` | base.css |
+| `--profiler-budget-line` | `var(--divider)` | base.css |
+| `--profiler-caption-fg` | `var(--fg-hint)` | base.css |
+| `--profiler-gap` | `var(--fg-disabled)` | base.css |
+| `--profiler-heading-fg` | `var(--fg-secondary)` | base.css |
+| `--profiler-live-bg` | `var(--accent-soft)` | base.css |
+| `--profiler-live-fg` | `var(--fg)` | base.css |
+| `--profiler-metric-fg` | `var(--fg)` | base.css |
+| `--profiler-panel-bg` | `var(--surface-panel)` | base.css |
+| `--profiler-pending` | `var(--fg-hint)` | base.css |
+| `--profiler-playhead` | `var(--accent)` | base.css |
+| `--profiler-recording-fg` | `var(--error-icon)` | base.css |
+| `--profiler-row-hover-bg` | `var(--hover-bg)` | base.css |
+| `--profiler-row-selected-bg` | `var(--selection-bg)` | base.css |
+| `--profiler-strip-bg` | `var(--surface-recessed)` | base.css |
+| `--profiler-tabs-bg` | `var(--surface-panel)` | base.css |
+| `--profiler-timeline-bg` | `var(--surface-base)` | base.css |
+| `--profiler-toolbar-bg` | `var(--surface-panel)` | base.css |
+| `--profiler-untracked-fg` | `var(--warning-icon)` | base.css |
+| `--profiler-zone-border` | `var(--border-base)` | base.css |
+| `--profiler-zone-ring` | `var(--fg)` | base.css |
+| `--profiler-zone-text` | `var(--fg-on-accent)` | base.css |
 | `--progress-cancel-hover-bg` | `var(--hover-bg)` | base.css |
 | `--progress-cancel-hover-fg` | `var(--fg)` | base.css |
 | `--progress-cancelling-fg` | `var(--fg-disabled)` | base.css |
@@ -764,4 +790,5 @@ editor scheme's.
 | `--workbench-bg` | `var(--surface-base)` | base.css |
 | `--workbench-control-hover-bg` | `var(--hover-bg)` | base.css |
 | `--workbench-control-pressed-bg` | `var(--pressed-bg)` | base.css |
+
 <!-- TOKENS:END -->
