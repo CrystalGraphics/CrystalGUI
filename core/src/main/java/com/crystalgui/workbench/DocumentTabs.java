@@ -108,8 +108,11 @@ public final class DocumentTabs {
      */
     void refreshPanelForTab(EditorService.Tab tab) {
         DockPanelRef ref = workbench.refForResource(tab.resource());
-        if (workbench.dock.builtContentFor(ref) == null) return;   // not on screen; nothing to replace
+        // GONE FIRST, ON SCREEN OR NOT. A read can fail while the panel is unbuilt -- a file deleted while
+        // the application was closed -- and a failure dropped here is never offered again: the tab stays
+        // FAILED and the panel built later is an empty placeholder with nothing to replace it.
         if (closeIfTheFileIsGone(tab, ref)) return;
+        if (workbench.dock.builtContentFor(ref) == null) return;   // not on screen; nothing to replace
         DocumentState placeholder = workbench.placeholders.get(ref);
         if (tab.editor() != null) {
             if (placeholder != null) workbench.dock.rebuildPanel(ref);
