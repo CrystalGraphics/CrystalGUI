@@ -2,6 +2,7 @@ package com.crystalgui.desktop.app;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
@@ -57,6 +58,8 @@ public final class ApplicationKind {
     private Function<LaunchContext, Application> factory;
     private boolean singleInstance;
     private boolean requiresConnection = true;
+    @Nullable
+    private Consumer<LaunchContext> autostart;
     private boolean frozen;
 
     private ApplicationKind(String id, String displayName) {
@@ -145,6 +148,34 @@ public final class ApplicationKind {
         return this;
     }
 
+    /**
+     * Work to do when a desktop starts, whether or not this application is ever opened.
+     *
+     * <p>freedesktop's autostart entry, for what an application must set up <b>before</b> its window
+     * exists — a profiler that records from the first frame, a tool that restores a background service.
+     * Run once per desktop, as soon as the desktop has storage, with this application's own
+     * {@link LaunchContext#storage()} and no workspace.</p>
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:profiler", "Profiler")
+     *         .autostart(ctx -> MySettings.load(ctx.storage()).applyAtLaunch())
+     *         .launch(ctx -> ...);
+     * }</pre>
+     *
+     * <p>It must be quick and must not open a window: it runs inside the host's startup, before the
+     * first frame.</p>
+     */
+    public ApplicationKind autostart(Consumer<LaunchContext> hook) {
+        check();
+        this.autostart = hook;
+        return this;
+    }
+
+    @Nullable
+    Consumer<LaunchContext> autostartHook() {
+        return autostart;
+    }
+
     private void check() {
         if (frozen) throw new IllegalStateException("'" + id + "' is registered; a manifest is data");
     }
@@ -162,18 +193,15 @@ public final class ApplicationKind {
         return displayName;
     }
 
-    @Nullable
     /** @see #keywords(String...) */
     public List<String> keywordList() {
         return List.copyOf(keywords);
     }
 
+    @Nullable
     public String icon() {
         return icon;
     }
-
-    @Nullable
-
 
     public boolean isSingleInstance() {
         return singleInstance;

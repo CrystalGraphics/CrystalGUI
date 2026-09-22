@@ -1331,6 +1331,7 @@ public class Desktop extends UIElement implements DataProvider {
         // A caller that named one place for the arrangement did not mean a second place for everything
         // else. @see #useStorage
         this.config = storage;
+        applications().autostart();
         persistence = new DesktopSession(this, storage);
         persistenceId = id;
         pendingPlacements.clear();
@@ -1368,6 +1369,9 @@ public class Desktop extends UIElement implements DataProvider {
         // A PATH, NOT A STORAGE: LocalConfigStorage creates its directory eagerly, and a cache/ that
         // exists before anything derived does is a directory nobody can explain.
         this.cacheRoot = StorageLayout.cacheIn(installation);
+        // AUTOSTART AS SOON AS THERE IS SOMEWHERE TO READ SETTINGS FROM: a hook that records from the
+        // first frame is only worth anything before the first frame.
+        applications().autostart();
         return this;
     }
 
