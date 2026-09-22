@@ -146,11 +146,14 @@ drawn for this since the 1990s, and what the builder's own selection draws on th
 16 box: `menu.__has-icons__` renders a mark at **10px**, so everything here is seen at 0.625 scale and a
 2-unit detail would come through at a pixel and a quarter.
 
-`general/action/rename.svg`, `duplicate.svg` and `copySelector.svg` are ours too; the set has no mark for
-any of them. Rename is a text field with its caret breaking the right edge. Duplicate takes `copy`'s
-two-sheet silhouette and puts a plus on the front sheet. Copy Selector is a selector's `{ }` alone, full
-height at 1.5 units: its first drawing put 1-unit braces inside `copy`'s sheets and was unreadable at a 12px
-menu mark. Single-tone `currentColor`, no `_dark` companion.
+`general/action/rename.svg` and `duplicate.svg` are ours too; the set has no mark for either. Rename is a
+text field with its caret breaking the right edge. Duplicate takes `copy`'s two-sheet silhouette and puts a
+plus on the front sheet. Single-tone `currentColor`, no `_dark` companion.
+
+`general/action/copySelector.svg` is **modified from the Platform's `copy.svg`** (Apache 2.0 § 4(b), stated
+in the file's header too): the three text lines on the front sheet are replaced by a selector's `#`, drawn
+with the same 1-unit rounded bars, so it sits beside Copy in a menu as the same icon saying something more
+specific. Single-tone, like the `copy` it comes from, so no `_dark` companion.
 
 ## Trademarks
 

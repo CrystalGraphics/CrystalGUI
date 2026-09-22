@@ -72,7 +72,7 @@ public final class ActionIcons {
     public static final String RENAME = ACTION + "rename";
     /** Copy's two sheets with a plus on the front one — ours. */
     public static final String DUPLICATE = ACTION + "duplicate";
-    /** A selector's braces, full height and heavy enough for a 12px menu mark. Ours. */
+    /** The set's {@code copy} with a selector's {@code #} in place of its text lines. */
     public static final String COPY_SELECTOR = ACTION + "copySelector";
 
     // The Library's two view faces.
