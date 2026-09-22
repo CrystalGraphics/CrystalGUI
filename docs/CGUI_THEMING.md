@@ -441,17 +441,6 @@ editor scheme's.
 | `--nav-arrow-fg` | `var(--fg-secondary)` | base.css |
 | `--nav-label-fg` | `var(--fg-secondary)` | base.css |
 | `--nav-sidebar-bg` | `var(--surface-panel)` | base.css |
-| `--nodemenu-bg` | `var(--surface-panel)` | base.css |
-| `--nodemenu-border` | `var(--border-base)` | base.css |
-| `--nodemenu-category-fg` | `var(--fg-hint)` | base.css |
-| `--nodemenu-category-label-fg` | `var(--fg-secondary)` | base.css |
-| `--nodemenu-empty-fg` | `var(--fg-hint)` | base.css |
-| `--nodemenu-hover-bg` | `var(--hover-bg)` | base.css |
-| `--nodemenu-selected-bg` | `var(--accent-soft)` | base.css |
-| `--nodemenu-selected-fg` | `var(--fg-on-accent)` | base.css |
-| `--nodemenu-separator-fg` | `var(--fg-disabled)` | base.css |
-| `--nodemenu-title-bg` | `var(--surface-raised)` | base.css |
-| `--nodemenu-twisty-fg` | `var(--fg-secondary)` | base.css |
 | `--notification-attribution-fg` | `var(--fg-secondary)` | base.css |
 | `--notification-bg` | `var(--surface-base)` | base.css |
 | `--notification-close-fg` | `var(--fg-hint)` | base.css |

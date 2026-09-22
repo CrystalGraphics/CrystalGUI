@@ -390,18 +390,6 @@ theme {
     --nav-label-fg: var(--fg-secondary);
     --nav-sidebar-bg: var(--surface-panel);
 
-    --nodemenu-bg: var(--surface-panel);
-    --nodemenu-border: var(--border-base);
-    --nodemenu-category-fg: var(--fg-hint);
-    --nodemenu-category-label-fg: var(--fg-secondary);
-    --nodemenu-empty-fg: var(--fg-hint);
-    --nodemenu-hover-bg: var(--hover-bg);
-    --nodemenu-selected-bg: var(--accent-soft);
-    --nodemenu-selected-fg: var(--fg-on-accent);
-    --nodemenu-separator-fg: var(--fg-disabled);
-    --nodemenu-title-bg: var(--surface-raised);
-    --nodemenu-twisty-fg: var(--fg-secondary);
-
     /* One card, one surface, wherever it is drawn -- a balloon and a row in the timeline are the same
      * thing and reading as two would be the tell that they are separately styled. @see --balloon-bg */
     --notification-bg: var(--surface-base);

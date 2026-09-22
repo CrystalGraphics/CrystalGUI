@@ -34,8 +34,6 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.CreateMenu;
 import com.crystalgui.widget.composite.SearchTree;
-import com.crystalgui.widget.surface.insert.InsertMenu;
-import com.crystalgui.widget.text.UIText;
 
 /**
  * What <i>Add property</i> opens: every registered property, filed by the Styles tab's own families, searchable —
@@ -78,9 +76,6 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
 
     static final String HINTS = "↑↓ to choose · Enter to add · Esc to close";
 
-    /** The Insert menu's row height, so the two read as one family. */
-    private static final float ROW_HEIGHT = 20f;
-
     /** The declarations written by hand most often, in the order a form asks for them. */
     private static final List<String> COMMON = List.of(
             "display", "flex-direction", "align-items", "justify-content", "gap", "width", "height",
@@ -92,16 +87,12 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
     }
 
     private final Predicate<String> declared;
-    private final UIText footer = new UIText(HINTS);
 
     private PropertyPalette(Predicate<String> declared) {
         super(NAME, "Add property");
         this.declared = declared;
-        addClass(QUICK_INPUT_CLASS);
         removeWhenHidden();
-        footer.addClass(InsertMenu.FOOTER_CLASS);
-        footer.setHitTest(false);
-        append(footer);
+        setHints(HINTS);
 
         setRows(new SearchTree.Rows<>() {
             @Override
@@ -148,7 +139,6 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
             }
         });
         searchBox().setPlaceholder("Search properties");
-        treeView().setItemHeight(ROW_HEIGHT);
         treeView().onSelectionChanged.connect(indices -> describeHighlighted());
     }
 
@@ -307,7 +297,7 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
             if (row != null) name = row.item().name();
             break;
         }
-        footer.setText(name == null ? HINTS : describe(name, declared.test(name)));
+        setFooterText(name == null ? null : describe(name, declared.test(name)));
     }
 
     /** {@code Layout · initial flex · declared here}, or for a shorthand the longhands it sets. */

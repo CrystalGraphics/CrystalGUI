@@ -55,9 +55,9 @@ public class NodeCreationMenu extends CreateMenu<NodeMenuTree.Node, NodeTypeRegi
     private TypeCompatibility compatibility = TypeCompatibility.EXACT;
 
     public NodeCreationMenu(NodeTypeRegistry library) {
-        super(NAME, "Create Node");
+        super(NAME, "Insert Node");
         this.library = library;
-        addClass("nodecreationmenu");
+        searchBox().setPlaceholder("Search to insert");
         setRows(new SearchTree.Rows<NodeMenuTree.Node, NodeTypeRegistry.Offer>() {
             @Override
             public List<NodeMenuTree.Node> roots(String query) {

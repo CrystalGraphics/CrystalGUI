@@ -51,10 +51,19 @@ public class CreateMenu<N, T> extends Popover {
     public static final Name NAME = Name.of("createmenu");
 
     /**
-     * The quick-input look — the Insert menu's: title, search, folders, a footer. A subclass wanting it adds this
-     * class rather than restating the sheet under its own tag.
+     * The quick-input look — title, search, folders, a footer — which every CreateMenu wears. The sheet keys on
+     * this class rather than on a tag, so a subclass with its own {@link Name} still gets it.
      */
     public static final String QUICK_INPUT_CLASS = "__quick-input__";
+
+    /** The line under the list: what the highlighted row is, or which keys do what. @see #setFooterText */
+    public static final String FOOTER_CLASS = "__insert-footer__";
+
+    /** What the footer says with nothing to describe, unless a subclass says otherwise. @see #setHints */
+    public static final String DEFAULT_HINTS = "↑↓ to choose · Enter to insert · Esc to close";
+
+    /** A row, tall enough for a 14px mark beside the label: the command palette's rhythm. */
+    private static final float ROW_HEIGHT = 20f;
 
     public static final String TITLE_BAR_CLASS = "__title-bar__";
     public static final String TITLE_CLASS = "__title__";
@@ -62,6 +71,8 @@ public class CreateMenu<N, T> extends Popover {
     private final UIElement titleBar = new UIElement();
     private final UIText titleLabel;
     private final SearchTree<N, T> body = new SearchTree<>();
+    private final UIText footer = new UIText(DEFAULT_HINTS);
+    private String hints = DEFAULT_HINTS;
 
     /** Fires with what was chosen, after which the menu closes. A folder emits nothing; it opens. */
     public final Signal.Value<T> onChosen = new Signal.Value<>();
@@ -73,6 +84,7 @@ public class CreateMenu<N, T> extends Popover {
     protected CreateMenu(Name name, String title) {
         super(name);
         this.titleLabel = new UIText(title);
+        addClass(QUICK_INPUT_CLASS);
 
         titleBar.addClass(TITLE_BAR_CLASS);
         titleLabel.addClass(TITLE_CLASS);
@@ -91,8 +103,32 @@ public class CreateMenu<N, T> extends Popover {
             hide();
         });
 
+        footer.addClass(FOOTER_CLASS);
+        footer.setHitTest(false);
+        // The view's to say, not the sheet's: a virtualised row's height is written from Java.
+        body.treeView().setItemHeight(ROW_HEIGHT);
+
         append(titleBar);
         append(body);
+        append(footer);
+    }
+
+    /**
+     * What the footer says while there is nothing to describe — the keys, worded for what choosing does.
+     *
+     * <pre>{@code
+     * setHints("↑↓ to choose · Enter to add · Esc to close");
+     * }</pre>
+     */
+    protected CreateMenu<N, T> setHints(String hints) {
+        this.hints = hints;
+        footer.setText(hints);
+        return this;
+    }
+
+    /** Describes the highlighted row in the footer; null or empty puts the {@link #setHints hints} back. */
+    protected void setFooterText(@Nullable String text) {
+        footer.setText(text == null || text.isEmpty() ? hints : text);
     }
 
     /** Says what this menu lists. Set once, before opening. */
