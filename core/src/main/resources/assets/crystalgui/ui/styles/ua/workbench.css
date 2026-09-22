@@ -906,6 +906,8 @@ quickpick .__row__ {
     flex-direction: row;
     align-items: center;
     height: 22px;
+    /* A ROUNDED BAR, as the file tree's band is -- on the row, so hover and selection are one shape. */
+    border-radius: var(--radius-control, 4px);
     padding-left: 8px;
     /* CLEAR OF THE SCROLLBAR. The bar is 8px and absolutely positioned over the right edge, so a row
      * padded to 6px ran its accelerator underneath it -- the keys were sliced in half by a bar that has
