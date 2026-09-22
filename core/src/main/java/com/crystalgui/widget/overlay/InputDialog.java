@@ -103,6 +103,22 @@ public final class InputDialog {
      */
     public static void confirm(@Nullable UIElement from, String title, String message,
                                String confirmLabel, Runnable onConfirm) {
+        confirm(from, title, message, null, confirmLabel, onConfirm);
+    }
+
+    /**
+     * {@link #confirm(UIElement, String, String, String, Runnable)} with a second line under the
+     * question, saying what the answer costs.
+     *
+     * <pre>{@code
+     * InputDialog.confirm(row, "Delete", "You are deleting 'a.java' with unsaved changes. Do you want to continue?",
+     *         "Your changes will be lost if you don't save them.", "Delete", this::delete);
+     * }</pre>
+     *
+     * @param detail the line under the question, or null for none
+     */
+    public static void confirm(@Nullable UIElement from, String title, String message, @Nullable String detail,
+                               String confirmLabel, Runnable onConfirm) {
         UIDocument window = from == null ? null : from.document();
         if (window == null) return;
 
@@ -110,6 +126,11 @@ public final class InputDialog {
         UIText caption = new UIText(message);
         caption.addClass(CAPTION_CLASS);
         dialog.getContent().append(caption);
+        if (detail != null) {
+            UIText why = new UIText(detail);
+            why.addClass(DETAIL_CLASS);
+            dialog.getContent().append(why);
+        }
 
         UIElement actions = new UIElement();
         // THE SHARED ROW, not ConflictDialog's own class: that one is scoped to `dialog.__conflict__`

@@ -5,8 +5,10 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.document.Document;
 import com.crystalgui.document.DraggedResources;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -131,12 +133,18 @@ final class ExplorerEditModel implements TreeEditModel<CgPath> {
     /**
      * Deletes, behind {@code explorer.confirmDelete}.
      *
-     * <p>A tab on a deleted file closes with it: a save from it would recreate what was just removed. Unsaved
-     * work keeps its tab; see {@code EditorService.closeDeleted}.</p>
+     * <p>A tab on a deleted file closes with it: a save from it would recreate what was just removed.</p>
+     *
+     * <p><b>Unsaved work is asked about, always</b> -- VS Code's rule ({@code fileActions.ts}), whatever the
+     * confirm setting says, because it is the one delete that loses something no trash holds. On yes the
+     * edits are reverted first, so the tab closes like any clean one and no backup of them outlives the
+     * file. A file deleted from elsewhere is different: its unsaved tab stays, see
+     * {@code EditorService.closeDeleted}.</p>
      */
     @Override
     public void delete(List<CgPath> paths) {
-        Runnable delete = () -> workbench.workspace().files().batch("delete files", batch -> {
+        List<Document> unsaved = unsavedUnder(paths);
+        Runnable deleteFiles = () -> workbench.workspace().files().batch("delete files", batch -> {
             for (CgPath path : paths) batch.delete(Resource.of(path));
         }).then(result -> {
             List<Resource> failed = new ArrayList<>();
@@ -146,11 +154,50 @@ final class ExplorerEditModel implements TreeEditModel<CgPath> {
             }
             reportFailures(result);
         });
-        if (!Boolean.TRUE.equals(workbench.resolve(WorkbenchSettings.CONFIRM_DELETE))) {
-            delete.run();
+        if (!unsaved.isEmpty()) {
+            Runnable revertThenDelete = () -> {
+                List<Reply<?>> reverts = new ArrayList<>();
+                for (Document document : unsaved) reverts.add(workbench.documents().revert(document));
+                // ALWAYS, not then: the author has already agreed to lose these edits, and a revert
+                // that fails must not keep the file they asked to delete.
+                Reply.all(reverts).always(deleteFiles);
+            };
+            InputDialog.confirm(tree, "Delete", unsavedConfirmation(paths, unsaved),
+                    "Your changes will be lost if you don't save them.", "Delete", revertThenDelete);
             return;
         }
-        InputDialog.confirm(tree, "Delete", confirmation(paths), "Delete", delete);
+        if (!Boolean.TRUE.equals(workbench.resolve(WorkbenchSettings.CONFIRM_DELETE))) {
+            deleteFiles.run();
+            return;
+        }
+        InputDialog.confirm(tree, "Delete", confirmation(paths), "Delete", deleteFiles);
+    }
+
+    /** Open documents with unsaved work at or under {@code paths}. */
+    private List<Document> unsavedUnder(List<CgPath> paths) {
+        List<Document> unsaved = new ArrayList<>();
+        for (Document document : workbench.documents().dirty()) {
+            String key = document.resource().toString();
+            for (CgPath path : paths) {
+                String target = Resource.of(path).toString();
+                if (key.equals(target) || key.startsWith(target + "/")) {
+                    unsaved.add(document);
+                    break;
+                }
+            }
+        }
+        return unsaved;
+    }
+
+    /** VS Code's wording, which names what is lost rather than only what is deleted. */
+    private String unsavedConfirmation(List<CgPath> paths, List<Document> unsaved) {
+        if (paths.size() > 1) return "You are deleting files with unsaved changes. Do you want to continue?";
+        CgPath path = paths.get(0);
+        if (!tree.isDirectory(path)) {
+            return "You are deleting '" + path.name() + "' with unsaved changes. Do you want to continue?";
+        }
+        return "You are deleting '" + path.name() + "' with unsaved changes in " + unsaved.size()
+                + (unsaved.size() == 1 ? " file" : " files") + ". Do you want to continue?";
     }
 
     private String confirmation(List<CgPath> paths) {
