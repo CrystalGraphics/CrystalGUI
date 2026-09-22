@@ -50,6 +50,7 @@ public final class GraphCommands {
     public static final String COPY = "graph.copy";
     public static final String PASTE = "graph.paste";
     public static final String DUPLICATE = "graph.duplicate";
+    public static final String DISCONNECT_ALL = "graph.disconnectAll";
 
     /**
      * Where a pasted or duplicated copy lands, relative to its original, in world units.
@@ -97,6 +98,8 @@ public final class GraphCommands {
         registry.register(Command.of(DELETE, "Delete")
                 .icon(ActionIcons.DELETE)
                 .menu(MenuId.MAIN_GRAPH, "1_nodes", 20)
+                .menu(MenuId.GRAPH_NODE_CONTEXT, "2_edit", 20)
+                .menu(MenuId.GRAPH_WIRE_CONTEXT, "1_edit", 10)
                 .run(context -> withGraph(context, GraphView::deleteSelection))
                 .enabledWhen(context -> {
                     GraphView graph = graphFor(context);
@@ -150,7 +153,9 @@ public final class GraphCommands {
                 }));
 
         registry.register(Command.of(COPY, "Copy")
+                .icon(ActionIcons.COPY)
                 .menu(MenuId.MAIN_GRAPH, "2_clipboard", 20)
+                .menu(MenuId.GRAPH_NODE_CONTEXT, "1_clipboard", 20)
                 .run(context -> withGraph(context, graph -> {
                     // Left ALONE when nothing is selected -- see GraphView.copySelection. Copying
                     // nothing must not throw away what was copied a minute ago.
@@ -161,7 +166,9 @@ public final class GraphCommands {
                 .enabledWhen(context -> hasNodes(graphFor(context))));
 
         registry.register(Command.of(CUT, "Cut")
+                .icon(ActionIcons.CUT)
                 .menu(MenuId.MAIN_GRAPH, "2_clipboard", 10)
+                .menu(MenuId.GRAPH_NODE_CONTEXT, "1_clipboard", 10)
                 .run(context -> withGraph(context, graph -> {
                     GraphDocument copied = graph.clipboard().copy();
                     if (copied == null) return;
@@ -171,7 +178,9 @@ public final class GraphCommands {
                 .enabledWhen(context -> hasNodes(graphFor(context))));
 
         registry.register(Command.of(PASTE, "Paste")
+                .icon(ActionIcons.PASTE)
                 .menu(MenuId.MAIN_GRAPH, "2_clipboard", 30)
+                .menu(MenuId.GRAPH_NODE_CONTEXT, "1_clipboard", 30)
                 .run(context -> withGraph(context, graph ->
                         pasteInto(graph, Clipboards.stored(GraphDocument.class))))
                 // Disabled with an empty clipboard, so the key falls through rather than doing nothing
@@ -182,8 +191,18 @@ public final class GraphCommands {
         registry.register(Command.of(DUPLICATE, "Duplicate")
                 .icon(ActionIcons.DUPLICATE)
                 .menu(MenuId.MAIN_GRAPH, "1_nodes", 30)
+                .menu(MenuId.GRAPH_NODE_CONTEXT, "2_edit", 10)
                 .run(context -> withGraph(context, graph -> pasteInto(graph, graph.clipboard().copy())))
                 .enabledWhen(context -> hasNodes(graphFor(context))));
+
+        // Unity's Disconnect All: every wire on the selected nodes, the nodes themselves left in place.
+        registry.register(Command.of(DISCONNECT_ALL, "Disconnect All")
+                .menu(MenuId.GRAPH_NODE_CONTEXT, "3_wires", 10)
+                .run(context -> withGraph(context, GraphView::disconnectSelection))
+                .enabledWhen(context -> {
+                    GraphView graph = graphFor(context);
+                    return graph != null && graph.selectionHasWires();
+                }));
 
         registry.register(Command.of(FRAME_ALL, "Frame All")
                 .menu(MenuId.MAIN_GRAPH, "4_layout", 20)

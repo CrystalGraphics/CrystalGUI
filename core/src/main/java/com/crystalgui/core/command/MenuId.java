@@ -52,6 +52,12 @@ public final class MenuId {
     /** Right-click on a node graph's canvas. */
     public static final MenuId GRAPH_CONTEXT = of("graph/context");
 
+    /** Right-click on a node — the selection, which the press makes include that node. */
+    public static final MenuId GRAPH_NODE_CONTEXT = of("graph/node");
+
+    /** Right-click on a wire, which the press selects. */
+    public static final MenuId GRAPH_WIRE_CONTEXT = of("graph/wire");
+
     /** Right-click a row in the shader graph's blackboard — a property. */
     public static final MenuId BLACKBOARD_CONTEXT = of("blackboard/context");
 
