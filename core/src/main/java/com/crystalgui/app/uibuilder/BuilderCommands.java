@@ -236,13 +236,13 @@ public final class BuilderCommands {
                         && selectionOf(context) != null));
 
         registry.register(Command.of(COPY_ATTRIBUTES, "Copy Attributes")
-                .icon(ActionIcons.COPY)
+                .icon(ActionIcons.COPY_ATTRIBUTES)
                 .run(context -> AttributeClipboard.put(
                         new StyleAttributes(selectionOf(context)).copyAttributes()))
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
 
         registry.register(Command.of(PASTE_ATTRIBUTES, "Paste Attributes")
-                .icon(ActionIcons.PASTE)
+                .icon(ActionIcons.PASTE_ATTRIBUTES)
                 .run(BuilderCommands::pasteAttributes)
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null
                         && AttributeClipboard.pending(StyleAttributes.DOMAIN) != null));
