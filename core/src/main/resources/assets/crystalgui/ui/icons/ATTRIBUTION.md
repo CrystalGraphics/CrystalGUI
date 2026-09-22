@@ -155,6 +155,11 @@ in the file's header too): the three text lines on the front sheet are replaced 
 with the same 1-unit rounded bars, so it sits beside Copy in a menu as the same icon saying something more
 specific. Single-tone, like the `copy` it comes from, so no `_dark` companion.
 
+`general/action/copyAttributes.svg` and `pasteAttributes.svg` are **modified from the Platform's
+`copy.svg` and `paste.svg`** the same way (Apache 2.0 § 4(b), stated in each file's header): the text
+lines are replaced by two sliders, so a style being moved reads as Copy and Paste of something that is
+not content. Same 1-unit bars, single-tone, no `_dark` companion.
+
 ## Trademarks
 
 Neither licence grants trademark rights — Apache 2.0 § 6 says so outright. The file-type icons above are

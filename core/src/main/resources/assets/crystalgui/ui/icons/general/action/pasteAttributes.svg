@@ -1,0 +1,8 @@
+<!-- Copyright 2000-2022 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license. Modified: the three text lines replaced by two attribute sliders. -->
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect x="5" y="7" width="6" height="1" rx="0.5" fill="currentColor"/>
+<rect x="6" y="6" width="2" height="3" rx="0.5" fill="currentColor"/>
+<rect x="5" y="10" width="6" height="1" rx="0.5" fill="currentColor"/>
+<rect x="8" y="9" width="2" height="3" rx="0.5" fill="currentColor"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M12 2H10.9146C10.7087 1.4174 10.1531 1 9.5 1H6.5C5.84689 1 5.29127 1.4174 5.08535 2H4C2.89543 2 2 2.89543 2 4V13C2 14.1046 2.89543 15 4 15H12C13.1046 15 14 14.1046 14 13V4C14 2.89543 13.1046 2 12 2ZM4 3H5.08535C5.29127 3.5826 5.84689 4 6.5 4H9.5C10.1531 4 10.7087 3.5826 10.9146 3H12C12.5523 3 13 3.44772 13 4V13C13 13.5523 12.5523 14 12 14H4C3.44772 14 3 13.5523 3 13V4C3 3.44772 3.44772 3 4 3ZM6.5 2C6.22386 2 6 2.22386 6 2.5C6 2.77614 6.22386 3 6.5 3H9.5C9.77614 3 10 2.77614 10 2.5C10 2.22386 9.77614 2 9.5 2H6.5Z" fill="currentColor"/>
+</svg>

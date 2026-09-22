@@ -74,6 +74,10 @@ public final class ActionIcons {
     public static final String DUPLICATE = ACTION + "duplicate";
     /** The set's {@code copy} with a selector's {@code #} in place of its text lines. */
     public static final String COPY_SELECTOR = ACTION + "copySelector";
+    /** The set's {@code copy} with two sliders in place of its text lines — a style, not content. */
+    public static final String COPY_ATTRIBUTES = ACTION + "copyAttributes";
+    /** The set's {@code paste} with the same two sliders. */
+    public static final String PASTE_ATTRIBUTES = ACTION + "pasteAttributes";
 
     // The Library's two view faces.
     public static final String VIEW_ROWS = ACTION + "viewRows";
