@@ -898,6 +898,7 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
  * `min-height`/`min-width` are cleared because `button` carries `min-height: 14px` in the base sheet,
  * and a minimum is a DIFFERENT PROPERTY from a height: it wins at any specificity without appearing
  * to compete, which is how three rounds of shrinking a height once changed nothing at all. */
+.__window__ .__title-bar__ .__caption-action__,
 .__window__ .__title-bar__ .__pin__,
 .__window__ .__title-bar__ .__minimize__,
 .__window__ .__title-bar__ .__maximize__,
@@ -942,6 +943,15 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-i
  * through to the base `button` sheet instead -- `min-height: 14px`, no `overlay-origin`, no padding
  * split -- and the glyph came out a quarter of the size with none of the gap. The controls read as one
  * flow or they read as a mistake. */
+/* AN APPLICATION'S OWN CAPTION BUTTONS -- WindowFrame.addCaptionAction. Listed in the rule above, which
+ * is what keeps them the same size as the four beside them. The gear is shared so every application's
+ * settings button is the same mark; one that is ON (its page is showing) wears the hover fill, held. */
+.__window__ .__title-bar__ .__settings__        { overlay: icon("crystalgui:general/action/settings"); }
+.__window__ .__title-bar__ .__caption-action__:hover,
+.__window__ .__title-bar__ .__caption-action__.__on__ {
+    background-color: var(--hover-bg, #FFFFFF14);
+}
+
 .__window__ .__title-bar__ .__pin__          { overlay: icon("crystalgui:general/action/pin"); }
 .__window__ .__title-bar__ .__pin__:hover    { overlay: icon("crystalgui:general/action/pinHovered"); }
 .__window__.__pinned__ .__title-bar__ .__pin__ { overlay: icon("crystalgui:general/action/pinSelected"); }
