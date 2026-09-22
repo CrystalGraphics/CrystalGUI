@@ -94,8 +94,9 @@ public final class InputDialog {
      * on the first click outside — so pressing Delete on a file put up a box that went away again and
      * deleted nothing.</p>
      *
-     * <p>Escape and a click outside both cancel, and focus lands on Cancel, so the destructive answer
-     * takes a deliberate press. The same arrangement {@code ConflictDialog} uses, for the same reason.</p>
+     * <p>Focus lands on the confirming button, as IntelliJ's does: the dialog is already the deliberate
+     * step, and Enter answers what was asked. Escape and a click outside both cancel, and Left/Right move
+     * between the two answers (see {@code Dialog}).</p>
      *
      * @param confirmLabel what the confirming button says. Name the ACTION — "Delete", "Discard" — never
      *                     "OK": it is the last thing read before something is destroyed
@@ -131,9 +132,8 @@ public final class InputDialog {
         window.addOverlay(dialog, null);
         dialog.removeWhenClosed();
         dialog.showModal();
-        // AFTER showModal, per Dialog's own instruction: the focusing steps take the first focusable
-        // descendant, and here that is the button that destroys something.
-        window.focus().requestFocus(cancel);
+        // AFTER showModal, per Dialog's own instruction: its focusing steps run inside it.
+        window.focus().requestFocus(confirm);
     }
 
     /** The line under a question that says why it is being asked. @see #askYesNo */
