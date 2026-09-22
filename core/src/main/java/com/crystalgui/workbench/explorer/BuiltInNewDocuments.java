@@ -71,11 +71,15 @@ public final class BuiltInNewDocuments {
                         target -> type(target, "public enum " + target.typeName() + " {"))
                 .variant("annotation", "Annotation", "crystalgui:nodes/java/annotation",
                         target -> type(target, "public @interface " + target.typeName() + " {"))
-                // NOT A KEYWORD, and the one that is not: an exception is a class that extends
-                // Exception, which is exactly what SymbolKind.EXCEPTION documents itself as -- a display
-                // refinement of CLASS rather than something the JLS has.
+                // NOT A KEYWORD: an exception is a class that extends a throwable, which is what
+                // SymbolKind.EXCEPTION documents itself as. IntelliJ's template -- unchecked, with the
+                // message constructor every exception is thrown through.
                 .variant("exception", "Exception", "crystalgui:nodes/java/exception",
-                        target -> type(target, "public class " + target.typeName() + " extends Exception {")));
+                        target -> type(target, "public class " + target.typeName()
+                                + " extends RuntimeException {" + NL
+                                + "    public " + target.typeName() + "(String message) {" + NL
+                                + "        super(message);" + NL
+                                + "    }")));
 
         kinds.register(NewDocumentKind.of(PACKAGE, "Package")
                 .icon(ActionIcons.PACKAGE)
