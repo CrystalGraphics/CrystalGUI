@@ -39,6 +39,11 @@ import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.widget.display.FrameStatsOverlay;
+import com.crystalgui.widget.display.CounterTrack;
+import com.crystalgui.widget.display.FrameStripTrack;
+import com.crystalgui.widget.display.SpanTrack;
+import com.crystalgui.widget.display.TimelineAxis;
+import com.crystalgui.widget.display.TimelineRuler;
 import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.composite.RadarChart;
 import com.crystalgui.widget.control.Slider;
@@ -179,6 +184,17 @@ public final class Widgets implements NodeKinds {
         // is a real tag the UA sheet can size and colour.
         UIElementRegistry.register(FrameStatsOverlay.NAME, FrameStatsOverlay::new, NodeContract.INERT,
                 KindInfo.hidden());
+        // THE PROFILER'S TWO TRACKS, on the same footing: hidden from the Library because nothing
+        // places one in a document, registered because `spantrack` and `framestrip` are what the UA
+        // sheet sizes and colours them through.
+        UIElementRegistry.register(SpanTrack.NAME, () -> new SpanTrack(new TimelineAxis()),
+                NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(FrameStripTrack.NAME, FrameStripTrack::new,
+                NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(CounterTrack.NAME, CounterTrack::new,
+                NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(TimelineRuler.NAME, () -> new TimelineRuler(new TimelineAxis()),
+                NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.register(SymbolIcon.NAME, SymbolIcon::new, NodeContract.INERT,
                 KindInfo.named("Symbol Icon").glyph(GlyphRole.TEXT).inCategory(DISPLAY)
                         .synonyms("icon", "image", "glyph").describedAs("A small icon drawn in the text color.")
