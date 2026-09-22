@@ -1,6 +1,7 @@
 package com.crystalgui.widget.display;
 
 import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.render.text.FontFamilyCache;
@@ -81,6 +82,19 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
             event.stopPropagation();
         }, false, true);
         onMouseDown.attachListener((element, event) -> {
+            // THE MIDDLE BUTTON PANS, on every row, whatever the left button means there -- the
+            // convention of every map and every node editor, and the one gesture a strip whose left drag
+            // is a range selection has for moving.
+            if (event.getButtonId() == CgMouseCodes.MIDDLE_BUTTON) {
+                UIDocument document = document();
+                if (document != null) document.input().setPointerCapture(this);
+                panning = true;
+                dragLastX = localX(event);
+                event.stopPropagation();
+                return;
+            }
+            // ONLY THE LEFT BUTTON picks and selects. The right is left for a menu.
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             // CAPTURED, so the gesture survives the pointer leaving the track. A flame row is a few
             // pixels tall and a pan drifts vertically; a strip range is released wherever the hand
             // stops. Without capture the first ended the pan halfway and the second never heard the
@@ -100,10 +114,9 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
         onMouseMove.attachListener((element, event) -> {
             float local = localX(event);
             if (pressed && Math.abs(local - pressX) > CLICK_SLOP) travelled = true;
-            if (dragging) {
+            if (dragging || panning) {
                 // NEGATED: dragging right moves the content right, which means looking EARLIER.
-                axis.setPixels(width());
-                axis.panPixels(dragLastX - local);
+                panPixels(dragLastX - local);
                 dragLastX = local;
             } else if (local != pointerX) {
                 pointerX = local;
@@ -113,7 +126,13 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
             }
         }, false, true);
         onMouseUp.attachListener((element, event) -> {
-            if (!pressed) return;
+            if (panning && event.getButtonId() == CgMouseCodes.MIDDLE_BUTTON) {
+                panning = false;
+                UIDocument document = document();
+                if (document != null) document.input().releasePointerCapture();
+                return;
+            }
+            if (!pressed || event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             pressed = false;
             dragging = false;
             UIDocument document = document();
@@ -126,7 +145,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
             onPicked(local, localY(event), axis.timeAt(local));
         }, false, true);
         onMouseLeave.attachListener((element, event) -> {
-            if (pressed) return;       // captured: the gesture is still ours
+            if (pressed || panning) return;       // captured: the gesture is still ours
             pointerX = Float.NaN;
             onHovered(Float.NaN, Float.NaN, 0L);
             repaint();
@@ -138,6 +157,17 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
 
     private boolean pressed;
     private boolean travelled;
+    /** A middle-button drag in progress. */
+    private boolean panning;
+
+    /**
+     * Moves the view by {@code pixels}; positive looks later. The time axis by default — a row on another
+     * axis (the frame strip) moves its own.
+     */
+    protected void panPixels(float pixels) {
+        axis.setPixels(width());
+        axis.panPixels(pixels);
+    }
     private float pressX;
 
     public TimelineAxis axis() {

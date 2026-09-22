@@ -88,8 +88,6 @@ public class CounterTrack extends FrameSeriesTrack {
         float usable = bottom - LABEL_BAND;
         int fill = computedStyle().get(StylePropertyRegistry.COLOR);
         int columns = columnCount();
-        float columnWidth = box.width() / columns;
-        float barWidth = columnWidth >= 4f ? columnWidth - 1f : Math.max(1f, columnWidth - 0.35f);
         long ceiling = Math.max(1L, peak);
 
         for (int column = 0; column < columns; column++) {
@@ -101,7 +99,9 @@ public class CounterTrack extends FrameSeriesTrack {
             float barHeight = value == 0L ? 0f : Math.max(1f, (float) value / ceiling * usable);
             if (barHeight <= 0f) continue;
             int colour = isComparable(at) ? fill : washed(fill);
-            ctx.rect().at(column * columnWidth, bottom - barHeight).size(barWidth, barHeight)
+            float[] bar = barOf(column);
+            if (bar == null) continue;
+            ctx.rect().at(bar[0], bottom - barHeight).size(bar[1], barHeight)
                     .fillColor(colour).submit();
         }
 
@@ -121,7 +121,7 @@ public class CounterTrack extends FrameSeriesTrack {
                 box.width() - 12f, text);
     }
 
-    // \u2500\u2500 Only the bars pick a frame \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    // ── Only the bars pick a frame ───────────────────────────────────────────────────────────
     // A click on a counter's NAME selected whatever frame sat under it, which read as a stray click.
 
     private boolean pressedOnLabel;
