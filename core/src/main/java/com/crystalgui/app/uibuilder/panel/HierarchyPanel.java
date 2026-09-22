@@ -186,6 +186,10 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
                 CLIPBOARD);
         editing.setModel(new HierarchyEditModel(builder));
         editing.attachContextMenu(CommandRegistry.global(), () -> ContextMenu.of(CONTEXT_MENU));
+        // ON THE TREE, NOT DECLARED: Ctrl+Shift+C is already Inspect Element application-wide, and an
+        // element's own keymap is asked first -- so the chord copies a selector here and picks everywhere
+        // else, whichever of the two registered first.
+        tree.keymap().bind("Ctrl+Shift+C", HierarchyActions.COPY_SELECTOR);
         tree.setRenderer(new RowRenderer());
         // AFTER the renderer, which it wraps to mark the matched letters in each row's label.
         TreeSearch<UIElement> search = TreeSearch.installOn(tree, content, TreeSearch.byText(HierarchyPanel::describe),
