@@ -736,7 +736,7 @@ editor scheme's.
 | `--taskbar-indicator-active` | `var(--accent)` | base.css |
 | `--taskbar-indicator-hidden` | `var(--fg-disabled)` | base.css |
 | `--tooltip-bg` | `#2B2D30` | crystal-dark.css |
-| `--tooltip-border` | `#43454A` | crystal-dark.css |
+| `--tooltip-border` | `#323438` | crystal-dark.css |
 | `--tooltip-fg` | `var(--fg)` | base.css |
 | `--tree-dimmed-fg` | `var(--fg-hint)` | base.css |
 | `--tree-drop-border` | `var(--accent)` | base.css |
