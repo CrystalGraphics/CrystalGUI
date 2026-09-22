@@ -1,5 +1,6 @@
 package com.crystalgui.render.texture.svg;
 
+import com.crystalgui.render.texture.CgUiSvg;
 import org.junit.After;
 import org.junit.Test;
 
@@ -47,5 +48,23 @@ public class SvgDocumentRevalidateTest {
         Files.write(file, WIDER.getBytes(StandardCharsets.UTF_8));
         assertEquals(1, SvgDocument.revalidate());
         assertNotSame("the edit is picked up", first, SvgDocument.of(path));
+    }
+
+    /**
+     * <b>A drawable built before the edit draws the edit.</b> A menu is built once and keeps its drawables;
+     * they re-resolve on the next draw because the reload moved {@link SvgDocument#generation}.
+     */
+    @Test
+    public void aDrawableBuiltBeforeTheEditFollowsTheReload() throws IOException {
+        file = Files.createTempFile("icon", ".svg");
+        Files.write(file, SQUARE.getBytes(StandardCharsets.UTF_8));
+        CgUiSvg drawable = CgUiSvg.of(file.toAbsolutePath().toString());
+        assertNotNull(drawable);
+        assertEquals(16f, drawable.intrinsicWidth(), 0f);
+
+        Files.write(file, SQUARE.replace("0 0 16 16", "0 0 24 24").getBytes(StandardCharsets.UTF_8));
+        SvgDocument.revalidate();
+
+        assertEquals("the same drawable now reads the edited file", 24f, drawable.intrinsicWidth(), 0f);
     }
 }

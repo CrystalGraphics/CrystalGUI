@@ -83,6 +83,9 @@ public final class SvgDocument {
     /** Path to parsed document; see {@link #of}. */
     private static final Map<String, SvgDocument> CACHE = new ConcurrentHashMap<>();
 
+    /** Moves whenever a cached document is dropped. @see #generation */
+    private static volatile int generation;
+
     /**
      * One batch of geometry sharing a colour and a mode.
      *
@@ -324,6 +327,22 @@ public final class SvgDocument {
     /** Drops every cached document. A resource reload wants {@link #revalidate} instead. */
     public static void invalidateCache() {
         CACHE.clear();
+        generation++;
+    }
+
+    /**
+     * A counter that moves whenever a cached document is dropped, so a holder can tell its document may be
+     * stale without being told.
+     *
+     * <pre>{@code
+     * if (seen != SvgDocument.generation()) { seen = SvgDocument.generation(); document = SvgDocument.of(path); }
+     * }</pre>
+     *
+     * <p>What {@code CgUiSvg} checks on every draw, which is what lets an icon set once -- a menu built at
+     * construction -- follow a reload. One int compare; the re-resolve is a map lookup.</p>
+     */
+    public static int generation() {
+        return generation;
     }
 
     /**
@@ -351,6 +370,7 @@ public final class SvgDocument {
                 dropped++;
             }
         }
+        if (dropped > 0) generation++;
         return dropped;
     }
 
