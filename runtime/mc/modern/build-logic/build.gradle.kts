@@ -2,12 +2,12 @@ plugins { `kotlin-dsl` }
 
 repositories {
     gradlePluginPortal()
-    maven("https://maven.neoforged.net/releases") // ModDevGradle — needed for neoFormRuntime {} in cg-mc1201-common
+    maven("https://maven.neoforged.net/releases") // ModDevGradle — needed for neoFormRuntime {} in cg-modern-common
 }
 
 dependencies {
     // ModDevGradle NeoForm mode: provides MC classes as compileOnly without the NeoForge modloader.
-    // Used by cg-mc1201-common.gradle.kts to put MC 1.20.1 on the compileOnly classpath of :runtime:mc:modern:common.
+    // Used by cg-modern-common.gradle.kts to put each common node's Minecraft on its compileOnly classpath.
     implementation("net.neoforged:moddev-gradle:2.0.141")
 
     // jvmDowngrader: :core emits Java 21 bytecode and MC 1.20.1 ships a Java 17 runtime, so the shipped

@@ -195,7 +195,7 @@ bytecode links against what the runtime actually declares.
 
 ### What each runtime speaks, measured from the build
 
-`:runtime:mc:modern:forge` has a `reobfJar` task and `:runtime:mc:modern:neoforge` has none, which is the whole story:
+A forge node has a `reobfJar` task and a neoforge node has none, which is the whole story:
 
 | Runtime | Classes | Members | Mapping |
 |---|---|---|---|

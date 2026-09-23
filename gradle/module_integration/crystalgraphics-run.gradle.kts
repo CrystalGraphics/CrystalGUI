@@ -20,8 +20,10 @@
 
 import java.io.File
 
-// "forge" or "neoforge" -- CrystalGraphics lays its loaders out under the same names.
-val loader = project.name
+// "forge" or "neoforge" -- CrystalGraphics lays its loaders out under the same names. The BRANCH, not
+// `project.name`: this is applied to a node, `:runtime:mc:modern:<loader>:<version>`, whose own name is
+// its Minecraft version.
+val loader = project.parent!!.name
 val crystalGraphics = gradle.includedBuild("CrystalGraphics")
 
 dependencies {
@@ -54,7 +56,7 @@ fun mainSourceSet(project: Project) =
     project.extensions.getByType(SourceSetContainer::class.java)["main"]
 
 // The bundled-project list, the service merge and its output directory are the LOADER PLUGIN's:
-// `ShadowUtils` needs them for the shipped jar and fabric never applies this script. @see cg-mc1201-loader
+// `ShadowUtils` needs them for the shipped jar and fabric never applies this script. @see cg-modern-loader
 @Suppress("UNCHECKED_CAST")
 val bundledProjects = extra["cgBundledProjects"] as List<Project>
 val mergedServicesDir = extra["cgMergedServicesDir"] as File

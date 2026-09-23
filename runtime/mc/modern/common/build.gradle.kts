@@ -1,19 +1,17 @@
-// ⚠ TOOLCHAIN NOTE: NeoForge did not publish artifacts for Minecraft 1.20.1 (version 20.1.x).
-// The NeoForge Maven shows the earliest available series as 20.2.x (MC 1.20.2). Therefore,
-// ModDevGradle NeoForm mode for 1.20.1 cannot be used — there is no
-// net.neoforged:neoform:1.20.1-* artifact. This subproject compiles as a plain Java-17
-// library against the shared :platform and :core modules. When we upgrade to 1.20.2+,
-// replace 'cg-mc1201-common' with the full ModDevGradle NeoForm setup.
+// The `common` branch: everything the 1.20.x loaders share, and nothing any one of them owns. Built
+// once per Minecraft version the tree targets -- `:runtime:mc:modern:common:<version>` -- and every
+// loader node compiles against the common node of its own version.
+//
+// The toolchain and every pin come from the node (`versions/<version>/gradle.properties`, read by
+// cg-modern-common), so this script carries nothing version-specific.
 
 plugins {
-    id("cg-mc1201-common")
+    id("cg-modern-common")
 }
 
-group = property("modGroup").toString()
-version = property("modVersion").toString()
-base { archivesName.set("crystalgui-mc1201-common") }
+base { archivesName.set("crystalgui-common-${project.name}") }
 
-// Adds CrystalGraphics compile-time deps (core, platform, mc1201-common, freetype) via
-// composite substitution — same as the three loader subprojects. mc1201:common needs to
-// see CrystalGraphics' platform types to compile its platform service adapter code.
+// Adds CrystalGraphics' compile-time deps (core, platform, its modern common, freetype) via composite
+// substitution -- the same as the three loader branches. Common names CrystalGraphics' platform types
+// to compile its platform service adapter code.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())

@@ -11,7 +11,7 @@ MOD for key mappings, FORGE for both sides, FORGE+CLIENT for input and paint -- 
 inner class is the `SimpleChannel` transport.
 
 The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in `:runtime:mc:modern:common`'s `LifecycleCrystalGUI`.
+mod and owns them. Everything this loader forwards to lives in the common branch's `LifecycleCrystalGUI`.
 
 ## Minecraft Source Location
 
@@ -19,20 +19,20 @@ Decompiled, Parchment-mapped sources are extracted into two subdirectories:
 
 | Path | Contents |
 |---|---|
-| `build/mc-src/java/` | MinecraftForge + Mojang Java sources, Parchment-mapped |
-| `build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) |
+| `versions/1.20.1/build/mc-src/java/` | MinecraftForge + Mojang Java sources, Parchment-mapped |
+| `versions/1.20.1/build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) |
 
 Gitignored, not committed. Generate them with:
 
 ```bash
-./gradlew :runtime:mc:modern:forge:extractMcSources
+./gradlew :runtime:mc:modern:forge:1.20.1:extractMcSources
 # or all three loader modules at once:
 ./gradlew extractAllMcSources
 ```
 
 Expect several minutes on the first run.
 
-Commonly referenced locations under `build/mc-src/java/`:
+Commonly referenced locations under `versions/1.20.1/build/mc-src/java/`:
 
 - `net/minecraft/client/Minecraft.java` — main game class
 - `net/minecraft/client/renderer/` — rendering pipeline
@@ -42,13 +42,13 @@ Commonly referenced locations under `build/mc-src/java/`:
 ## Build
 
 ```bash
-./gradlew :runtime:mc:modern:forge:compileJava
-./gradlew :runtime:mc:modern:forge:shadowJar
-./gradlew :runtime:mc:modern:forge:serverSmoke -PcgAcceptEula   # boots a dedicated server, asserts, stops
+./gradlew :runtime:mc:modern:forge:1.20.1:compileJava
+./gradlew :runtime:mc:modern:forge:1.20.1:shadowJar
+./gradlew :runtime:mc:modern:forge:1.20.1:serverSmoke -PcgAcceptEula   # boots a dedicated server, asserts, stops
 ```
 
 ## Plugin
 
 Uses `net.neoforged.moddev.legacyforge` (ModDevGradle legacyForge), which covers MinecraftForge
-1.17-1.20.1 and is Gradle 9 + JDK 25 compatible. Version pins live in `build.gradle.kts` under the
-`mc1201.forge` / `mc1201.parchment.*` keys.
+1.17-1.20.1 and is Gradle 9 + JDK 25 compatible. Version pins are per node, in
+`versions/<version>/gradle.properties` (`mc.version`, `forge.version`, `parchment.*`).

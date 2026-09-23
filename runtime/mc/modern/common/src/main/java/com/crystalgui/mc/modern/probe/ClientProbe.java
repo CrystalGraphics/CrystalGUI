@@ -20,7 +20,7 @@ import org.lwjgl.glfw.GLFW;
  * had no version of it at all.</p>
  *
  * <pre>{@code
- * ./gradlew :runtime:mc:modern:forge:runClient -Dcrystalgui.clientProbe=true
+ * ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.clientProbe=true
  * }</pre>
  *
  * <p>Screenshots land in {@code runs/client/screenshots} as {@code cgui-NN-step.png}. Add

@@ -1,14 +1,17 @@
 # runtime/mc/modern/common — Agent Knowledge Base
 
-The MC 1.20.x code that is not a loader's. Compiled against MC 1.20.1 + MinecraftForge 47.2.0 via
-`legacyForge` in `cg-mc1201-common.gradle.kts`, and consumed by `forge`, `neoforge` and `fabric`
-through the `commonOutput` configuration.
+The MC 1.20.x code that is not a loader's. A BRANCH of the Stonecutter tree: built once per Minecraft
+version the tree targets (`:runtime:mc:modern:common:<version>`), and every loader node compiles
+against the common node of its own version through the `commonOutput` configuration.
+`cg-modern-common.gradle.kts` picks each node's toolchain from its pins — NeoForm (vanilla alone) where
+one exists, 1.20.2 onward; Forge's userdev through `legacyForge` below that.
 
 **No loader type appears here.** A Forge, NeoForge or Fabric import in this module is a mistake — it
 compiles against one loader and is used by three.
 
 ```bash
-./gradlew :runtime:mc:modern:common:compileJava
+./gradlew :runtime:mc:modern:common:1.20.1:compileJava
+./gradlew checkAllTargets                        # every node of every branch
 ```
 
 ## Package Guide
