@@ -118,7 +118,7 @@ registerSingleJarPipeline(SingleJarSpec(
         "FMLCorePluginContainsFMLMod" to true,
         "ForceLoadAsMod" to true,
         "TweakClass" to "org.spongepowered.asm.launch.MixinTweaker",
-        "MixinConfigs" to "mixins.crystalgui.json",
+        "MixinConfigs" to modDescriptors.getValue("main").manifestMixinConfigs(),
         // mods.toml says ${file.jarVersion}, which FML reads from here.
         "Implementation-Version" to project.version.toString(),
         "Automatic-Module-Name" to singleJarModId,
@@ -184,7 +184,7 @@ registerSingleJarPipeline(SingleJarSpec(
             "FMLCorePluginContainsFMLMod" to "true",
             "ForceLoadAsMod" to "true",
             "TweakClass" to "org.spongepowered.asm.launch.MixinTweaker",
-            "MixinConfigs" to "mixins.crystalgui.json",
+            "MixinConfigs" to modDescriptors.getValue("main").manifestMixinConfigs(),
             "Fabric-Loom-Mixin-Remap-Type" to "",
         ))
         // core's own eight, which is the whole of what this jar contributes since J8. The language

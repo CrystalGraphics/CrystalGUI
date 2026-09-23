@@ -2,7 +2,9 @@
 
 ## Target Versions
 
-MC 1.20.1 / MinecraftForge 47.x
+MC 1.20–1.21.4 / MinecraftForge 46–54 — a node each for 1.20.1, 1.20.2, 1.20.4, 1.20.6, 1.21.1,
+1.21.3 and 1.21.4, pinned in `versions/<version>/gradle.properties`. Forge 1.21 is refused (Forge 51 has
+no HUD event); Forge published nothing for 1.20.5 or 1.21.2.
 
 ## The loader is registration only
 
