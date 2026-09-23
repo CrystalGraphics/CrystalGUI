@@ -98,9 +98,20 @@ public final class CgUiScreen extends Screen {
 
     // ── Minecraft's screen lifecycle ────────────────────────────────────────────────────────────
 
+    // 1.21.6 draws the HUD at the end of the frame, after this screen's immediate-mode paint, so the
+    // hotbar and crosshair would land ON the desktop, which used to cover them. Hidden while it is up;
+    // the player's own setting is kept once per opening, since init() also runs on every resize.
+    //? if >=1.21.6 {
+    /*private Boolean hudHiddenBefore;
+    *///?}
+
     @Override
     protected void init() {
         HostSession.session().shown();
+        //? if >=1.21.6 {
+        /*if (hudHiddenBefore == null) hudHiddenBefore = minecraft.options.hideGui;
+        minecraft.options.hideGui = true;
+        *///?}
     }
 
     @Override
@@ -124,11 +135,22 @@ public final class CgUiScreen extends Screen {
         // DRAIN MINECRAFT'S OWN BATCH FIRST. GuiGraphics queues its geometry into a BufferSource that is
         // flushed only after render() returns, so anything Minecraft still had pending would composite ON
         // TOP of the immediate-mode GL below rather than under it. The symptom is the whole UI reading one
-        // shade darker, with nothing in the UI itself to blame.
+        // shade darker, with nothing in the UI itself to blame. 1.21.6 records GUI draws and renders them
+        // at the end of the frame, so there is no batch to drain here.
+        //? if <1.21.6 {
         graphics.flush();
+        //?}
 
         session.paint(DesktopPresentation.DESKTOP, delta, PAINT_HOST);
     }
+
+    // 1.21.6 draws the background from renderWithTooltip, before render() and deferred to the end of the
+    // frame -- so its blur and dim would land OVER the desktop painted above. The desktop is its own.
+    //? if >=1.21.6 {
+    /*@Override
+    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    }
+    *///?}
 
     /**
      * The screen's own bracket — no {@code beforePaint}, unlike the HUD's.
@@ -164,6 +186,10 @@ public final class CgUiScreen extends Screen {
     @Override
     public void removed() {
         HostSession.session().hidden();
+        //? if >=1.21.6 {
+        /*if (hudHiddenBefore != null) minecraft.options.hideGui = hudHiddenBefore;
+        hudHiddenBefore = null;
+        *///?}
     }
 
     /**

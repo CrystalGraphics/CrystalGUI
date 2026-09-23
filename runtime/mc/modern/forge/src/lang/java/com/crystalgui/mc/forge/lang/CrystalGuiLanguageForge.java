@@ -24,7 +24,12 @@ public final class CrystalGuiLanguageForge implements VariantEntry {
         // CLIENT ONLY, and structurally so: the script service registers against a live Minecraft
         // instance and a dedicated server has none. FMLClientSetupEvent fires on no server at all,
         // which is a stronger guarantee than a Dist check somebody has to remember to write.
+        // Forge 56's EventBus 7 hands a mod-bus event's bus out per bus group.
+        //? if >=1.21.6 {
+        /*FMLClientSetupEvent.getBus(((FMLJavaModLoadingContext) context).getModBusGroup()).addListener(this::clientSetup);
+        *///?} else {
         ((FMLJavaModLoadingContext) context).getModEventBus().addListener(this::clientSetup);
+        //?}
     }
 
     private void clientSetup(FMLClientSetupEvent event) {

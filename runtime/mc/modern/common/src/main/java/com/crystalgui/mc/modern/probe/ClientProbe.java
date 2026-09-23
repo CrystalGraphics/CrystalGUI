@@ -93,7 +93,11 @@ public final class ClientProbe {
         public void shoot(String fileName) {
             Minecraft mc = Minecraft.getInstance();
             if (mc == null) return;
+            //? if >=1.21.6 {
+            /*Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget(), 1, message -> { });
+            *///?} else {
             Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget(), message -> { });
+            //?}
         }
 
         @Override

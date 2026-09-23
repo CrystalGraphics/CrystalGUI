@@ -2,9 +2,13 @@
 
 ## Target Versions
 
-MC 1.20–1.21.4 / MinecraftForge 46–54 — a node each for 1.20.1, 1.20.2, 1.20.4, 1.20.6, 1.21.1,
-1.21.3 and 1.21.4, pinned in `versions/<version>/gradle.properties`. Forge 1.21 is refused (Forge 51 has
-no HUD event); Forge published nothing for 1.20.5 or 1.21.2.
+MC 1.20–1.21.8 / MinecraftForge 46–58 — a node each for 1.20.1, 1.20.2, 1.20.4, 1.20.6, 1.21.1,
+1.21.3, 1.21.4, 1.21.5, 1.21.6 (also 1.21.7) and 1.21.8, pinned in `versions/<version>/gradle.properties`.
+Forge 1.21 is refused (Forge 51 has no HUD event); Forge published nothing for 1.20.5 or 1.21.2.
+
+**Forge 56-57 (1.21.6-1.21.7) have no HUD event either**, and there the HUD is a node mixin on
+`Gui.render` (`mixin/HudHook`, gated by `CrystalGuiForgeMixins` in `runtime/mc/shared`). From 1.21.6 Forge
+is EventBus 7: every subscription in `CrystalGUIForge` has a `>=1.21.6` twin.
 
 ## The loader is registration only
 

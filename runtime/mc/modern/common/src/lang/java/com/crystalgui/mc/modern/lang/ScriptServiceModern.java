@@ -130,7 +130,12 @@ public final class ScriptServiceModern implements ScriptService {
 
     /** The Minecraft version this runtime IS, which is the only one its mappings may be fetched for. */
     private static String minecraftVersion() {
+        // 1.21.6 renamed WorldVersion's accessors.
+        //? if >=1.21.6 {
+        /*return SharedConstants.getCurrentVersion().name();
+        *///?} else {
         return SharedConstants.getCurrentVersion().getName();
+        //?}
     }
 
     /**

@@ -12,19 +12,28 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
-//? if >=1.20.6 {
+//? if >=1.21.8 {
+/*import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
+*///?} elif >=1.21.6 {
+/*// Forge 56-57 have no HUD event.
+*///?} elif >=1.20.6 {
 /*import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
 *///?} else {
 import net.minecraftforge.client.event.RenderGuiEvent;
 //?}
 import net.minecraftforge.client.event.ScreenEvent;
-import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
+//? if >=1.21.6 {
+/*import net.minecraftforge.eventbus.api.bus.BusGroup;
+*///?} else {
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.IEventBus;
+//?}
 import net.minecraftforge.fml.CrashReportCallables;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
@@ -73,7 +82,7 @@ public final class CrystalGUIForge implements VariantEntry {
         CrashReportCallables.registerCrashCallable(CrashVariant.label(NAME),
                 () -> CrashVariant.report(CrystalGUIForge.class));
         LifecycleCrystalGUI.bootstrap(Network.register());
-        Events.register(((FMLJavaModLoadingContext) context).getModEventBus());
+        Events.register((FMLJavaModLoadingContext) context);
     }
 
     // -- Network ----------------------------------------------------------------
@@ -199,7 +208,18 @@ public final class CrystalGUIForge implements VariantEntry {
          * <p>No {@code Dist} on the common half: a dedicated server has to open connections and tick
          * the workspace, and a client-only subscriber would leave it with neither — silently.</p>
          */
-        public static void register(IEventBus modBus) {
+        public static void register(FMLJavaModLoadingContext context) {
+            // Forge 56's EventBus 7: every event carries its own bus, ticks come as Pre and Post, and a
+            // mod-bus event hands out one bus per mod's bus group.
+            //? if >=1.21.6 {
+            /*ServerStartingEvent.BUS.addListener(Events::onServerStarting);
+            ServerStartedEvent.BUS.addListener(Events::onServerStarted);
+            ServerStoppingEvent.BUS.addListener(Events::onServerStopping);
+            TickEvent.ServerTickEvent.Post.BUS.addListener(event -> LifecycleCrystalGUI.serverTick());
+            PlayerEvent.PlayerLoggedInEvent.BUS.addListener(Events::onPlayerJoin);
+            PlayerEvent.PlayerLoggedOutEvent.BUS.addListener(Events::onPlayerLeave);
+            BusGroup modBus = context.getModBusGroup();
+            *///?} else {
             IEventBus forgeBus = MinecraftForge.EVENT_BUS;
             forgeBus.addListener(Events::onServerStarting);
             forgeBus.addListener(Events::onServerStarted);
@@ -207,6 +227,8 @@ public final class CrystalGUIForge implements VariantEntry {
             forgeBus.addListener(Events::onServerTick);
             forgeBus.addListener(Events::onPlayerJoin);
             forgeBus.addListener(Events::onPlayerLeave);
+            IEventBus modBus = context.getModEventBus();
+            //?}
 
             // A SEPARATE CLASS, not a branch inside this one: naming a client-only event type in a
             // method of `Events` would resolve it when a dedicated server links this class.
@@ -225,9 +247,11 @@ public final class CrystalGUIForge implements VariantEntry {
             LifecycleCrystalGUI.serverStopping();
         }
 
+        //? if <1.21.6 {
         private static void onServerTick(TickEvent.ServerTickEvent event) {
             if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.serverTick();
         }
+        //?}
 
         private static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
             if (event.getEntity() instanceof ServerPlayer player) LifecycleCrystalGUI.playerJoined(player);
@@ -242,34 +266,73 @@ public final class CrystalGUIForge implements VariantEntry {
 
             private ClientBus() {}
 
+            // A cancelling listener returns whether it consumed the event: Forge 56+ takes that as a
+            // Predicate, and older Forge is told through setCanceled.
+            //? if >=1.21.6 {
+            /*static void register(BusGroup modBus) {
+                RegisterKeyMappingsEvent.getBus(modBus).addListener(ClientBus::onRegisterKeyMappings);
+                registerHud(modBus);
+                TickEvent.ClientTickEvent.Post.BUS.addListener(event -> LifecycleCrystalGUI.clientTick());
+                ClientPlayerNetworkEvent.LoggingIn.BUS.addListener(ClientBus::onClientLoggedIn);
+                ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(ClientBus::onClientLoggedOut);
+                ScreenEvent.Render.Post.BUS.addListener(ClientBus::onScreenRender);
+                ScreenEvent.MouseButtonPressed.Pre.BUS.addListener(ClientBus::onMousePressed);
+                ScreenEvent.MouseButtonReleased.Pre.BUS.addListener(ClientBus::onMouseReleased);
+                ScreenEvent.MouseScrolled.Pre.BUS.addListener(ClientBus::onMouseScrolled);
+                ScreenEvent.KeyPressed.Pre.BUS.addListener(ClientBus::onKeyPressed);
+                ScreenEvent.KeyReleased.Pre.BUS.addListener(ClientBus::onKeyReleased);
+                ScreenEvent.CharacterTyped.Pre.BUS.addListener(ClientBus::onCharTyped);
+            }
+            *///?} else {
             static void register(IEventBus modBus) {
                 IEventBus forgeBus = MinecraftForge.EVENT_BUS;
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
-                //? if >=1.20.6 {
-                /*modBus.addListener(ClientBus::onAddGuiLayers);
-                *///?}
+                registerHud(modBus);
                 forgeBus.addListener(ClientBus::onClientTick);
                 forgeBus.addListener(ClientBus::onClientLoggedIn);
                 forgeBus.addListener(ClientBus::onClientLoggedOut);
-                //? if <1.20.6 {
-                forgeBus.addListener(ClientBus::onRenderGui);
-                //?}
                 forgeBus.addListener(ClientBus::onScreenRender);
-                forgeBus.addListener(ClientBus::onMousePressed);
-                forgeBus.addListener(ClientBus::onMouseReleased);
-                forgeBus.addListener(ClientBus::onMouseScrolled);
-                forgeBus.addListener(ClientBus::onKeyPressed);
-                forgeBus.addListener(ClientBus::onKeyReleased);
-                forgeBus.addListener(ClientBus::onCharTyped);
-            }
-
-            private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-                LifecycleCrystalGUI.bootstrapClient();
-                CgUiKeybinds.all().forEach(event::register);
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseButtonPressed.Pre.class,
+                        e -> { if (onMousePressed(e)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseButtonReleased.Pre.class,
+                        e -> { if (onMouseReleased(e)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseScrolled.Pre.class,
+                        e -> { if (onMouseScrolled(e)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyPressed.Pre.class,
+                        e -> { if (onKeyPressed(e)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyReleased.Pre.class,
+                        e -> { if (onKeyReleased(e)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.CharacterTyped.Pre.class,
+                        e -> { if (onCharTyped(e)) e.setCanceled(true); });
             }
 
             private static void onClientTick(TickEvent.ClientTickEvent event) {
                 if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.clientTick();
+            }
+            //?}
+
+            // The HUD: a layer where Forge offers one. Forge 56-57 (1.21.6-1.21.7) offer none, and a
+            // node mixin paints it there. @see com.crystalgui.mc.forge.mixin.HudHook
+            //? if >=1.21.8 {
+            /*private static void registerHud(BusGroup modBus) {
+                AddGuiOverlayLayersEvent.getBus(modBus).addListener(ClientBus::onAddGuiLayers);
+            }
+            *///?} elif >=1.21.6 {
+            /*private static void registerHud(BusGroup modBus) {
+            }
+            *///?} elif >=1.20.6 {
+            /*private static void registerHud(IEventBus modBus) {
+                modBus.addListener(ClientBus::onAddGuiLayers);
+            }
+            *///?} else {
+            private static void registerHud(IEventBus modBus) {
+                MinecraftForge.EVENT_BUS.addListener(ClientBus::onRenderGui);
+            }
+            //?}
+
+            private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
+                LifecycleCrystalGUI.bootstrapClient();
+                CgUiKeybinds.all().forEach(event::register);
             }
 
             private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
@@ -285,7 +348,13 @@ public final class CrystalGUIForge implements VariantEntry {
              * boss bar, chat and a dozen more -- so painting from it laid out and drew the whole
              * compositor fifteen times a frame and put the game at ten fps.
              */
-            //? if >=1.20.6 {
+            //? if >=1.21.8 {
+            /*private static void onAddGuiLayers(AddGuiOverlayLayersEvent event) {
+                event.getLayeredDraw().add(ResourceIds.of(MODID, "hud"), (graphics, partialTick) -> LifecycleCrystalGUI.paintHud());
+            }
+            *///?} elif >=1.21.6 {
+            /*// Forge 56-57 have no HUD event: a node mixin paints it.
+            *///?} elif >=1.20.6 {
             /*// Forge 50 dropped RenderGuiEvent for vanilla's layered HUD: one layer, added last, so on top.
             private static void onAddGuiLayers(AddGuiOverlayLayersEvent event) {
                 event.getLayeredDraw().add(ResourceIds.of(MODID, "hud"), (graphics, partialTick) -> LifecycleCrystalGUI.paintHud());
@@ -300,32 +369,32 @@ public final class CrystalGUIForge implements VariantEntry {
                 LifecycleCrystalGUI.paintOverlay();
             }
 
-            private static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
-                if (LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f)) event.setCanceled(true);
+            private static boolean onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
+                return LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f);
             }
 
-            private static void onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
-                if (LifecycleCrystalGUI.offerMouse(event.getButton(), false, 0f)) event.setCanceled(true);
+            private static boolean onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
+                return LifecycleCrystalGUI.offerMouse(event.getButton(), false, 0f);
             }
 
-            private static void onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
+            private static boolean onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
                 //? if >=1.20.2 {
-                /*if (LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getDeltaY())) event.setCanceled(true);
+                /*return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getDeltaY());
                 *///?} else {
-                if (LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDelta())) event.setCanceled(true);
+                return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDelta());
                 //?}
             }
 
-            private static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
-                if (LifecycleCrystalGUI.offerKey(event.getKeyCode(), (char) 0, true)) event.setCanceled(true);
+            private static boolean onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
+                return LifecycleCrystalGUI.offerKey(event.getKeyCode(), (char) 0, true);
             }
 
-            private static void onKeyReleased(ScreenEvent.KeyReleased.Pre event) {
-                if (LifecycleCrystalGUI.offerKey(event.getKeyCode(), (char) 0, false)) event.setCanceled(true);
+            private static boolean onKeyReleased(ScreenEvent.KeyReleased.Pre event) {
+                return LifecycleCrystalGUI.offerKey(event.getKeyCode(), (char) 0, false);
             }
 
-            private static void onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
-                if (LifecycleCrystalGUI.offerKey(0, event.getCodePoint(), true)) event.setCanceled(true);
+            private static boolean onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
+                return LifecycleCrystalGUI.offerKey(0, event.getCodePoint(), true);
             }
         }
     }

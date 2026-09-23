@@ -40,6 +40,9 @@ dependencies {
     // does not bring it. compileOnly for the same reason Mixin is: every loader has one, and the
     // version it has is the one that must be used.
     compileOnly("org.ow2.asm:asm-tree:${property("asmVersion")}")
+
+    // The variant selector a mixin plugin here extends -- CrystalGraphics' one copy, on every loader.
+    compileOnly("com.crystalgraphics:mc-shared:1.0.0")
 }
 
 // THE VARIANT SELECTOR IS NOT HERE, and that is the same rule `LoaderProbe` and `CrashVariant`
