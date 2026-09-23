@@ -515,10 +515,12 @@ editor scheme's.
 | `--profiler-bar-bad` | `var(--error-icon)` | base.css |
 | `--profiler-bar-good` | `var(--fg-disabled)` | base.css |
 | `--profiler-bar-warn` | `var(--warning-icon)` | base.css |
+| `--profiler-better-fg` | `var(--success)` | base.css |
 | `--profiler-budget-line` | `var(--divider)` | base.css |
 | `--profiler-caption-fg` | `var(--fg-hint)` | base.css |
 | `--profiler-gap` | `var(--fg-disabled)` | base.css |
 | `--profiler-heading-fg` | `var(--fg-secondary)` | base.css |
+| `--profiler-hint-code-fg` | `var(--warning-icon)` | base.css |
 | `--profiler-live-bg` | `var(--accent-soft)` | base.css |
 | `--profiler-live-fg` | `var(--fg)` | base.css |
 | `--profiler-metric-fg` | `var(--fg)` | base.css |
@@ -534,6 +536,7 @@ editor scheme's.
 | `--profiler-timeline-bg` | `var(--surface-base)` | base.css |
 | `--profiler-toolbar-bg` | `var(--surface-panel)` | base.css |
 | `--profiler-untracked-fg` | `var(--warning-icon)` | base.css |
+| `--profiler-worse-fg` | `var(--error)` | base.css |
 | `--profiler-zone-border` | `var(--border-base)` | base.css |
 | `--profiler-zone-ring` | `var(--fg)` | base.css |
 | `--profiler-zone-text` | `var(--fg-on-accent)` | base.css |

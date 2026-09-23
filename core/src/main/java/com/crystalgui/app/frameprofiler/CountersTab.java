@@ -1,6 +1,8 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.display.CounterTrack;
 import com.crystalgui.widget.text.UIText;
@@ -55,6 +57,36 @@ public class CountersTab extends UIElement {
 
     public List<CounterTrack> rows() {
         return List.copyOf(rows);
+    }
+
+    /** On the row a hint pointed at. */
+    public static final String HIGHLIGHT_CLASS = "__highlight__";
+
+    /**
+     * Marks {@code name}'s row and scrolls it into view — where a hint's counter link lands.
+     *
+     * <p>After layout: the tab has usually just been switched to, and a row with no box yet has nowhere
+     * to scroll to.</p>
+     */
+    public void highlight(String name) {
+        CounterTrack target = null;
+        for (CounterTrack row : rows) {
+            boolean match = row.label().equals(name);
+            if (match) target = row;
+            if (match != row.hasClass(HIGHLIGHT_CLASS)) {
+                if (match) row.addClass(HIGHLIGHT_CLASS);
+                else row.removeClass(HIGHLIGHT_CLASS);
+            }
+        }
+        UIDocument document = document();
+        if (target == null || document == null) return;
+        CounterTrack row = target;
+        document.animation().afterLayout(this, delta -> {
+            Box box = row.box();
+            if (box == null) return document() != null;
+            box.scrollIntoView();
+            return false;
+        });
     }
 
     /** The view every row shows — the strip's. @see #showView */

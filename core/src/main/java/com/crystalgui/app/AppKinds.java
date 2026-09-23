@@ -4,7 +4,10 @@ import com.crystalgui.app.frameprofiler.CallTreeTab;
 import com.crystalgui.app.frameprofiler.ChannelsControl;
 import com.crystalgui.app.frameprofiler.CountersTab;
 import com.crystalgui.app.frameprofiler.FlameChart;
+import com.crystalgui.app.frameprofiler.ChainsTab;
+import com.crystalgui.app.frameprofiler.CompareTab;
 import com.crystalgui.app.frameprofiler.FrameProfilerPanel;
+import com.crystalgui.app.frameprofiler.HintsTab;
 import com.crystalgui.app.frameprofiler.ProfilerSettingsPage;
 import com.crystalgui.app.frameprofiler.ZonesTab;
 import com.crystalgui.app.shadergraph.ShaderGraphView;
@@ -87,5 +90,8 @@ public final class AppKinds implements NodeKinds {
         UIElementRegistry.registerTag(ChannelsControl.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(CountersTab.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ProfilerSettingsPage.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(HintsTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ChainsTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(CompareTab.NAME, NodeContract.INERT);
     }
 }

@@ -318,7 +318,10 @@ frameprofiler tabview {
 
 zonestab,
 calltreetab,
-counterstab {
+counterstab,
+hintstab,
+chainstab,
+comparetab {
     flex-direction: column;
     width: 100%;
     height: 100%;
@@ -605,4 +608,284 @@ profilersettings .__configurator__ > .__inline__ > .__config-control__.__note__ 
 profilersettings .__config-control__.__note__ .__value__ {
     color: var(--profiler-caption-fg);
     font-size: 10;
+}
+
+/* ── hints ───────────────────────────────────────────────────────────────── */
+
+hintstab scrollerview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+/* ONE BLOCK PER FINDING: the code to scan by, the sentence with its numbers, and where to go next. */
+hintstab .__hint__ {
+    flex-direction: column;
+    width: 100%;
+    gap: 3px;
+    padding: 8px;
+    border-radius: var(--radius-control, 4px);
+}
+
+hintstab .__hint__:hover {
+    background-color: var(--profiler-row-hover-bg);
+}
+
+hintstab .__hint-head__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 10px;
+}
+
+hintstab .__hint-code__ {
+    color: var(--profiler-hint-code-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 11;
+}
+
+hintstab .__hint-meta__ {
+    color: var(--profiler-caption-fg);
+    font-size: 10;
+}
+
+hintstab .__hint-text__ {
+    width: 100%;
+    color: var(--profiler-metric-fg);
+    font-size: 11;
+    white-space: normal;
+}
+
+hintstab .__hint-links__ {
+    flex-direction: row;
+    gap: 6px;
+}
+
+/* A LINK, not a button: flat, in the accent, underlined by nothing but its colour. */
+hintstab .__hint-link__ {
+    height: 20px;
+    min-height: 0px;
+    padding-left: 6px;
+    padding-right: 6px;
+    background: none;
+    color: var(--profiler-playhead);
+    font-size: 10;
+}
+
+hintstab .__hint-link__:hover {
+    background: none;
+    background-color: var(--hover-bg);
+}
+
+hintstab .__hint-ref__ {
+    color: var(--profiler-caption-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+hintstab .__empty__ {
+    padding: 12px;
+    color: var(--profiler-caption-fg);
+    font-size: 11;
+}
+
+/* ── compare ─────────────────────────────────────────────────────────────── */
+
+comparetab {
+    gap: 4px;
+}
+
+comparetab .__compare-bar__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    flex-shrink: 0;
+    padding-top: 4px;
+}
+
+comparetab .__compare-bar__ button {
+    height: 22px;
+    min-height: 0px;
+    font-size: 10;
+}
+
+comparetab .__compare-side__ {
+    color: var(--profiler-metric-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+    margin-right: 8px;
+}
+
+comparetab .__compare-summary__ {
+    flex-shrink: 0;
+    padding-left: 4px;
+    color: var(--profiler-heading-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 11;
+}
+
+comparetab tableview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+comparetab tableview .__row__:hover {
+    background-color: var(--profiler-row-hover-bg);
+}
+
+comparetab tableview .__cell__ {
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+comparetab tableview .__header-cell__ {
+    color: var(--profiler-caption-fg);
+    font-size: 10;
+}
+
+comparetab tableview .__cell__.__worse__ {
+    color: var(--profiler-worse-fg);
+}
+
+comparetab tableview .__cell__.__better__ {
+    color: var(--profiler-better-fg);
+}
+
+/* ── counters: the row a hint pointed at ─────────────────────────────────── */
+
+counterstab countertrack.__highlight__ {
+    background-color: var(--profiler-row-selected-bg);
+}
+
+/* ── footer: what the window hides, and what tracing costs ──────────────── */
+
+/* QUIET AND LAST: the reader needs it once, to trust the rest, and never while reading a frame. */
+frameprofiler .__footer__ {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0px;
+    height: 20px;
+    flex-shrink: 0;
+    padding-left: 4px;
+}
+
+frameprofiler .__footer__ .__caption__ {
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
+    margin-left: 0px;
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 9;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+frameprofiler .__footer__ button {
+    height: 18px;
+    min-height: 0px;
+    padding-left: 8px;
+    padding-right: 8px;
+    background: none;
+    color: var(--profiler-playhead);
+    font-size: 10;
+}
+
+frameprofiler .__footer__ button:hover {
+    background: none;
+    background-color: var(--hover-bg);
+}
+
+/* ── chains ──────────────────────────────────────────────────────────────── */
+
+/* THE CALL TREE'S SHAPE, on purpose: a chain is read the same way, heaviest step to what it waited on. */
+chainstab treeview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+chainstab .__chain-heading__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    flex-shrink: 0;
+    padding-left: 24px;
+    padding-right: 18px;
+    padding-top: 6px;
+    padding-bottom: 2px;
+    color: var(--profiler-caption-fg);
+    font-size: 10;
+}
+
+chainstab .__chain-heading__ text {
+    color: var(--profiler-caption-fg);
+    font-size: 10;
+}
+
+chainstab .__chain-row__ {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    padding-right: 4px;
+    gap: 8px;
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+chainstab .__chain-name__ {
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+chainstab .__chain-figure__ {
+    width: 80px;
+    text-align: right;
+    flex-shrink: 0;
+    color: var(--profiler-caption-fg);
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
+}
+
+/* A WAIT is time nothing in the chain was doing: dim, so the steps read first. */
+chainstab .__chain-row__.__wait__ .__chain-name__ {
+    color: var(--profiler-caption-fg);
+}
+
+/* THE STALL: the longest step or wait under a span, in the colour a miss wears on the strip. */
+chainstab .__chain-row__.__stall__ .__chain-name__,
+chainstab .__chain-row__.__stall__ .__chain-figure__ {
+    color: var(--profiler-hint-code-fg);
+}
+
+chainstab treeview .__row__:hover {
+    background-color: var(--profiler-row-hover-bg);
+}
+
+chainstab treeview .__row__.__selected__,
+chainstab treeview .__row__.__selected__:hover {
+    background-color: var(--profiler-row-selected-bg);
+}
+
+chainstab .__twisty__ {
+    margin-left: 4px;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--tree-twisty-fg, #FFFFFF);
+}
+
+chainstab .__collapsed__ > .__twisty__ { overlay: shape("chevron-right"); }
+chainstab .__expanded__ > .__twisty__ { overlay: shape("chevron-down"); }
+chainstab .__leaf__ > .__twisty__ { overlay: none; }
+
+chainstab .__empty__ {
+    padding: 12px;
+    color: var(--profiler-caption-fg);
+    font-size: 11;
 }

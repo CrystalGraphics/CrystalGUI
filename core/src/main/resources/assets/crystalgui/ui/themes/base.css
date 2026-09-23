@@ -662,6 +662,11 @@ theme {
     --profiler-playhead: var(--accent);
     /* The strip's scrollbar thumb: the in-budget bars' grey, so it reads as part of the strip. */
     --profiler-scroll-thumb: var(--fg-disabled);
+    /* Compare's change column: the TEXT roles, which are darkened until a figure in them reads. */
+    --profiler-worse-fg: var(--error);
+    --profiler-better-fg: var(--success);
+    /* A hint's code, the one word a row is scanned by. */
+    --profiler-hint-code-fg: var(--warning-icon);
     --profiler-zone-border: var(--border-base);
     /* Light text on the zone palette's mid-tones, and a ring in the foreground colour for the one
      * selected -- never a recolour, which would defeat a zone keeping its colour. */

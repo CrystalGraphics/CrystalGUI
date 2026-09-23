@@ -518,4 +518,75 @@ public class ProfilerModelTest {
         assertEquals("the frame list moved under a held snapshot",
                 held.frames().size(), model.frameCount());
     }
+
+    /** Two sides of different lengths compare per FRAME, or a longer range reads as a regression. */
+    @Test
+    public void compareIsPerFrameAcrossSidesOfDifferentLengths() {
+        frame(5d);
+        frame(5d);
+        frame(10d);
+        frame(10d);
+        frame(10d);
+        frame(10d);
+        close();
+
+        ProfilerModel model = new ProfilerModel();
+        model.refresh();
+        model.setFollowing(false);
+        model.selectRange(0, 1);
+        model.pinA();
+        model.selectRange(2, 5);
+        model.pinB();
+
+        ProfilerModel.CompareRow root = model.compare().stream()
+                .filter(row -> row.name().equals("root")).findFirst().orElseThrow();
+        assertEquals("A is not the root's time per frame", 4d, root.aMillis(), 0.01d);
+        assertEquals("B is not the root's time per frame", 8d, root.bMillis(), 0.01d);
+        assertEquals(4d, root.delta(), 0.01d);
+        assertEquals("the biggest change is not first", "root", model.compare().get(0).name());
+    }
+
+    /** Over a range a rule is listed once, with how many frames it fired in and the first of them. */
+    @Test
+    public void aRangeListsEachHintOnceWithItsFrameCount() {
+        for (int i = 0; i < 4; i++) {
+            CgTrace.frameBegin(clock);
+            if (i != 0) CgTrace.counter(CHANNEL, "svg-direct", 2L);
+            clock += 5_000_000L;
+            CgTrace.frameEnd(clock);
+        }
+        close();
+
+        ProfilerModel model = new ProfilerModel();
+        model.refresh();
+        model.setFollowing(false);
+        model.selectRange(0, 3);
+
+        List<ProfilerModel.HintRow> rows = model.hintsOfSelection().stream()
+                .filter(row -> row.hint().code().equals("ICONS-DIRECT")).toList();
+        assertEquals("a rule was listed once per frame rather than once", 1, rows.size());
+        assertEquals(3, rows.get(0).frames());
+        assertEquals("the first frame it fired in", 1, rows.get(0).firstPosition());
+    }
+
+    /** A chain's idle stretch between two steps is a row of its own, and the longest thing is the stall. */
+    @Test
+    public void aChainShowsWhereItWaitedAndMarksTheStall() {
+        long open = CgTrace.spanBeginAt(CHANNEL, "chain:open", 0L);
+        long read = CgTrace.spanBeginAt(CHANNEL, "chain:read", 0L);
+        CgTrace.spanEndAt(read, 10_000_000L);
+        long parse = CgTrace.spanBeginAt(CHANNEL, "chain:parse", 60_000_000L);
+        CgTrace.spanEndAt(parse, 100_000_000L);
+        CgTrace.spanEndAt(open, 100_000_000L);
+
+        List<ChainsTab.Step> chains = ChainsTab.build(CgTrace.frameSnapshot().spans());
+        assertEquals(1, chains.size());
+        List<ChainsTab.Step> steps = chains.get(0).children();
+        assertEquals("read, the wait, parse", 3, steps.size());
+        assertEquals("chain:read", steps.get(0).name());
+        assertTrue("the idle stretch is not a wait row", steps.get(1).isWait());
+        assertEquals(50_000_000L, steps.get(1).durationNanos());
+        assertTrue("the 50 ms wait, the longest thing in the chain, is not the stall", steps.get(1).isStall());
+        assertFalse(steps.get(2).isStall());
+    }
 }
