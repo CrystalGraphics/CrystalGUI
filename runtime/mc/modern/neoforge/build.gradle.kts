@@ -1,23 +1,20 @@
-// NOTE: Despite living under runtime/mc/modern/, this subproject targets MC 1.20.4 / NeoForge 20.4.x.
-// NeoForge 20.1.x (MC 1.20.1) was never published to the NeoForge Maven; the earliest
-// available stable series is 20.4.x (MC 1.20.4). Version pins live in gradle.properties
-// under mc1204.* keys. The directory name runtime/mc/modern/neoforge/ is retained for continuity.
+// The `neoforge` branch — NeoForge through ModDevGradle, one node per Minecraft version
+// (`versions/<version>/`, whose gradle.properties pins mc.version, neoforge.version, Parchment and the
+// loader's ASM). Its first node is 1.20.4: NeoForge published no 20.1.x series.
+
+import cgbuildlogic.commonNode
 
 plugins {
-    id("cg-mc1201-loader")
+    id("cg-modern-loader")
     id("net.neoforged.moddev")
     id("com.gradleup.shadow")
 }
-
-group = property("modGroup").toString()
-version = property("modVersion").toString()
-base { archivesName.set("crystalgui-mc1201-neoforge") }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
 // ADHOC: Re-declare two Maven repos that net.neoforged.moddev.repositories (settings plugin)
-// should provide at project level. The cg-mc1201-loader convention plugin's repositories block
+// should provide at project level. The cg-modern-loader convention plugin's repositories block
 // runs at project configuration time and takes precedence over settings-level repos in Gradle 9,
 // causing moddev's NeoForge/Mojang repos to go missing during dependency resolution.
 //
@@ -43,7 +40,7 @@ apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts"
 configurations.matching { it.name == "runtimeClasspath" || it.name == "additionalRuntimeClasspath" }
     .configureEach {
         resolutionStrategy.eachDependency {
-            if (requested.group == "org.ow2.asm") useVersion(property("mc1204.asm").toString())
+            if (requested.group == "org.ow2.asm") useVersion(property("asm").toString())
         }
     }
 
@@ -56,13 +53,14 @@ repositories {
 }
 
 neoForge {
-    version = property("mc1204.neoforge").toString()
+    version = property("neoforge.version").toString()
 
     parchment {
-        minecraftVersion = property("mc1204.parchment.mc").toString()
-        mappingsVersion = property("mc1204.parchment").toString()
+        minecraftVersion = property("parchment.mc").toString()
+        mappingsVersion = property("parchment.version").toString()
     }
 
+    // Per NODE: `project.file` resolves under versions/<version>/, so two versions never share a world.
     runs {
         create("client") {
             client()
@@ -79,19 +77,19 @@ neoForge {
     mods {
         create("crystalgui") {
             sourceSet(sourceSets.main.get())
-            // Dev-run classpath: core and mc1201:common are compileOnly for production
+            // Dev-run classpath: core and the common node are compileOnly for production
             // (shadowJar bundles them via from(zipTree(...))), but ModDevGradle dev runs only see
             // what's declared in this mods{} block. Adding their source sets here puts their
             // compiled classes in the mod's virtual JAR, making them visible to ModuleClassLoader.
             sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
-            sourceSet(project(":runtime:mc:modern:common").extensions.getByType<SourceSetContainer>()["main"])
+            sourceSet(project.commonNode.extensions.getByType<SourceSetContainer>()["main"])
         }
         // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
         // leaves it out, which is how the degraded configuration is exercised without building a jar.
         if (!providers.gradleProperty("cgNoLanguage").isPresent) {
             create("crystalgui_language") {
                 sourceSet(sourceSets["lang"])
-                sourceSet(project(":runtime:mc:modern:common").extensions.getByType<SourceSetContainer>()["lang"])
+                sourceSet(project.commonNode.extensions.getByType<SourceSetContainer>()["lang"])
             }
         }
     }
@@ -103,10 +101,10 @@ neoForge {
 // name 'additionalRuntimeClasspath' not found".
 apply(from = rootProject.file("gradle/module_integration/crystalgraphics-run.gradle.kts").toURI())
 
-// Extracts NeoForge + MC 1.20.4 sources and resources into build/mc-src for local navigation.
+// Extracts this node's NeoForge + Minecraft sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when the source jar changes between toolchain version bumps.
 val extractMcSources by tasks.registering(Sync::class) {
-    description = "Extracts NeoForge + MC 1.20.4 sources and resources into build/mc-src for local navigation."
+    description = "Extracts this node's NeoForge + Minecraft sources and resources into build/mc-src for local navigation."
     group = "crystalgui"
 
     // dependsOn (not mustRunAfter) — mustRunAfter only orders tasks already scheduled; it does not
@@ -139,7 +137,7 @@ tasks.named("classes") { dependsOn(extractMcSources) }
 // `thin` classifier directly rather than the `thin-dev` the other two carry until they are mapped.
 tasks.named<AbstractArchiveTask>("thinShadowJar") { archiveClassifier.set("thin") }
 
-// Registered by cg-mc1201-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
+// Registered by cg-modern-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
 tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
     jar.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
 }

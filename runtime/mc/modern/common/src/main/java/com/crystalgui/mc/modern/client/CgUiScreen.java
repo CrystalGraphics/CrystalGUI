@@ -221,8 +221,14 @@ public final class CgUiScreen extends Screen {
         return true;
     }
 
+    // 1.20.2 added the horizontal axis. Reached only when the loader's scroll event did not consume the
+    // scroll -- see CgUiHud -- which is the same on every version.
     @Override
+    //? if >=1.20.2 {
+    /*public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double delta) {
+    *///?} else {
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    //?}
         UIDocument window = window();
         return window != null && CgUiInput.scrolled(window, delta);
     }

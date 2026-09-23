@@ -1,4 +1,6 @@
 // `java` is the JavaPluginExtension in a build script, so the PACKAGE has to be imported to be named.
+import cgbuildlogic.MODERN_TREE
+import cgbuildlogic.modernNodes
 import groovy.json.JsonSlurper
 import java.net.HttpURLConnection
 import java.net.URI
@@ -9,8 +11,9 @@ import java.util.Properties
 //
 // MC version subprojects:
 //   :runtime:mc:1710         — Minecraft 1.7.10 + Forge (LWJGL 2, gtnhconvention)
-//   :runtime:mc:modern:common  — the 1.20.x platform seam, shared by all three loaders
-//   :runtime:mc:modern:{forge,neoforge,fabric} — registration only
+//   :runtime:mc:modern:<branch>:<version> — a Stonecutter tree, one node per Minecraft version:
+//     common    — the 1.20.x platform seam, shared by all three loaders
+//     forge, neoforge, fabric — registration only
 //
 // Platform-agnostic subprojects:
 //   :core     — platform-agnostic UI engine
@@ -202,39 +205,28 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
             .split(',').map { it.trim() }.filter { it.isNotEmpty() })
 }
 
-// ── J10 / E-A1 day 3: every era target, compiled by one task ─────────────────────────────────────
+// ── Every era target, compiled by one task ───────────────────────────────────────────────────────
 //
-// The spike's exit condition includes "checkAllTargets compiles every target", and the reason it is
-// one task is the rule it enforces: a refactor is compiled against EVERY version before it is
-// committed, not just against whichever node the IDE happens to have active. A break line that only
-// holds for the active version is invisible until somebody else builds.
+// The rule it enforces: a refactor is compiled against EVERY Minecraft version before it is committed,
+// not just against whichever node the IDE happens to have active. A break line that holds only for the
+// active version is invisible until somebody else builds.
 //
-// The node list mirrors the `stonecutter { }` declaration in settings.gradle.kts and has to be
-// updated with it. Deriving it instead would mean configuring those projects eagerly, which is the
-// cost this task exists to keep measurable.
-//
-// Absent when `-PcgNoSpike` drops the tree, so the flag stays a clean switch.
-val cgSpikeNodes = listOf(
-    ":runtime:mc:spike:common:1.20.1",
-    ":runtime:mc:spike:common:1.19.4",
-    ":runtime:mc:spike:forge:1.20.1",
-    ":runtime:mc:spike:fabric:1.20.1",
-    ":runtime:mc:spike:fabric:1.19.4",
-)
-
-if (cgSpikeNodes.all { findProject(it) != null }) {
-    tasks.register("checkAllTargets") {
-        group = "verification"
-        description = "Compiles every era target the spike declares -- all versions, both loaders."
-        dependsOn(cgSpikeNodes.map { "$it:compileJava" })
-    }
+// Both source sets per node: `lang` is the language mod's half and compiles against the same Minecraft.
+// Read off the tree, which settings.gradle.kts declares -- listing nodes configures none of them.
+tasks.register("checkAllTargets") {
+    group = "verification"
+    description = "Compiles every node of the 1.20.x tree -- every Minecraft version, every loader."
+    val nodes = listOf("common", "forge", "neoforge", "fabric").flatMap { modernNodes(project, it) }
+    dependsOn(nodes.flatMap { listOf("${it.path}:compileJava", "${it.path}:compileLangJava") })
 }
 
 tasks.register("assembleConsumerRuntime") {
     group = "crystalgui"
     description = "Builds every jar a consuming mod's dev run puts on its classpath."
 
-    dependsOn(":core:jar", ":taffy:jar", ":runtime:mc:modern:common:jar", ":runtime:mc:modern:forge:jar")
+    // A 1.20.1 Forge consumer's, so the 1.20.1 nodes. CrystalGraphics' tree is not versioned, so its
+    // paths below stay as they are.
+    dependsOn(":core:jar", ":taffy:jar", "$MODERN_TREE:common:1.20.1:jar", "$MODERN_TREE:forge:1.20.1:jar")
 
     listOf(":core:jar", ":platform:jar", ":freetype-msdfgen-harfbuzz-bindings:jar",
            ":runtime:mc:modern:common:jar", ":runtime:mc:modern:forge:jar")

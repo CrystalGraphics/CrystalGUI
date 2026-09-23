@@ -3,7 +3,7 @@
 /.idea/
 /.vscode/
 /run/
-/runs/
+/versions/*/runs/
 /logs/
 /build/
 /eclipse/

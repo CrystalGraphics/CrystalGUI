@@ -12,7 +12,7 @@ One `@Mod` class. Its `Events` inner class registers every listener on `NeoForge
 from the constructor, and its `Network` inner class is the payload-based transport.
 
 The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in `:runtime:mc:modern:common`'s `LifecycleCrystalGUI`.
+mod and owns them. Everything this loader forwards to lives in the common branch's `LifecycleCrystalGUI`.
 
 ## Minecraft Source Location
 
@@ -20,20 +20,20 @@ Decompiled, Parchment-mapped sources are extracted into two subdirectories:
 
 | Path | Contents |
 |---|---|
-| `build/mc-src/java/` | NeoForge + Mojang Java sources, Parchment-mapped |
-| `build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) |
+| `versions/1.20.4/build/mc-src/java/` | NeoForge + Mojang Java sources, Parchment-mapped |
+| `versions/1.20.4/build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) |
 
 Gitignored, not committed. Generate them with:
 
 ```bash
-./gradlew :runtime:mc:modern:neoforge:extractMcSources
+./gradlew :runtime:mc:modern:neoforge:1.20.4:extractMcSources
 # or all three loader modules at once:
 ./gradlew extractAllMcSources
 ```
 
 Expect several minutes on the first run.
 
-Commonly referenced locations under `build/mc-src/java/`:
+Commonly referenced locations under `versions/1.20.4/build/mc-src/java/`:
 
 - `net/minecraft/client/Minecraft.java` — main game class
 - `net/minecraft/client/renderer/` — rendering pipeline
@@ -43,12 +43,12 @@ Commonly referenced locations under `build/mc-src/java/`:
 ## Build
 
 ```bash
-./gradlew :runtime:mc:modern:neoforge:compileJava
-./gradlew :runtime:mc:modern:neoforge:shadowJar
-./gradlew :runtime:mc:modern:neoforge:serverSmoke -PcgAcceptEula   # boots a dedicated server, asserts, stops
+./gradlew :runtime:mc:modern:neoforge:1.20.4:compileJava
+./gradlew :runtime:mc:modern:neoforge:1.20.4:shadowJar
+./gradlew :runtime:mc:modern:neoforge:1.20.4:serverSmoke -PcgAcceptEula   # boots a dedicated server, asserts, stops
 ```
 
 ## Plugin
 
-Uses `net.neoforged.moddev` (ModDevGradle). Version pins live in `gradle.properties` under the
-`mc1204.*` keys.
+Uses `net.neoforged.moddev` (ModDevGradle). Version pins are per node, in
+`versions/<version>/gradle.properties` (`mc.version`, `neoforge.version`, `parchment.*`, `asm`).

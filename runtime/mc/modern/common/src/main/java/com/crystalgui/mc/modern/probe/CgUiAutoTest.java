@@ -1,7 +1,6 @@
 package com.crystalgui.mc.modern.probe;
 
 import java.io.File;
-import java.lang.reflect.Method;
 
 import javax.annotation.Nullable;
 
@@ -129,13 +128,7 @@ public final class CgUiAutoTest {
         }
     };
 
-    /**
-     * Asks Minecraft to load the save, through whichever entry point this version has.
-     *
-     * <p>1.20.1 is the compiled path and 1.20.4 the reflective one, because there is no common method
-     * and this module runs on both: 1.20.1 has {@code loadLevel(Screen, String)} and 1.20.4 deleted it
-     * in favour of {@code checkForBackupAndLoad(String, Runnable)}.</p>
-     */
+    /** Asks Minecraft to load the save, through whichever entry point this version has. */
     private static void loadWorld(Minecraft mc) {
         String name = resolveWorld(mc);
         if (name == null) {
@@ -145,39 +138,15 @@ public final class CgUiAutoTest {
         }
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST loading world '{}'", name);
         WorldOpenFlows flows = mc.createWorldOpenFlows();
-        // A COMPILED call, not a reflective one: each loader's thin jar is remapped as it is built, so
-        // this becomes the SRG member on Forge and the intermediary one on Fabric. A reflective lookup
-        // by Mojang name is a plain string and no remapper rewrites a string, so it resolved on
-        // NeoForge -- which runs official names -- and on neither of the others.
-        try {
-            flows.loadLevel(mc.screen, name);
-            return;
-        } catch (NoSuchMethodError deletedIn1204) {
-            // 1.20.4 dropped loadLevel. That build DOES run official names, so the lookup below works
-            // there for the same reason it failed above.
-        }
-        // The Runnable is the GIVE-UP path -- taken when the save cannot be read -- not a completion
-        // callback, so there is nothing to do in it.
-        if (call(flows, "checkForBackupAndLoad", new Class<?>[] {String.class, Runnable.class},
-                name, (Runnable) () -> { })) return;
-        CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST {} offers no world-open method this build knows",
-                flows.getClass().getName());
-    }
-
-    /** @return true when the method EXISTS, whether or not the call itself then succeeded. */
-    private static boolean call(Object target, String name, Class<?>[] types, Object... args) {
-        Method method;
-        try {
-            method = target.getClass().getMethod(name, types);
-        } catch (NoSuchMethodException otherVersion) {
-            return false;
-        }
-        try {
-            method.invoke(target, args);
-        } catch (ReflectiveOperationException failed) {
-            CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST {} failed", name, failed);
-        }
-        return true;
+        // COMPILED on both sides of the break, never reflective: each thin jar is remapped as it is
+        // built, so this becomes the SRG member on Forge and the intermediary one on Fabric, where a
+        // lookup by Mojang name is a string no remapper rewrites. The Runnable is the GIVE-UP path,
+        // taken when the save cannot be read, not a completion callback.
+        //? if >=1.20.2 {
+        /*flows.checkForBackupAndLoad(name, () -> { });
+        *///?} else {
+        flows.loadLevel(mc.screen, name);
+        //?}
     }
 
     /**

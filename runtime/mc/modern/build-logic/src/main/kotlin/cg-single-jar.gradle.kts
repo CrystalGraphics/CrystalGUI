@@ -1,4 +1,6 @@
 import cgbuildlogic.SingleJarSpec
+import cgbuildlogic.modernLoaderNodes
+import cgbuildlogic.modernNodes
 import cgbuildlogic.registerSingleJarPipeline
 
 // ── One jar for every loader (J4) ────────────────────────────────────────────────────────────────
@@ -41,6 +43,35 @@ repositories {
 // TASK, not the project, and fails with "unknown property 'modId'".
 val singleJarModId = property("modId").toString()
 
+// ── The 1.20.x thin jars, one per NODE, read off the tree ────────────────────────────────────────
+//
+// Every node of :runtime:mc:modern ships a thin jar, so nothing here names one: a version added in
+// settings.gradle.kts is merged, counted and checked with no edit to this file. The hierarchy is known
+// before any project is configured, so reading it here configures nothing.
+//
+// Named per LOADER because each toolchain names its own production step: ModDevGradle's `reobfuscate`
+// derives `reobfThinShadowJar` from the task it consumes, Loom's remap task is the one registered by
+// name, and NeoForge needs no mapping step at all.
+val modernThinTask = mapOf("forge" to "reobfThinShadowJar", "neoforge" to "thinShadowJar", "fabric" to "remapThinJar")
+val modernLangThinTask = mapOf(
+    "forge" to "reobfLangThinShadowJar", "neoforge" to "langThinShadowJar", "fabric" to "remapLangThinJar")
+
+fun modernThinJars(taskByLoader: Map<String, String>): List<Pair<String, String>> =
+    modernLoaderNodes(project).map { it.path to taskByLoader.getValue(it.parent!!.name) }
+
+/**
+ * How many relocated copies of a `common` class the merged jar must hold: one per loader node, since
+ * each thin jar carries its own common, relocated under its own loader.
+ */
+val modernCopies = modernLoaderNodes(project).size
+
+/**
+ * The Fabric thin jar whose manifest supplies every Fabric-* attribute; any Fabric node's will do. Null
+ * in an embedded build, which has no Fabric node and never builds the single jar.
+ */
+fun fabricThinJar(task: String): Pair<String, String>? =
+    modernNodes(project, "fabric").firstOrNull()?.let { it.path to task }
+
 registerSingleJarPipeline(SingleJarSpec(
     modId = singleJarModId,
     fileName = "$singleJarModId-${project.version}.jar",
@@ -48,15 +79,8 @@ registerSingleJarPipeline(SingleJarSpec(
     // legal package identifier, so the module system rejects the jar before the early display.
     shadePath = "com/crystalgui/shadow",
 
-    // Named per loader because each toolchain names its own production step: ModDevGradle's
-    // `reobfuscate` derives `reobfThinShadowJar` from the task it consumes, Loom's remap task is the
-    // one registered by name, NeoForge needs no mapping step at all, and 1.7.10's is registered here.
-    thinJars = listOf(
-        ":runtime:mc:1710" to "reobfThinJar",
-        ":runtime:mc:modern:forge" to "reobfThinShadowJar",
-        ":runtime:mc:modern:neoforge" to "thinShadowJar",
-        ":runtime:mc:modern:fabric" to "remapThinJar",
-    ),
+    // 1.7.10's production step is registered in its own build; every 1.20.x node's is read off the tree.
+    thinJars = listOf(":runtime:mc:1710" to "reobfThinJar") + modernThinJars(modernThinTask),
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
@@ -97,7 +121,7 @@ registerSingleJarPipeline(SingleJarSpec(
         "Implementation-Version" to project.version.toString(),
         "Automatic-Module-Name" to singleJarModId,
     ),
-    fabricThinJar = ":runtime:mc:modern:fabric" to "remapThinJar",
+    fabricThinJar = fabricThinJar("remapThinJar"),
 
     // THE NOTICE TRAVELS WITH THE BINARY (G7). MIT, Apache 2.0 and the OFL each require it to reach
     // whoever receives the jar, and a file in the source repository does not. J8 moved code between
@@ -132,8 +156,8 @@ registerSingleJarPipeline(SingleJarSpec(
         // this asked for 3 copies of CgUiScreen.class and found 4. `CgUiKeybinds` has no 1.7.10
         // counterpart, so it counts the relocation and nothing else.
         relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/modern/platform/LifecycleCrystalGUI.class" to 3,
-            "com/crystalgui/mc/modern/client/CgUiKeybinds.class" to 3,
+            "com/crystalgui/mc/modern/platform/LifecycleCrystalGUI.class" to modernCopies,
+            "com/crystalgui/mc/modern/client/CgUiKeybinds.class" to modernCopies,
         ))
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
@@ -187,12 +211,7 @@ registerSingleJarPipeline(SingleJarSpec(
     fileName = "crystalgui-language-${project.version}.jar",
     shadePath = "com/crystalgui/lang/shadow",
 
-    thinJars = listOf(
-        ":runtime:mc:1710" to "reobfLangThinJar",
-        ":runtime:mc:modern:forge" to "reobfLangThinShadowJar",
-        ":runtime:mc:modern:neoforge" to "langThinShadowJar",
-        ":runtime:mc:modern:fabric" to "remapLangThinJar",
-    ),
+    thinJars = listOf(":runtime:mc:1710" to "reobfLangThinJar") + modernThinJars(modernLangThinTask),
     libraryProjects = listOf(":language"),
     serviceOwners = listOf(":language"),
 
@@ -220,7 +239,7 @@ registerSingleJarPipeline(SingleJarSpec(
         "Implementation-Version" to project.version.toString(),
         "Automatic-Module-Name" to "crystalgui_language",
     ),
-    fabricThinJar = ":runtime:mc:modern:fabric" to "remapLangThinJar",
+    fabricThinJar = fabricThinJar("remapLangThinJar"),
     descriptorsTask = "generateLanguageDescriptors",
 
     extraContent = {
@@ -240,9 +259,9 @@ registerSingleJarPipeline(SingleJarSpec(
             ?.forEach { from(project.zipTree(it)) }
 
         // ALL THREE BANDS. 8 is what a 1.7.10 client runs, 17 what 1.20.x does, and 11 what a 1.7.10
-        // client on lwjgl3ify may. Taken from the two loaders that already resolve them rather than
-        // re-resolved here.
-        listOf(":runtime:mc:1710", ":runtime:mc:modern:forge").forEach { path ->
+        // client on lwjgl3ify may. Taken from the two eras that already resolve them rather than
+        // re-resolved here -- any 1.20.x node will do, since the bands name no Minecraft.
+        listOf(":runtime:mc:1710", modernLoaderNodes(project).first().path).forEach { path ->
             val producer = project.project(path).tasks.named("bundleEngineBands")
             dependsOn(producer)
             from(producer)
@@ -271,7 +290,7 @@ registerSingleJarPipeline(SingleJarSpec(
         // defect rather than a functional one -- the two are in different packages -- but the host
         // half wants a name of its own; `ModernScriptService` is what the plan asked for.
         relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/modern/lang/LanguageLifecycle.class" to 3,
+            "com/crystalgui/mc/modern/lang/LanguageLifecycle.class" to modernCopies,
         ))
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
