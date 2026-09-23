@@ -82,17 +82,9 @@ loom {
     }
 }
 
-// `${version}` in fabric.mod.json is a GRADLE placeholder and nothing at runtime expands it.
-//
-// Forge's `${file.jarVersion}` is read by FML from the jar manifest; Fabric has no such thing, so an
-// unexpanded fabric.mod.json ships the six literal characters. Fabric Loader does not reject it -- it
-// falls back to a StringVersion -- so the mod loads and the failure is confined to what reads the
-// version: the mod list shows `${version}`, and any dependency range another mod declares on this id
-// can never be satisfied.
-tasks.processResources {
-    inputs.property("modVersion", project.version)
-    filesMatching("fabric.mod.json") { expand("version" to project.version) }
-}
+// NO fabric.mod.json OF ITS OWN (J11.1b): a node's dev run takes the merged one, which cg-modern-loader
+// adds to its resources -- it names only the bootstrapper and ORs every node's range, so it is right
+// for every node and carries the real version rather than a `${version}` placeholder to expand.
 
 // -- The SHIPPED jar is the SHADED SHADOW jar, remapped ------------------------------------------
 //

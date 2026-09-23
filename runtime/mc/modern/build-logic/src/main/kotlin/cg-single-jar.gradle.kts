@@ -1,7 +1,9 @@
+import cgbuildlogic.ModDescriptor
 import cgbuildlogic.SingleJarSpec
 import cgbuildlogic.modernLoaderNodes
 import cgbuildlogic.modernNodes
 import cgbuildlogic.registerSingleJarPipeline
+import cgbuildlogic.shippedEntryPaths
 
 // ── One jar for every loader (J4) ────────────────────────────────────────────────────────────────
 //
@@ -58,6 +60,10 @@ val modernLangThinTask = mapOf(
 
 fun modernThinJars(taskByLoader: Map<String, String>): List<Pair<String, String>> =
     modernLoaderNodes(project).map { it.path to taskByLoader.getValue(it.parent!!.name) }
+
+/** Declared once by cg-descriptors, which the root applies first. */
+@Suppress("UNCHECKED_CAST")
+val modDescriptors = extra["cgModDescriptors"] as Map<String, ModDescriptor>
 
 /**
  * How many relocated copies of a `common` class the merged jar must hold: one per loader node, since
@@ -163,15 +169,9 @@ registerSingleJarPipeline(SingleJarSpec(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             "mixins.crystalgui.json",
             "com/crystalgui/mc/v1710/mixins/CrystalGuiMixins.class",
-            // Every entry point the descriptors name -- see the language jar's list for what this
-            // catches. These four are each loader's own package, which no relocation touches.
-            "com/crystalgui/mc/v1710/CrystalGUI.class",
-            "com/crystalgui/mc/forge/CrystalGUIForge.class",
-            "com/crystalgui/mc/neoforge/CrystalGUINeoForge.class",
-            "com/crystalgui/mc/fabric/CrystalGUIFabric.class",
-            // J11.0. The table decides which of those runs, and the three bootstrappers are what the
-            // loaders actually construct -- the classes above carry no annotation any more, so a jar
-            // missing one of these loads nothing at all on that loader and says nothing about why.
+            // J11.0. The table decides which entry runs, and the three bootstrappers are what the
+            // loaders actually construct -- the entries carry no annotation any more, so a jar missing
+            // one of these loads nothing at all on that loader and says nothing about why.
             "META-INF/crystalgui/variants.json",
             "com/crystalgui/mc/fabric/FabricBootstrap.class",
             "com/crystalgui/mc/forge/ForgeBootstrap.class",
@@ -180,7 +180,10 @@ registerSingleJarPipeline(SingleJarSpec(
             "META-INF/NOTICE.md",
             // Where every download comes from, beside core's DownloadLocations, which reads it.
             "assets/crystalgui/download/locations.json",
-        ))
+        // EVERY ENTRY POINT THE TABLE NAMES, at its shipped name: one per node, relocated into that
+        // node's package (cgbuildlogic.ModernVariants). A table naming a class absent from the jar is
+        // a crash at mod construction on that version alone.
+        ) + modDescriptors.getValue("main").shippedEntryPaths())
         requiredManifest.set(mapOf(
             "FMLCorePluginContainsFMLMod" to "true",
             "ForceLoadAsMod" to "true",
@@ -294,16 +297,6 @@ registerSingleJarPipeline(SingleJarSpec(
         ))
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
-            // EVERY ENTRY POINT THE DESCRIPTORS NAME. A descriptor naming a class that is not here is
-            // a crash at mod construction on Forge and a hard loader error on Fabric, and nothing else
-            // in this build looks: a rename that updated the classes and mangled the descriptor
-            // strings passed every other check and produced a jar whose Fabric entrypoint did not
-            // exist. Only `com.crystalgui.mc.modern.lang` is relocated, so 1.7.10's and the three
-            // loader entries all keep their own package.
-            "com/crystalgui/mc/v1710/lang/CrystalGuiLanguage.class",
-            "com/crystalgui/mc/forge/lang/CrystalGuiLanguageForge.class",
-            "com/crystalgui/mc/neoforge/lang/CrystalGuiLanguageNeoForge.class",
-            "com/crystalgui/mc/fabric/lang/CrystalGuiLanguageFabric.class",
             // J11.0: the table, and the three bootstrappers the loaders actually construct.
             "META-INF/crystalgui_language/variants.json",
             "com/crystalgui/mc/forge/lang/LanguageForgeBootstrap.class",
@@ -314,7 +307,10 @@ registerSingleJarPipeline(SingleJarSpec(
             "assets/crystalgui/engines/8/index.txt",
             "assets/crystalgui/engines/11/index.txt",
             "assets/crystalgui/engines/17/index.txt",
-        ))
+        // EVERY ENTRY POINT THE TABLE NAMES, at its shipped name. A table naming a class that is not
+        // here is a crash at mod construction, and nothing else in this build looks: a rename once
+        // updated the classes, mangled the descriptor strings and passed every other check.
+        ) + modDescriptors.getValue("lang").shippedEntryPaths())
         requiredManifest.set(mapOf(
             "FMLCorePluginContainsFMLMod" to "true",
             "ForceLoadAsMod" to "true",
