@@ -244,4 +244,29 @@ public class UITextMeasureTest extends UiDocumentTestBase {
         assertEquals("nothing is highlighted, so nothing may be banded",
                 0, text.highlightBandCount());
     }
+
+    /**
+     * A point on a line of one run answers the character under it, not the run's first character.
+     *
+     * <p>A line with no highlights is one run, and the offset used to be that run's start: every point on
+     * the frame readout's sparkline opened its first bar, whichever was pressed.</p>
+     */
+    @Test
+    public void aPointFindsTheCharacterUnderItInsideOneRun() {
+        UIText text = new UIText("0123456789");
+        document.append(text);
+        settle();
+        Box box = text.box();
+        float left = box.border().left + box.padding().left;
+        float middle = box.height() / 2f;
+        // THE TEXT'S OWN EXTENT, found by walking right until nothing is under the point: the box is
+        // stretched to the document, and a share of it is not a share of the text.
+        float width = 0f;
+        while (width < box.contentBoxWidth() && text.offsetAt(left + width, middle) >= 0) width += 0.5f;
+
+        assertEquals(0, text.offsetAt(left + width * 0.02f, middle));
+        int nearMiddle = text.offsetAt(left + width * 0.55f, middle);
+        assertTrue("the middle of a one-run line answered " + nearMiddle, nearMiddle >= 4 && nearMiddle <= 6);
+        assertEquals(9, text.offsetAt(left + width * 0.98f, middle));
+    }
 }
