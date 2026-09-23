@@ -1,12 +1,12 @@
 package com.crystalgui.mc.neoforge;
 
+import com.crystalgraphics.mc.modern.platform.ResourceIds;
 import com.crystalgraphics.mc.shared.CrashVariant;
 import java.util.function.BiConsumer;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import com.crystalgui.net.wire.CgNetworkChannel;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -18,14 +18,25 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.TickEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+//? if >=1.20.5 {
+/*import io.netty.buffer.ByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
+*///?} else {
+import net.minecraft.network.FriendlyByteBuf;
+import net.neoforged.neoforge.event.TickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlerEvent;
 import net.neoforged.neoforge.network.handling.PlayPayloadContext;
+//?}
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.MODID;
 import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
@@ -49,9 +60,9 @@ public final class CrystalGUINeoForge implements VariantEntry {
     @Override
     public void start(Object context) {
         IEventBus modBus = (IEventBus) context;
-        // WHICH VARIANT, in the log rather than the crash report: NeoForge 20.4 exposes no crash
-        // callable — CrashReportExtender is its own — so unlike Forge and 1.7.10 there is nothing to
-        // register with, and `latest.log` is the file a report is attached with anyway. @see CrashVariant
+        // WHICH VARIANT, in the log rather than the crash report: NeoForge exposes no crash callable --
+        // CrashReportExtender is its own -- so unlike Forge and 1.7.10 there is nothing to register
+        // with, and `latest.log` is the file a report is attached with anyway. @see CrashVariant
         CrystalGuiCore.LOGGER.info("[cgui] {}: {}", CrashVariant.label(NAME),
                 CrashVariant.report(CrystalGUINeoForge.class));
         LifecycleCrystalGUI.bootstrap(Network.get());
@@ -60,11 +71,17 @@ public final class CrystalGUINeoForge implements VariantEntry {
 
     // -- Network ----------------------------------------------------------------
 
-    /** The MC 1.20.4 NeoForge transport: bytes in, bytes out. Framing and routing are {@code net.wire}'s. */
+    /**
+     * The NeoForge transport: bytes in, bytes out. Framing and routing are {@code net.wire}'s.
+     *
+     * <p>Two payload APIs: 1.20.4's registrar keyed on an id, and 1.20.5's typed payloads with a
+     * {@code StreamCodec}. NeoForge splits an oversized payload itself on both, so one frame may exceed
+     * vanilla's 32 KiB serverbound cap.</p>
+     */
     public static final class Network implements CgNetworkChannel {
 
         private static final String VERSION = "1";
-        private static final ResourceLocation ID = new ResourceLocation(MODID, "wire");
+        private static final ResourceLocation ID = ResourceIds.of(MODID, "wire");
 
         /** Under the payload split threshold, so one frame stays one packet. */
         private static final int MAX_FRAME_BYTES = 900_000;
@@ -79,6 +96,29 @@ public final class CrystalGUINeoForge implements VariantEntry {
             return INSTANCE;
         }
 
+        //? if >=1.20.5 {
+        /*public record Frame(byte[] bytes) implements CustomPacketPayload {
+
+            static final CustomPacketPayload.Type<Frame> TYPE = new CustomPacketPayload.Type<>(ID);
+            static final StreamCodec<ByteBuf, Frame> CODEC = ByteBufCodecs.BYTE_ARRAY.map(Frame::new, Frame::bytes);
+
+            @Override
+            public CustomPacketPayload.Type<Frame> type() {
+                return TYPE;
+            }
+        }
+
+        public static void register(RegisterPayloadHandlersEvent event) {
+            event.registrar(VERSION).playBidirectional(Frame.TYPE, Frame.CODEC, Network::receive);
+        }
+
+        private static void receive(Frame frame, IPayloadContext context) {
+            context.enqueueWork(() -> {
+                ServerPlayer sender = context.player() instanceof ServerPlayer p ? p : null;
+                INSTANCE.inbound.accept(sender, frame.bytes());
+            });
+        }
+        *///?} else {
         /** One payload carrying a frame. */
         public record Frame(byte[] bytes) implements CustomPacketPayload {
 
@@ -114,6 +154,7 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 INSTANCE.inbound.accept(sender, frame.bytes());
             });
         }
+        //?}
 
         @Override
         public int maxFrameBytes() {
@@ -122,13 +163,21 @@ public final class CrystalGUINeoForge implements VariantEntry {
 
         @Override
         public void sendToServer(byte[] frame) {
+            //? if >=1.20.5 {
+            /*PacketDistributor.sendToServer(new Frame(frame));
+            *///?} else {
             PacketDistributor.SERVER.noArg().send(new Frame(frame));
+            //?}
         }
 
         @Override
         public void sendToPlayer(Object player, byte[] frame) {
             if (!(player instanceof ServerPlayer serverPlayer)) return;
+            //? if >=1.20.5 {
+            /*PacketDistributor.sendToPlayer(serverPlayer, new Frame(frame));
+            *///?} else {
             PacketDistributor.PLAYER.with(serverPlayer).send(new Frame(frame));
+            //?}
         }
 
         @Override
@@ -174,9 +223,16 @@ public final class CrystalGUINeoForge implements VariantEntry {
             LifecycleCrystalGUI.serverStopping();
         }
 
+        // 1.20.5 split the tick events by phase into classes of their own.
+        //? if >=1.20.5 {
+        /*private static void onServerTick(ServerTickEvent.Post event) {
+            LifecycleCrystalGUI.serverTick();
+        }
+        *///?} else {
         private static void onServerTick(TickEvent.ServerTickEvent event) {
             if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.serverTick();
         }
+        //?}
 
         private static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
             if (event.getEntity() instanceof ServerPlayer player) LifecycleCrystalGUI.playerJoined(player);
@@ -226,9 +282,15 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 CgUiKeybinds.all().forEach(event::register);
             }
 
+            //? if >=1.20.5 {
+            /*private static void onClientTick(ClientTickEvent.Post event) {
+                LifecycleCrystalGUI.clientTick();
+            }
+            *///?} else {
             private static void onClientTick(TickEvent.ClientTickEvent event) {
                 if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.clientTick();
             }
+            //?}
 
             private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
                 LifecycleCrystalGUI.clientConnected();

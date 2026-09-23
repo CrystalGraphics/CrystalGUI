@@ -41,7 +41,8 @@ tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
 // LOOM READS A MOD FILE WHILE THE BUILD IS CONFIGURED, before the task above has run. On the first
 // build of a node the jar does not exist yet, so that run has no CrystalGraphics mod at all and dies at
 // the entrypoint with NoClassDefFoundError: com/crystalgraphics/mc/shared/VariantBootstrap. The next run
-// finds the jar. Said here, where it can be read, rather than left to that error.
+// finds the jar. Said here, where it can be read, rather than left to that error. A CHANGED jar lags the
+// same way: the run after a CrystalGraphics edit still loads the previous build.
 if (crystalGraphicsMod.isEmpty) {
     logger.warn("[cgui] {}: CrystalGraphics' fabric mod jar is not built yet, so a dev run started by " +
         "THIS invocation has no CrystalGraphics. It is built on the way; run again, or build " +

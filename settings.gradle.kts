@@ -6,7 +6,7 @@ pluginManagement {
     // id("com.gtnewhorizons.gtnhconvention") with no version. Applying gtnhsettingsconvention here
     // would inject spotless onto every subproject's buildscript classpath -- including :core and
     // :language, which are ordinary Java modules and are not GTNH builds.
-    // Supplies the 1.20.x convention plugins (cg-java17, cg-modern-common, cg-modern-loader). Without
+    // Supplies the 1.20.x convention plugins (cg-java, cg-modern-common, cg-modern-loader). Without
     // it every 1.20.x node fails at id("cg-modern-loader") with "plugin not found".
     includeBuild("runtime/mc/modern/build-logic")
 
@@ -127,10 +127,10 @@ if (!embedded) include("runtime:mc:1710")
 val modernNodes: Map<String, List<String>> =
     if (embedded) linkedMapOf("common" to listOf("1.20.1"), "forge" to listOf("1.20.1"))
     else linkedMapOf(
-        "common" to listOf("1.20.1", "1.20.4"),
+        "common" to listOf("1.20.1", "1.20.4", "1.21.1"),
         "forge" to listOf("1.20.1"),
-        "neoforge" to listOf("1.20.4"),
-        "fabric" to listOf("1.20.1", "1.20.4"),
+        "neoforge" to listOf("1.20.4", "1.21.1"),
+        "fabric" to listOf("1.20.1", "1.20.4", "1.21.1"),
     )
 
 // Read by composite.settings.gradle.kts, which substitutes CrystalGraphics' node of each version --

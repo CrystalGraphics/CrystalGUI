@@ -166,7 +166,7 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/modern/client/CgUiKeybinds.class" to modernCopies,
         ))
         requiredEntries.set(listOf(
-            "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
+            "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             "mixins.crystalgui.json",
             "com/crystalgui/mc/v1710/mixins/CrystalGuiMixins.class",
             // J11.0. The table decides which entry runs, and the three bootstrappers are what the
@@ -296,7 +296,7 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/modern/lang/LanguageLifecycle.class" to modernCopies,
         ))
         requiredEntries.set(listOf(
-            "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
+            "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             // J11.0: the table, and the three bootstrappers the loaders actually construct.
             "META-INF/crystalgui_language/variants.json",
             "com/crystalgui/mc/forge/lang/LanguageForgeBootstrap.class",
