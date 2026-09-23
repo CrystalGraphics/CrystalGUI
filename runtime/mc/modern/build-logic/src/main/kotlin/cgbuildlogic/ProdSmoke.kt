@@ -136,6 +136,13 @@ abstract class ProdSmoke : DefaultTask() {
             if (!cfg.isFile) throw GradleException("$name: no instance.cfg at $instanceDir")
             val uuid = cfg.readLines().firstOrNull { it.startsWith("uuid=") }?.removePrefix("uuid=")
                 ?: throw GradleException("$name: instance.cfg names no uuid")
+            // A copied instance keeps its original's uuid, and `--launch` then starts the ORIGINAL,
+            // unarmed: it sits on the title screen and reads as a hung autotest.
+            val twins = instanceDir.parentFile.listFiles().orEmpty().filter { other ->
+                other != instanceDir && File(other, "instance.cfg").let { it.isFile && "uuid=$uuid" in it.readLines() }
+            }
+            if (twins.isNotEmpty()) throw GradleException(
+                "$name: uuid $uuid is also ${twins.joinToString { it.name }}'s; give the copy a new uuid in its instance.cfg")
             targets += Target(name, instanceDir, cfg, uuid)
         }
         if (targets.isEmpty()) throw GradleException("prodSmoke matched no instance")
