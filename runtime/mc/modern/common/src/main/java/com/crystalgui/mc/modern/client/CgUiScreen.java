@@ -18,6 +18,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+//? if >=1.21.9 {
+/*import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+*///?}
 
 /**
  * The CrystalGUI desktop as a 1.20.x {@link Screen} — <b>and nothing more than that</b>.
@@ -218,6 +223,19 @@ public final class CgUiScreen extends Screen {
     // ── Input ───────────────────────────────────────────────────────────────────────────────────
 
     @Override
+    // 1.21.9 hands input as event objects.
+    //? if >=1.21.9 {
+    /*public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        UIDocument window = window();
+        return window != null && CgUiInput.mouseButton(window, event.button(), true);
+    }
+
+    @Override
+    public boolean mouseReleased(MouseButtonEvent event) {
+        UIDocument window = window();
+        return window != null && CgUiInput.mouseButton(window, event.button(), false);
+    }
+    *///?} else {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         UIDocument window = window();
         return window != null && CgUiInput.mouseButton(window, button, true);
@@ -228,6 +246,7 @@ public final class CgUiScreen extends Screen {
         UIDocument window = window();
         return window != null && CgUiInput.mouseButton(window, button, false);
     }
+    //?}
 
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
@@ -240,7 +259,11 @@ public final class CgUiScreen extends Screen {
      * press here would end the drag on its first pixel.
      */
     @Override
+    //? if >=1.21.9 {
+    /*public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+    *///?} else {
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+    //?}
         UIDocument window = window();
         if (window == null) return false;
         CgUiInput.mouseMoved(window);
@@ -260,7 +283,12 @@ public final class CgUiScreen extends Screen {
     }
 
     @Override
+    //? if >=1.21.9 {
+    /*public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+    *///?} else {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    //?}
         UIDocument window = window();
         if (window == null) return false;
         if (CgUiInput.key(window, keyCode, true)) return true;
@@ -276,6 +304,19 @@ public final class CgUiScreen extends Screen {
 
     private static final int ESCAPE_KEY = 256;
 
+    //? if >=1.21.9 {
+    /*@Override
+    public boolean keyReleased(KeyEvent event) {
+        UIDocument window = window();
+        return window != null && CgUiInput.key(window, event.key(), false);
+    }
+
+    @Override
+    public boolean charTyped(CharacterEvent event) {
+        UIDocument window = window();
+        return window != null && CgUiInput.character(window, (char) event.codepoint());
+    }
+    *///?} else {
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         UIDocument window = window();
@@ -287,6 +328,7 @@ public final class CgUiScreen extends Screen {
         UIDocument window = window();
         return window != null && CgUiInput.character(window, codePoint);
     }
+    //?}
 
     /** @see #keyPressed */
     @Override

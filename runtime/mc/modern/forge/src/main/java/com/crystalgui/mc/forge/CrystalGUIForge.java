@@ -369,20 +369,34 @@ public final class CrystalGUIForge implements VariantEntry {
                 LifecycleCrystalGUI.paintOverlay();
             }
 
-            private static boolean onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
-                return LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f);
+            // Forge 59 (1.21.9) carries the input as Minecraft's own event object, through getInfo().
+            //? if >=1.21.9 {
+            /*private static boolean onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
+                return LifecycleCrystalGUI.offerMouse(event.getInfo().button(), true, 0f);
             }
 
             private static boolean onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
                 return LifecycleCrystalGUI.offerMouse(event.getButton(), false, 0f);
             }
 
-            private static boolean onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
-                //? if >=1.20.2 {
-                /*return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getDeltaY());
-                *///?} else {
-                return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDelta());
-                //?}
+            private static boolean onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
+                return LifecycleCrystalGUI.offerKey(event.getInfo().key(), (char) 0, true);
+            }
+
+            private static boolean onKeyReleased(ScreenEvent.KeyReleased.Pre event) {
+                return LifecycleCrystalGUI.offerKey(event.getInfo().key(), (char) 0, false);
+            }
+
+            private static boolean onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
+                return LifecycleCrystalGUI.offerKey(0, (char) event.getInfo().codepoint(), true);
+            }
+            *///?} else {
+            private static boolean onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
+                return LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f);
+            }
+
+            private static boolean onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
+                return LifecycleCrystalGUI.offerMouse(event.getButton(), false, 0f);
             }
 
             private static boolean onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
@@ -396,6 +410,16 @@ public final class CrystalGUIForge implements VariantEntry {
             private static boolean onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
                 return LifecycleCrystalGUI.offerKey(0, event.getCodePoint(), true);
             }
+            //?}
+
+            private static boolean onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
+                //? if >=1.20.2 {
+                /*return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getDeltaY());
+                *///?} else {
+                return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDelta());
+                //?}
+            }
+
         }
     }
 }

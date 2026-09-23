@@ -20,7 +20,7 @@ import org.lwjgl.glfw.GLFW;
 public final class MachineExampleClientModern {
 
     public static final KeyMapping OPEN_MACHINE =
-            new KeyMapping("key.crystalgui.machine", GLFW.GLFW_KEY_F8, "key.categories.crystalgui");
+            new KeyMapping("key.crystalgui.machine", GLFW.GLFW_KEY_F8, CgUiKeybinds.CATEGORY);
 
     private MachineExampleClientModern() {}
 

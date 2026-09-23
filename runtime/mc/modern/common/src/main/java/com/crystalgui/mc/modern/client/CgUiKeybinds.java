@@ -4,6 +4,9 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import net.minecraft.client.KeyMapping;
+//? if >=1.21.9 {
+/*import com.crystalgraphics.mc.modern.platform.ResourceIds;
+*///?}
 
 import org.lwjgl.glfw.GLFW;
 
@@ -17,7 +20,13 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class CgUiKeybinds {
 
-    private static final String CATEGORY = "key.categories.crystalgui";
+    /** CrystalGUI's key category, for every mapping of ours. 1.21.9 made it a registered id. */
+    //? if >=1.21.9 {
+    /*public static final KeyMapping.Category CATEGORY =
+            KeyMapping.Category.register(ResourceIds.of("crystalgui", "keys"));
+    *///?} else {
+    public static final String CATEGORY = "key.categories.crystalgui";
+    //?}
 
     public static final KeyMapping OPEN_EDITOR =
             new KeyMapping("key.crystalgui.open", GLFW.GLFW_KEY_F6, CATEGORY);

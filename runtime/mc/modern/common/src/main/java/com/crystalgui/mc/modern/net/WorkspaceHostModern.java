@@ -18,6 +18,9 @@ import com.mojang.authlib.GameProfile;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.storage.LevelResource;
+//? if >=1.21.9 {
+/*import net.minecraft.server.players.NameAndId;
+*///?}
 
 /**
  * The server's workspace on MC 1.20.x: where it lives, who may write to it, and who is asking.
@@ -139,7 +142,11 @@ public final class WorkspaceHostModern {
             MinecraftServer server = currentServer;
             if (server == null) return false;
             GameProfile owner = server.getSingleplayerProfile();
+            //? if >=1.21.9 {
+            /*return owner != null && owner.name() != null && owner.name().equalsIgnoreCase(actorId);
+            *///?} else {
             return owner != null && owner.getName() != null && owner.getName().equalsIgnoreCase(actorId);
+            //?}
         }
 
         @Override
@@ -147,7 +154,12 @@ public final class WorkspaceHostModern {
             MinecraftServer server = currentServer;
             if (server == null || server.getPlayerList() == null) return false;
             ServerPlayer player = server.getPlayerList().getPlayerByName(actorId);
+            // 1.21.9 asks by NameAndId.
+            //? if >=1.21.9 {
+            /*return player != null && server.getPlayerList().isOp(new NameAndId(player.getGameProfile()));
+            *///?} else {
             return player != null && server.getPlayerList().isOp(player.getGameProfile());
+            //?}
         }
     }
 }

@@ -12,7 +12,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.IEventBus;
 import com.crystalgraphics.mc.shared.VariantEntry;
-import net.neoforged.fml.loading.FMLEnvironment;
+import com.crystalgraphics.mc.shared.FmlSide;
+import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
@@ -250,7 +251,7 @@ public final class CrystalGUINeoForge implements VariantEntry {
             NeoForge.EVENT_BUS.addListener(Events::onPlayerJoin);
             NeoForge.EVENT_BUS.addListener(Events::onPlayerLeave);
 
-            if (FMLEnvironment.dist.isClient()) ClientBus.register(modBus);
+            if (FmlSide.isClient(FMLLoader.class)) ClientBus.register(modBus);
         }
 
         private static void onServerStarting(ServerStartingEvent event) {
@@ -386,7 +387,8 @@ public final class CrystalGUINeoForge implements VariantEntry {
             }
 
             private static void onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
-                if (LifecycleCrystalGUI.offerKey(0, event.getCodePoint(), true)) event.setCanceled(true);
+                // An int from NeoForge 21.9; a char before it, where the cast is a no-op.
+                if (LifecycleCrystalGUI.offerKey(0, (char) event.getCodePoint(), true)) event.setCanceled(true);
             }
         }
     }
