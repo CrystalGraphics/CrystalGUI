@@ -1489,9 +1489,9 @@ slowest 13.1ms cpu: phases 12.9ms
 - **`FrameStats` keeps no storage of its own.** It is a view over `CgTrace`'s frame ring
   (`plan/platform-trace-engine.md`), which is why the expanded breakdown can be the *slowest* frame's:
   every frame's zones are still there, so there is no peak to hold and no decay to get right.
-- **The phase rows are `FrameProfile`'s**, and it is a forwarder onto that engine — `begin`/`end`
-  becomes a zone, `count` a counter, and `step`/`enter`/`leave` a **span**, because a chain that
-  outlives a frame is not a phase. Recording follows the channel mask rather than a property, so a
+- **The phase rows are zones on `UiTrace.FRAME`**, written straight to that engine — a per-frame
+  count is `CgTrace.add`, and a chain that outlives a frame is a **span** on `UiTrace.FLOW`, because it
+  is not a phase. Recording follows the channel mask rather than a property, so a
   readout can ask for the phases without a restart, which is exactly when a stall is least
   reproducible; `-Dcrystalgui.frameprofile=true` adds the per-slow-frame LOGGING on top and nothing
   else.
@@ -1504,8 +1504,8 @@ slowest 13.1ms cpu: phases 12.9ms
 
 ### Reading the counts
 
-The count rows are `FrameProfile.count(...)` calls — accumulated per frame and flushed once, since
-`count("drawcalls", 1)` fires once per draw. Phase timing follows the channel mask, so they all reach
+The count rows are `CgTrace.add(UiTrace.FRAME, ...)` calls — summed per frame and written once, since
+`add(..., "drawcalls", 1)` fires once per draw. Phase timing follows the channel mask, so they all reach
 the HUD with no property set. The layer ones answer the question a paint-bound frame actually
 raises — *why are there seventeen layers?* — and they account for every one:
 

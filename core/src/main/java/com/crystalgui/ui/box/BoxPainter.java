@@ -2,7 +2,8 @@ package com.crystalgui.ui.box;
 
 import com.crystalgui.render.InkOverflow;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.LayerRegion;
 import com.crystalgui.render.RetainedLayer;
@@ -94,7 +95,7 @@ public final class BoxPainter {
         if (CgUiPaintContext.CULL) {
             inkThrough(box, base);
             if (ctx.outsideClip(INK[0], INK[1], INK[2], INK[3])) {
-                FrameProfile.count("culled", 1);
+                CgTrace.add(UiTrace.FRAME, "culled", 1);
                 return;
             }
         }
@@ -117,7 +118,7 @@ public final class BoxPainter {
             // opacity 1 -- the whole apparatus for an identity. Rounded `overflow: hidden` is on almost
             // every surface in this UI, and most of the leaves wearing it have no children at all.
             if (mask && box.children().isEmpty() && !CgUiPaintContext.LEGACY_LAYERS) {
-                FrameProfile.count("masks-elided", 1);
+                CgTrace.add(UiTrace.FRAME, "masks-elided", 1);
                 mask = false;
             }
             boolean needsLayer = opacity < 1f || mask;
@@ -127,7 +128,7 @@ public final class BoxPainter {
             // an `Opacity`. Group opacity differs from per-primitive opacity only where two primitives
             // cover the same pixel; where there is only one, they are the same number.
             if (needsLayer && !mask && !CgUiPaintContext.LEGACY_LAYERS && foldsOpacity(box, style, node)) {
-                FrameProfile.count("layers-elided", 1);
+                CgTrace.add(UiTrace.FRAME, "layers-elided", 1);
                 float previousOpacity = ctx.pushLayerOpacity(opacity);
                 try {
                     paintSelf(box, style, ctx, radii);
@@ -156,7 +157,7 @@ public final class BoxPainter {
             // WHAT THE LAYER IS FOR. `layers=17` is a number nobody can act on: a mask layer is two
             // targets and a composite, an opacity layer is one, and the two are removed by different
             // things -- a radius that need not clip, or an opacity that could fold.
-            FrameProfile.count(mask ? "layers-mask" : "layers-opacity", 1);
+            CgTrace.add(UiTrace.FRAME, mask ? "layers-mask" : "layers-opacity", 1);
             LayerRegion region = regionOf(box, ctx, base);
             if (region.isEmpty()) return;
 
@@ -168,7 +169,7 @@ public final class BoxPainter {
             // repaints itself may not be kept. @see Box#retainable
             RetainedLayer keep = null;
             if (box.retainable()) keep = ctx.retain(box, region, box.subtreeRevision());
-            else FrameProfile.count("retain-dynamic", 1);
+            else CgTrace.add(UiTrace.FRAME, "retain-dynamic", 1);
             if (keep != null && keep.isFresh()) {
                 // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
                 ctx.notePainted(IDENTITY, region.x(), region.y(), region.x() + region.width(),

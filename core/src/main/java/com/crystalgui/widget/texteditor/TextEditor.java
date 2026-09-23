@@ -11,7 +11,8 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.search.SearchMatcher;
@@ -832,20 +833,20 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      */
     private void subscribeToBuffer() {
         bufferChanged = buffer.onChanged.connect(change -> {
-            long changed = FrameProfile.enter("buffer.onChanged");
+            long changed = CgTrace.spanBegin(UiTrace.FLOW, "buffer.onChanged");
             // The tokenizer hears about the edit BEFORE the next query, so an incremental one can update
             // what it holds. Applying the edit is cheap and must be synchronous; the expensive reparse is
             // the implementation's business. See SyntaxTokenizer#edited.
-            long timed = FrameProfile.begin();
+            long timed = CgTrace.stamp(UiTrace.FLOW);
             tokenizer.edited(buffer.document(), change);
-            FrameProfile.step(timed, "tokenizer.edited");
+            CgTrace.spanDone(UiTrace.FLOW, "tokenizer.edited", timed);
             markHighlightsDirty();
-            FrameProfile.leave(changed, "buffer.onChanged head");
+            CgTrace.spanEnd(changed);
             // BEFORE reprojectAfterEdit, which is what advances previousLineCount -- this needs the count
             // as it was in order to tell a same-row edit from one that shifted every row below it.
-            long piece = FrameProfile.begin();
+            long piece = CgTrace.stamp(UiTrace.FLOW);
             invalidateMeasuredRows(change);
-            FrameProfile.step(piece, "ed:invalidateMeasuredRows");
+            CgTrace.spanDone(UiTrace.FLOW, "ed:invalidateMeasuredRows", piece);
             // THE VIEW-LINE COUNT AS IT WAS, read here and USED below -- the two have to be separated.
             //
             // Written first as `rowsTouchedBy(change, viewLineCount())` at this line, which reads
@@ -857,9 +858,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // before this edit -- so it belongs beside the call above rather than anywhere later.
             //
             // MAPPED, not dropped -- see settleSyntaxIfIdle for why those are different things.
-            piece = FrameProfile.begin();
+            piece = CgTrace.stamp(UiTrace.FLOW);
             mapRowSyntaxThroughEdit(change);
-            FrameProfile.step(piece, "ed:mapRowSyntaxThroughEdit");
+            CgTrace.spanDone(UiTrace.FLOW, "ed:mapRowSyntaxThroughEdit", piece);
             // NOT invalidateWindow() unless the line COUNT changed.
             //
             // Recycling every line on every keystroke clears each one's highlights -- recycleLine has to,
@@ -879,16 +880,16 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // recycled every line, and recycling clears highlights that are only republished after the
             // frame's style pass.
             forgetWidestLine();
-            long reprojected = FrameProfile.begin();
+            long reprojected = CgTrace.stamp(UiTrace.FLOW);
             reprojectAfterEdit(change);
-            FrameProfile.step(reprojected, "reprojectAfterEdit");
-            piece = FrameProfile.begin();
+            CgTrace.spanDone(UiTrace.FLOW, "reprojectAfterEdit", reprojected);
+            piece = CgTrace.stamp(UiTrace.FLOW);
             folds.markDirty();
-            FrameProfile.step(piece, "ed:folds.markDirty");
-            long rebound = FrameProfile.begin();
+            CgTrace.spanDone(UiTrace.FLOW, "ed:folds.markDirty", piece);
+            long rebound = CgTrace.stamp(UiTrace.FLOW);
             int[] touched = rowsTouchedBy(change, viewLinesBefore);
             rebindRealisedLines(touched);
-            FrameProfile.step(rebound, "rebindRealisedLines");
+            CgTrace.spanDone(UiTrace.FLOW, "rebindRealisedLines", rebound);
             // AND THE BANDS ARE CONFINED TO THE SAME ROWS. Set here rather than beside the
             // markHighlightsDirty() above because this is the first point the answer exists -- and
             // because anything later in this listener that dirties the highlights for a reason of its
@@ -906,9 +907,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // undo and redo -- and offsets found against the old text describe the new one wrongly: the
             // count went stale and the highlights sat over whatever had moved into their place. Re-running
             // from this one signal is what makes undo correct without the undo path knowing about search.
-            piece = FrameProfile.begin();
+            piece = CgTrace.stamp(UiTrace.FLOW);
             find.refreshAfterEdit();
-            FrameProfile.step(piece, "ed:find.refreshAfterEdit");
+            CgTrace.spanDone(UiTrace.FLOW, "ed:find.refreshAfterEdit", piece);
             // A HOVER BOX DESCRIBES AN OFFSET, and typing moves it. Dismissed rather than re-resolved,
             // because what is on screen is now about a position that has shifted underneath it and the
             // pointer has not asked about wherever the text ended up. A Ctrl+Q popup is left alone: it was
@@ -920,9 +921,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // 73KB for an ordinary class, 108KB for Minecraft.class -- and it was built unconditionally,
             // as the argument to an emit with, measured, ZERO connections on every path that opens a file.
             // A signal with no listeners costs nothing; the argument handed to it does not.
-            piece = FrameProfile.begin();
+            piece = CgTrace.stamp(UiTrace.FLOW);
             if (onChanged.connectionCount() > 0) onChanged.emit(buffer.toString());
-            FrameProfile.step(piece, "ed:onChanged.emit -> " + onChanged.connectionCount() + " listeners");
+            CgTrace.spanDone(UiTrace.FLOW, "ed:onChanged.emit -> " + onChanged.connectionCount() + " listeners", piece);
         });
 
         // AN UNDO THAT MOVES THE TEXT BACK AND NOT THE CARET has moved the text out from under your
@@ -1059,12 +1060,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         }
         // `load`, not `replace`: it normalises AND remembers the ending, so a save writes back what the
         // file came with. It breaks undo coalescing itself.
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         buffer.load(text == null ? "" : text);
-        FrameProfile.step(timed, "buffer.load (rope build, " + buffer.lineCount() + " lines)");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "buffer.load (rope build, " + buffer.lineCount() + " lines)", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         setSelection(0, 0);
-        FrameProfile.step(timed, "setSelection");
+        CgTrace.spanDone(UiTrace.FLOW, "setSelection", timed);
         return this;
     }
 
@@ -1081,12 +1082,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
                 && buffer.lineEnding() == prepared.ending()) {
             return this;
         }
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         buffer.load(prepared);
-        FrameProfile.step(timed, "buffer.load (PREPARED, " + buffer.lineCount() + " lines)");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "buffer.load (PREPARED, " + buffer.lineCount() + " lines)", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         setSelection(0, 0);
-        FrameProfile.step(timed, "setSelection");
+        CgTrace.spanDone(UiTrace.FLOW, "setSelection", timed);
         return this;
     }
 
@@ -2596,25 +2597,25 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * plausibly arrive from both ends.</p>
      */
     public void disposeLanguage() {
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         tokenizer.setInvalidationListener(null);
         tokenizer.close();
         tokenizer = SyntaxTokenizer.NONE;
-        FrameProfile.step(timed, "close.tokenizer.close (frees the native trees)");
+        CgTrace.spanDone(UiTrace.FLOW, "close.tokenizer.close (frees the native trees)", timed);
         if (languageDiagnostics != null) {
             languageDiagnostics.disconnect();
             languageDiagnostics = null;
         }
         if (languageServices != null) {
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FLOW);
             languageServices.semanticTokens().setInvalidationListener(null);
             languageServices.close();
             languageServices = null;
-            FrameProfile.step(timed, "close.languageServices.close");
+            CgTrace.spanDone(UiTrace.FLOW, "close.languageServices.close", timed);
         }
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         rowSyntax.clear();
-        FrameProfile.step(timed, "close.rowSyntax.clear");
+        CgTrace.spanDone(UiTrace.FLOW, "close.rowSyntax.clear", timed);
     }
 
     /**
@@ -2663,10 +2664,10 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         highlightedTo = to;
         highlightsDirty = false;
 
-        long syntaxTimed = FrameProfile.begin();
+        long syntaxTimed = CgTrace.stamp(UiTrace.FRAME);
         ensureRowSyntax(firstViewLine, lastViewLine);
-        FrameProfile.end(syntaxTimed, "ed:ensureRowSyntax");
-        long bandsTimed = FrameProfile.begin();
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:ensureRowSyntax", syntaxTimed);
+        long bandsTimed = CgTrace.stamp(UiTrace.FRAME);
         int rebuilt = 0;
         int unchanged = 0;
         for (Map.Entry<Integer, UIElement> entry : realisedLines.entrySet()) {
@@ -2837,8 +2838,8 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // SPENT. It described one edit, and a limit left standing would confine the NEXT rebuild -- one
         // raised by something with no row information at all -- to that edit's rows.
         highlightRowLimit = null;
-        FrameProfile.end(bandsTimed, "ed:highlightBands " + rebuilt + "/" + realisedLines.size()
-                + " (" + unchanged + " unchanged)");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:highlightBands " + rebuilt + "/" + realisedLines.size()
+                + " (" + unchanged + " unchanged)", bandsTimed);
     }
 
     /**
@@ -3134,12 +3135,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         }
         if (filling.isEmpty()) return;
 
-        long grammarTimed = FrameProfile.begin();
+        long grammarTimed = CgTrace.stamp(UiTrace.FRAME);
         List<SyntaxToken> grammarTokens = tokenizer.tokenize(buffer.document(), spanStart, spanEnd);
-        FrameProfile.end(grammarTimed, "ed:tokenize");
-        FrameProfile.step(grammarTimed, "ed:tokenize rows " + firstMissing + ".." + lastMissing
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:tokenize", grammarTimed);
+        CgTrace.spanDone(UiTrace.FLOW, "ed:tokenize rows " + firstMissing + ".." + lastMissing
                 + " (" + (lastMissing - firstMissing + 1) + " of " + lineCount + "), span "
-                + (spanEnd - spanStart) + " chars -> " + grammarTokens.size() + " tokens");
+                + (spanEnd - spanStart) + " chars -> " + grammarTokens.size() + " tokens", grammarTimed);
         for (SyntaxToken token : grammarTokens) {
             distributeToRows(token, firstMissing, lastMissing, filling);
         }
@@ -3159,11 +3160,11 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // token would make each semantic token displace the previous one, and they are deliberately
         // allowed to overlap each other: `count` being a field and `count` being deprecated are two
         // true things about one range, drawn as a colour and a strike-through by two different rules.
-        long semanticTimed = FrameProfile.begin();
+        long semanticTimed = CgTrace.stamp(UiTrace.FRAME);
         List<SyntaxToken> semanticTokens = semantic.tokensIn(spanStart, spanEnd);
-        FrameProfile.end(semanticTimed, "ed:semanticTokens");
-        FrameProfile.step(semanticTimed, "ed:semanticTokens span " + (spanEnd - spanStart)
-                + " chars -> " + semanticTokens.size() + " tokens");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:semanticTokens", semanticTimed);
+        CgTrace.spanDone(UiTrace.FLOW, "ed:semanticTokens span " + (spanEnd - spanStart)
+                + " chars -> " + semanticTokens.size() + " tokens", semanticTimed);
         for (SyntaxToken token : semanticTokens) {
             clearGrammarUnder(token, firstMissing, lastMissing, filling);
         }
@@ -5413,12 +5414,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
         List<Change> changes = change.changes();
         if (changes.size() != 1) {
-            long whole = FrameProfile.begin();
+            long whole = CgTrace.stamp(UiTrace.FLOW);
             projections.rebuild(buffer.document());
             // THE WHOLE-DOCUMENT PATH, named apart from the incremental one. Which of the two ran is the
             // first question about any reprojection cost, and both used to report as one number.
-            FrameProfile.step(whole, "ed:projections.rebuild (WHOLE DOC, " + lineCount + " lines, "
-                    + changes.size() + " changes)");
+            CgTrace.spanDone(UiTrace.FLOW, "ed:projections.rebuild (WHOLE DOC, " + lineCount + " lines, "
+                    + changes.size() + " changes)", whole);
             return;
         }
         Change edit = changes.get(0);
@@ -5450,20 +5451,20 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         int removed = added - delta;
         if (removed < 1) {
             // Not a shape rowsChanged can express. Rebuilding is always correct, only slower.
-            long whole = FrameProfile.begin();
+            long whole = CgTrace.stamp(UiTrace.FLOW);
             projections.rebuild(buffer.document());
-            FrameProfile.step(whole, "ed:projections.rebuild (WHOLE DOC, unexpressible shape, "
-                    + lineCount + " lines)");
+            CgTrace.spanDone(UiTrace.FLOW, "ed:projections.rebuild (WHOLE DOC, unexpressible shape, "
+                    + lineCount + " lines)", whole);
             return;
         }
-        long some = FrameProfile.begin();
+        long some = CgTrace.stamp(UiTrace.FLOW);
         projections.rowsChanged(buffer.document(), row, removed, added);
         // A FULL LOAD LANDS HERE, not on the rebuild branch: TextBuffer.load is ONE change that replaces
         // everything, so `added` is the whole new document and this is a whole-document reprojection
         // wearing the incremental path's name. Worth reporting the row count, or a 2,208-row reprojection
         // reads as an ordinary keystroke.
-        FrameProfile.step(some, "ed:projections.rowsChanged at " + row
-                + " (-" + removed + " +" + added + " of " + lineCount + ")");
+        CgTrace.spanDone(UiTrace.FLOW, "ed:projections.rowsChanged at " + row
+                + " (-" + removed + " +" + added + " of " + lineCount + ")", some);
     }
 
     private CgFontFamily resolveFamily() {
@@ -5684,7 +5685,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // first line or the reverse, which moves its carried indent and its width -- and after a
             // resize it moves every one of them.
             String before = textOf(entry.getValue()).getText();
-            long t0 = FrameProfile.begin();
+            long t0 = CgTrace.stamp(UiTrace.FLOW);
             layOutLine(viewLine, entry.getValue());
             if (t0 != 0L) placed += System.nanoTime() - t0;
             // A ROW WHOSE TEXT CHANGED HAS STALE HIGHLIGHTS, and nothing else says so.
@@ -5704,7 +5705,8 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // nothing writes nothing: setText no-ops on an unchanged string, and so does this.
             if (!before.equals(textOf(entry.getValue()).getText())) markHighlightsDirty();
         }
-        FrameProfile.report(placed, "ed:rebind.layOutLine x" + rows);
+        // A TOTAL across the loop, recorded as one step that ended now and lasted that long.
+        if (placed > 0L) CgTrace.spanDone(UiTrace.FLOW, "ed:rebind.layOutLine x" + rows, System.nanoTime() - placed);
         // NO markTreeDirty() HERE, and its absence is the point.
         //
         // This method's own contract, three lines up in updateWindow, is that it is safe to call every
@@ -5792,25 +5794,25 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             pendingReveal = false;
             revealCaretCentred();
         }
-        long profiled = FrameProfile.begin();
+        long profiled = CgTrace.stamp(UiTrace.FRAME);
         updateWindow();
-        FrameProfile.end(profiled, "ed:updateWindow");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:updateWindow", profiled);
         // THE REST OF THE TICK, named. A frame measured `tick:TextEditor 35,010us` with `ed:updateWindow`
         // absent from the same line -- so 35ms was in one of the four calls below and nothing said which.
-        profiled = FrameProfile.begin();
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         viewCursorsPart.advanceBlink(deltaSeconds);
-        FrameProfile.end(profiled, "ed:blink");
-        profiled = FrameProfile.begin();
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:blink", profiled);
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         zoomIndicatorPart.tick(deltaSeconds);
-        FrameProfile.end(profiled, "ed:zoomIndicator");
-        profiled = FrameProfile.begin();
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:zoomIndicator", profiled);
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         autoScrollDuringDrag(deltaSeconds);
-        FrameProfile.end(profiled, "ed:autoScrollDuringDrag");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:autoScrollDuringDrag", profiled);
         // A REST TIMER, so it belongs on the heartbeat rather than on the move event: what it measures is
         // the pointer NOT moving, and the last move is the one event that will not be followed by another.
-        profiled = FrameProfile.begin();
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         langFeatures.hover().tick(deltaSeconds);
-        FrameProfile.end(profiled, "ed:hoverTick");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:hoverTick", profiled);
         return true;
     }
 
@@ -5873,9 +5875,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // which is stated on FoldingRegions itself -- so it is the one call in here whose cost scales
         // with the file rather than with what is visible. ed:updateWindow reports 33.6ms on the frame
         // that opens a 2,000-line class while everything named inside it sums to 8ms.
-        long folded = FrameProfile.begin();
+        long folded = CgTrace.stamp(UiTrace.FLOW);
         boolean foldingChanged = folds.refreshFolding();
-        FrameProfile.step(folded, "ed:refreshFolding (" + viewLineCount() + " view lines)");
+        CgTrace.spanDone(UiTrace.FLOW, "ed:refreshFolding (" + viewLineCount() + " view lines)", folded);
         if (foldingChanged) {
             firstRealised = -1;
             lastRealised = -1;
@@ -5927,7 +5929,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // frame that opens a class while every named sub-item inside it summed to 9.8ms -- so 23ms
             // was landing here, in creating and placing the viewport's line elements and in whatever
             // onWindowChanged wakes up.
-            long recycled = FrameProfile.begin();
+            long recycled = CgTrace.stamp(UiTrace.FLOW);
             for (var iterator = realisedLines.entrySet().iterator(); iterator.hasNext(); ) {
                 var entry = iterator.next();
                 if (entry.getKey() < first || entry.getKey() > last) {
@@ -5935,8 +5937,8 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
                     iterator.remove();
                 }
             }
-            FrameProfile.step(recycled, "ed:recycleLines");
-            long realised = FrameProfile.begin();
+            CgTrace.spanDone(UiTrace.FLOW, "ed:recycleLines", recycled);
+            long realised = CgTrace.stamp(UiTrace.FLOW);
             int created = 0;
             for (int viewLine = first; viewLine <= last; viewLine++) {
                 if (!realisedLines.containsKey(viewLine)) {
@@ -5944,7 +5946,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
                     created++;
                 }
             }
-            FrameProfile.step(realised, "ed:realiseLines x" + created);
+            CgTrace.spanDone(UiTrace.FLOW, "ed:realiseLines x" + created, realised);
             firstRealised = first;
             lastRealised = last;
             // THE WINDOW MOVED, WHICH IS NOT THE SAME AS THE CONTENT CHANGING.
@@ -5958,10 +5960,10 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // run rather than early-out on an unchanged range. Which rows within it still hold good bands
             // is a per-row question, and `bandsShownFor` is what answers it.
             highlightWindowMoved = true;
-            long announced = FrameProfile.begin();
+            long announced = CgTrace.stamp(UiTrace.FLOW);
             onWindowChanged.emit();
-            FrameProfile.step(announced, "ed:onWindowChanged -> "
-                    + onWindowChanged.connectionCount() + " listeners");
+            CgTrace.spanDone(UiTrace.FLOW, "ed:onWindowChanged -> "
+                    + onWindowChanged.connectionCount() + " listeners", announced);
         }
         // EVERY FRAME, not only when the realised set changes. The lines live in a scroll-exempt viewport
         // now, so they no longer get the scroll translate for free -- their `top` is baked in by
@@ -5972,47 +5974,47 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // replaceOrPutCandidate no-ops on an unchanged value, so a frame that did not scroll writes
         // nothing. It is also the rebinding path, not the recycling one -- recycling every frame is what
         // cleared highlights and made the colours flicker.
-        long profiled = FrameProfile.begin();
+        long profiled = CgTrace.stamp(UiTrace.FRAME);
         rebindRealisedLines();
-        FrameProfile.end(profiled, "ed:rebind");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:rebind", profiled);
         // BEFORE anything reads the scroll extent, and exactly once. getScrollWidth is a pure accessor
         // over the mark this grows; see its note for why it must not do the scan itself.
-        profiled = FrameProfile.begin();
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         measureWidestRealisedLine();
-        FrameProfile.end(profiled, "ed:measure");
-        profiled = FrameProfile.begin();
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:measure", profiled);
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         syncLineFonts();
-        FrameProfile.end(profiled, "ed:fonts");
-        profiled = FrameProfile.begin();
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:fonts", profiled);
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         refreshHighlights(first, last);
-        FrameProfile.end(profiled, "ed:highlights");
-        profiled = FrameProfile.begin();
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:highlights", profiled);
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         layOutTextViewport();
-        FrameProfile.end(profiled, "ed:viewport");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:viewport", profiled);
         // Every extracted part, in one pass. Monaco gates each on a dirty flag; this does not, and that is
         // now stated where the flag used to be rather than implied by a field nobody set. See
         // EditorViewPart.
         for (EditorViewPart part : viewParts) {
-            long partStart = FrameProfile.begin();
+            long partStart = CgTrace.stamp(UiTrace.FRAME);
             part.render(first, last);
-            FrameProfile.end(partStart, "part:" + part.getClass().getSimpleName());
+            CgTrace.zoneDone(UiTrace.FRAME, "part:" + part.getClass().getSimpleName(), partStart);
         }
         // THE TAIL WAS NEVER TIMED, and ed:updateWindow reports 40ms while everything named inside it
         // sums to 22. Four calls sat past the parts loop with no bucket of their own, which is exactly
         // how a cost stays invisible while the number above it is read over and over.
-        profiled = FrameProfile.begin();
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         insetHorizontalBarPastGutter();
-        FrameProfile.end(profiled, "ed:insetBar");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:insetBar", profiled);
         // AFTER the parts have rendered, so a layer built on this frame is moved on this frame rather
         // than drawing once at the unscrolled origin. It is a transform, so nothing below it re-lays out.
-        profiled = FrameProfile.begin();
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         syncScrollLayers();
-        FrameProfile.end(profiled, "ed:syncScrollLayers");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:syncScrollLayers", profiled);
         // The pause that finishes a word, checked once a frame -- there is no other timer in the editor
         // and adding one for this would be a thread to keep in step with the frame it reports to.
-        profiled = FrameProfile.begin();
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         settleSyntaxIfIdle();
-        FrameProfile.end(profiled, "ed:settleSyntax");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:settleSyntax", profiled);
         // THE POPUP RE-ANCHORS HERE, once a frame, and not only when the caret moves.
         //
         // The anchor is derived from measured row widths, and those are computed in this very method --
@@ -6021,9 +6023,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // origin, and it drew neatly over the editor's top-left corner: plausible enough to look like a
         // placement policy rather than an unmeasured read. Re-anchoring per frame also keeps it correct
         // through a scroll, which no caret-driven update would have caught either.
-        profiled = FrameProfile.begin();
+        profiled = CgTrace.stamp(UiTrace.FRAME);
         suggest.updateAnchor();
-        FrameProfile.end(profiled, "ed:suggestAnchor");
+        CgTrace.zoneDone(UiTrace.FRAME, "ed:suggestAnchor", profiled);
     }
 
     /**

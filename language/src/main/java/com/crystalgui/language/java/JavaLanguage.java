@@ -1,6 +1,7 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.fs.Resource;
@@ -347,40 +348,40 @@ public final class JavaLanguage {
 
     private static LanguageServices servicesFor(TextBuffer buffer, Resource resource,
                                                 List<String> classpath) {
-        long profiled = FrameProfile.enter("servicesFor " + resource);
+        long profiled = CgTrace.spanBegin(UiTrace.FLOW, "servicesFor " + resource);
         try {
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         JavaEngine ready = engine();
-        FrameProfile.step(timed, "JavaLanguage.engine() (opens the band loader if cold)");
+        CgTrace.spanDone(UiTrace.FLOW, "JavaLanguage.engine() (opens the band loader if cold)", timed);
         // NULL RATHER THAN A BROKEN SERVICES OBJECT. No engine is a legitimate deployment -- the editor
         // colours from the grammar and analyses nothing -- and it is the state a first launch is in while
         // the band is still arriving.
         if (ready == null) {
-            FrameProfile.note("no engine");
+            CgTrace.marker(UiTrace.FLOW, "no engine");
             return null;
         }
         // A BORROWED DOCUMENT gets services configured for one: no diagnostics, and compliance 8 when
         // the text came out of src.zip. @see JavaLanguageServices#forLibrary
         if (resource != null && Resource.SCHEME_LIBRARY.equals(resource.scheme())) {
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FLOW);
             AttachedSources attached = AttachedSources.forClasspath(classpath);
-            FrameProfile.step(timed, "AttachedSources.forClasspath (SCANS EVERY JAR if cold)");
-            timed = FrameProfile.begin();
+            CgTrace.spanDone(UiTrace.FLOW, "AttachedSources.forClasspath (SCANS EVERY JAR if cold)", timed);
+            timed = CgTrace.stamp(UiTrace.FLOW);
             boolean platform = attached.isPlatformSource(resource.path());
-            FrameProfile.step(timed, "isPlatformSource");
-            timed = FrameProfile.begin();
+            CgTrace.spanDone(UiTrace.FLOW, "isPlatformSource", timed);
+            timed = CgTrace.stamp(UiTrace.FLOW);
             LanguageServices made = JavaLanguageServices.forLibrary(
                     buffer, ready, scheduler, resource.path(), classpath, platform);
-            FrameProfile.step(timed, "new JavaLanguageServices.forLibrary (ctor + start)");
+            CgTrace.spanDone(UiTrace.FLOW, "new JavaLanguageServices.forLibrary (ctor + start)", timed);
             return made;
         }
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         LanguageServices made =
                 new JavaLanguageServices(buffer, ready, scheduler, classNameFor(resource), classpath);
-        FrameProfile.step(timed, "new JavaLanguageServices (ctor + start)");
+        CgTrace.spanDone(UiTrace.FLOW, "new JavaLanguageServices (ctor + start)", timed);
         return made;
         } finally {
-            FrameProfile.leave(profiled, "servicesFor");
+            CgTrace.spanEnd(profiled);
         }
     }
 

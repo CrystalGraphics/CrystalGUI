@@ -30,7 +30,7 @@ import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.asset.FileIconTheme;
@@ -641,10 +641,10 @@ public final class CgUiPaintContext {
         // WOULD matter — MC writes glClearDepth once at startup, like the glDepthFunc it sets there.
         // THE FULL-SCREEN CLEAR, timed apart from the rest of beginFrame. gl:begin was measured at 33ms
         // in a client, and this is the only thing in it that touches every pixel of the surface.
-        long cleared = FrameProfile.begin();
+        long cleared = CgTrace.stamp(UiTrace.FRAME);
         frameFbo.bind();
         frameFbo.clearColor(0f, 0f, 0f, 0f);
-        FrameProfile.end(cleared, "glbegin:frameClear");
+        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:frameClear", cleared);
 
         // Overwritten and deliberately NOT restored — the javadoc used to claim otherwise and was
         // corrected rather than implemented. CgFrameData is per-frame scratch that every consumer
@@ -665,23 +665,23 @@ public final class CgUiPaintContext {
         // never even reaching the report threshold. So the cost is one of the four below, and they have
         // nothing in common: a UBO upload, a projection write plus an atlas tick, a buffer rewind, and a
         // material bind that compiles on its first use.
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         pipeline.prepareFrame();
-        FrameProfile.end(timed, "glbegin:prepareFrame");
+        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:prepareFrame", timed);
 
         // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
         // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.context().updateOrtho(screenWidth, screenHeight);
-        FrameProfile.end(timed, "glbegin:textOrtho");
+        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:textOrtho", timed);
 
         poseStack.pushPose();
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FRAME);
         renderer.begin();
-        FrameProfile.end(timed, "glbegin:renderer.begin");
-        timed = FrameProfile.begin();
+        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:renderer.begin", timed);
+        timed = CgTrace.stamp(UiTrace.FRAME);
         bindQuadPath(boxModelMaterial);
-        FrameProfile.end(timed, "glbegin:bindQuadPath");
+        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:bindQuadPath", timed);
         currentMaterial = boxModelMaterial;
         currentTexture = null;
         frameActive = true; // must be set before the pool warms a slot — quad() requires an active frame
@@ -773,10 +773,10 @@ public final class CgUiPaintContext {
         // client while every CPU phase in that frame was under 2ms. Draining our own queued draws and
         // compositing the frame onto the real target fail for different reasons -- and a composite that
         // blocks is the GPU being behind, which no amount of tuning our traversal would ever touch.
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.endBatch();
         renderer.flush();
-        FrameProfile.end(timed, "glend:flush");
+        CgTrace.zoneDone(UiTrace.FRAME, "glend:flush", timed);
 
         // The finished picture, before it goes anywhere: frameFbo holds exactly what this frame drew.
         captureFrameImage();
@@ -848,7 +848,7 @@ public final class CgUiPaintContext {
         // THE OTHER HALF OF THE FRAME THE DOCUMENT OPENED, and last of all so the composite above is
         // in it. Reports and clears; a no-op when nothing opened one, which is
         // every headless document. @see UIDocument#frame
-        FrameProfile.frameEnd();
+        UiTrace.frameEnd();
     }
 
     // ── Public draw API ─────────────────────────────────────────────────────
@@ -859,7 +859,7 @@ public final class CgUiPaintContext {
         // 21-30us per painted element -- far too much for a tree walk, and exactly the shape of
         // per-element driver overhead. 271 elements after a file is opened (up from 130 with none) at
         // one or more draw calls each is the whole 8.33ms budget spent submitting.
-        FrameProfile.count("drawcalls", 1);
+        CgTrace.add(UiTrace.FRAME, "drawcalls", 1);
         bindTexture(whitePixel);
         quad().at(x, y).size(width, height).color(argb).submit();
         flush();
@@ -874,7 +874,7 @@ public final class CgUiPaintContext {
         // texture looking like the recognisable "missing texture" it is, at whatever size it was
         // asked to draw. Was previously enforced centrally in submitQuad; it now lives at the two
         // sites that can actually be handed a fallback (here and CgUiSprite).
-        FrameProfile.count("drawcalls", 1);
+        CgTrace.add(UiTrace.FRAME, "drawcalls", 1);
         boolean missing = texture == CgTextureManager.get().getFallback();
         CgQuadRenderer.Quad q = quad().at(x, y).size(width, height).color(argb);
         (missing ? q : q.uv(u0, v0, u1, v1)).submit();
@@ -985,7 +985,7 @@ public final class CgUiPaintContext {
         // TEXT OWNS A SECOND RENDERER with its own material, so switching to it flushes the quad path
         // and switching back flushes text -- meaning every alternation between a box and a label is two
         // draw calls. An editor row is exactly that alternation, repeated per line.
-        FrameProfile.count("textswitches", 1);
+        CgTrace.add(UiTrace.FRAME, "textswitches", 1);
         beginTextPath();
         return textRenderer;
     }
@@ -1014,7 +1014,7 @@ public final class CgUiPaintContext {
         // only this one costs anything: a frame with 67 labels reports 67 text() calls whether they were
         // consecutive (one switch, one upload) or interleaved with boxes (67 switches, 67 uploads). The
         // batch below is worth exactly as much as the gap between them, so the gap has to be visible.
-        FrameProfile.count("textpath-switches", 1);
+        CgTrace.add(UiTrace.FRAME, "textpath-switches", 1);
         renderer.flush();
         activePath = InstancePath.TEXT;
         currentTexture = null;
@@ -1216,7 +1216,7 @@ public final class CgUiPaintContext {
         // background (`.__line__` sets none), so consecutive lines ought to batch -- and measurably do
         // not. Whatever takes the path away between them is the thing to move, and only the counts can
         // name it: quads (a fill, an image) and curves (every SVG icon) are different problems.
-        FrameProfile.count("quadpath-switches", 1);
+        CgTrace.add(UiTrace.FRAME, "quadpath-switches", 1);
         endTextPath();
         renderer.flushCurves();
         // bindQuadPath sets activePath itself — the one place it is assigned for this path.
@@ -1229,7 +1229,7 @@ public final class CgUiPaintContext {
         if (activePath == InstancePath.CURVE) return;
         // @see #beginQuadPath -- every SVG icon draws through here, and an icon beside a label is one
         // alternation per row in any list.
-        FrameProfile.count("curvepath-switches", 1);
+        CgTrace.add(UiTrace.FRAME, "curvepath-switches", 1);
         endTextPath();
         renderer.flushQuads();
         activePath = InstancePath.CURVE;
@@ -1515,7 +1515,7 @@ public final class CgUiPaintContext {
         // A SCISSOR IS A FLUSH TOO, and every element with overflow pushes one. Counted beside the
         // fills because they add up in the same place: a clipped container costs a draw call to enter
         // and another to leave, whatever it contains.
-        FrameProfile.count("scissors", 1);
+        CgTrace.add(UiTrace.FRAME, "scissors", 1);
         flush();
         Matrix4f m = poseStack.last().pose();
         float physX0 = m.m00() * x + m.m10() * y + m.m30();
@@ -1855,12 +1855,12 @@ public final class CgUiPaintContext {
                 boolean fresh = layer.revision == revision && layer.region.equals(region);
                 layer.region = region;
                 layer.setFresh(fresh, revision);
-                FrameProfile.count(fresh ? "layers-reused" : "layers-repainted", 1);
+                CgTrace.add(UiTrace.FRAME, fresh ? "layers-reused" : "layers-repainted", 1);
                 return layer;
             }
             // COUNTED APART FROM A FIRST SIGHTING: a layer whose element resizes every frame keeps
             // starting over as a candidate and never settles, which is a different finding.
-            FrameProfile.count("retain-resized", 1);
+            CgTrace.add(UiTrace.FRAME, "retain-resized", 1);
             drop(key, layer);
         }
 
@@ -1875,7 +1875,7 @@ public final class CgUiPaintContext {
             candidates.put(key, new Candidate(revision, region, frameId));
             // NOT YET, rather than no: the subtree has to be seen unchanged once. A frame where this
             // dominates is one where everything is moving, and no cache would have helped.
-            FrameProfile.count("retain-settling", 1);
+            CgTrace.add(UiTrace.FRAME, "retain-settling", 1);
             return null;
         }
 
@@ -1884,7 +1884,7 @@ public final class CgUiPaintContext {
         if (retainedBytes + bytes > RETAINED_BUDGET_BYTES && !evictUntil(bytes)) {
             // THE BUDGET IS SPENT, which is the one refusal a bigger budget would fix -- and the only
             // way to tell it from the others is to count it.
-            FrameProfile.count("retain-nobudget", 1);
+            CgTrace.add(UiTrace.FRAME, "retain-nobudget", 1);
             return null;
         }
         candidates.remove(key);
@@ -1896,7 +1896,7 @@ public final class CgUiPaintContext {
         layer.setFresh(false, revision);
         retained.put(key, layer);
         retainedBytes += bytes;
-        FrameProfile.count("layers-retained-new", 1);
+        CgTrace.add(UiTrace.FRAME, "layers-retained-new", 1);
         return layer;
     }
 
@@ -2019,8 +2019,8 @@ public final class CgUiPaintContext {
      */
     public CgFrameBuffer beginLayerFbo(LayerRegion region) {
         int width = Math.max(1, region.width()), height = Math.max(1, region.height());
-        FrameProfile.count("layers", 1);
-        FrameProfile.count("layers-d" + layerStack.size(), 1);
+        CgTrace.add(UiTrace.FRAME, "layers", 1);
+        CgTrace.add(UiTrace.FRAME, "layers-d" + layerStack.size(), 1);
         return beginLayerFbo(acquireLayerFbo(layerStack.size(), width, height), true, region);
     }
 
@@ -2091,15 +2091,15 @@ public final class CgUiPaintContext {
             // to be drawn into it and it still holds whatever the last element to take this slot left
             // behind. Nothing ever samples that: the composite reads the region and no more, which is
             // the same argument that made the full-screen clear correct when every layer was a screen.
-            long timed = FrameProfile.begin();
+            long timed = CgTrace.stamp(UiTrace.FRAME);
             int width = region == null ? fbo.getWidth() : Math.min(fbo.getWidth(), region.width());
             int height = region == null ? fbo.getHeight() : Math.min(fbo.getHeight(), region.height());
             scissorStack.pushScissor(0, 0, width, height);
             scissorStack.applyScissorIfNeeded(fbo.getHeight());
             fbo.clearColor(0f, 0f, 0f, 0f);
             scissorStack.popScissor();
-            FrameProfile.end(timed, "layer:clear");
-            FrameProfile.count("layer-clear-kpx", width * height / 1000);
+            CgTrace.zoneDone(UiTrace.FRAME, "layer:clear", timed);
+            CgTrace.add(UiTrace.FRAME, "layer-clear-kpx", width * height / 1000);
         }
         // THE INHERITED CLIP, RE-EXPRESSED FOR THIS BUFFER. A GL scissor rect is bottom-left pixels of
         // one particular target; the stack keeps rects top-left and flips them here, so a layer of
@@ -2280,8 +2280,8 @@ public final class CgUiPaintContext {
      */
     public void blitLayer(CgFrameBuffer fbo, float opacity, LayerRegion region) {
         if (region.isEmpty()) return;
-        long timed = FrameProfile.begin();
-        FrameProfile.count("layer-blit-kpx", region.width() * region.height() / 1000);
+        long timed = CgTrace.stamp(UiTrace.FRAME);
+        CgTrace.add(UiTrace.FRAME, "layer-blit-kpx", region.width() * region.height() / 1000);
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
         float u1 = Math.min(1f, (float) region.width() / fbo.getWidth());
         float v1 = Math.max(0f, 1f - (float) region.height() / fbo.getHeight());
@@ -2303,7 +2303,7 @@ public final class CgUiPaintContext {
             // the two symptoms this composite is blamed for, and neither looks like a binding fault.
             poseStack.popPose();
         }));
-        FrameProfile.end(timed, "layer:blit");
+        CgTrace.zoneDone(UiTrace.FRAME, "layer:blit", timed);
     }
 
     /**
@@ -2336,7 +2336,7 @@ public final class CgUiPaintContext {
      */
     public void compositeMask(CgFrameBuffer subtreeFbo, CgFrameBuffer maskFbo, LayerRegion region) {
         if (region.isEmpty()) return;
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         flush();
         try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
             subtreeFbo.bind();
@@ -2401,7 +2401,7 @@ public final class CgUiPaintContext {
         // The scope put the enclosing target back; the clip has to follow it.
         reapplyScissor();
         currentTexture = null;
-        FrameProfile.end(timed, "layer:mask");
+        CgTrace.zoneDone(UiTrace.FRAME, "layer:mask", timed);
     }
 
     /**
@@ -2444,15 +2444,15 @@ public final class CgUiPaintContext {
         long frame = CgTrace.currentFrameIndex();
         boolean due = CgFrameImages.isDue(frame);
         if (!due && (frameImages == null || !frameImages.isPending())) return;
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         if (frameImages == null) frameImages = new CgPixelReadback(3);
         frameImages.poll(pixels -> CgFrameImages.put(pixels.tag(), pixels.width(), pixels.height(), pixels.rgb()));
-        FrameProfile.end(timed, "glend:image:poll");
+        CgTrace.zoneDone(UiTrace.FRAME, "glend:image:poll", timed);
         if (due) {
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FRAME);
             frameImages.request(frameFbo.getId(), frameFbo.getWidth(), frameFbo.getHeight(),
                     CgFrameImages.width(), frame);
-            FrameProfile.end(timed, "glend:image:request");
+            CgTrace.zoneDone(UiTrace.FRAME, "glend:image:request", timed);
         }
     }
 

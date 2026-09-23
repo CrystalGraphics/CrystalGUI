@@ -1,6 +1,7 @@
 package com.crystalgui.language.grammar;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -757,7 +758,7 @@ public final class TreeSitterTokenizer
         // Applied against the offsets of the text the tree currently describes, LAST CHANGE FIRST --
         // every Change in a set is expressed against the document the set applies to, so an earlier one
         // must not be allowed to move a later one's coordinates. @see the note on the loop below.
-        long interpolated = FrameProfile.begin();
+        long interpolated = CgTrace.stamp(UiTrace.FLOW);
         // A FULL REPLACEMENT HAS NOTHING TO INTERPOLATE. Phase 1 exists to keep an existing tree
         // describing the text while a reparse catches up -- move every node's coordinates so highlights
         // stay attached to the right characters. When the change replaces the ENTIRE document that
@@ -770,7 +771,7 @@ public final class TreeSitterTokenizer
         // will be thrown away. Rewriting that walk to one allocation-free pass moved it by 64us, which
         // is what said the work itself was not the problem: DOING it was.
         if (tree != null && replacesWholeDocument(change)) {
-            FrameProfile.note("ts.interpolate skipped -- whole document replaced");
+            CgTrace.marker(UiTrace.FLOW, "ts.interpolate skipped -- whole document replaced");
             // AND THE TREE IS DROPPED, not merely left uninterpolated.
             //
             // Skipping phase 1 skips `tree.edit()`, and an unedited tree is exactly what tree-sitter
@@ -833,31 +834,35 @@ public final class TreeSitterTokenizer
             // import.
             List<Change> ordered = change.changes();
             for (int i = ordered.size() - 1; i >= 0; i--) {
-                long t0 = FrameProfile.begin();
+                long t0 = CgTrace.stamp(UiTrace.FLOW);
                 TSInputEdit edit = inputEditFor(ordered.get(i));
-                long t1 = FrameProfile.begin();
+                long t1 = CgTrace.stamp(UiTrace.FLOW);
                 tree.edit(edit);
                 if (t0 != 0L) {
                     built += t1 - t0;
                     applied += System.nanoTime() - t1;
                 }
             }
-            FrameProfile.report(built, "ts.inputEditFor x" + change.changes().size());
-            FrameProfile.report(applied, "ts.tree.edit x" + change.changes().size() + " (NATIVE)");
+            // TOTALS across the loop, each recorded as one step that ended now and lasted that long.
+            long now = System.nanoTime();
+            if (built > 0L) CgTrace.spanDone(UiTrace.FLOW, "ts.inputEditFor x" + change.changes().size(), now - built);
+            if (applied > 0L) {
+                CgTrace.spanDone(UiTrace.FLOW, "ts.tree.edit x" + change.changes().size() + " (NATIVE)", now - applied);
+            }
         }
-        FrameProfile.step(interpolated, "ts.interpolate x" + change.changes().size()
-                + (tree == null ? " (no tree)" : ""));
+        CgTrace.spanDone(UiTrace.FLOW, "ts.interpolate x" + change.changes().size()
+                + (tree == null ? " (no tree)" : ""), interpolated);
 
         // PHASE 2 -- reparse. The expensive half: measured at ~17ms average and ~26ms worst per keystroke
         // on a 5,000-line file, against a budget of 2ms. It goes to a worker when there is one, and is
         // otherwise deferred to the next query so that a burst of keystrokes still costs one parse rather
         // than one per key.
         stale = true;
-        long scheduled = FrameProfile.begin();
+        long scheduled = CgTrace.stamp(UiTrace.FLOW);
         if (scheduler != null) scheduleReparse(after);
         // SUBMITTING should be nothing, and this is here to prove it rather than assume it: tree.copy()
         // is native and the job carries a Rope, so "handing the work over" is itself work, on the frame.
-        FrameProfile.step(scheduled, "ts.scheduleReparse");
+        CgTrace.spanDone(UiTrace.FLOW, "ts.scheduleReparse", scheduled);
     }
 
     /**
@@ -915,7 +920,7 @@ public final class TreeSitterTokenizer
         if (!parsePending) {
             // ONCE PER SCHEDULING, not once per call: this runs from a paint and returns true every
             // frame until the tree lands, so noting it unconditionally is a log line per frame.
-            FrameProfile.note("ts.firstParse deferred to a worker, " + document.length() + " chars");
+            CgTrace.marker(UiTrace.FLOW, "ts.firstParse deferred to a worker, " + document.length() + " chars");
             scheduleReparse(document);
         }
         return true;
@@ -967,7 +972,7 @@ public final class TreeSitterTokenizer
             // that was never edited -- it reuses the old nodes and reports the OLD extent, silently.
             // One line, and it is the difference between seeing that and inferring it from missing
             // colour. @see #edited
-            FrameProfile.note("ts.parsed root 0.." + result.tree().getRootNode().getEndByte()
+            CgTrace.marker(UiTrace.FLOW, "ts.parsed root 0.." + result.tree().getRootNode().getEndByte()
                     + " bytes (incremental base: " + (replaced == null ? "none" : "a tree") + ")");
             // A new tree means new scopes -- ALREADY COMPUTED, on the worker that built the tree. Null
             // only when the grammar ships no locals.scm or the pass failed, and localsForTree then falls

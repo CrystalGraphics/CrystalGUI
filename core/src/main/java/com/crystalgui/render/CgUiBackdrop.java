@@ -10,7 +10,8 @@ import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
@@ -436,7 +437,7 @@ final class CgUiBackdrop {
                 && needX1 <= capX0 + capW && needY1 <= capY0 + capH) {
             return true;
         }
-        long probeT0 = PROBE || FrameProfile.ENABLED ? System.nanoTime() : 0L;
+        long probeT0 = PROBE ? System.nanoTime() : CgTrace.stamp(UiTrace.FRAME);
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
         if (captureFbo.getWidth() != w || captureFbo.getHeight() != h) captureFbo.resize(w, h);
 
@@ -544,8 +545,8 @@ final class CgUiBackdrop {
         captureDepth = depth;
         captureTarget = innermost.getId();
         blurFrame = -1L;   // the capture moved, so whatever was blurred describes somewhere else
-        FrameProfile.end(probeT0, "backdrop:capture");
-        FrameProfile.count("backdrop-capture-kpx", (capW * capH) / 1000);
+        CgTrace.zoneDone(UiTrace.FRAME, "backdrop:capture", probeT0);
+        CgTrace.add(UiTrace.FRAME, "backdrop-capture-kpx", (capW * capH) / 1000);
         if (PROBE) {
             pCapture += System.nanoTime() - probeT0;
             pRecaptures++;
@@ -660,7 +661,7 @@ final class CgUiBackdrop {
             if (PROBE) probeBlurSkipped++;
             return (CgTexture2D) blurResult.getColorTexture(0);
         }
-        long probeB0 = PROBE || FrameProfile.ENABLED ? System.nanoTime() : 0L;
+        long probeB0 = PROBE ? System.nanoTime() : CgTrace.stamp(UiTrace.FRAME);
 
         // The fraction of each target the capture actually occupies. Identical in all of them, because
         // they are all the same fraction of the screen. @see #capX0
@@ -723,7 +724,7 @@ final class CgUiBackdrop {
         blurFrame = ctx.frameId;
         blurRadiusPx = radiusPx;
         blurResult = result;
-        FrameProfile.end(probeB0, "backdrop:blur");
+        CgTrace.zoneDone(UiTrace.FRAME, "backdrop:blur", probeB0);
         if (PROBE) pBlur += System.nanoTime() - probeB0;
         return (CgTexture2D) result.getColorTexture(0);
     }

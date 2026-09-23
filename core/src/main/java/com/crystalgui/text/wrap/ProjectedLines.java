@@ -1,6 +1,7 @@
 package com.crystalgui.text.wrap;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.text.Rope;
 
 import java.util.Arrays;
@@ -165,14 +166,14 @@ public final class ProjectedLines {
         // sequential walk over the leaves would be O(n) overall. Projecting it is the wrap computer.
         // A full document LOAD comes through here (one change replacing everything, so `added` is every
         // row), which is why a 2,001-row reprojection reports under the incremental path's name.
-        long reading = FrameProfile.begin();
+        long reading = CgTrace.stamp(UiTrace.FLOW);
         String[] rows = readRows(document, fromRow, added);
-        FrameProfile.step(reading, "proj:readRows x" + added);
-        long projecting = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "proj:readRows x" + added, reading);
+        long projecting = CgTrace.stamp(UiTrace.FLOW);
         for (int i = 0; i < added; i++) {
             updated[fromRow + i] = computer.project(rows[i]);
         }
-        FrameProfile.step(projecting, "proj:project x" + added);
+        CgTrace.spanDone(UiTrace.FLOW, "proj:project x" + added, projecting);
         System.arraycopy(projections, fromRow + removed, updated, fromRow + added, oldCount - fromRow - removed);
         projections = updated;
 

@@ -4,7 +4,8 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -340,10 +341,10 @@ public final class JobScheduler implements Disposable {
             try {
                 // NAMED WHILE PROFILING. `drain` is a bucket that can hide anything: an onDone runs on the
                 // frame thread by contract, so one expensive handler is one expensive frame and nothing in
-                // the phase total says which. @see FrameProfile
-                long profiled = FrameProfile.begin();
+                // the phase total says which. @see UiTrace
+                long profiled = CgTrace.stamp(UiTrace.FRAME);
                 completion.deliver();
-                FrameProfile.end(profiled, "done:" + completion.key);
+                CgTrace.zoneDone(UiTrace.FRAME, "done:" + completion.key, profiled);
             } catch (RuntimeException failed) {
                 // A throwing consumer must not take the frame down with it, and must not stop the rest of
                 // this tick's results being delivered.
