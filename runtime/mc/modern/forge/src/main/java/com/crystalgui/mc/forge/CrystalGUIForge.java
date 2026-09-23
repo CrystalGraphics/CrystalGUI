@@ -12,7 +12,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+//? if >=1.20.6 {
+/*import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
+*///?} else {
 import net.minecraftforge.client.event.RenderGuiEvent;
+//?}
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
@@ -24,13 +28,20 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.CrashReportCallables;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.minecraftforge.network.PacketDistributor;
+//? if >=1.20.2 {
+/*import net.minecraftforge.network.ChannelBuilder;
+import net.minecraftforge.network.SimpleChannel;
+*///?} else {
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
-import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
+//?}
 
 import java.util.function.BiConsumer;
+//? if <1.20.2 {
 import java.util.function.Supplier;
+//?}
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.MODID;
 import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
@@ -67,9 +78,19 @@ public final class CrystalGUIForge implements VariantEntry {
 
     // -- Network ----------------------------------------------------------------
 
-    /** The MC 1.20.1 Forge transport: bytes in, bytes out. Framing and routing are {@code net.wire}'s. */
+    /** The Forge transport: bytes in, bytes out. Framing and routing are {@code net.wire}'s. */
     public static final class Network implements CgNetworkChannel {
 
+        //? if >=1.20.2 {
+        /*// Forge 48+ rewrote networking and no payload split is measured there, so a frame stays under
+        // vanilla's 32767-byte serverbound cap.
+        private static final int MAX_FRAME_BYTES = 32_000;
+
+        private static final SimpleChannel CHANNEL = ChannelBuilder
+                .named(ResourceIds.of(MODID, "wire"))
+                .networkProtocolVersion(1)
+                .simpleChannel();
+        *///?} else {
         private static final String VERSION = "1";
 
         /**
@@ -84,6 +105,7 @@ public final class CrystalGUIForge implements VariantEntry {
                 .clientAcceptedVersions(VERSION::equals)
                 .serverAcceptedVersions(VERSION::equals)
                 .simpleChannel();
+        //?}
 
         private static final Network INSTANCE = new Network();
 
@@ -97,14 +119,27 @@ public final class CrystalGUIForge implements VariantEntry {
 
         /** Called once from the mod entry point, before anything can send. */
         public static Network register() {
+            //? if >=1.20.2 {
+            /*// consumerMainThread: the tree is the frame thread's. getSender() is null on the client.
+            CHANNEL.messageBuilder(byte[].class, 0)
+                    .encoder((frame, buf) -> buf.writeByteArray(frame))
+                    .decoder(buf -> buf.readByteArray())
+                    .consumerMainThread((frame, ctx) -> INSTANCE.inbound.accept(ctx.getSender(), frame))
+                    .add();
+            *///?} else {
             CHANNEL.registerMessage(0, byte[].class,
                     (frame, buf) -> buf.writeByteArray(frame),
                     FriendlyByteBuf::readByteArray,
                     Network::receive);
+            //?}
+            //? if >=1.20.6 {
+            /*CHANNEL.build();
+            *///?}
 
             return INSTANCE;
         }
 
+        //? if <1.20.2 {
         private static void receive(byte[] frame, Supplier<NetworkEvent.Context> context) {
             NetworkEvent.Context ctx = context.get();
             // enqueueWork: the handler runs on the network thread, and the tree is the frame thread's.
@@ -114,6 +149,7 @@ public final class CrystalGUIForge implements VariantEntry {
             });
             ctx.setPacketHandled(true);
         }
+        //?}
 
         @Override
         public int maxFrameBytes() {
@@ -122,13 +158,21 @@ public final class CrystalGUIForge implements VariantEntry {
 
         @Override
         public void sendToServer(byte[] frame) {
+            //? if >=1.20.2 {
+            /*CHANNEL.send(frame, PacketDistributor.SERVER.noArg());
+            *///?} else {
             CHANNEL.sendToServer(frame);
+            //?}
         }
 
         @Override
         public void sendToPlayer(Object player, byte[] frame) {
             if (!(player instanceof ServerPlayer)) return;
+            //? if >=1.20.2 {
+            /*CHANNEL.send(frame, PacketDistributor.PLAYER.with((ServerPlayer) player));
+            *///?} else {
             CHANNEL.send(PacketDistributor.PLAYER.with(() -> (ServerPlayer) player), frame);
+            //?}
         }
 
         @Override
@@ -201,10 +245,15 @@ public final class CrystalGUIForge implements VariantEntry {
             static void register(IEventBus modBus) {
                 IEventBus forgeBus = MinecraftForge.EVENT_BUS;
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
+                //? if >=1.20.6 {
+                /*modBus.addListener(ClientBus::onAddGuiLayers);
+                *///?}
                 forgeBus.addListener(ClientBus::onClientTick);
                 forgeBus.addListener(ClientBus::onClientLoggedIn);
                 forgeBus.addListener(ClientBus::onClientLoggedOut);
+                //? if <1.20.6 {
                 forgeBus.addListener(ClientBus::onRenderGui);
+                //?}
                 forgeBus.addListener(ClientBus::onScreenRender);
                 forgeBus.addListener(ClientBus::onMousePressed);
                 forgeBus.addListener(ClientBus::onMouseReleased);
@@ -236,9 +285,16 @@ public final class CrystalGUIForge implements VariantEntry {
              * boss bar, chat and a dozen more -- so painting from it laid out and drew the whole
              * compositor fifteen times a frame and put the game at ten fps.
              */
+            //? if >=1.20.6 {
+            /*// Forge 50 dropped RenderGuiEvent for vanilla's layered HUD: one layer, added last, so on top.
+            private static void onAddGuiLayers(AddGuiOverlayLayersEvent event) {
+                event.getLayeredDraw().add(ResourceIds.of(MODID, "hud"), (graphics, partialTick) -> LifecycleCrystalGUI.paintHud());
+            }
+            *///?} else {
             private static void onRenderGui(RenderGuiEvent.Post event) {
                 LifecycleCrystalGUI.paintHud();
             }
+            //?}
 
             private static void onScreenRender(ScreenEvent.Render.Post event) {
                 LifecycleCrystalGUI.paintOverlay();
@@ -253,7 +309,11 @@ public final class CrystalGUIForge implements VariantEntry {
             }
 
             private static void onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
+                //? if >=1.20.2 {
+                /*if (LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getDeltaY())) event.setCanceled(true);
+                *///?} else {
                 if (LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDelta())) event.setCanceled(true);
+                //?}
             }
 
             private static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {

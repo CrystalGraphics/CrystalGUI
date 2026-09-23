@@ -142,10 +142,10 @@ public final class CgUiAutoTest {
         // built, so this becomes the SRG member on Forge and the intermediary one on Fabric, where a
         // lookup by Mojang name is a string no remapper rewrites. The Runnable is the GIVE-UP path,
         // taken when the save cannot be read, not a completion callback. `openWorld` arrived with
-        // 1.20.5's world-recovery flow (read on 1.20.6); `checkForBackupAndLoad` is 1.20.2-1.20.4.
+        // 1.20.5's world-recovery flow (read on 1.20.6); `checkForBackupAndLoad` is 1.20.3-1.20.4.
         //? if >=1.20.5 {
         /*flows.openWorld(name, () -> { });
-        *///?} elif >=1.20.2 {
+        *///?} elif >=1.20.3 {
         /*flows.checkForBackupAndLoad(name, () -> { });
         *///?} else {
         flows.loadLevel(mc.screen, name);
