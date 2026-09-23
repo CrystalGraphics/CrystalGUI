@@ -149,7 +149,10 @@ public class UiHintsTest {
     @Test
     public void gpuBound() {
         CgFrameRecord frame = new CgFrameRecord(1L, 0L, 20 * MS, 6 * MS, 14 * MS, 0L, 0, 0, 0L);
-        find("GPU-BOUND", frame, List.of(), Map.of());
+        // A frame's GPU figure lands with one counter per GPU zone; the hint names the costliest.
+        CgTraceHints.Hint hint = find("GPU-BOUND", frame, List.of(),
+                Map.of("gpu:ui", 11 * MS, "gpu:world.opaque", 3 * MS, "drawcalls", 900L));
+        assertEquals("gpu:ui", hint.linkedCounter());
     }
 
     @Test

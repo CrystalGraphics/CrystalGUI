@@ -96,13 +96,23 @@ public class ChannelsControl extends UIElement {
 
         ConfigDescriptor descriptor = ConfigDescriptor.mask("profiler.channels", "Channels", names)
                 .emptyText("Not recording");
-        MaskControl made = new MaskControl(descriptor, bound.enabledChannels());
+        MaskControl made = new MaskControl(descriptor, listedEnabled(bound));
         // POLLED, deliberately: the mask moves from Capture, from Freeze and from anything else in the
         // process that enables a channel, and none of those announce. A poll of a volatile long once a
         // frame is cheaper than a notification seam on the engine for one reader.
-        made.bind(Property.derived(bound::enabledChannels, this::apply));
+        made.bind(Property.derived(() -> listedEnabled(bound), this::apply));
         control = made;
         appendStructural(made);
+    }
+
+    /**
+     * The enabled channels the menu lists — without the engine's own, as the options are. Handing it the
+     * engine's too made the summary count them: two of those against two unticked boxes read "Everything".
+     */
+    private static Set<String> listedEnabled(ProfilerModel bound) {
+        Set<String> out = bound.enabledChannels();
+        out.removeIf(CgTrace::isEngineOwn);
+        return out;
     }
 
     private void apply(@Nullable Set<String> selected) {

@@ -121,7 +121,8 @@ public class CompareTab extends UIElement {
         } else {
             double change = b - a;
             summary.setText(String.format("Frame time %.2f ms → %.2f ms  (%s%.2f ms, %s)", a, b,
-                    change >= 0d ? "+" : "−", Math.abs(change), share(change, a)));
+                    change >= 0d ? "+" : "−", Math.abs(change), share(change, a))
+                    + gpuSummary(model.meanGpuMillis(model.sideA()), model.meanGpuMillis(model.sideB())));
             rows.setAll(model.compare());
         }
         table.refreshColumns();
@@ -169,6 +170,15 @@ public class CompareTab extends UIElement {
         int held = model.framesOf(side).size();
         return side.label() + (side.count() > 1 ? " (" + side.count() + " frames)" : "")
                 + (held < side.count() ? ", " + held + " still held" : "");
+    }
+
+    /** The GPU beside the frame time, or what is missing — a side with no landed figure is not zero. */
+    private static String gpuSummary(double a, double b) {
+        if (a < 0d && b < 0d) return "";
+        if (a < 0d || b < 0d) return "   ·   GPU: " + (a < 0d ? "A" : "B") + " has no GPU figure";
+        double change = b - a;
+        return String.format("   ·   GPU %.2f ms → %.2f ms  (%s%.2f ms, %s)", a, b,
+                change >= 0d ? "+" : "−", Math.abs(change), share(change, a));
     }
 
     private static String millis(double value) {

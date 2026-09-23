@@ -1,6 +1,7 @@
 package com.crystalgui.core.trace;
 
 import com.crystalgraphics.trace.CgFrameRecord;
+import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceHints;
@@ -10,6 +11,7 @@ import com.crystalgraphics.trace.CgTraceSnapshot;
 import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * What a slow CrystalGUI frame is accused of — the rules over this engine's own counter vocabulary.
@@ -146,7 +148,7 @@ public final class UiHints {
                 out.add(new CgTraceHints.Hint("GPU-BOUND",
                         String.format("the GPU took %.2f ms against %.2f ms of CPU: shortening the CPU zones "
                                 + "will not make this frame faster", frame.gpuMillis(), frame.cpuMillis()),
-                        "CgGpuProfiler"));
+                        largestGpuZone(counters)));
             }
         });
 
@@ -199,6 +201,20 @@ public final class UiHints {
     private static String frameThreadName() {
         Thread thread = CgTrace.frameThread();
         return thread == null ? null : thread.getName();
+    }
+
+    /** A link to the frame's costliest GPU zone, or null when none resolved. */
+    @Nullable
+    private static String largestGpuZone(Map<String, Long> counters) {
+        String worst = null;
+        long most = -1L;
+        for (Map.Entry<String, Long> e : counters.entrySet()) {
+            if (e.getKey().startsWith(CgGpuTrace.PREFIX) && e.getValue() > most) {
+                worst = e.getKey();
+                most = e.getValue();
+            }
+        }
+        return worst == null ? null : CgTraceHints.Hint.counter(worst);
     }
 
     private static List<CgTraceAggregate.Node> flatten(List<CgTraceAggregate.Node> roots) {

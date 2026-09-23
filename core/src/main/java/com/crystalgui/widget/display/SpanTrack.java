@@ -8,6 +8,7 @@ import com.crystalgui.ui.dom.Name;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -205,6 +206,7 @@ public class SpanTrack extends TimelineTrack {
         int textColor = computedStyle().get(StylePropertyRegistry.COLOR);
         int ring = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
         float trackWidth = box.width();
+        Arrays.fill(lastSliverPixel, Integer.MIN_VALUE);
 
         for (Span span : spans) {
             float x0 = axis.xOf(span.startNanos());
@@ -234,6 +236,19 @@ public class SpanTrack extends TimelineTrack {
             // A HAIRLINE GAP BETWEEN NEIGHBOURS, taken from the right edge: two siblings that touch
             // would otherwise read as one bar, and a flame chart is mostly touching siblings.
             float drawn = width > 3f ? width - 1f : width;
+            if (drawn < SLIVER && !isSelected && !isHovered) {
+                // A SLIVER on a pixel its row has already painted adds nothing a reader can see, and a
+                // frame of glyph-level zones is thousands of them. One per pixel column per row, and
+                // plain: a corner narrower than its own radius is not drawn anyway, and a rounded rect
+                // is a draw call of its own where a plain one joins the batch.
+                int pixel = (int) left;
+                int depth = span.depth();
+                if (depth >= lastSliverPixel.length) lastSliverPixel = growPixels(lastSliverPixel, depth);
+                if (lastSliverPixel[depth] == pixel) continue;
+                lastSliverPixel[depth] = pixel;
+                ctx.rect().at(left, top).size(drawn, height).fillColor(fill).submit();
+                continue;
+            }
             if (isSelected) {
                 ctx.rect().at(left, top).size(drawn, height).radius(RADIUS, RADIUS)
                         .border(1.5f, ring).fillColor(fill).submit();
@@ -278,6 +293,18 @@ public class SpanTrack extends TimelineTrack {
     private static final float ROW_GAP = 2f;
 
     private static final float RADIUS = 2.5f;
+
+    /** Narrower than two corners, a span is drawn plain and merged per pixel. @see #paintTrack */
+    private static final float SLIVER = 2f * RADIUS;
+
+    /** Per depth, the pixel column the last sliver drawn on that row covered. Reused across paints. */
+    private int[] lastSliverPixel = new int[16];
+
+    private static int[] growPixels(int[] held, int depth) {
+        int[] grown = Arrays.copyOf(held, Math.max(depth + 1, held.length * 2));
+        Arrays.fill(grown, held.length, grown.length, Integer.MIN_VALUE);
+        return grown;
+    }
 
     private static final float LABEL_PAD = 4f;
 
