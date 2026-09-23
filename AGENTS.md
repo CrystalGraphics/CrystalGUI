@@ -1427,6 +1427,9 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                of its own). The capture engine itself is CrystalGraphics'
                                `com.crystalgraphics.trace`, in its PLATFORM module rather than core, so
                                a dedicated server and `headlessTest` can both reach it.
+                               CrystalGraphics' `CgProfiler` is a facade over it too (T6): its
+                               scopes land on `crystalgraphics.text`/`.gl`/`.async`/`.misc` by the
+                               name's first segment.
                                **A run writes `cache/trace/latest/`** — `trace.log` (off the frame
                                thread, on a bounded queue that drops and COUNTS), `trace.json` (Chrome's
                                format, which ui.perfetto.dev opens) and `meta.json` (which channels were
