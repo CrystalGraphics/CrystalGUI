@@ -60,7 +60,11 @@ public final class ClientProbe {
         @Override
         public void openForeignScreen() {
             Minecraft mc = Minecraft.getInstance();
+            //? if >=1.21.9 {
+            /*if (mc != null) mc.setScreen(new ChatScreen("", false));
+            *///?} else {
             if (mc != null) mc.setScreen(new ChatScreen(""));
+            //?}
         }
 
         @Override
