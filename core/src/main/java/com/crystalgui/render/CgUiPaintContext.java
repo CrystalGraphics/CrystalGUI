@@ -609,10 +609,15 @@ public final class CgUiPaintContext {
         glScope = CgGlState.save(
                 CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
                 CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.SCISSOR);
+                CgGlSlot.SCISSOR, CgGlSlot.COLOR_MASK);
         // ALPHA_TEST is saved above only so the host gets it back; this is what turns it off, before
         // anything of ours draws. @see #disableFixedFunctionAlphaTest
         disableFixedFunctionAlphaTest();
+
+        // Every channel, alpha included. A host that leaves alpha writes off (1.21.6+ does) leaves the
+        // frame's alpha at 0 through the clear and every draw, and the premultiplied composite then
+        // ADDS the UI to the scene -- a pale desktop with the world showing through it.
+        CgGL.glColorMask(true, true, true, true);
 
         // A frame owns the whole surface, so a clip the host left enabled would clip the clear below and
         // every draw after it. SCISSOR is in the save list above for the other direction: popScissor
