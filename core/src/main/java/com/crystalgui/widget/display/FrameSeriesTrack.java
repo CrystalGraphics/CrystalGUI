@@ -472,7 +472,22 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
         if (dragAnchor >= 0 && hovered >= 0) {
             range = new Range(Math.min(dragAnchor, hovered), Math.max(dragAnchor, hovered));
         }
-        if (hovered != was) repaint();
+        if (hovered != was) {
+            repaint();
+            for (IntConsumer listener : hoverListeners) listener.accept(hovered);
+        }
+    }
+
+    private final List<IntConsumer> hoverListeners = new ArrayList<>(2);
+
+    /** Hears the frame under the pointer whenever it changes, and {@code -1} when the pointer leaves. */
+    public void onHoverChanged(IntConsumer listener) {
+        if (listener != null) hoverListeners.add(listener);
+    }
+
+    /** Where the pointer last was along this row, in the row's own space; NaN before any hover. */
+    public float pointerX() {
+        return lastX;
     }
 
     @Override

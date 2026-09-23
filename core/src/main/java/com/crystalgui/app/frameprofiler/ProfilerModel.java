@@ -1,5 +1,6 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
@@ -17,9 +18,11 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * What the profiler window is looking at: one snapshot, and a selection inside it.
@@ -92,6 +95,8 @@ public final class ProfilerModel {
         // is millions of objects four times a second; zones are fetched for the selection alone.
         snapshot = CgTrace.frameSnapshot();
         cachedZonesKey = null;
+        images.clear();
+        landImages();
         List<CgFrameRecord> frames = snapshot.frames();
         if (following || was < 0L) {
             selected = frames.size() - 1;
@@ -400,6 +405,42 @@ public final class ProfilerModel {
             if (frame.index() >= givenUp && !withGpu(frame).hasGpu()) return true;
         }
         return false;
+    }
+
+    // ── Frame images ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The pictures of this snapshot's frames, held here rather than read from the store.
+     *
+     * <p>The store keeps pictures for the frames the LIVE ring holds, and a paused window's frames fall
+     * out of that ring while it is being read — so a picture looked up there went missing some while
+     * after a pause, earlier for older frames. References only; nothing is copied.</p>
+     */
+    private final NavigableMap<Long, CgFrameImages.Image> images = new TreeMap<>();
+
+    /**
+     * Picks up pictures of this snapshot's frames that have landed since — one is read back a frame or
+     * two after its frame. Keeps every one already held.
+     *
+     * @return whether any arrived
+     */
+    public boolean landImages() {
+        List<CgFrameRecord> frames = snapshot.frames();
+        if (frames.isEmpty()) return false;
+        boolean arrived = false;
+        long from = frames.get(0).index();
+        long to = frames.get(frames.size() - 1).index();
+        for (CgFrameImages.Image image : CgFrameImages.between(from, to)) {
+            if (images.putIfAbsent(image.frameIndex(), image) == null) arrived = true;
+        }
+        return arrived;
+    }
+
+    /** The picture of {@code frameIndex}, or the nearest earlier this snapshot holds; null for none. */
+    @Nullable
+    public CgFrameImages.Image imageAtOrBefore(long frameIndex) {
+        Map.Entry<Long, CgFrameImages.Image> held = images.floorEntry(frameIndex);
+        return held == null ? null : held.getValue();
     }
 
     /** Each frame's absolute number, in the order {@link #counterSeries()} lays its values out. */

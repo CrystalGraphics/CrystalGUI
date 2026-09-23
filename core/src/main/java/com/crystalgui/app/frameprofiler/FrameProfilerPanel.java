@@ -1,12 +1,15 @@
 package com.crystalgui.app.frameprofiler;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -22,6 +25,7 @@ import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.FlexDirection;
+import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
 import java.lang.management.ManagementFactory;
@@ -110,6 +114,13 @@ public class FrameProfilerPanel extends UIElement {
     private final HintsTab hints = new HintsTab();
     private final ChainsTab chains = new ChainsTab();
     private final CompareTab compare = new CompareTab(model);
+    private final ScreenTab screen = new ScreenTab();
+
+    /** What the strip's hovered frame looked like, floating under the pointer. @see #showPreview */
+    private final UIElement preview = new UIElement();
+    private final FrameImageView previewImage = new FrameImageView();
+    private final UIText previewCaption = new UIText("");
+    public static final String PREVIEW_CLASS = "__frame-preview__";
     /** What the Compare tab was last built for — it re-reads only when a pinned side changes. */
     @Nullable
     private String shownCompare;
@@ -142,6 +153,12 @@ public class FrameProfilerPanel extends UIElement {
         split.setPercentage(58f);
         appendStructural(split);
         appendStructural(buildFooter());
+        preview.addClass(PREVIEW_CLASS);
+        previewCaption.addClass(CAPTION_CLASS);
+        preview.append(previewImage, previewCaption);
+        preview.setDisplayed(false);
+        appendStructural(preview);
+        strip.onHoverChanged(this::showPreview);
 
         // EVERY SELECTION PAUSES, and pauses FIRST: the refresh a live window runs would otherwise
         // move the selection straight back to the newest frame on the next tick.
@@ -301,6 +318,8 @@ public class FrameProfilerPanel extends UIElement {
         // PAUSED, ONLY THE GPU IS WAITED FOR: a held frame's figure lands frames after it, and the
         // snapshot is kept still on purpose, so the figures are read from the ring rather than the whole
         // snapshot taken again under somebody reading it.
+        // A PICTURE LANDING for a paused frame is drawn at once: it is what the Screen tab is waiting on.
+        if (!following && model.landImages()) render();
         if (!following && !model.selectionAwaitsGpu()) return true;
         sinceRefresh += deltaSeconds;
         // A SETTING, and four times a second by default: fast enough that the strip visibly fills, slow
@@ -447,12 +466,65 @@ public class FrameProfilerPanel extends UIElement {
         chainsTab.content().append(chains);
         compareTab = tabs.addTab("Compare");
         compareTab.content().append(compare);
+        screenTab = tabs.addTab("Screen");
+        screenTab.content().append(screen);
         return tabs;
     }
 
     private Tab hintsTab;
     private Tab chainsTab;
     private Tab compareTab;
+    private Tab screenTab;
+
+    public Tab screenTab() {
+        return screenTab;
+    }
+
+    public ScreenTab screen() {
+        return screen;
+    }
+
+    public UIElement preview() {
+        return preview;
+    }
+
+    public String previewCaptionText() {
+        return previewCaption.getText();
+    }
+
+    /**
+     * The hovered frame's picture — its own, or the nearest earlier — under the pointer, just below the
+     * strip. Hidden off the strip, and when nothing has been captured.
+     */
+    private void showPreview(int index) {
+        previewIndex = index;
+        List<CgFrameRecord> frames = model.snapshot().frames();
+        CgFrameImages.Image image = index < 0 || index >= frames.size() ? null
+                : model.imageAtOrBefore(frames.get(index).index());
+        if (image == null || strip.box() == null || box() == null) {
+            preview.setDisplayed(false);
+            previewImage.show(null);
+            return;
+        }
+        long hovered = frames.get(index).index();
+        previewImage.show(image);
+        String caption = image.frameIndex() == hovered ? "#" + hovered : "#" + image.frameIndex() + "  (for #" + hovered + ")";
+        if (!caption.equals(previewCaption.getText())) previewCaption.setText(caption);
+        Box own = box();
+        Box row = strip.box();
+        Vector2f origin = Box.originIn(row, own);
+        float width = preview.box() != null ? preview.box().width() : PREVIEW_WIDTH;
+        float left = Math.max(0f, Math.min(own.width() - width, origin.x + strip.pointerX() - width * 0.5f));
+        float top = origin.y + row.height() + 4f;
+        StyleGroup.inlinePipeline(preview.getStyle().getLayoutGroup(), l -> l.left(left).top(top));
+        preview.setDisplayed(true);
+    }
+
+    /** The strip position the preview was last shown for. */
+    private int previewIndex = -1;
+
+    /** The preview's width before it has a box to measure. Matches the sheet. */
+    private static final float PREVIEW_WIDTH = 200f;
 
     public Tab chainsTab() {
         return chainsTab;
@@ -592,6 +664,9 @@ public class FrameProfilerPanel extends UIElement {
 
         CgFrameRecord frame = model.selectedFrame();
         renderHeader(frame);
+        screen.show(frame, frame == null ? null : model.imageAtOrBefore(frame.index()));
+        // A PICTURE CAN LAND UNDER A STILL POINTER: one is read back a frame or two after its frame.
+        if (preview.isDisplayed()) showPreview(previewIndex);
 
         // THE CHART AND THE TABLES ONLY WHEN WHAT THEY SHOW HAS MOVED. See the class note.
         String key = frame == null ? null

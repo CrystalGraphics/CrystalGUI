@@ -3,6 +3,8 @@ package com.crystalgui.app;
 import com.crystalgui.app.frameprofiler.CallTreeTab;
 import com.crystalgui.app.frameprofiler.ChannelsControl;
 import com.crystalgui.app.frameprofiler.CountersTab;
+import com.crystalgui.app.frameprofiler.FrameImageView;
+import com.crystalgui.app.frameprofiler.ScreenTab;
 import com.crystalgui.app.frameprofiler.FlameChart;
 import com.crystalgui.app.frameprofiler.ChainsTab;
 import com.crystalgui.app.frameprofiler.CompareTab;
@@ -89,6 +91,8 @@ public final class AppKinds implements NodeKinds {
         UIElementRegistry.registerTag(CallTreeTab.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ChannelsControl.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(CountersTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ScreenTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(FrameImageView.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ProfilerSettingsPage.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(HintsTab.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(ChainsTab.NAME, NodeContract.INERT);
