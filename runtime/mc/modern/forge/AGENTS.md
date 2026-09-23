@@ -52,3 +52,6 @@ Commonly referenced locations under `versions/1.20.1/build/mc-src/java/`:
 Uses `net.neoforged.moddev.legacyforge` (ModDevGradle legacyForge), which covers MinecraftForge
 1.17-1.20.1 and is Gradle 9 + JDK 25 compatible. Version pins are per node, in
 `versions/<version>/gradle.properties` (`mc.version`, `forge.version`, `parchment.*`).
+From 1.20.2 legacyForge sets up nothing, so those nodes pin `neoform.version` too and are built
+from parts: NeoForm's Minecraft, Forge's jars compileOnly, no dev run, and `SrgReobfJar` below 1.20.6.
+See CrystalGraphics' `singlejar-logic/README.md` § Many Minecraft versions.

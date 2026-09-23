@@ -4,6 +4,7 @@ import cgbuildlogic.modernLoaderNodes
 import cgbuildlogic.modernNodes
 import cgbuildlogic.registerSingleJarPipeline
 import cgbuildlogic.shippedEntryPaths
+import cgbuildlogic.thinJarTask
 
 // ── One jar for every loader (J4) ────────────────────────────────────────────────────────────────
 //
@@ -51,15 +52,10 @@ val singleJarModId = property("modId").toString()
 // settings.gradle.kts is merged, counted and checked with no edit to this file. The hierarchy is known
 // before any project is configured, so reading it here configures nothing.
 //
-// Named per LOADER because each toolchain names its own production step: ModDevGradle's `reobfuscate`
-// derives `reobfThinShadowJar` from the task it consumes, Loom's remap task is the one registered by
-// name, and NeoForge needs no mapping step at all.
-val modernThinTask = mapOf("forge" to "reobfThinShadowJar", "neoforge" to "thinShadowJar", "fabric" to "remapThinJar")
-val modernLangThinTask = mapOf(
-    "forge" to "reobfLangThinShadowJar", "neoforge" to "langThinShadowJar", "fabric" to "remapLangThinJar")
-
-fun modernThinJars(taskByLoader: Map<String, String>): List<Pair<String, String>> =
-    modernLoaderNodes(project).map { it.path to taskByLoader.getValue(it.parent!!.name) }
+// Each node's production step is `thinJarTask`'s answer, per NODE rather than per loader: Forge runs
+// SRG below 1.20.6 and Mojang's names from it on.
+fun modernThinJars(shadowTask: String): List<Pair<String, String>> =
+    modernLoaderNodes(project).map { it.path to thinJarTask(it, shadowTask) }
 
 /** Declared once by cg-descriptors, which the root applies first. */
 @Suppress("UNCHECKED_CAST")
@@ -86,7 +82,7 @@ registerSingleJarPipeline(SingleJarSpec(
     shadePath = "com/crystalgui/shadow",
 
     // 1.7.10's production step is registered in its own build; every 1.20.x node's is read off the tree.
-    thinJars = listOf(":runtime:mc:1710" to "reobfThinJar") + modernThinJars(modernThinTask),
+    thinJars = listOf(":runtime:mc:1710" to "reobfThinJar") + modernThinJars("thinShadowJar"),
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
@@ -214,7 +210,7 @@ registerSingleJarPipeline(SingleJarSpec(
     fileName = "crystalgui-language-${project.version}.jar",
     shadePath = "com/crystalgui/lang/shadow",
 
-    thinJars = listOf(":runtime:mc:1710" to "reobfLangThinJar") + modernThinJars(modernLangThinTask),
+    thinJars = listOf(":runtime:mc:1710" to "reobfLangThinJar") + modernThinJars("langThinShadowJar"),
     libraryProjects = listOf(":language"),
     serviceOwners = listOf(":language"),
 
