@@ -11,22 +11,42 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+//? if >=1.19 {
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
+//?} elif >=1.18 {
+/*import net.minecraftforge.client.ClientRegistry;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+*///?} else {
+/*import net.minecraftforge.fmlclient.registry.ClientRegistry;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+*///?}
 //? if >=1.21.8 {
 /*import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
 *///?} elif >=1.21.6 {
 /*// Forge 56-57 have no HUD event.
 *///?} elif >=1.20.6 {
 /*import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
-*///?} else {
+*///?} elif >=1.19 {
 import net.minecraftforge.client.event.RenderGuiEvent;
-//?}
+//?} else {
+/*import net.minecraftforge.client.event.RenderGameOverlayEvent;
+*///?}
+//? if >=1.18 {
 import net.minecraftforge.client.event.ScreenEvent;
+//?} else {
+/*import net.minecraftforge.client.event.GuiScreenEvent;
+*///?}
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+//? if >=1.18 {
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
+//?} else {
+/*import net.minecraftforge.fmlserverevents.FMLServerStartedEvent;
+import net.minecraftforge.fmlserverevents.FMLServerStartingEvent;
+import net.minecraftforge.fmlserverevents.FMLServerStoppingEvent;
+*///?}
 //? if >=1.21.6 {
 /*import net.minecraftforge.eventbus.api.bus.BusGroup;
 *///?} else {
@@ -37,15 +57,21 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.CrashReportCallables;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
-import net.minecraftforge.network.PacketDistributor;
 //? if >=1.20.2 {
-/*import net.minecraftforge.network.ChannelBuilder;
+/*import net.minecraftforge.network.PacketDistributor;
+import net.minecraftforge.network.ChannelBuilder;
 import net.minecraftforge.network.SimpleChannel;
-*///?} else {
+*///?} elif >=1.18 {
+import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
-//?}
+//?} else {
+/*import net.minecraftforge.fmllegacy.network.PacketDistributor;
+import net.minecraftforge.fmllegacy.network.NetworkEvent;
+import net.minecraftforge.fmllegacy.network.NetworkRegistry;
+import net.minecraftforge.fmllegacy.network.simple.SimpleChannel;
+*///?}
 
 import java.util.function.BiConsumer;
 //? if <1.20.2 {
@@ -235,6 +261,7 @@ public final class CrystalGUIForge implements VariantEntry {
             if (FMLEnvironment.dist == Dist.CLIENT) ClientBus.register(modBus);
         }
 
+        //? if >=1.18 {
         private static void onServerStarting(ServerStartingEvent event) {
             LifecycleCrystalGUI.serverStarting(event.getServer());
         }
@@ -246,6 +273,19 @@ public final class CrystalGUIForge implements VariantEntry {
         private static void onServerStopping(ServerStoppingEvent event) {
             LifecycleCrystalGUI.serverStopping();
         }
+        //?} else {
+        /*private static void onServerStarting(FMLServerStartingEvent event) {
+            LifecycleCrystalGUI.serverStarting(event.getServer());
+        }
+
+        private static void onServerStarted(FMLServerStartedEvent event) {
+            LifecycleCrystalGUI.serverStarted(event.getServer());
+        }
+
+        private static void onServerStopping(FMLServerStoppingEvent event) {
+            LifecycleCrystalGUI.serverStopping();
+        }
+        *///?}
 
         //? if <1.21.6 {
         private static void onServerTick(TickEvent.ServerTickEvent event) {
@@ -253,6 +293,8 @@ public final class CrystalGUIForge implements VariantEntry {
         }
         //?}
 
+        // Forge 41 (1.19) renamed getPlayer to getEntity.
+        //? if >=1.19 {
         private static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
             if (event.getEntity() instanceof ServerPlayer player) LifecycleCrystalGUI.playerJoined(player);
         }
@@ -260,6 +302,15 @@ public final class CrystalGUIForge implements VariantEntry {
         private static void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
             if (event.getEntity() instanceof ServerPlayer player) LifecycleCrystalGUI.playerLeft(player);
         }
+        //?} else {
+        /*private static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+            if (event.getPlayer() instanceof ServerPlayer player) LifecycleCrystalGUI.playerJoined(player);
+        }
+
+        private static void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+            if (event.getPlayer() instanceof ServerPlayer player) LifecycleCrystalGUI.playerLeft(player);
+        }
+        *///?}
 
         /** Client-only, and a class of its own so a dedicated server never links one of these types. */
         public static final class ClientBus {
@@ -283,7 +334,7 @@ public final class CrystalGUIForge implements VariantEntry {
                 ScreenEvent.KeyReleased.Pre.BUS.addListener(ClientBus::onKeyReleased);
                 ScreenEvent.CharacterTyped.Pre.BUS.addListener(ClientBus::onCharTyped);
             }
-            *///?} else {
+            *///?} elif >=1.19 {
             static void register(IEventBus modBus) {
                 IEventBus forgeBus = MinecraftForge.EVENT_BUS;
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
@@ -305,6 +356,55 @@ public final class CrystalGUIForge implements VariantEntry {
                 forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.CharacterTyped.Pre.class,
                         e -> { if (onCharTyped(e)) e.setCanceled(true); });
             }
+            //?} elif >=1.18 {
+            /*// Forge 38-40 name the screen events ScreenEvent.*Event and register keys in client setup.
+            static void register(IEventBus modBus) {
+                IEventBus forgeBus = MinecraftForge.EVENT_BUS;
+                modBus.addListener(ClientBus::onClientSetup);
+                registerHud(modBus);
+                forgeBus.addListener(ClientBus::onClientTick);
+                forgeBus.addListener(ClientBus::onClientLoggedIn);
+                forgeBus.addListener(ClientBus::onClientLoggedOut);
+                forgeBus.addListener(ClientBus::onScreenRender);
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseClickedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseReleasedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), false, 0f)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseScrollEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerMouse(-1, false, (float) e.getScrollDelta())) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyboardKeyPressedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerKey(e.getKeyCode(), (char) 0, true)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyboardKeyReleasedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerKey(e.getKeyCode(), (char) 0, false)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyboardCharTypedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerKey(0, e.getCodePoint(), true)) e.setCanceled(true); });
+            }
+            *///?} else {
+            /*// Forge 37 names them GuiScreenEvent.*Event.
+            static void register(IEventBus modBus) {
+                IEventBus forgeBus = MinecraftForge.EVENT_BUS;
+                modBus.addListener(ClientBus::onClientSetup);
+                registerHud(modBus);
+                forgeBus.addListener(ClientBus::onClientTick);
+                forgeBus.addListener(ClientBus::onClientLoggedIn);
+                forgeBus.addListener(ClientBus::onClientLoggedOut);
+                forgeBus.addListener(ClientBus::onScreenRender);
+                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseClickedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseReleasedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), false, 0f)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseScrollEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerMouse(-1, false, (float) e.getScrollDelta())) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.KeyboardKeyPressedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerKey(e.getKeyCode(), (char) 0, true)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.KeyboardKeyReleasedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerKey(e.getKeyCode(), (char) 0, false)) e.setCanceled(true); });
+                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.KeyboardCharTypedEvent.Pre.class,
+                        e -> { if (LifecycleCrystalGUI.offerKey(0, e.getCodePoint(), true)) e.setCanceled(true); });
+            }
+            *///?}
+
+            //? if <1.21.6 {
 
             private static void onClientTick(TickEvent.ClientTickEvent event) {
                 if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.clientTick();
@@ -330,6 +430,7 @@ public final class CrystalGUIForge implements VariantEntry {
             }
             //?}
 
+            //? if >=1.19 {
             private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
                 LifecycleCrystalGUI.bootstrapClient();
                 CgUiKeybinds.all().forEach(event::register);
@@ -342,6 +443,23 @@ public final class CrystalGUIForge implements VariantEntry {
             private static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
                 LifecycleCrystalGUI.clientDisconnected();
             }
+            //?} else {
+            /*// Before Forge 41 keys are registered in client setup, on the main thread.
+            private static void onClientSetup(FMLClientSetupEvent event) {
+                event.enqueueWork(() -> {
+                    LifecycleCrystalGUI.bootstrapClient();
+                    CgUiKeybinds.all().forEach(ClientRegistry::registerKeyBinding);
+                });
+            }
+
+            private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggedInEvent event) {
+                LifecycleCrystalGUI.clientConnected();
+            }
+
+            private static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggedOutEvent event) {
+                LifecycleCrystalGUI.clientDisconnected();
+            }
+            *///?}
 
             /**
              * ONCE a frame. RenderGuiOverlayEvent fires per vanilla overlay element -- hotbar, crosshair,
@@ -359,15 +477,30 @@ public final class CrystalGUIForge implements VariantEntry {
             private static void onAddGuiLayers(AddGuiOverlayLayersEvent event) {
                 event.getLayeredDraw().add(ResourceIds.of(MODID, "hud"), (graphics, partialTick) -> LifecycleCrystalGUI.paintHud());
             }
-            *///?} else {
+            *///?} elif >=1.19 {
             private static void onRenderGui(RenderGuiEvent.Post event) {
                 LifecycleCrystalGUI.paintHud();
             }
-            //?}
+            //?} else {
+            /*// Forge 37-40: posted per overlay element as well; ALL is the once-a-frame one.
+            private static void onRenderGui(RenderGameOverlayEvent.Post event) {
+                if (event.getType() == RenderGameOverlayEvent.ElementType.ALL) LifecycleCrystalGUI.paintHud();
+            }
+            *///?}
 
+            //? if >=1.19 {
             private static void onScreenRender(ScreenEvent.Render.Post event) {
                 LifecycleCrystalGUI.paintOverlay();
             }
+            //?} elif >=1.18 {
+            /*private static void onScreenRender(ScreenEvent.DrawScreenEvent.Post event) {
+                LifecycleCrystalGUI.paintOverlay();
+            }
+            *///?} else {
+            /*private static void onScreenRender(GuiScreenEvent.DrawScreenEvent.Post event) {
+                LifecycleCrystalGUI.paintOverlay();
+            }
+            *///?}
 
             // Forge 59 (1.21.9) carries the input as Minecraft's own event object, through getInfo().
             //? if >=1.21.9 {
@@ -390,7 +523,7 @@ public final class CrystalGUIForge implements VariantEntry {
             private static boolean onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
                 return LifecycleCrystalGUI.offerKey(0, (char) event.getInfo().codepoint(), true);
             }
-            *///?} else {
+            *///?} elif >=1.19 {
             private static boolean onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
                 return LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f);
             }
@@ -412,13 +545,15 @@ public final class CrystalGUIForge implements VariantEntry {
             }
             //?}
 
-            private static boolean onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
-                //? if >=1.20.2 {
-                /*return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getDeltaY());
-                *///?} else {
-                return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDelta());
-                //?}
+            //? if >=1.20.2 {
+            /*private static boolean onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
+                return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getDeltaY());
             }
+            *///?} elif >=1.19 {
+            private static boolean onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
+                return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDelta());
+            }
+            //?}
 
         }
     }

@@ -54,7 +54,19 @@ public final class ClientProbe {
         @Override
         public int fps() {
             Minecraft mc = Minecraft.getInstance();
-            return mc == null ? -1 : mc.getFps();
+            if (mc == null) return -1;
+            // getFps arrived in 1.19.3; before it the count leads the debug string, "60 fps T: ...".
+            //? if >=1.19.3 {
+            return mc.getFps();
+            //?} else {
+            /*String fps = mc.fpsString;
+            int end = fps == null ? -1 : fps.indexOf(' ');
+            try {
+                return end > 0 ? Integer.parseInt(fps.substring(0, end)) : -1;
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+            *///?}
         }
 
         @Override
