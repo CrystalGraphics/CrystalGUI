@@ -147,7 +147,7 @@ by absence and reaches no loader; the GL harness is a client with a context by d
 ```
 
 ```bash
-**1.20.x/1.21.x** — a node per (loader, Minecraft version): forge:1.20.1 | forge:1.20.2 | forge:1.20.4 | forge:1.20.6 | forge:1.21.1 | neoforge:1.20.2 | neoforge:1.20.3 | neoforge:1.20.4 | neoforge:1.20.6 | neoforge:1.21.1 | fabric:1.20.1 | fabric:1.20.2 | fabric:1.20.4 | fabric:1.20.6 | fabric:1.21.1 — every release from 1.20 to 1.21.1 on all three, except Forge 1.21 (refused: Forge 51 has no HUD event). A node claims the versions it was booted on; its `variant.minecraft` says which.
+**1.20.x/1.21.x** — a node per (loader, Minecraft version): forge:1.20.1 | forge:1.20.2 | forge:1.20.4 | forge:1.20.6 | forge:1.21.1 | forge:1.21.3 | forge:1.21.4 | neoforge:1.20.2 | neoforge:1.20.3 | neoforge:1.20.4 | neoforge:1.20.6 | neoforge:1.21.1 | neoforge:1.21.3 | neoforge:1.21.4 | fabric:1.20.1 | fabric:1.20.2 | fabric:1.20.4 | fabric:1.20.6 | fabric:1.21.1 | fabric:1.21.3 | fabric:1.21.4 — every release from 1.20 to 1.21.4 on all three, except Forge 1.21 (refused: Forge 51 has no HUD event) and the Forge versions never published (1.20.5, 1.21.2). NeoForge 1.21.2 runs its only build, the 21.2 beta. A node claims the versions it was booted on; its `variant.minecraft` says which.
 ./gradlew :runtime:mc:modern:<loader>:<version>:runClient
 ./gradlew :runtime:mc:modern:<loader>:<version>:runServer
 ./gradlew :runtime:mc:modern:<loader>:<version>:serverSmoke   # boots, asserts, stops. Needs -PcgAcceptEula

@@ -3,6 +3,7 @@ import cgbuildlogic.commonNode
 import cgbuildlogic.modernLoader
 import cgbuildlogic.nodeJava
 import cgbuildlogic.nodePackage
+import cgbuildlogic.registerNodeMixins
 import cgbuildlogic.registerNodeVariants
 import cgbuildlogic.registerCheckDescriptorsNameNoCommon
 import cgbuildlogic.sameVersionNodeCoordinate
@@ -245,6 +246,8 @@ registerNodeVariants(modDescriptors.getValue("lang"), "lang")
 // merged table's names would not resolve. On Fabric it also takes the merged fabric.mod.json, which
 // names only the bootstrapper and ORs every node's range, so one file is right for every node.
 registerNodeVariants(modDescriptors.getValue("main"))
+// A node that pins `variant.mixinPlugin` ships its config beside its classes, at the shipped package.
+registerNodeMixins(modDescriptors.getValue("main"), "thinShadowJar")
 // NeoForge the same way: its merged mods.toml AND neoforge.mods.toml, the only file NeoForge 20.5+ reads.
 // Forge takes the merged mods.toml too, whose hull covers every Forge node.
 val mergedDevDescriptors = mapOf(
