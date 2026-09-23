@@ -12,6 +12,7 @@ import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
+import com.crystalgraphics.gl.framebuffer.CgPixelReadback;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
@@ -22,7 +23,9 @@ import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgGpuTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.text.cache.CgFontRegistry;
@@ -774,6 +777,9 @@ public final class CgUiPaintContext {
         textRenderer.endBatch();
         renderer.flush();
         FrameProfile.end(timed, "glend:flush");
+
+        // The finished picture, before it goes anywhere: frameFbo holds exactly what this frame drew.
+        captureFrameImage();
 
         // Composite the frame's own target (see beginFrame/frameFbo) back onto whatever the real
         // target was. Closing glScope HERE — early, not at this method's usual end — is what puts
@@ -2426,6 +2432,30 @@ public final class CgUiPaintContext {
      *
      * <p>Idempotent, and safe to call when the singleton was never constructed.</p>
      */
+    /** Built on the first frame a picture is asked for; three in flight covers a GPU two frames behind. */
+    @Nullable
+    private CgPixelReadback frameImages;
+
+    /**
+     * Photographs the finished frame for the trace when one is due, and files whatever earlier requests
+     * have read back. Never waits on the GPU. @see CgFrameImages
+     */
+    private void captureFrameImage() {
+        long frame = CgTrace.currentFrameIndex();
+        boolean due = CgFrameImages.isDue(frame);
+        if (!due && (frameImages == null || !frameImages.isPending())) return;
+        long timed = FrameProfile.begin();
+        if (frameImages == null) frameImages = new CgPixelReadback(3);
+        frameImages.poll(pixels -> CgFrameImages.put(pixels.tag(), pixels.width(), pixels.height(), pixels.rgb()));
+        FrameProfile.end(timed, "glend:image:poll");
+        if (due) {
+            timed = FrameProfile.begin();
+            frameImages.request(frameFbo.getId(), frameFbo.getWidth(), frameFbo.getHeight(),
+                    CgFrameImages.width(), frame);
+            FrameProfile.end(timed, "glend:image:request");
+        }
+    }
+
     public static void destroy() {
         if (instance == null) return;
         instance.releaseOwnedResources();
@@ -2449,6 +2479,7 @@ public final class CgUiPaintContext {
         // constructor) — destroy() drops the whole singleton right after this, so a fresh instance
         // with a fresh FBO is what the next getInstance() builds anyway.
         frameFbo.delete();
+        if (frameImages != null) frameImages.delete();
 
         // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
         backdrop.delete();

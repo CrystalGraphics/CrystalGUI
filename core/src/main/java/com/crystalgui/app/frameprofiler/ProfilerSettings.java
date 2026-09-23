@@ -1,5 +1,6 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
@@ -36,6 +37,7 @@ import java.util.List;
  *   <li><b>Frames kept from the start, newest frames kept and zones per frame</b> resize the ring, which <b>clears</b> what it
  *       holds. They apply the moment they change, and at startup.</li>
  *   <li><b>Stop after a slow frame</b> arms or disarms at once and clears nothing.</li>
+ *   <li><b>Picture interval and width</b> apply from the next picture and clear nothing.</li>
  *   <li><b>Record from launch</b> is read at startup only; turning it on starts nothing now.</li>
  *   <li><b>Channels</b> is what Record switches on. The channel menu changes what is recording now and
  *       leaves this alone.</li>
@@ -89,6 +91,18 @@ public final class ProfilerSettings {
             "profiler.hitch.framesAfter", "Frames kept after it", 120)
             .description("How many frames to record after the slow one before stopping.");
 
+    // ── Images ───────────────────────────────────────────────────────────────────────────────
+
+    public static final Setting<Integer> IMAGE_INTERVAL = Setting.integer(
+            "profiler.images.interval", "A picture every (frames)", 30)
+            .description("While the images channel records, how often the screen is photographed for the "
+                    + "strip's hover preview and the Screen tab. Each costs a small GPU copy.");
+
+    public static final Setting<Integer> IMAGE_WIDTH = Setting.integer(
+            "profiler.images.width", "Picture width (px)", 256)
+            .description("How wide each picture is kept; the height follows the screen. Wider reads better "
+                    + "in the Screen tab and holds more memory: 3 bytes a pixel, one picture per interval.");
+
     // ── View ─────────────────────────────────────────────────────────────────────────────────
 
     public static final Setting<String> TARGET = Setting.select(
@@ -103,7 +117,7 @@ public final class ProfilerSettings {
     /** In the order the page shows them, under the headings in {@link #SECTIONS}. */
     public static List<Setting<?>> all() {
         return List.of(RECORD_AT_LAUNCH, CHANNELS, FIRST_FRAMES, FRAMES, ZONES_PER_FRAME,
-                STOP_AFTER_MS, FRAMES_AFTER, TARGET, REFRESH_MS);
+                STOP_AFTER_MS, FRAMES_AFTER, IMAGE_INTERVAL, IMAGE_WIDTH, TARGET, REFRESH_MS);
     }
 
     /** A heading and the settings under it. */
@@ -113,6 +127,7 @@ public final class ProfilerSettings {
     public static final List<Section> SECTIONS = List.of(
             new Section("Recording", List.of(RECORD_AT_LAUNCH, CHANNELS, FIRST_FRAMES, FRAMES, ZONES_PER_FRAME)),
             new Section("Hitches", List.of(STOP_AFTER_MS, FRAMES_AFTER)),
+            new Section("Images", List.of(IMAGE_INTERVAL, IMAGE_WIDTH)),
             new Section("View", List.of(TARGET, REFRESH_MS)));
 
     public static final int MAX_FRAMES = 100_000;
@@ -152,6 +167,7 @@ public final class ProfilerSettings {
         listen();
         applyCapacity();
         applyHitch();
+        applyImages();
     }
 
     /** The profiler's autostart: load, apply, and start recording if asked to. */
@@ -173,6 +189,7 @@ public final class ProfilerSettings {
                 applyCapacity();
             }
             if (change.affects(STOP_AFTER_MS) || change.affects(FRAMES_AFTER)) applyHitch();
+            if (change.affects(IMAGE_INTERVAL) || change.affects(IMAGE_WIDTH)) applyImages();
         });
     }
 
@@ -240,6 +257,12 @@ public final class ProfilerSettings {
     /** What {@link #applyCapacity} last configured, so an unrelated change does not clear the ring. */
     @Nullable
     private static String applied;
+
+    /** Neither clears anything: a picture already taken keeps its size, and the next is taken at the new one. */
+    static void applyImages() {
+        CgFrameImages.setInterval(Math.max(1, Math.min(10_000, get(IMAGE_INTERVAL))));
+        CgFrameImages.setWidth(Math.max(64, Math.min(1024, get(IMAGE_WIDTH))));
+    }
 
     static void applyHitch() {
         int ms = Math.max(0, get(STOP_AFTER_MS));

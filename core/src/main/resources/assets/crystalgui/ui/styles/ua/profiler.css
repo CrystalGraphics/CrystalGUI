@@ -324,11 +324,58 @@ calltreetab,
 counterstab,
 hintstab,
 chainstab,
-comparetab {
+comparetab,
+screentab {
     flex-direction: column;
     width: 100%;
     height: 100%;
     font-size: 11;
+}
+
+/* ── frame images: the Screen tab and the strip's hover preview ────────────── */
+
+screentab {
+    gap: 6px;
+    padding: 6px;
+}
+
+screentab .__screen-caption__ {
+    flex-shrink: 0;
+    color: var(--profiler-caption-fg);
+    font-size: 11;
+}
+
+screentab frameimage {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+/* FLOATS under the pointer, over whatever is below the strip, and takes no room from it. */
+frameprofiler .__frame-preview__ {
+    position: absolute;
+    flex-direction: column;
+    gap: 3px;
+    width: 200px;
+    height: 138px;
+    padding: 4px;
+    background-color: var(--profiler-strip-bg);
+    border-width: 1px;
+    border-color: var(--profiler-zone-ring);
+    border-radius: var(--radius-control, 4px);
+}
+
+frameprofiler .__frame-preview__ frameimage {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+frameprofiler .__frame-preview__ .__caption__ {
+    flex-shrink: 0;
+    margin-left: 0px;
+    font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
+    font-size: 10;
 }
 
 /* SIDE BY SIDE, in a split: callees on the left, callers on the right. Stacked, the two trees halved a
