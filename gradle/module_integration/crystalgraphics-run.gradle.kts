@@ -20,11 +20,14 @@
 
 import java.io.File
 
-// "forge" or "neoforge" -- CrystalGraphics lays its loaders out under the same names. The BRANCH, not
-// `project.name`: this is applied to a node, `:runtime:mc:modern:<loader>:<version>`, whose own name is
-// its Minecraft version.
-val loader = project.parent!!.name
 val crystalGraphics = gradle.includedBuild("CrystalGraphics")
+
+// CrystalGraphics' nodes of this node's loader AND Minecraft version -- its tree has the same layout.
+// Answered by cg-modern-loader through cgbuildlogic.ModernTree; see `cgGraphicsNodes` there.
+@Suppress("UNCHECKED_CAST")
+val graphicsNodes = extra["cgGraphicsNodes"] as Map<String, Pair<String, File>>
+val (graphicsCommonPath, graphicsCommonDir) = graphicsNodes.getValue("common")
+val (graphicsLoaderPath, graphicsLoaderDir) = graphicsNodes.getValue("loader")
 
 dependencies {
     add("additionalRuntimeClasspath", project(":taffy"))
@@ -48,9 +51,9 @@ fun modClasses(modId: String, roots: Iterable<File>) = roots.map { "$modId%%$it"
 fun modClasses(modId: String, sourceSet: SourceSet) = modClasses(modId,
     sourceSet.output.classesDirs.files + listOfNotNull(sourceSet.output.resourcesDir))
 
-/** The same for a module in another build, where only the output LAYOUT is reachable from here. */
-fun modClasses(modId: String, moduleDir: File) = modClasses(modId, listOf(
-    File(moduleDir, "build/classes/java/main"), File(moduleDir, "build/resources/main")))
+/** The same for a node in another build, where only the output LAYOUT is reachable from here. */
+fun modClasses(modId: String, nodeDir: File) = modClasses(modId, listOf(
+    File(nodeDir, "build/classes/java/main"), File(nodeDir, "build/resources/main")))
 
 fun mainSourceSet(project: Project) =
     project.extensions.getByType(SourceSetContainer::class.java)["main"]
@@ -113,8 +116,8 @@ val modClassesValue = (
         + bundledProjects
             .flatMap { modClasses("crystalgui", mainSourceSet(it).output.classesDirs.files) }
         + modClasses("crystalgui", treeSitterJars)
-        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "runtime/mc/modern/common"))
-        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "runtime/mc/modern/$loader"))
+        + modClasses("crystalgraphics", graphicsCommonDir)
+        + modClasses("crystalgraphics", graphicsLoaderDir)
     // FML splits MOD_CLASSES on the PLATFORM's path separator, not on a semicolon.
     ).joinToString(File.pathSeparator)
 
@@ -131,8 +134,8 @@ tasks.matching {
     // everything correctly.
     inputs.property("cgModClasses", modClassesValue)
     dependsOn(stageDevResources)
-    dependsOn(crystalGraphics.task(":runtime:mc:modern:common:classes"))
-    dependsOn(crystalGraphics.task(":runtime:mc:modern:$loader:classes"))
+    dependsOn(crystalGraphics.task("$graphicsCommonPath:classes"))
+    dependsOn(crystalGraphics.task("$graphicsLoaderPath:classes"))
 
     // And the jars the runtime classpath is made of. These arrive as substituted coordinates, which
     // ModDevGradle resolves with nothing ordering them before the launch -- so a jar could still be

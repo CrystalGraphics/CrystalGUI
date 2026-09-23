@@ -1,5 +1,9 @@
 import cgbuildlogic.commonNode
 import cgbuildlogic.modernLoader
+import cgbuildlogic.registerCheckDescriptorsNameNoCommon
+import cgbuildlogic.sameVersionNodeCoordinate
+import cgbuildlogic.sameVersionNodeDir
+import cgbuildlogic.sameVersionNodePath
 import cgbuildlogic.useNodeCoordinates
 import org.gradle.process.CommandLineArgumentProvider
 import java.io.File
@@ -109,6 +113,9 @@ dependencies {
     // mods{} sourceSet declarations in each loader's build.gradle.kts.
     "compileOnly"(project(common.path))
     "compileOnly"(project(":core"))
+    // CrystalGraphics' common node of THIS Minecraft, through the composite's per-node substitution.
+    "compileOnly"(sameVersionNodeCoordinate("com.crystalgraphics", "common"))
+    "runtimeOnly"(sameVersionNodeCoordinate("com.crystalgraphics", "common"))
 
     // compileOnly and NOT bundled: the merge adds :runtime:mc:shared once, under a package no variant
     // relocates. EMPTY today -- the variant selector it briefly held is CrystalGraphics' (J11.0),
@@ -242,36 +249,9 @@ val langThinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shado
     relocate("$cgCommonRoot.lang", "$cgThinRoot.lang")
 }
 
-// Nothing in the common node may be NAMED from a descriptor or a service file.
-//
-// The relocation rewrites class references inside the jar; it cannot rewrite a name sitting in
-// `mods.toml`, `fabric.mod.json` or `META-INF/services/...`, so such a name would point at a class
-// that no longer exists under that spelling -- on three loaders, silently, at the moment something
-// asks for it. The loader's OWN packages are fine: they are not relocated.
-val checkDescriptorsNameNoCommon = tasks.register("checkDescriptorsNameNoCommon") {
-    group = "verification"
-    description = "Fails if a descriptor or service file names a class that the thin jar relocates."
-    // THE SOURCE SET'S resources, never a path under the project directory: on a node that is
-    // `versions/<v>/src`, which does not exist, and the check would pass having read nothing.
-    val resources = sourceSets["main"].resources
-    val forbidden = listOf(cgCommonRoot)
-    inputs.files(resources).withPropertyName("resources")
-    outputs.upToDateWhen { true }
-    doLast {
-        val hits = resources.files
-            .flatMap { file ->
-                val text = runCatching { file.readText() }.getOrDefault("")
-                forbidden.filter { text.contains(it) }.map { file.name to it }
-            }
-        if (hits.isNotEmpty()) {
-            throw GradleException(
-                "A descriptor or service file names a package the thin jar relocates, so the name "
-                    + "will be wrong on every loader:\n"
-                    + hits.joinToString("\n") { (path, pkg) -> "  $path  names  $pkg" })
-        }
-    }
-}
-tasks.named("check") { dependsOn(checkDescriptorsNameNoCommon) }
+// Nothing in the common node may be NAMED from a descriptor or a service file: the relocation above
+// rewrites class references, never a name in mods.toml, fabric.mod.json or META-INF/services.
+registerCheckDescriptorsNameNoCommon(listOf(cgCommonRoot))
 
 // A dev run must BUILD what mods{} makes visible.
 //
@@ -391,6 +371,14 @@ tasks.register("mergeDevServices") {
 // Read by crystalgraphics-run.gradle.kts, which stages the dev run's resources from the same list.
 extra["cgBundledProjects"] = cgBundledProjects
 extra["cgMergedServicesDir"] = cgMergedServicesDir
+
+// CrystalGraphics' nodes of THIS loader and version, for the same script: an applied script cannot
+// import this build's classes, so the tree's rule is applied here and the answers handed over.
+val graphicsBuildDir: File = gradle.includedBuild("CrystalGraphics").projectDir
+extra["cgGraphicsNodes"] = mapOf(
+    "common" to (sameVersionNodePath("common") to sameVersionNodeDir(graphicsBuildDir, "common")),
+    "loader" to (sameVersionNodePath(modernLoader) to sameVersionNodeDir(graphicsBuildDir, modernLoader)),
+)
 
 /**
  * Third-party libraries this jar carries -- EMPTY on 1.20.x, and that is the whole point.
