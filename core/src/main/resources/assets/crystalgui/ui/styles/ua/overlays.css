@@ -1446,6 +1446,8 @@ framestats .__hidden__ {
  * carries all eight, which was checked against the file's own character map rather than assumed. */
 framestats .__spark__ {
     color: var(--framestats-good, #7FD08C);
+    /* A DOOR: a press on a bar opens that frame in the Frame Profiler. @see FrameStatsOverlay#onOpenFrame */
+    cursor: pointer;
 }
 
 /* A COLUMN AT A TIME, through the Custom Highlight API -- the alternative is a node per bar, forty-six

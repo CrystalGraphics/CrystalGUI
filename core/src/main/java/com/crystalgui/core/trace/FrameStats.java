@@ -76,7 +76,10 @@ public final class FrameStats {
     /** Starts collecting, or joins a collection already running. The first holder clears what was there. */
     public void hold() {
         if (++holders == 1) {
-            CgTrace.clear();
+            // A FRESH RING ONLY WHEN NOTHING ELSE WAS RECORDING. The ring is one per process, and showing
+            // the readout while the profiler recorded wiped the profiler's frames -- the kept start
+            // included, which is the one thing that cannot be recorded again.
+            if (!recordingSomething()) CgTrace.clear();
             // BY THE CHANNEL AND NOT BY NAME: a prefix only matches channels that have registered,
             // and a channel registers when its declaring class loads -- so the string form would
             // silently enable nothing if nothing had touched UiTrace yet. @see CgTrace#setEnabled
@@ -91,6 +94,14 @@ public final class FrameStats {
             CgTrace.setEnabled(UiTrace.FRAME, true);
             CgTrace.setEnabled(UiTrace.FLOW, true);
         }
+    }
+
+    /** Whether any channel that measures something is on — the engine's own channels do not count. */
+    private static boolean recordingSomething() {
+        for (String name : CgTrace.enabledNames()) {
+            if (!CgTrace.isEngineOwn(name)) return true;
+        }
+        return false;
     }
 
     /** Drops one {@link #hold()}, switching off only the channels that hold switched on. */
@@ -462,6 +473,23 @@ public final class FrameStats {
             health.add(healthOf(worst / 1_000_000f));
         }
         return new Spark(bars.toString(), health);
+    }
+
+    /**
+     * The frame {@code column} of a {@code columns}-wide {@link #spark} stands for — the worst in its
+     * bucket, which is the bar drawn — as its {@link CgFrameRecord#index()}, or -1.
+     */
+    public long frameIndexAt(int column, int columns) {
+        List<CgFrameRecord> frames = window();
+        int kept = frames.size();
+        if (kept < 2 || columns < 1 || column < 0 || column >= columns) return -1L;
+        int from = (int) ((long) column * kept / columns);
+        int to = Math.min(kept, Math.max(from + 1, (int) ((long) (column + 1) * kept / columns)));
+        CgFrameRecord worst = frames.get(from);
+        for (int i = from; i < to; i++) {
+            if (frames.get(i).wallNanos() > worst.wallNanos()) worst = frames.get(i);
+        }
+        return worst.index();
     }
 
     /** {@link #spark}'s answer: the bars, and one verdict per bar. */
