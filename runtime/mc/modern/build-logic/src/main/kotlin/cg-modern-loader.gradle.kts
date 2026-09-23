@@ -1,6 +1,7 @@
 import cgbuildlogic.ModDescriptor
 import cgbuildlogic.commonNode
 import cgbuildlogic.modernLoader
+import cgbuildlogic.nodeJava
 import cgbuildlogic.nodePackage
 import cgbuildlogic.registerNodeVariants
 import cgbuildlogic.registerCheckDescriptorsNameNoCommon
@@ -15,7 +16,7 @@ import xyz.wagyourtail.jvmdg.gradle.task.ShadeJar
 import java.time.Duration
 
 plugins {
-    id("cg-java17")
+    id("cg-java")
     id("xyz.wagyourtail.jvmdowngrader")
 }
 
@@ -36,7 +37,7 @@ evaluationDependsOn(common.path)
 
 // :core emits Java 21 bytecode (v65) and MC 1.20.1 ships a Java 17 runtime, so the bundled classes are
 // rewritten to 17 -- the same mechanism mc1710 uses to reach Java 8. Compiling against v65 needs only a
-// 21 toolchain (see cg-java17); LOADING it on a player's JVM needs this.
+// 21 toolchain (see cg-java); LOADING it on a player's JVM needs this.
 jvmdg.downgradeTo.set(JavaVersion.VERSION_17)
 
 // LWJGL 3.3.1 -- what MC 1.20.1 ships -- predates Java 21 and does not recognise its JNI version. It
@@ -44,7 +45,7 @@ jvmdg.downgradeTo.set(JavaVersion.VERSION_17)
 // table is instrumented, so the write lands past it and the process dies with a native fail-fast
 // (0xC0000409 on Windows) before the window opens.
 //
-// A dev run here is ALWAYS on Java 21: cg-java17 raises the toolchain to 21 so javac can read :core's
+// A dev run here is ALWAYS on Java 21: cg-java raises the toolchain to 21 so javac can read :core's
 // v65 classes, and ModDevGradle takes the run JVM from the toolchain. So the client runs fine and
 // cannot be debugged -- which reads as an IDE fault rather than a library one.
 //
@@ -195,6 +196,10 @@ val loaderPackage = "com.crystalgui.mc.$modernLoader"
 val nodeRoot = nodePackage(loaderPackage, project.name)
 val cgThinRoot = "$nodeRoot.common"
 val loaderTitle = mapOf("forge" to "Forge", "neoforge" to "NeoForge", "fabric" to "Fabric").getValue(modernLoader)
+
+/** CrystalGraphics' common package, and where its thin jar for this loader and version ships it. */
+val graphicsCommonRoot = "com.crystalgraphics.mc.modern.platform"
+val graphicsNodeCommon = nodePackage("com.crystalgraphics.mc.modern.$modernLoader", project.name) + ".common.platform"
 val bootstrappers = listOf("$loaderPackage.${loaderTitle}Bootstrap", "$loaderPackage.lang.Language${loaderTitle}Bootstrap")
 
 /** The descriptors every merged jar is printed from, and the variant each node's dev run reads. */
@@ -218,6 +223,10 @@ val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.ta
     from(commonJar.map { zipTree(it.archiveFile) })
     relocate(cgCommonRoot, cgThinRoot)
     relocate(loaderPackage, nodeRoot) { bootstrappers.forEach { exclude(it) } }
+    // REFERENCES into CrystalGraphics' common node, which ships relocated in ITS thin jar by the same
+    // rule -- so a class here naming `ResourceIds` must name it where that jar puts it. Nothing of
+    // CrystalGraphics' is bundled; only the names in our bytecode move.
+    relocate(graphicsCommonRoot, graphicsNodeCommon)
 }
 
 // A DEV RUN HAS TO SEE crystalgui_language AS A MOD, which means descriptors in the lang source set's
@@ -236,11 +245,16 @@ registerNodeVariants(modDescriptors.getValue("lang"), "lang")
 // merged table's names would not resolve. On Fabric it also takes the merged fabric.mod.json, which
 // names only the bootstrapper and ORs every node's range, so one file is right for every node.
 registerNodeVariants(modDescriptors.getValue("main"))
-if (modernLoader == "fabric") {
+// NeoForge the same way: its merged mods.toml AND neoforge.mods.toml, the only file NeoForge 20.5+ reads.
+val mergedDevDescriptors = mapOf(
+    "fabric" to listOf("fabric.mod.json"),
+    "neoforge" to listOf("META-INF/mods.toml", "META-INF/neoforge.mods.toml"),
+)[modernLoader]
+if (mergedDevDescriptors != null) {
     tasks.named<ProcessResources>("processResources") {
         val descriptors = rootProject.tasks.named("generateMergedDescriptors")
         dependsOn(descriptors)
-        from(descriptors) { include("fabric.mod.json") }
+        from(descriptors) { include(mergedDevDescriptors) }
     }
 }
 
@@ -677,6 +691,9 @@ tasks.matching { it.name == "runClient" }.configureEach {
 // differs. The task is shared with every project on this build — CrystalGraphics/singlejar-logic.
 tasks.register<cgbuildlogic.CheckThinJar>("checkThinJar") {
     allowedPrefixes.set(listOf("com/crystalgui/mc/"))
+    // The node's own Java, never above it: a thin jar is this node's Minecraft's bytecode until the merge
+    // downgrades everything to 52. Java N is class-file major N + 44.
+    maxClassMajor.set(nodeJava + 44)
     // What CrystalGUI merges at the ROOT, and so must not be here: a copy would ship four times.
     forbiddenPrefixes.set(listOf(
         "com/crystalgui/ui/", "com/crystalgui/widget/", "com/crystalgui/style/",

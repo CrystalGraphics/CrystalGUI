@@ -20,6 +20,9 @@ add a version and what will bite is CrystalGraphics' — read
 - **A node depends on CrystalGraphics' node of its own version** — its common through the composite
   (`sameVersionNodeCoordinate`), and its loader through the dev run (`crystalgraphics-run`, handed the
   paths as `cgGraphicsNodes` by `cg-modern-loader`, since an applied script cannot import build-logic).
+- **It calls CrystalGraphics' common node, never a copy of it** — `ResourceIds` is CrystalGraphics'.
+  The thin jar relocates those references to where CrystalGraphics' thin jar for the same node ships
+  its common (`graphicsNodeCommon` in `cg-modern-loader`), so the merged jars agree.
 - **Two source sets per node**: `main` for the host jar and `lang` for `crystalgui_language`, which
   compiles against the same Minecraft.
 - **Fabric excludes both CrystalGraphics groups from its runtime classpath** — the libraries' and the

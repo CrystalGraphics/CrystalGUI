@@ -1,5 +1,6 @@
 package com.crystalgui.mc.forge;
 
+import com.crystalgraphics.mc.modern.platform.ResourceIds;
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
@@ -78,7 +79,7 @@ public final class CrystalGUIForge implements VariantEntry {
         private static final int MAX_FRAME_BYTES = 900_000;
 
         private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
-                .named(new ResourceLocation(MODID, "wire"))
+                .named(ResourceIds.of(MODID, "wire"))
                 .networkProtocolVersion(() -> VERSION)
                 .clientAcceptedVersions(VERSION::equals)
                 .serverAcceptedVersions(VERSION::equals)

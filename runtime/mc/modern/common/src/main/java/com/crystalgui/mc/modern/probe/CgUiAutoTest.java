@@ -141,8 +141,12 @@ public final class CgUiAutoTest {
         // COMPILED on both sides of the break, never reflective: each thin jar is remapped as it is
         // built, so this becomes the SRG member on Forge and the intermediary one on Fabric, where a
         // lookup by Mojang name is a string no remapper rewrites. The Runnable is the GIVE-UP path,
-        // taken when the save cannot be read, not a completion callback.
-        //? if >=1.20.2 {
+        // taken when the save cannot be read, not a completion callback. `openWorld` is measured on
+        // 1.21.1 and `checkForBackupAndLoad` on 1.20.4; the boundary between them moves to the first
+        // version a node between the two is built on.
+        //? if >=1.21 {
+        /*flows.openWorld(name, () -> { });
+        *///?} elif >=1.20.2 {
         /*flows.checkForBackupAndLoad(name, () -> { });
         *///?} else {
         flows.loadLevel(mc.screen, name);

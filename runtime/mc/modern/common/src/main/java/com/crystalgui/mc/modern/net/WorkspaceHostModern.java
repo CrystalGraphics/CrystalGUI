@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.net;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import javax.annotation.Nullable;
 
@@ -90,8 +91,10 @@ public final class WorkspaceHostModern {
         public Path root() {
             MinecraftServer server = currentServer;
             if (server == null) return null;
+            // getServerDirectory() is a File before 1.21 and a Path from it; toString is the one spelling
+            // both have, so this line serves every node without a directive.
             Path base = server.isDedicatedServer()
-                    ? server.getServerDirectory().toPath()
+                    ? Paths.get(server.getServerDirectory().toString())
                     : server.getWorldPath(LevelResource.ROOT);
             return base == null ? null : StorageLayout.projectsIn(base).resolve(PROJECT_DIR);
         }

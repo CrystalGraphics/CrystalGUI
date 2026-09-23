@@ -1,5 +1,6 @@
 package com.crystalgui.mc.fabric;
 
+import com.crystalgraphics.mc.modern.platform.ResourceIds;
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
@@ -15,11 +16,19 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+//? if >=1.20.5 {
+/*import io.netty.buffer.ByteBuf;
+import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+*///?} else {
+import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
+//?}
 
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.glfw.GLFWCharModsCallback;
@@ -58,13 +67,24 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
 
     // -- Network ----------------------------------------------------------------
 
-    /** The MC 1.20.1 Fabric transport: bytes in, bytes out. Framing and routing are {@code net.wire}'s. */
+    /**
+     * The Fabric transport: bytes in, bytes out. Framing and routing are {@code net.wire}'s.
+     *
+     * <p>Two payload APIs: 1.20.1's channel keyed on an id with a raw buffer, and 1.20.5's typed payloads,
+     * registered in {@code PayloadTypeRegistry} with a {@code StreamCodec} before any receiver.</p>
+     */
     public static final class Network implements CgNetworkChannel {
 
-        private static final ResourceLocation ID = new ResourceLocation(MODID, "wire");
+        private static final ResourceLocation ID = ResourceIds.of(MODID, "wire");
 
-        /** Fabric's custom-payload limit is ~1 MB; staying under it keeps one frame one packet. */
+        // 1.20.1: Fabric's custom-payload limit is ~1 MB, so one frame is one packet. 1.20.5+: nothing
+        // here has shown Fabric lifting vanilla's 32 767-byte serverbound cap, and Fabric does not split,
+        // so a frame is kept under it -- net.wire already splits a message into as many frames as needed.
+        //? if >=1.20.5 {
+        /*private static final int MAX_FRAME_BYTES = 32_000;
+        *///?} else {
         private static final int MAX_FRAME_BYTES = 900_000;
+        //?}
 
         private static final Network INSTANCE = new Network();
 
@@ -76,21 +96,49 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
             return INSTANCE;
         }
 
-        /** The server half. Safe on a dedicated server; names no client class. */
+        //? if >=1.20.5 {
+        /*public record Frame(byte[] bytes) implements CustomPacketPayload {
+
+            static final CustomPacketPayload.Type<Frame> TYPE = new CustomPacketPayload.Type<>(ID);
+            static final StreamCodec<ByteBuf, Frame> CODEC = ByteBufCodecs.BYTE_ARRAY.map(Frame::new, Frame::bytes);
+
+            @Override
+            public CustomPacketPayload.Type<Frame> type() {
+                return TYPE;
+            }
+        }
+        *///?}
+
+        /**
+         * The server half, and on 1.20.5+ the payload type both directions share. Safe on a dedicated
+         * server; names no client class. The tree is the frame thread's and a receiver runs on the netty
+         * thread, so each hands its frame across.
+         */
         public static void registerServerReceiver() {
+            //? if >=1.20.5 {
+            /*PayloadTypeRegistry.playC2S().register(Frame.TYPE, Frame.CODEC);
+            PayloadTypeRegistry.playS2C().register(Frame.TYPE, Frame.CODEC);
+            ServerPlayNetworking.registerGlobalReceiver(Frame.TYPE, (frame, context) ->
+                    context.server().execute(() -> INSTANCE.inbound.accept(context.player(), frame.bytes())));
+            *///?} else {
             ServerPlayNetworking.registerGlobalReceiver(ID, (server, player, handler, buf, responder) -> {
                 byte[] frame = buf.readByteArray();
-                // The tree is the frame thread's; the receiver runs on the netty thread.
                 server.execute(() -> INSTANCE.inbound.accept(player, frame));
             });
+            //?}
         }
 
         /** The client half, called only from the client initialiser. */
         public static void registerClientReceiver() {
+            //? if >=1.20.5 {
+            /*ClientPlayNetworking.registerGlobalReceiver(Frame.TYPE, (frame, context) ->
+                    context.client().execute(() -> INSTANCE.inbound.accept(null, frame.bytes())));
+            *///?} else {
             ClientPlayNetworking.registerGlobalReceiver(ID, (client, handler, buf, responder) -> {
                 byte[] frame = buf.readByteArray();
                 client.execute(() -> INSTANCE.inbound.accept(null, frame));
             });
+            //?}
         }
 
         @Override
@@ -100,13 +148,21 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
 
         @Override
         public void sendToServer(byte[] frame) {
+            //? if >=1.20.5 {
+            /*ClientPlayNetworking.send(new Frame(frame));
+            *///?} else {
             ClientPlayNetworking.send(ID, PacketByteBufs.create().writeByteArray(frame));
+            //?}
         }
 
         @Override
         public void sendToPlayer(Object player, byte[] frame) {
             if (!(player instanceof ServerPlayer serverPlayer)) return;
+            //? if >=1.20.5 {
+            /*ServerPlayNetworking.send(serverPlayer, new Frame(frame));
+            *///?} else {
             ServerPlayNetworking.send(serverPlayer, ID, PacketByteBufs.create().writeByteArray(frame));
+            //?}
         }
 
         @Override
