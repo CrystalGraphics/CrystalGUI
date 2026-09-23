@@ -1,6 +1,6 @@
 // `java` is the JavaPluginExtension in a build script, so the PACKAGE has to be imported to be named.
 import cgbuildlogic.MODERN_TREE
-import cgbuildlogic.modernNodes
+import cgbuildlogic.registerCheckAllTargets
 import groovy.json.JsonSlurper
 import java.net.HttpURLConnection
 import java.net.URI
@@ -207,29 +207,20 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
 
 // ── Every era target, compiled by one task ───────────────────────────────────────────────────────
 //
-// The rule it enforces: a refactor is compiled against EVERY Minecraft version before it is committed,
-// not just against whichever node the IDE happens to have active. A break line that holds only for the
-// active version is invisible until somebody else builds.
-//
-// Both source sets per node: `lang` is the language mod's half and compiles against the same Minecraft.
-// Read off the tree, which settings.gradle.kts declares -- listing nodes configures none of them.
-tasks.register("checkAllTargets") {
-    group = "verification"
-    description = "Compiles every node of the 1.20.x tree -- every Minecraft version, every loader."
-    val nodes = listOf("common", "forge", "neoforge", "fabric").flatMap { modernNodes(project, it) }
-    dependsOn(nodes.flatMap { listOf("${it.path}:compileJava", "${it.path}:compileLangJava") })
-}
+// Every node of the 1.20.x tree, every source set -- the rule is that a change is compiled against
+// every Minecraft version before it is committed, not only the IDE's active node. CrystalGraphics'
+// definition, shared with it: @see cgbuildlogic.registerCheckAllTargets
+registerCheckAllTargets()
 
 tasks.register("assembleConsumerRuntime") {
     group = "crystalgui"
     description = "Builds every jar a consuming mod's dev run puts on its classpath."
 
-    // A 1.20.1 Forge consumer's, so the 1.20.1 nodes. CrystalGraphics' tree is not versioned, so its
-    // paths below stay as they are.
+    // A 1.20.1 Forge consumer's, so the 1.20.1 nodes -- in both builds, which share the layout.
     dependsOn(":core:jar", ":taffy:jar", "$MODERN_TREE:common:1.20.1:jar", "$MODERN_TREE:forge:1.20.1:jar")
 
     listOf(":core:jar", ":platform:jar", ":freetype-msdfgen-harfbuzz-bindings:jar",
-           ":runtime:mc:modern:common:jar", ":runtime:mc:modern:forge:jar")
+           "$MODERN_TREE:common:1.20.1:jar", "$MODERN_TREE:forge:1.20.1:jar")
         .forEach { dependsOn(gradle.includedBuild("CrystalGraphics").task(it)) }
 }
 

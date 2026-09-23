@@ -1,16 +1,13 @@
+import cgbuildlogic.guardLoaderImports
+import cgbuildlogic.sameVersionNodeCoordinate
+import cgbuildlogic.useModernMinecraft
 import cgbuildlogic.useNodeCoordinates
-import net.neoforged.moddevgradle.dsl.NeoForgeExtension
-import net.neoforged.moddevgradle.legacyforge.dsl.LegacyForgeExtension
 
 // ── A node of the `common` branch: vanilla Minecraft, and nothing from any loader ───────────────────
 //
-// Applied to every `:runtime:mc:modern:common:<version>`. The TOOLCHAIN is chosen by the node's own
-// pins, because no single ModDevGradle mode reaches every version:
-//
-//   neoform.version  -> NeoForm mode: Minecraft alone at official names, no loader on the classpath.
-//                       Only exists from 1.20.2 (NeoForm published no 1.20.1 artifact).
-//   forge.version    -> legacyForge: Forge's userdev, the one ModDevGradle route to 1.17-1.20.1. It puts
-//                       Forge on compileOnly, which is why the import guard below exists.
+// Applied to every `:runtime:mc:modern:common:<version>`. How a node finds Minecraft, what its
+// coordinates are and what it may not import are CrystalGraphics' answers, shared by every build laid
+// out this way -- @see CrystalGraphics/singlejar-logic, ModernTree and ModernConventions.
 
 plugins {
     id("cg-java17")
@@ -34,23 +31,7 @@ repositories {
     }
 }
 
-val mcVersion = property("mc.version").toString()
-val neoFormPin = findProperty("neoform.version")?.toString()
-val forgePin = findProperty("forge.version")?.toString()
-
-when {
-    neoFormPin != null -> {
-        pluginManager.apply("net.neoforged.moddev")
-        extensions.configure<NeoForgeExtension> { setNeoFormVersion(neoFormPin) }
-    }
-    forgePin != null -> {
-        pluginManager.apply("net.neoforged.moddev.legacyforge")
-        extensions.configure<LegacyForgeExtension> { setVersion("$mcVersion-$forgePin") }
-    }
-    else -> throw GradleException(
-        "$path pins neither neoform.version nor forge.version in its gradle.properties, so there is no "
-            + "toolchain to put Minecraft $mcVersion on its classpath.")
-}
+useModernMinecraft()
 
 dependencies {
     // implementation — core is an internal dependency consumed by common.
@@ -67,6 +48,10 @@ dependencies {
     // causes duplicate-AP obfuscation-mapping errors for all @Inject targets.
     "compileOnly"("io.github.llamalad7:mixinextras-common:${property("modern.mixinextras")}")
     "annotationProcessor"("io.github.llamalad7:mixinextras-common:${property("modern.mixinextras")}")
+
+    // CrystalGraphics' common node of THIS Minecraft, through the composite's per-node substitution.
+    "compileOnly"(sameVersionNodeCoordinate("com.crystalgraphics", "common"))
+    "runtimeOnly"(sameVersionNodeCoordinate("com.crystalgraphics", "common"))
 }
 
 // ── The language stack's host half (J8) ──────────────────────────────────────────────────────────
@@ -109,43 +94,5 @@ configurations.create("commonLangOutput") {
 }
 artifacts { add("commonLangOutput", langJar) }
 
-// -- Import guard --------------------------------------------------------------------------------
-// One platform implementation serves Forge, NeoForge and Fabric, so this module may name vanilla
-// (net.minecraft.*, com.mojang.*, org.lwjgl.*) but nothing from a loader. Anything loader-specific
-// goes behind LoaderBridge -- plan/platform-mc1201.md 3.8.
-//
-// Needed wherever a node is on legacyForge, which puts MinecraftForge on the compileOnly classpath:
-// without it a net.minecraftforge import compiles here and throws NoClassDefFoundError on the other
-// two loaders.
-//
-// It reads the task's OWN sources -- what javac was handed for THIS node, directives applied. A path
-// under the project directory would be a node's `versions/<v>/src`, which does not exist, and the
-// guard would pass having read nothing.
-val loaderPackages = listOf("net.minecraftforge.", "net.neoforged.", "net.fabricmc.", "cpw.mods.fml.")
-
-tasks.named<JavaCompile>("compileJava") {
-    val sources = source
-    doLast {
-        val violations = sources.files
-            .filter { it.extension == "java" }
-            .mapNotNull { file ->
-                val hit = file.readLines()
-                    .map { it.trimStart() }
-                    .firstOrNull { line ->
-                        line.startsWith("import ") && loaderPackages.any { line.contains(it) }
-                    }
-                if (hit == null) null else file.name to hit
-            }
-        if (sources.files.none { it.extension == "java" }) {
-            throw GradleException("$path compiled no Java sources, so the import guard read nothing")
-        }
-        if (violations.isNotEmpty()) {
-            error(
-                "Loader-specific imports found in runtime/mc/modern/common -- this module is shared by Forge, " +
-                "NeoForge and Fabric, so it may name net.minecraft.* and com.mojang.* but nothing " +
-                "from a loader. Put it behind LoaderBridge instead (plan/platform-mc1201.md 3.8.3):\n" +
-                violations.joinToString("\n") { (name, line) -> "  $name\n      $line" }
-            )
-        }
-    }
-}
+// A Forge import compiles on a legacyForge node and throws NoClassDefFoundError on the other two loaders.
+guardLoaderImports()

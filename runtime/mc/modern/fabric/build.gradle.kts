@@ -1,5 +1,8 @@
 @file:Suppress("UnstableApiUsage")
 
+import cgbuildlogic.sameVersionNodeDir
+import cgbuildlogic.sameVersionNodePath
+
 // The `fabric` branch — Fabric through Loom, one node per Minecraft version (`versions/<version>/`,
 // whose gradle.properties pins mc.version, the loader, fabric-api and Parchment).
 
@@ -19,10 +22,11 @@ val mcVersion = property("mc.version").toString()
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
-// The producing task is wired in below: a bare path serves whatever happens to sit on disk.
+// CrystalGraphics' fabric node of THIS Minecraft. The producing task is wired in below: a bare path
+// serves whatever happens to sit on disk.
 val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
-val crystalGraphicsMod = fileTree(crystalGraphicsBuild.projectDir.resolve("runtime/mc/modern/fabric/build/libs")) {
-    include("crystalgraphics-mc1201-fabric-*.jar")
+val crystalGraphicsMod = fileTree(project.sameVersionNodeDir(crystalGraphicsBuild.projectDir, "fabric").resolve("build/libs")) {
+    include("crystalgraphics-fabric-*.jar")
     // `-thin` is the MERGE's input (J1) -- one loader's own classes and nothing else -- and Loom loaded
     // it as a second mod beside the full jar, where its entrypoint ran first and died on
     // NoClassDefFoundError: com/crystalgraphics/mc/shared/VariantBootstrap. The class is in the full jar
@@ -31,7 +35,17 @@ val crystalGraphicsMod = fileTree(crystalGraphicsBuild.projectDir.resolve("runti
 }
 
 tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
-    dependsOn(crystalGraphicsBuild.task(":runtime:mc:modern:fabric:remapJar"))
+    dependsOn(crystalGraphicsBuild.task("${project.sameVersionNodePath("fabric")}:remapJar"))
+}
+
+// LOOM READS A MOD FILE WHILE THE BUILD IS CONFIGURED, before the task above has run. On the first
+// build of a node the jar does not exist yet, so that run has no CrystalGraphics mod at all and dies at
+// the entrypoint with NoClassDefFoundError: com/crystalgraphics/mc/shared/VariantBootstrap. The next run
+// finds the jar. Said here, where it can be read, rather than left to that error.
+if (crystalGraphicsMod.isEmpty) {
+    logger.warn("[cgui] {}: CrystalGraphics' fabric mod jar is not built yet, so a dev run started by " +
+        "THIS invocation has no CrystalGraphics. It is built on the way; run again, or build " +
+        "{}:remapJar first.", path, project.sameVersionNodePath("fabric"))
 }
 
 dependencies {
@@ -191,7 +205,13 @@ tasks.named("ideaSyncTask") { dependsOn(extractMcSources) }
 //
 // Only runtimeClasspath: compileOnly still needs them, and forge/neoforge take theirs from a classpath
 // rather than a mod jar, so this is fabric's alone.
-configurations.named("runtimeClasspath") { exclude(group = "com.crystalgraphics") }
+// Both groups: its libraries, and its common NODE, whose coordinates are per branch
+// (`com.crystalgraphics.mc.modern.common`, @see cgbuildlogic.useNodeCoordinates) and so match no
+// exclude on `com.crystalgraphics` alone.
+configurations.named("runtimeClasspath") {
+    exclude(group = "com.crystalgraphics")
+    exclude(group = "com.crystalgraphics.mc.modern.common")
+}
 
 
 // The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact

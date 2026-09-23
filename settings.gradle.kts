@@ -109,22 +109,6 @@ include("runtime:mc:shared")
 // a client, in 2a10724, and it is a plain subproject. See plan/platform-mc1710.md 25.2.
 if (!embedded) include("runtime:mc:1710")
 
-// CrystalGraphics, and the ONE place it is included from.
-//
-// This file used to carry its own includeBuild("CrystalGraphics") block with three substitutions.
-// composite.settings.gradle.kts declares the same build with FIVE -- adding
-// com.crystalgraphics:crystalgraphics -> :runtime:mc:1710, which is how the loader resolves the CrystalGraphics
-// *mod* rather than its libraries. Two includeBuilds of one path is a configuration error, so the
-// smaller block is gone and this is the survivor: its list is a strict superset, and it is also where
-// integration.gradle.kts (applied by runtime/mc/1710/build.gradle.kts) reads its `submoduleMods` data from.
-// Applied even when embedded: :core takes com.crystalgraphics:core and :platform as compileOnly.
-apply(from = "gradle/module_integration/composite.settings.gradle.kts")
-
-//include(":CrystalGraphics")
-//include(":CrystalGraphics:core")
-//include(":CrystalGraphics:platform")
-//include(":CrystalGraphics:freetype-msdfgen-harfbuzz-bindings")
-
 // ── The MC 1.20.x loaders: one source tree, a node per Minecraft version (J11) ───────────────────
 //
 // Stonecutter, BRANCHED. Each loader is a branch -- `runtime/mc/modern/<loader>/` holds the shared
@@ -148,6 +132,26 @@ val modernNodes: Map<String, List<String>> =
         "neoforge" to listOf("1.20.4"),
         "fabric" to listOf("1.20.1"),
     )
+
+// Read by composite.settings.gradle.kts, which substitutes CrystalGraphics' node of each version --
+// so this table is declared before that script is applied.
+extra["cgModernNodes"] = modernNodes
+
+// CrystalGraphics, and the ONE place it is included from.
+//
+// This file used to carry its own includeBuild("CrystalGraphics") block with three substitutions.
+// composite.settings.gradle.kts declares the same build with FIVE -- adding
+// com.crystalgraphics:crystalgraphics -> :runtime:mc:1710, which is how the loader resolves the CrystalGraphics
+// *mod* rather than its libraries. Two includeBuilds of one path is a configuration error, so the
+// smaller block is gone and this is the survivor: its list is a strict superset, and it is also where
+// integration.gradle.kts (applied by runtime/mc/1710/build.gradle.kts) reads its `submoduleMods` data from.
+// Applied even when embedded: :core takes com.crystalgraphics:core and :platform as compileOnly.
+apply(from = "gradle/module_integration/composite.settings.gradle.kts")
+
+//include(":CrystalGraphics")
+//include(":CrystalGraphics:core")
+//include(":CrystalGraphics:platform")
+//include(":CrystalGraphics:freetype-msdfgen-harfbuzz-bindings")
 
 stonecutter {
     create("runtime:mc:modern") {
