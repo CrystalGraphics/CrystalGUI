@@ -183,6 +183,14 @@ PART	CategoryHeader	arrow	B	4	confirmed	leaf in every rule, scoped by an ancesto
 PART	CategoryHeader	category	B	0	confirmed	leaf in every rule
 PART	CategoryHeader	collapsed	C	5	confirmed	state adjective
 PART	CategoryHeader	name	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	ChainsTab	chain-figure	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	ChainsTab	chain-heading	A	0	proposed	leaf in every rule
+PART	ChainsTab	chain-name	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ChainsTab	chain-row	A	0	proposed	leaf in every rule
+PART	ChainsTab	empty	C	2	proposed	state adjective
+PART	ChainsTab	stall	A	0	proposed	leaf in every rule
+PART	ChainsTab	twisty	A	0	proposed	leaf in every rule
+PART	ChainsTab	wait	A	1	proposed	leaf in every rule
 PART	ClassChips	active	C	17	proposed	state adjective
 PART	ClassChips	chip	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	ClassChips	chip-hint	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
@@ -215,6 +223,12 @@ PART	ColorSelector	swatch-new	A	2	confirmed	leaf in every rule, scoped by an anc
 PART	ColorSelector	swatch-original	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ColorSelector	swatches	A	0	confirmed	leaf in every rule
 PART	ColorSelector	wheel	A	0	confirmed	leaf in every rule
+PART	CompareTab	better	A	0	proposed	leaf in every rule
+PART	CompareTab	cell	A	0	proposed	leaf in every rule
+PART	CompareTab	compare-bar	A	0	proposed	leaf in every rule
+PART	CompareTab	compare-side	A	0	proposed	leaf in every rule
+PART	CompareTab	compare-summary	A	0	proposed	leaf in every rule
+PART	CompareTab	worse	A	0	proposed	leaf in every rule
 PART	CompletionPopup	completion	B	0	confirmed	leaf in every rule
 PART	CompletionPopup	completion-deprecated	B	2	confirmed	a rule selects through it (2)
 PART	CompletionPopup	completion-detail	B	1	confirmed	leaf in every rule
@@ -256,6 +270,7 @@ PART	CornerBox	corner-link	A	3	proposed	leaf in every rule
 PART	CornerBox	corner-puck	A	2	proposed	leaf in every rule
 PART	CornerBox	side-puck	A	10	proposed	leaf in every rule
 PART	CountersTab	empty	C	2	proposed	state adjective
+PART	CountersTab	highlight	A	0	proposed	leaf in every rule
 PART	CreateMenu	insert-footer	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	CreateMenu	quick-input	B	25	proposed	a rule selects through it (24)
 PART	CreateMenu	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
@@ -333,9 +348,10 @@ PART	FlameChart	thread-label	A	0	proposed	leaf in every rule
 PART	FlameChart	thread-row	A	0	proposed	leaf in every rule
 PART	FrameProfilerPanel	absent	A	0	proposed	leaf in every rule
 PART	FrameProfilerPanel	badge	A	0	proposed	leaf in every rule
-PART	FrameProfilerPanel	caption	A	0	proposed	leaf in every rule
+PART	FrameProfilerPanel	caption	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	FrameProfilerPanel	figure	A	0	proposed	leaf in every rule
 PART	FrameProfilerPanel	following	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	FrameProfilerPanel	footer	A	0	proposed	leaf in every rule
 PART	FrameProfilerPanel	frame-header	A	0	proposed	leaf in every rule
 PART	FrameProfilerPanel	headline	A	0	proposed	leaf in every rule
 PART	FrameProfilerPanel	live	C	1	proposed	state adjective
@@ -397,6 +413,15 @@ PART	HierarchyPanel	rename	A	2	proposed	leaf in every rule, scoped by an ancesto
 PART	HierarchyPanel	selected	C	12	proposed	state adjective
 PART	HierarchyPanel	twisty	A	0	proposed	leaf in every rule
 PART	HierarchyToolWindow	hierarchy-window	A	0	proposed	leaf in every rule
+PART	HintsTab	empty	C	2	proposed	state adjective
+PART	HintsTab	hint	A	0	proposed	leaf in every rule
+PART	HintsTab	hint-code	A	0	proposed	leaf in every rule
+PART	HintsTab	hint-head	A	0	proposed	leaf in every rule
+PART	HintsTab	hint-link	A	0	proposed	leaf in every rule
+PART	HintsTab	hint-links	A	0	proposed	leaf in every rule
+PART	HintsTab	hint-meta	A	0	proposed	leaf in every rule
+PART	HintsTab	hint-ref	A	0	proposed	leaf in every rule
+PART	HintsTab	hint-text	A	0	proposed	leaf in every rule
 PART	HostSession	host-root	A	0	proposed	leaf in every rule
 PART	HoverHighlight	hover-highlight	A	0	proposed	leaf in every rule
 PART	InfoControl	info	B	2	confirmed	a rule selects through it (1)

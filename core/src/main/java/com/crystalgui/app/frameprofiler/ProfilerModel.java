@@ -4,8 +4,10 @@ import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceChannel;
+import com.crystalgraphics.trace.CgTraceHints;
 import com.crystalgraphics.trace.CgTraceSnapshot;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.trace.UiHints;
 import com.crystalgui.widget.display.CounterTrack;
 
 import javax.annotation.Nullable;
@@ -75,6 +77,14 @@ public final class ProfilerModel {
      * frames arrived, and a window left open would drift through the run on its own.</p>
      */
     public void refresh() {
+        try (CgTrace.Zone ignored = CgTrace.zone(VIEWER, REFRESH_ZONE)) {
+            refreshNow();
+        }
+    }
+
+    private static final int REFRESH_ZONE = CgTrace.name("viewer:refresh");
+
+    private void refreshNow() {
         long was = selected >= 0 && selected < snapshot.frames().size()
                 ? snapshot.frames().get(selected).index() : -1L;
         // FRAMES AND COUNTERS ONLY. A full snapshot copies every zone held, which at ten thousand frames
@@ -226,7 +236,7 @@ public final class ProfilerModel {
      */
     public boolean isCapturing() {
         for (String name : CgTrace.enabledNames()) {
-            if (!name.equals(CgTrace.TRACE.name())) return true;
+            if (!CgTrace.isEngineOwn(name)) return true;
         }
         return false;
     }
@@ -323,7 +333,13 @@ public final class ProfilerModel {
      */
     public void setEnabledChannels(Set<String> names) {
         frozenChannels = null;
-        CgTrace.enableOnly(names == null ? List.of() : new ArrayList<>(names));
+        List<String> chosen = names == null ? new ArrayList<>() : new ArrayList<>(names);
+        // THE ENGINE'S OWN STAY AS THEY ARE: the menu does not list them, so a set written from it would
+        // otherwise switch the viewer's own channel off whenever a box was ticked.
+        for (String name : CgTrace.enabledNames()) {
+            if (CgTrace.isEngineOwn(name) && !chosen.contains(name)) chosen.add(name);
+        }
+        CgTrace.enableOnly(chosen);
         onChanged.emit();
     }
 
@@ -403,6 +419,41 @@ public final class ProfilerModel {
         onChanged.emit();
     }
 
+    /**
+     * Selects the frame whose {@link CgFrameRecord#index()} is {@code frameIndex}, or the nearest one
+     * still held — how a frame named somewhere else (the readout, a report) is opened here.
+     */
+    public void selectFrameIndex(long frameIndex) {
+        List<CgFrameRecord> frames = snapshot.frames();
+        int best = -1;
+        long bestDistance = Long.MAX_VALUE;
+        for (int i = 0; i < frames.size(); i++) {
+            long distance = Math.abs(frames.get(i).index() - frameIndex);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = i;
+            }
+        }
+        if (best >= 0) selectFrame(best);
+    }
+
+    /** Selects the frame that {@code nanos} falls in, or the nearest one held. */
+    public void selectFrameAtNanos(long nanos) {
+        List<CgFrameRecord> frames = snapshot.frames();
+        int best = -1;
+        long bestDistance = Long.MAX_VALUE;
+        for (int i = 0; i < frames.size(); i++) {
+            CgFrameRecord frame = frames.get(i);
+            long distance = frame.contains(nanos) ? 0L
+                    : Math.min(Math.abs(frame.beginNanos() - nanos), Math.abs(frame.endNanos() - nanos));
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = i;
+            }
+        }
+        if (best >= 0) selectFrame(best);
+    }
+
     /** Steps by {@code by} frames — what an arrow key does. */
     public void stepFrame(int by) {
         selectFrame(selected < 0 ? 0 : selected + by);
@@ -460,11 +511,62 @@ public final class ProfilerModel {
         CgFrameRecord last = frames.get(hasRange() ? Math.min(rangeTo, frames.size() - 1) : selected);
         String key = first.index() + ":" + last.index();
         // ONE FETCH PER SELECTION, not per reader: the chart, both tables and the header each ask.
-        if (!key.equals(cachedZonesKey)) {
-            cachedZones = CgTrace.zonesBetween(first.beginNanos(), last.endNanos());
-            cachedZonesKey = key;
+        String wanted = key + ":" + showViewer;
+        if (!wanted.equals(cachedZonesKey)) {
+            List<CgTraceSnapshot.ZoneView> all = CgTrace.zonesBetween(first.beginNanos(), last.endNanos());
+            List<CgTraceSnapshot.ZoneView> shown = new ArrayList<>(all.size());
+            long viewer = 0L;
+            long reach = Long.MIN_VALUE;
+            for (CgTraceSnapshot.ZoneView zone : all) {
+                boolean own = VIEWER.name().equals(zone.channel());
+                // THE UNION, not the sum: the viewer's zones nest inside each other and inside the
+                // frame's, so their recorded depth says nothing; ordered by start, overlap is one pass.
+                if (own && !zone.isOpen()) {
+                    long from = Math.max(zone.startNanos(), reach);
+                    if (zone.endNanos() > from) viewer += zone.endNanos() - from;
+                    reach = Math.max(reach, zone.endNanos());
+                }
+                if (!own || showViewer) shown.add(zone);
+            }
+            cachedZones = shown;
+            cachedAllZones = all.size();
+            cachedViewerNanos = viewer;
+            cachedZonesKey = wanted;
         }
         return cachedZones;
+    }
+
+    /**
+     * The channel the window's OWN work is recorded on. Hidden from every table and the chart unless
+     * {@link #setShowViewer} says otherwise — and the hiding is stated, never silent.
+     */
+    public static final CgTraceChannel VIEWER = CgTrace.channel("trace.viewer");
+
+    private boolean showViewer;
+    private int cachedAllZones;
+    private long cachedViewerNanos;
+
+    public boolean isShowingViewer() {
+        return showViewer;
+    }
+
+    public void setShowViewer(boolean value) {
+        if (showViewer == value) return;
+        showViewer = value;
+        cachedHintsKey = null;
+        onChanged.emit();
+    }
+
+    /** The viewer's own work in the selection, per frame, whether it is shown or not. */
+    public long viewerNanosPerFrame() {
+        zonesOfSelection();
+        return cachedViewerNanos / Math.max(1, selectionFrameCount());
+    }
+
+    /** Every zone recorded in the selection, per frame, the viewer's own included. */
+    public int zonesPerFrame() {
+        zonesOfSelection();
+        return cachedAllZones / Math.max(1, selectionFrameCount());
     }
 
     @Nullable
@@ -493,5 +595,203 @@ public final class ProfilerModel {
     /** How many frames the tables below are speaking for. */
     public int selectionFrameCount() {
         return hasRange() ? rangeTo - rangeFrom + 1 : selected >= 0 ? 1 : 0;
+    }
+
+    // ── Hints ───────────────────────────────────────────────────────────────────────────────
+
+    static {
+        // THE RULES THE WINDOW RUNS are the ones the report runs; a window opened before UiTrace was ever
+        // touched would otherwise accuse nothing.
+        UiHints.install();
+    }
+
+    /**
+     * A hint as the window lists it: for a range, each rule once, with how many frames it fired in and
+     * the first of them.
+     *
+     * @param frames        frames in the selection it fired in; 1 for a single frame
+     * @param firstPosition where in {@link #frames()} it first fired — what a click on the row selects
+     */
+    public record HintRow(CgTraceHints.Hint hint, int frames, int firstPosition) {
+    }
+
+    /** The most frames a range is judged over, so a whole-ring drag cannot stall the window. */
+    public static final int MAX_HINT_FRAMES = 400;
+
+    /**
+     * What the selection is accused of — {@link UiHints}' rules over each frame in it.
+     *
+     * <p>Cached per selection: the chart, the tab and its title all ask, and a range runs every rule over
+     * every frame in it.</p>
+     */
+    public List<HintRow> hintsOfSelection() {
+        List<CgFrameRecord> frames = snapshot.frames();
+        if (frames.isEmpty() || selected < 0 || selected >= frames.size()) return List.of();
+        int from = hasRange() ? rangeFrom : selected;
+        int to = hasRange() ? Math.min(rangeTo, frames.size() - 1) : selected;
+        String key = frames.get(from).index() + ":" + frames.get(to).index();
+        if (key.equals(cachedHintsKey)) return cachedHints;
+
+        Map<String, HintRow> byCode = new LinkedHashMap<>();
+        for (int i = from; i <= to && i < from + MAX_HINT_FRAMES; i++) {
+            CgFrameRecord frame = frames.get(i);
+            List<CgTraceAggregate.Node> tree = CgTraceAggregate.tree(withoutViewer(CgTrace.zonesIn(frame)));
+            for (CgTraceHints.Hint hint : CgTraceHints.forFrame(frame, tree, summed(snapshot.countersIn(frame)))) {
+                HintRow was = byCode.get(hint.code());
+                byCode.put(hint.code(), was == null ? new HintRow(hint, 1, i)
+                        : new HintRow(was.hint(), was.frames() + 1, was.firstPosition()));
+            }
+        }
+        cachedHints = List.copyOf(byCode.values());
+        cachedHintsKey = key;
+        return cachedHints;
+    }
+
+    /** {@code zones} less the viewer's own, unless they are being shown. */
+    private List<CgTraceSnapshot.ZoneView> withoutViewer(List<CgTraceSnapshot.ZoneView> zones) {
+        if (showViewer) return zones;
+        List<CgTraceSnapshot.ZoneView> out = new ArrayList<>(zones.size());
+        for (CgTraceSnapshot.ZoneView zone : zones) {
+            if (!VIEWER.name().equals(zone.channel())) out.add(zone);
+        }
+        return out;
+    }
+
+    @Nullable
+    private String cachedHintsKey;
+    private List<HintRow> cachedHints = List.of();
+
+    /** Counters summed per name — what a hint rule is handed. */
+    static Map<String, Long> summed(List<CgTraceSnapshot.CounterView> counters) {
+        Map<String, Long> out = new LinkedHashMap<>();
+        for (CgTraceSnapshot.CounterView counter : counters) out.merge(counter.name(), counter.value(), Long::sum);
+        return out;
+    }
+
+    // ── Compare ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * One side of a comparison: frames by their INDEX, not their place in the ring, so a side stays the
+     * frames it was pinned to while the ring moves on.
+     */
+    public record Side(long fromIndex, long toIndex) {
+
+        public long count() {
+            return toIndex - fromIndex + 1;
+        }
+
+        public String label() {
+            return fromIndex == toIndex ? "#" + fromIndex : "#" + fromIndex + " \u2013 #" + toIndex;
+        }
+    }
+
+    /** A zone on both sides, as milliseconds per frame. {@code a} or {@code b} is 0 where it never ran. */
+    public record CompareRow(String name, @Nullable String source, double aMillis, double bMillis) {
+
+        public double delta() {
+            return bMillis - aMillis;
+        }
+    }
+
+    @Nullable
+    private Side sideA;
+    @Nullable
+    private Side sideB;
+
+    @Nullable
+    public Side sideA() {
+        return sideA;
+    }
+
+    @Nullable
+    public Side sideB() {
+        return sideB;
+    }
+
+    /** Pins the current selection — a frame or a range — as side A. */
+    public void pinA() {
+        sideA = selectionSide();
+        onChanged.emit();
+    }
+
+    /** Pins the current selection as side B. */
+    public void pinB() {
+        sideB = selectionSide();
+        onChanged.emit();
+    }
+
+    public void swapSides() {
+        Side a = sideA;
+        sideA = sideB;
+        sideB = a;
+        onChanged.emit();
+    }
+
+    @Nullable
+    private Side selectionSide() {
+        List<CgFrameRecord> frames = snapshot.frames();
+        if (frames.isEmpty() || selected < 0 || selected >= frames.size()) return null;
+        int from = hasRange() ? rangeFrom : selected;
+        int to = hasRange() ? Math.min(rangeTo, frames.size() - 1) : selected;
+        return new Side(frames.get(from).index(), frames.get(to).index());
+    }
+
+    /** The frames of {@code side} still in the ring; empty once they have been overwritten. */
+    public List<CgFrameRecord> framesOf(@Nullable Side side) {
+        if (side == null) return List.of();
+        List<CgFrameRecord> out = new ArrayList<>();
+        for (CgFrameRecord frame : snapshot.frames()) {
+            if (frame.index() >= side.fromIndex() && frame.index() <= side.toIndex()) out.add(frame);
+        }
+        return out;
+    }
+
+    /** Mean wall time per frame on {@code side}, or -1 when none of it is held. */
+    public double meanFrameMillis(@Nullable Side side) {
+        List<CgFrameRecord> frames = framesOf(side);
+        if (frames.isEmpty()) return -1d;
+        long total = 0L;
+        for (CgFrameRecord frame : frames) total += frame.wallNanos();
+        return total / 1_000_000d / frames.size();
+    }
+
+    /**
+     * Every zone on either side, as time per frame, biggest change first.
+     *
+     * <p>Per FRAME, not summed: two sides are rarely the same length, and totals over 40 frames against
+     * 12 would read as a regression that is only a longer range. Inclusive time, since a zone's cost to
+     * the frame is what it and everything under it took.</p>
+     */
+    public List<CompareRow> compare() {
+        if (sideA == null || sideB == null) return List.of();
+        Map<String, CgTraceAggregate.Stat> a = statsByName(framesOf(sideA));
+        Map<String, CgTraceAggregate.Stat> b = statsByName(framesOf(sideB));
+        int aFrames = Math.max(1, framesOf(sideA).size());
+        int bFrames = Math.max(1, framesOf(sideB).size());
+        Set<String> names = new LinkedHashSet<>(a.keySet());
+        names.addAll(b.keySet());
+        List<CompareRow> rows = new ArrayList<>();
+        for (String name : names) {
+            CgTraceAggregate.Stat left = a.get(name);
+            CgTraceAggregate.Stat right = b.get(name);
+            String source = left != null ? left.source() : right.source();
+            rows.add(new CompareRow(name, source,
+                    left == null ? 0d : left.totalMillis() / aFrames,
+                    right == null ? 0d : right.totalMillis() / bFrames));
+        }
+        rows.sort((x, y) -> Double.compare(Math.abs(y.delta()), Math.abs(x.delta())));
+        return rows;
+    }
+
+    private static Map<String, CgTraceAggregate.Stat> statsByName(List<CgFrameRecord> frames) {
+        Map<String, CgTraceAggregate.Stat> out = new LinkedHashMap<>();
+        if (frames.isEmpty()) return out;
+        List<CgTraceSnapshot.ZoneView> zones = new ArrayList<>();
+        for (CgTraceSnapshot.ZoneView zone : CgTrace.zonesBetween(frames.get(0).beginNanos(),
+                frames.get(frames.size() - 1).endNanos())) {
+            if (!VIEWER.name().equals(zone.channel())) zones.add(zone);
+        }
+        for (CgTraceAggregate.Stat stat : CgTraceAggregate.byCost(zones)) out.put(stat.name(), stat);
+        return out;
     }
 }

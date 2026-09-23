@@ -31,5 +31,7 @@ public final class Applications implements ApplicationKinds {
         // editor's and a game client's, and a profiler reachable only from a harness scene can see
         // neither. Every desktop that has this jar can open it.
         applications.install(FrameProfiler.KIND);
+        // Its command and the readout's door, with the kind: both are how it is reached.
+        FrameProfiler.register();
     }
 }

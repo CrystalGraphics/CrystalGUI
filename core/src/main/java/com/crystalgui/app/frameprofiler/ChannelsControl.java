@@ -80,7 +80,7 @@ public class ChannelsControl extends UIElement {
         // the engine whenever anything else is; offering it as a box made every summary start with a
         // name that means nothing to the reader and could not usefully be unticked.
         List<String> names = new ArrayList<>(bound.channelNames());
-        names.remove(CgTrace.TRACE.name());
+        names.removeIf(CgTrace::isEngineOwn);
         // THE ENGINE'S COUNT, before `trace` is taken out: readBack compares against channelNames(),
         // and measuring the filtered list made the two differ by one forever -- so the control was
         // destroyed and rebuilt on every render, closing an open menu four times a second.

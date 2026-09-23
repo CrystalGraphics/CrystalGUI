@@ -1,5 +1,7 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgui.core.command.Command;
+import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.core.window.WindowPolicy;
@@ -10,6 +12,8 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.display.FrameStatsOverlay;
 
 import javax.annotation.Nullable;
 
@@ -40,6 +44,67 @@ public final class FrameProfiler {
 
     /** The window key, so a second open raises the first rather than stacking another. */
     public static final String WINDOW_KEY = "profiler:main";
+
+    /** Opens the profiler, or closes it when it is already the window in front. */
+    public static final String OPEN_COMMAND = "profiler.open";
+
+    private static boolean registered;
+
+    /**
+     * The command, and the frame readout's door — idempotent, from the application layer's
+     * {@code ApplicationKinds} service, because the desktop may not name an application.
+     *
+     * <p>F9 everywhere: the harness scene's own key for it, so the gesture learned profiling a scene is
+     * the gesture in game, beside F7 and F8 for the readout.</p>
+     */
+    public static synchronized void register() {
+        if (registered) return;
+        registered = true;
+        CommandRegistry.global().register(Command.of(OPEN_COMMAND, "Frame Profiler")
+                .binding("F9")
+                .run(context -> {
+                    UIElement source = UIElement.sourceOf(context);
+                    Desktop desktop = source == null ? null : Desktop.ifPresent(source.document());
+                    if (desktop == null) return;
+                    WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
+                    if (existing != null && existing == desktop.activeWindow()) existing.requestClose();
+                    else openOn(desktop);
+                })
+                .enabledWhen(context -> {
+                    UIElement source = UIElement.sourceOf(context);
+                    return source != null && Desktop.ifPresent(source.document()) != null;
+                }));
+        // THE READOUT'S SPARKLINE opens the frame it shows. The readout is the thing people already look
+        // at, so it should be the door.
+        FrameStatsOverlay.onOpenFrame(FrameProfiler::openAt);
+    }
+
+    /**
+     * Opens the profiler paused on the frame with {@code frameIndex}, or on the nearest one still held.
+     *
+     * <pre>{@code
+     * FrameProfiler.openAt(document, 412);
+     * }</pre>
+     */
+    @Nullable
+    public static WindowFrame openAt(@Nullable UIDocument document, long frameIndex) {
+        WindowFrame window = open(document);
+        if (window == null) return null;
+        for (UIElement each : window.composedSubtree()) {
+            if (each instanceof FrameProfilerPanel panel) {
+                panel.model().setFollowing(false);
+                panel.model().refresh();
+                panel.model().selectFrameIndex(frameIndex);
+                break;
+            }
+        }
+        return window;
+    }
+
+    /** Testing seam: {@code CommandRegistry.resetForTesting()} drops the command, not this flag. */
+    public static synchronized void resetForTesting() {
+        registered = false;
+    }
 
     private FrameProfiler() {
     }
@@ -82,7 +147,9 @@ public final class FrameProfiler {
         if (config != null) ProfilerSettings.useStorage(config.scoped(StorageLayout.APPS).scoped(ID));
         WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
         if (existing != null) {
-            desktop.raise(existing);
+            // ACTIVATE, not raise: a closed profiler is HIDDEN (HIDE_ON_CLOSE), and raising a hidden window
+            // reorders it and leaves it hidden -- the second F9 did nothing at all.
+            desktop.activate(existing, true);
             return existing;
         }
         WindowFrame frame = new WindowFrame("Frame Profiler");
@@ -135,7 +202,7 @@ public final class FrameProfiler {
         @Override
         public void activate() {
             Desktop desktop = Desktop.ifPresent(window.document());
-            if (desktop != null) desktop.raise(window);
+            if (desktop != null) desktop.activate(window, true);
         }
 
         @Override

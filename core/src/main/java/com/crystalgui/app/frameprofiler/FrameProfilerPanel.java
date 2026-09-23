@@ -4,6 +4,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
+import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
@@ -105,6 +106,12 @@ public class FrameProfilerPanel extends UIElement {
     private final ZonesTab zones = new ZonesTab();
     private final CallTreeTab callers = new CallTreeTab();
     private final CountersTab counters = new CountersTab();
+    private final HintsTab hints = new HintsTab();
+    private final ChainsTab chains = new ChainsTab();
+    private final CompareTab compare = new CompareTab(model);
+    /** What the Compare tab was last built for — it re-reads only when a pinned side changes. */
+    @Nullable
+    private String shownCompare;
 
     /** What the chart and the tables were last built for — a rebuild happens only when this moves. */
     @Nullable
@@ -133,6 +140,7 @@ public class FrameProfilerPanel extends UIElement {
         split.second(buildTabs());
         split.setPercentage(58f);
         appendStructural(split);
+        appendStructural(buildFooter());
 
         // EVERY SELECTION PAUSES, and pauses FIRST: the refresh a live window runs would otherwise
         // move the selection straight back to the newest frame on the next tick.
@@ -160,6 +168,25 @@ public class FrameProfilerPanel extends UIElement {
         counters.onViewChanged(() -> {
             CounterTrack moved = counters.rows().isEmpty() ? null : counters.rows().get(0);
             if (moved != null) strip.showView(moved.viewFrom(), moved.isZoomed() ? moved.visible() : 0d);
+        });
+        // A HINT'S LINK GOES SOMEWHERE: a zone is selected and shown in its table, a counter's track is
+        // opened, and a range row can take the reader to the first frame it fired in.
+        hints.onZone(name -> {
+            model.setFollowing(false);
+            model.selectZone(name);
+            tabs.selectTab(zonesTab);
+        });
+        hints.onCounter(name -> {
+            tabs.selectTab(countersTab);
+            counters.highlight(name);
+        });
+        chains.onStartSelected(nanos -> {
+            model.setFollowing(false);
+            model.selectFrameAtNanos(nanos);
+        });
+        hints.onFrame(position -> {
+            model.setFollowing(false);
+            model.selectFrame(position);
         });
         counters.onFrameSelected(index -> {
             model.setFollowing(false);
@@ -190,6 +217,76 @@ public class FrameProfilerPanel extends UIElement {
     }
 
     private float sinceRefresh;
+
+    // ── The footer: what the window is not showing, and what tracing costs ─────────────────
+
+    public static final String FOOTER_CLASS = "__footer__";
+
+    private final UIElement footer = new UIElement();
+    private final UIText footerText = new UIText("");
+    private final Button viewerToggle = new Button("Show");
+
+    private UIElement buildFooter() {
+        footer.addClass(FOOTER_CLASS);
+        footerText.addClass(CAPTION_CLASS);
+        viewerToggle.attachListener(() -> model.setShowViewer(!model.isShowingViewer()));
+        footer.append(footerText, viewerToggle);
+        return footer;
+    }
+
+    public UIText footerText() {
+        return footerText;
+    }
+
+    public Button viewerToggle() {
+        return viewerToggle;
+    }
+
+    /**
+     * A profiler inside the application it profiles costs something, and says what: its own work, hidden
+     * or shown; what the instrumentation itself costs a frame; and anything the log writer dropped. The
+     * two ways a trace can be quietly wrong are both on screen.
+     */
+    private void renderFooter() {
+        StringBuilder text = new StringBuilder();
+        text.append(model.isShowingViewer() ? "Showing" : "Hiding").append(" the viewer's own work: ")
+                .append(shortMs(model.viewerNanosPerFrame())).append(" a frame (trace.viewer)");
+        int zones = model.zonesPerFrame();
+        text.append("  \u00b7  tracing \u2248 ").append(shortMicros(zones * zoneCostNanos()))
+                .append(" a frame (").append(zones).append(" zones)");
+        long dropped = CgTraceLog.dropped();
+        if (dropped > 0L) text.append("  \u00b7  ").append(dropped).append(" log lines dropped");
+        if (!text.toString().equals(footerText.getText())) footerText.setText(text.toString());
+        String label = model.isShowingViewer() ? "Hide" : "Show";
+        if (!label.equals(viewerToggle.getText())) viewerToggle.setText(label);
+    }
+
+    /**
+     * What one enabled zone costs, measured once on this machine: two clock reads, which is what the
+     * engine's own gate says a zone is, plus the array writes between them — estimated as the clock pair.
+     * An ESTIMATE, and the footer says so with its "about".
+     */
+    private static long zoneCostNanos() {
+        long cost = zoneCost;
+        if (cost > 0L) return cost;
+        long sink = 0L;
+        long start = System.nanoTime();
+        for (int i = 0; i < CLOCK_SAMPLES; i++) sink += System.nanoTime();
+        long each = Math.max(1L, (System.nanoTime() - start) / CLOCK_SAMPLES);
+        // KEPT, or the JIT may drop the reads being timed.
+        clockSink = sink;
+        zoneCost = each * 2L;
+        return zoneCost;
+    }
+
+    private static final int CLOCK_SAMPLES = 20_000;
+    private static long zoneCost;
+    private static volatile long clockSink;
+
+    private static String shortMicros(long nanos) {
+        return nanos >= 1_000_000L ? String.format("%.2f ms", nanos / 1_000_000d)
+                : String.format("%.0f \u00b5s", nanos / 1_000d);
+    }
 
     /** How many frames the strip showed last render; fewer now means the recording was cleared. */
     private int shownFrames;
@@ -234,6 +331,7 @@ public class FrameProfilerPanel extends UIElement {
         scrollbar.setDisplayed(!open);
         header.setDisplayed(!open);
         split.setDisplayed(!open);
+        footer.setDisplayed(!open);
         if (settingsPage != null) settingsPage.setDisplayed(open);
         if (!open) {
             // WHAT CHANGED WHILE IT WAS OPEN: the budget moves the strip's lines, a resize empties the ring.
@@ -326,13 +424,48 @@ public class FrameProfilerPanel extends UIElement {
     }
 
     private UIElement buildTabs() {
+        // HINTS FIRST: it is the answer, and the other tabs are the working for it.
+        hintsTab = tabs.addTab("Hints");
+        hintsTab.content().append(hints);
         zonesTab = tabs.addTab("Zones");
         zonesTab.content().append(zones);
         callTreeTab = tabs.addTab("Call tree");
         callTreeTab.content().append(callers);
         countersTab = tabs.addTab("Counters");
         countersTab.content().append(counters);
+        chainsTab = tabs.addTab("Chains");
+        chainsTab.content().append(chains);
+        compareTab = tabs.addTab("Compare");
+        compareTab.content().append(compare);
         return tabs;
+    }
+
+    private Tab hintsTab;
+    private Tab chainsTab;
+    private Tab compareTab;
+
+    public Tab chainsTab() {
+        return chainsTab;
+    }
+
+    public ChainsTab chains() {
+        return chains;
+    }
+
+    public Tab hintsTab() {
+        return hintsTab;
+    }
+
+    public Tab compareTab() {
+        return compareTab;
+    }
+
+    public HintsTab hints() {
+        return hints;
+    }
+
+    public CompareTab compare() {
+        return compare;
     }
 
     private Tab zonesTab;
@@ -387,6 +520,19 @@ public class FrameProfilerPanel extends UIElement {
     // ── Rendering the whole window from the model ───────────────────────────────────────────
 
     private void render() {
+        // THE VIEWER'S OWN WORK, on its own channel: recorded exactly while anything else is, so it is in
+        // the ring beside what it measures -- and hidden from every view unless asked for, which the
+        // footer says.
+        boolean viewer = model.isCapturing();
+        if (CgTrace.isEnabled(ProfilerModel.VIEWER) != viewer) CgTrace.setEnabled(ProfilerModel.VIEWER, viewer);
+        try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, RENDER_ZONE)) {
+            renderNow();
+        }
+    }
+
+    private static final int RENDER_ZONE = CgTrace.name("viewer:render");
+
+    private void renderNow() {
         List<CgFrameRecord> frames = model.frames();
         long budget = budgetNanos();
 
@@ -467,6 +613,9 @@ public class FrameProfilerPanel extends UIElement {
             refreshTables();
         }
         counters.show(model.counterSeries(), model.selectedIndex(), comparable);
+        refreshCompare();
+        chains.show(model.snapshot().spans());
+        renderFooter();
         counters.showView(strip.viewFrom(), strip.isZoomed() ? strip.visible() : 0d);
     }
 
@@ -474,6 +623,19 @@ public class FrameProfilerPanel extends UIElement {
         shownZone = model.selectedZone();
         zones.show(model.statsOfSelection(), shownZone, selectionWallNanos());
         callers.show(model.treeOfSelection(), shownZone);
+        List<ProfilerModel.HintRow> found = model.hintsOfSelection();
+        hints.show(found, model.selectionFrameCount());
+        // THE COUNT ON THE TAB, so a hint is seen from whichever tab is open.
+        hintsTab.setText(found.isEmpty() ? "Hints" : "Hints (" + found.size() + ")");
+    }
+
+    /** Rebuilds Compare when a pinned side, or how much of it the ring still holds, has changed. */
+    private void refreshCompare() {
+        String key = model.sideA() + "|" + model.sideB() + "|" + model.framesOf(model.sideA()).size()
+                + "|" + model.framesOf(model.sideB()).size();
+        if (key.equals(shownCompare)) return;
+        shownCompare = key;
+        compare.show();
     }
 
     /** The wall time the tables' percentages are OF: the frame, or the whole range. */
