@@ -31,11 +31,17 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
-*///?} else {
-import net.minecraft.network.FriendlyByteBuf;
+*///?} elif >=1.20.4 {
+/*import net.minecraft.network.FriendlyByteBuf;
 import net.neoforged.neoforge.event.TickEvent;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlerEvent;
 import net.neoforged.neoforge.network.handling.PlayPayloadContext;
+*///?} else {
+import net.minecraft.network.FriendlyByteBuf;
+import net.neoforged.neoforge.event.TickEvent;
+import net.neoforged.neoforge.network.NetworkEvent;
+import net.neoforged.neoforge.network.NetworkRegistry;
+import net.neoforged.neoforge.network.simple.SimpleChannel;
 //?}
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.MODID;
@@ -74,9 +80,9 @@ public final class CrystalGUINeoForge implements VariantEntry {
     /**
      * The NeoForge transport: bytes in, bytes out. Framing and routing are {@code net.wire}'s.
      *
-     * <p>Two payload APIs: 1.20.4's registrar keyed on an id, and 1.20.5's typed payloads with a
-     * {@code StreamCodec}. NeoForge splits an oversized payload itself on both, so one frame may exceed
-     * vanilla's 32 KiB serverbound cap.</p>
+     * <p>Three payload APIs: 20.2-20.3's Forge-shaped {@code SimpleChannel}, 1.20.4's registrar keyed on
+     * an id, and 1.20.5's typed payloads with a {@code StreamCodec}. NeoForge splits an oversized payload
+     * itself on all three, so one frame may exceed vanilla's 32 KiB serverbound cap.</p>
      */
     public static final class Network implements CgNetworkChannel {
 
@@ -118,8 +124,8 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 INSTANCE.inbound.accept(sender, frame.bytes());
             });
         }
-        *///?} else {
-        /** One payload carrying a frame. */
+        *///?} elif >=1.20.4 {
+        /*// One payload carrying a frame.
         public record Frame(byte[] bytes) implements CustomPacketPayload {
 
             public Frame(FriendlyByteBuf buf) {
@@ -137,7 +143,7 @@ public final class CrystalGUINeoForge implements VariantEntry {
             }
         }
 
-        /** Wired to RegisterPayloadHandlerEvent on the mod bus. */
+        // Wired to RegisterPayloadHandlerEvent on the mod bus.
         public static void register(RegisterPayloadHandlerEvent event) {
             event.registrar(MODID)
                     .versioned(VERSION)
@@ -154,6 +160,27 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 INSTANCE.inbound.accept(sender, frame.bytes());
             });
         }
+        *///?} else {
+        private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
+                .named(ID)
+                .networkProtocolVersion(() -> VERSION)
+                .clientAcceptedVersions(VERSION::equals)
+                .serverAcceptedVersions(VERSION::equals)
+                .simpleChannel();
+
+        /** Called once from the entry point, before anything can send: 20.2 has no registration event. */
+        public static void register() {
+            CHANNEL.registerMessage(0, byte[].class,
+                    (frame, buf) -> buf.writeByteArray(frame),
+                    FriendlyByteBuf::readByteArray,
+                    Network::receive);
+        }
+
+        private static void receive(byte[] frame, NetworkEvent.Context ctx) {
+            // enqueueWork: the handler runs on the network thread, and the tree is the frame thread's.
+            ctx.enqueueWork(() -> INSTANCE.inbound.accept(ctx.getSender(), frame));
+            ctx.setPacketHandled(true);
+        }
         //?}
 
         @Override
@@ -165,8 +192,10 @@ public final class CrystalGUINeoForge implements VariantEntry {
         public void sendToServer(byte[] frame) {
             //? if >=1.20.5 {
             /*PacketDistributor.sendToServer(new Frame(frame));
+            *///?} elif >=1.20.4 {
+            /*PacketDistributor.SERVER.noArg().send(new Frame(frame));
             *///?} else {
-            PacketDistributor.SERVER.noArg().send(new Frame(frame));
+            CHANNEL.sendToServer(frame);
             //?}
         }
 
@@ -175,8 +204,10 @@ public final class CrystalGUINeoForge implements VariantEntry {
             if (!(player instanceof ServerPlayer serverPlayer)) return;
             //? if >=1.20.5 {
             /*PacketDistributor.sendToPlayer(serverPlayer, new Frame(frame));
+            *///?} elif >=1.20.4 {
+            /*PacketDistributor.PLAYER.with(serverPlayer).send(new Frame(frame));
             *///?} else {
-            PacketDistributor.PLAYER.with(serverPlayer).send(new Frame(frame));
+            CHANNEL.send(PacketDistributor.PLAYER.with(() -> serverPlayer), frame);
             //?}
         }
 
@@ -199,7 +230,11 @@ public final class CrystalGUINeoForge implements VariantEntry {
         private Events() {}
 
         static void register(IEventBus modBus) {
-            modBus.addListener(Network::register);
+            //? if >=1.20.4 {
+            /*modBus.addListener(Network::register);
+            *///?} else {
+            Network.register();
+            //?}
 
             NeoForge.EVENT_BUS.addListener(Events::onServerStarting);
             NeoForge.EVENT_BUS.addListener(Events::onServerStarted);
