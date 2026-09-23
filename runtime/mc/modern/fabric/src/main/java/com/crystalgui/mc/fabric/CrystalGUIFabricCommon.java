@@ -118,8 +118,9 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
             //? if >=1.20.5 {
             /*PayloadTypeRegistry.playC2S().register(Frame.TYPE, Frame.CODEC);
             PayloadTypeRegistry.playS2C().register(Frame.TYPE, Frame.CODEC);
+            // Through the player: Context.server() is fabric-api 0.99+, and 1.20.5's stops at 0.97.
             ServerPlayNetworking.registerGlobalReceiver(Frame.TYPE, (frame, context) ->
-                    context.server().execute(() -> INSTANCE.inbound.accept(context.player(), frame.bytes())));
+                    context.player().getServer().execute(() -> INSTANCE.inbound.accept(context.player(), frame.bytes())));
             *///?} else {
             ServerPlayNetworking.registerGlobalReceiver(ID, (server, player, handler, buf, responder) -> {
                 byte[] frame = buf.readByteArray();
