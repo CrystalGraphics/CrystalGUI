@@ -15,9 +15,17 @@ import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 
 import net.minecraft.client.Minecraft;
+//? if >=1.20 {
 import net.minecraft.client.gui.GuiGraphics;
+//?} else {
+/*import com.mojang.blaze3d.vertex.PoseStack;
+*///?}
 import net.minecraft.client.gui.screens.Screen;
+//? if >=1.19 {
 import net.minecraft.network.chat.Component;
+//?} else {
+/*import net.minecraft.network.chat.TextComponent;
+*///?}
 //? if >=1.21.9 {
 /*import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
@@ -36,7 +44,11 @@ import net.minecraft.client.input.MouseButtonEvent;
 public final class CgUiScreen extends Screen {
 
     public CgUiScreen() {
+        //? if >=1.19 {
         super(Component.literal("CrystalGUI"));
+        //?} else {
+        /*super(new TextComponent("CrystalGUI"));
+        *///?}
     }
 
     /**
@@ -120,7 +132,11 @@ public final class CgUiScreen extends Screen {
     }
 
     @Override
+    //? if >=1.20 {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    //?} else {
+    /*public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+    *///?}
         HostSession session = HostSession.session();
         if (!session.isBuilt()) return;
         // The engine initialises on the first WORLD render and this screen also opens over the title
@@ -141,10 +157,15 @@ public final class CgUiScreen extends Screen {
         // flushed only after render() returns, so anything Minecraft still had pending would composite ON
         // TOP of the immediate-mode GL below rather than under it. The symptom is the whole UI reading one
         // shade darker, with nothing in the UI itself to blame. 1.21.6 records GUI draws and renders them
-        // at the end of the frame, so there is no batch to drain here.
-        //? if <1.21.6 {
+        // at the end of the frame, so there is no batch to drain here. Before 1.20 the batch is the game's
+        // own buffer source, which GuiGraphics.flush wraps.
+        //? if >=1.21.6 {
+        /*// (nothing)
+        *///?} elif >=1.20 {
         graphics.flush();
-        //?}
+        //?} else {
+        /*Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
+        *///?}
 
         session.paint(DesktopPresentation.DESKTOP, delta, PAINT_HOST);
     }

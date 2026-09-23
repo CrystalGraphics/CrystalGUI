@@ -141,12 +141,17 @@ public final class WorkspaceHostModern {
         public boolean isOwner(String actorId) {
             MinecraftServer server = currentServer;
             if (server == null) return false;
-            GameProfile owner = server.getSingleplayerProfile();
+            // 1.19 made the single-player owner a profile; before it is just a name.
             //? if >=1.21.9 {
-            /*return owner != null && owner.name() != null && owner.name().equalsIgnoreCase(actorId);
-            *///?} else {
+            /*GameProfile owner = server.getSingleplayerProfile();
+            return owner != null && owner.name() != null && owner.name().equalsIgnoreCase(actorId);
+            *///?} elif >=1.19 {
+            GameProfile owner = server.getSingleplayerProfile();
             return owner != null && owner.getName() != null && owner.getName().equalsIgnoreCase(actorId);
-            //?}
+            //?} else {
+            /*String owner = server.getSingleplayerName();
+            return owner != null && owner.equalsIgnoreCase(actorId);
+            *///?}
         }
 
         @Override

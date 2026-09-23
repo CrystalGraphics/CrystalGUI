@@ -2,9 +2,15 @@
 
 ## Target Versions
 
-MC 1.20–1.21.11 / MinecraftForge 46–61 — a node each for 1.20.1, 1.20.2, 1.20.4, 1.20.6, 1.21.1,
-1.21.3, 1.21.4, 1.21.5, 1.21.6 (also 1.21.7), 1.21.8, 1.21.10 (also 1.21.9) and 1.21.11, pinned in `versions/<version>/gradle.properties`.
-Forge 1.21 is refused (Forge 51 has no HUD event); Forge published nothing for 1.20.5 or 1.21.2.
+MC 1.17.1–1.21.11 / MinecraftForge 37–61 — a node each for 1.17.1, 1.18.2 (also 1.18, 1.18.1), 1.19.2
+(also 1.19, 1.19.1), 1.19.3, 1.19.4, 1.20.1, 1.20.2, 1.20.4, 1.20.6, 1.21.1, 1.21.3, 1.21.4, 1.21.5, 1.21.6
+(also 1.21.7), 1.21.8, 1.21.10 (also 1.21.9) and 1.21.11, pinned in `versions/<version>/gradle.properties`.
+Forge 1.21 is refused (Forge 51 has no HUD event); Forge published nothing for 1.17, 1.20.5 or 1.21.2.
+
+**Three API eras below 1.19**, each a directive in `CrystalGUIForge`: Forge 37 (1.17.1) names screen
+events `GuiScreenEvent.*Event` and keeps servers and networking in `fmlserverevents`/`fmllegacy`;
+Forge 38-40 (1.18.x) name them `ScreenEvent.*Event`; both register keys through `ClientRegistry` in
+client setup and paint the HUD on `RenderGameOverlayEvent.Post` for `ElementType.ALL`.
 
 **Forge 56-57 (1.21.6-1.21.7) have no HUD event either**, and there the HUD is a node mixin on
 `Gui.render` (`mixin/HudHook`, gated by `CrystalGuiForgeMixins` in `runtime/mc/shared`). From 1.21.6 Forge

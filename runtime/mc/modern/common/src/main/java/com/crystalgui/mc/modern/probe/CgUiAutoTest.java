@@ -1,7 +1,10 @@
 package com.crystalgui.mc.modern.probe;
 
 import java.io.File;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -10,9 +13,13 @@ import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.AutoTest;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.network.chat.Component;
+//? if >=1.19 {
 import net.minecraft.client.gui.screens.worldselection.WorldOpenFlows;
+//?}
 
 /**
  * The MC 1.20.x half of {@link AutoTest}: load a world, open the desktop, photograph it, quit.
@@ -157,19 +164,22 @@ public final class CgUiAutoTest {
             return;
         }
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST loading world '{}'", name);
-        WorldOpenFlows flows = mc.createWorldOpenFlows();
         // COMPILED on both sides of the break, never reflective: each thin jar is remapped as it is
         // built, so this becomes the SRG member on Forge and the intermediary one on Fabric, where a
         // lookup by Mojang name is a string no remapper rewrites. The Runnable is the GIVE-UP path,
         // taken when the save cannot be read, not a completion callback. `openWorld` arrived with
-        // 1.20.5's world-recovery flow (read on 1.20.6); `checkForBackupAndLoad` is 1.20.3-1.20.4.
+        // 1.20.5's world-recovery flow (read on 1.20.6); `checkForBackupAndLoad` is 1.20.3-1.20.4;
+        // WorldOpenFlows itself is 1.19's, and before it Minecraft loads a save directly.
         //? if >=1.20.5 {
-        /*flows.openWorld(name, () -> { });
+        /*mc.createWorldOpenFlows().openWorld(name, () -> { });
         *///?} elif >=1.20.3 {
-        /*flows.checkForBackupAndLoad(name, () -> { });
-        *///?} else {
+        /*mc.createWorldOpenFlows().checkForBackupAndLoad(name, () -> { });
+        *///?} elif >=1.19 {
+        WorldOpenFlows flows = mc.createWorldOpenFlows();
         flows.loadLevel(mc.screen, name);
-        //?}
+        //?} else {
+        /*mc.loadLevel(name);
+        *///?}
     }
 
     /**
@@ -206,11 +216,7 @@ public final class CgUiAutoTest {
         // The callback fires once the PNG is written, on every version: encoded on the IO pool through
         // 1.21.4, and from 1.21.5 read back from the GPU on a later frame first.
         // 1.21.6 added a downscale factor; 1 is the frame as drawn.
-        //? if >=1.21.6 {
-        /*Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), 1, message -> {
-        *///?} else {
-        Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), message -> {
-        //?}
+        Consumer<Component> onWritten = message -> {
             try {
                 boolean moved = written.equals(file);
                 if (!moved && written.isFile()) {
@@ -229,6 +235,38 @@ public final class CgUiAutoTest {
             } finally {
                 PENDING_CAPTURES.decrementAndGet();
             }
-        });
+        };
+        //? if >=1.21.6 {
+        /*Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), 1, onWritten);
+        *///?} else {
+        try {
+            Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), onWritten);
+        } catch (NoSuchMethodError before1171) {
+            grabWithSize(gameDir, file.getName(), mc.getMainRenderTarget(), onWritten);
+        }
+        //?}
+    }
+
+    /**
+     * 1.17's grab, which also takes the frame's size: the node that claims 1.17 is compiled against
+     * 1.17.1, which dropped it. Found by parameter shape, since its runtime name is an intermediary one.
+     */
+    private static void grabWithSize(File gameDir, String name, RenderTarget target, Consumer<Component> done) {
+        for (Method method : Screenshot.class.getDeclaredMethods()) {
+            Class<?>[] p = method.getParameterTypes();
+            // Public: a private helper of the same shape sits beside it.
+            if (Modifier.isStatic(method.getModifiers()) && Modifier.isPublic(method.getModifiers())
+                    && p.length == 6 && p[0] == File.class
+                    && p[1] == String.class && p[2] == int.class && p[3] == int.class
+                    && p[4].isInstance(target) && p[5] == Consumer.class) {
+                try {
+                    method.invoke(null, gameDir, name, target.width, target.height, target, done);
+                    return;
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException("CGUI AUTOTEST could not take a screenshot", e);
+                }
+            }
+        }
+        throw new IllegalStateException("CGUI AUTOTEST found no Screenshot.grab this version answers");
     }
 }

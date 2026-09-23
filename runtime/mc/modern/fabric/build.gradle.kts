@@ -73,6 +73,12 @@ dependencies {
     // fail at class load rather than at resolution. Local, because this is how a dev run finds
     // CrystalGraphics and not something a published POM should demand.
     modLocalRuntime(crystalGraphicsMod)
+
+    // Minecraft ships JOML from 1.19.3; below it the shipped jar's companion supplies it, and a dev run
+    // takes it as a library.
+    val mcOrdinal = property("mc.version").toString().split('.').map { it.toIntOrNull() ?: 0 }
+        .let { v -> v.getOrElse(1) { 0 } * 1000 + v.getOrElse(2) { 0 } }
+    if (mcOrdinal < 19_003) runtimeOnly("org.joml:joml-jdk8:1.10.1")
 }
 
 // Per NODE: relative to versions/<version>/, so two versions never share a world.
