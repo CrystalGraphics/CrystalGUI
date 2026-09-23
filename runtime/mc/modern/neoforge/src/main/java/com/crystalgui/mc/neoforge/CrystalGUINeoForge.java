@@ -23,6 +23,10 @@ import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+//? if >=1.21.7 {
+/*import net.neoforged.neoforge.client.network.ClientPacketDistributor;
+import net.neoforged.neoforge.client.network.event.RegisterClientPayloadHandlersEvent;
+*///?}
 //? if >=1.20.5 {
 /*import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -190,7 +194,10 @@ public final class CrystalGUINeoForge implements VariantEntry {
 
         @Override
         public void sendToServer(byte[] frame) {
-            //? if >=1.20.5 {
+            // NeoForge 21.7 moved the client's send to a client-only class.
+            //? if >=1.21.7 {
+            /*ClientPacketDistributor.sendToServer(new Frame(frame));
+            *///?} elif >=1.20.5 {
             /*PacketDistributor.sendToServer(new Frame(frame));
             *///?} elif >=1.20.4 {
             /*PacketDistributor.SERVER.noArg().send(new Frame(frame));
@@ -297,6 +304,11 @@ public final class CrystalGUINeoForge implements VariantEntry {
 
             static void register(IEventBus modBus) {
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
+                // NeoForge 21.7 refuses to load a clientbound payload with no client-side handler, and
+                // the common registrar's no longer counts as one.
+                //? if >=1.21.7 {
+                /*modBus.addListener(ClientBus::onRegisterClientPayloads);
+                *///?}
 
                 NeoForge.EVENT_BUS.addListener(ClientBus::onClientTick);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onClientLoggedIn);
@@ -316,6 +328,12 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 LifecycleCrystalGUI.bootstrapClient();
                 CgUiKeybinds.all().forEach(event::register);
             }
+
+            //? if >=1.21.7 {
+            /*private static void onRegisterClientPayloads(RegisterClientPayloadHandlersEvent event) {
+                event.register(Network.Frame.TYPE, Network::receive);
+            }
+            *///?}
 
             //? if >=1.20.5 {
             /*private static void onClientTick(ClientTickEvent.Post event) {

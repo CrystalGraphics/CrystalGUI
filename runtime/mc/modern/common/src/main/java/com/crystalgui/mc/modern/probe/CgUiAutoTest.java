@@ -205,7 +205,12 @@ public final class CgUiAutoTest {
         PENDING_CAPTURES.incrementAndGet();
         // The callback fires once the PNG is written, on every version: encoded on the IO pool through
         // 1.21.4, and from 1.21.5 read back from the GPU on a later frame first.
+        // 1.21.6 added a downscale factor; 1 is the frame as drawn.
+        //? if >=1.21.6 {
+        /*Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), 1, message -> {
+        *///?} else {
         Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), message -> {
+        //?}
             try {
                 boolean moved = written.equals(file);
                 if (!moved && written.isFile()) {
