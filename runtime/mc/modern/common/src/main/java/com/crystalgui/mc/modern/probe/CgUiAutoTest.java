@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.probe;
 
 import java.io.File;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.annotation.Nullable;
 
@@ -28,10 +29,14 @@ public final class CgUiAutoTest {
     /** @see AutoTest#ENABLED */
     public static final boolean ENABLED = AutoTest.ENABLED;
 
-    /** How long to keep trying to move a capture out of {@code screenshots/}: 150 x 20ms = 3s. */
-    private static final int MOVE_ATTEMPTS = 150;
+    /** Ticks a quit waits for captures still being written: 200 = 10s. */
+    private static final int QUIT_WAIT_TICKS = 200;
 
-    private static final long MOVE_RETRY_MS = 20;
+    /** Captures grabbed and not yet on disk. Written from Minecraft's IO pool. */
+    private static final AtomicInteger PENDING_CAPTURES = new AtomicInteger();
+
+    /** Ticks since the sequence asked to quit, or -1 until it does. */
+    private static int quitWaited = -1;
 
     /** TICKS on this era. @see AutoTest.Host */
     private static int sinceOpen;
@@ -42,6 +47,10 @@ public final class CgUiAutoTest {
     /** Called once per client tick. Cheap when off: one static boolean read. */
     public static void tick() {
         if (!ENABLED) return;
+        if (quitWaited >= 0) {
+            quitWhenWritten();
+            return;
+        }
         AutoTest.tick(HOST);
         AutoTest.settled(HOST, sinceOpen++);
     }
@@ -105,11 +114,8 @@ public final class CgUiAutoTest {
 
         @Override
         public void quit() {
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST done; quitting");
-            // stop() rather than System.exit: it runs Minecraft's own shutdown, which is what
-            // CgGraphicsLifecycle.destroyContext hangs off. Exiting under it would skip the teardown
-            // this is partly here to exercise.
-            Minecraft.getInstance().stop();
+            quitWaited = 0;
+            quitWhenWritten();
         }
 
         @Override
@@ -127,6 +133,20 @@ public final class CgUiAutoTest {
             return Integer.getInteger(AutoTest.LATE_CAPTURE_AT, 0);
         }
     };
+
+    /**
+     * Quits once every capture is on disk, or after {@link #QUIT_WAIT_TICKS}. From 1.21.5 a screenshot is
+     * a GPU readback that completes on a LATER frame, so the render thread has to keep running for it.
+     */
+    private static void quitWhenWritten() {
+        if (PENDING_CAPTURES.get() > 0 && quitWaited++ < QUIT_WAIT_TICKS) return;
+        quitWaited = Integer.MIN_VALUE;
+        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST done; quitting");
+        // stop() rather than System.exit: it runs Minecraft's own shutdown, which is what
+        // CgGraphicsLifecycle.destroyContext hangs off. Exiting under it would skip the teardown
+        // this is partly here to exercise.
+        Minecraft.getInstance().stop();
+    }
 
     /** Asks Minecraft to load the save, through whichever entry point this version has. */
     private static void loadWorld(Minecraft mc) {
@@ -172,47 +192,38 @@ public final class CgUiAutoTest {
         File parent = file.getParentFile();
         if (parent != null) parent.mkdirs();
         // Screenshot.grab's first argument is the GAME DIRECTORY, not the output directory: it writes
-        // to <dir>/screenshots/<name> and creates that subdirectory itself. So the frame is grabbed
-        // into it and then moved to the path that was actually asked for -- otherwise a caller that
-        // waits for its own path sees nothing and calls a successful run a failure.
+        // to <dir>/screenshots/<name>. So the frame is grabbed into it and moved to the path asked for.
         File gameDir = parent == null ? new File(".") : parent;
-        Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), message -> { });
-
-        // The PNG is encoded on Util.ioPool(), so it does NOT exist when grab returns -- and the first
-        // capture additionally pays for that pool starting its thread, which is why an immediate move
-        // left the early one behind in screenshots/ and moved the late one. Retrying is also what
-        // makes a partial file safe: renameTo fails while the writer still holds it, so a rename that
-        // succeeds is itself the proof that the write finished.
         File written = new File(new File(gameDir, "screenshots"), file.getName());
-        boolean moved = written.equals(file);
-        for (int attempt = 0; !moved && attempt < MOVE_ATTEMPTS; attempt++) {
-            if (written.isFile()) {
-                file.delete();
-                moved = written.renameTo(file);
+        // Read HERE, on the render thread: the callback runs on Minecraft's IO pool. Whether the desktop
+        // painted matters because a capture proves only that a frame was read back -- with no live GL
+        // context the screen's render() returns at once, and with no level Minecraft does not clear the
+        // colour buffer, so a photograph of the main menu is indistinguishable from a working desktop.
+        int width = mc.getMainRenderTarget().width;
+        int height = mc.getMainRenderTarget().height;
+        boolean painted = HostSession.isInstalled() && HostSession.session().hasPainted();
+        PENDING_CAPTURES.incrementAndGet();
+        // The callback fires once the PNG is written, on every version: encoded on the IO pool through
+        // 1.21.4, and from 1.21.5 read back from the GPU on a later frame first.
+        Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), message -> {
+            try {
+                boolean moved = written.equals(file);
+                if (!moved && written.isFile()) {
+                    file.delete();
+                    moved = written.renameTo(file);
+                }
+                if (!moved) {
+                    // Never claim the path that was asked for unless the file is on it: this line is
+                    // the only evidence a caller has.
+                    CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST capture stayed at {}; nothing was written to {}",
+                            written.getAbsolutePath(), file.getAbsolutePath());
+                    return;
+                }
+                CrystalGuiCore.LOGGER.info("CGUI AUTOTEST wrote {}x{} capture to {} (desktop painted: {})",
+                        width, height, file.getAbsolutePath(), painted);
+            } finally {
+                PENDING_CAPTURES.decrementAndGet();
             }
-            if (!moved) sleep(MOVE_RETRY_MS);
-        }
-        if (!moved) {
-            // Never claim the path that was asked for unless the file is on it: this line is the only
-            // evidence a caller has, and an unconditional one reported a capture that was not there.
-            CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST capture stayed at {}; nothing was written to {}",
-                    written.getAbsolutePath(), file.getAbsolutePath());
-            return;
-        }
-        // WHETHER THE DESKTOP ACTUALLY PAINTED, beside the file. A capture proves only that a frame was
-        // read back: with no live GL context the screen's render() returns at once, and with no level
-        // Minecraft does not clear the colour buffer, so the frame still holds the PREVIOUS screen and
-        // a photograph of the main menu is indistinguishable from a working desktop.
-        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST wrote {}x{} capture to {} (desktop painted: {})",
-                mc.getMainRenderTarget().width, mc.getMainRenderTarget().height, file.getAbsolutePath(),
-                HostSession.isInstalled() && HostSession.session().hasPainted());
-    }
-
-    private static void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        }
+        });
     }
 }

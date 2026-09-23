@@ -3,8 +3,13 @@ package com.crystalgui.mc.modern.client;
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 
+//? if >=1.21.5 {
+/*import com.crystalgraphics.mc.modern.platform.LifecycleModern;
+import com.mojang.blaze3d.opengl.GlStateManager;
+import net.minecraft.client.Minecraft;
+*///?} else {
 import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
+//?}
 
 import org.lwjgl.opengl.GL13;
 
@@ -66,6 +71,11 @@ public final class CgUiHostGl {
      */
     public static void enter() {
         CgGlState.invalidateAllIfPresent();
+        // 1.21.5 binds a target only inside its own render passes, so a screen or HUD paint finds the
+        // last pass's still bound and the desktop composites into it, unseen.
+        //? if >=1.21.5 {
+        /*LifecycleModern.bindMainTarget(Minecraft.getInstance());
+        *///?}
     }
 
     /**
@@ -92,8 +102,8 @@ public final class CgUiHostGl {
      * while here it MUST go through Blaze3D or Minecraft's cache is left describing the wrong world.
      */
     public static void leave() {
-        RenderSystem.activeTexture(GL13.GL_TEXTURE1);
-        RenderSystem.activeTexture(GL13.GL_TEXTURE0);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE1);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0);
         GlStateManager._glUseProgram(0);
         // The three lines above went through Blaze3D and not CgGL, so our own shadow cannot see them
         // either -- the same rule, pointing the other way.
