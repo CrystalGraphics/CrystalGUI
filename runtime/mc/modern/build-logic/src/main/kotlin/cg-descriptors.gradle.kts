@@ -1,8 +1,10 @@
 import cgbuildlogic.Dependency
+import cgbuildlogic.LoaderEntries
 import cgbuildlogic.ModDescriptor
 import cgbuildlogic.Ordering
 import cgbuildlogic.Side
 import cgbuildlogic.Variant
+import cgbuildlogic.modernVariants
 import cgbuildlogic.registerDescriptorTasks
 
 // ── What this mod says about itself, once (J3) ───────────────────────────────────────────────────
@@ -27,6 +29,8 @@ val cgDescriptor = ModDescriptor(
         // CrystalGUI service reads, and a UI that loads first finds no backend at all.
         Dependency("crystalgraphics", "[1.0.0,)", ordering = Ordering.AFTER),
     ),
+    // 1.7.10 by hand; every 1.20.x variant is a NODE of the tree, whose range and pack format are its
+    // own pins (`variant.minecraft`, `variant.packFormat`) -- so adding a version adds its variant.
     variants = listOf(
         Variant(
             loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
@@ -34,28 +38,15 @@ val cgDescriptor = ModDescriptor(
             mixinConfigs = listOf("mixins.crystalgui.json"),
             packFormat = 1,
         ),
-        Variant(
-            loader = "forge", minecraft = "[1.20.1,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.forge.CrystalGUIForge",
-            packFormat = 15,
-        ),
-        Variant(
-            loader = "neoforge", minecraft = "[1.20.4,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.neoforge.CrystalGUINeoForge",
-            packFormat = 22,
-        ),
-        Variant(
-            loader = "fabric", minecraft = "[1.20.1,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.fabric.CrystalGUIFabricCommon",
-            clientEntry = "com.crystalgui.mc.fabric.CrystalGUIFabric",
-            fabricDepends = linkedMapOf(
-                "fabricloader" to ">=0.15.0",
-                "minecraft" to "~1.20.1",
-                "fabric-api" to "*",
-            ),
-            packFormat = 15,
-        ),
-    ),
+    ) + modernVariants(project, mapOf(
+        "forge" to LoaderEntries("com.crystalgui.mc.forge", common = "com.crystalgui.mc.forge.CrystalGUIForge"),
+        "neoforge" to LoaderEntries("com.crystalgui.mc.neoforge",
+            common = "com.crystalgui.mc.neoforge.CrystalGUINeoForge"),
+        "fabric" to LoaderEntries("com.crystalgui.mc.fabric",
+            common = "com.crystalgui.mc.fabric.CrystalGUIFabricCommon",
+            client = "com.crystalgui.mc.fabric.CrystalGUIFabric",
+            fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0", "fabric-api" to "*")),
+    )),
     // WHAT THE LOADER CONSTRUCTS, where that is not the variant itself. Fabric's descriptor names
     // entry points and Fabric constructs EVERY one it names, so with more than one variant it would
     // construct them all -- including the one compiled against a Minecraft that is not running. The
@@ -94,30 +85,22 @@ val cgLangDescriptor = ModDescriptor(
             commonEntry = "com.crystalgui.mc.v1710.lang.CrystalGuiLanguage",
             packFormat = 1,
         ),
-        Variant(
-            loader = "forge", minecraft = "[1.20.1,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.forge.lang.CrystalGuiLanguageForge",
-            packFormat = 15,
-        ),
-        Variant(
-            loader = "neoforge", minecraft = "[1.20.4,1.21)", era = "modern",
-            commonEntry = "com.crystalgui.mc.neoforge.lang.CrystalGuiLanguageNeoForge",
-            packFormat = 22,
-        ),
-        Variant(
-            loader = "fabric", minecraft = "[1.20.1,1.21)", era = "modern",
-            clientEntry = "com.crystalgui.mc.fabric.lang.CrystalGuiLanguageFabric",
-            fabricDepends = linkedMapOf(
-                "fabricloader" to ">=0.15.0",
-                "minecraft" to "~1.20.1",
-                "crystalgui" to "*",
-            ),
-            packFormat = 15,
-        ),
-    ),
+    ) + modernVariants(project, mapOf(
+        "forge" to LoaderEntries("com.crystalgui.mc.forge",
+            common = "com.crystalgui.mc.forge.lang.CrystalGuiLanguageForge"),
+        "neoforge" to LoaderEntries("com.crystalgui.mc.neoforge",
+            common = "com.crystalgui.mc.neoforge.lang.CrystalGuiLanguageNeoForge"),
+        "fabric" to LoaderEntries("com.crystalgui.mc.fabric",
+            client = "com.crystalgui.mc.fabric.lang.CrystalGuiLanguageFabric",
+            fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0", "crystalgui" to "*")),
+    )),
     // Its own mod, its own table: the language stack selects a variant exactly as the host does and
     // shares nothing but the selector. Fabric alone needs a name here -- see the host's note above.
     bootstrappers = mapOf("fabric" to "com.crystalgui.mc.fabric.lang.LanguageFabricBootstrap"),
 )
 
 registerDescriptorTasks(cgLangDescriptor, "cgui-lang", name = "language", checkShipped = false)
+
+// Read by every loader node (its dev run's own variant table) and by cg-single-jar (the entries the
+// merged jars must carry) -- neither can see this script's vals.
+extra["cgModDescriptors"] = mapOf("main" to cgDescriptor, "lang" to cgLangDescriptor)

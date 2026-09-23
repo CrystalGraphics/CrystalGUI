@@ -1,5 +1,8 @@
+import cgbuildlogic.ModDescriptor
 import cgbuildlogic.commonNode
 import cgbuildlogic.modernLoader
+import cgbuildlogic.nodePackage
+import cgbuildlogic.registerNodeVariants
 import cgbuildlogic.registerCheckDescriptorsNameNoCommon
 import cgbuildlogic.sameVersionNodeCoordinate
 import cgbuildlogic.sameVersionNodeDir
@@ -177,76 +180,86 @@ cgbuildlogic.configureShadowJarBundling(project)
 // and NOTHING else. The engine, the language stack, Taffy, the bands and tree-sitter enter the merge
 // once at the root; a copy here would ship four times over.
 //
-// `common` has to be relocated because the single jar carries THREE remapped copies of it -- SRG on
-// Forge, official on NeoForge, intermediary on Fabric -- and three classes cannot share a name.
+// EVERYTHING A NODE SHIPS LIVES UNDER ITS OWN PACKAGE, `com.crystalgui.mc.<loader>.v<version>` (J11.1b):
+// the single jar carries one copy of common per NODE -- remapped three ways, and one per Minecraft
+// version of each loader -- and two classes cannot share a name. So common goes to `<node>.common`, and
+// the loader's own classes to `<node>` itself. `mc.modern.client.CgUiScreen` ships as
+// `mc.fabric.v1204.common.client.CgUiScreen`, `mc.fabric.CrystalGUIFabric` as `mc.fabric.v1204.CrystalGUIFabric`.
 //
-// ONE RULE OVER `com.crystalgui.mc.modern`, which is what J9's package move bought. This used to
-// name each of `client`, `net`, `platform` and `example` individually, because the only alternative
-// was relocating `com.crystalgui.mc` -- and that would have rewritten this loader's own
-// `com.crystalgui.mc.<loader>` too, into `...<loader>.common.<loader>`. Now the era tree has a root
-// of its own, that hazard is gone and a new sub-package needs no edit here.
-// A class that was `mc.modern.client.CgUiScreen` becomes `mc.forge.common.client.CgUiScreen`.
-//
-// Keyed on the LOADER, which is one node per loader today. A second node of one loader (J11.1b) needs
-// the version in here too, or two thin jars carry one relocated name and the merge keeps whichever
-// arrived first.
+// EXCEPT THE BOOTSTRAPPERS: each is the one class its loader constructs whatever version is running --
+// named by the descriptor, or found by its @Mod -- so every node ships it at one name and the merge
+// keeps a single copy. They name no Minecraft class, which is what makes one copy right for all nodes.
+// The variant table names the relocated entries (cgbuildlogic.ModernVariants).
 val cgCommonRoot = "com.crystalgui.mc.modern"
-val cgThinRoot = "com.crystalgui.mc.$modernLoader.common"
+val loaderPackage = "com.crystalgui.mc.$modernLoader"
+val nodeRoot = nodePackage(loaderPackage, project.name)
+val cgThinRoot = "$nodeRoot.common"
+val loaderTitle = mapOf("forge" to "Forge", "neoforge" to "NeoForge", "fabric" to "Fabric").getValue(modernLoader)
+val bootstrappers = listOf("$loaderPackage.${loaderTitle}Bootstrap", "$loaderPackage.lang.Language${loaderTitle}Bootstrap")
+
+/** The descriptors every merged jar is printed from, and the variant each node's dev run reads. */
+@Suppress("UNCHECKED_CAST")
+val modDescriptors = rootProject.extra["cgModDescriptors"] as Map<String, ModDescriptor>
+
+/** The dev run's, which the merge writes its own copy of once -- four thin jars carrying them is four to arbitrate. */
+val devDescriptors = listOf("META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta", "META-INF/*/variants.json")
 
 val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("thinShadowJar") {
     group = "build"
-    description = "This loader plus its common node, relocated -- the merge's input, before remapping."
+    description = "This node plus its common node, relocated into the node's package -- the merge's input, before remapping."
     // DEV NAMES STILL. Forge reobfuscates this, Fabric remaps it, NeoForge ships it as it is; the
     // classifier says so, so a `-thin-dev` jar is never mistaken for something installable.
     archiveClassifier.set("thin-dev")
     configurations = emptyList()
     from(sourceSets["main"].output)
+    exclude(devDescriptors)
     val commonJar = common.tasks.named<Jar>("jar")
     dependsOn(commonJar)
     from(commonJar.map { zipTree(it.archiveFile) })
     relocate(cgCommonRoot, cgThinRoot)
+    relocate(loaderPackage, nodeRoot) { bootstrappers.forEach { exclude(it) } }
 }
 
-// A DEV RUN HAS TO SEE crystalgui_language AS A MOD, which means a descriptor in the lang source set's
-// resources -- the merged one, which is what the shipped jar carries and already describes every
-// loader. Without it the classes are on the run classpath and no loader constructs the entry point,
-// so scripting is silently absent from every dev client while the shipped jar is fine.
+// A DEV RUN HAS TO SEE crystalgui_language AS A MOD, which means descriptors in the lang source set's
+// resources -- the merged ones, which name only the bootstrapper and span every node. Without them the
+// classes are on the run classpath and no loader constructs the entry point, so scripting is silently
+// absent from every dev client while the shipped jar is fine. Its VARIANT TABLE is this node's own.
 tasks.named<ProcessResources>("processLangResources") {
     val descriptors = rootProject.tasks.named("generateLanguageDescriptors")
     dependsOn(descriptors)
-    from(descriptors)
+    from(descriptors) { exclude("META-INF/*/variants.json") }
 }
+registerNodeVariants(modDescriptors.getValue("lang"), "lang")
 
-// A DEV RUN HAS TO SEE THE VARIANT TABLE (J11.0), because the bootstrapper its descriptor names reads
-// one -- so without this every dev client dies in the entry point rather than at prodSmoke time. Only
-// the table: the per-loader descriptors under this module's own resources are what a dev run uses,
-// and the merged ones are the shipped jar's.
-tasks.named<ProcessResources>("processResources") {
-    val descriptors = rootProject.tasks.named("generateMergedDescriptors")
-    dependsOn(descriptors)
-    from(descriptors) { include("META-INF/*/variants.json") }
+// A DEV RUN HAS TO SEE A VARIANT TABLE (J11.0), because the bootstrapper its descriptor names reads one
+// -- and it must be THIS NODE'S, at source names: the dev run loads the classes unrelocated, so the
+// merged table's names would not resolve. On Fabric it also takes the merged fabric.mod.json, which
+// names only the bootstrapper and ORs every node's range, so one file is right for every node.
+registerNodeVariants(modDescriptors.getValue("main"))
+if (modernLoader == "fabric") {
+    tasks.named<ProcessResources>("processResources") {
+        val descriptors = rootProject.tasks.named("generateMergedDescriptors")
+        dependsOn(descriptors)
+        from(descriptors) { include("fabric.mod.json") }
+    }
 }
 
 /**
- * The language merge's input from this loader: its own `lang` classes plus its common node's, relocated.
- *
- * The same relocation as `thinShadowJar` and for the same reason: the language jar carries three
- * remapped copies of the common half and three classes cannot share a name. The loader's own entry sits
- * in `com.crystalgui.mc.<loader>.lang`, which the relocation does not touch.
+ * The language merge's input from this node: its own `lang` classes plus its common node's, relocated
+ * exactly as `thinShadowJar` relocates the host half.
  */
 val langThinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("langThinShadowJar") {
     group = "language jar"
-    description = "This loader's language half plus its common node's, relocated -- before remapping."
+    description = "This node's language half plus its common node's, relocated -- before remapping."
     archiveClassifier.set("lang-thin-dev")
     configurations.empty()
     from(lang.output)
-    // The descriptors above are for the DEV RUN. The merge writes its own copy once, from the same
-    // generator, so four thin jars carrying them too is four duplicates for it to arbitrate.
-    exclude("META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta")
+    exclude(devDescriptors)
     val commonLangJar = common.tasks.named<Jar>("langJar")
     dependsOn(commonLangJar)
     from(commonLangJar.map { zipTree(it.archiveFile) })
     relocate("$cgCommonRoot.lang", "$cgThinRoot.lang")
+    relocate(loaderPackage, nodeRoot) { bootstrappers.forEach { exclude(it) } }
 }
 
 // Nothing in the common node may be NAMED from a descriptor or a service file: the relocation above

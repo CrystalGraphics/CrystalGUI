@@ -147,7 +147,7 @@ by absence and reaches no loader; the GL harness is a client with a context by d
 ```
 
 ```bash
-**1.20.x** — a node per (loader, Minecraft version): forge:1.20.1 | neoforge:1.20.4 | fabric:1.20.1.
+**1.20.x** — a node per (loader, Minecraft version): forge:1.20.1 | neoforge:1.20.4 | fabric:1.20.1 | fabric:1.20.4.
 ./gradlew :runtime:mc:modern:<loader>:<version>:runClient
 ./gradlew :runtime:mc:modern:<loader>:<version>:runServer
 ./gradlew :runtime:mc:modern:<loader>:<version>:serverSmoke   # boots, asserts, stops. Needs -PcgAcceptEula
