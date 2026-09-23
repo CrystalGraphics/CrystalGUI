@@ -7,7 +7,6 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.trace.FrameStats;
-import com.crystalgui.core.trace.FrameProfile;
 import com.crystalgui.text.TextRange;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
@@ -25,11 +24,10 @@ import com.crystalgui.widget.text.UIText;
  * hud.stats().setBudgetMs(1000f / 144f);                        // this host's refresh rate
  * }</pre>
  *
- * <p>It reads {@link FrameStats}, which takes its frame boundary from
- * {@link FrameProfile} — so the same overlay works in a harness scene, in the
- * editor and on a Minecraft screen, and measures the whole frame rather than its own subtree. The phase
- * breakdown follows the readout rather than a property: {@code FrameProfile} times its phases whenever
- * something is collecting, and {@code -Dcrystalgui.frameprofile=true} adds the LOGGING on top.</p>
+ * <p>It reads {@link FrameStats}, which reads the frames {@link UiTrace#frameBegin()} marks — so the same
+ * overlay works in a harness scene, in the editor and on a Minecraft screen, and measures the whole frame
+ * rather than its own subtree. The phase breakdown is whatever the frame channel recorded while
+ * something is collecting.</p>
  *
  * <h3>It holds the collector only while it is in the tree</h3>
  *

@@ -48,7 +48,7 @@ public final class UiHints {
     /** How much of a frame a worker must overlap before the frame is said to have waited on it. */
     private static final long WORKER_OVERLAP_FLOOR_NANOS = 500_000L;
 
-    /** The marker blame writes, heaviest site first. @see FrameProfile */
+    /** The marker blame writes, heaviest site first. @see UiTrace#blame */
     private static final String BLAME_MARKER = "invalidated-by";
 
     private static boolean installed;

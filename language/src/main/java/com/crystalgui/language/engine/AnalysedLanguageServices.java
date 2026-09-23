@@ -1,6 +1,7 @@
 package com.crystalgui.language.engine;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -657,11 +658,11 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
 
     private void install(Analysis analysis, @Nullable List<SyntaxToken> materialisedTokens) {
         if (analysis == null) return;
-        long profiled = FrameProfile.enter("install analysis v" + analysis.version() + " (" + id + ")");
+        long profiled = CgTrace.spanBegin(UiTrace.FLOW, "install analysis v" + analysis.version() + " (" + id + ")");
         try {
             installInternal(analysis, materialisedTokens);
         } finally {
-            FrameProfile.leave(profiled, "install analysis");
+            CgTrace.spanEnd(profiled);
         }
     }
 
@@ -707,28 +708,28 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         current = analysis;
         if (previous != null) previous.close();
 
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         // THE WHOLE DOCUMENT'S TOKENS, MATERIALISED ACROSS THE BRIDGE -- on the WORKER now, handed in.
         // Cheap for a script; a 2000-line decompiled class is tens of thousands of them, and pulling
         // them here spent 18.8ms of a 34ms install on the frame thread. @see #semanticTokensOf
         tokens.adopt(analysis, materialisedTokens);
-        FrameProfile.step(timed, "tokens.adopt (materialised on worker: "
-                + (materialisedTokens != null) + ")");
+        CgTrace.spanDone(UiTrace.FLOW, "tokens.adopt (materialised on worker: "
+                + (materialisedTokens != null) + ")", timed);
         // COMPUTED ONCE PER ANALYSIS, not once per listener. announcement() has a side effect -- it
         // replaces the retained-warning lane -- and its inputs are row/column positions that are only
         // meaningful against the document the analysis saw. Recomputing it later, when a listener happens
         // to attach, would map those positions against a buffer that has since been edited and overwrite
         // correctly-tracked ranges with wrong offsets. @see #announcement
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         lastAnnouncement = announcement(analysis);
-        FrameProfile.step(timed, "announcement (retained lane + tracking)");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "announcement (retained lane + tracking)", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         for (Consumer<Versioned<List<Diagnostic>>> listener : new ArrayList<>(diagnosticListeners)) {
             listener.accept(lastAnnouncement);
         }
-        FrameProfile.step(timed, "diagnostics -> "
+        CgTrace.spanDone(UiTrace.FLOW, "diagnostics -> "
                 + (lastAnnouncement.value() == null ? 0 : lastAnnouncement.value().size())
-                + " problems, " + diagnosticListeners.size() + " listeners");
+                + " problems, " + diagnosticListeners.size() + " listeners", timed);
     }
 
     // ── Semantic tokens: push, with an invalidation range ───────────────────────────────────────
@@ -859,14 +860,14 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
          * resolve rather than one per hover.</p>
          */
         private SymbolInfo resolveUnderLock(Analysis analysis, int offset) {
-            long timed = FrameProfile.begin();
+            long timed = CgTrace.stamp(UiTrace.FLOW);
             SymbolInfo resolved;
             synchronized (analysis) {
                 resolved = analysis.resolveAt(offset);
             }
-            FrameProfile.step(timed, "engine.resolveAt" + (scheduler == null ? "" : " [worker]") + " -> "
+            CgTrace.spanDone(UiTrace.FLOW, "engine.resolveAt" + (scheduler == null ? "" : " [worker]") + " -> "
                     + (resolved == null ? "nothing"
-                            : resolved.kind() + " " + resolved.container() + "." + resolved.name()));
+                            : resolved.kind() + " " + resolved.container() + "." + resolved.name()), timed);
             // IN THE READABLE NAMESPACE, whatever the author spelled. The compile view declares a mapped
             // member under both names so a legacy script builds, and an engine quotes whichever
             // declaration it resolved -- so a script naming `func_71203_ab` got a popup saying exactly

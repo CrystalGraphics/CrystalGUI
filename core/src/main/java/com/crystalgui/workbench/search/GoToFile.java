@@ -9,7 +9,8 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.lang.TypeSearch;
 import com.crystalgui.text.lang.TypeSearchRegistry;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.chrome.palette.QuickPick;
@@ -120,7 +121,7 @@ public final class GoToFile {
         pick.setSource((query, sink) ->
                 fetchInto(query, workbench.projects().knownFiles(), sink));
         pick.onAccepted.connect(id -> {
-            long accepted = FrameProfile.enter("ENTER accepted " + id);
+            long accepted = CgTrace.spanBegin(UiTrace.FLOW, "ENTER accepted " + id);
             try {
             String member = null;
             int carried = id.indexOf(MEMBER_SEPARATOR);
@@ -137,7 +138,7 @@ public final class GoToFile {
             if (resource.isProject()) workbench.openFileAt(resource.asPath(), at);
             else workbench.openResourceAt(resource, at, member);
             } finally {
-                FrameProfile.leave(accepted, "ENTER accepted");
+                CgTrace.spanEnd(accepted);
             }
         });
         workbench.setQuickOpen(pick);
@@ -173,16 +174,16 @@ public final class GoToFile {
         // `Main.java:42` empties the list, which reads as the search breaking on a keystroke.
         SearchQuery effective = name.equals(typed) ? query : SearchQuery.of(name);
 
-        long profiled = FrameProfile.enter("GoToFile.fetchInto '" + name + "' over "
+        long profiled = CgTrace.spanBegin(UiTrace.FLOW, "GoToFile.fetchInto '" + name + "' over "
                 + files.size() + " workspace files");
         List<Scored> fileRows = new ArrayList<>();
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         collectFiles(files, effective, fileRows);
-        FrameProfile.step(timed, "collectFiles -> " + fileRows.size());
+        CgTrace.spanDone(UiTrace.FLOW, "collectFiles -> " + fileRows.size(), timed);
         List<Scored> typeRows = new ArrayList<>();
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         collectTypes(name, effective, typeRows);
-        FrameProfile.step(timed, "collectTypes -> " + typeRows.size());
+        CgTrace.spanDone(UiTrace.FLOW, "collectTypes -> " + typeRows.size(), timed);
 
         // RANKED WITHIN EACH GROUP, then pushed group by group -- which is the same order the single
         // sort produced and is cheaper to reason about, since the group is now the outer key.
@@ -190,11 +191,11 @@ public final class GoToFile {
         boolean cut = trimTo(fileRows, MAX_PER_GROUP) | trimTo(typeRows, MAX_PER_GROUP);
         if (cut) sink.markTruncated();
 
-        long pushed = FrameProfile.begin();
+        long pushed = CgTrace.stamp(UiTrace.FLOW);
         boolean more = push(fileRows, sink);
         if (more) push(typeRows, sink);
-        FrameProfile.step(pushed, "push rows");
-        FrameProfile.leave(profiled, "GoToFile.fetchInto");
+        CgTrace.spanDone(UiTrace.FLOW, "push rows", pushed);
+        CgTrace.spanEnd(profiled);
     }
 
     /**
@@ -251,9 +252,9 @@ public final class GoToFile {
 
     private static void collectTypes(String name, SearchQuery effective, List<Scored> out) {
         // THE CLASSPATH INDEX -- tens of thousands of types, asked on every keystroke.
-        long searched = FrameProfile.begin();
+        long searched = CgTrace.stamp(UiTrace.FLOW);
         TypeSearch.Results found = TypeSearchRegistry.search(name, TYPE_LIMIT);
-        FrameProfile.step(searched, "TypeSearchRegistry.search");
+        CgTrace.spanDone(UiTrace.FLOW, "TypeSearchRegistry.search", searched);
         for (TypeSearch.Result result : found.results()) {
             // THE FILE THE TYPE LIVES IN, which for a nested type is not the type. A member has no class
             // file of its own, so addressing a `library:` resource by `WorldSettings.GameType` asked the

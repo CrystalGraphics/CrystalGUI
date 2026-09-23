@@ -1,6 +1,7 @@
 package com.crystalgui.language.grammar;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.syntax.Language;
 
@@ -142,15 +143,15 @@ public enum Grammar {
      * @param scheduler where reparses run, or null to parse on the calling thread
      */
     public TreeSitterTokenizer newTokenizer(JobScheduler scheduler) {
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         TSLanguage parser = newParser();
-        FrameProfile.step(timed, "grammar.newParser " + directory);
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "grammar.newParser " + directory, timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         Queries.Prepared highlights = Queries.loadForHighlighting(queryPath("highlights.scm"));
-        FrameProfile.step(timed, "grammar.loadHighlights " + directory);
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "grammar.loadHighlights " + directory, timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         TreeSitterTokenizer tokenizer = new TreeSitterTokenizer(parser, highlights, scheduler);
-        FrameProfile.step(timed, "grammar.compileQuery " + directory);
+        CgTrace.spanDone(UiTrace.FLOW, "grammar.compileQuery " + directory, timed);
         // AND WHERE ITS OPTIONAL FAMILIES LIVE. `folds.scm`, `indents.scm` and `locals.scm` are loaded
         // on first use rather than here, so a document that is never folded pays nothing for them --
         // but only this table knows which directory to read, and a tokenizer built from a bare query
@@ -159,9 +160,9 @@ public enum Grammar {
         // AND WHATEVER THIS GRAMMAR CANNOT PARSE, if its language has said so. @see #filterSourceWith
         if (sourceFilter != null) tokenizer.filterSourceWith(sourceFilter);
         if (hasInjections()) {
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FLOW);
             tokenizer.withInjections(this, scheduler);
-            FrameProfile.step(timed, "grammar.withInjections " + directory);
+            CgTrace.spanDone(UiTrace.FLOW, "grammar.withInjections " + directory, timed);
         }
         return tokenizer;
     }

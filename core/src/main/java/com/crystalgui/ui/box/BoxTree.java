@@ -1,6 +1,7 @@
 package com.crystalgui.ui.box;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -327,9 +328,9 @@ public final class BoxTree {
      * surface transform. Layout first -- the painter draws what {@link #layout} composed.
      */
     public void paint(CgUiPaintContext ctx) {
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         BoxPainter.paint(this, ctx);
-        FrameProfile.end(timed, "paint:tree");
+        CgTrace.zoneDone(UiTrace.FRAME, "paint:tree", timed);
     }
 
     // ── Sync ─────────────────────────────────────────────────────────────────

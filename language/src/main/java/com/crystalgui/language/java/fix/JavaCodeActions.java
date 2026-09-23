@@ -1,6 +1,7 @@
 package com.crystalgui.language.java.fix;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.language.engine.bridge.Analysis;
 import com.crystalgui.language.java.classpath.TypeIndex;
 import com.crystalgui.text.lang.CodeAction;
@@ -85,10 +86,10 @@ public final class JavaCodeActions implements CodeActionProvider,
         // ON THE CALLING THREAD, which for the gutter bulb is a PAINT. Measured at 24.8ms for the first
         // ask against a freshly opened 1,980-line unit and ~200us for every ask after it, which is the
         // signature of forcing work the analysis had left lazy rather than of the catalog itself.
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         List<CodeAction> found = current.codeActionsIn(request.from(), request.to(), this);
-        FrameProfile.step(timed, "java.codeActionsIn " + request.from() + ".." + request.to()
-                + " -> " + found.size());
+        CgTrace.spanDone(UiTrace.FLOW, "java.codeActionsIn " + request.from() + ".." + request.to()
+                + " -> " + found.size(), timed);
         answer.accept(Versioned.of(current.version(), found));
     }
 }

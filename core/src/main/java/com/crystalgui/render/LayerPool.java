@@ -1,7 +1,8 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -87,7 +88,7 @@ final class LayerPool {
         fbo = CgFrameBuffer.createOwned("cgui_layer_" + created++, width, height, CgUiPaintContext.LAYER_FORMAT);
         slots[slot] = fbo;
         warmUp.accept(fbo);
-        FrameProfile.count("layer-fbos", 1);
+        CgTrace.add(UiTrace.FRAME, "layer-fbos", 1);
         return fbo;
     }
 

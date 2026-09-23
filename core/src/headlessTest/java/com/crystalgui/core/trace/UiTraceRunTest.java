@@ -54,30 +54,28 @@ public class UiTraceRunTest {
     /**
      * A run of frames with phases, counters and a chain.
      *
-     * <p>Driven through {@link FrameProfile}'s own API rather than through the engine's clock-taking
-     * overloads, because the point of this test is the whole path a real frame takes: the probe's
-     * boundary, its buckets, its counters and its chain, into the ring and out to a file. The first
-     * version of it called {@code CgTrace.frameEnd} directly and quietly recorded no counters at all,
-     * since those are accumulated by the probe and flushed at ITS boundary.</p>
+     * <p>Through the calls a real frame makes — the host's boundary, stamped phases, per-frame counts and
+     * a chain — into the ring and out to a file. Counts are totalled per frame and written at the next
+     * boundary, so a test that skipped {@link UiTrace#frameBegin()} would quietly record none.</p>
      */
     private void record() {
         UiTrace.useDirectoryProperty();
         FrameStats.get().hold();
-        long chain = FrameProfile.enter("open file");
+        long chain = CgTrace.spanBegin(UiTrace.FLOW, "open file");
         for (int i = 0; i < 120; i++) {
-            FrameProfile.frameBegin();
-            long paint = FrameProfile.begin();
+            UiTrace.frameBegin();
+            long paint = CgTrace.stamp(UiTrace.FRAME);
             burn();
-            FrameProfile.end(paint, "paint:tree");
-            long layout = FrameProfile.begin();
+            CgTrace.zoneDone(UiTrace.FRAME, "paint:tree", paint);
+            long layout = CgTrace.stamp(UiTrace.FRAME);
             burn();
-            FrameProfile.end(layout, "frame:layout");
-            FrameProfile.count("drawcalls", 31);
-            FrameProfile.count("layers", 17);
-            FrameProfile.frameEnd();
+            CgTrace.zoneDone(UiTrace.FRAME, "frame:layout", layout);
+            CgTrace.add(UiTrace.FRAME, "drawcalls", 31);
+            CgTrace.add(UiTrace.FRAME, "layers", 17);
+            UiTrace.frameEnd();
         }
-        FrameProfile.leave(chain, "open file");
-        FrameProfile.frameBegin();
+        CgTrace.spanEnd(chain);
+        UiTrace.frameBegin();
     }
 
     /** A little real work, so a zone has a duration the clock can see. */
@@ -103,11 +101,10 @@ public class UiTraceRunTest {
         assertNotNull("nothing exported", exported);
         assertTrue("no trace.json", Files.isRegularFile(dir.resolve("trace.json")));
 
-        // THE T4 GATE: the probe's own lines reach the file rather than the game console. `enter` and
-        // `leave` bracket the chain, so there are at least those two.
-        List<String> log = Files.readAllLines(dir.resolve("trace.log"), StandardCharsets.UTF_8);
-        assertTrue("nothing reached the file", log.size() >= 2);
-        assertTrue(log.get(0), log.get(0).contains("open file"));
+        // THE T4 GATE: what a run records reaches its own directory rather than the game console. The
+        // chain is a span, so it is in the export; trace.log carries slow frames, and these are not.
+        String json = new String(Files.readAllBytes(dir.resolve("trace.json")), StandardCharsets.UTF_8);
+        assertTrue("the chain is not in the export", json.contains("open file"));
     }
 
     @Test

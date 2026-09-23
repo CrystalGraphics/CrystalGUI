@@ -1,6 +1,7 @@
 package com.crystalgui.language.js;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
@@ -129,12 +130,12 @@ public final class JsLanguageServices extends AnalysedLanguageServices {
     @Override
     protected Analysis analyse(String source, long version) {
         int nth = ANALYSES.incrementAndGet();
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         try {
             return analyseInner(source, version);
         } finally {
-            FrameProfile.step(timed, "js.analyse #" + nth + " (" + sourceName + ", "
-                    + source.length() + " chars)");
+            CgTrace.spanDone(UiTrace.FLOW, "js.analyse #" + nth + " (" + sourceName + ", "
+                    + source.length() + " chars)", timed);
         }
     }
 

@@ -1,7 +1,8 @@
 package com.crystalgui.text;
 
 import java.util.ArrayList;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
@@ -252,19 +253,19 @@ public final class TextBuffer {
      */
     public void load(CharSequence text) {
         String incoming = text == null ? "" : text.toString();
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         this.lineEnding = LineEnding.detect(incoming);
-        FrameProfile.step(timed, "buf.detectEnding " + incoming.length() + " chars");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "buf.detectEnding " + incoming.length() + " chars", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         String normalised = LineEnding.normalise(incoming);
-        FrameProfile.step(timed, "buf.normalise");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "buf.normalise", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         ChangeSet change = ChangeSet.replace(document.length(), 0, document.length(), normalised);
         if (!change.isEmpty()) {
             document = change.apply(document);
             applied(change);
         }
-        FrameProfile.step(timed, "buf.replace");
+        CgTrace.spanDone(UiTrace.FLOW, "buf.replace", timed);
         history.clear();
     }
 
@@ -346,23 +347,23 @@ public final class TextBuffer {
                     + change.lengthBefore() + ", but this one is " + document.length());
         }
 
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         ChangeSet inverse = change.invert(document);
-        FrameProfile.step(timed, "buf.invert");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "buf.invert", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         document = change.apply(document);
-        FrameProfile.step(timed, "buf.applyToRope");
+        CgTrace.spanDone(UiTrace.FLOW, "buf.applyToRope", timed);
         // Applied here, then recorded — which is what UndoStack.push is for. Handing the stack an
         // unapplied edit would mean applying it twice. Push also clears the redo branch: keeping it
         // would let redo replay a change against a document it was never described against, which the
         // length check above would then reject at some arbitrary later point rather than here.
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         history.push(new ChangeSetEdit(this, change, inverse,
                 carets == null ? null : List.copyOf(carets)));
-        FrameProfile.step(timed, "buf.historyPush");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "buf.historyPush", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         applied(change);
-        FrameProfile.step(timed, "buf.applied (decorations + onChanged)");
+        CgTrace.spanDone(UiTrace.FLOW, "buf.applied (decorations + onChanged)", timed);
     }
 
     /**
@@ -384,12 +385,12 @@ public final class TextBuffer {
     private void applied(ChangeSet change) {
         version++;
         trackAlternativeVersion();
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         decorations.adjust(change);
-        FrameProfile.step(timed, "buf.decorations.adjust");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "buf.decorations.adjust", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         onChanged.emit(change);
-        FrameProfile.step(timed, "buf.onChanged.emit -> " + onChanged.connectionCount() + " listeners");
+        CgTrace.spanDone(UiTrace.FLOW, "buf.onChanged.emit -> " + onChanged.connectionCount() + " listeners", timed);
     }
 
     /**

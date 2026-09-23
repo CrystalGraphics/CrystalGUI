@@ -3,7 +3,8 @@ package com.crystalgui.workbench.chrome.palette;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgraphics.platform.input.CgKeyCodes;
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.collection.pick.QuickPickEntry;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
@@ -454,20 +455,20 @@ public class QuickPick extends Popover {
     /** Re-asks the source and rebuilds the row model. */
     public void refresh() {
         // ONCE PER KEYSTROKE. Typing "Minecraft" runs this nine times, and every run re-asks the source.
-        long profiled = FrameProfile.enter("QuickPick.refresh '" + search.getText() + "'");
-        long timed = FrameProfile.begin();
+        long profiled = CgTrace.spanBegin(UiTrace.FLOW, "QuickPick.refresh '" + search.getText() + "'");
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         QuickPickSource.Batch batch =
                 QuickPickSource.drain(source, SearchQuery.of(search.getText()), MAX_RESULTS);
-        FrameProfile.step(timed, "source.drain");
+        CgTrace.spanDone(UiTrace.FLOW, "source.drain", timed);
         List<QuickPickEntry> entries = batch.entries();
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         results.clear();
         for (QuickPickEntry entry : entries) results.add(entry);
-        FrameProfile.step(timed, "results.replace " + entries.size() + " rows");
+        CgTrace.spanDone(UiTrace.FLOW, "results.replace " + entries.size() + " rows", timed);
         setTruncated(batch.truncated());
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         sizeListToContent(entries.size());
-        FrameProfile.step(timed, "sizeListToContent");
+        CgTrace.spanDone(UiTrace.FLOW, "sizeListToContent", timed);
         // Land on the best row that can actually be chosen, so Enter on an untouched query does the obvious
         // thing. This is why the source's ORDER is a contract rather than a suggestion -- and why the search
         // is for the first ENABLED row rather than simply index 0, which may be dimmed.
@@ -492,7 +493,7 @@ public class QuickPick extends Popover {
             list.setFocusedIndex(-1);
             list.clearSelection();
         }
-        FrameProfile.leave(profiled, "QuickPick.refresh");
+        CgTrace.spanEnd(profiled);
     }
 
     /**

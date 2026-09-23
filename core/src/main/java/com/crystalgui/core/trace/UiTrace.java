@@ -4,7 +4,6 @@ import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceExport;
 import com.crystalgraphics.trace.CgTraceLog;
-import com.crystalgraphics.trace.CgTraceNames;
 import com.crystalgraphics.trace.CgTraceReport;
 import com.crystalgui.core.CrystalGuiCore;
 
@@ -14,7 +13,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.Nullable;
 
@@ -34,8 +36,21 @@ import javax.annotation.Nullable;
  * invalidation and was once a quarter of the frames it measured, which is exactly the kind of thing
  * that has to be asked for by name.</p>
  *
- * <p>They are declared here rather than in {@link FrameProfile} so that a class can record on one
- * without loading the probe, and so the names sit in one place a reader can check against the mask.</p>
+ * <h3>Recording on them</h3>
+ *
+ * <pre>{@code
+ * long t = CgTrace.stamp(UiTrace.FRAME);             // a phase: 0 while the channel is off
+ * layout();
+ * CgTrace.zoneDone(UiTrace.FRAME, "frame:layout", t);
+ * CgTrace.add(UiTrace.FRAME, "drawcalls", 1);         // a per-frame count
+ *
+ * long span = CgTrace.spanBegin(UiTrace.FLOW, "open:file");   // a chain across frames
+ * CgTrace.spanEnd(span);
+ *
+ * UiTrace.blame("rematch");                           // who asked, on the blame channel
+ * }</pre>
+ *
+ * <p>A host brackets each frame with {@link #frameBegin()} and {@link #frameEnd()}.</p>
  */
 public final class UiTrace {
 
@@ -57,14 +72,100 @@ public final class UiTrace {
     public static final CgTraceChannel BLAME = CgTrace.channel("crystalgui.blame");
 
     static {
-        // FIRST, and before any name is interned: FrameProfile forwards, so without this every zone it
-        // records is attributed to FrameProfile's own line rather than to the call site that asked --
-        // which makes the one column that turns a report into a next step say the same thing 275 times.
-        CgTraceNames.addForwarder(FrameProfile.class.getName());
-        // And HERE, because this class is loaded by anything that records a CrystalGUI zone -- so the
+        // HERE, because this class is loaded by anything that records a CrystalGUI zone -- so the
         // accusations exist wherever the counters do, without a host being told to install them.
         UiHints.install();
+        // THE LOG PROPERTY STILL MEANS "show me slow frames": only an enabled channel records, so it
+        // switches the frame channel on rather than leaving the line with no breakdown.
+        if (SlowFrameLog.ECHO) CgTrace.setEnabled(FRAME, true);
     }
+
+    // ── The frame boundary ──────────────────────────────────────────────────────────────────
+
+    /**
+     * The very top of a frame, from the host that owns the frame loop.
+     *
+     * <p>The engine commits the PREVIOUS frame here, since a frame's wall time is the interval to the next
+     * one — and that frame's slow-frame line is written now, when its counters have landed.</p>
+     */
+    public static void frameBegin() {
+        CgTrace.frameBegin();
+        SlowFrameLog.frameCommitted();
+    }
+
+    /** The painter's last line: this frame's blame as markers, and the engine's CPU mark. */
+    public static void frameEnd() {
+        flushBlame();
+        CgTrace.frameEnd();
+    }
+
+    // ── Blame ───────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Blames the CALLER for one occurrence of {@code what} — the probe that names a churn source.
+     *
+     * <pre>{@code
+     * UiTrace.blame("rematch", "com.crystalgui.style.");   // skip the bookkeeping's own frames
+     * }</pre>
+     *
+     * <p>A count says three hundred elements were re-matched; it cannot say who asked. This walks up to
+     * the first frame outside the given packages and counts that, so the frame carries
+     * {@code Tooltip.reposition:214 x280} rather than {@code rematched=300}. A stack walk per call, so it
+     * records only while {@link #BLAME} is on.</p>
+     */
+    public static void blame(String what, String... ignorePackages) {
+        if (!CgTrace.isEnabled(BLAME)) return;
+        // CAPPED: a frame that re-matches two thousand elements would make two thousand walks, and the
+        // probe was a quarter of the frames it measured. Every call is attributed up to a cap, then one
+        // in a stride stands for the stride, so the totals hold and the cost does not.
+        int nth = blamesThisFrame++;
+        int weight = 1;
+        if (nth >= BLAME_EXACTLY) {
+            if ((nth - BLAME_EXACTLY) % BLAME_STRIDE != 0) return;
+            weight = BLAME_STRIDE;
+        }
+        for (StackTraceElement frame : new Throwable().getStackTrace()) {
+            String at = frame.getClassName();
+            if (at.equals(UiTrace.class.getName()) || ignored(at, ignorePackages)) continue;
+            int dot = at.lastIndexOf('.');
+            SITES.merge((dot < 0 ? at : at.substring(dot + 1)) + '.' + frame.getMethodName() + ':'
+                    + frame.getLineNumber(), weight, Integer::sum);
+            return;
+        }
+        SITES.merge(what + "(unattributed)", weight, Integer::sum);
+    }
+
+    private static boolean ignored(String className, String[] packages) {
+        for (String each : packages) {
+            if (className.startsWith(each)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * This frame's blame as markers, top sites first — ONE per site, since two thousand markers a frame
+     * would fill the ring with the evidence for a single finding.
+     */
+    private static void flushBlame() {
+        if (!SITES.isEmpty() && CgTrace.isEnabled(BLAME)) {
+            List<Map.Entry<String, Integer>> sites = new ArrayList<>(SITES.entrySet());
+            sites.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+            for (int i = 0; i < Math.min(MAX_BLAME_MARKERS, sites.size()); i++) {
+                CgTrace.marker(BLAME, "invalidated-by", sites.get(i).getKey() + " x" + sites.get(i).getValue());
+            }
+        }
+        SITES.clear();
+        blamesThisFrame = 0;
+    }
+
+    /** Past this the list is a log rather than a finding. */
+    private static final int MAX_BLAME_MARKERS = 10;
+    /** Attributed one by one each frame up to this, then one in a stride. */
+    private static final int BLAME_EXACTLY = 256;
+    private static final int BLAME_STRIDE = 16;
+
+    private static final Map<String, Integer> SITES = new LinkedHashMap<>();
+    private static int blamesThisFrame;
 
     /** Whether anything in CrystalGUI is recording. */
     public static boolean isRecording() {

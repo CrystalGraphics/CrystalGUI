@@ -7,7 +7,8 @@ import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.api.PoseStack;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.texture.svg.SvgDocument;
 
 import org.joml.Matrix4f;
@@ -129,7 +130,7 @@ public final class SvgRasterCache {
         // THE DIRECT PATH IS THE EXPENSIVE ONE -- a draw per scanline cell against one textured quad --
         // so a frame full of them is a finding rather than a detail. Counted here and not at the two
         // call sites, because there are five ways to refuse and a caller can tell none of them apart.
-        if (!served) FrameProfile.count("svg-direct", 1);
+        if (!served) CgTrace.add(UiTrace.FRAME, "svg-direct", 1);
         return served;
     }
 
@@ -195,7 +196,7 @@ public final class SvgRasterCache {
         // at the bottom of the texture -- the convention drawLayer already documents.
         float v0 = 1f - (float) entry.y / ATLAS_SIZE, v1 = 1f - (float) (entry.y + entry.height) / ATLAS_SIZE;
         CgTexture2D texture = (CgTexture2D) atlas.getColorTexture(0);
-        FrameProfile.count("svg-raster-draws", 1);
+        CgTrace.add(UiTrace.FRAME, "svg-raster-draws", 1);
 
         if (!entry.baked) {
             // Straight-alpha white coverage under the tint: an ordinary textured quad, batched with
@@ -243,8 +244,8 @@ public final class SvgRasterCache {
         float atlasX = entry.x + pad - cornerX, atlasY = entry.y + pad - cornerY;
         entry.baked = drawn.fill() && !flat && drawn.colours() != null;
 
-        FrameProfile.count("svg-raster-builds", 1);
-        long timed = FrameProfile.begin();
+        CgTrace.add(UiTrace.FRAME, "svg-raster-builds", 1);
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         ctx.beginLayerFbo(atlas, false);
         int[] scissor = ctx.suspendScissor();
         PoseStack pose = ctx.getPoseStack();
@@ -268,7 +269,7 @@ public final class SvgRasterCache {
             ctx.resumeScissor(scissor);
             ctx.endLayerFbo();
         }
-        FrameProfile.end(timed, "svg-raster:build");
+        CgTrace.zoneDone(UiTrace.FRAME, "svg-raster:build", timed);
         return entry;
     }
 
@@ -304,7 +305,7 @@ public final class SvgRasterCache {
         entries.clear();
         shelfX = shelfY = shelfHeight = 0;
         clear();
-        FrameProfile.count("svg-raster-resets", 1);
+        CgTrace.add(UiTrace.FRAME, "svg-raster-resets", 1);
     }
 
     private void clear() {

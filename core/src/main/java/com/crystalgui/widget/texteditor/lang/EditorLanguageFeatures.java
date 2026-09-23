@@ -1,6 +1,7 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.core.trace.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.decoration.TrackedRange;
@@ -307,22 +308,22 @@ public final class EditorLanguageFeatures {
         // measured `ed:hoverTick 36,087us` -- 36ms in a frame, while scrolling with the pointer parked
         // over the text. The rest timer is the one thing in the editor tick that fires from the pointer
         // NOT moving, which a scroll is, so it lands in the middle of exactly the gesture being measured.
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         List<Diagnostic> problems = editor.diagnosticsAt(offset);
-        FrameProfile.step(timed, "doc.diagnosticsAt -> " + problems.size());
+        CgTrace.spanDone(UiTrace.FLOW, "doc.diagnosticsAt -> " + problems.size(), timed);
         if (!problems.isEmpty()) {
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FLOW);
             ensureDocPopup();
-            FrameProfile.step(timed, "doc.ensurePopup");
-            timed = FrameProfile.begin();
+            CgTrace.spanDone(UiTrace.FLOW, "doc.ensurePopup", timed);
+            timed = CgTrace.stamp(UiTrace.FLOW);
             docPopup.showProblemsAt(window, problems, anchor[0], anchor[1], anchor[2]);
-            FrameProfile.step(timed, "doc.showProblemsAt");
-            timed = FrameProfile.begin();
+            CgTrace.spanDone(UiTrace.FLOW, "doc.showProblemsAt", timed);
+            timed = CgTrace.stamp(UiTrace.FLOW);
             fillProblemSection(offset);
-            FrameProfile.step(timed, "doc.fillProblemSection");
+            CgTrace.spanDone(UiTrace.FLOW, "doc.fillProblemSection", timed);
         }
 
-        long asking = FrameProfile.begin();
+        long asking = CgTrace.stamp(UiTrace.FLOW);
         boolean asked = resolveAt(LANE_DOC, offset, symbol -> {
             UIDocument live = editor.document();
             if (live == null) return;
@@ -332,7 +333,7 @@ public final class EditorLanguageFeatures {
             docPopup.show(live, symbol, at[0], at[1], at[2]);
             fillProblemSection(offset);
         });
-        FrameProfile.step(asking, "doc.resolveAt (asked=" + asked + ")");
+        CgTrace.spanDone(UiTrace.FLOW, "doc.resolveAt (asked=" + asked + ")", asking);
         return asked || !problems.isEmpty();
     }
 

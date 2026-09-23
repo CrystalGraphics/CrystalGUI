@@ -59,10 +59,8 @@ final class SvgTessellator {
     }
 
     /**
-     * <p><b>Not profiled, and it cannot be.</b> Tessellation is reachable from {@code SvgDocument.parse},
-     * which is pure geometry and therefore runs in {@code headlessTest} with CrystalGraphics core absent —
-     * so a {@code CgProfiler} scope here compiles, passes {@code :core:test}, and dies with
-     * {@code NoClassDefFoundError} on a dedicated server. {@code SvgDocument.load} is the profiled seam.</p>
+     * <p>Reachable from {@code SvgDocument.parse}, and so from {@code headlessTest} and a dedicated server:
+     * record through {@code CgTrace} if anything, never through a CrystalGraphics core type.</p>
      */
     static SvgMesh tessellate(List<SvgPath.Polyline> contours, boolean evenOdd, SvgScene.Paint paint) {
         List<List<float[]>> rings = SvgGeometry.ringsOf(contours);

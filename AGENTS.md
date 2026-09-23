@@ -1422,15 +1422,19 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
   .trace                       WHAT A FRAME COST, and who asked. UiTrace (CrystalGUI's three channels —
                                `crystalgui.frame` for phases and counters, `.flow` for chains that
                                outlive a frame, `.blame` for the stack walk — plus `useCacheRoot`, the
-                               run directory, `export()` and `writeMeta()`), FrameProfile (the API 275
-                               call sites use, a FORWARDER onto CrystalGraphics' CgTrace since T3) and
+                               run directory, `export()` and `writeMeta()`, and the frame boundary a
+                               UIDocument brackets its frame with -- `frameBegin`/`frameEnd`, `blame`),
+                               SlowFrameLog (the `[frame]` line, read back off the ring) and
                                FrameStats (the readout's model — a VIEW over the ring, with no storage
                                of its own). The capture engine itself is CrystalGraphics'
                                `com.crystalgraphics.trace`, in its PLATFORM module rather than core, so
-                               a dedicated server and `headlessTest` can both reach it.
-                               CrystalGraphics' `CgProfiler` is a facade over it too (T6): its
-                               scopes land on `crystalgraphics.text`/`.gl`/`.async`/`.misc` by the
-                               name's first segment. The GPU is `CgGpuTrace` (T7): timer queries
+                               a dedicated server and `headlessTest` can both reach it. Call sites
+                               write to it DIRECTLY -- `CgTrace.zone(UiTrace.FRAME, "...")`,
+                               `CgTrace.add` for a per-frame count, `CgTrace.stamp` + `zoneDone` for
+                               a split begin/end -- and CrystalGraphics' own on `CgChannels.TEXT`/
+                               `GL`/`ASYNC`/`MISC`. There is no facade left: `FrameProfile` and
+                               `CgProfiler` were deleted in T9, and the harness reads the ring through
+                               `harness.trace.TraceReport`/`TraceDump`. The GPU is `CgGpuTrace` (T7): timer queries
                                landing in the frame they were issued in, one to three frames late, as
                                `gpuNanos` and a `gpu:<name>` counter per zone -- absent, never zero.
                                Frame images are `CgFrameImages` (T8), on the `images` channel: the
