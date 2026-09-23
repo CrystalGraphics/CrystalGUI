@@ -1,8 +1,13 @@
 // The `neoforge` branch — NeoForge through ModDevGradle, one node per Minecraft version
 // (`versions/<version>/`, whose gradle.properties pins mc.version, neoforge.version, Parchment and the
-// loader's ASM). Its first node is 1.20.4: NeoForge published no 20.1.x series.
+// loader's ASM). Its first node is 1.20.2: NeoForge published no 20.1.x series.
+//
+// A node that also pins `neoform.version` (1.20.2, 1.20.3 -- NeoForge 20.2/20.3, which ModDevGradle does
+// not set up) is built from parts: NeoForm's Minecraft, NeoForge's jars compileOnly, and no dev run.
+// @see cgbuildlogic.useNeoForgeApi
 
 import cgbuildlogic.commonNode
+import cgbuildlogic.useNeoForgeApi
 
 plugins {
     id("cg-modern-loader")
@@ -12,6 +17,9 @@ plugins {
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
+
+val fromParts = findProperty("neoform.version") != null
+if (fromParts) useNeoForgeApi()
 
 // ADHOC: Re-declare two Maven repos that net.neoforged.moddev.repositories (settings plugin)
 // should provide at project level. The cg-modern-loader convention plugin's repositories block
@@ -37,7 +45,7 @@ apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts"
 // The run is pinned rather than the project: `asmVersion` is what the SHIPPED language jar carries and
 // what its `.map` layer is compiled against, and that is a separate decision from what a dev launch
 // borrows from its loader. @see CGUI_INVARIANTS.md § building
-configurations.matching { it.name == "runtimeClasspath" || it.name == "additionalRuntimeClasspath" }
+if (!fromParts) configurations.matching { it.name == "runtimeClasspath" || it.name == "additionalRuntimeClasspath" }
     .configureEach {
         resolutionStrategy.eachDependency {
             if (requested.group == "org.ow2.asm") useVersion(property("asm").toString())
@@ -53,7 +61,8 @@ repositories {
 }
 
 neoForge {
-    version = property("neoforge.version").toString()
+    if (fromParts) neoFormVersion = property("neoform.version").toString()
+    else version = property("neoforge.version").toString()
 
     parchment {
         minecraftVersion = property("parchment.mc").toString()
@@ -61,7 +70,7 @@ neoForge {
     }
 
     // Per NODE: `project.file` resolves under versions/<version>/, so two versions never share a world.
-    runs {
+    if (!fromParts) runs {
         create("client") {
             client()
             gameDirectory = project.file("runs/client")
@@ -74,7 +83,7 @@ neoForge {
         }
     }
 
-    mods {
+    if (!fromParts) mods {
         create("crystalgui") {
             sourceSet(sourceSets.main.get())
             // Dev-run classpath: core and the common node are compileOnly for production
@@ -99,7 +108,7 @@ neoForge {
 // loader block on purpose -- ModDevGradle creates additionalRuntimeClasspath while that extension is
 // configured, not when its plugin is applied, so an apply above it fails with "Configuration with
 // name 'additionalRuntimeClasspath' not found".
-apply(from = rootProject.file("gradle/module_integration/crystalgraphics-run.gradle.kts").toURI())
+if (!fromParts) apply(from = rootProject.file("gradle/module_integration/crystalgraphics-run.gradle.kts").toURI())
 
 // Extracts this node's NeoForge + Minecraft sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when the source jar changes between toolchain version bumps.
