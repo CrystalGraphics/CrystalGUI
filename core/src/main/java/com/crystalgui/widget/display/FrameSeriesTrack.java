@@ -87,6 +87,8 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
             if (KeyStroke.hasMod(modifiers)) return;
             if (CgModifiers.hasShift(modifiers)) {
                 panBy(notches * visible() * PAN_PER_NOTCH);
+            } else if (!wheelZooms()) {
+                return;     // not ours: it goes on to whatever scrolls this row's container
             } else {
                 // A POSITIVE notch is the wheel rolled DOWN (HostPointer.scroll), which zooms OUT.
                 float x = Float.isNaN(lastX) ? width() * 0.5f : lastX;
@@ -94,6 +96,14 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
             }
             event.stopPropagation();
         }, false, true);
+    }
+
+    /**
+     * Whether a plain wheel zooms this row. A row stacked with others in a scrolling list answers no, so
+     * the wheel scrolls the list; it still pans with Shift, and follows a zoom made elsewhere.
+     */
+    protected boolean wheelZooms() {
+        return true;
     }
 
     // ── The view: which frames are across the row ───────────────────────────────────────────

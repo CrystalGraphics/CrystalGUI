@@ -22,6 +22,7 @@ import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.text.cache.CgFontRegistry;
@@ -96,6 +97,8 @@ public final class CgUiPaintContext {
      * WARM is for, stated where the warm is, rather than a second copy of somebody else's default.</p>
      */
     private static final float WARM_UI_SCALE = 2f;
+
+    private static final int GPU_UI = CgGpuTrace.name("ui");
     /** {@code namespace:path} resolved through {@link CgIO}'s waterfall (filesystem override →
      * MC resource manager → classpath) — works identically in-game and in the harness/tests,
      * unlike the hardcoded absolute Windows path this replaced ({@code C:\WINDOWS\Fonts\arial.ttf},
@@ -596,6 +599,8 @@ public final class CgUiPaintContext {
     public void beginFrame(int screenWidth, int screenHeight) {
         frameId++;
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
+        // Everything the UI asks of the GPU this frame, the composite included. @see #endFrame
+        CgGpuTrace.begin(GPU_UI);
         layerOriginX = 0;
         layerOriginY = 0;
         clearPainted();
@@ -831,6 +836,8 @@ public final class CgUiPaintContext {
         poseStack.popPose();
 
         if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
+
+        CgGpuTrace.end();
 
         // THE OTHER HALF OF THE FRAME THE DOCUMENT OPENED, and last of all so the composite above is
         // in it. Reports and clears; a no-op when nothing opened one, which is

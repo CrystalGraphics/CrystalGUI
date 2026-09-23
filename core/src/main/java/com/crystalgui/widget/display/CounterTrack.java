@@ -27,6 +27,11 @@ import com.crystalgui.ui.dom.Name;
  * <p>The peak is printed in the row, because a sparkline with no number answers "this went up" and not
  * "this went up to twenty-four megapixels" — and the second is the one that decides anything. An
  * absent value is a GAP rather than a zero: a counter nothing wrote in a frame did not measure zero.</p>
+ *
+ * <p>A counter that holds a duration says so, and is printed as one:</p>
+ * <pre>{@code
+ * gpuUi.setSeries("gpu:ui", nanosPerFrame).setUnit(CounterTrack.Unit.NANOSECONDS); // "17.70 ms"
+ * }</pre>
  */
 public class CounterTrack extends FrameSeriesTrack {
 
@@ -35,9 +40,19 @@ public class CounterTrack extends FrameSeriesTrack {
     /** No value recorded for this frame. Distinct from zero, and drawn as a gap. */
     public static final long ABSENT = Long.MIN_VALUE;
 
+    /** What a value counts, which decides only how it is printed. */
+    public enum Unit {
+        COUNT,
+        /** Printed as milliseconds. */
+        NANOSECONDS
+    }
+
     private String label = "";
     private long[] values = new long[0];
     private long peak;
+    private Unit unit = Unit.COUNT;
+    private String note = "";
+    private boolean wheelZooms = true;
 
     public CounterTrack() {
         super(NAME);
@@ -58,6 +73,49 @@ public class CounterTrack extends FrameSeriesTrack {
 
     public String label() {
         return label;
+    }
+
+    public CounterTrack setUnit(Unit unit) {
+        Unit wanted = unit == null ? Unit.COUNT : unit;
+        if (wanted != this.unit) {
+            this.unit = wanted;
+            repaint();
+        }
+        return this;
+    }
+
+    public Unit unit() {
+        return unit;
+    }
+
+    /** Said after the peak — why a row is empty, say. Empty for nothing. */
+    public CounterTrack setNote(String value) {
+        String wanted = value == null ? "" : value;
+        if (!wanted.equals(note)) {
+            note = wanted;
+            repaint();
+        }
+        return this;
+    }
+
+    /**
+     * False for a row in a scrolling list of rows: a plain wheel then scrolls the list rather than
+     * zooming this row. Shift+wheel still pans.
+     */
+    public CounterTrack setWheelZooms(boolean value) {
+        wheelZooms = value;
+        return this;
+    }
+
+    @Override
+    protected boolean wheelZooms() {
+        return wheelZooms;
+    }
+
+    /** {@code value} as this row prints it: {@code "412"}, or {@code "17.70 ms"} for a duration. */
+    public String format(long value) {
+        if (value == ABSENT) return "—";
+        return unit == Unit.NANOSECONDS ? String.format("%.2f ms", value / 1_000_000d) : Long.toString(value);
     }
 
     public long peak() {
@@ -115,9 +173,11 @@ public class CounterTrack extends FrameSeriesTrack {
         String shownValue = "";
         if (shown >= 0) {
             long at = valueAt(shown);
-            shownValue = "   " + (at == ABSENT ? "\u2014" : at);
+            // NOT A BARE DASH: nothing written here is an answer, and "—" read as a missing reading.
+            shownValue = "   " + (at == ABSENT ? "none this frame" : format(at));
         }
-        label(ctx, font, label + shownValue + "   peak " + peak, 6f, 1f, LABEL_BAND - 1f,
+        label(ctx, font, label + shownValue + "   peak " + format(peak) + (note.isEmpty() ? "" : "   " + note),
+                6f, 1f, LABEL_BAND - 1f,
                 box.width() - 12f, text);
     }
 

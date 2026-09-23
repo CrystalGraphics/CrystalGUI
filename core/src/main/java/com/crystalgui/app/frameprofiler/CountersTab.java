@@ -5,6 +5,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.display.CounterTrack;
+import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.FlexDirection;
 
@@ -19,7 +20,7 @@ import java.util.function.IntConsumer;
  * <pre>{@code
  * CountersTab tab = new CountersTab();
  * tab.onFrameSelected(model::selectFrame);
- * tab.show(model.counterSeries(), model.selectedIndex(), model.comparableFrom());
+ * tab.show(model.counterSeries(), model.frameIndices(), model.selectedIndex(), model.comparableFrom());
  * }</pre>
  *
  * <h3>A tab, not a band</h3>
@@ -44,11 +45,14 @@ public class CountersTab extends UIElement {
     private final List<CounterTrack> rows = new ArrayList<>();
     private final List<IntConsumer> listeners = new ArrayList<>(2);
     private final UIText empty = new UIText("No counters recorded on an enabled channel.");
+    /** What the wheel scrolls: `overflow` on the tab clips, and only a scroller turns a wheel into a scroll. */
+    private final ScrollerView list = new ScrollerView();
 
     public CountersTab() {
         super(NAME);
         layout(l -> l.flexDirection(FlexDirection.COLUMN));
         empty.addClass(EMPTY_CLASS);
+        append(list);
     }
 
     public void onFrameSelected(IntConsumer listener) {
@@ -57,6 +61,11 @@ public class CountersTab extends UIElement {
 
     public List<CounterTrack> rows() {
         return List.copyOf(rows);
+    }
+
+    /** What the rows scroll in. */
+    public ScrollerView scroller() {
+        return list;
     }
 
     /** On the row a hint pointed at. */
@@ -106,18 +115,31 @@ public class CountersTab extends UIElement {
         for (CounterTrack row : rows) row.showView(from, span);
     }
 
-    public void show(Map<String, long[]> series, int selected, int comparableFrom) {
+    /** On a row whose counter has not been written lately: its channel is off, or it stopped. */
+    public static final String STALE_CLASS = "__stale__";
+
+    /** A counter with no value in this many of the newest frames is stale. */
+    static final int RECENT_FRAMES = 60;
+
+    /**
+     * Shows {@code series}, one value per frame, over frames whose absolute numbers are
+     * {@code frameIndices} — what a stale row's note names.
+     */
+    public void show(Map<String, long[]> series, long[] frameIndices, int selected, int comparableFrom) {
         List<String> order = ordered(series);
         if (!sameNames(order)) {
-            removeAll();
+            list.removeAll();
             rows.clear();
             if (order.isEmpty()) {
-                append(empty);
+                list.append(empty);
                 return;
             }
             for (String name : order) {
                 CounterTrack row = new CounterTrack();
                 row.setSeries(name, series.get(name));
+                // THE WHEEL SCROLLS THE LIST: the rows fill the tab, so a row that zoomed on a plain
+                // wheel left nothing to scroll with. They follow the strip's zoom instead.
+                row.setWheelZooms(false);
                 row.onSelected(index -> {
                     for (IntConsumer listener : listeners) listener.accept(index);
                 });
@@ -131,34 +153,64 @@ public class CountersTab extends UIElement {
                     for (Runnable listener : viewListeners) listener.run();
                 });
                 rows.add(row);
-                append(row);
+                list.append(row);
             }
         }
         for (CounterTrack row : rows) {
             row.setSeries(row.label(), series.get(row.label()));
+            row.setUnit(ProfilerModel.isDuration(row.label())
+                    ? CounterTrack.Unit.NANOSECONDS : CounterTrack.Unit.COUNT);
             row.showSelected(selected);
             row.setComparableFrom(comparableFrom);
             row.showView(viewFrom, viewSpan);
+            int last = lastWritten(series.get(row.label()));
+            boolean stale = isStale(series.get(row.label()));
+            if (stale != row.hasClass(STALE_CLASS)) {
+                if (stale) row.addClass(STALE_CLASS);
+                else row.removeClass(STALE_CLASS);
+            }
+            row.setNote(!stale ? "" : last < 0 ? "never recorded"
+                    : "last recorded #" + (last < frameIndices.length ? frameIndices[last] : last));
         }
     }
 
+    private static int lastWritten(long[] values) {
+        for (int i = values.length - 1; i >= 0; i--) {
+            if (values[i] != CounterTrack.ABSENT) return i;
+        }
+        return -1;
+    }
+
+    private static boolean isStale(long[] values) {
+        return lastWritten(values) < values.length - RECENT_FRAMES;
+    }
+
     /**
-     * Rows with something in them first, each group by name.
+     * Counters still being written first, then those that stopped; within each, rows with something in
+     * them before rows that stayed at zero, and by name.
      *
-     * <p>A counter that stayed at zero for the whole ring draws an empty row, and two dozen counters in
-     * recording order put three of those at the top. Moved to the end, not hidden: that a counter never
-     * moved is a fact, just not the first one worth reading. By name within each group, so a row stays
-     * where it was found between refreshes.</p>
+     * <p>A counter whose channel was switched off keeps its old values in the ring, so it reads as a row
+     * that is empty now and full a long way back — interleaved with live ones, the tab was a wall of
+     * rows that mostly said nothing about the frame being looked at. Moved down and dimmed, not hidden:
+     * that it was recorded is still a fact. By name within each group, so a row stays where it was
+     * found between refreshes.</p>
      */
     private static List<String> ordered(Map<String, long[]> series) {
         List<String> moving = new ArrayList<>();
         List<String> still = new ArrayList<>();
+        List<String> stale = new ArrayList<>();
         for (Map.Entry<String, long[]> entry : series.entrySet()) {
-            (peakOf(entry.getValue()) > 0L ? moving : still).add(entry.getKey());
+            if (isStale(entry.getValue())) stale.add(entry.getKey());
+            else (peakOf(entry.getValue()) > 0L ? moving : still).add(entry.getKey());
         }
         moving.sort(String::compareTo);
         still.sort(String::compareTo);
+        stale.sort(String::compareTo);
         moving.addAll(still);
+        moving.addAll(stale);
+        // THE FRAME'S GPU TOTAL LEADS: it is the one row read against the strip above to tell a GPU-bound
+        // frame from a CPU-bound one.
+        if (moving.remove(ProfilerModel.GPU_SERIES)) moving.add(0, ProfilerModel.GPU_SERIES);
         return moving;
     }
 
@@ -175,6 +227,6 @@ public class CountersTab extends UIElement {
         for (int i = 0; i < order.size(); i++) {
             if (!rows.get(i).label().equals(order.get(i))) return false;
         }
-        return !order.isEmpty() || children().contains(empty);
+        return !order.isEmpty() || list.children().contains(empty);
     }
 }

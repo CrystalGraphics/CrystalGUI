@@ -1,5 +1,6 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.settings.Setting;
@@ -52,10 +53,13 @@ public final class ProfilerSettings {
                     + "frames of the program are captured. Takes effect on the next launch.");
 
     // NOT crystalgui.blame by default: it walks a stack on every invalidation, which slows the very frames
-    // being measured. It is asked for by name, from the channel menu, when it is wanted.
+    // being measured. NOR crystalgraphics.text, .gl or .misc: a zone per text draw, per draw call and per
+    // buffer map, 3,000 to 8,000 a frame on the desktop scene, where the ring budgets 256. They overflow it
+    // and bury the frame's own phases. All are asked for by name, from the channel menu.
     public static final Setting<String> CHANNELS = Setting.string(
             "profiler.recording.channels", "Channels",
-            String.join(", ", "crystalgraphics", UiTrace.FRAME.name(), UiTrace.FLOW.name()))
+            String.join(", ", UiTrace.FRAME.name(), UiTrace.FLOW.name(), CgGpuTrace.GPU.name(),
+                    "crystalgraphics.async"))
             .description("What Record and Record from launch switch on, comma-separated. A name takes "
                     + "every channel beneath it, including ones that load later.");
 

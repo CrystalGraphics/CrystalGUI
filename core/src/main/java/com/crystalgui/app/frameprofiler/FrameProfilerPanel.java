@@ -2,6 +2,7 @@ package com.crystalgui.app.frameprofiler;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.trace.CgFrameRecord;
+import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceLog;
@@ -254,6 +255,7 @@ public class FrameProfilerPanel extends UIElement {
         int zones = model.zonesPerFrame();
         text.append("  \u00b7  tracing \u2248 ").append(shortMicros(zones * zoneCostNanos()))
                 .append(" a frame (").append(zones).append(" zones)");
+        text.append("  \u00b7  ").append(gpuStatus());
         long dropped = CgTraceLog.dropped();
         if (dropped > 0L) text.append("  \u00b7  ").append(dropped).append(" log lines dropped");
         if (!text.toString().equals(footerText.getText())) footerText.setText(text.toString());
@@ -295,13 +297,21 @@ public class FrameProfilerPanel extends UIElement {
     private int revealedIndex = -1;
 
     private boolean tick(float deltaSeconds) {
-        if (!model.isFollowing() || !model.isCapturing()) return true;
+        boolean following = model.isFollowing() && model.isCapturing();
+        // PAUSED, ONLY THE GPU IS WAITED FOR: a held frame's figure lands frames after it, and the
+        // snapshot is kept still on purpose, so the figures are read from the ring rather than the whole
+        // snapshot taken again under somebody reading it.
+        if (!following && !model.selectionAwaitsGpu()) return true;
         sinceRefresh += deltaSeconds;
         // A SETTING, and four times a second by default: fast enough that the strip visibly fills, slow
         // enough to read, and cheap enough that the viewer does not become the thing worth profiling.
         if (sinceRefresh < ProfilerSettings.refreshSeconds()) return true;
         sinceRefresh = 0f;
-        model.refresh();
+        if (following) {
+            model.refresh();
+        } else {
+            render();
+        }
         return true;
     }
 
@@ -612,7 +622,7 @@ public class FrameProfilerPanel extends UIElement {
         } else if (!Objects.equals(model.selectedZone(), shownZone)) {
             refreshTables();
         }
-        counters.show(model.counterSeries(), model.selectedIndex(), comparable);
+        counters.show(model.counterSeries(), model.frameIndices(), model.selectedIndex(), comparable);
         refreshCompare();
         chains.show(model.snapshot().spans());
         renderFooter();
@@ -699,7 +709,9 @@ public class FrameProfilerPanel extends UIElement {
             if (frame.hadGc()) collected++;
         }
         text.append(over).append(" slow of ").append(wall.length);
-        if (collected > 0) text.append("  \u00b7  GC in ").append(collected);
+        // A COUNT OF FRAMES, said as one: "GC in 4" read as "a collection in four frames' time".
+        if (collected > 0) text.append("  \u00b7  ").append(collected).append(collected == 1 ? " frame" : " frames")
+                .append(" had a GC");
         text.append("  \u00b7  p95 ").append(shortMs(sorted[Math.min(sorted.length - 1, (int) (sorted.length * 0.95))]))
                 .append("  \u00b7  p50 ").append(shortMs(sorted[sorted.length / 2]));
         stats.setText(text.toString());
@@ -733,7 +745,15 @@ public class FrameProfilerPanel extends UIElement {
         // ABSENT IS NOT ZERO. A GPU timer resolves one to three frames late, and printing 0.00 ms
         // would read as "the GPU did nothing".
         header.append(caption("GPU"));
-        header.append(frame.hasGpu() ? figure(String.format("%.2f ms", frame.gpuMillis())) : absent("pending"));
+        CgFrameRecord timed = model.withGpu(frame);
+        header.append(timed.hasGpu() ? figure(String.format("%.2f ms", timed.gpuMillis())) : absent(gpuAbsence()));
+        // LIVE ALWAYS SHOWS THE NEWEST FRAME, whose figure is always still on its way — so beside it,
+        // the latest one that has landed, or the header never shows a GPU number while following.
+        CgFrameRecord landed = timed.hasGpu() ? null : latestWithGpu();
+        if (landed != null) {
+            header.append(caption("last"));
+            header.append(figure(String.format("%.2f ms (#%d)", landed.gpuMillis(), landed.index())));
+        }
         if (frame.hadGc()) {
             header.append(caption("GC"));
             header.append(figure(frame.gcSummary()));
@@ -871,6 +891,31 @@ public class FrameProfilerPanel extends UIElement {
         UIText element = new UIText(text);
         element.addClass(FIGURE_CLASS);
         return element;
+    }
+
+    /** The newest frame whose GPU figure has landed, or null. */
+    @Nullable
+    private CgFrameRecord latestWithGpu() {
+        List<CgFrameRecord> frames = model.snapshot().frames();
+        for (int i = frames.size() - 1; i >= 0; i--) {
+            CgFrameRecord frame = model.withGpu(frames.get(i));
+            if (frame.hasGpu()) return frame;
+        }
+        return null;
+    }
+
+    /** Whether GPU time is being measured at all — the one thing no single frame's header can say. */
+    private static String gpuStatus() {
+        if (CgGpuTrace.support() == CgGpuTrace.Support.UNSUPPORTED) return "GPU: no timer queries on this context";
+        if (!CgGpuTrace.isMeasuring()) return "GPU: not recorded (the gpu channel is off)";
+        if (CgGpuTrace.support() == CgGpuTrace.Support.UNKNOWN) return "GPU: on, nothing timed yet";
+        return "GPU: timed, each figure lands a few frames late";
+    }
+
+    /** Why a frame has no GPU figure: never zero, and never "pending" when nothing is on its way. */
+    private static String gpuAbsence() {
+        if (CgGpuTrace.support() == CgGpuTrace.Support.UNSUPPORTED) return "no timer queries";
+        return CgGpuTrace.isMeasuring() ? "pending" : "not recorded";
     }
 
     private static UIElement absent(String text) {

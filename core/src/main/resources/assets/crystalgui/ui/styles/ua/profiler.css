@@ -143,6 +143,9 @@ frameprofiler .__frame-header__ {
     padding-left: 4px;
     padding-right: 4px;
     font-size: 11;
+    /* CLIPPED, not scrolled: a narrow window cuts the least important figures off the end, where an
+     * overflowing header put a horizontal scrollbar on the whole window. */
+    overflow: hidden;
 }
 
 /* A LADDER OF THREE: caption small and dim, figure mono and secondary, headline large. The eye reads
@@ -466,10 +469,14 @@ calltreetab .__call-cost__ {
  * whole reason it is drawn on the strip's axis. Padding here slid every spike a few frames right of
  * the bar it belongs to. */
 counterstab {
-    gap: 3px;
     padding-top: 6px;
     padding-bottom: 6px;
-    overflow: scroll;
+}
+
+counterstab scrollerview {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
 }
 
 /* The same quiet bar and the same accent selection as the strip, so a counter reads as the strip's
@@ -478,12 +485,18 @@ countertrack {
     width: 100%;
     height: 34px;
     flex-shrink: 0;
+    margin-bottom: 3px;
     background-color: var(--profiler-strip-bg);
     border-radius: var(--radius-control, 4px);
     color: var(--profiler-bar-good);
     border-color: var(--profiler-playhead);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
     font-size: 9;
+}
+
+/* A counter nothing has written lately — its channel is off. Below the live ones, and quiet. */
+counterstab countertrack.__stale__ {
+    color: var(--profiler-pending);
 }
 
 counterstab .__empty__ {

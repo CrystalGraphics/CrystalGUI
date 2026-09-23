@@ -1,6 +1,7 @@
 package com.crystalgui.app.frameprofiler;
 
 import com.crystalgraphics.trace.CgFrameRecord;
+import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceChannel;
@@ -367,6 +368,57 @@ public final class ProfilerModel {
     // ── Counters ────────────────────────────────────────────────────────────────────────────
 
     /**
+     * {@code frame} with its GPU figure, if one has landed since the snapshot was taken — the ring's
+     * current record then, else {@code frame} itself.
+     *
+     * <p>A GPU figure lands frames after its frame, and a PAUSED window keeps one snapshot: without this
+     * every frame it held that was still pending stayed pending however long it was looked at.</p>
+     */
+    public CgFrameRecord withGpu(CgFrameRecord frame) {
+        if (frame.hasGpu()) return frame;
+        CgFrameRecord now = CgTrace.frame(frame.index());
+        return now != null && now.hasGpu() ? now : frame;
+    }
+
+    /**
+     * Whether the selection holds a frame still waiting on a GPU figure that is on its way — what a
+     * paused window keeps polling for.
+     */
+    /** Frames after its own within which a GPU figure has landed, measured at four; with room to spare. */
+    private static final int GPU_LANDS_WITHIN = 16;
+
+    public boolean selectionAwaitsGpu() {
+        if (!CgGpuTrace.isMeasuring()) return false;
+        List<CgFrameRecord> frames = snapshot.frames();
+        int from = hasRange() ? rangeFrom : selected;
+        int to = hasRange() ? rangeTo : selected;
+        // A FIGURE LANDS WITHIN A HANDFUL OF FRAMES OR NEVER: one recorded with the channel off will not
+        // arrive, and waiting on it would repaint a paused window four times a second for good.
+        long givenUp = CgTrace.frameCount() - GPU_LANDS_WITHIN;
+        for (int i = Math.max(0, from); i <= to && i < frames.size(); i++) {
+            CgFrameRecord frame = frames.get(i);
+            if (frame.index() >= givenUp && !withGpu(frame).hasGpu()) return true;
+        }
+        return false;
+    }
+
+    /** Each frame's absolute number, in the order {@link #counterSeries()} lays its values out. */
+    public long[] frameIndices() {
+        List<CgFrameRecord> frames = snapshot.frames();
+        long[] out = new long[frames.size()];
+        for (int i = 0; i < out.length; i++) out[i] = frames.get(i).index();
+        return out;
+    }
+
+    /** The series holding each frame's GPU total, in nanoseconds. @see #counterSeries() */
+    public static final String GPU_SERIES = "gpu";
+
+    /** Whether a series holds nanoseconds: the GPU total, and every GPU zone's counter. */
+    public static boolean isDuration(String series) {
+        return GPU_SERIES.equals(series) || series.startsWith(CgGpuTrace.PREFIX);
+    }
+
+    /**
      * Every counter in the ring, as one value per frame, oldest first.
      *
      * <p>{@link CounterTrack#ABSENT} where a frame recorded none — a
@@ -378,6 +430,17 @@ public final class ProfilerModel {
         List<CgFrameRecord> frames = snapshot.frames();
         Map<String, long[]> series = new LinkedHashMap<>();
         if (frames.isEmpty()) return series;
+
+        // THE FRAME'S GPU TOTAL, beside the per-zone figures it is the sum of — absent until it lands.
+        long[] gpu = absentSeries(frames.size());
+        boolean anyGpu = false;
+        for (int i = 0; i < frames.size(); i++) {
+            CgFrameRecord frame = withGpu(frames.get(i));
+            if (!frame.hasGpu()) continue;
+            gpu[i] = frame.gpuNanos();
+            anyGpu = true;
+        }
+        if (anyGpu) series.put(GPU_SERIES, gpu);
 
         Map<Long, Integer> positionOf = new LinkedHashMap<>();
         for (int i = 0; i < frames.size(); i++) positionOf.put(frames.get(i).index(), i);
@@ -636,7 +699,7 @@ public final class ProfilerModel {
         for (int i = from; i <= to && i < from + MAX_HINT_FRAMES; i++) {
             CgFrameRecord frame = frames.get(i);
             List<CgTraceAggregate.Node> tree = CgTraceAggregate.tree(withoutViewer(CgTrace.zonesIn(frame)));
-            for (CgTraceHints.Hint hint : CgTraceHints.forFrame(frame, tree, summed(snapshot.countersIn(frame)))) {
+            for (CgTraceHints.Hint hint : CgTraceHints.forFrame(withGpu(frame), tree, summed(snapshot.countersIn(frame)))) {
                 HintRow was = byCode.get(hint.code());
                 byCode.put(hint.code(), was == null ? new HintRow(hint, 1, i)
                         : new HintRow(was.hint(), was.frames() + 1, was.firstPosition()));
@@ -756,6 +819,22 @@ public final class ProfilerModel {
     }
 
     /**
+     * Mean GPU time per frame on {@code side}, over the frames whose figure has landed; -1 when none
+     * has — absent, never zero.
+     */
+    public double meanGpuMillis(@Nullable Side side) {
+        long total = 0L;
+        int timed = 0;
+        for (CgFrameRecord held : framesOf(side)) {
+            CgFrameRecord frame = withGpu(held);
+            if (!frame.hasGpu()) continue;
+            total += frame.gpuNanos();
+            timed++;
+        }
+        return timed == 0 ? -1d : total / 1_000_000d / timed;
+    }
+
+    /**
      * Every zone on either side, as time per frame, biggest change first.
      *
      * <p>Per FRAME, not summed: two sides are rarely the same length, and totals over 40 frames against
@@ -779,8 +858,38 @@ public final class ProfilerModel {
                     left == null ? 0d : left.totalMillis() / aFrames,
                     right == null ? 0d : right.totalMillis() / bFrames));
         }
+        // GPU ZONES as rows of their own, per frame whose GPU figure landed: a frame still pending would
+        // otherwise count as one that cost the GPU nothing.
+        Map<String, Double> gpuA = gpuMillisByZone(framesOf(sideA));
+        Map<String, Double> gpuB = gpuMillisByZone(framesOf(sideB));
+        Set<String> gpuNames = new LinkedHashSet<>(gpuA.keySet());
+        gpuNames.addAll(gpuB.keySet());
+        for (String name : gpuNames) {
+            rows.add(new CompareRow(name, GPU_SOURCE, gpuA.getOrDefault(name, 0d), gpuB.getOrDefault(name, 0d)));
+        }
         rows.sort((x, y) -> Double.compare(Math.abs(y.delta()), Math.abs(x.delta())));
         return rows;
+    }
+
+    /** What a GPU zone's Compare row gives as its source: it has no line of Java behind it. */
+    public static final String GPU_SOURCE = "GPU";
+
+    private Map<String, Double> gpuMillisByZone(List<CgFrameRecord> frames) {
+        Map<String, Double> out = new LinkedHashMap<>();
+        int timed = 0;
+        for (CgFrameRecord frame : frames) {
+            if (!withGpu(frame).hasGpu()) continue;
+            timed++;
+            for (CgTraceSnapshot.CounterView counter : snapshot.countersIn(frame)) {
+                if (counter.name().startsWith(CgGpuTrace.PREFIX)) {
+                    out.merge(counter.name(), counter.value() / 1_000_000d, Double::sum);
+                }
+            }
+        }
+        if (timed > 1) {
+            for (Map.Entry<String, Double> e : out.entrySet()) e.setValue(e.getValue() / timed);
+        }
+        return out;
     }
 
     private static Map<String, CgTraceAggregate.Stat> statsByName(List<CgFrameRecord> frames) {
