@@ -201,8 +201,8 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
             ServerLifecycleEvents.SERVER_STOPPING.register(server -> LifecycleCrystalGUI.serverStopping());
             ServerTickEvents.END_SERVER_TICK.register(server -> LifecycleCrystalGUI.serverTick());
 
-            // getPlayer() postdates 1.15, whose handler exposes the field.
-            //? if >=1.16 {
+            // getPlayer() arrived in 1.17; before it the handler exposes the field.
+            //? if >=1.17 {
             ServerPlayConnectionEvents.JOIN.register(
                     (handler, sender, server) -> LifecycleCrystalGUI.playerJoined(handler.getPlayer()));
             ServerPlayConnectionEvents.DISCONNECT.register(

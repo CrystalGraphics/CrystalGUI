@@ -2,12 +2,12 @@
 
 ## Target Versions
 
-MC 1.15–1.21.11 / MinecraftForge 29–61 — a node each for 1.15.2 (also 1.15, 1.15.1), 1.17.1, 1.18.2 (also 1.18, 1.18.1), 1.19.2
+MC 1.15–1.21.11 / MinecraftForge 29–61 — a node each for 1.15.2 (also 1.15, 1.15.1), 1.16.5 (also 1.16.1-1.16.4), 1.17.1, 1.18.2 (also 1.18, 1.18.1), 1.19.2
 (also 1.19, 1.19.1), 1.19.3, 1.19.4, 1.20.1, 1.20.2, 1.20.4, 1.20.6, 1.21.1, 1.21.3, 1.21.4, 1.21.5, 1.21.6
 (also 1.21.7), 1.21.8, 1.21.10 (also 1.21.9) and 1.21.11, pinned in `versions/<version>/gradle.properties`.
 Forge 1.21 is refused (Forge 51 has no HUD event); Forge published nothing for 1.17, 1.20.5 or 1.21.2.
 
-**Forge 29-31 (1.15.x)** are built by Unimined, run on Java 8, and differ once more: `fml.network`,
+**Forge 29-36 (1.15.x, 1.16.x)** are built by Unimined, run on Java 8, and differ once more: `fml.network`,
 `fml.event.server`, `CrashReportExtender`, and key registration through `DeferredWorkQueue`.
 
 **Three API eras below 1.19**, each a directive in `CrystalGUIForge`: Forge 37 (1.17.1) names screen
