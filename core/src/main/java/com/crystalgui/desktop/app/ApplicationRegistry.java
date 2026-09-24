@@ -2,13 +2,11 @@ package com.crystalgui.desktop.app;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.ServiceConfigurationError;
-import java.util.ServiceLoader;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
@@ -91,30 +89,16 @@ public final class ApplicationRegistry {
         // SET BEFORE THE LOOP: a service installs, and `install` bootstraps, so anything else would
         // re-enter here and run every service twice.
         bootstrapped = true;
-        Iterator<ApplicationKinds> services =
-                ServiceLoader.load(ApplicationKinds.class, ApplicationRegistry.class.getClassLoader())
-                        .iterator();
-        while (true) {
-            ApplicationKinds kinds;
-            try {
-                if (!services.hasNext()) break;
-                kinds = services.next();
-            } catch (ServiceConfigurationError | RuntimeException | LinkageError broken) {
-                // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN PRODUCTS AND NOT THE DESKTOP. The
-                // iterator throws on the ENTRY, so this has to bracket `next()` rather than the body --
-                // catching only around the call below leaves one mod's missing class emptying the
-                // launcher.
-                CrystalGuiCore.LOGGER.error("[cgui] an ApplicationKinds service could not be loaded; "
-                        + "its applications are not installed", broken);
-                continue;
-            }
+        // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN PRODUCTS AND NOT THE DESKTOP.
+        Providers.forEach(ApplicationKinds.class, ApplicationRegistry.class.getClassLoader(), kinds -> {
             try {
                 kinds.register(this);
             } catch (RuntimeException | LinkageError failed) {
                 CrystalGuiCore.LOGGER.error("[cgui] the ApplicationKinds service '{}' failed to install "
                         + "its applications: {}", kinds.getClass().getName(), failed.getMessage(), failed);
             }
-        }
+        }, broken -> CrystalGuiCore.LOGGER.error("[cgui] an ApplicationKinds service could not be loaded; "
+                + "its applications are not installed", broken));
     }
 
     /**
