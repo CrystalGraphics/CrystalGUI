@@ -10,7 +10,11 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
+//? if >=1.14.4 {
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
+//?} else {
+/*import net.minecraft.client.Minecraft;
+*///?}
 //? if >=1.19 {
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 //?} elif >=1.18 {
@@ -40,8 +44,14 @@ import net.minecraftforge.client.event.ScreenEvent;
 //?} else {
 /*import net.minecraftforge.client.event.GuiScreenEvent;
 *///?}
+// Forge 25-27 keep ticks and logins in FML's own package.
+//? if >=1.14.4 {
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+//?} else {
+/*import net.minecraftforge.fml.common.gameevent.TickEvent;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent;
+*///?}
 //? if >=1.18 {
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
@@ -442,14 +452,13 @@ public final class CrystalGUIForge implements VariantEntry {
                         e -> { if (LifecycleCrystalGUI.offerKey(0, e.getCodePoint(), true)) e.setCanceled(true); });
             }
             *///?} else {
-            /*// Forge 37 names them GuiScreenEvent.*Event.
+            /*// Forge 25-37 name them GuiScreenEvent.*Event.
             static void register(IEventBus modBus) {
                 IEventBus forgeBus = MinecraftForge.EVENT_BUS;
                 modBus.addListener(ClientBus::onClientSetup);
                 registerHud(modBus);
                 forgeBus.addListener(ClientBus::onClientTick);
-                forgeBus.addListener(ClientBus::onClientLoggedIn);
-                forgeBus.addListener(ClientBus::onClientLoggedOut);
+                registerConnection(forgeBus);
                 forgeBus.addListener(ClientBus::onScreenRender);
                 forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseClickedEvent.Pre.class,
                         e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
@@ -466,12 +475,36 @@ public final class CrystalGUIForge implements VariantEntry {
             }
             *///?}
 
-            //? if <1.21.6 {
+            //? if >=1.14.4 <1.18 {
+            /*private static void registerConnection(IEventBus forgeBus) {
+                forgeBus.addListener(ClientBus::onClientLoggedIn);
+                forgeBus.addListener(ClientBus::onClientLoggedOut);
+            }
+            *///?} elif <1.14.4 {
+            /*// Forge 25-27 have no ClientPlayerNetworkEvent: onClientTick sees the connection come and go.
+            private static void registerConnection(IEventBus forgeBus) {
+            }
+            *///?}
 
+            //? if >=1.14.4 <1.21.6 {
             private static void onClientTick(TickEvent.ClientTickEvent event) {
                 if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.clientTick();
             }
-            //?}
+            //?} elif <1.14.4 {
+            /*private static boolean connected;
+
+            // getConnection() is the player's, so it appears where LoggedInEvent would fire.
+            private static void onClientTick(TickEvent.ClientTickEvent event) {
+                if (event.phase != TickEvent.Phase.END) return;
+                boolean now = Minecraft.getInstance().getConnection() != null;
+                if (now != connected) {
+                    connected = now;
+                    if (now) LifecycleCrystalGUI.clientConnected();
+                    else LifecycleCrystalGUI.clientDisconnected();
+                }
+                LifecycleCrystalGUI.clientTick();
+            }
+            *///?}
 
             // The HUD: a layer where Forge offers one. Forge 56-57 (1.21.6-1.21.7) offer none, and a
             // node mixin paints it there. @see com.crystalgui.mc.forge.mixin.HudHook
@@ -524,7 +557,7 @@ public final class CrystalGUIForge implements VariantEntry {
             private static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
                 LifecycleCrystalGUI.clientDisconnected();
             }
-            //?} else {
+            //?} elif >=1.14.4 {
             /*private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggedInEvent event) {
                 LifecycleCrystalGUI.clientConnected();
             }

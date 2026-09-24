@@ -23,7 +23,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 //? if >=1.19 {
 import net.minecraft.network.chat.Component;
-//?} else {
+//?} elif >=1.14 {
 /*import net.minecraft.network.chat.TextComponent;
 *///?}
 //? if >=1.21.9 {
@@ -46,8 +46,10 @@ public final class CgUiScreen extends Screen {
     public CgUiScreen() {
         //? if >=1.19 {
         super(Component.literal("CrystalGUI"));
-        //?} else {
+        //?} elif >=1.14 {
         /*super(new TextComponent("CrystalGUI"));
+        *///?} else {
+        /*super();
         *///?}
     }
 
@@ -184,9 +186,18 @@ public final class CgUiScreen extends Screen {
      * The screen's own bracket — no {@code beforePaint}, unlike the HUD's.
      *
      * <p>1.20 posts no move event for a HUD, so that arm has to offer the pointer itself every frame.
-     * A screen gets {@link #mouseMoved} and would be told twice.</p>
+     * A screen gets {@link #mouseMoved} and would be told twice -- except on 1.13, which tells a screen
+     * of no move either.</p>
      */
     private static final HostSession.PaintHost PAINT_HOST = new HostSession.PaintHost() {
+
+        //? if <1.14 {
+        /*@Override
+        public void beforePaint() {
+            UIDocument window = window();
+            if (window != null) CgUiInput.mouseMoved(window);
+        }
+        *///?}
 
         @Override
         public boolean ownScreenUp() {
@@ -271,11 +282,13 @@ public final class CgUiScreen extends Screen {
     }
     //?}
 
+    //? if >=1.14 {
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
         UIDocument window = window();
         if (window != null) CgUiInput.mouseMoved(window);
     }
+    //?}
 
     /**
      * A drag is a move: the engine tracks the button itself through pointer capture, and reporting a
@@ -298,9 +311,11 @@ public final class CgUiScreen extends Screen {
     @Override
     //? if >=1.20.2 {
     /*public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double delta) {
-    *///?} else {
+    *///?} elif >=1.14 {
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-    //?}
+    //?} else {
+    /*public boolean mouseScrolled(double delta) {
+    *///?}
         UIDocument window = window();
         return window != null && CgUiInput.scrolled(window, delta);
     }
