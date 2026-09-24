@@ -1,5 +1,6 @@
 package com.crystalgui.mc.modern.client;
 
+import com.crystalgraphics.mc.modern.platform.Windows;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -60,13 +61,13 @@ final class HostModern implements HostServices {
     @Override
     public int surfaceWidth() {
         Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.getWindow() == null ? 0 : mc.getWindow().getWidth();
+        return mc == null || Windows.of(mc) == null ? 0 : Windows.of(mc).getWidth();
     }
 
     @Override
     public int surfaceHeight() {
         Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.getWindow() == null ? 0 : mc.getWindow().getHeight();
+        return mc == null || Windows.of(mc) == null ? 0 : Windows.of(mc).getHeight();
     }
 
     @Override

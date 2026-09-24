@@ -88,13 +88,14 @@ val cgLangDescriptor = ModDescriptor(
             packFormat = 1,
         ),
     ) + modernVariants(project, mapOf(
+        // The host's node mixins are the host's: naming them here too is a duplicate config to Fabric.
         "forge" to LoaderEntries("com.crystalgui.mc.forge",
-            common = "com.crystalgui.mc.forge.lang.CrystalGuiLanguageForge"),
+            common = "com.crystalgui.mc.forge.lang.CrystalGuiLanguageForge", mixins = false),
         "neoforge" to LoaderEntries("com.crystalgui.mc.neoforge",
-            common = "com.crystalgui.mc.neoforge.lang.CrystalGuiLanguageNeoForge"),
+            common = "com.crystalgui.mc.neoforge.lang.CrystalGuiLanguageNeoForge", mixins = false),
         "fabric" to LoaderEntries("com.crystalgui.mc.fabric",
             client = "com.crystalgui.mc.fabric.lang.CrystalGuiLanguageFabric",
-            fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0", "crystalgui" to "*")),
+            fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0", "crystalgui" to "*"), mixins = false),
     )),
     // Its own mod, its own table: the language stack selects a variant exactly as the host does and
     // shares nothing but the selector. Fabric alone needs a name here -- see the host's note above.

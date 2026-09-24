@@ -1,5 +1,6 @@
 package com.crystalgui.mc.fabric;
 
+import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgraphics.mc.modern.platform.ResourceIds;
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgui.core.CrystalGuiCore;
@@ -12,7 +13,9 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+//? if >=1.15 {
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+//?}
 //? if >=1.16 {
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 //?}
@@ -228,10 +231,11 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
                     (handler, client) -> LifecycleCrystalGUI.clientDisconnected());
 
             // Pinned windows. ScreenOverlay decides; the loader only forwards and honours the boolean.
-            // Fabric API for 1.15 hands the HUD callback the tick delta alone.
+            // Fabric API for 1.15 hands the HUD callback the tick delta alone; 1.14's has none, and the
+            // HUD is a node mixin there. @see com.crystalgui.mc.fabric.mixin.HudHook
             //? if >=1.16 {
             HudRenderCallback.EVENT.register((graphics, tickDelta) -> LifecycleCrystalGUI.paintHud());
-            //?} else {
+            //?} elif >=1.15 {
             /*HudRenderCallback.EVENT.register(tickDelta -> LifecycleCrystalGUI.paintHud());
             *///?}
             // Fabric API for 1.15 has no screen events, so pinned windows do not draw over another
@@ -243,7 +247,7 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
             //?}
 
             ClientLifecycleEvents.CLIENT_STARTED.register(
-                    client -> Input.install(client.getWindow().getWindow()));
+                    client -> Input.install(Windows.handle(client)));
         }
 
         /**

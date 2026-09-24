@@ -3,6 +3,7 @@ import cgbuildlogic.commonNode
 import cgbuildlogic.modernLoader
 import cgbuildlogic.nodeJava
 import cgbuildlogic.nodePackage
+import cgbuildlogic.devNodeMixinConfigs
 import cgbuildlogic.registerNodeMixins
 import cgbuildlogic.registerNodeVariants
 import cgbuildlogic.registerCheckDescriptorsNameNoCommon
@@ -217,7 +218,7 @@ val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.ta
     // classifier says so, so a `-thin-dev` jar is never mistaken for something installable.
     archiveClassifier.set("thin-dev")
     configurations = emptyList()
-    from(sourceSets["main"].output)
+    from(sourceSets["main"].output) { exclude(modDescriptors.getValue("main").devNodeMixinConfigs(modernLoader)) }
     exclude(devDescriptors)
     val commonJar = common.tasks.named<Jar>("jar")
     dependsOn(commonJar)
