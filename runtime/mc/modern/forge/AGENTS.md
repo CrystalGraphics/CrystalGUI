@@ -2,15 +2,15 @@
 
 ## Target Versions
 
-MC 1.13.2–1.21.11 / MinecraftForge 25–61 — a node each for 1.13.2, 1.14.4, 1.15.2 (also 1.15, 1.15.1), 1.16.5 (also 1.16.1-1.16.4), 1.17.1, 1.18.2 (also 1.18, 1.18.1), 1.19.2
+MC 1.13.2–1.21.11 / MinecraftForge 25–61 — a node each for 1.13.2, 1.14.3 (also 1.14.2), 1.14.4, 1.15.2 (also 1.15, 1.15.1), 1.16.5 (also 1.16.1-1.16.4), 1.17.1, 1.18.2 (also 1.18, 1.18.1), 1.19.2
 (also 1.19, 1.19.1), 1.19.3, 1.19.4, 1.20.1, 1.20.2, 1.20.4, 1.20.6, 1.21.1, 1.21.3, 1.21.4, 1.21.5, 1.21.6
 (also 1.21.7), 1.21.8, 1.21.10 (also 1.21.9) and 1.21.11, pinned in `versions/<version>/gradle.properties`.
 Forge 1.21 is refused (Forge 51 has no HUD event); Forge published nothing for 1.17, 1.20.5 or 1.21.2.
 
 **Forge 25-36 (1.13.2-1.16.x)** are built by Unimined, run on Java 8, and differ once more: `fml.network`,
-`fml.event.server`, `CrashReportExtender`, and key registration through `DeferredWorkQueue`. **Forge 25**
-(1.13.2) also keeps ticks and logins in `fml.common.gameevent` and has no `ClientPlayerNetworkEvent`, so
-the client tick watches `getConnection()` come and go instead; the node compiles against Mojang names
+`fml.event.server`, `CrashReportExtender`, and key registration through `DeferredWorkQueue`. **Forge 25-27**
+(1.13.2-1.14.3) also keep ticks and logins in `fml.common.gameevent` and have no `ClientPlayerNetworkEvent`,
+so the client tick watches `getConnection()` come and go instead; those nodes compile against Mojang names
 carried back from 1.14.4 (`CrystalGraphics/runtime/mc/modern/mappings/`).
 
 **Three API eras below 1.19**, each a directive in `CrystalGUIForge`: Forge 37 (1.17.1) names screen
