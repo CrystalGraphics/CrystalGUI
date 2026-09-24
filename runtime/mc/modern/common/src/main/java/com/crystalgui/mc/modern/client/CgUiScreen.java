@@ -17,7 +17,7 @@ import com.crystalgui.workbench.app.WorkbenchApplication;
 import net.minecraft.client.Minecraft;
 //? if >=1.20 {
 import net.minecraft.client.gui.GuiGraphics;
-//?} else {
+//?} elif >=1.15 {
 /*import com.mojang.blaze3d.vertex.PoseStack;
 *///?}
 import net.minecraft.client.gui.screens.Screen;
@@ -165,7 +165,7 @@ public final class CgUiScreen extends Screen {
         /*// (nothing)
         *///?} elif >=1.20 {
         graphics.flush();
-        //?} else {
+        //?} elif >=1.15 {
         /*Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
         *///?}
 

@@ -2,8 +2,10 @@
 
 ## Target Versions
 
-MC 1.15–1.21.11 / Fabric, a node per `versions/<version>`; 1.16 and 1.16.1 are refused, their only Fabric
-API builds lacking `lifecycle-events-v1` or `networking-api-v1`. Below 1.16 Fabric API has no screen
+MC 1.14.4–1.21.11 / Fabric, a node per `versions/<version>`; 1.14-1.14.3, 1.16 and 1.16.1 are refused, their
+only Fabric API builds lacking `lifecycle-events-v1` or `networking-api-v1`. Fabric API for 1.14 has no
+HUD callback either, so there the HUD is a node mixin on `Gui.render` (`mixin/HudHook`, gated by
+`CrystalGuiFabricMixins`). Below 1.16 Fabric API has no screen
 events, so a pinned window draws no overlay over another mod's screen there.
 
 ## The loader is registration only

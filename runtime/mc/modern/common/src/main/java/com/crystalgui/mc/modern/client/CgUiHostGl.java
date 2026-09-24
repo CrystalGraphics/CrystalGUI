@@ -12,6 +12,9 @@ import com.mojang.blaze3d.platform.GlStateManager;
 //?}
 
 import org.lwjgl.opengl.GL13;
+//? if <1.15 {
+/*import org.lwjgl.opengl.GL20;
+*///?}
 
 /**
  * The GL discipline around every CrystalGUI paint on 1.20.x, in one place because both paint paths --
@@ -102,9 +105,16 @@ public final class CgUiHostGl {
      * while here it MUST go through Blaze3D or Minecraft's cache is left describing the wrong world.
      */
     public static void leave() {
+        //? if >=1.15 {
         GlStateManager._activeTexture(GL13.GL_TEXTURE1);
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);
         GlStateManager._glUseProgram(0);
+        //?} else {
+        /*// Before 1.15 the names lack the prefix, and the program is not cached at all.
+        GlStateManager.activeTexture(GL13.GL_TEXTURE1);
+        GlStateManager.activeTexture(GL13.GL_TEXTURE0);
+        GL20.glUseProgram(0);
+        *///?}
         // The three lines above went through Blaze3D and not CgGL, so our own shadow cannot see them
         // either -- the same rule, pointing the other way.
         CgGlState.invalidateAllIfPresent();

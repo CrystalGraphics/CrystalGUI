@@ -1,5 +1,6 @@
 package com.crystalgui.mc.modern.probe;
 
+import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import com.crystalgui.mc.modern.client.CgUiHud;
@@ -100,8 +101,8 @@ public final class ClientProbe {
         @Override
         public void movePointerTo(int surfaceX, int surfaceY) {
             Minecraft mc = Minecraft.getInstance();
-            if (mc == null || mc.getWindow() == null) return;
-            GLFW.glfwSetCursorPos(mc.getWindow().getWindow(), surfaceX, surfaceY);
+            if (mc == null || Windows.of(mc) == null) return;
+            GLFW.glfwSetCursorPos(Windows.handle(mc), surfaceX, surfaceY);
         }
 
         /** Minecraft's own main target, which is where our composite lands. */
