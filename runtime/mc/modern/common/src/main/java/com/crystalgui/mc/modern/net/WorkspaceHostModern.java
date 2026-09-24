@@ -17,7 +17,9 @@ import com.mojang.authlib.GameProfile;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+//? if >=1.16 {
 import net.minecraft.world.level.storage.LevelResource;
+//?}
 //? if >=1.21.9 {
 /*import net.minecraft.server.players.NameAndId;
 *///?}
@@ -45,6 +47,16 @@ public final class WorkspaceHostModern {
     private static boolean registered;
     private static WorkspaceHost host;
     private static volatile MinecraftServer currentServer;
+
+    /** The directory the running world is saved in. */
+    public static Path worldRoot(MinecraftServer server) {
+        // LevelResource is 1.16's; before it the save is a folder of the storage source's base.
+        //? if >=1.16 {
+        return server.getWorldPath(LevelResource.ROOT);
+        //?} else {
+        /*return server.getStorageSource().getBaseDir().resolve(server.getLevelIdName());
+        *///?}
+    }
 
     /** Called by each loader when its server starts and stops. */
     public static void setServer(@Nullable MinecraftServer server) {
@@ -98,7 +110,7 @@ public final class WorkspaceHostModern {
             // both have, so this line serves every node without a directive.
             Path base = server.isDedicatedServer()
                     ? Paths.get(server.getServerDirectory().toString())
-                    : server.getWorldPath(LevelResource.ROOT);
+                    : worldRoot(server);
             return base == null ? null : StorageLayout.projectsIn(base).resolve(PROJECT_DIR);
         }
 

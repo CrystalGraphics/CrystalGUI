@@ -8,11 +8,11 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.mc.modern.net.Connections;
+import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
-import net.minecraft.world.level.storage.LevelResource;
 
 /**
  * How MC 1.20.x answers the questions only a platform can. Nothing here decides anything.
@@ -42,7 +42,7 @@ final class HostModern implements HostServices {
     public Path localWorldDirectory() {
         Minecraft mc = Minecraft.getInstance();
         IntegratedServer server = mc == null ? null : mc.getSingleplayerServer();
-        return server == null ? null : server.getWorldPath(LevelResource.ROOT);
+        return server == null ? null : WorkspaceHostModern.worldRoot(server);
     }
 
     /**

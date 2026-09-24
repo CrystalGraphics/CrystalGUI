@@ -111,9 +111,13 @@ public final class ClientProbe {
             if (mc == null) return;
             //? if >=1.21.6 {
             /*Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget(), 1, message -> { });
-            *///?} else {
+            *///?} elif >=1.17.1 {
             Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget(), message -> { });
-            //?}
+            //?} else {
+            /*// Before 1.17.1 grab also takes the frame's size.
+            Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget().width,
+                    mc.getMainRenderTarget().height, mc.getMainRenderTarget(), message -> { });
+            *///?}
         }
 
         @Override

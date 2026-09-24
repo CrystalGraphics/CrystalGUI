@@ -3,6 +3,9 @@ package com.crystalgui.mc.forge.lang;
 import com.crystalgui.mc.modern.lang.LanguageLifecycle;
 
 import com.crystalgraphics.mc.shared.VariantEntry;
+//? if <1.17 {
+/*import net.minecraftforge.fml.DeferredWorkQueue;
+*///?}
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 
@@ -32,7 +35,12 @@ public final class CrystalGuiLanguageForge implements VariantEntry {
         //?}
     }
 
+    // Forge 29-31 reach the main thread through DeferredWorkQueue rather than the event.
     private void clientSetup(FMLClientSetupEvent event) {
+        //? if >=1.17 {
         event.enqueueWork(LanguageLifecycle::bootstrapClient);
+        //?} else {
+        /*DeferredWorkQueue.runLater(LanguageLifecycle::bootstrapClient);
+        *///?}
     }
 }
