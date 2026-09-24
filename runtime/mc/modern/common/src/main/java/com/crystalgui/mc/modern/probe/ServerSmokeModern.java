@@ -77,7 +77,12 @@ public final class ServerSmokeModern {
 
         @Override
         public void halt() {
+            // 1.14 added halt's wait-for-the-thread flag.
+            //? if >=1.14 {
             if (server != null) server.halt(false);
+            //?} else {
+            /*if (server != null) server.halt();
+            *///?}
         }
     }
 }

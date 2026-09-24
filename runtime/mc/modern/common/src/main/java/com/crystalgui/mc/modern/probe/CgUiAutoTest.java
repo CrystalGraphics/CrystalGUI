@@ -77,11 +77,20 @@ public final class CgUiAutoTest {
         Minecraft mc = Minecraft.getInstance();
         // A client tick fires underneath the loading overlay, so a launch requested before the game is
         // up races Mojang's splash.
-        if (mc == null || mc.getOverlay() != null) return false;
+        if (mc == null || loading(mc)) return false;
         // -PcgJoin pointed this client at a server: it is already on its way, and there is no save.
         if (mc.getCurrentServer() != null) return true;
         loadWorld(mc);
         return true;
+    }
+
+    /** Mojang's loading overlay is up. 1.13 has none: its splash blocks the thread instead. */
+    private static boolean loading(Minecraft mc) {
+        //? if >=1.14 {
+        return mc.getOverlay() != null;
+        //?} else {
+        /*return false;
+        *///?}
     }
 
     private static final AutoTest.Host HOST = new AutoTest.Host() {
@@ -94,7 +103,7 @@ public final class CgUiAutoTest {
         @Override
         public boolean readyToDrive() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && mc.getOverlay() == null;
+            return mc != null && !loading(mc);
         }
 
         @Override

@@ -53,8 +53,10 @@ public final class WorkspaceHostModern {
         // LevelResource is 1.16's; before it the save is a folder of the storage source's base.
         //? if >=1.16 {
         return server.getWorldPath(LevelResource.ROOT);
-        //?} else {
+        //?} elif >=1.14 {
         /*return server.getStorageSource().getBaseDir().resolve(server.getLevelIdName());
+        *///?} else {
+        /*return server.getStorageSource().getLevelPath(server.getLevelIdName());
         *///?}
     }
 

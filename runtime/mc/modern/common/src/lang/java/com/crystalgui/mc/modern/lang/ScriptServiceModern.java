@@ -17,7 +17,9 @@ import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
 
+//? if >=1.14 {
 import net.minecraft.SharedConstants;
+//?}
 import net.minecraft.client.Minecraft;
 
 /**
@@ -130,12 +132,14 @@ public final class ScriptServiceModern implements ScriptService {
 
     /** The Minecraft version this runtime IS, which is the only one its mappings may be fetched for. */
     private static String minecraftVersion() {
-        // 1.21.6 renamed WorldVersion's accessors.
+        // 1.21.6 renamed WorldVersion's accessors; 1.13 has none, and its node runs 1.13.2 alone.
         //? if >=1.21.6 {
         /*return SharedConstants.getCurrentVersion().name();
-        *///?} else {
+        *///?} elif >=1.14 {
         return SharedConstants.getCurrentVersion().getName();
-        //?}
+        //?} else {
+        /*return "1.13.2";
+        *///?}
     }
 
     /**
