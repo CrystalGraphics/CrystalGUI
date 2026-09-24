@@ -16,8 +16,12 @@ import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 //?} elif >=1.18 {
 /*import net.minecraftforge.client.ClientRegistry;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-*///?} else {
+*///?} elif >=1.17 {
 /*import net.minecraftforge.fmlclient.registry.ClientRegistry;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+*///?} else {
+/*import net.minecraftforge.fml.client.registry.ClientRegistry;
+import net.minecraftforge.fml.DeferredWorkQueue;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?}
 //? if >=1.21.8 {
@@ -42,10 +46,14 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
-//?} else {
+//?} elif >=1.17 {
 /*import net.minecraftforge.fmlserverevents.FMLServerStartedEvent;
 import net.minecraftforge.fmlserverevents.FMLServerStartingEvent;
 import net.minecraftforge.fmlserverevents.FMLServerStoppingEvent;
+*///?} else {
+/*import net.minecraftforge.fml.event.server.FMLServerStartedEvent;
+import net.minecraftforge.fml.event.server.FMLServerStartingEvent;
+import net.minecraftforge.fml.event.server.FMLServerStoppingEvent;
 *///?}
 //? if >=1.21.6 {
 /*import net.minecraftforge.eventbus.api.bus.BusGroup;
@@ -54,7 +62,13 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.IEventBus;
 //?}
+//? if >=1.17 {
 import net.minecraftforge.fml.CrashReportCallables;
+//?} else {
+/*import net.minecraftforge.fml.CrashReportExtender;
+import net.minecraftforge.fml.common.ICrashCallable;
+import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+*///?}
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 //? if >=1.20.2 {
@@ -66,17 +80,33 @@ import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
-//?} else {
+//?} elif >=1.17 {
 /*import net.minecraftforge.fmllegacy.network.PacketDistributor;
 import net.minecraftforge.fmllegacy.network.NetworkEvent;
 import net.minecraftforge.fmllegacy.network.NetworkRegistry;
 import net.minecraftforge.fmllegacy.network.simple.SimpleChannel;
+*///?} else {
+/*import net.minecraftforge.fml.network.PacketDistributor;
+import net.minecraftforge.fml.network.NetworkEvent;
+import net.minecraftforge.fml.network.NetworkRegistry;
+import net.minecraftforge.fml.network.simple.SimpleChannel;
 *///?}
 
 import java.util.function.BiConsumer;
 //? if <1.20.2 {
 import java.util.function.Supplier;
 //?}
+//? if <1.17 {
+/*import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.core.provider.Providers;
+import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.moddiscovery.ModFileInfo;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+*///?}
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.MODID;
 import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
@@ -105,11 +135,43 @@ public final class CrystalGUIForge implements VariantEntry {
         // under its own prefix, so a trace naming com.crystalgui.mc.forge.common.* is the only thing
         // that says which one ran -- and asking a reporter to work that out is asking them to know how
         // the jar is built. @see CrashVariant
+        //? if >=1.17 {
         CrashReportCallables.registerCrashCallable(CrashVariant.label(NAME),
                 () -> CrashVariant.report(CrystalGUIForge.class));
+        //?} else {
+        /*// Forge 29-31 keep callables in a plain list that ForgeMod iterates while mods construct on
+        // parallel workers, so registering here races it: register on the main thread after setup.
+        ((FMLJavaModLoadingContext) context).getModEventBus().addListener((FMLCommonSetupEvent event) ->
+                DeferredWorkQueue.runLater(() -> CrashReportExtender.registerCrashCallable(new ICrashCallable() {
+                    @Override
+                    public String getLabel() {
+                        return CrashVariant.label(NAME);
+                    }
+
+                    @Override
+                    public String call() {
+                        return CrashVariant.report(CrystalGUIForge.class);
+                    }
+                })));
+        *///?}
+        //? if <1.17 {
+        /*// ModLauncher 5 lists no resource inside a mod file, so ServiceLoader finds no provider there.
+        CgPlatform.provide(Providers.Copies.SERVICE, CrystalGUIForge::resourceCopies);
+        *///?}
         LifecycleCrystalGUI.bootstrap(Network.register());
         Events.register((FMLJavaModLoadingContext) context);
     }
+
+    //? if <1.17 {
+    /*private static List<Path> resourceCopies(String path) {
+        List<Path> copies = new ArrayList<>();
+        for (ModFileInfo file : FMLLoader.getLoadingModList().getModFiles()) {
+            Path found = file.getFile().findResource(path);
+            if (Files.exists(found)) copies.add(found);
+        }
+        return copies;
+    }
+    *///?}
 
     // -- Network ----------------------------------------------------------------
 
@@ -430,12 +492,31 @@ public final class CrystalGUIForge implements VariantEntry {
             }
             //?}
 
+            // Before Forge 41 keys are registered in client setup, on the main thread -- which Forge 29-31
+            // reach through DeferredWorkQueue rather than the event.
             //? if >=1.19 {
             private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
                 LifecycleCrystalGUI.bootstrapClient();
                 CgUiKeybinds.all().forEach(event::register);
             }
+            //?} elif >=1.17 {
+            /*private static void onClientSetup(FMLClientSetupEvent event) {
+                event.enqueueWork(ClientBus::registerKeys);
+            }
+            *///?} else {
+            /*private static void onClientSetup(FMLClientSetupEvent event) {
+                DeferredWorkQueue.runLater(ClientBus::registerKeys);
+            }
+            *///?}
 
+            //? if <1.19 {
+            /*private static void registerKeys() {
+                LifecycleCrystalGUI.bootstrapClient();
+                CgUiKeybinds.all().forEach(ClientRegistry::registerKeyBinding);
+            }
+            *///?}
+
+            //? if >=1.19 {
             private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
                 LifecycleCrystalGUI.clientConnected();
             }
@@ -444,15 +525,7 @@ public final class CrystalGUIForge implements VariantEntry {
                 LifecycleCrystalGUI.clientDisconnected();
             }
             //?} else {
-            /*// Before Forge 41 keys are registered in client setup, on the main thread.
-            private static void onClientSetup(FMLClientSetupEvent event) {
-                event.enqueueWork(() -> {
-                    LifecycleCrystalGUI.bootstrapClient();
-                    CgUiKeybinds.all().forEach(ClientRegistry::registerKeyBinding);
-                });
-            }
-
-            private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggedInEvent event) {
+            /*private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggedInEvent event) {
                 LifecycleCrystalGUI.clientConnected();
             }
 

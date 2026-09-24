@@ -177,8 +177,10 @@ public final class CgUiAutoTest {
         *///?} elif >=1.19 {
         WorldOpenFlows flows = mc.createWorldOpenFlows();
         flows.loadLevel(mc.screen, name);
-        //?} else {
+        //?} elif >=1.16 {
         /*mc.loadLevel(name);
+        *///?} else {
+        /*mc.selectLevel(name, name, null);
         *///?}
     }
 
@@ -238,13 +240,16 @@ public final class CgUiAutoTest {
         };
         //? if >=1.21.6 {
         /*Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), 1, onWritten);
-        *///?} else {
+        *///?} elif >=1.17 {
         try {
             Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), onWritten);
         } catch (NoSuchMethodError before1171) {
             grabWithSize(gameDir, file.getName(), mc.getMainRenderTarget(), onWritten);
         }
-        //?}
+        //?} else {
+        /*RenderTarget target = mc.getMainRenderTarget();
+        Screenshot.grab(gameDir, file.getName(), target.width, target.height, target, onWritten);
+        *///?}
     }
 
     /**

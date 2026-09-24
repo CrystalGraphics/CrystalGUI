@@ -1,6 +1,8 @@
 // The `forge` branch — MinecraftForge, one node per Minecraft version (`versions/<version>/`, whose
-// gradle.properties pins the toolchain and Parchment). Two toolchains, chosen by those pins
+// gradle.properties pins the toolchain and Parchment). Three toolchains, chosen by those pins
 // (cgbuildlogic.useModernMinecraft):
+//
+//   - below 1.17 the node pins `minecraft.unimined`: Unimined, compile only. See below.
 //
 //   - 1.20.1 pins `forge.version` alone: ModDevGradle's legacyForge, Forge's userdev, dev runs included.
 //     legacyForge stops at 1.20.1.
@@ -18,22 +20,47 @@ import cgbuildlogic.forgeRunsSrg
 import cgbuildlogic.registerSrgReobf
 import cgbuildlogic.useForgeApi
 import cgbuildlogic.useModernMinecraft
+import cgbuildlogic.usesUniminedMinecraft
 import net.neoforged.moddevgradle.dsl.NeoForgeExtension
 import net.neoforged.moddevgradle.legacyforge.dsl.LegacyForgeExtension
 import net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension
+import xyz.wagyourtail.unimined.api.UniminedExtension
 
 plugins {
     id("cg-modern-loader")
     id("com.gradleup.shadow")
+    // Declared here and applied only on a node below 1.17, so it loads in this branch alone.
+    id("xyz.wagyourtail.unimined") version "1.4.1" apply false
 }
 
 useModernMinecraft()
 val legacyForge = extensions.findByType<LegacyForgeExtension>()
 
+// Forge below 1.17 through Unimined, which neither ModDevGradle mode reaches: Forge's userdev at
+// Mojang's names to compile against. No dev run -- Forge 1.15 needs Java 8, and a dev run would load
+// classes built for 17 -- so prodSmoke is this node's runtime check, as for the NeoForm nodes.
+if (usesUniminedMinecraft) {
+    apply(plugin = "xyz.wagyourtail.unimined")
+    the<UniminedExtension>().minecraft {
+        version(property("mc.version").toString())
+        mappings {
+            searge()
+            mojmap()
+        }
+        minecraftForge { loader(property("forge.version").toString()) }
+        // The shipped jar is the thin shadow jar, renamed by SrgReobfJar like the NeoForm nodes'.
+        defaultRemapJar = false
+    }
+    // Unimined attaches Minecraft to `main` alone; the language mod's source set needs it too.
+    sourceSets.findByName("lang")?.let { lang ->
+        the<UniminedExtension>().minecraft(lang) { combineWith(sourceSets.main.get()) }
+    }
+}
+
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
-if (legacyForge == null) {
+if (legacyForge == null && !usesUniminedMinecraft) {
     useForgeApi()
     configure<NeoForgeExtension> {
         parchment {
@@ -113,7 +140,7 @@ val extractMcSources by tasks.registering(Sync::class) {
 
 // extractMcSources is cheap (unzips an already-present jar — createMinecraftArtifacts ran first).
 // Wire it into classes so build/mc-src/ is always populated after a normal compile.
-tasks.named("classes") { dependsOn(extractMcSources) }
+if (!usesUniminedMinecraft) tasks.named("classes") { dependsOn(extractMcSources) }
 
 // The SHIPPED jars are reobfuscated where Forge runs SRG, and it is the SHADOW jar that ships.
 //
@@ -128,8 +155,8 @@ val thinJar: TaskProvider<out AbstractArchiveTask> = if (!forgeRunsSrg(project.n
 } else if (legacyForge == null) {
     // main's classpath, as legacyForge's reobf uses: the renamer only needs what Minecraft members are
     // overridden, and the language libraries (ECJ, Rhino) trip its inheritance scan.
-    registerSrgReobf("langThinShadowJar", "lang-thin", configurations["compileClasspath"])
-    registerSrgReobf("thinShadowJar", "thin", configurations["compileClasspath"])
+    registerSrgReobf("langThinShadowJar", "lang-thin", sourceSets.main.get().compileClasspath)
+    registerSrgReobf("thinShadowJar", "thin", sourceSets.main.get().compileClasspath)
 } else {
     val obfuscation = the<ObfuscationExtension>()
     // Downgrade, then SHADE, then remap. jvmdg rewrites bytecode and adds a dependency on its own

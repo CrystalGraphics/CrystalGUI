@@ -2,7 +2,8 @@
 
 ## Target Versions
 
-MC 1.20.1 / Fabric
+MC 1.15–1.21.11 / Fabric, a node per `versions/<version>`. Below 1.16 Fabric API has no screen
+events, so a pinned window draws no overlay over another mod's screen there.
 
 ## The loader is registration only
 
