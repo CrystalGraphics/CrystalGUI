@@ -45,6 +45,8 @@ val submoduleData = listOf(
             // carrying their own; not a loader path, so it survives an embedded build.
             mapOf("module" to "com.crystalgraphics:mc-shared",
                 "projectPath" to ":runtime:mc:shared"),
+            mapOf("module" to "com.crystalgraphics:forge-stubs",
+                "projectPath" to ":runtime:mc:forge-stubs"),
             // The 1.20.1 Forge MOD, for a consumer that wants CrystalGraphics in its own dev run's mod
             // list rather than merely on its compile classpath -- RPG-Core names this coordinate.
             mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-forge",

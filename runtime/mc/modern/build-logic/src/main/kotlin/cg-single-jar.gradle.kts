@@ -86,7 +86,7 @@ registerSingleJarPipeline(SingleJarSpec(
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
-    libraryProjects = listOf(":core", ":taffy", ":runtime:mc:shared"),
+    libraryProjects = listOf(":core", ":taffy", ":runtime:mc:shared", ":runtime:mc:forge-bootstrap"),
 
     // One owner today, and the union is still the mechanism: the language jar ships its own
     // META-INF/services, and a second jar's providers never merge into this one's file.
@@ -242,6 +242,11 @@ registerSingleJarPipeline(SingleJarSpec(
     descriptorsTask = "generateLanguageDescriptors",
 
     extraContent = {
+        // The language mod's @Mod for every Forge: the bootstrap module's `lang` half.
+        val langBootstrap = project(":runtime:mc:forge-bootstrap").tasks.named<Jar>("langJar")
+        dependsOn(langBootstrap)
+        from(langBootstrap.map { project.zipTree(it.archiveFile) }) { exclude("META-INF/MANIFEST.MF") }
+
         // THE NOTICE, in the binary (G7). Most of this jar by weight is somebody else's work, and
         // EPL-2.0 and MPL-2.0 both require the notice to reach whoever receives it.
         from(project.rootProject.file("notices/crystalgui-language.md")) {

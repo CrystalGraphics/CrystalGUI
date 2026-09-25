@@ -102,6 +102,8 @@ legacyForge?.apply {
             // compiled classes in the mod's virtual JAR, making them visible to ModuleClassLoader.
             sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
             sourceSet(project.commonNode.extensions.getByType<SourceSetContainer>()["main"])
+            // The @Mod itself: one class for every Forge, compiled apart from any node.
+            sourceSet(project(":runtime:mc:forge-bootstrap").extensions.getByType<SourceSetContainer>()["main"])
         }
         // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
         // leaves it out, which is how the degraded configuration is exercised without building a jar.
@@ -109,6 +111,7 @@ legacyForge?.apply {
             create("crystalgui_language") {
                 sourceSet(sourceSets["lang"])
                 sourceSet(project.commonNode.extensions.getByType<SourceSetContainer>()["lang"])
+                sourceSet(project(":runtime:mc:forge-bootstrap").extensions.getByType<SourceSetContainer>()["lang"])
             }
         }
     }

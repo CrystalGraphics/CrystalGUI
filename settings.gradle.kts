@@ -96,6 +96,10 @@ include("language")
 // the toolchains the loader modules below do.
 include("runtime:mc:shared")
 
+// The @Mod classes every Forge constructs -- modern and legacy FML scan for the same annotation --
+// compiled once against CrystalGraphics' forge-stubs.
+include("runtime:mc:forge-bootstrap")
+
 // NO TIER-1 MODULES HERE. They existed briefly and held one class between them, the cursor adapters,
 // which are CrystalGraphics' now: a cursor is a toolkit's job and this engine only decides WHICH one.
 // `core`'s CursorService turns a keyword into a picture and hands it to CgCursorService, so no host

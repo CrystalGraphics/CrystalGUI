@@ -122,11 +122,14 @@ val treeSitterJars: List<File> = rootProject.file("lib/tree-sitter").listFiles()
 val modClassesValue = (
     modClasses("crystalgui", listOf(devResourcesDir))
         + modClasses("crystalgui", mainSourceSet(project))
+        + modClasses("crystalgui", mainSourceSet(project(":runtime:mc:forge-bootstrap")).output.classesDirs.files)
         + bundledProjects
             .flatMap { modClasses("crystalgui", mainSourceSet(it).output.classesDirs.files) }
         + modClasses("crystalgui", treeSitterJars)
         + modClasses("crystalgraphics", graphicsCommonDir)
         + modClasses("crystalgraphics", graphicsLoaderDir)
+        // Its @Mod: one class for every Forge, in a module of its own.
+        + modClasses("crystalgraphics", listOf(File(crystalGraphics.projectDir, "runtime/mc/forge-bootstrap/build/classes/java/main")))
     // FML splits MOD_CLASSES on the PLATFORM's path separator, not on a semicolon.
     ).joinToString(File.pathSeparator)
 
@@ -145,6 +148,8 @@ tasks.matching {
     dependsOn(stageDevResources)
     dependsOn(crystalGraphics.task("$graphicsCommonPath:classes"))
     dependsOn(crystalGraphics.task("$graphicsLoaderPath:classes"))
+    dependsOn(crystalGraphics.task(":runtime:mc:forge-bootstrap:classes"))
+    dependsOn(":runtime:mc:forge-bootstrap:classes")
 
     // And the jars the runtime classpath is made of. These arrive as substituted coordinates, which
     // ModDevGradle resolves with nothing ordering them before the launch -- so a jar could still be
