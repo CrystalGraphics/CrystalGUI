@@ -6,6 +6,9 @@ add a version and what will bite is CrystalGraphics' — read
 [`CrystalGraphics/singlejar-logic/README.md`](../../../CrystalGraphics/singlejar-logic/README.md)
 § *Many Minecraft versions*.** This file holds only what is CrystalGUI's own.
 
+Every node but the active one can compile from the committed stub database instead of its real
+toolchain (`-PcgStubs`); a node added or re-pinned needs it regenerated — [`STUBS.md`](../../../CrystalGraphics/singlejar-logic/STUBS.md).
+
 ```bash
 ./gradlew checkAllTargets                                # every node, every source set
 ./gradlew :runtime:mc:modern:forge:1.20.1:runClient
