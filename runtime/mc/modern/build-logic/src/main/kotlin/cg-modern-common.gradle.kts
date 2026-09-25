@@ -1,5 +1,7 @@
+import cgbuildlogic.configureStubs
 import cgbuildlogic.guardLoaderImports
 import cgbuildlogic.sameVersionNodeCoordinate
+import cgbuildlogic.stubMode
 import cgbuildlogic.useModernMinecraft
 import cgbuildlogic.useNodeCoordinates
 
@@ -41,12 +43,13 @@ dependencies {
     // holds a Taffy NodeId and a JOML Matrix4f as FIELDS, which resolve at class load. Without these
     // javac reports "cannot access UIDocument" rather than a missing dependency. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":taffy"))
-    // Mixin compileOnly — both loaders bundle it at runtime; never shade it.
-    "compileOnly"("org.spongepowered:mixin:${property("modern.mixin")}")
+    // Mixin compileOnly — both loaders bundle it at runtime; never shade it. A stub build has its
+    // signatures in the stub, and downloads neither.
+    if (!stubMode) "compileOnly"("org.spongepowered:mixin:${property("modern.mixin")}")
     // NOTE: mixin annotationProcessor is intentionally omitted here — legacyForge configures
     // the Mixin AP with the correct SRG file automatically. Adding a second AP without SRG
     // causes duplicate-AP obfuscation-mapping errors for all @Inject targets.
-    "compileOnly"("io.github.llamalad7:mixinextras-common:${property("modern.mixinextras")}")
+    if (!stubMode) "compileOnly"("io.github.llamalad7:mixinextras-common:${property("modern.mixinextras")}")
     "annotationProcessor"("io.github.llamalad7:mixinextras-common:${property("modern.mixinextras")}")
 
     // CrystalGraphics' common node of THIS Minecraft, through the composite's per-node substitution.
@@ -96,3 +99,6 @@ artifacts { add("commonLangOutput", langJar) }
 
 // A Forge import compiles on a legacyForge node and throws NoClassDefFoundError on the other two loaders.
 guardLoaderImports()
+
+// Last, once every source set exists: the stub on the classpath, or the tasks that write and check it.
+configureStubs()

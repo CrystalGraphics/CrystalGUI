@@ -1,5 +1,6 @@
 import cgbuildlogic.ModDescriptor
 import cgbuildlogic.commonNode
+import cgbuildlogic.configureStubs
 import cgbuildlogic.modernLoader
 import cgbuildlogic.nodeJava
 import cgbuildlogic.nodePackage
@@ -10,6 +11,7 @@ import cgbuildlogic.registerCheckDescriptorsNameNoCommon
 import cgbuildlogic.sameVersionNodeCoordinate
 import cgbuildlogic.sameVersionNodeDir
 import cgbuildlogic.sameVersionNodePath
+import cgbuildlogic.stubMode
 import cgbuildlogic.useNodeCoordinates
 import org.gradle.process.CommandLineArgumentProvider
 import java.io.File
@@ -168,10 +170,10 @@ dependencies {
         exclude(group = "org.apache.logging.log4j")
         exclude(group = "com.google.code.gson")
     }
-    // Mixin compileOnly — loaders bundle it at runtime
-    "compileOnly"("org.spongepowered:mixin:${property("modern.mixin")}")
+    // Mixin compileOnly — loaders bundle it at runtime. A stub build has its signatures in the stub.
+    if (!stubMode) "compileOnly"("org.spongepowered:mixin:${property("modern.mixin")}")
     "annotationProcessor"("org.spongepowered:mixin:${property("modern.mixin")}:processor")
-    "compileOnly"("io.github.llamalad7:mixinextras-common:${property("modern.mixinextras")}")
+    if (!stubMode) "compileOnly"("io.github.llamalad7:mixinextras-common:${property("modern.mixinextras")}")
 }
 
 // Shared shadow JAR bundling: bundles :core and the common node into shadowJar.
@@ -636,7 +638,8 @@ tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
 tasks.register("serverSmoke") {
     group = "crystalgui"
     description = "Boots a dedicated server, asserts the server-side stack came up, and stops it."
-    dependsOn(tasks.named("runServer"))
+    // By name: a node in stub mode has no run task, and asking for this one makes the node real.
+    dependsOn("runServer")
     outputs.upToDateWhen { false }
 
     // THE HALF THAT MAKES IT SOUND. The mod halts(1) when a check fails, which covers "ran and failed";
@@ -764,7 +767,8 @@ tasks.withType<JavaExec>().matching { it.name == "runClient" }.configureEach {
 tasks.register("connectionProbe") {
     group = "crystalgui"
     description = "Drives a client into a world, checks everything that needs a real connection, quits."
-    dependsOn(tasks.named("runClient"))
+    // By name: a node in stub mode has no run task, and asking for this one makes the node real.
+    dependsOn("runClient")
     outputs.upToDateWhen { false }
 
     doLast {
@@ -783,3 +787,6 @@ tasks.register("connectionProbe") {
         logger.lifecycle(file.readText())
     }
 }
+
+// Last, once every source set exists: the stub on the classpath, or the tasks that write and check it.
+configureStubs()
