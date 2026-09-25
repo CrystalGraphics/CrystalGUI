@@ -54,6 +54,27 @@ version = providers.gradleProperty("modVersion").orElse("1.0.0").get()
 apply(from = "repositories.gradle")
 apply(from = "dependencies.gradle")
 
+// ASK shadowImplementation FOR JARS.
+//
+// It carries RetroFuturaGradle's obfuscation attributes, and a PROJECT dependency publishes several
+// variants (classes, resources, the jar) where a Maven artifact publishes one -- so the moment :taffy
+// stopped being `dev.vfyjxf:taffy` and became a module of ours, resolution became ambiguous and
+// shadowJar failed before it started: "we cannot choose between the following variants of project
+// :taffy". Naming the element type is the whole fix; the RFG attributes in that error are unmatched
+// on every variant equally and are not what the resolver is stuck on.
+configurations.named("shadowImplementation") {
+    attributes {
+        attribute(LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE,
+                objects.named(LibraryElements::class.java, LibraryElements.JAR))
+    }
+}
+
+// ...and say who PRODUCES that jar. Asking for the JAR element type above makes shadowJar read
+// `taffy/build/libs/taffy.jar` directly, and Gradle cannot infer the producing task through an
+// attribute override -- it fails the build outright rather than racing, which is the good outcome and
+// still needs answering. Solution 2 of the three Gradle offers, because it is the one that states the
+// relationship rather than merely ordering it.
+tasks.named("shadowJar") { dependsOn(":taffy:jar") }
 // Composite build integration — injects CrystalGraphics dev deps + RunMinecraftTask bootstrap.
 // Uses project-relative path (../gradle/...) to avoid Windows URI issues with rootProject.file().
 // Use .toURI() to ensure forward-slash paths on Windows — IntelliJ Gradle sync fails on
@@ -650,6 +671,28 @@ val langJar = tasks.register<Jar>("langJar") {
 }
 
 /**
+ * Every mapping input TAKEN FROM `reobfJar` rather than re-derived: a thin jar must reobfuscate against
+ * the same SRG, CSVs and reference classpath as the fat one, and a second spelling of that configuration
+ * is a second thing to keep in step.
+ *
+ * - Its PROPERTIES, never providers mapped off the task: those carry a dependency on `reobfJar` itself,
+ *   which pulled the fat shadowJar into every singleJar -- and on a clean clone that failed, resolving
+ *   taffy's jar before :taffy:jar had run.
+ */
+fun com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar.mappingsOfReobfJar() {
+    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar").get()
+    mcVersion.set(fat.mcVersion)
+    srg.set(fat.srg)
+    fieldCsv.set(fat.fieldCsv)
+    methodCsv.set(fat.methodCsv)
+    exceptorCfg.set(fat.exceptorCfg)
+    recompMcJar.set(fat.recompMcJar)
+    extraSrgEntries.set(fat.extraSrgEntries)
+    extraSrgFiles.from(fat.extraSrgFiles)
+    referenceClasspath.from(fat.referenceClasspath)
+}
+
+/**
  * The language thin jar: this loader's language half at SRG names, the language merge's input.
  *
  * Same mapping inputs as `reobfThinJar` and for the same reason: two reobfuscations against
@@ -660,17 +703,8 @@ val reobfLangThinJar = tasks.register<com.gtnewhorizons.retrofuturagradle.mcp.Re
     description = "This loader's language half at SRG names, the language merge's input."
     archiveClassifier.set("lang")
 
-    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar")
     inputJar.set(langJar.flatMap { it.archiveFile })
-    mcVersion.set(fat.flatMap { it.mcVersion })
-    srg.set(fat.flatMap { it.srg })
-    fieldCsv.set(fat.flatMap { it.fieldCsv })
-    methodCsv.set(fat.flatMap { it.methodCsv })
-    exceptorCfg.set(fat.flatMap { it.exceptorCfg })
-    recompMcJar.set(fat.flatMap { it.recompMcJar })
-    extraSrgEntries.set(fat.flatMap { it.extraSrgEntries })
-    extraSrgFiles.from(fat.map { it.extraSrgFiles })
-    referenceClasspath.from(fat.map { it.referenceClasspath })
+    mappingsOfReobfJar()
 }
 
 // ── The thin jar (J1) ────────────────────────────────────────────────────────────────────────────
@@ -699,20 +733,8 @@ val reobfThinJar = tasks.register<com.gtnewhorizons.retrofuturagradle.mcp.Reobfu
     description = "This loader's own classes at SRG names -- the merge's input."
     archiveClassifier.set("thin")
 
-    // Every mapping input is TAKEN FROM `reobfJar` rather than re-derived: the two must reobfuscate
-    // against the same SRG, the same CSVs and the same reference classpath, and a second spelling of
-    // that configuration is a second thing to keep in step. Providers, so nothing resolves early.
-    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar")
     inputJar.set(tasks.named<Jar>("jar").flatMap { it.archiveFile })
-    mcVersion.set(fat.flatMap { it.mcVersion })
-    srg.set(fat.flatMap { it.srg })
-    fieldCsv.set(fat.flatMap { it.fieldCsv })
-    methodCsv.set(fat.flatMap { it.methodCsv })
-    exceptorCfg.set(fat.flatMap { it.exceptorCfg })
-    recompMcJar.set(fat.flatMap { it.recompMcJar })
-    extraSrgEntries.set(fat.flatMap { it.extraSrgEntries })
-    extraSrgFiles.from(fat.map { it.extraSrgFiles })
-    referenceClasspath.from(fat.map { it.referenceClasspath })
+    mappingsOfReobfJar()
 }
 
 // Written out here rather than reusing `cgbuildlogic.CheckThinJar`, which the three 1.20.x loaders
