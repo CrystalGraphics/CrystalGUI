@@ -169,7 +169,7 @@ by absence and reaches no loader; the GL harness is a client with a context by d
 📄 **[CrystalGraphics/singlejar-logic/STUBS.md](CrystalGraphics/singlejar-logic/STUBS.md)** — read it
 before adding a node, changing a node's pins, or touching a branch script's toolchain.
 
-With `-PcgStubs`, every node except the active Stonecutter version compiles against
+**By default** every node except the active Stonecutter version compiles against
 `CrystalGraphics/singlejar-logic/stubs.zip` — one 16 MB database of every node's Minecraft, loader and
 library API, shared by both repos — instead of setting up its real toolchain, and produces byte-identical
 jars. A node becomes real when one of its run tasks is requested, so `runClient` and `serverSmoke` work
@@ -182,7 +182,8 @@ exactly as before.
 | touch a branch script | ask `stubMode` before applying a toolchain; rename thin jars through `registerThinRename` |
 
 ```bash
-./gradlew singleJar languageJar -PcgStubs                   # the shipped jars, no Minecraft toolchain
+./gradlew singleJar languageJar                             # the shipped jars, no Minecraft toolchain
+./gradlew singleJar languageJar -PcgStubs=false             # every node real, as before stubs
 ./gradlew :runtime:mc:modern:<branch>:<version>:checkStubEquivalence   # real vs stub, byte for byte
 ```
 
