@@ -9,6 +9,11 @@
  *  - shadowImplementation("g:n:v:c"): effectively the same as API, but the dependency is included in your jar under a renamed package name
  *       Requires you to enable usesShadowedDependencies in gradle.properties
  */
+
+// taffy's jar is named through its task below, which needs the project configured first.
+evaluationDependsOn(':taffy')
+def taffyJar = rootProject.project(':taffy').tasks.named('jar').flatMap { it.archiveFile }
+
 dependencies {
     //runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.7.69-GTNH:dev")
 
@@ -78,7 +83,12 @@ dependencies {
     // the relocation is what makes owning a fork safe -- another mod shipping stock 1.1.4 lands in
     // `dev.vfyjxf.taffy` while ours lands in `com.crystalgui.shadow.dev.vfyjxf.taffy`, so neither can
     // silently win and take our measure fix away with it. See taffy/MODIFICATIONS.md.
-    shadowImplementation project(':taffy')
+    //
+    // Its JAR, as a file its task produces -- not `project(':taffy')`. RetroFuturaGradle transforms every
+    // shadowImplementation artifact, and on a project dependency it ran while Gradle was still working out
+    // shadowJar's dependencies, before :taffy:jar existed: a clean clone failed with "Transform output
+    // taffy-1.0.0.jar must exist". A file with a producer is scheduled after it.
+    shadowImplementation files(taffyJar)
 
     // JOML: compileOnly, and it MUST NOT be shadowImplementation.
     //
