@@ -169,11 +169,11 @@ by absence and reaches no loader; the GL harness is a client with a context by d
 📄 **[CrystalGraphics/singlejar-logic/STUBS.md](CrystalGraphics/singlejar-logic/STUBS.md)** — read it
 before adding a node, changing a node's pins, or touching a branch script's toolchain.
 
-**By default** every node except the active Stonecutter version compiles against
+**By default** every node compiles against
 `CrystalGraphics/singlejar-logic/stubs.zip` — one 16 MB database of every node's Minecraft, loader and
 library API, shared by both repos — instead of setting up its real toolchain, and produces byte-identical
 jars. A node becomes real when one of its run tasks is requested, so `runClient` and `serverSmoke` work
-exactly as before.
+exactly as before, and the active Stonecutter version is real during an IDE sync, so the IDE has the game.
 
 | You | Then |
 |---|---|
