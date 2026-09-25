@@ -1,7 +1,13 @@
 @file:Suppress("UnstableApiUsage")
 
+import cgbuildlogic.registerThinRename
 import cgbuildlogic.sameVersionNodeDir
 import cgbuildlogic.sameVersionNodePath
+import cgbuildlogic.stubMode
+import net.fabricmc.loom.LoomGradleExtension
+import net.fabricmc.loom.api.LoomGradleExtensionAPI
+import net.fabricmc.loom.task.GenerateSourcesTask
+import net.fabricmc.loom.task.RemapJarTask
 
 // The `fabric` branch — Fabric through Loom, one node per Minecraft version (`versions/<version>/`,
 // whose gradle.properties pins mc.version, the loader, fabric-api and Parchment).
@@ -13,7 +19,8 @@ plugins {
     // resolution without an exclusive lock — a Gradle 9 hard error (not fixable via properties).
     // fabric-loom 1.16.x requires Gradle 9.4+ — that's where the runtimeClasspath
     // exclusive-lock fix lives (1.15.x still triggers it via the jvmArguments getter).
-    id("fabric-loom") version "1.16.2"
+    // Applied below, on a real node only (cgbuildlogic.StubMode).
+    id("fabric-loom") version "1.16.2" apply false
     id("com.gradleup.shadow") // version pinned in settings.gradle.kts pluginManagement
 }
 
@@ -22,74 +29,84 @@ val mcVersion = property("mc.version").toString()
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
-// CrystalGraphics' fabric node of THIS Minecraft. The producing task is wired in below: a bare path
-// serves whatever happens to sit on disk.
-val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
-val crystalGraphicsMod = fileTree(project.sameVersionNodeDir(crystalGraphicsBuild.projectDir, "fabric").resolve("build/libs")) {
-    include("crystalgraphics-fabric-*.jar")
-    // `-thin` is the MERGE's input (J1) -- one loader's own classes and nothing else -- and Loom loaded
-    // it as a second mod beside the full jar, where its entrypoint ran first and died on
-    // NoClassDefFoundError: com/crystalgraphics/mc/shared/VariantBootstrap. The class is in the full jar
-    // the whole time, which is what makes this read as a packaging fault rather than a selection one.
-    exclude("*-sources.jar", "*-all.jar", "*-dev.jar", "*-java*.jar", "*-thin.jar")
+if (!stubMode) {
+    apply(plugin = "fabric-loom")
+    val loom = the<LoomGradleExtensionAPI>()
+
+    // CrystalGraphics' fabric node of THIS Minecraft. The producing task is wired in below: a bare path
+    // serves whatever happens to sit on disk.
+    val crystalGraphicsBuild = gradle.includedBuild("CrystalGraphics")
+    val crystalGraphicsMod = fileTree(project.sameVersionNodeDir(crystalGraphicsBuild.projectDir, "fabric").resolve("build/libs")) {
+        include("crystalgraphics-fabric-*.jar")
+        // `-thin` is the MERGE's input (J1) -- one loader's own classes and nothing else -- and Loom loaded
+        // it as a second mod beside the full jar, where its entrypoint ran first and died on
+        // NoClassDefFoundError: com/crystalgraphics/mc/shared/VariantBootstrap. The class is in the full jar
+        // the whole time, which is what makes this read as a packaging fault rather than a selection one.
+        exclude("*-sources.jar", "*-all.jar", "*-dev.jar", "*-java*.jar", "*-thin.jar")
+    }
+
+    // Requesting this node's run makes CrystalGraphics' node of the same version real too, so its
+    // remapJar exists (cgbuildlogic.StubMode).
+    tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
+        dependsOn(crystalGraphicsBuild.task("${project.sameVersionNodePath("fabric")}:remapJar"))
+    }
+
+    // LOOM READS A MOD FILE WHILE THE BUILD IS CONFIGURED, before the task above has run. On the first
+    // build of a node the jar does not exist yet, so that run has no CrystalGraphics mod at all and dies at
+    // the entrypoint with NoClassDefFoundError: com/crystalgraphics/mc/shared/VariantBootstrap. The next run
+    // finds the jar. Said here, where it can be read, rather than left to that error. A CHANGED jar lags the
+    // same way: the run after a CrystalGraphics edit still loads the previous build.
+    if (crystalGraphicsMod.isEmpty) {
+        logger.warn("[cgui] {}: CrystalGraphics' fabric mod jar is not built yet, so a dev run started by " +
+            "THIS invocation has no CrystalGraphics. It is built on the way; run again, or build " +
+            "{}:remapJar first.", path, project.sameVersionNodePath("fabric"))
+    }
+
+    dependencies {
+        "minecraft"("com.mojang:minecraft:$mcVersion")
+        "mappings"(loom.layered {
+            officialMojangMappings()
+            // Parchment starts at 1.16.5; a node below it pins none and gets Mojang's names alone.
+            findProperty("parchment.version")?.let {
+                parchment("org.parchmentmc.data:parchment-${property("parchment.mc")}:$it@zip")
+            }
+        })
+        "modImplementation"("net.fabricmc:fabric-loader:${property("fabric.loader")}")
+        "modImplementation"("net.fabricmc.fabric-api:fabric-api:${property("fabric.api")}")
+
+        // CRYSTALGRAPHICS, AS A MOD. It registers CgPlatform from its own entrypoint and nothing here
+        // does it, so without this every class resolves and the desktop paints nothing. One dependency
+        // covers everything: that jar already bundles platform, core and freetype the same way this
+        // module bundles :core and its common node below, so there is no library half to add separately
+        // and nothing is shipped twice.
+        //
+        // Named as a FILE, because the obvious form does not work. Adding a composite substitution for
+        // com.crystalgraphics:crystalgraphics-mc1201-fabric and depending on that coordinate was tried:
+        // Loom derives a remapped dependency's coordinate from the PROJECT NAME, so it went looking for
+        // "com.crystalgraphics:fabric", which exists nowhere. Loom's remapJar output is what a mod
+        // dependency must be -- intermediary namespace -- and modLocalRuntime is what maps it back to
+        // named for a dev run; a plain runtimeOnly would put an intermediary mod on a named classpath and
+        // fail at class load rather than at resolution. Local, because this is how a dev run finds
+        // CrystalGraphics and not something a published POM should demand.
+        "modLocalRuntime"(crystalGraphicsMod)
+    }
+
+    // Per NODE: relative to versions/<version>/, so two versions never share a world.
+    loom.runs {
+        named("client") { runDir("runs/client") }
+        named("server") { runDir("runs/server") }
+    }
 }
 
-tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
-    dependsOn(crystalGraphicsBuild.task("${project.sameVersionNodePath("fabric")}:remapJar"))
-}
-
-// LOOM READS A MOD FILE WHILE THE BUILD IS CONFIGURED, before the task above has run. On the first
-// build of a node the jar does not exist yet, so that run has no CrystalGraphics mod at all and dies at
-// the entrypoint with NoClassDefFoundError: com/crystalgraphics/mc/shared/VariantBootstrap. The next run
-// finds the jar. Said here, where it can be read, rather than left to that error. A CHANGED jar lags the
-// same way: the run after a CrystalGraphics edit still loads the previous build.
-if (crystalGraphicsMod.isEmpty) {
-    logger.warn("[cgui] {}: CrystalGraphics' fabric mod jar is not built yet, so a dev run started by " +
-        "THIS invocation has no CrystalGraphics. It is built on the way; run again, or build " +
-        "{}:remapJar first.", path, project.sameVersionNodePath("fabric"))
-}
+/** Loom's named -> intermediary table, which generateStubs cuts this node's stub.tiny from. */
+val loomMappings = { LoomGradleExtension.get(project).mappingConfiguration.tinyMappings.toFile() }
 
 dependencies {
-    minecraft("com.mojang:minecraft:$mcVersion")
-    mappings(loom.layered {
-        officialMojangMappings()
-        // Parchment starts at 1.16.5; a node below it pins none and gets Mojang's names alone.
-        findProperty("parchment.version")?.let {
-            parchment("org.parchmentmc.data:parchment-${property("parchment.mc")}:$it@zip")
-        }
-    })
-    modImplementation("net.fabricmc:fabric-loader:${property("fabric.loader")}")
-    modImplementation("net.fabricmc.fabric-api:fabric-api:${property("fabric.api")}")
-
-    // CRYSTALGRAPHICS, AS A MOD. It registers CgPlatform from its own entrypoint and nothing here
-    // does it, so without this every class resolves and the desktop paints nothing. One dependency
-    // covers everything: that jar already bundles platform, core and freetype the same way this
-    // module bundles :core and its common node below, so there is no library half to add separately
-    // and nothing is shipped twice.
-    //
-    // Named as a FILE, because the obvious form does not work. Adding a composite substitution for
-    // com.crystalgraphics:crystalgraphics-mc1201-fabric and depending on that coordinate was tried:
-    // Loom derives a remapped dependency's coordinate from the PROJECT NAME, so it went looking for
-    // "com.crystalgraphics:fabric", which exists nowhere. Loom's remapJar output is what a mod
-    // dependency must be -- intermediary namespace -- and modLocalRuntime is what maps it back to
-    // named for a dev run; a plain runtimeOnly would put an intermediary mod on a named classpath and
-    // fail at class load rather than at resolution. Local, because this is how a dev run finds
-    // CrystalGraphics and not something a published POM should demand.
-    modLocalRuntime(crystalGraphicsMod)
-
     // Minecraft ships JOML from 1.19.3; below it the shipped jar's companion supplies it, and a dev run
     // takes it as a library.
     val mcOrdinal = property("mc.version").toString().split('.').map { it.toIntOrNull() ?: 0 }
         .let { v -> v.getOrElse(1) { 0 } * 1000 + v.getOrElse(2) { 0 } }
     if (mcOrdinal < 19_003) runtimeOnly("org.joml:joml-jdk8:1.10.1")
-}
-
-// Per NODE: relative to versions/<version>/, so two versions never share a world.
-loom {
-    runs {
-        named("client") { runDir("runs/client") }
-        named("server") { runDir("runs/server") }
-    }
 }
 
 // NO fabric.mod.json OF ITS OWN (J11.1b): a node's dev run takes the merged one, which cg-modern-loader
@@ -119,7 +136,7 @@ loom {
 // shipped jar now comes from a pipeline that assembles far more than it did.
 val shadedShadowJar = tasks.named<AbstractArchiveTask>("shadeDowngradedShadowJar")
 
-tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
+if (!stubMode) tasks.named<RemapJarTask>("remapJar") {
     inputFile.set(shadedShadowJar.flatMap { it.archiveFile })
 }
 
@@ -128,12 +145,15 @@ tasks.named<net.fabricmc.loom.task.RemapJarTask>("remapJar") {
 // A SECOND remap task rather than a reconfiguration of the first: `remapJar` produces the fat jar
 // this loader ships today, and both artifacts have to keep building until the root merge replaces
 // the fat one. Remapping is what makes a thin jar production-shaped here, exactly as reobfuscation
-// does on Forge -- intermediary is what a Fabric mod's class references must be.
-val remapThinJar = tasks.register<net.fabricmc.loom.task.RemapJarTask>("remapThinJar") {
-    group = "build"
-    description = "The thin jar at intermediary names -- the merge's input from this loader."
-    inputFile.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
-    archiveClassifier.set("thin")
+// does on Forge -- intermediary is what a Fabric mod's class references must be. A node in stub mode
+// renames through tiny-remapper and the committed stub.tiny instead (registerThinRename).
+val remapThinJar = registerThinRename("thinShadowJar", "thin", loomMappings) {
+    tasks.register<RemapJarTask>("remapThinJar") {
+        group = "build"
+        description = "The thin jar at intermediary names -- the merge's input from this loader."
+        inputFile.set(tasks.named<AbstractArchiveTask>("thinShadowJar").flatMap { it.archiveFile })
+        archiveClassifier.set("thin")
+    }
 }
 
 // Registered by cg-modern-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
@@ -143,61 +163,66 @@ tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
 tasks.named("assemble") { dependsOn(remapThinJar) }
 
 /** The language half of the same thing (J8) — remapped for the same reason the host half is. */
-val remapLangThinJar = tasks.register<net.fabricmc.loom.task.RemapJarTask>("remapLangThinJar") {
-    group = "language jar"
-    description = "The language thin jar at intermediary names -- the language merge's input."
-    inputFile.set(tasks.named<AbstractArchiveTask>("langThinShadowJar").flatMap { it.archiveFile })
-    archiveClassifier.set("lang-thin")
+registerThinRename("langThinShadowJar", "lang-thin", loomMappings) {
+    tasks.register<RemapJarTask>("remapLangThinJar") {
+        group = "language jar"
+        description = "The language thin jar at intermediary names -- the language merge's input."
+        inputFile.set(tasks.named<AbstractArchiveTask>("langThinShadowJar").flatMap { it.archiveFile })
+        archiveClassifier.set("lang-thin")
+    }
 }
 
-// Extracts this node's Minecraft sources and resources into build/mc-src for local navigation.
-// Sync (not Copy) removes stale files when jars change between toolchain version bumps.
-val extractMcSources by tasks.registering(Sync::class) {
-    description = "Extracts this node's Minecraft sources and resources into build/mc-src for local navigation."
-    group = "crystalgui"
+// A real node only: in stub mode there are no sources to extract.
+if (!stubMode) {
+    // Extracts this node's Minecraft sources and resources into build/mc-src for local navigation.
+    // Sync (not Copy) removes stale files when jars change between toolchain version bumps.
+    val extractMcSources = tasks.register<Sync>("extractMcSources") {
+        description = "Extracts this node's Minecraft sources and resources into build/mc-src for local navigation."
+        group = "crystalgui"
 
-    // genSourcesWithVineflower is Loom's decompile task. dependsOn ensures it runs before extraction.
-    // Running this task triggers Vineflower decompilation — may take several minutes on first run.
-    //
-    // Use the typed GenerateSourcesTask so we can access sourcesOutputJar directly.
-    // task.outputs.files.singleFile would throw because GenerateSourcesTask also declares a
-    // @LocalState working directory, giving it more than one output file in total.
-    val genSources = tasks.named(
-        "genSourcesWithVineflower",
-        net.fabricmc.loom.task.GenerateSourcesTask::class
-    )
-    dependsOn(genSources)
+        // genSourcesWithVineflower is Loom's decompile task. dependsOn ensures it runs before extraction.
+        // Running this task triggers Vineflower decompilation — may take several minutes on first run.
+        //
+        // Use the typed GenerateSourcesTask so we can access sourcesOutputJar directly.
+        // task.outputs.files.singleFile would throw because GenerateSourcesTask also declares a
+        // @LocalState working directory, giving it more than one output file in total.
+        val genSources = tasks.named(
+            "genSourcesWithVineflower",
+            GenerateSourcesTask::class
+        )
+        dependsOn(genSources)
 
-    // sourcesOutputJar is the @OutputFile declared by GenerateSourcesTask — the canonical way
-    // to consume it without spelunking the loom cache path (which is hash-named).
-    val sourcesJar = genSources.flatMap { it.sourcesOutputJar }
-    from(zipTree(sourcesJar)) { into("java") }
+        // sourcesOutputJar is the @OutputFile declared by GenerateSourcesTask — the canonical way
+        // to consume it without spelunking the loom cache path (which is hash-named).
+        val sourcesJar = genSources.flatMap { it.sourcesOutputJar }
+        from(zipTree(sourcesJar)) { into("java") }
 
-    // Resources — filter non-class, non-META-INF content from the merged binary jar.
-    // Loom publishes the named+merged jar to its local maven under "minecraft-merged" — it
-    // lands on the compileClasspath. configurations["minecraft"] is Declarable-only in Gradle 9
-    // (resolvedConfiguration() is not permitted on it), so we filter compileClasspath instead.
-    // provider {} keeps the resolution lazy — executed only at task execution time.
-    val mergedJar = provider {
-        configurations["compileClasspath"].resolvedConfiguration.resolvedArtifacts
-            .first { it.file.name.startsWith("minecraft-merged") }
-            .file
+        // Resources — filter non-class, non-META-INF content from the merged binary jar.
+        // Loom publishes the named+merged jar to its local maven under "minecraft-merged" — it
+        // lands on the compileClasspath. configurations["minecraft"] is Declarable-only in Gradle 9
+        // (resolvedConfiguration() is not permitted on it), so we filter compileClasspath instead.
+        // provider {} keeps the resolution lazy — executed only at task execution time.
+        val mergedJar = provider {
+            configurations["compileClasspath"].resolvedConfiguration.resolvedArtifacts
+                .first { it.file.name.startsWith("minecraft-merged") }
+                .file
+        }
+        from(zipTree(mergedJar)) {
+            into("resources")
+            exclude("**/*.class")
+            exclude("META-INF/**")
+        }
+
+        into(layout.buildDirectory.dir("mc-src"))
     }
-    from(zipTree(mergedJar)) {
-        into("resources")
-        exclude("**/*.class")
-        exclude("META-INF/**")
-    }
 
-    into(layout.buildDirectory.dir("mc-src"))
+    // Wire into ideaSyncTask only — NOT classes.
+    // genSourcesWithVineflower (which extractMcSources depends on) is an optional dev task; forcing
+    // it on classes would add 2-5 minutes of Vineflower decompilation to every fresh-clone build.
+    // ideaSyncTask is Loom's dedicated IDE sync hook — the right moment for one-time source gen.
+    // CLI users who want sources without IDE sync: ./gradlew :runtime:mc:modern:fabric:1.20.1:extractMcSources
+    tasks.named("ideaSyncTask") { dependsOn(extractMcSources) }
 }
-
-// Wire into ideaSyncTask only — NOT classes.
-// genSourcesWithVineflower (which extractMcSources depends on) is an optional dev task; forcing
-// it on classes would add 2-5 minutes of Vineflower decompilation to every fresh-clone build.
-// ideaSyncTask is Loom's dedicated IDE sync hook — the right moment for one-time source gen.
-// CLI users who want sources without IDE sync: ./gradlew :runtime:mc:modern:fabric:1.20.1:extractMcSources
-tasks.named("ideaSyncTask") { dependsOn(extractMcSources) }
 
 // CrystalGraphics ships as its OWN MOD on this loader, so its classes must not also be on the system
 // classpath. Knot loads a mod jar's classes itself, so a class present in both places exists TWICE --

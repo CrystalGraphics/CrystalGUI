@@ -6,6 +6,7 @@
 // cg-modern-common), so this script carries nothing version-specific.
 
 import cgbuildlogic.backportedMojmap
+import cgbuildlogic.stubMode
 import cgbuildlogic.usesLoomMinecraft
 import cgbuildlogic.usesUniminedMinecraft
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
@@ -13,11 +14,12 @@ import net.fabricmc.loom.api.LoomGradleExtensionAPI
 plugins {
     id("cg-modern-common")
     // Below 1.17 no ModDevGradle mode reaches Minecraft, and Loom supplies it vanilla with Mojang's
-    // names. Declared here, and only applied on such a node, so it loads in this branch alone.
+    // names. Declared here, and only applied on such a node, so it loads in this branch alone. A node
+    // in stub mode applies no toolchain at all (cgbuildlogic.StubMode).
     id("fabric-loom") version "1.16.2" apply false
 }
 
-if (usesLoomMinecraft) {
+if (!stubMode && usesLoomMinecraft) {
     // A loader bundles common at Mojang's names and remaps the two together, as on every later node:
     // keep the unremapped jar in the outgoing variants and drop Loom's intermediary one.
     extra["fabric.loom.disableRemappedVariants"] = "true"
@@ -37,7 +39,7 @@ if (usesLoomMinecraft) {
     }
 }
 
-if (usesUniminedMinecraft) {
+if (!stubMode && usesUniminedMinecraft) {
     extra["cg.backportedMojmap"] = backportedMojmap() ?: error("${project.path} pins minecraft.unimined with no backported names")
     apply(from = buildscript.sourceFile!!.resolveSibling("unimined-vanilla.gradle.kts"))
 }
