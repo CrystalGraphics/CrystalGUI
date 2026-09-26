@@ -1,9 +1,11 @@
 import cgbuildlogic.Dependency
+import cgbuildlogic.LegacyEntries
 import cgbuildlogic.LoaderEntries
 import cgbuildlogic.ModDescriptor
 import cgbuildlogic.Ordering
 import cgbuildlogic.Side
 import cgbuildlogic.Variant
+import cgbuildlogic.legacyVariants
 import cgbuildlogic.modernVariants
 import cgbuildlogic.registerDescriptorTasks
 
@@ -29,7 +31,7 @@ val cgDescriptor = ModDescriptor(
         // CrystalGUI service reads, and a UI that loads first finds no backend at all.
         Dependency("crystalgraphics", "[1.0.0,)", ordering = Ordering.AFTER),
     ),
-    // 1.7.10 by hand; every 1.20.x variant is a NODE of the tree, whose range and pack format are its
+    // 1.7.10 by hand; every other variant is a NODE of a tree, whose range and pack format are its
     // own pins (`variant.minecraft`, `variant.packFormat`) -- so adding a version adds its variant.
     variants = listOf(
         Variant(
@@ -38,7 +40,10 @@ val cgDescriptor = ModDescriptor(
             mixinConfigs = listOf("mixins.crystalgui.json"),
             packFormat = 1,
         ),
-    ) + modernVariants(project, mapOf(
+    ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy",
+        common = "com.crystalgui.mc.legacy.CrystalGUILegacy",
+        client = "com.crystalgui.mc.legacy.CrystalGUILegacyClient",
+    )) + modernVariants(project, mapOf(
         "forge" to LoaderEntries("com.crystalgui.mc.forge", common = "com.crystalgui.mc.forge.CrystalGUIForge"),
         "neoforge" to LoaderEntries("com.crystalgui.mc.neoforge",
             common = "com.crystalgui.mc.neoforge.CrystalGUINeoForge"),
@@ -87,7 +92,9 @@ val cgLangDescriptor = ModDescriptor(
             commonEntry = "com.crystalgui.mc.v1710.lang.CrystalGuiLanguage",
             packFormat = 1,
         ),
-    ) + modernVariants(project, mapOf(
+    ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy",
+        common = "com.crystalgui.mc.legacy.lang.CrystalGuiLanguageLegacy",
+    )) + modernVariants(project, mapOf(
         // The host's node mixins are the host's: naming them here too is a duplicate config to Fabric.
         "forge" to LoaderEntries("com.crystalgui.mc.forge",
             common = "com.crystalgui.mc.forge.lang.CrystalGuiLanguageForge", mixins = false),
