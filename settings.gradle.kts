@@ -167,4 +167,9 @@ stonecutter {
             branch(branchName) { versions(*nodeVersions.toTypedArray()) }
         }
     }
+    // Forge 1.8 to 1.12.2, a node per SRG plateau -- CrystalGraphics' legacy tree, node for node.
+    // @see cgbuildlogic.LegacyTree
+    if (!embedded) create("runtime:mc:legacy") {
+        branch("forge") { versions("1.8.9", "1.10.2", "1.12.2") }
+    }
 }

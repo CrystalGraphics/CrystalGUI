@@ -1,5 +1,6 @@
 import cgbuildlogic.ModDescriptor
 import cgbuildlogic.SingleJarSpec
+import cgbuildlogic.legacyNodes
 import cgbuildlogic.modernLoaderNodes
 import cgbuildlogic.modernNodes
 import cgbuildlogic.registerSingleJarPipeline
@@ -82,7 +83,8 @@ registerSingleJarPipeline(SingleJarSpec(
     shadePath = "com/crystalgui/shadow",
 
     // 1.7.10's production step is registered in its own build; every 1.20.x node's is read off the tree.
-    thinJars = listOf(":runtime:mc:1710" to "reobfThinJar") + modernThinJars("thinShadowJar"),
+    thinJars = listOf(":runtime:mc:1710" to "reobfThinJar") +
+        legacyNodes(project).map { it.path to "reobfThinShadowJar" } + modernThinJars("thinShadowJar"),
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
@@ -210,7 +212,8 @@ registerSingleJarPipeline(SingleJarSpec(
     fileName = "crystalgui-language-${project.version}.jar",
     shadePath = "com/crystalgui/lang/shadow",
 
-    thinJars = listOf(":runtime:mc:1710" to "reobfLangThinJar") + modernThinJars("langThinShadowJar"),
+    thinJars = listOf(":runtime:mc:1710" to "reobfLangThinJar") +
+        legacyNodes(project).map { it.path to "reobfLangThinShadowJar" } + modernThinJars("langThinShadowJar"),
     libraryProjects = listOf(":language"),
     serviceOwners = listOf(":language"),
 
