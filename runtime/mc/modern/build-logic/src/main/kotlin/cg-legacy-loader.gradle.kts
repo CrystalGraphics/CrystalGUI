@@ -31,7 +31,14 @@ val lang: SourceSet by sourceSets.creating {
 dependencies {
     // compileOnly: the merge adds each of these once, at the root.
     "compileOnly"(project(":core"))
+    // UIDocument holds Taffy fields, and a field's type is read when a class using it compiles.
+    "compileOnly"(project(":taffy"))
+    // CrystalGraphics' modules, through the composite -- what `modernCompileDeps` gives a modern node.
+    "compileOnly"("com.crystalgraphics:core:1.0.0")
+    "compileOnly"("com.crystalgraphics:platform:1.0.0")
     "compileOnly"("com.crystalgraphics:mc-shared:1.0.0")
+    // @Nullable: legacy Minecraft brings no jsr305 with its libraries.
+    "compileOnly"("com.google.code.findbugs:jsr305:3.0.2")
 }
 
 // ── The thin jars ────────────────────────────────────────────────────────────────────────────────
