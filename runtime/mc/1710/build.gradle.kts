@@ -660,11 +660,17 @@ dependencies {
 // A DEV RUN SEES crystalgui_language BECAUSE FML SCANS THE CLASSPATH for @Mod (J8) -- no descriptor
 // needed here, unlike the three ModLauncher/Knot loaders. `-PcgNoLanguage` leaves it off, which is
 // how the degraded configuration is exercised without building a jar.
+//
+// INSIDE the dev jar, not beside it: `lang` compiles to Java 25 like `main`, and only the jar is
+// downgraded. Its class directory on the run classpath was refused by FML's ASM 5 ("probably a corrupt
+// file"), so the language mod never loaded in a dev run.
 if (!providers.gradleProperty("cgNoLanguage").isPresent) {
-    dependencies {
-        "runtimeOnly"(files(lang.output))
-        // Java 8 classes, so FML's ASM 5 scan of the dev classpath can read them.
-        "runtimeOnly"(project(":runtime:mc:launchwrapper"))
+    tasks.shadowJar {
+        from(lang.output)
+        // Looked up here, lazily: that project is configured after this one.
+        val launchWrapperJar = project(":runtime:mc:launchwrapper").tasks.named<Jar>("jar")
+        dependsOn(launchWrapperJar)
+        from(launchWrapperJar.map { zipTree(it.archiveFile) }) { exclude("META-INF/MANIFEST.MF") }
     }
 }
 
