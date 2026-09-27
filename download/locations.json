@@ -20,6 +20,10 @@
       "urls": ["https://raw.githubusercontent.com/MinecraftForge/FML/a099592d3d1418245e3af65eda195da244287188/conf/fields.csv"],
       "digest": "gitblob:db4063eab8c1dc742791c59d071be22772ae462c"
     },
+    "forge/mcp-stable/{version}": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:{version}@zip",
+      "from": ["forge"]
+    },
     "mojang/version-manifest": {
       "urls": ["https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"]
     },
