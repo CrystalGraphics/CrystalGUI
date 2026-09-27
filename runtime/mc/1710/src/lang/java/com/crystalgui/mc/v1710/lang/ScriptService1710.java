@@ -9,6 +9,7 @@ import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.MappingCoordinates.Source;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptService;
+import com.crystalgui.mc.launchwrapper.LaunchWrapperBytes;
 
 import cpw.mods.fml.common.FMLCommonHandler;
 

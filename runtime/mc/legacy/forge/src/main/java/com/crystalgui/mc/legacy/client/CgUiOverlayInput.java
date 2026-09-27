@@ -2,11 +2,9 @@ package com.crystalgui.mc.legacy.client;
 
 import java.io.IOException;
 
-import javax.annotation.Nullable;
-
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.host.ScreenOverlay;
 
 import net.minecraft.client.Minecraft;
@@ -18,8 +16,8 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 /**
- * Offers a foreign screen's input to pinned windows first. A courier: who gets an event is
- * {@link ScreenOverlay}'s decision, in {@code core/}.
+ * Offers a foreign screen's input to pinned windows first. A courier: who gets an event is decided in
+ * {@code core/}, by {@link HostSession#offerMouse} and then {@link ScreenOverlay}.
  *
  * <p>Forge 1.8–1.12.2 posts {@code GuiScreenEvent.MouseInputEvent.Pre} and {@code KeyboardInputEvent.Pre}
  * once per queued event from inside {@code GuiScreen.handleInput}, standing on that event, and skips the
@@ -51,9 +49,8 @@ public final class CgUiOverlayInput {
 
     /** Offers the mouse event LWJGL is standing on; true when the desktop took it. */
     public static boolean offerCurrentMouse(GuiScreen screen) {
-        ScreenOverlay overlay = overlay(screen);
-        if (overlay == null) return false;
-        return overlay.offerMouse(
+        announce(screen);
+        return HostSession.isInstalled() && HostSession.session().offerMouse(CgUiHud.HOST, Mouse.isGrabbed(),
                 Mouse.getEventX(),
                 // LWJGL measures from the bottom of the display, the engine from the top.
                 Minecraft.getMinecraft().displayHeight - Mouse.getEventY(),
@@ -64,9 +61,9 @@ public final class CgUiOverlayInput {
 
     /** Offers the keyboard event LWJGL is standing on; true when the desktop took it. */
     public static boolean offerCurrentKey(GuiScreen screen) {
-        ScreenOverlay overlay = overlay(screen);
-        return overlay != null
-                && overlay.offerKey(Keyboard.getEventKey(), Keyboard.getEventCharacter(), Keyboard.getEventKeyState());
+        announce(screen);
+        return HostSession.isInstalled() && HostSession.session().offerKey(
+                Keyboard.getEventKey(), Keyboard.getEventCharacter(), Keyboard.getEventKeyState());
     }
 
     /**
@@ -82,17 +79,11 @@ public final class CgUiOverlayInput {
         }
     }
 
-    @Nullable
-    private static ScreenOverlay overlay(GuiScreen screen) {
-        if (CgUiScreen.window() == null) return null;
-        // The desktop node, not only the host's document: a closed UI leaves the node disconnected.
-        Desktop desktop = CgUiScreen.desktop();
-        ScreenOverlay overlay = desktop == null ? null : desktop.screenOverlay();
-        if (overlay != null && !announced) {
-            announced = true;
-            CrystalGuiCore.LOGGER.info("[cgui] overlay input is live: pinned windows are taking events "
-                    + "from {}", screen.getClass().getName());
-        }
-        return overlay;
+    /** Once: a hook that never fires and a feature that was never wired look the same from outside. */
+    private static void announce(GuiScreen screen) {
+        if (announced || screen == null) return;
+        announced = true;
+        CrystalGuiCore.LOGGER.info("[cgui] overlay input is live: pinned windows are taking events from {}",
+                screen.getClass().getName());
     }
 }

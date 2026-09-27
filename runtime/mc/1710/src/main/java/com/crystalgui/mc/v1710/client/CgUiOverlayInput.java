@@ -3,7 +3,7 @@ package com.crystalgui.mc.v1710.client;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
@@ -17,9 +17,10 @@ import org.lwjgl.input.Mouse;
  *
  * <p>Called only from {@code MixinGuiScreen}, which cancels {@code GuiScreen.handleInput} when this
  * wants the events. <b>This is a courier and not a decision-maker</b>: every question about who gets an
- * event is answered by {@link ScreenOverlay} in {@code core/}, so that the arbitration has one
- * implementation rather than one per Minecraft version. What lives here is the part that genuinely is
- * per-version — how to read an event out of LWJGL2 and how to hand back the ones we declined.</p>
+ * event is answered in {@code core/} — {@link HostSession#offerMouse}, then {@link ScreenOverlay} — so
+ * that the arbitration has one implementation rather than one per Minecraft version. What lives here is
+ * the part that genuinely is per-version — how to read an event out of LWJGL2 and how to hand back the
+ * ones we declined.</p>
  *
  * <h3>On the render tick, not the game tick</h3>
  *
@@ -95,30 +96,24 @@ public final class CgUiOverlayInput {
             CrystalGuiCore.LOGGER.info("[cgui] overlay input is live: pinned windows are taking events "
                     + "from {}", screen.getClass().getName());
         }
-        // NOT COVERED BY THE GUARD ABOVE, which asks the HOST for a document; this asks the DESKTOP
-        // NODE, and a closed UI leaves the node disconnected while the host still holds one. @see CgUiHud
-        Desktop desktop = CgUiScreen.desktop();
-        ScreenOverlay overlay = desktop == null ? null : desktop.screenOverlay();
-        if (overlay == null) return;
+        HostSession session = HostSession.session();
         Minecraft mc = Minecraft.getMinecraft();
 
         try {
             while (Mouse.next()) {
-                int button = Mouse.getEventButton();
-                float wheel = Mouse.getEventDWheel() * MOUSE_SCROLL_NORMALIZE;
-                boolean consumed = overlay.offerMouse(
+                boolean consumed = session.offerMouse(CgUiHud.HOST, Mouse.isGrabbed(),
                         Mouse.getEventX(),
                         // BOTTOM-UP TO TOP-DOWN. LWJGL measures from the bottom of the display and the
                         // engine from the top -- the same conversion CgUiInput.pumpMouse does, and
                         // getting it wrong places everything neatly somewhere wrong.
                         mc.displayHeight - Mouse.getEventY(),
-                        button,
+                        Mouse.getEventButton(),
                         Mouse.getEventButtonState(),
-                        wheel);
+                        Mouse.getEventDWheel() * MOUSE_SCROLL_NORMALIZE);
                 if (!consumed) screen.handleMouseInput();
             }
             while (Keyboard.next()) {
-                boolean consumed = overlay.offerKey(
+                boolean consumed = session.offerKey(
                         Keyboard.getEventKey(), Keyboard.getEventCharacter(), Keyboard.getEventKeyState());
                 if (!consumed) screen.handleKeyboardInput();
             }

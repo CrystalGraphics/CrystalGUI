@@ -651,6 +651,8 @@ val lang: SourceSet by sourceSets.creating {
 
 dependencies {
     "langCompileOnly"(project(":language"))
+    // What this host shares with Forge 1.8-1.12.2's; merged once into the language jar.
+    "langCompileOnly"(project(":runtime:mc:launchwrapper"))
     "langCompileOnly"("org.projectlombok:lombok:1.18.44")
     "langAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
 }
@@ -659,7 +661,11 @@ dependencies {
 // needed here, unlike the three ModLauncher/Knot loaders. `-PcgNoLanguage` leaves it off, which is
 // how the degraded configuration is exercised without building a jar.
 if (!providers.gradleProperty("cgNoLanguage").isPresent) {
-    dependencies { "runtimeOnly"(files(lang.output)) }
+    dependencies {
+        "runtimeOnly"(files(lang.output))
+        // Java 8 classes, so FML's ASM 5 scan of the dev classpath can read them.
+        "runtimeOnly"(project(":runtime:mc:launchwrapper"))
+    }
 }
 
 /** The language host's own classes, the input to its thin jar. */

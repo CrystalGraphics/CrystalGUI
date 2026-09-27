@@ -3,20 +3,17 @@ package com.crystalgui.mc.v1710.client;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.host.HostSession;
-import com.crystalgui.desktop.host.ScreenOverlay;
 
+import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 import cpw.mods.fml.relauncher.Side;
 import cpw.mods.fml.relauncher.SideOnly;
-import javax.annotation.Nullable;
 
 import org.lwjgl.input.Mouse;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraftforge.client.event.GuiScreenEvent;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -113,7 +110,7 @@ public final class CgUiHud {
         CgUiHud.Handler handler = new CgUiHud.Handler();
         MinecraftForge.EVENT_BUS.register(handler);
         // AND THE FML BUS for the render tick: TickEvent lives there, not on the Forge bus.
-        cpw.mods.fml.common.FMLCommonHandler.instance().bus().register(handler);
+        FMLCommonHandler.instance().bus().register(handler);
         CrystalGuiCore.LOGGER.info("[cgui] overlay hooks registered; pinned windows paint over the game "
                 + "and over other GUIs");
     }
@@ -140,38 +137,14 @@ public final class CgUiHud {
 
     /** @return whether the desktop consumed it and a foreign screen must not see it */
     public static boolean offerMouse(int button, boolean pressed, float wheel) {
-        ScreenOverlay overlay = overlay();
-        if (overlay == null) return false;
-        return overlay.offerMouse(pointerX(), pointerY(), button, pressed, wheel);
+        // LWJGL2 measures from the bottom; the DISPLAY height, since GuiScreen.height is GUI-scaled.
+        return HostSession.isInstalled() && HostSession.session().offerMouse(HOST, Mouse.isGrabbed(),
+                Mouse.getX(), Minecraft.getMinecraft().displayHeight - Mouse.getY(), button, pressed, wheel);
     }
 
     /** @return whether the desktop consumed it */
     public static boolean offerKey(int keyCode, char typed, boolean pressed) {
-        ScreenOverlay overlay = overlay();
-        return overlay != null && overlay.offerKey(keyCode, typed, pressed);
-    }
-
-    @Nullable
-    private static ScreenOverlay overlay() {
-        Desktop desktop = CgUiScreen.desktop();
-        if (desktop == null || CgUiScreen.window() == null) return null;
-        return desktop.screenOverlay();
-    }
-
-    /** Raw surface pixels, TOP-DOWN -- what ScreenOverlay documents it wants. */
-    private static int pointerX() {
-        return Mouse.getX();
-    }
-
-    /**
-     * LWJGL2's origin is bottom-left and the compositor's is top-left, so this flips.
-     *
-     * <p>The same conversion {@code CgUiInput.pumpMouse} makes on every real event, and the reason it
-     * reads the DISPLAY height rather than a screen's: {@code GuiScreen.height} is already divided by
-     * Minecraft's GUI scale.</p>
-     */
-    private static int pointerY() {
-        return Minecraft.getMinecraft().displayHeight - Mouse.getY();
+        return HostSession.isInstalled() && HostSession.session().offerKey(keyCode, typed, pressed);
     }
 
     public static final class Handler {

@@ -1,4 +1,4 @@
-package com.crystalgui.mc.legacy.lang;
+package com.crystalgui.mc.launchwrapper;
 
 import com.crystalgui.language.map.ReadableView;
 
@@ -11,7 +11,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Post-transform bytes, out of LaunchWrapper.
+ * Post-transform bytes, out of LaunchWrapper — for 1.7.10 and Forge 1.8–1.12.2 alike.
  *
  * <p>The whole of what LaunchWrapper Minecraft has to contribute to §15.5 A, and it is a dozen lines because
  * {@code LaunchClassLoader} happens to expose both halves publicly:</p>
@@ -58,10 +58,10 @@ import java.util.List;
  * each transformer rather than one name twice: a deobfuscating transformer decides what to rename from
  * the difference between them.</p>
  */
-final class LaunchWrapperBytes {
+public final class LaunchWrapperBytes {
 
     /** Shared: stateless, and the loader it reads is a process-wide singleton anyway. */
-    static final ReadableView.ByteSource SOURCE = new ReadableView.ByteSource() {
+    public static final ReadableView.ByteSource SOURCE = new ReadableView.ByteSource() {
         @Override
         public byte[] bytesOf(String internalName) {
             return transformed(internalName);
@@ -75,7 +75,7 @@ final class LaunchWrapperBytes {
      * The class file's own bytes, before any transformer: what a file-based classpath would read. Asked by
      * the file's name, which in production is the obfuscated one.
      */
-    static byte[] rawBytes(String internalName) {
+    public static byte[] rawBytes(String internalName) {
         LaunchClassLoader loader = Launch.classLoader;
         if (loader == null) return null;
         String binaryName = internalName.replace('/', '.');
@@ -149,7 +149,7 @@ final class LaunchWrapperBytes {
      * an index scan happens when a document opens, long after every mod has registered, whereas a byte
      * request can arrive at any time and a null cached early would answer wrongly for the whole process.</p>
      */
-    static String runtimeName(String internalName) {
+    public static String runtimeName(String internalName) {
         LaunchClassLoader loader = Launch.classLoader;
         if (loader == null) return internalName;
         if (cachedRenamer == null) {
