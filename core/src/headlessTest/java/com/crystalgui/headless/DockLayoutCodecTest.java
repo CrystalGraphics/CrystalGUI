@@ -212,9 +212,9 @@ public class DockLayoutCodecTest {
         assertNull(DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("something-else")));
     }
 
-    /** A central leaf survives being emptied by rule 2 — it is the main work area, not a panel. */
+    /** A central leaf emptied by rule 2 beside a sibling hands the role on rather than restoring a blank half. */
     @Test
-    public void aCentralLeafSurvivesLosingItsPanels() {
+    public void aCentralLeafLosingItsPanelsHandsTheRoleOn() {
         DockLeaf central = leaf("gone");
         central.setCentral(true);
         DockLayout layout = DockLayout.of(central);
@@ -224,8 +224,8 @@ public class DockLayoutCodecTest {
         DockLayout restored = DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("side"));
 
         assertNotNull(restored);
-        assertNotNull("the central leaf is still there, empty", restored.centralLeaf());
-        assertTrue(restored.centralLeaf().isEmpty());
+        assertEquals("one leaf, and it is central", 1, restored.leaves().size());
+        assertEquals("side", restored.centralLeaf().panels().get(0).typeId());
         restored.checkInvariants();
     }
 
