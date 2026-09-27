@@ -2,7 +2,7 @@
 // gradle.properties pins the toolchain and Parchment). Three toolchains, chosen by those pins
 // (cgbuildlogic.useModernMinecraft):
 //
-//   - below 1.17 the node pins `minecraft.unimined`: Unimined, compile only. See below.
+//   - below 1.17 the node pins `minecraft.unimined`: Unimined, its dev runs made real by uniminedDevRun.
 //
 //   - 1.20.1 pins `forge.version` alone: ModDevGradle's legacyForge, Forge's userdev, dev runs included.
 //     legacyForge stops at 1.20.1.
@@ -21,6 +21,7 @@ import cgbuildlogic.registerSrgReobf
 import cgbuildlogic.registerThinRename
 import cgbuildlogic.stubMode
 import cgbuildlogic.useForgeApi
+import cgbuildlogic.uniminedDevRun
 import cgbuildlogic.useModernMinecraft
 import cgbuildlogic.backportedMojmap
 import cgbuildlogic.usesUniminedMinecraft
@@ -40,8 +41,8 @@ useModernMinecraft()
 val legacyForge = extensions.findByType<LegacyForgeExtension>()
 
 // Forge below 1.17 through Unimined, which neither ModDevGradle mode reaches: Forge's userdev at
-// Mojang's names to compile against. No dev run -- Forge 1.15 needs Java 8, and a dev run would load
-// classes built for 17 -- so prodSmoke is this node's runtime check, as for the NeoForm nodes.
+// Mojang's names. Its dev run is on the node's own Java, 8 below 1.17, which the abstract modules'
+// Java 8 copies make possible. @see cgbuildlogic.uniminedDevRun
 if (!stubMode && usesUniminedMinecraft) {
     apply(plugin = "xyz.wagyourtail.unimined")
     the<UniminedExtension>().minecraft {
@@ -61,6 +62,7 @@ if (!stubMode && usesUniminedMinecraft) {
     sourceSets.findByName("lang")?.let { lang ->
         the<UniminedExtension>().minecraft(lang) { combineWith(sourceSets.main.get()) }
     }
+    uniminedDevRun()
 }
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
