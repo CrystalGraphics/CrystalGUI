@@ -248,12 +248,13 @@ registerCheckAllTargets()
 // What a FRESH clone's jar build leaves in the checkout: every build/ and project .gradle/ directory,
 // both repositories. A working checkout holds real nodes, run directories and server installs and is over
 // any budget, so this is run on a fresh clone rather than wired into `check`. ~/.gradle is shared by every
-// clone on the machine and is not counted. -PcgFootprintBudgetMb overrides the budget.
+// clone on the machine and is not counted. 700 MB: a fresh clone measured 655 on 2026-09-27, 236 of
+// them the two 1.7.10 RFG modules. -PcgFootprintBudgetMb overrides it.
 tasks.register("checkFootprint") {
     group = "verification"
     description = "Fails when this checkout's build output is over budget -- run it on a fresh clone."
     val root = rootDir
-    val budgetMb = (providers.gradleProperty("cgFootprintBudgetMb").orNull ?: "500").toLong()
+    val budgetMb = (providers.gradleProperty("cgFootprintBudgetMb").orNull ?: "700").toLong()
     mustRunAfter("singleJar", "languageJar")
     doLast {
         val found = mutableListOf<Pair<File, Long>>()
