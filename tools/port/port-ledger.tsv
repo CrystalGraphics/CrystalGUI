@@ -17,10 +17,10 @@ CLASS	net/window/ServerScope	593	net/window	6.8	copy	in-place
 CLASS	net/window/ServerWindow	265	net/window	6.8	copy	in-place
 CLASS	net/window/ServerWindows	552	net/window	6.8	copy	in-place
 CLASS	net/window/SheetSupply	231	net/window	6.8	copy	in-place
-CLASS	net/window/UiType	360	net/window	6.8	copy	in-place
+CLASS	net/window/UiType	364	net/window	6.8	copy	in-place
 CLASS	net/window/ViewCommands	123	net/window	6.8	copy	in-place
 CLASS	net/window/WindowMount	74	net/window	6.8	copy	in-place
-CLASS	net/window/WindowProtocol	57	net/window	6.8	move	in-place
+CLASS	net/window/WindowProtocol	76	net/window	6.8	move	in-place
 CLASS	ui/text/HighlightRegistry	119	ui/text	stays	move	in-place
 CLASS	language/run/view/MappingCommands	180	language/run/view	6.7	move	in-place
 CLASS	language/run/view/RunConsoleView	644	language/run/view	6.7	move	in-place
@@ -62,7 +62,6 @@ PART	(unowned)	markup-h4	A	1	proposed	leaf in every rule
 PART	(unowned)	markup-h5	A	1	proposed	leaf in every rule
 PART	(unowned)	markup-h6	A	1	proposed	leaf in every rule
 PART	(unowned)	menu	B	12	proposed	a rule selects through it (10)
-PART	(unowned)	monogram	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
 PART	(unowned)	region-auxiliary	A	1	proposed	leaf in every rule
 PART	(unowned)	region-panel	A	1	proposed	leaf in every rule
 PART	(unowned)	region-sidebar	A	1	proposed	leaf in every rule
@@ -233,7 +232,7 @@ PART	ConfiguratorGroup	arrow	B	2	confirmed	leaf in every rule, scoped by an ance
 PART	ConfiguratorGroup	collapsed	C	5	confirmed	state adjective
 PART	ConfiguratorGroup	configurator-group	B	14	confirmed	a rule selects through it (13)
 PART	ConfiguratorGroup	content	B	7	confirmed	a rule selects through it (5)
-PART	ConfiguratorGroup	head	B	6	confirmed	a rule selects through it (3)
+PART	ConfiguratorGroup	head	B	7	confirmed	a rule selects through it (3)
 PART	ConfiguratorGroup	title	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	ConfiguratorPanel	configurator-panel	B	1	confirmed	leaf in every rule
 PART	ConflictDialog	conflict	B	5	confirmed	a rule selects through it (3)
@@ -250,6 +249,7 @@ PART	CornerBox	corner-box	A	1	proposed	leaf in every rule
 PART	CornerBox	corner-link	A	3	proposed	leaf in every rule
 PART	CornerBox	corner-puck	A	2	proposed	leaf in every rule
 PART	CornerBox	side-puck	A	10	proposed	leaf in every rule
+PART	CreateMenu	insert-footer	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	CreateMenu	quick-input	B	25	proposed	a rule selects through it (24)
 PART	CreateMenu	title	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
 PART	CreateMenu	title-bar	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
@@ -257,6 +257,7 @@ PART	Desktop	live	C	1	confirmed	state adjective
 PART	Desktop	overlays	A	0	proposed	leaf in every rule
 PART	Desktop	snap-preview	B	1	confirmed	leaf in every rule
 PART	Desktop	windows	B	0	confirmed	leaf in every rule
+PART	DesktopProbe	entry	A	0	proposed	leaf in every rule
 PART	Dialog	backdrop	B	0	confirmed	leaf in every rule
 PART	Dialog	close	B	7	confirmed	leaf in every rule, scoped by an ancestor in 7
 PART	Dialog	content	B	0	confirmed	leaf in every rule
@@ -312,11 +313,17 @@ PART	DragGhost	iconless	B	4	proposed	a rule selects through it (1)
 PART	DragGhost	unlabelled	C	2	confirmed	state adjective
 PART	DropIndicator	drop-indicator	A	0	proposed	leaf in every rule
 PART	EditorFind	editor-find	B	4	confirmed	a rule selects through it (3)
-PART	EmptyState	start-aligned	A	1	proposed	leaf in every rule
+PART	EmptyState	start-aligned	A	2	proposed	leaf in every rule
 PART	ErrorStripePart	error-stripe	B	1	confirmed	leaf in every rule
 PART	ErrorStripePart	error-stripe-error	B	1	confirmed	leaf in every rule
 PART	ErrorStripePart	error-stripe-information	B	1	confirmed	leaf in every rule
 PART	ErrorStripePart	error-stripe-warning	B	1	confirmed	leaf in every rule
+PART	FrameStatsOverlay	bad	A	0	proposed	leaf in every rule
+PART	FrameStatsOverlay	good	A	0	proposed	leaf in every rule
+PART	FrameStatsOverlay	head	A	0	proposed	leaf in every rule
+PART	FrameStatsOverlay	row	A	0	proposed	leaf in every rule
+PART	FrameStatsOverlay	spark	A	2	proposed	leaf in every rule
+PART	FrameStatsOverlay	warn	A	0	proposed	leaf in every rule
 PART	GeneratedSourceView	shader-source	A	1	proposed	leaf in every rule
 PART	GlassLab	glass-lab	A	0	proposed	leaf in every rule
 PART	GlassLab	glass-sample-pane	A	1	proposed	leaf in every rule
@@ -359,9 +366,10 @@ PART	HierarchyPanel	hierarchy-content	B	3	proposed	a rule selects through it (1)
 PART	HierarchyPanel	hierarchy-row	A	1	proposed	leaf in every rule
 PART	HierarchyPanel	label	A	4	proposed	leaf in every rule, scoped by an ancestor in 4
 PART	HierarchyPanel	rename	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	HierarchyPanel	selected	C	11	proposed	state adjective
+PART	HierarchyPanel	selected	C	12	proposed	state adjective
 PART	HierarchyPanel	twisty	A	0	proposed	leaf in every rule
 PART	HierarchyToolWindow	hierarchy-window	A	0	proposed	leaf in every rule
+PART	HostSession	host-root	A	0	proposed	leaf in every rule
 PART	HoverHighlight	hover-highlight	A	0	proposed	leaf in every rule
 PART	InfoControl	info	B	2	confirmed	a rule selects through it (1)
 PART	InfoControl	value	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -370,7 +378,6 @@ PART	InputDialog	dialog-detail	A	0	proposed	leaf in every rule
 PART	InputDialog	placing	C	3	confirmed	state adjective
 PART	InputDialog	prompt	B	4	confirmed	a rule selects through it (2)
 PART	InputDialog	prompt-caption	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	InsertMenu	insert-footer	A	0	proposed	leaf in every rule
 PART	InsertMenu	insert-header	A	0	proposed	leaf in every rule
 PART	InsertionMarker	insertion	A	1	confirmed	leaf in every rule
 PART	InspectionWidgetPart	inspection	B	1	confirmed	leaf in every rule
@@ -429,7 +436,9 @@ PART	LinkedPair	linked-pair	B	2	proposed	a rule selects through it (1)
 PART	ListView	focused	C	1	confirmed	state adjective
 PART	ListView	h-scroll	B	0	confirmed	leaf in every rule
 PART	ListView	row	B	0	confirmed	leaf in every rule
-PART	ListView	selected	C	19	confirmed	state adjective
+PART	ListView	run-bottom	A	0	proposed	leaf in every rule
+PART	ListView	run-top	A	0	proposed	leaf in every rule
+PART	ListView	selected	C	20	confirmed	state adjective
 PART	MainPreviewPanel	head	B	3	confirmed	a rule selects through it (1)
 PART	MainPreviewPanel	main-preview	B	8	confirmed	a rule selects through it (6)
 PART	MainPreviewPanel	orbiting	B	1	confirmed	a rule selects through it (1)
@@ -467,14 +476,13 @@ PART	Menu	has-checkable	C	7	confirmed	state adjective
 PART	Menu	has-icons	B	4	proposed	a rule selects through it (4)
 PART	Menu	separator	A	0	confirmed	leaf in every rule
 PART	MenuBarView	burger	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	MenuBarView	burger-bar	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MenuBarView	collapsed	C	5	confirmed	state adjective
 PART	MenuBarView	menu-bar	B	9	confirmed	a rule selects through it (7)
-PART	MenuBarView	menu-title	B	4	confirmed	a rule selects through it (1)
+PART	MenuBarView	menu-title	B	5	confirmed	a rule selects through it (1)
 PART	MenuBarView	open	C	2	confirmed	state adjective
 PART	MenuItem	accelerator	A	0	confirmed	leaf in every rule
 PART	MenuItem	checkable	A	0	confirmed	leaf in every rule
-PART	MenuItem	has-submenu	C	1	confirmed	state adjective
+PART	MenuItem	has-submenu	C	2	confirmed	state adjective
 PART	MenuItem	icon	A	0	proposed	leaf in every rule
 PART	MenuItem	mark	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	MenuItem	submenu-arrow	A	0	confirmed	leaf in every rule
@@ -499,6 +507,12 @@ PART	NavigatorView	nav-node	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-search	B	0	confirmed	leaf in every rule
 PART	NavigatorView	nav-sidebar	B	0	confirmed	leaf in every rule
 PART	NetworkedPanels	networked-loading	A	0	proposed	leaf in every rule
+PART	NewDocumentPrompt	new-class	B	9	proposed	a rule selects through it (8)
+PART	NewDocumentPrompt	new-class-divider	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NewDocumentPrompt	new-class-kind	A	2	proposed	leaf in every rule
+PART	NewDocumentPrompt	new-class-kinds	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	NewDocumentPrompt	new-class-label	A	1	proposed	leaf in every rule
+PART	NewDocumentPrompt	new-class-name	B	3	proposed	a rule selects through it (2)
 PART	NodePort	dot	B	0	confirmed	leaf in every rule
 PART	NodePort	dot-core	B	0	confirmed	leaf in every rule
 PART	NodePort	editor	B	0	confirmed	leaf in every rule
@@ -576,7 +590,7 @@ PART	PreviewCard	placeholder	A	0	proposed	leaf in every rule
 PART	PreviewCard	preview-clip	A	1	proposed	leaf in every rule
 PART	PreviewCard	preview-frame	A	2	proposed	leaf in every rule
 PART	PreviewCard	preview-glyph	A	1	proposed	leaf in every rule
-PART	PreviewCard	selected	C	11	proposed	state adjective
+PART	PreviewCard	selected	C	12	proposed	state adjective
 PART	PreviewCard	stage	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
 PART	ProblemsPanel	content	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	ProblemsPanel	line	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
@@ -591,7 +605,7 @@ PART	ProblemsPanel	problems	B	0	confirmed	leaf in every rule
 PART	ProblemsPanel	problems-body	B	0	confirmed	leaf in every rule
 PART	ProblemsPanel	problems-empty	B	0	confirmed	leaf in every rule
 PART	ProblemsPanel	problems-head	B	0	confirmed	leaf in every rule
-PART	ProblemsPanel	selected	C	11	confirmed	state adjective
+PART	ProblemsPanel	selected	C	12	confirmed	state adjective
 PART	ProblemsPanel	severity	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	ProblemsPanel	tab-count	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	ProblemsPanel	twisty	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
@@ -625,7 +639,7 @@ PART	PropertyPill	name	B	2	confirmed	leaf in every rule, scoped by an ancestor i
 PART	PropertyPill	property-pill	B	16	confirmed	a rule selects through it (15)
 PART	PropertyPill	rename	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	PropertyPill	renaming	B	2	confirmed	a rule selects through it (2)
-PART	PropertyPill	selected	C	11	confirmed	state adjective
+PART	PropertyPill	selected	C	12	confirmed	state adjective
 PART	PropertyPill	type	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	QuickFixBulbPart	quick-fix-bulb	B	0	confirmed	leaf in every rule
 PART	QuickPick	content	B	0	confirmed	leaf in every rule
@@ -682,7 +696,8 @@ PART	RunRail	run-rail-glyph	A	10	proposed	leaf in every rule, scoped by an ances
 PART	RunRail	run-rail-name	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	RunRail	run-rail-time	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	Scroller	vertical	C	13	confirmed	state adjective
-PART	ScrollerView	scroll-view	A	1	proposed	leaf in every rule
+PART	ScrollerView	scroll-view	A	4	proposed	leaf in every rule
+PART	ScrollerView	v-gutter	B	4	proposed	a rule selects through it (1)
 PART	SearchField	focused	C	1	confirmed	state adjective
 PART	SearchField	not-found	B	2	confirmed	a rule selects through it (1)
 PART	SearchField	on	C	2	confirmed	state adjective
@@ -706,17 +721,17 @@ PART	SearchReplaceBar	option-preserve-case	B	1	confirmed	leaf in every rule
 PART	SearchReplaceBar	option-regex	B	1	confirmed	leaf in every rule
 PART	SearchReplaceBar	option-words	B	1	confirmed	leaf in every rule
 PART	SearchTree	category	A	0	proposed	leaf in every rule
-PART	SearchTree	category-segment	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
-PART	SearchTree	category-separator	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchTree	category-segment	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchTree	category-separator	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	SearchTree	empty	C	2	proposed	state adjective
 PART	SearchTree	entry	A	0	proposed	leaf in every rule
-PART	SearchTree	entry-category	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	SearchTree	entry-category	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	SearchTree	entry-hint	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
 PART	SearchTree	entry-icon	A	0	proposed	leaf in every rule
 PART	SearchTree	items	A	0	proposed	leaf in every rule
-PART	SearchTree	label	A	5	proposed	leaf in every rule, scoped by an ancestor in 5
+PART	SearchTree	label	A	3	proposed	leaf in every rule, scoped by an ancestor in 3
 PART	SearchTree	search	A	0	proposed	leaf in every rule
-PART	SearchTree	twisty	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	SearchTree	twisty	A	0	proposed	leaf in every rule
 PART	SelectControl	select	B	2	confirmed	a rule selects through it (1)
 PART	SelectionOutline	selection-outline	A	0	proposed	leaf in every rule
 PART	ShaderGraphView	content	A	0	proposed	leaf in every rule
@@ -748,14 +763,17 @@ PART	StatusBarView	status-bar	B	6	confirmed	a rule selects through it (6)
 PART	StatusBarView	status-item	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	StatusBarView	status-sep	B	0	confirmed	leaf in every rule
 PART	StripeView	activity-bar	B	7	confirmed	a rule selects through it (7)
-PART	StripeView	activity-item	A	3	confirmed	leaf in every rule, scoped by an ancestor in 3
+PART	StripeView	activity-item	A	6	confirmed	a rule selects through it (1)
 PART	StripeView	badge	A	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	StripeView	dot	A	4	confirmed	leaf in every rule, scoped by an ancestor in 4
+PART	StripeView	menu-open	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
+PART	StripeView	more	B	5	proposed	a rule selects through it (1)
 PART	StripeView	panel-focused	C	0	confirmed	state adjective
 PART	StripeView	stripe-left	A	0	confirmed	leaf in every rule
 PART	StripeView	stripe-right	A	0	confirmed	leaf in every rule
 PART	StripeView	stripe-separator	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	StripeView	stripe-spacer	A	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	StripeView	with-names	A	0	proposed	leaf in every rule
 PART	StyleChip	style-chip	B	4	proposed	a rule selects through it (3)
 PART	StyleChip	style-chip-continued	A	1	proposed	leaf in every rule
 PART	StyleChip	style-chip-swatch	B	5	proposed	a rule selects through it (1)
@@ -879,6 +897,7 @@ PART	ToolWindowFrame	floating	C	0	confirmed	state adjective
 PART	ToolWindowFrame	tool-window	B	10	confirmed	a rule selects through it (9)
 PART	ToolWindowFrame	windowed	C	0	confirmed	state adjective
 PART	ToolbarForm	config-toolbar	A	1	proposed	leaf in every rule
+PART	Tooltip	beside	A	1	proposed	leaf in every rule
 PART	Tooltip	wait	A	1	proposed	leaf in every rule
 PART	TransformBox	transform-box	A	0	proposed	leaf in every rule
 PART	TransformLab	lab-pivot	A	1	proposed	leaf in every rule
@@ -922,8 +941,8 @@ PART	ViewContainer	hide	B	4	confirmed	leaf in every rule, scoped by an ancestor 
 PART	ViewContainer	options	A	0	proposed	leaf in every rule
 PART	ViewContainer	panel-header	B	11	confirmed	a rule selects through it (10)
 PART	ViewContainer	title	A	2	confirmed	leaf in every rule, scoped by an ancestor in 2
-PART	ViewContainer	title-actions	A	1	proposed	leaf in every rule, scoped by an ancestor in 1
-PART	ViewContainer	title-trailing	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ViewContainer	title-actions	A	2	proposed	leaf in every rule, scoped by an ancestor in 2
+PART	ViewContainer	title-trailing	B	8	proposed	a rule selects through it (4)
 PART	ViewContainer	view-container	B	6	confirmed	a rule selects through it (5)
 PART	ViewContainer	view-content	B	9	confirmed	a rule selects through it (7)
 PART	WidgetSamples	sample-back-page	A	1	proposed	leaf in every rule
@@ -938,7 +957,7 @@ PART	WidgetSamples	sample-popover	A	1	proposed	leaf in every rule
 PART	WidgetSamples	sample-title	A	1	proposed	leaf in every rule
 PART	WidgetSamples	sample-twisty	A	1	proposed	leaf in every rule
 PART	WindowFrame	active	C	16	confirmed	state adjective
-PART	WindowFrame	caption-adopted	C	3	confirmed	state adjective
+PART	WindowFrame	caption-adopted	C	9	confirmed	state adjective
 PART	WindowFrame	caption-chrome	B	2	confirmed	leaf in every rule, scoped by an ancestor in 2
 PART	WindowFrame	close	B	7	confirmed	leaf in every rule, scoped by an ancestor in 7
 PART	WindowFrame	content	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
@@ -956,22 +975,22 @@ PART	WindowFrame	title-bar	B	27	confirmed	a rule selects through it (23)
 PART	WindowFrame	window	B	34	confirmed	a rule selects through it (30)
 PART	WindowIcon	branded	C	1	confirmed	state adjective
 PART	WindowIcon	tile-mono	A	1	confirmed	leaf in every rule
-PART	WindowIcon	window-icon	B	11	confirmed	a rule selects through it (1)
+PART	WindowIcon	window-icon	B	10	confirmed	leaf in every rule
 PART	WindowKeyboardMove	keyboard-moving	C	0	confirmed	state adjective
-PART	WindowPreview	pre-icon	B	2	confirmed	a rule selects through it (1)
+PART	WindowPreview	pre-icon	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowPreview	preview-close	B	3	confirmed	leaf in every rule, scoped by an ancestor in 3
 PART	WindowPreview	preview-header	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowPreview	preview-title	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
-PART	WindowPreview	window-preview	B	14	confirmed	a rule selects through it (11)
-PART	WindowSwitcher	icon	B	2	confirmed	a rule selects through it (1)
-PART	WindowSwitcher	selected	C	11	confirmed	state adjective
+PART	WindowPreview	window-preview	B	13	confirmed	a rule selects through it (10)
+PART	WindowSwitcher	icon	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
+PART	WindowSwitcher	selected	C	12	confirmed	state adjective
 PART	WindowSwitcher	switcher-close	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
-PART	WindowSwitcher	switcher-entry	B	13	confirmed	a rule selects through it (10)
+PART	WindowSwitcher	switcher-entry	B	12	confirmed	a rule selects through it (9)
 PART	WindowSwitcher	switcher-header	B	1	confirmed	leaf in every rule, scoped by an ancestor in 1
 PART	WindowSwitcher	switcher-panel	B	2	confirmed	a rule selects through it (1)
 PART	WindowSwitcher	switcher-title	B	1	confirmed	leaf in every rule
 PART	WindowSwitcher	window-switcher	B	2	confirmed	a rule selects through it (1)
-PART	WindowThumbnail	placeholder	B	4	confirmed	a rule selects through it (2)
+PART	WindowThumbnail	placeholder	B	4	confirmed	leaf in every rule, scoped by an ancestor in 4
 PART	WindowThumbnail	thumbnail	B	0	confirmed	leaf in every rule
 PART	Workbench	content	A	0	confirmed	leaf in every rule
 PART	Workbench	dock	A	0	confirmed	leaf in every rule
