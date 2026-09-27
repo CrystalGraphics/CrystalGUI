@@ -181,6 +181,11 @@ exactly as before, and the active Stonecutter version is real during an IDE sync
 | add a node, or change its pins | regenerate `stubs.zip` and commit it with the node — STUBS.md § *Regenerating*. Until then that node builds real |
 | touch a branch script | ask `stubMode` before applying a toolchain; rename thin jars through `registerThinRename` |
 
+**One compiler.** Every module compiles with JDK 25 (`dep.jdk.compiler`, one rule in the root build); its
+source/target or `--release` still decides its bytecode, and its own toolchain is only a launcher. A
+module on source/target — every one that reads `:core`'s Java 21 classes — gets no API check from javac,
+so calling a method newer than its target is a review rule, not a compile error.
+
 ```bash
 ./gradlew singleJar languageJar                             # the shipped jars, no Minecraft toolchain
 ./gradlew singleJar languageJar -PcgStubs=false             # every node real, as before stubs
