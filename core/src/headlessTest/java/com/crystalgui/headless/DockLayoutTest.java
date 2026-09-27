@@ -12,6 +12,7 @@ import org.junit.Test;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -311,9 +312,25 @@ public class DockLayoutTest {
         assertSame(two, leaf.activePanel());
     }
 
-    /** The central leaf is the guarantee the main work area exists — it survives being emptied. */
+    /** The central leaf is the guarantee the main work area exists — the last one standing survives being emptied. */
     @Test
-    public void theCentralLeafSurvivesBeingEmptiedAndCannotBeRemoved() {
+    public void theLastCentralLeafSurvivesBeingEmptiedAndCannotBeRemoved() {
+        DockPanelRef doc = new DockPanelRef("doc");
+        DockLeaf central = new DockLeaf(doc);
+        central.setCentral(true);
+        DockLayout layout = DockLayout.of(central);
+
+        layout.closePanel(doc);
+        assertTrue("emptied but still there", central.isEmpty());
+        assertSame(central, layout.centralLeaf());
+
+        assertNull("and it refuses to be removed outright", layout.remove(central));
+        layout.checkInvariants();
+    }
+
+    /** Beside a sibling, closing the central leaf's last panel hands the role on and gives the space back. */
+    @Test
+    public void closingTheCentralLeafBesideASiblingHandsTheRoleOn() {
         DockPanelRef doc = new DockPanelRef("doc");
         DockLeaf central = new DockLeaf(doc);
         central.setCentral(true);
@@ -321,10 +338,8 @@ public class DockLayoutTest {
         layout.drop(central, DockDropZone.SPLIT_RIGHT, leaf("side"));
 
         layout.closePanel(doc);
-        assertTrue("emptied but still there", central.isEmpty());
-        assertSame(central, layout.centralLeaf());
-
-        assertNull("and it refuses to be removed outright", layout.remove(central));
+        assertFalse("the emptied half is gone", layout.leaves().contains(central));
+        assertEquals("side", layout.centralLeaf().panels().get(0).typeId());
         layout.checkInvariants();
     }
 
