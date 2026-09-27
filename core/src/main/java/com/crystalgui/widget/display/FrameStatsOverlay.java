@@ -6,14 +6,12 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.async.FrameStats;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.TextRange;
+import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
-
-import dev.vfyjxf.taffy.style.TaffyDisplay;
 
 /**
  * The frame rate, and what is behind it, drawn over whatever is being measured — a debug HUD.
@@ -190,9 +188,7 @@ public class FrameStatsOverlay extends UIElement {
     public FrameStatsOverlay setShowing(boolean value) {
         if (showing == value) return this;
         showing = value;
-        // IMPORTANT, so a sheet cannot leave a hidden HUD drawn -- the same channel Tab hides a pane on.
-        StyleGroup.importantPipeline(getStyle().getLayoutGroup(),
-                l -> l.display(value ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        set(Attribute.HIDDEN, !value);
         applyCollection();
         return this;
     }
@@ -285,8 +281,7 @@ public class FrameStatsOverlay extends UIElement {
             }
             if (health != null && !row.hasClass(health)) row.addClass(health);
             paintBars(row, wanted.barHealth());
-            StyleGroup.importantPipeline(row.getStyle().getLayoutGroup(),
-                    l -> l.display(wanted.text().isEmpty() ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
+            row.set(Attribute.HIDDEN, wanted.text().isEmpty());
         }
     }
 
