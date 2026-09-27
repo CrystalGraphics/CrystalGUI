@@ -1,6 +1,7 @@
 // CrystalGUI core — platform-agnostic UI engine.
 // NO Minecraft, Forge, or LWJGL imports permitted in this subproject (import guard below).
 
+import cgbuildlogic.abstractModule
 import java.io.File as JFile
 
 plugins {
@@ -11,14 +12,8 @@ plugins {
 group = "com.crystalgui"
 version = "1.0.0"
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-    toolchain {
-        // Jabel is stable on 17 and 21. It is not stable on 25.
-        languageVersion.set(JavaLanguageVersion.of(21))
-    }
-}
+// An abstract module: Java 25, with a Java 8 copy for every consumer below it. @see cgbuildlogic.abstractModule
+abstractModule("com/crystalgui/core/jvmdg")
 
 repositories {
     maven {

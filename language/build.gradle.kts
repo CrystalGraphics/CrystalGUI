@@ -26,6 +26,7 @@
 
 // `java` is the JavaPluginExtension accessor inside a Kotlin DSL script, which shadows the PACKAGE of
 // the same name -- so `java.util.zip.ZipFile` does not resolve here and has to be imported.
+import cgbuildlogic.abstractModule
 import java.io.File
 import java.security.MessageDigest
 import java.security.cert.CertificateFactory
@@ -36,13 +37,8 @@ plugins {
     `java-library`
 }
 
-java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
-    }
-}
+// An abstract module: Java 25, with a Java 8 copy for every consumer below it. @see cgbuildlogic.abstractModule
+abstractModule("com/crystalgui/language/jvmdg")
 
 tasks.withType<JavaCompile>().configureEach {
     // NAMES FOR THE EDITOR, and the only mechanism that reaches an INTERFACE method (M13 §25.1).
@@ -561,9 +557,9 @@ tasks.register("engineReport") {
  */
 // ── Does a band actually RUN on the JVM it is pinned for? ───────────────────────────────────────
 //
-// A SEPARATE SOURCE SET COMPILED TO JAVA 8, and it has to be. This module compiles to Java 21, so a
+// A SEPARATE SOURCE SET COMPILED TO JAVA 8, and it has to be. This module compiles to Java 25, so a
 // JUnit test asking "does band 8 work on Java 8" could not load on the JVM it was asking about — the
-// question would go unanswered while the test suite went green on Java 21.
+// question would go unanswered while the test suite went green on Java 25.
 //
 // `checkEngineBands` proves the jars are LOADABLE and `EngineApiSurfaceTest` proves the API is PRESENT;
 // neither runs a compiler. §6.4 rejected downgrading the newest ECJ precisely because its runtime

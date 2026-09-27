@@ -6,24 +6,16 @@ plugins { `java-library` }
 // are Java 21. @see cgbuildlogic.nodeJava
 
 java {
-    // JDK 21 (or the node's, if newer) to COMPILE, the node's Java OUT. :core emits Java 21 (v65) -- its Jabel processor is
-    // commented out, so nothing desugars it -- and a JDK 17 javac cannot read a v65 class file at all:
-    //
-    //     bad class file: .../DesktopPresentation.class
-    //       class file has wrong version 65.0, should be 61.0
-    //
-    // What we EMIT is the node's Minecraft's Java, never :core's.
+    // The dev runs' JVM; every compile uses the one compiler (root build). 21 at least, which the dev
+    // launchers of the 17 nodes have always run on.
     toolchain { languageVersion.set(JavaLanguageVersion.of(maxOf(21, nodeJava))) }
     withSourcesJar()
-    // Gradle would otherwise reject :core as incompatible with a 17 consumer.
-    disableAutoTargetJvm()
+    // What Gradle requests of a dependency, so the abstract modules resolve to their Java 8 copies.
+    // @see cgbuildlogic.abstractModule
+    sourceCompatibility = JavaVersion.toVersion(nodeJava)
+    targetCompatibility = JavaVersion.toVersion(nodeJava)
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    // source/target rather than release: --release 17 also refuses to READ anything newer, which is
-    // the error above. The 21 toolchain's platform classes are the only thing lost, and nothing here
-    // wants a post-17 API.
-    sourceCompatibility = nodeJava.toString()
-    targetCompatibility = nodeJava.toString()
 }

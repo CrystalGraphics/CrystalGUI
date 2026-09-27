@@ -16,6 +16,7 @@
 //   - There is no Gradle 9 property to suppress the exclusive-lock requirement.
 
 import cgbuildlogic.commonNode
+import cgbuildlogic.devRunSourceSet
 import cgbuildlogic.registerSrgReobf
 import cgbuildlogic.registerThinRename
 import cgbuildlogic.stubMode
@@ -100,7 +101,7 @@ legacyForge?.apply {
             // (shadowJar bundles them via from(zipTree(...))), but ModDevGradle dev runs only see
             // what's declared in this mods{} block. Adding their source sets here puts their
             // compiled classes in the mod's virtual JAR, making them visible to ModuleClassLoader.
-            sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
+            sourceSet(devRunSourceSet(project(":core")))
             sourceSet(project.commonNode.extensions.getByType<SourceSetContainer>()["main"])
             // The @Mod itself: one class for every Forge, compiled apart from any node.
             sourceSet(project(":runtime:mc:forge-bootstrap").extensions.getByType<SourceSetContainer>()["main"])

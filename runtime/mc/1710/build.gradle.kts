@@ -90,11 +90,10 @@ jvmdg.multiReleaseOriginal.set(false)
 
 // :core subproject — platform-agnostic UI engine, bundled into this JAR.
 //
-// compileOnly, and it MUST NOT be api()/implementation(). :core compiles to Java 21 bytecode (its Jabel
-// annotationProcessor is commented out, so nothing desugars it), and a dev run puts every runtime
-// dependency on LaunchWrapper's classpath, where FML's ModDiscoverer opens each jar with
-// asm-debug-all-5.0.3 looking for @Mod. ASM 5.0.3 tops out at Java 8 class files, so it fails on the
-// first entry with:
+// compileOnly, and it MUST NOT be api()/implementation(). :core compiles to Java 25 bytecode, and a
+// dev run puts every runtime dependency on LaunchWrapper's classpath, where FML's ModDiscoverer opens
+// each jar with asm-debug-all-5.0.3 looking for @Mod. ASM 5.0.3 tops out at Java 8 class files, so it
+// fails on the first entry with:
 //
 //     There was a problem reading the entry com/crystalgui/core/CrystalGuiCore.class in the jar
 //     .../core/build/libs/core.jar - probably a corrupt zip
@@ -104,7 +103,7 @@ jvmdg.multiReleaseOriginal.set(false)
 // to diagnose from the message alone.
 //
 // The classes still reach runtime, downgraded: shadowJar below bundles core's output and jvmdg rewrites
-// the result to major 52. So the mod jar carries a Java 8 core and the raw Java 21 jar stays off the
+// the result to major 52. So the mod jar carries a Java 8 core and the raw Java 25 jar stays off the
 // classpath entirely. Verify with:
 //     unzip -p runtime/mc/1710/build/libs/crystalgui-1.0.0-dev.jar com/crystalgui/ui/UIWindow.class | od -An -t u1 -N 8
 dependencies {
