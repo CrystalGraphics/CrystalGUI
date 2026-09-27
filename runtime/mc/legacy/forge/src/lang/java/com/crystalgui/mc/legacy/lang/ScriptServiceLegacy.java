@@ -10,6 +10,7 @@ import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.MappingCoordinates.Source;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptService;
+import com.crystalgui.mc.launchwrapper.LaunchWrapperBytes;
 
 import net.minecraftforge.common.ForgeVersion;
 import net.minecraftforge.fml.common.FMLCommonHandler;
@@ -101,12 +102,12 @@ public final class ScriptServiceLegacy implements ScriptService {
     }
 
     /** The running version, read at run time: {@code ForgeVersion.mcVersion} is a constant javac inlines. */
-    static String minecraftVersion() {
+    private static String minecraftVersion() {
         return FmlVersion.of(ForgeVersion.class);
     }
 
     /** The MCP release for {@code minecraft}: the newest at or below it. */
-    static String mcpVersion(String minecraft) {
+    private static String mcpVersion(String minecraft) {
         String chosen = MCP_STABLE[0][1];
         for (String[] release : MCP_STABLE) {
             if (compare(release[0], minecraft) <= 0) chosen = release[1];
@@ -127,6 +128,8 @@ public final class ScriptServiceLegacy implements ScriptService {
 
     @Override
     public String toString() {
-        return "ScriptServiceLegacy[cache=" + cacheRoot() + "]";
+        String minecraft = minecraftVersion();
+        return "ScriptServiceLegacy[Minecraft " + minecraft + ", MCP " + mcpVersion(minecraft)
+                + ", cache=" + cacheRoot() + "]";
     }
 }

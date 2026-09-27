@@ -344,6 +344,56 @@ public final class HostSession {
         return desktop.presentation(ours, any);
     }
 
+    // ── Input offered over a screen ─────────────────────────────────────────────────────────────
+
+    /**
+     * Offers one pointer event to the pinned windows, and <b>refuses it while the pointer is the camera</b>.
+     *
+     * <pre>{@code
+     * // a host's screen-input hook: forward only what the desktop did not take
+     * if (session.offerMouse(myPaintHost, Mouse.isGrabbed(), x, displayHeight - y, button, pressed, wheel)) {
+     *     event.setCanceled(true);
+     * }
+     * }</pre>
+     *
+     * <p>With no screen up there is no cursor: the position runs with the look direction and a press is
+     * an attack, so hit-testing it would press whatever pinned window the player is looking at. A grab
+     * under a screen means the same, since a mod may capture the pointer there. A host reports the grab;
+     * this decides.</p>
+     *
+     * @param host    answers whether a screen is up
+     * @param grabbed whether the host has captured the pointer
+     * @param yPx     surface pixels from the TOP; a host whose toolkit measures from the bottom flips it
+     * @return whether the desktop consumed it, so the screen must not see it. See {@link ScreenOverlay#offerMouse}
+     */
+    public boolean offerMouse(PaintHost host, boolean grabbed, int xPx, int yPx, int button, boolean pressed,
+                              float wheel) {
+        if (grabbed || !host.anyScreenUp()) return false;
+        ScreenOverlay overlay = screenOverlay();
+        return overlay != null && overlay.offerMouse(xPx, yPx, button, pressed, wheel);
+    }
+
+    /**
+     * Offers one key to the pinned windows.
+     *
+     * @param keyCode the engine's key code ({@code CgKeyCodes}), not the toolkit's
+     * @return whether the desktop consumed it. See {@link ScreenOverlay#offerKey}
+     */
+    public boolean offerKey(int keyCode, char typed, boolean pressed) {
+        ScreenOverlay overlay = screenOverlay();
+        return overlay != null && overlay.offerKey(keyCode, typed, pressed);
+    }
+
+    /**
+     * Null until there is a document, and again after a close: the host keeps its {@link Desktop} while the
+     * node is disconnected, and only the overlay knows that.
+     */
+    @Nullable
+    private ScreenOverlay screenOverlay() {
+        Desktop desktop = desktop();
+        return desktop == null || document() == null ? null : desktop.screenOverlay();
+    }
+
     /**
      * Paints {@code arm}, and <b>only when the compositor is actually in it</b>.
      *

@@ -1,13 +1,9 @@
 package com.crystalgui.mc.legacy.client;
 
-import javax.annotation.Nullable;
-
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.host.HostSession;
-import com.crystalgui.desktop.host.ScreenOverlay;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -96,25 +92,13 @@ public final class CgUiHud {
 
     /** @return whether the desktop consumed it and a foreign screen must not see it */
     public static boolean offerMouse(int button, boolean pressed, float wheel) {
-        // With no screen, or the mouse grabbed, the pointer is the camera and a press is an attack.
-        if (Minecraft.getMinecraft().currentScreen == null || Mouse.isGrabbed()) return false;
-        ScreenOverlay overlay = overlay();
-        if (overlay == null) return false;
-        return overlay.offerMouse(Mouse.getX(), Minecraft.getMinecraft().displayHeight - Mouse.getY(),
-                button, pressed, wheel);
+        return HostSession.isInstalled() && HostSession.session().offerMouse(HOST, Mouse.isGrabbed(),
+                Mouse.getX(), Minecraft.getMinecraft().displayHeight - Mouse.getY(), button, pressed, wheel);
     }
 
     /** @return whether the desktop consumed it */
     public static boolean offerKey(int keyCode, char typed, boolean pressed) {
-        ScreenOverlay overlay = overlay();
-        return overlay != null && overlay.offerKey(keyCode, typed, pressed);
-    }
-
-    @Nullable
-    private static ScreenOverlay overlay() {
-        Desktop desktop = CgUiScreen.desktop();
-        if (desktop == null || CgUiScreen.window() == null) return null;
-        return desktop.screenOverlay();
+        return HostSession.isInstalled() && HostSession.session().offerKey(keyCode, typed, pressed);
     }
 
     private static GuiScreen guiOf(GuiScreenEvent event) {

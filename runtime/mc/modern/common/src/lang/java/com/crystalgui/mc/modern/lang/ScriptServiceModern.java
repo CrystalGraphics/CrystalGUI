@@ -3,17 +3,16 @@ package com.crystalgui.mc.modern.lang;
 import java.io.IOException;
 import java.nio.file.Path;
 
-import com.crystalgraphics.platform.CgPlatform;
+import javax.annotation.Nullable;
+
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.MappingCoordinates.Source;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptService;
-import com.crystalgui.language.platform.ScriptServices;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
 
@@ -26,7 +25,7 @@ import net.minecraft.client.Minecraft;
  * The 1.20.x half of {@link ScriptService} — <b>where to put things, and nothing else</b>.
  *
  * <pre>{@code
- * ScriptServiceModern.install();   // from LifecycleCrystalGUI.bootstrapClient()
+ * LanguageHost.install(ScriptServiceModern.forThisClient());   // from LanguageLifecycle.bootstrapClient()
  * }</pre>
  *
  * <p>Registered for {@link #cacheRoot()} alone, and that is the whole reason it exists.
@@ -59,13 +58,11 @@ public final class ScriptServiceModern implements ScriptService {
         this.gameDirectory = gameDirectory;
     }
 
-    /** Registers one, if a client is up. Idempotent. */
-    public static void install() {
+    /** This client's service, or null before a client is up. */
+    @Nullable
+    public static ScriptServiceModern forThisClient() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.gameDirectory == null) return;
-        ScriptServiceModern service = new ScriptServiceModern(mc.gameDirectory.toPath());
-        CgPlatform.provide(ScriptServices.SERVICE, service);
-        DownloadLocations.useCacheRoot(service.cacheRoot());
+        return mc == null || mc.gameDirectory == null ? null : new ScriptServiceModern(mc.gameDirectory.toPath());
     }
 
     /**

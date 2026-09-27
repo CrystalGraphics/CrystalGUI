@@ -214,7 +214,7 @@ registerSingleJarPipeline(SingleJarSpec(
 
     thinJars = listOf(":runtime:mc:1710" to "reobfLangThinJar") +
         legacyNodes(project).map { it.path to "reobfLangThinShadowJar" } + modernThinJars("langThinShadowJar"),
-    libraryProjects = listOf(":language"),
+    libraryProjects = listOf(":language", ":runtime:mc:launchwrapper"),
     serviceOwners = listOf(":language"),
 
     // ASM, AND ONLY ASM. Taffy and JOML are the host jar's; tree-sitter must NOT be relocated,
@@ -306,6 +306,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/forge/lang/LanguageForgeBootstrap.class",
             "com/crystalgui/mc/neoforge/lang/LanguageNeoForgeBootstrap.class",
             "com/crystalgui/mc/fabric/lang/LanguageFabricBootstrap.class",
+            // Both LaunchWrapper hosts' language halves name it, and only the merge brings it.
+            "com/crystalgui/mc/launchwrapper/LaunchWrapperBytes.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md",
             "assets/crystalgui/engines/8/index.txt",

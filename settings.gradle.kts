@@ -100,6 +100,10 @@ include("runtime:mc:shared")
 // compiled once against CrystalGraphics' forge-stubs.
 include("runtime:mc:forge-bootstrap")
 
+// What the two LaunchWrapper hosts share -- 1.7.10 and Forge 1.8 to 1.12.2 -- merged once into the
+// language jar. LaunchWrapper's API never changed, so one copy serves both.
+include("runtime:mc:launchwrapper")
+
 // NO TIER-1 MODULES HERE. They existed briefly and held one class between them, the cursor adapters,
 // which are CrystalGraphics' now: a cursor is a toolkit's job and this engine only decides WHICH one.
 // `core`'s CursorService turns a keyword into a picture and hands it to CgCursorService, so no host
