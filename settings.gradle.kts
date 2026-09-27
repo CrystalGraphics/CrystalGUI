@@ -16,8 +16,8 @@ pluginManagement {
 
         // The 1.20.x loader scripts request these with no version, so the pins live here. moddev
         // matches runtime/mc/modern/build-logic's net.neoforged:moddev-gradle:2.0.141 -- one version, one
-        // spelling. (BUILD_SETUP.md claims a net.neoforged.moddev.repositories settings plugin pins
-        // them; nothing applies that plugin in either repository. Corrected at L8.)
+        // spelling. No net.neoforged.moddev.repositories settings plugin pins them: nothing applies
+        // that plugin in either repository.
         id("com.gradleup.shadow") version("9.2.2")
         id("net.neoforged.moddev") version("2.0.141")
         id("net.neoforged.moddev.legacyforge") version("2.0.141")

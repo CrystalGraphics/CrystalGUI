@@ -1,5 +1,7 @@
 # runtime/mc/modern — one source tree, a node per Minecraft version
 
+Adding a version, pins, toolchains and checks: [`CGUI_BUILD.md`](../../../docs/CGUI_BUILD.md).
+
 A branched Stonecutter tree: `common`, `forge`, `neoforge` and `fabric` are branches, and each Minecraft
 version a branch targets is a node, `:runtime:mc:modern:<branch>:<version>`. **How the tree works, how to
 add a version and what will bite is CrystalGraphics' — read

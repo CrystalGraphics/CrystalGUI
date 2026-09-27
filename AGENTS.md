@@ -58,6 +58,10 @@ philosophy, which outlives the milestone.
 
 # TO BUILD
 
+📄 **[docs/CGUI_BUILD.md](docs/CGUI_BUILD.md)** — the build, verification and adding a Minecraft version;
+**[docs/CGUI_CROSS_VERSION.md](docs/CGUI_CROSS_VERSION.md)** — adding code or a platform service that must
+run on every version (also the `/cross-version` skill, `.claude/skills/cross-version/`).
+
 ```bash
 ./gradlew :taffy:test             # the VENDORED layout engine's own regression tests
 ./gradlew :core:compileJava       # the engine — enforces the MC/Forge/LWJGL import guard
@@ -1941,6 +1945,8 @@ better and does not go stale when it changes.
 | Doc | For |
 |---|---|
 | **`CGUI_BUILDING_UIS.md`** | **Using CrystalGUI rather than building it.** A client-only UI, a networked one, and how to choose. The whole `Networked` authoring surface by example, ending in a symptom→cause table for the failures that are silent |
+| **`CGUI_BUILD.md`** | The build: layout, commands, what each check can see, and adding a Minecraft version |
+| **`CGUI_CROSS_VERSION.md`** | Code against every Minecraft version and loader — seams, eras, directives, verification. The `cross-version` skill is its checklist |
 | **`CGUI_WORKBENCH_EXTENSIONS.md`** | The other user-facing guide: getting a panel, a file type, a command or a status entry into somebody else's workbench |
 | **`CGUI_INVARIANTS.md`** | What is invisible from any single class and expensive to rediscover, by subsystem. **Read the section for what you are touching** |
 | `CGUI_STYLE_RENDER_PIPELINE.md` | The cascade and the paint path in full — origins, selectors, transitions, drawables, compositing, `background:` grammar, the visual-layer FBO pass |
