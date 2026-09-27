@@ -565,7 +565,8 @@ val shadeDowngradedShadowJar = tasks.register<ShadeJar>("shadeDowngradedShadowJa
  * with "You need to agree to the EULA", having ignored both files.
  *
  * So the fallback is the CONVENTION all three loaders declare rather than a guess: forge and neoforge
- * set gameDirectory to runs/server, fabric sets runDir to the same. If one ever diverges the EULA guard
+ * set gameDirectory to runs/server, fabric sets runDir to the same, and uniminedDevRun points Unimined's
+ * there. If one ever diverges the EULA guard
  * names the path it looked at, so it fails visibly rather than writing into the void.
  */
 fun gameDirOf(task: JavaExec): File = runCatching {
@@ -606,8 +607,17 @@ tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
     // does not exist at JVM start for a static one to name. Left reflective, the "no client-only class
     // loaded" assertion cannot run and passes VACUOUSLY, which is the failure its own javadoc warns about.
     // -Xlog needs no access to anything and is the JVM's own record of every class it defined.
-    jvmArgs("-Xlog:class+load=info:file=" + classLoadLog.get().asFile.absolutePath)
-    systemProperty("crystalgui.server.smoke.classlog", classLoadLog.get().asFile.absolutePath)
+    //
+    // Java 9 and up only: a Java 8 JVM refuses to start on it, and there, with no module system, the
+    // reflective route works. Read from the launcher at execution, which Unimined sets after this.
+    doFirst {
+        val java = exec.javaLauncher.orNull?.metadata?.languageVersion?.asInt()
+            ?: JavaVersion.current().majorVersion.toInt()
+        if (java >= 9) {
+            exec.jvmArgs("-Xlog:class+load=info:file=" + classLoadLog.get().asFile.absolutePath)
+            exec.systemProperty("crystalgui.server.smoke.classlog", classLoadLog.get().asFile.absolutePath)
+        }
+    }
 
     // The code source is a union: URL under FML, so the client package cannot be enumerated from it.
     // The build knows where those classes are, so it says so.
