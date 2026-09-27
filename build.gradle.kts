@@ -141,6 +141,12 @@ val deploySingleJars = tasks.register("deploySingleJars") {
                 logger.lifecycle("[cgui] {} is not set; skipping", key)
                 return@forEach
             }
+            // An instance renamed in Prism leaves this pointing at nothing, and creating `mods/` there would
+            // turn a stale entry into a folder Prism lists as a broken instance.
+            if (!File(dir, "instance.cfg").isFile) {
+                throw GradleException("$key names $dir, which is not a Prism instance (no instance.cfg) "
+                    + "-- renamed in Prism? Fix the path in local.properties.")
+            }
             val mods = File(dir, ".minecraft/mods")
             mods.mkdirs()
             // ONLY OURS. UniMixins on 1.7.10 and fabric-api on Fabric live here too and are not ours
@@ -191,6 +197,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
 //
 //   ./gradlew prodSmoke
 //   ./gradlew prodSmoke -PcgTargets=1710,1201forge
+//   ./gradlew prodSmoke -PcgBatch=3
 val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     // -PcgNoDeploy drives whatever is ALREADY installed. Rebuilding and redeploying both single jars is
     // minutes and driving the clients is seconds, so paying for the first while iterating on the second
@@ -203,6 +210,8 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     onlyTargets.set(
         (providers.gradleProperty("cgTargets").orNull ?: "")
             .split(',').map { it.trim() }.filter { it.isNotEmpty() })
+    // -PcgBatch=3 for every instance: far more clients than one machine runs at once.
+    providers.gradleProperty("cgBatch").orNull?.let { batchSize.set(it.toInt()) }
 }
 
 // ── Every era target, compiled by one task ───────────────────────────────────────────────────────

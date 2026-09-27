@@ -38,6 +38,7 @@ private const val POWERSHELL_TIMEOUT_SECONDS = 60L
  * <pre>
  * ./gradlew prodSmoke                       # every instance in local.properties
  * ./gradlew prodSmoke -PcgTargets=1710      # one of them
+ * ./gradlew prodSmoke -PcgBatch=3           # every instance, three clients at a time
  * </pre>
  *
  * <p>EVERY INSTANCE IS ARMED FIRST, with the launcher closed. Prism serves a {@code --launch} from the
@@ -86,6 +87,10 @@ abstract class ProdSmoke : DefaultTask() {
     @get:Input
     abstract val onlyTargets: ListProperty<String>
 
+    /** Clients launched together; each batch finishes before the next starts. Default: all at once. */
+    @get:Input
+    abstract val batchSize: Property<Int>
+
     init {
         group = "verification"
         description = "Launches every installed client on the single jar and fails if one did not draw."
@@ -96,6 +101,7 @@ abstract class ProdSmoke : DefaultTask() {
         startTimeoutSeconds.convention(180)
         runTimeoutSeconds.convention(120)
         onlyTargets.convention(emptyList())
+        batchSize.convention(Int.MAX_VALUE)
         outputs.upToDateWhen { false }
     }
 
@@ -167,32 +173,46 @@ abstract class ProdSmoke : DefaultTask() {
                     + lost.joinToString(", ") { it.name } + "; their configs no longer carry $ARMED_MARKER")
             }
 
-            // ALL AT ONCE, a second apart -- every client is up within seconds. Driving them
-            // one at a time costs some 2.5 minutes per instance, because a `--launch` FORWARDED to a
-            // launcher that has just had a client exit sits that long before it is acted on, and
-            // restarting the launcher between instances to dodge that is slower still. The instances
-            // are independent (separate game directories, separate capture paths) and a capture reads
-            // the RENDER TARGET rather than the screen, so an overlapped window still photographs.
-            targets.forEach { target ->
-                captureOf(out, target, "early").delete()
-                captureOf(out, target, "late").delete()
-                logger.lifecycle("[prodSmoke] {}: launching {}", target.name, target.uuid)
-                powershell("Start-Process -FilePath '$exe' -ArgumentList '--launch','${target.uuid}'")
-                Thread.sleep(LAUNCHER_SETTLE_MS)
-            }
+            // ALL AT ONCE within a batch, a second apart -- every client is up within seconds. Driving
+            // them one at a time costs some 2.5 minutes per instance, because a `--launch` FORWARDED to
+            // a launcher that has just had a client exit sits that long before it is acted on. The
+            // instances are independent (separate game directories, separate capture paths) and a
+            // capture reads the RENDER TARGET rather than the screen, so an overlapped window still
+            // photographs.
+            val batches = targets.chunked(batchSize.get().coerceAtLeast(1))
+            batches.forEachIndexed { index, batch ->
+                if (index > 0) {
+                    // A fresh launcher per batch, for the forwarded-launch stall above. The configs stay
+                    // armed: the launcher re-reads them on every start.
+                    killLauncher()
+                    Thread.sleep(3000)
+                    startLauncher(exe)
+                }
+                if (batches.size > 1) {
+                    logger.lifecycle("[prodSmoke] batch {} of {}: {}", index + 1, batches.size,
+                        batch.joinToString(", ") { it.name })
+                }
+                batch.forEach { target ->
+                    captureOf(out, target, "early").delete()
+                    captureOf(out, target, "late").delete()
+                    logger.lifecycle("[prodSmoke] {}: launching {}", target.name, target.uuid)
+                    powershell("Start-Process -FilePath '$exe' -ArgumentList '--launch','${target.uuid}'")
+                    Thread.sleep(LAUNCHER_SETTLE_MS)
+                }
 
-            val up = awaitClients(targets.size, startTimeoutSeconds.get())
-            logger.lifecycle("[prodSmoke] {} of {} clients up", up, targets.size)
-            val allExited = awaitNoClients(runTimeoutSeconds.get())
-            if (!allExited) {
-                logger.lifecycle("[prodSmoke] killing clients still alive after {}s", runTimeoutSeconds.get())
-                killClients()
-            }
+                val up = awaitClients(batch.size, startTimeoutSeconds.get())
+                logger.lifecycle("[prodSmoke] {} of {} clients up", up, batch.size)
+                val allExited = awaitNoClients(runTimeoutSeconds.get())
+                if (!allExited) {
+                    logger.lifecycle("[prodSmoke] killing clients still alive after {}s", runTimeoutSeconds.get())
+                    killClients()
+                }
 
-            targets.forEach { target ->
-                val verdict = verdictFor(target, allExited, out)
-                if (verdict != null) failures += "${target.name}: $verdict"
-                else logger.lifecycle("[prodSmoke] {} drew", target.name)
+                batch.forEach { target ->
+                    val verdict = verdictFor(target, allExited, out)
+                    if (verdict != null) failures += "${target.name}: $verdict"
+                    else logger.lifecycle("[prodSmoke] {} drew", target.name)
+                }
             }
         } finally {
             // Kill THEN restore: Prism rewrites instance.cfg from memory as it exits, so a restore
