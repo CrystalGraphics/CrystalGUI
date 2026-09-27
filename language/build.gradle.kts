@@ -573,11 +573,10 @@ tasks.register("engineReport") {
 val bandSmoke: SourceSet by sourceSets.creating
 
 tasks.named<JavaCompile>("compileBandSmokeJava") {
-    // Java 8 SOURCE and 8 bytecode, via --release so the Java 21 toolchain cannot let a newer API slip
-    // in. `sourceCompatibility` alone would compile against Java 21's class library and fail at run time
-    // on a NoSuchMethodError naming a method that plainly exists — on the developer's machine.
+    // Java 8 SOURCE and 8 bytecode, via --release so the build's JDK 25 compiler cannot let a newer API
+    // slip in. `sourceCompatibility` alone would compile against Java 25's class library and fail at run
+    // time on a NoSuchMethodError naming a method that plainly exists — on the developer's machine.
     options.release.set(8)
-    javaCompiler.set(javaToolchains.compilerFor { languageVersion.set(JavaLanguageVersion.of(21)) })
 }
 
 /** One smoke run: a band's jars, under a launcher of the given feature version. */

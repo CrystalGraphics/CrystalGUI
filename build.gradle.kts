@@ -42,6 +42,25 @@ plugins {
 // anything reads one. @see gradle/local-settings.gradle.kts
 apply(from = rootProject.file("gradle/local-settings.gradle.kts").toURI())
 
+// ── One compiler ─────────────────────────────────────────────────────────────────────────────────
+//
+// Every module compiles with ONE JDK, `dep.jdk.compiler`; its own source/target or --release still
+// decides its bytecode, and its toolchain stays for launchers only -- so building the jars provisions
+// no other JDK. Where a module uses source/target rather than --release (every one that reads :core's
+// Java 21 classes, which --release refuses), javac no longer checks the API: calling a method newer than
+// the module's target compiles and fails on the game. That is a convention, policed in review.
+// :runtime:mc:1710 is left to GTNH's convention, which already compiles with 25.
+val compilerJdk = providers.gradleProperty("dep.jdk.compiler").get().toInt()
+subprojects {
+    if (path == ":runtime:mc:1710") return@subprojects
+    plugins.withType<JavaBasePlugin> {
+        val toolchains = extensions.getByType<JavaToolchainService>()
+        tasks.withType<JavaCompile>().configureEach {
+            javaCompiler.set(toolchains.compilerFor { languageVersion.set(JavaLanguageVersion.of(compilerJdk)) })
+        }
+    }
+}
+
 // ── Everything a consuming mod's dev run reads, built ────────────────────────────────────────────
 //
 // A mod that consumes CrystalGUI as a composite puts these jars on its game classpath, and nothing
