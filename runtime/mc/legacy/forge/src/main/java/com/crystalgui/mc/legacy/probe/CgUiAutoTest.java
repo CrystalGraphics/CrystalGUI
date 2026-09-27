@@ -13,11 +13,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiMainMenu;
 import com.crystalgui.mc.legacy.client.ClientGame;
 import net.minecraft.world.WorldSettings;
-//? if <1.9 {
-/*import net.minecraft.world.WorldSettings.GameType;
-*///?} else {
-import net.minecraft.world.GameType;
-//?}
 import net.minecraft.world.WorldType;
 
 import org.lwjgl.BufferUtils;
@@ -27,6 +22,7 @@ import javax.imageio.ImageIO;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 
 
@@ -187,9 +183,28 @@ public final class CgUiAutoTest {
         String world = resolveWorld(mc);
         boolean exists = new File(ClientGame.gameDir(), "saves/" + world + "/level.dat").isFile();
         CrystalGuiCore.LOGGER.info("[cgui] {} world '{}'", exists ? "loading" : "creating", world);
-        mc.launchIntegratedServer(world, world, exists ? null
-                : new WorldSettings(0L, GameType.CREATIVE, false, false, WorldType.FLAT));
+        mc.launchIntegratedServer(world, world, exists ? null : creativeFlat());
         return true;
+    }
+
+    /**
+     * {@code new WorldSettings(0, CREATIVE, false, false, FLAT)}, with the game-mode type read off the
+     * constructor: it is {@code WorldSettings.GameType} to 1.9.4 and {@code world.GameType} from 1.10, inside
+     * one node's range.
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static WorldSettings creativeFlat() {
+        for (Constructor<?> constructor : WorldSettings.class.getConstructors()) {
+            Class<?>[] parameters = constructor.getParameterTypes();
+            if (parameters.length != 5 || !parameters[1].isEnum()) continue;
+            try {
+                Object creative = Enum.valueOf((Class) parameters[1], "CREATIVE");
+                return (WorldSettings) constructor.newInstance(0L, creative, false, false, WorldType.FLAT);
+            } catch (ReflectiveOperationException failed) {
+                throw new IllegalStateException("cannot build WorldSettings", failed);
+            }
+        }
+        throw new IllegalStateException("no WorldSettings(long, GameType, boolean, boolean, WorldType)");
     }
 
     /** Reads the bound framebuffer back to a PNG. Must be called from inside a frame. */
