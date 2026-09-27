@@ -73,6 +73,22 @@ python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # l
 | `-PcgSmokePort=` | when 25599 is taken |
 | `-PcgJoin=host:port`, `-PcgProbe`, `-PcgProbeRole=watcher` | two-process runs and the connection probe |
 
+## Publishing
+
+`./gradlew publishToMavenLocal`, and the same in `CrystalGraphics/` for its artifacts. The mechanism is
+`CrystalGraphics/singlejar-logic/README.md` § *Publishing*.
+
+| Coordinate | What | Consumer |
+|---|---|---|
+| `com.crystalgui:core` | the engine — jar, `java8` copy, sources, javadoc | compiles against it |
+| `com.crystalgui:taffy` | the layout engine (MIT) | comes with `core` |
+| `com.crystalgui:crystalgui` | the shipped jar | runs it in a dev client, with `com.crystalgraphics:crystalgraphics` |
+| `com.crystalgui:crystalgui-language` | the optional language mod | runs it, if wanted |
+
+`core`'s metadata carries CrystalGraphics' `core` and `platform`, `taffy`, JOML 1.10.5, gson 2.2.4,
+log4j-api 2.0-beta9 and two annotation packages — each the oldest any target ships. `language` is not
+published: nothing outside CrystalGUI compiles against it.
+
 ## Verification, and what each check can see
 
 | Check | Sees | Blind to |

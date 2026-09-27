@@ -2,6 +2,8 @@
 // NO Minecraft, Forge, or LWJGL imports permitted in this subproject (import guard below).
 
 import cgbuildlogic.abstractModule
+import cgbuildlogic.consumerApi
+import cgbuildlogic.publishedModule
 import java.io.File as JFile
 
 plugins {
@@ -14,6 +16,7 @@ version = "1.0.0"
 
 // An abstract module: Java 25, with a Java 8 copy for every consumer below it. @see cgbuildlogic.abstractModule
 abstractModule("com/crystalgui/core/jvmdg")
+publishedModule("CrystalGUI Core", "A retained-mode UI engine for Minecraft: DOM, CSS cascade, flex and grid layout, widgets.")
 
 repositories {
     maven {
@@ -32,8 +35,8 @@ repositories {
 dependencies {
     // CrystalGraphics API — resolved via composite build substitution to CG's 1.7.10 subproject
 //    compileOnly("com.crystalgraphics:crystalgraphics:1.0.0")
-    compileOnly("com.crystalgraphics:core:1.0.0")
-    compileOnly("com.crystalgraphics:platform:1.0.0")
+    consumerApi("com.crystalgraphics:core:1.0.0")
+    consumerApi("com.crystalgraphics:platform:1.0.0")
     // testImplementation, not testCompileOnly: tests need CG on the RUNTIME classpath too, or
     // anything that touches a CG type (e.g. CgUiSprite.setTexture -> CgTextureManager) dies with
     // NoClassDefFoundError instead of running. Note this only makes the classes loadable — calls
@@ -69,7 +72,7 @@ dependencies {
     // has, so the harness and the tests (running 2.26.1) are unaffected. API ONLY: core names just
     // LogManager and Logger. The implementation stays modern and runtime-scoped, which also keeps it
     // off 1.7.10's classpath, where Minecraft supplies its own.
-    compileOnly("org.apache.logging.log4j:log4j-api:2.0-beta9")
+    consumerApi("org.apache.logging.log4j:log4j-api:2.0-beta9")
     runtimeOnly("org.apache.logging.log4j:log4j-core:2.26.1")
     testImplementation("org.apache.logging.log4j:log4j-core:2.26.1")
 
@@ -77,13 +80,16 @@ dependencies {
     // It used to arrive transitively from log4j-core 2.26.1 -- modern log4j-api depends on it -- so
     // moving log4j off the compile classpath above took an annotation package with it. Annotation-only
     // and CLASS-retention, so compileOnly is the whole requirement.
-    compileOnly("org.jspecify:jspecify:1.0.0")
+    consumerApi("org.jspecify:jspecify:1.0.0")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
 
     // Taffy layout engine + JOML (consumed from CG at runtime; needed here for compile)
-    compileOnly(project(":taffy"))
+    consumerApi(project(":taffy"))
     testImplementation(project(":taffy"))
-    compileOnly("org.joml:joml:${rootProject.properties["jomlVersion"]}")
+    // Minecraft 1.19.3's, the oldest that ships one. 1.10.8 also drags in kotlin-stdlib.
+    consumerApi("org.joml:joml:1.10.5")
+    // Its @Nullable once arrived through that kotlin-stdlib.
+    consumerApi("org.jetbrains:annotations:13.0")
     testImplementation("org.joml:joml:${rootProject.properties["jomlVersion"]}")
 
     // @Nullable / @NonNull annotations — javax.annotation not on module path in JDK 11+
@@ -105,7 +111,7 @@ dependencies {
     // THE GENERAL RULE, now paid for twice: a library Minecraft also supplies must be COMPILED against
     // the oldest version any target ships, never merely tested against the newest. The failure is always
     // a NoSuchMethodError on a cold path, never a build error.
-    compileOnly("com.google.code.gson:gson:2.2.4")
+    consumerApi("com.google.code.gson:gson:2.2.4")
     runtimeOnly("com.google.code.gson:gson:2.11.0")
     testImplementation("com.google.code.gson:gson:2.11.0")
 
