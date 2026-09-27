@@ -240,6 +240,39 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
 // definition, shared with it: @see cgbuildlogic.registerCheckAllTargets
 registerCheckAllTargets()
 
+// ── The footprint budget ─────────────────────────────────────────────────────────────────────────
+//
+//   git clone --recursive <repo> fresh && cd fresh
+//   ./gradlew singleJar languageJar checkFootprint
+//
+// What a FRESH clone's jar build leaves in the checkout: every build/ and project .gradle/ directory,
+// both repositories. A working checkout holds real nodes, run directories and server installs and is over
+// any budget, so this is run on a fresh clone rather than wired into `check`. ~/.gradle is shared by every
+// clone on the machine and is not counted. -PcgFootprintBudgetMb overrides the budget.
+tasks.register("checkFootprint") {
+    group = "verification"
+    description = "Fails when this checkout's build output is over budget -- run it on a fresh clone."
+    val root = rootDir
+    val budgetMb = (providers.gradleProperty("cgFootprintBudgetMb").orNull ?: "500").toLong()
+    mustRunAfter("singleJar", "languageJar")
+    doLast {
+        val found = mutableListOf<Pair<File, Long>>()
+        fun sizeOf(dir: File): Long = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        fun visit(dir: File) {
+            dir.listFiles().orEmpty().filter { it.isDirectory && it.name != ".git" }.forEach {
+                if (it.name == "build" || it.name == ".gradle") found += it to sizeOf(it) else visit(it)
+            }
+        }
+        visit(root)
+        val totalMb = found.sumOf { it.second } / (1024 * 1024)
+        found.sortedByDescending { it.second }.take(10).forEach { (dir, bytes) ->
+            logger.lifecycle("[footprint] {} MB  {}", bytes / (1024 * 1024), dir.relativeTo(root))
+        }
+        logger.lifecycle("[footprint] {} MB in {} directories; budget {} MB", totalMb, found.size, budgetMb)
+        if (totalMb > budgetMb) throw GradleException("build output is $totalMb MB, over the $budgetMb MB budget")
+    }
+}
+
 tasks.register("assembleConsumerRuntime") {
     group = "crystalgui"
     description = "Builds every jar a consuming mod's dev run puts on its classpath."
