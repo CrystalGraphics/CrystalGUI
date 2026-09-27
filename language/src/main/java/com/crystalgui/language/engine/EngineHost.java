@@ -84,7 +84,9 @@ public final class EngineHost implements Closeable {
      */
     public <T> T adapter(String className, Class<T> bridgeType) {
         try {
-            Class<?> adapter = Class.forName(className, true, loader);
+            // Not initialised yet: an adapter defined outside the band dies in its static init on the first
+            // engine type, which would hide the check below behind a NoClassDefFoundError.
+            Class<?> adapter = Class.forName(className, false, loader);
             // WHICH LOADER DEFINED IT IS THE ASSERTION, not a diagnostic nicety. `loadChildFirst` falls
             // back to the parent when the child has no such class -- which is right for an engine's own
             // dependencies and catastrophic here: the parent CAN load this class and cannot load the
@@ -94,7 +96,8 @@ public final class EngineHost implements Closeable {
             if (adapter.getClassLoader() != loader) {
                 throw new IllegalStateException(className + " was loaded by "
                         + adapter.getClassLoader() + " rather than the engine loader — its own classes "
-                        + "are missing from the engine's URLs, so it cannot see the engine");
+                        + "are missing from the engine's URLs, so it cannot see the engine. Own classes: "
+                        + ownClasses());
             }
             return bridgeType.cast(adapter.getDeclaredConstructor().newInstance());
         } catch (ReflectiveOperationException unreachable) {
@@ -149,6 +152,11 @@ public final class EngineHost implements Closeable {
      *
      * <p>So whatever the source, the result is reduced to a root: an archive URL keeps only the archive,
      * and a file URL keeps only the part before this class's own package path.</p>
+     *
+     * <p>ModLauncher 8 (Forge 1.16) reports a mod's root in its own scheme and without a trailing slash,
+     * {@code modjar://crystalgui_language}. A {@link java.net.URLClassLoader} opens anything not ending in
+     * {@code /} as an archive, and Forge's handler then fails on the empty path, so such a root gets its
+     * slash back.</p>
      */
     private static URL ownClasses() {
         CodeSource source = EngineHost.class.getProtectionDomain().getCodeSource();
@@ -161,7 +169,7 @@ public final class EngineHost implements Closeable {
     }
 
     /** Reduces a URL that may name a class entry to the root that contains it. */
-    private static URL asClasspathRoot(URL url) {
+    static URL asClasspathRoot(URL url) {
         String text = url.toString();
         try {
             if (text.startsWith("jar:")) {
@@ -170,7 +178,10 @@ public final class EngineHost implements Closeable {
                 return separator > 0 ? new URL(text.substring(4, separator)) : url;
             }
             String path = EngineHost.class.getName().replace('.', '/') + ".class";
-            return text.endsWith(path) ? new URL(text.substring(0, text.length() - path.length())) : url;
+            if (text.endsWith(path)) return new URL(text.substring(0, text.length() - path.length()));
+            // A root in a loader's own scheme is a directory, never an archive. @see #ownClasses
+            boolean ownScheme = !"file".equals(url.getProtocol());
+            return ownScheme && !text.endsWith("/") ? new URL(url, url.getPath() + "/") : url;
         } catch (java.net.MalformedURLException malformed) {
             return null;
         }
