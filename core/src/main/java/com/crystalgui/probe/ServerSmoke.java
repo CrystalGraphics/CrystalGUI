@@ -131,8 +131,16 @@ public final class ServerSmoke {
          */
         List<String> clientPackages();
 
-        /** Client-only classes that live outside {@link #clientPackages()}. */
+        /** Our own client-only classes that live outside {@link #clientPackages()}. Each must still exist. */
         default List<String> alsoNeverLoaded() {
+            return Collections.emptyList();
+        }
+
+        /**
+         * The game's client classes that must never load here, e.g. {@code net.minecraft.client.Minecraft}.
+         * Not required to exist: a production server ships without them, while a dev server has them all.
+         */
+        default List<String> gameClientClasses() {
             return Collections.emptyList();
         }
 
@@ -245,6 +253,7 @@ public final class ServerSmoke {
         List<String> subjects = new ArrayList<>(NEVER_LOADED_ANYWHERE);
         subjects.addAll(host.alsoNeverLoaded());
         checkTheNamedOnesStillExist(host, subjects, lines, failures);
+        subjects.addAll(host.gameClientClasses());
         subjects.addAll(auditClientPackage(host, lines));
 
         Set<String> definedByTheJvm = loadedFromJvmLog();
@@ -369,6 +378,12 @@ public final class ServerSmoke {
             CodeSource source = host.getClass().getProtectionDomain().getCodeSource();
             if (source == null || source.getLocation() == null) return null;
             URI uri = source.getLocation().toURI();
+            // LaunchWrapper names the class entry, jar:file:/…/mod.jar!/com/…/X.class; the jar is the root.
+            if ("jar".equals(uri.getScheme())) {
+                String inner = uri.getRawSchemeSpecificPart();
+                int bang = inner.indexOf("!/");
+                uri = new URI(bang < 0 ? inner : inner.substring(0, bang));
+            }
             return "file".equals(uri.getScheme()) ? Paths.get(uri) : null;
         } catch (Throwable unreadable) {
             return null;
@@ -545,6 +560,11 @@ public final class ServerSmoke {
         }
         System.out.flush();
         System.err.flush();
-        Runtime.getRuntime().halt(1);
+        try {
+            Runtime.getRuntime().halt(1);
+        } catch (SecurityException trapped) {
+            // FML 1.8+ traps every exit, halt included; the verdict is already written, so stop cleanly.
+            host.halt();
+        }
     }
 }

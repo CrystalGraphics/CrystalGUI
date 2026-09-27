@@ -1,6 +1,7 @@
 package com.crystalgui.mc.v1710.probe;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import com.crystalgui.mc.v1710.net.CgUiConnections;
@@ -74,9 +75,13 @@ public final class CgUiServerSmoke {
                     // Client-side content outside that package. CommonProxy exists so both are
                     // unreachable from common code.
                     "com.crystalgui.mc.v1710.ClientProxy",
-                    "com.crystalgui.mc.v1710.example.MachineExampleClient1710",
-                    // Naming this from a common path is the commonest spelling of the bug.
-                    "net.minecraft.client.Minecraft");
+                    "com.crystalgui.mc.v1710.example.MachineExampleClient1710");
+        }
+
+        /** Naming this from a common path is the commonest spelling of the bug. */
+        @Override
+        public List<String> gameClientClasses() {
+            return Collections.singletonList("net.minecraft.client.Minecraft");
         }
 
         @Override

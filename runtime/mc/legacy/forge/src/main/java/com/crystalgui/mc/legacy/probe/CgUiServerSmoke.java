@@ -1,6 +1,7 @@
 package com.crystalgui.mc.legacy.probe;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import com.crystalgui.mc.legacy.net.CgUiConnections;
@@ -78,9 +79,13 @@ public final class CgUiServerSmoke {
                     // Client-side content outside those packages: the client entry is what keeps both
                     // unreachable from common code.
                     root + ".CrystalGUILegacyClient",
-                    root + ".example.MachineExampleClientLegacy",
-                    // Naming this from a common path is the commonest spelling of the bug.
-                    "net.minecraft.client.Minecraft");
+                    root + ".example.MachineExampleClientLegacy");
+        }
+
+        /** Naming this from a common path is the commonest spelling of the bug. */
+        @Override
+        public List<String> gameClientClasses() {
+            return Collections.singletonList("net.minecraft.client.Minecraft");
         }
 
         @Override

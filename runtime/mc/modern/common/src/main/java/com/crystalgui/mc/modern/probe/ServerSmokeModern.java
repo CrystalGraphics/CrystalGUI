@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.probe;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import com.crystalgui.mc.modern.net.Connections;
@@ -68,11 +69,14 @@ public final class ServerSmokeModern {
 
         @Override
         public List<String> alsoNeverLoaded() {
-            return Arrays.asList(
-                    // Client-side content that does not live in the client package.
-                    "com.crystalgui.mc.modern.example.MachineExampleClientModern",
-                    // Naming this from a common path is the commonest spelling of the bug.
-                    "net.minecraft.client.Minecraft");
+            // Client-side content that does not live in the client package.
+            return Collections.singletonList("com.crystalgui.mc.modern.example.MachineExampleClientModern");
+        }
+
+        /** Naming this from a common path is the commonest spelling of the bug. */
+        @Override
+        public List<String> gameClientClasses() {
+            return Collections.singletonList("net.minecraft.client.Minecraft");
         }
 
         @Override
