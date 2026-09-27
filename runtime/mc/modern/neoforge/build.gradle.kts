@@ -7,6 +7,7 @@
 // @see cgbuildlogic.useNeoForgeApi
 
 import cgbuildlogic.commonNode
+import cgbuildlogic.devRunSourceSet
 import cgbuildlogic.stubMode
 import cgbuildlogic.useNeoForgeApi
 import net.neoforged.moddevgradle.dsl.NeoForgeExtension
@@ -96,7 +97,7 @@ if (!stubMode) configure<NeoForgeExtension> {
             // (shadowJar bundles them via from(zipTree(...))), but ModDevGradle dev runs only see
             // what's declared in this mods{} block. Adding their source sets here puts their
             // compiled classes in the mod's virtual JAR, making them visible to ModuleClassLoader.
-            sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
+            sourceSet(devRunSourceSet(project(":core")))
             sourceSet(project.commonNode.extensions.getByType<SourceSetContainer>()["main"])
         }
         // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`

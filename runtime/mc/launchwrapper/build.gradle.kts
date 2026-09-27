@@ -12,16 +12,14 @@ version = property("modVersion").toString()
 base { archivesName.set("crystalgui-launchwrapper") }
 
 java {
-    // A 21 javac to READ :language (Java 21 class files), source/target 8 to emit what FML can read.
-    // --release 8 would refuse the first. The same arrangement as a legacy node's.
-    toolchain { languageVersion.set(JavaLanguageVersion.of(21)) }
-    disableAutoTargetJvm()
+    // Java 8 is also what Gradle then requests, so :language resolves to its Java 8 copy.
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
-    sourceCompatibility = "1.8"
-    targetCompatibility = "1.8"
+    options.release.set(8)
 }
 
 repositories {

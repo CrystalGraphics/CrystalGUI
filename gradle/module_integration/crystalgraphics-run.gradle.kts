@@ -73,6 +73,8 @@ fun mainSourceSet(project: Project) =
 val bundledProjects = extra["cgBundledProjects"] as List<Project>
 val mergedServicesDir = extra["cgMergedServicesDir"] as File
 val mergeDevServices = tasks.named("mergeDevServices")
+@Suppress("UNCHECKED_CAST")
+val devRunClasses = extra["cgDevRunClasses"] as List<FileCollection>
 val resourceTasks: List<String> = bundledProjects.map { "${it.path}:processResources" }
 
 // Setting MOD_CLASSES REPLACES what ModDevGradle derived from mods{} rather than adding to it, so the
@@ -123,8 +125,7 @@ val modClassesValue = (
     modClasses("crystalgui", listOf(devResourcesDir))
         + modClasses("crystalgui", mainSourceSet(project))
         + modClasses("crystalgui", mainSourceSet(project(":runtime:mc:forge-bootstrap")).output.classesDirs.files)
-        + bundledProjects
-            .flatMap { modClasses("crystalgui", mainSourceSet(it).output.classesDirs.files) }
+        + devRunClasses.flatMap { modClasses("crystalgui", it.files) }
         + modClasses("crystalgui", treeSitterJars)
         + modClasses("crystalgraphics", graphicsCommonDir)
         + modClasses("crystalgraphics", graphicsLoaderDir)
@@ -154,8 +155,9 @@ tasks.matching {
     // And the jars the runtime classpath is made of. These arrive as substituted coordinates, which
     // ModDevGradle resolves with nothing ordering them before the launch -- so a jar could still be
     // mid-rewrite when the JVM reads it, presenting as a NoClassDefFoundError for a class that is in it.
-    dependsOn(crystalGraphics.task(":core:jar"))
-    dependsOn(crystalGraphics.task(":platform:jar"))
+    dependsOn(crystalGraphics.task(":core:downgradedJar"))
+    dependsOn(crystalGraphics.task(":platform:downgradedJar"))
+    dependsOn(crystalGraphics.task(":runtime:lwjgl:3:downgradedJar"))
     dependsOn(crystalGraphics.task(":freetype-msdfgen-harfbuzz-bindings:jar"))
 }
 

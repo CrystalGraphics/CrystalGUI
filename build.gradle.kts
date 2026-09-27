@@ -46,9 +46,10 @@ apply(from = rootProject.file("gradle/local-settings.gradle.kts").toURI())
 //
 // Every module compiles with ONE JDK, `dep.jdk.compiler`; its own source/target or --release still
 // decides its bytecode, and its toolchain stays for launchers only -- so building the jars provisions
-// no other JDK. Where a module uses source/target rather than --release (every one that reads :core's
-// Java 21 classes, which --release refuses), javac no longer checks the API: calling a method newer than
-// the module's target compiles and fails on the game. That is a convention, policed in review.
+// no other JDK. The abstract modules are authored at this Java, and every consumer below it resolves
+// their Java 8 copies (cgbuildlogic.abstractModule). Where a module uses source/target rather than
+// --release, javac does not check the API: calling a method newer than the module's target compiles
+// and fails on the game. That is a convention, policed in review.
 // :runtime:mc:1710 is left to GTNH's convention, which already compiles with 25.
 val compilerJdk = providers.gradleProperty("dep.jdk.compiler").get().toInt()
 subprojects {

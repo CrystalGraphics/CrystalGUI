@@ -2,7 +2,7 @@
 
 **Project type**: Platform-agnostic retained-mode UI engine, shaped like a lightweight web browser
 (DOM + CSS cascade + Taffy layout + immediate-mode painting).
-**Authored in**: Java 21 (Jabel-desugared toward Java 8 bytecode) · **Layout**: Taffy · **Backend**: CrystalGraphics
+**Authored in**: Java 25, with a Java 8 copy of every engine module for consumers below it · **Layout**: Taffy · **Backend**: CrystalGraphics
 **Targets**: MC 1.7.10 (Forge/LWJGL2) · MC 1.20.1/1.20.4 (Forge/NeoForge/Fabric, LWJGL3) — *all four loaders are in the build and running; see [Module layout](#module-layout--what-actually-compiles)*
 
 ---
@@ -183,8 +183,23 @@ exactly as before, and the active Stonecutter version is real during an IDE sync
 
 **One compiler.** Every module compiles with JDK 25 (`dep.jdk.compiler`, one rule in the root build); its
 source/target or `--release` still decides its bytecode, and its own toolchain is only a launcher. A
-module on source/target — every one that reads `:core`'s Java 21 classes — gets no API check from javac,
-so calling a method newer than its target is a review rule, not a compile error.
+module on source/target gets no API check from javac, so calling a method newer than its target is a
+review rule, not a compile error.
+
+**Abstract modules are Java 25, and a consumer below that gets a Java 8 copy.** `core`, `language` and
+`taffy` here, and CrystalGraphics' `core`, `platform` and `runtime/lwjgl/*`, each call
+`cgbuildlogic.abstractModule` — which also builds `downgradedJar` and publishes it as a second variant
+at `TargetJvmVersion` 8. Gradle picks by what a consumer requests: a node, the launchwrapper module and
+the harness get the copy, a test worker at 25 gets the original. **Never lower an abstract module's Java
+to suit a consumer**; the consumer resolves the copy instead.
+
+| Consumer | How it reaches the copy |
+|---|---|
+| Any Gradle configuration that requests a Java — compile, Loom's `runtimeClasspath` | automatically |
+| ModDevGradle's `additionalRuntimeClasspath` and `*LegacyClasspath` | `requestJvm`, in `cg-modern-loader` — they request nothing, and a request of nothing gets the Java 25 classes |
+| ModDevGradle's `mods {}` and `MOD_CLASSES` | `devRunSourceSet` / `devRunClasses` — a source set reads no variant |
+| CrystalGraphics' fabric dev jar and the fat per-loader jars | `from(zipTree(<module>.downgradedJar))` |
+| The shipped merges | never: they take `jar` and downgrade the whole tree once |
 
 ```bash
 ./gradlew singleJar languageJar                             # the shipped jars, no Minecraft toolchain
@@ -324,7 +339,7 @@ own), while CrystalGraphics is a submodule that is a composite `includeBuild`. C
 
 | Module | In build? | State |
 |---|---|---|
-| `core/` | ✅ | The engine. Java 21 → Java 8 bytecode. Everything below lives here. |
+| `core/` | ✅ | The engine. Java 25, an abstract module (above). Everything below lives here. |
 | `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and ECJ's ~13MB off a dedicated server. **Since J8 it ships as its OWN MOD, `crystalgui_language`**, and the rule now reaches the loader hosts too: `:language` is on their `lang` source sets and not on `main`, so no host class can name it. Its 1.7.10 and 1.20.x hosts are `runtime/mc/1710/src/lang` and `runtime/mc/modern/common/src/lang`, plus one entry class per 1.20.x loader. `.grammar` (six tree-sitter grammars), `.engine` (band selection, the ONE shared loader per band — `EngineHost` — the language-neutral `Analysis` answer and the `AnalysedLanguageServices` attachment every engine extends), `.java` (everything Java, split by what a class is FOR — `.ecj` the adapters, `.classpath` what a script compiles against, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog over `.fix.catalog`/`.fix.ast`/`.fix.edit`, `.exec` the `ScriptHost` runtime), `.js` (everything JavaScript, split by WHICH LOADER defines a class — `.host` may name `language.run`/`language.java` and never Rhino, `.rhino` is the reverse and holds `.rhino.resolve`/`.rhino.fix`/`.rhino.exec`), `.map` (the readable↔runtime boundary, on ASM), `.run` (the **engine-neutral** Run shell: `ScriptRuntime` SPI + `ScriptRuntimes` registry and `ScriptPolicy` at the root — which lives there because three of its four consumers are not JavaScript — over `.exec` (capture, stop, cache), `.console` (the transcript, UI-free) and `.view` (the only one that may import `com.crystalgui.ui`). `RunShellIsEngineNeutralTest` forbids the whole tree naming `.java`, `.js`, ECJ or Rhino, and still needs no change after the split because it matches by path PREFIX). `.resolve` is reserved. *(Was `syntax-treesitter/` until M4.)* |
 | `taffy/` | ✅ | **The layout engine, VENDORED.** Git submodule ([`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), branch `master`) — so `git clone --recursive`, like the other two. A fork of the published sources of `dev.vfyjxf:taffy:1.1.4` (MIT), carrying our own fixes to its measure path — see `taffy/MODIFICATIONS.md`, which is the statement of changes MIT requires, and `plan/engine-rewrite.md` D3. The package stays `dev.vfyjxf.taffy` because `runtime/mc/1710` relocates it when shipping, so 165 call sites needed no edit and a stock copy in another mod cannot win a classloader race. **Depends on nothing** since 2026-09-10: the seven fastutil types it used are reimplemented in `dev.vfyjxf.taffy.collection`, which took the merged jar from 31.20 MB to 8.44 — fastutil was 63% of it. `MODIFICATIONS.md` §2 has the two behaviours that are silent when wrong. |
 | `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`). 17 CrystalGUI scenes. The only way to run the UI. |

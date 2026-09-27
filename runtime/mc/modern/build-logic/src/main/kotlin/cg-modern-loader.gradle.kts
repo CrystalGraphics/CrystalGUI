@@ -5,6 +5,8 @@ import cgbuildlogic.modernLoader
 import cgbuildlogic.nodeJava
 import cgbuildlogic.nodePackage
 import cgbuildlogic.devNodeMixinConfigs
+import cgbuildlogic.devRunClasses
+import cgbuildlogic.requestJvm
 import cgbuildlogic.registerNodeMixins
 import cgbuildlogic.registerNodeVariants
 import cgbuildlogic.registerCheckDescriptorsNameNoCommon
@@ -39,9 +41,9 @@ val common: Project = project.commonNode
 // which only happens to put `common` first alphabetically.
 evaluationDependsOn(common.path)
 
-// :core emits Java 21 bytecode (v65) and MC 1.20.1 ships a Java 17 runtime, so the bundled classes are
-// rewritten to 17 -- the same mechanism mc1710 uses to reach Java 8. Compiling against v65 needs only a
-// 21 toolchain (see cg-java); LOADING it on a player's JVM needs this.
+// :core emits Java 25 bytecode and MC 1.20.1 ships a Java 17 runtime, so the bundled classes are
+// rewritten to 17 -- the same mechanism mc1710 uses to reach Java 8. A dev run loads the abstract
+// modules' Java 8 copies instead. @see cgbuildlogic.abstractModule
 jvmdg.downgradeTo.set(JavaVersion.VERSION_17)
 
 // LWJGL 3.3.1 -- what MC 1.20.1 ships -- predates Java 21 and does not recognise its JNI version. It
@@ -49,9 +51,9 @@ jvmdg.downgradeTo.set(JavaVersion.VERSION_17)
 // table is instrumented, so the write lands past it and the process dies with a native fail-fast
 // (0xC0000409 on Windows) before the window opens.
 //
-// A dev run here is ALWAYS on Java 21: cg-java raises the toolchain to 21 so javac can read :core's
-// v65 classes, and ModDevGradle takes the run JVM from the toolchain. So the client runs fine and
-// cannot be debugged -- which reads as an IDE fault rather than a library one.
+// A dev run here is ALWAYS on Java 21 at least: that is cg-java's toolchain, and ModDevGradle takes the
+// run JVM from it. So the client runs fine and cannot be debugged -- which reads as an IDE fault rather
+// than a library one.
 //
 // 3.3.3 knows the version and uses the right layout. Dev runs only; nothing shipped resolves LWJGL.
 configurations.all {
@@ -288,25 +290,6 @@ val langThinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shado
 // rewrites class references, never a name in mods.toml, fabric.mod.json or META-INF/services.
 registerCheckDescriptorsNameNoCommon(listOf(cgCommonRoot))
 
-// A dev run must BUILD what mods{} makes visible.
-//
-// `mods { sourceSet(project(":core")...) }` writes the source set's output DIRECTORY into
-// -Dfml.modFolders and does nothing else -- it adds no task dependency, and neither compileOnly nor
-// runtimeOnly adds one ModDevGradle honours. Verified: with this block removed, neither :core:classes
-// nor the common node's classes appears in `prepareClientRun --dry-run`.
-//
-// prepareClientRun is the task the IDE runs before launching, so an IDE launch pointed at a directory
-// nothing had compiled into. The symptom is a NoClassDefFoundError for a class that plainly exists on
-// disk, at a call site that plainly compiles:
-//
-//     NoClassDefFoundError: com/crystalgui/mc/platform/LifecycleCrystalGUI
-//         at com.crystalgui.mc.forge.CrystalGUIForge.<init>
-//
-// which reads as a packaging or classloader fault rather than as a missing build step.
-tasks.matching { it.name.startsWith("run") || it.name.startsWith("prepare") }.configureEach {
-    dependsOn(":core:classes", "${common.path}:classes", ":language:classes")
-}
-
 
 // The engine band, for a DEV run only.
 //
@@ -406,6 +389,35 @@ tasks.register("mergeDevServices") {
 // Read by crystalgraphics-run.gradle.kts, which stages the dev run's resources from the same list.
 extra["cgBundledProjects"] = cgBundledProjects
 extra["cgMergedServicesDir"] = cgMergedServicesDir
+
+// The class roots a dev run loads each of them from -- an abstract module's Java 8 copy, which is what a
+// dev JVM and FML's scanner can read. Handed to crystalgraphics-run.gradle.kts for MOD_CLASSES.
+val cgDevRunClasses: List<FileCollection> = cgBundledProjects.map { devRunClasses(it) }
+extra["cgDevRunClasses"] = cgDevRunClasses
+
+// A dev run must BUILD what mods{} makes visible.
+//
+// `mods { sourceSet(...) }` and MOD_CLASSES write output DIRECTORIES into the launch and do nothing
+// else -- they add no task dependency, and neither compileOnly nor runtimeOnly adds one ModDevGradle
+// honours. Verified: without this, neither :core:classes nor the common node's classes appears in
+// `prepareClientRun --dry-run`.
+//
+// prepareClientRun is the task the IDE runs before launching, so an IDE launch pointed at a directory
+// nothing had compiled into. The symptom is a NoClassDefFoundError for a class that plainly exists on
+// disk, at a call site that plainly compiles:
+//
+//     NoClassDefFoundError: com/crystalgui/mc/platform/LifecycleCrystalGUI
+//         at com.crystalgui.mc.forge.CrystalGUIForge.<init>
+//
+// which reads as a packaging or classloader fault rather than as a missing build step.
+tasks.matching { it.name.startsWith("run") || it.name.startsWith("prepare") }.configureEach {
+    dependsOn(cgDevRunClasses)
+}
+
+// ModDevGradle's library classpaths request no Java at all, and would take an abstract module's Java 25
+// classes. The per-run ones are what it resolves, and extending one passes on no attribute.
+configurations.matching { it.name == "additionalRuntimeClasspath" || it.name.endsWith("LegacyClasspath") }
+    .configureEach { requestJvm(this, nodeJava) }
 
 // CrystalGraphics' nodes of THIS loader and version, for the same script: an applied script cannot
 // import this build's classes, so the tree's rule is applied here and the answers handed over.
@@ -514,7 +526,7 @@ val downgradeShadowJar = tasks.register<DowngradeJar>("downgradeShadowJar") {
 /**
  * The jvmdg RUNTIME the downgrade just made this jar depend on.
  *
- * Downgrading does not only lower the class-file version: where the source used a Java 21 construct
+ * Downgrading does not only lower the class-file version: where the source used a newer construct
  * with no Java 17 spelling, jvmdg rewrites the reference to a STUB of its own. A pattern-matching
  * switch in `TaffyBridge` became a reference to
  * `xyz.wagyourtail.jvmdg.j21.stub.java_base.J_L_MatchException`, and that class ships in jvmdg's API
