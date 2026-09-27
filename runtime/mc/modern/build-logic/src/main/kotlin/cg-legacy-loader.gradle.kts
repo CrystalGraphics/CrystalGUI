@@ -39,6 +39,8 @@ dependencies {
     "compileOnly"("com.crystalgraphics:mc-shared:1.0.0")
     // @Nullable: legacy Minecraft brings no jsr305 with its libraries.
     "compileOnly"("com.google.code.findbugs:jsr305:3.0.2")
+    // The language stack, on `lang` and never `main`: the host jar may not name it.
+    "langCompileOnly"(project(":language"))
 }
 
 // ── The thin jars ────────────────────────────────────────────────────────────────────────────────

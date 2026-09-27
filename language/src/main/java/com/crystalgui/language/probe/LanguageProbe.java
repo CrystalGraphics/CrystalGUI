@@ -114,6 +114,12 @@ public final class LanguageProbe {
     private static final int RUN_SCRIPT_ON_FRAME =
             SCRIPT == null ? -1 : Integer.getInteger("crystalgui.autotest.scriptFrame", 5);
 
+    /**
+     * Which painted frame reads the completion answers. A cold engine's first analysis can outlast the
+     * default, and an analysis that has not landed answers an empty, complete list.
+     */
+    private static final int REPORT_COMPLETION_ON_FRAME = Integer.getInteger("crystalgui.autotest.completeFrame", 60);
+
     /** A newline, spelled once — a probe source is written inline and every one of them needs one. */
     private static final String NL = String.valueOf((char) 10);
 
@@ -138,7 +144,7 @@ public final class LanguageProbe {
         AutoTest.onFrame(6, LanguageProbe::probeCompletionOnce);
         // ...and asked much later, because the analysis behind each one is debounced onto a worker that
         // drains on THIS thread.
-        AutoTest.onFrame(60, LanguageProbe::reportCompletionProbes);
+        AutoTest.onFrame(REPORT_COMPLETION_ON_FRAME, LanguageProbe::reportCompletionProbes);
     }
 
     /**
