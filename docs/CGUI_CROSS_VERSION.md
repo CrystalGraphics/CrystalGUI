@@ -23,6 +23,85 @@ core (contract + logic, Java 25 → 8)      ←  the only place behaviour lives
 
 ---
 
+## Where to look — in this order
+
+**1. The nearest existing feature.** Something in the hosts already registers, listens or queries the way
+you need to, with its version boundaries worked out. Copy its shape before reading any Minecraft API.
+
+| You need | Copy |
+|---|---|
+| traffic between client and server | `CgNetworkChannel` — `CrystalGUIForge.Network`, `CrystalGUINeoForge`, `CrystalGUIFabricCommon`, `legacy/net/NetworkChannelLegacy`, `v1710/net/NetworkChannel1710` |
+| a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
+| a permission or "who is this player" | `WorkspaceHostModern.McRoles`; legacy `Game.canSendCommands`; 1.7.10 `CgUiWorkspaceHost` |
+| client input, HUD, a screen | `mc.modern.client` (`CgUiInput`, `CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
+| a member renamed across versions | legacy `Game` / `client.ClientGame`; the controller's `replacements.string` |
+| a hook with no loader event | CrystalGraphics' node mixins (Forge 1.21.3+ render hooks) |
+
+```bash
+grep -rn "RegisterCommandsEvent\|ServerStartingEvent" runtime/mc CrystalGraphics/runtime/mc --include=*.java
+grep -n "//? if" runtime/mc/modern/forge/src/main/java/com/crystalgui/mc/forge/CrystalGUIForge.java   # its breaks
+```
+
+**2. The API on every node, in seconds: `mcapi.py`.** It reads `stubs.zip` — every node's Minecraft and
+loader API — and answers with version runs, so one line says where a spelling holds and where it breaks.
+
+```bash
+python CrystalGraphics/singlejar-logic/mcapi.py PlayerList isOp
+#   method isOp(GameProfile) boolean   common:1.13.2-1.21.8, forge:1.13.2-1.21.8, neoforge:1.20.2-1.21.8, ...
+#   method isOp(NameAndId) boolean     common:1.21.10-1.21.11, forge:1.21.10-1.21.11, ...
+python CrystalGraphics/singlejar-logic/mcapi.py RegisterCommandsEvent           # loader API too
+python CrystalGraphics/singlejar-logic/mcapi.py find 'CommandRegistrationCallback|ServerStartingEvent$'
+python CrystalGraphics/singlejar-logic/mcapi.py find Menu --in net/minecraft/world/inventory
+```
+
+- Names are what each node **compiles** against: Mojang's on the modern tree, MCP's on legacy
+  (`net/minecraft/server/management/PlayerList` there — find it with `find`).
+- **A `common` node 1.17.1–1.20.1 also sees Forge's API** (it is built on Forge's userdev). Never call it
+  from common: the same code compiles for Fabric and NeoForge from nodes that lack it.
+- **1.7.10 is not in the database.** Read the 1.7.10 host and, after a real build, the decompiled sources
+  under `runtime/mc/1710/build/rfg/`.
+
+**3. Behaviour, not just signatures.** Decompiled sources: a real node's `extractMcSources` →
+`build/mc-src/java` (`-PcgRealNodes=<branch>:<version>`, minutes the first time);
+`research_repos/mc1201_sources/` holds 1.20.1 with no setup. A loader's own behaviour: its sources jar in
+`~/.gradle/caches/modules-2/`.
+
+**4. Runtime names** — only for strings and mixin targets: a real node's `build/stubs/names.tsrg`
+(Mojang → SRG) or Loom's mappings (→ intermediary). Compiled code never needs them.
+
+Never run `generateStubDatabase` to read the API — it rewrites `stubs.zip` from whatever is on disk.
+
+## Plan it — the break table first
+
+The costly mistake is discovering a version break at runtime: each costs a build and a `prodSmoke` cycle.
+All of them are knowable from `mcapi.py` before writing a line.
+
+1. **Contract and test in `core`** (§1) — what the feature does, as if Minecraft did not exist.
+2. **List every touch point** the hosts need: each registration, event, query and client hook.
+3. **Break table** — run `mcapi.py` on each and write it down:
+
+   | Touch point | Spelling | Nodes |
+   |---|---|---|
+   | register commands | `RegisterCommandsEvent.getDispatcher()` (Forge) | forge:1.16.5-1.21.11 |
+   | | `FMLServerStartingEvent.getCommandDispatcher()` | forge:1.13.2-1.15.2 |
+   | | `RegisterCommandsEvent` (NeoForge's) | neoforge:1.20.2-1.21.11 |
+   | | `CommandRegistrationCallback` v1 → v2 (Fabric) | v1 fabric:1.14.4-1.18.2 · v2 fabric:1.19.2-1.21.11 |
+   | | `ICommand` in the server-starting event | legacy, 1.7.10 |
+   | is op | `isOp(GameProfile)` → `isOp(NameAndId)` | break at 1.21.9 |
+
+   Each distinct spelling is a directive branch; each run boundary is its predicate. Where a node has
+   **no** spelling, decide now: implement another way, or degrade to the contract's absent value — and
+   write the reason down. Never drop a version silently.
+4. **Write each era in one pass** from the table: `modern/common` (the active node's spelling live, the
+   others in `/* */`), then the three loader branches' registration, then legacy, then 1.7.10.
+5. **Compile everything** (`checkAllTargets`) and fix by **family** — one directive fixes every node in a
+   run; a failure list sorted by node points at the run.
+6. **Runtime, cheapest first** (§7). A failure there that the break table did not predict belongs in the
+   table, and in `CGUI_INVARIANTS.md` if it is not a spelling.
+
+Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke` about a minute per node;
+`prodSmoke` about four minutes per 8 clients; a node made real for sources, minutes the first time.
+
 ## 1. Design the contract in `core`
 
 - **Types that cross it are Minecraft-free**: JDK types, `core` types, `UUID`/`String` ids, value records.
@@ -89,20 +168,7 @@ return server.getPlayerList().isOp(player.getGameProfile());
   and its target must never appear in the sources.
 - **Several renamed members** — put them behind one accessor per side (legacy `Game`, `client.ClientGame`)
   so the rest of the host reads the same on every version.
-- **Finding the API of a version** without setting it up: `stubs.zip` is text inside. Each block in
-  `api/<package>.sig` is headed `in <set>`; `sets.txt` says which nodes a set covers.
-
-  ```bash
-  unzip -p CrystalGraphics/singlejar-logic/stubs.zip sets.txt | head
-  unzip -p CrystalGraphics/singlejar-logic/stubs.zip api/net.minecraft.server.sig \
-      | grep "^in \|^class net/minecraft/server/players/PlayerList \| isOp " | grep -B1 "isOp\|PlayerList"
-  ```
-
-  Decompiled sources: a real node's `extractMcSources` (`build/mc-src`). Mojang → SRG names: a node's
-  `build/stubs/names.tsrg`. `research_repos/mc1201_sources/` holds 1.20.1. **Never run
-  `generateStubDatabase` to read the API** — it rewrites `stubs.zip` from whatever listings are on disk.
-- **Survey before booting**: find every version where the API breaks and write all the directives in one
-  pass; one `prodSmoke` cycle per fix is the expensive way.
+- **Which spelling holds where**: the break table (§ *Plan it*), from `mcapi.py`.
 
 ## 5. Client and server
 
