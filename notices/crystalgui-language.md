@@ -30,4 +30,4 @@ runtime into the user's own game directory — MCP `stable_12` from MinecraftFor
 the addresses `crystalgui-<version>.jar` carries in `assets/crystalgui/download/locations.json`.
 
 `com/crystalgui/language/**`, `com/crystalgui/mc/v1710/lang/**` and `com/crystalgui/mc/*/lang/**` are
-CrystalGUI's own and are LGPL-3.0-or-later.
+CrystalGUI's own and are LGPL-3.0-or-later. The licence texts are beside this file: `META-INF/COPYING.LESSER` (LGPL-3.0) and `META-INF/COPYING` (the GPL-3.0 it builds on).
