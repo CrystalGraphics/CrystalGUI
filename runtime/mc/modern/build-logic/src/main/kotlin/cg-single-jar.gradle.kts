@@ -1,4 +1,5 @@
 import cgbuildlogic.ModDescriptor
+import cgbuildlogic.ShippedJar
 import cgbuildlogic.SingleJarSpec
 import cgbuildlogic.legacyNodes
 import cgbuildlogic.modernLoaderNodes
@@ -200,6 +201,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "com.crystalgui.workbench.extension.WorkbenchExtension" to "com.crystalgui.workbench",
         ))
     },
+    publication = ShippedJar("com.crystalgui", "crystalgui", "CrystalGUI",
+        "The CrystalGUI mod: one jar for every loader and Minecraft version."),
 ))
 
 // ── The language stack, as its own jar (J8) ─────────────────────────────────────────────────────
@@ -337,6 +340,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "com.crystalgui.workbench.extension.WorkbenchExtension" to "com.crystalgui.language",
         ))
     },
+    publication = ShippedJar("com.crystalgui", "crystalgui-language", "CrystalGUI Language",
+        "The optional CrystalGUI language mod: grammars, analysis and scripting."),
 ))
 
 dependencies {
