@@ -135,6 +135,11 @@ registerSingleJarPipeline(SingleJarSpec(
             into("META-INF")
             rename { "NOTICE.md" }
         }
+        // The licence itself: LGPL-3.0 is a set of additions to the GPL-3.0, and both require every
+        // recipient of the object code to get a copy.
+        from(project.rootProject.files("COPYING.LESSER", "COPYING")) {
+            into("META-INF")
+        }
     },
 
     configureCheck = {
@@ -175,7 +180,7 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/forge/ForgeBootstrap.class",
             "com/crystalgui/mc/neoforge/NeoForgeBootstrap.class",
             // G7: the notice for what THIS jar carries, in the jar.
-            "META-INF/NOTICE.md",
+            "META-INF/NOTICE.md", "META-INF/COPYING", "META-INF/COPYING.LESSER",
             // Where every download comes from, beside core's DownloadLocations, which reads it.
             "assets/crystalgui/download/locations.json",
         // EVERY ENTRY POINT THE TABLE NAMES, at its shipped name: one per node, relocated into that
@@ -256,6 +261,11 @@ registerSingleJarPipeline(SingleJarSpec(
             into("META-INF")
             rename { "NOTICE.md" }
         }
+        // The licence itself: LGPL-3.0 is a set of additions to the GPL-3.0, and both require every
+        // recipient of the object code to get a copy.
+        from(project.rootProject.files("COPYING.LESSER", "COPYING")) {
+            into("META-INF")
+        }
 
         // The tree-sitter jars go in VERBATIM and are never relocated: each carries the JNI natives
         // for its grammar, and a JNI symbol is named after the mangled package -- renaming it renames
@@ -309,7 +319,7 @@ registerSingleJarPipeline(SingleJarSpec(
             // Both LaunchWrapper hosts' language halves name it, and only the merge brings it.
             "com/crystalgui/mc/launchwrapper/LaunchWrapperBytes.class",
             // G7: the notice for what THIS jar carries, in the jar.
-            "META-INF/NOTICE.md",
+            "META-INF/NOTICE.md", "META-INF/COPYING", "META-INF/COPYING.LESSER",
             "assets/crystalgui/engines/8/index.txt",
             "assets/crystalgui/engines/11/index.txt",
             "assets/crystalgui/engines/17/index.txt",

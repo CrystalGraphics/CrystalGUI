@@ -1,5 +1,7 @@
 # Third-party notices
 
+CrystalGUI itself is licensed **LGPL-3.0-or-later**: [`COPYING.LESSER`](COPYING.LESSER), with the GPL-3.0 it builds on in [`COPYING`](COPYING). Both ship in every jar under `META-INF/`.
+
 Everything in this repository that was written by somebody else, what it is licensed under, and what that
 obliges us to do. **This file is an obligation, not documentation** — MIT requires its copyright notice to
 travel with the distribution, and Apache 2.0 requires the licence, any `NOTICE`, and a statement of
