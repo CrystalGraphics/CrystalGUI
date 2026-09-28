@@ -18,9 +18,10 @@ and bundles neither.
 
 ## Requirements
 
-- JDK 25 installed. **Gradle runs on it** when you build against a CrystalGUI checkout or on
-  singlejar-logic: `toolchainVersion=25` in `gradle/gradle-daemon-jvm.properties`. Your mod still compiles
-  for its own Minecraft's Java.
+- One version from Maven: your MDK's JDK, nothing more.
+- Against a CrystalGUI checkout, or many versions: JDK 25, and **Gradle runs on it** —
+  `toolchainVersion=25` in `gradle/gradle-daemon-jvm.properties`. Your mod still compiles for its own
+  Minecraft's Java.
 - Everything is published to one Maven, `https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/`.
   Your settings name it for the plugins; the plugin adds it for everything else, exclusive to the
   `com.crystalgui` and `com.crystalgraphics` groups.
@@ -42,7 +43,8 @@ and bundles neither.
 
 ## One version
 
-Start from your loader's usual MDK and add two things:
+Start from your loader's usual MDK and add two things: the repository, and the `com.crystalgui` line.
+The toolchain lines are the versions this was verified on; keep your MDK's.
 
 ```kotlin
 // settings.gradle.kts -- beside the plugin repositories your MDK already names
@@ -75,6 +77,13 @@ Add to its dependencies:
 # META-INF/mods.toml -- neoforge.mods.toml says type = "required" instead of mandatory
 [[dependencies.yourmod]]
 modId = "crystalgui"
+mandatory = true
+versionRange = "[0.0.1,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.yourmod]]
+modId = "crystalgraphics"
 mandatory = true
 versionRange = "[0.0.1,)"
 ordering = "AFTER"
@@ -181,18 +190,45 @@ names itself everywhere else:
 
 | In | Change |
 |---|---|
-| `gradle.properties` | `modId`, `modGroup`, `modVersion`; delete `crystalgui.mavenLocal = true` to take the released CrystalGUI |
+| `gradle.properties` | `modId`, `modGroup`, `modVersion`; delete `crystalgui.mavenLocal = true` to take the released CrystalGUI, keep it [against an unreleased one](#against-an-unreleased-crystalgui) |
 | `settings.gradle.kts` | `rootProject.name`; the whole `pluginManagement` block becomes the one above — the sample's reads its CrystalGUI version from `../../gradle.properties` and names only Maven local |
 | `runtime/mc/modern/loader.gradle.kts` | `crystalGraphicsVersion`, read from `../../CrystalGraphics/gradle.properties`, becomes `"0.0.1"` |
 | every file, sources and `META-INF/services` included | the package `com.example.fieldnotes` and the path `com/example/fieldnotes` — in `build.gradle.kts` they are the variant entries, `bootstrappers`, the bootstrapper classes each thin jar keeps, `shadePath` and the checks' expectations |
 
 ### Against an unreleased CrystalGUI
 
-`checkout(...)` serves one target, so a many-version project takes CrystalGUI from Maven local: in the
-CrystalGUI clone `./gradlew publishToMavenLocal` and `./gradlew -p CrystalGraphics publishToMavenLocal`,
-then `crystalgui.mavenLocal = true` in your `gradle.properties`, and in your settings `mavenLocal()` first
-among the plugin repositories and the clone's `modVersion` as the `com.crystalgui` version. An edit to
-CrystalGUI reaches your build when it is published again.
+`checkout(...)` serves one target, so a many-version project takes CrystalGUI from Maven local. In the
+CrystalGUI clone:
+
+```bash
+./gradlew publishToMavenLocal                  # CrystalGUI, and the com.crystalgui plugin
+./gradlew -p CrystalGraphics publishToMavenLocal
+```
+
+Then in your project:
+
+```properties
+# gradle.properties
+crystalgui.mavenLocal = true
+```
+
+```kotlin
+// settings.gradle.kts
+pluginManagement {
+    includeBuild("<path>/CrystalGUI/CrystalGraphics/singlejar-logic")
+    plugins { id("com.crystalgui") version "0.0.1" }   // the clone's modVersion
+    repositories {
+        mavenLocal()                                   // first
+        maven("https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/")
+        gradlePluginPortal()
+        mavenCentral()
+        maven("https://maven.fabricmc.net/")
+        maven("https://maven.neoforged.net/releases")
+    }
+}
+```
+
+An edit to CrystalGUI reaches your build when it is published again.
 
 ```bash
 ./gradlew checkSingle            # build/libs/<mod>-<version>.jar, checked; no Minecraft toolchain needed
