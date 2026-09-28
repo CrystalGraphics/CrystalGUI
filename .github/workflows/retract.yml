@@ -1,0 +1,62 @@
+# Takes a CrystalGUI version back: its packages on Cloudsmith, its GitHub release and its tag. For a release
+# that went out broken and is to be released again at the same version. The release commit stays on master.
+#
+# Only packages under com/crystalgui/ are touched; CrystalGraphics shares the Cloudsmith repository.
+name: Retract
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: CrystalGUI version to take back (x.y.z)
+        required: true
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  retract:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version }}
+      CLOUDSMITH_PASSWORD: ${{ secrets.CLOUDSMITH_PASSWORD }}
+      CLOUDSMITH_REPOSITORY: crystalgraphics/crystalgraphics
+    steps:
+      - name: Delete the Cloudsmith packages
+        shell: python
+        run: |
+          import json, os, re, sys, urllib.request
+
+          version = os.environ["VERSION"]
+          if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+              sys.exit(f"::error::'{version}' is not x.y.z")
+          api = f"https://api.cloudsmith.io/v1/packages/{os.environ['CLOUDSMITH_REPOSITORY']}/"
+          key = {"X-Api-Key": os.environ["CLOUDSMITH_PASSWORD"]}
+
+          def call(url, method="GET"):
+              with urllib.request.urlopen(urllib.request.Request(url, headers=key, method=method)) as r:
+                  body = r.read()
+                  return json.loads(body) if body else None
+
+          packages = call(f"{api}?query=version:{version}&page_size=100")
+          def paths(p):
+              return [p.get("cdn_url") or ""] + [f.get("cdn_url") or "" for f in p.get("files", [])]
+          ours = [p for p in packages
+                  if p.get("version") == version and any("/com/crystalgui/" in u for u in paths(p))]
+          if not ours:
+              for p in packages:
+                  print(p.get("name"), p.get("version"), paths(p)[0])
+              sys.exit(f"::error::no com.crystalgui package at {version}")
+          for p in ours:
+              call(f"{api}{p['slug_perm']}/", "DELETE")
+              print("deleted", p["name"], p["version"], paths(p)[0])
+
+      - name: Delete the GitHub release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then gh release delete "v$VERSION" --yes; fi
+          gh api -X DELETE "repos/$GH_REPO/git/refs/tags/v$VERSION" || echo "no tag v$VERSION"
