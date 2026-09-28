@@ -14,7 +14,7 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * The MC 1.20.x half of {@link DesktopProbe}: thirteen one-liners.
+ * The modern half of {@link DesktopProbe}: thirteen one-liners.
  *
  * <p>The routine itself — minimise, restore mid-animation, the jump list, pin, click through an
  * overlay, click with the mouse grabbed — is {@code core}'s. It used to be 353 lines here, and 1.7.10

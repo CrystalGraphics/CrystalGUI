@@ -17,7 +17,7 @@ import net.minecraft.client.Minecraft;
  * whether a screen is up and whose it is, where the pointer is and whether it is grabbed, and how to
  * bracket a draw.</p>
  *
- * <p><b>No mixin.</b> 1.7.10's Forge has no screen input event at all, which is why mc1710 needs one;
+ * <p><b>No mixin.</b> 1.7.10's Forge has no screen input event at all, which is why 1.7.10 needs one;
  * every version from 1.8 has a cancellable one.</p>
  */
 public final class CgUiHud {
@@ -41,7 +41,7 @@ public final class CgUiHud {
 
         /**
          * 1.20 posts no screen event for a move, so the pointer is offered once per frame from here —
-         * the per-frame drain mc1710 gets from pumping the event queue itself. Without it hover never
+         * the per-frame drain 1.7.10 gets from pumping the event queue itself. Without it hover never
          * updates and a drag runs on wherever the pointer was when a button last changed.
          */
         @Override

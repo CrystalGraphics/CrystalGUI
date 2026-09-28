@@ -16,7 +16,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 
 /**
- * How MC 1.20.x answers the questions only a platform can. Nothing here decides anything.
+ * How the modern tree answers the questions only a platform can. Nothing here decides anything.
  *
  * @see HostServices
  */

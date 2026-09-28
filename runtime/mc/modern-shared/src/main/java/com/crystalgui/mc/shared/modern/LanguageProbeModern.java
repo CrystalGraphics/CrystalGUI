@@ -5,7 +5,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.language.probe.LanguageProbe;
 
 /**
- * The MC 1.20.x half of {@link LanguageProbe} — <b>which this era did not have at all</b>.
+ * The modern half of {@link LanguageProbe} — <b>which this era did not have at all</b>.
  *
  * <p>The scripting probes were 1.7.10's alone: a script run through the Run command, the classpath a
  * game launcher assembles, and what the member list actually holds in a client. None of that had ever

@@ -22,7 +22,7 @@ import net.minecraft.client.gui.screens.worldselection.WorldOpenFlows;
 //?}
 
 /**
- * The MC 1.20.x half of {@link AutoTest}: load a world, open the desktop, photograph it, quit.
+ * The modern half of {@link AutoTest}: load a world, open the desktop, photograph it, quit.
  *
  * <p>The sequence is {@code core}'s. What is here is how this era loads a save, takes a screenshot and
  * stops — and the screenshot is the interesting one, because it is <b>asynchronous</b>.</p>

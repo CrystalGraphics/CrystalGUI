@@ -12,7 +12,7 @@ import javax.annotation.Nullable;
 import net.minecraft.server.MinecraftServer;
 
 /**
- * The MC 1.20.x half of the dedicated-server smoke: five facts and a way to stop the server.
+ * The modern half of the dedicated-server smoke: five facts and a way to stop the server.
  *
  * <p>Every check, the report and the exit code are {@link ServerSmoke}'s.</p>
  */

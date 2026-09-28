@@ -1,8 +1,9 @@
 # CrystalGUI
 
-A general platform-agnostic UI engine for shaped like a lightweight web browser: a DOM-like `UIElement` tree, Taffy
-flexbox layout, a real CSS cascade with selectors and transitions, and twelve widgets — all
-loader-blind, and able to run headless on a dedicated server.
+A platform-agnostic UI engine shaped like a lightweight web browser: a DOM-like node tree with shadow
+roots, Taffy flexbox and grid layout, a real CSS cascade with selectors and transitions, and a full
+widget set up to a code editor and a node graph — all loader-blind, able to run headless on a dedicated
+server, and shipped as one jar for Forge 1.7.10 through 1.21.11, NeoForge and Fabric.
 
 **Using CrystalGUI in your mod: [`docs/CGUI_SETUP.md`](docs/CGUI_SETUP.md)** — setting the project up,
 for one Minecraft version or many — then [`docs/CGUI_BUILDING_UIS.md`](docs/CGUI_BUILDING_UIS.md).
@@ -37,13 +38,13 @@ During development, use the `Run Client (Java 25, hotswap)` task <br>
 below 25 gets its Java 8 copy — `docs/CGUI_BUILD.md`.)</sub>
 
 
-## Shadowed libraries
-Shadowed libraries will also get downgraded to Java 8. 
+## Bundled libraries
+The shipped jars are downgraded to Java 8 whole, bundled libraries included — the host jar carries none
+(Taffy is vendored), the language jar carries its grammars and engines.
 
-
-**DO NOT** use libraries that rely on JNI *unless* their natives were compiled against Java 8.
-<br>If the natives were compiled against a higher version of the Java API, there will be major problems.
-<br>(Recompiling shouldn't be too big of an issue if the project is OpenSource)
+**DO NOT** bundle a library that relies on JNI *unless* its natives were compiled against Java 8.
+<br>Natives built against a higher Java API break on a Java 8 instance; recompile them if the project is
+open source.
 
 ## Licence
 
