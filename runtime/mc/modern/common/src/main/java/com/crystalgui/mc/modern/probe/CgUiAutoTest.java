@@ -223,6 +223,8 @@ public final class CgUiAutoTest {
         int width = mc.getMainRenderTarget().width;
         int height = mc.getMainRenderTarget().height;
         boolean painted = HostSession.isInstalled() && HostSession.session().hasPainted();
+        // Which screen is up, since `painted` is the session's and says nothing about what is in front.
+        String screen = mc.screen == null ? "none" : mc.screen.getClass().getSimpleName();
         PENDING_CAPTURES.incrementAndGet();
         // The callback fires once the PNG is written, on every version: encoded on the IO pool through
         // 1.21.4, and from 1.21.5 read back from the GPU on a later frame first.
@@ -241,8 +243,8 @@ public final class CgUiAutoTest {
                             written.getAbsolutePath(), file.getAbsolutePath());
                     return;
                 }
-                CrystalGuiCore.LOGGER.info("CGUI AUTOTEST wrote {}x{} capture to {} (desktop painted: {})",
-                        width, height, file.getAbsolutePath(), painted);
+                CrystalGuiCore.LOGGER.info("CGUI AUTOTEST wrote {}x{} capture to {} (desktop painted: {}, screen: {})",
+                        width, height, file.getAbsolutePath(), painted, screen);
             } finally {
                 PENDING_CAPTURES.decrementAndGet();
             }
