@@ -21,13 +21,13 @@ and bundles neither.
 - JDK 25 installed. **Gradle runs on it** when you build against a CrystalGUI checkout or on
   singlejar-logic: `toolchainVersion=25` in `gradle/gradle-daemon-jvm.properties`. Your mod still compiles
   for its own Minecraft's Java.
-- The artifacts are on no Maven repository yet: publish them locally, once per update, from a clone of
-  [CrystalGUI](https://github.com/CrystalGraphics/CrystalGUI) (`git clone --recursive`):
-
-```bash
-./gradlew publishToMavenLocal                     # CrystalGUI, its API and the com.crystalgui plugins
-./gradlew -p CrystalGraphics publishToMavenLocal  # CrystalGraphics and com.crystalgraphics:mc-shared
-```
+- Everything is published to one Maven, `https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/`.
+  Your settings name it for the plugins; the plugin adds it for everything else, exclusive to the
+  `com.crystalgui` and `com.crystalgraphics` groups.
+- **An unreleased build**: from a clone of [CrystalGUI](https://github.com/CrystalGraphics/CrystalGUI)
+  (`git clone --recursive`), `./gradlew publishToMavenLocal` and `./gradlew -p CrystalGraphics
+  publishToMavenLocal`; then `crystalgui.mavenLocal = true` in your `gradle.properties` puts Maven local
+  first. Or build against the clone itself: [Against a CrystalGUI checkout](#against-a-crystalgui-checkout).
 
 | Coordinate | What |
 |---|---|
@@ -42,7 +42,12 @@ and bundles neither.
 
 ```kotlin
 // settings.gradle.kts
-pluginManagement { repositories { mavenLocal(); gradlePluginPortal() } }
+pluginManagement {
+    repositories {
+        maven("https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/")
+        gradlePluginPortal()
+    }
+}
 
 // build.gradle.kts
 plugins {

@@ -9,7 +9,7 @@ import net.neoforged.moddevgradle.dsl.NeoForgeExtension
 plugins {
     `java-library`
     id("com.gradleup.shadow")
-    id("com.crystalgui") version "1.0.0"                 // CrystalGUI and CrystalGraphics on the dev run
+    id("com.crystalgui")                                 // CrystalGUI and CrystalGraphics on the dev run
 }
 
 apply(from = rootDir.resolve("runtime/mc/modern/node.gradle.kts"))

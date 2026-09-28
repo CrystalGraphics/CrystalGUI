@@ -27,6 +27,8 @@ final class Artifacts {
 
     static final String GUI_VERSION;
     static final String CG_VERSION;
+    /** The public Maven both groups are published to. */
+    static final String REPOSITORY;
 
     static {
         Properties versions = new Properties();
@@ -37,6 +39,7 @@ final class Artifacts {
         }
         GUI_VERSION = versions.getProperty("crystalgui");
         CG_VERSION = versions.getProperty("crystalgraphics");
+        REPOSITORY = versions.getProperty("repository");
     }
 
     private Artifacts() {

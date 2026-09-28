@@ -1,11 +1,15 @@
 package com.crystalgui.gradle;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.gradle.api.GradleException;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.artifacts.dsl.RepositoryHandler;
+import org.gradle.api.artifacts.repositories.ArtifactRepository;
 import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.plugins.ExtraPropertiesExtension;
 import org.gradle.api.tasks.SourceSetContainer;
@@ -21,24 +25,38 @@ import org.gradle.jvm.tasks.Jar;
  * crystalgui { minecraft("1.20.1", "forge") }
  * }</pre>
  *
- * <p>Artifacts come from Maven local until they are published to a Maven repository; the plugin adds
- * it, filtered to CrystalGUI's and CrystalGraphics' groups. A build whose settings forbid project
- * repositories declares {@code mavenLocal()} there instead.</p>
+ * <p>The plugin adds the repository both mods are published to, exclusive to their two groups. A build
+ * whose settings forbid project repositories declares it there instead. {@code crystalgui.mavenLocal=true}
+ * in {@code gradle.properties} puts Maven local ahead of it, for a build published from a clone.</p>
  */
 public class CrystalGuiPlugin implements Plugin<Project> {
 
     /** Where {@link CrystalGuiSettingsPlugin} leaves a target declared in settings. */
     static final String SETTINGS_TARGET = "com.crystalgui.target";
 
+    /** {@code true}: resolve CrystalGUI and CrystalGraphics from Maven local first. */
+    static final String MAVEN_LOCAL = "crystalgui.mavenLocal";
+
     @Override
     public void apply(Project project) {
         CrystalGuiExtension extension =
             project.getExtensions().create("crystalgui", CrystalGuiExtension.class, project);
 
-        project.getRepositories().mavenLocal(repo -> repo.content(content -> {
-            content.includeGroup(Artifacts.GUI_GROUP);
-            content.includeGroup(Artifacts.CG_GROUP);
+        RepositoryHandler repositories = project.getRepositories();
+        List<ArtifactRepository> ours = new ArrayList<>();
+        if (Boolean.parseBoolean(String.valueOf(project.findProperty(MAVEN_LOCAL)))) {
+            ours.add(repositories.mavenLocal());
+        }
+        ours.add(repositories.maven(repo -> {
+            repo.setName("CrystalGUI");
+            repo.setUrl(Artifacts.REPOSITORY);
         }));
+        repositories.exclusiveContent(exclusive -> exclusive
+            .forRepositories(ours.toArray(new ArtifactRepository[0]))
+            .filter(content -> {
+                content.includeGroup(Artifacts.GUI_GROUP);
+                content.includeGroup(Artifacts.CG_GROUP);
+            }));
 
         project.getPluginManager().withPlugin("java", p -> {
             project.getDependencies().add("compileOnly", Artifacts.at(Artifacts.CORE));

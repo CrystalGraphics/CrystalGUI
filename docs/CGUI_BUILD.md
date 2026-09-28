@@ -81,8 +81,26 @@ python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # l
 
 ## Publishing
 
-`./gradlew publishToMavenLocal`, and the same in `CrystalGraphics/` for its artifacts. The mechanism is
-`CrystalGraphics/singlejar-logic/README.md` § *Publishing*.
+**A release is one button: Actions → Release → Run workflow** (`.github/workflows/release.yml`). Pick
+`patch`, `minor`, `major` or `as-is`, or type a version. In order:
+
+1. CrystalGraphics moves to its `master`. When that commit is unreleased, it is released first: a patch
+   version, published, committed, tagged and pushed, with a GitHub release.
+2. CrystalGUI's `modVersion` is set; `apiCheck`, `checkSingleJar` and `checkLanguageJar` run; everything,
+   the consumer plugins included, is published to Cloudsmith.
+3. Only then: a commit with the version and the submodule pointer, the tag `v<version>`, the push, and the
+   GitHub release with both jars. A failure before this leaves nothing tagged; run it again once fixed.
+
+Repository secrets: `CLOUDSMITH_USERNAME`, `CLOUDSMITH_PASSWORD` (a Cloudsmith API key) and
+`CRYSTALGRAPHICS_TOKEN` (a fine-grained token with contents: write on CrystalGraphics, for step 1).
+
+| Command | Publishes to |
+|---|---|
+| `./gradlew publish` with `CLOUDSMITH_USERNAME`/`CLOUDSMITH_PASSWORD` set | Cloudsmith, `cloudsmith.repository` in `gradle.properties` |
+| `./gradlew publish` without them, or `publishToMavenLocal` | Maven local, for a consumer testing an unreleased build |
+
+Consumers read `https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/`
+([`CGUI_SETUP.md`](CGUI_SETUP.md)). The mechanism is `CrystalGraphics/singlejar-logic/README.md` § *Publishing*.
 
 | Coordinate | What | Consumer |
 |---|---|---|

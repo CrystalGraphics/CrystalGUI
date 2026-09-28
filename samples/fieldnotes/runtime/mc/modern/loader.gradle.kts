@@ -12,6 +12,12 @@ import cgbuildlogic.nodeLibrary
 import cgbuildlogic.nodePackage
 import cgbuildlogic.registerNodeDevRun
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
+import java.util.Properties
+
+/** The clone this sample sits in; a project of its own writes the CrystalGraphics release it wants. */
+val crystalGraphicsVersion: String = Properties()
+    .apply { rootDir.resolve("../../CrystalGraphics/gradle.properties").reader().use(::load) }
+    .getProperty("modVersion")
 
 /** The common node of THIS node's Minecraft. */
 val common: Project = project.commonNode
@@ -23,7 +29,7 @@ dependencies {
 }
 // VariantBootstrap and ForgeStart: CrystalGraphics' jar carries them at run time, for every mod. A node
 // library, so the stub check keeps it rather than taking it for the toolchain's.
-nodeLibrary("com.crystalgraphics:mc-shared:1.0.0")
+nodeLibrary("com.crystalgraphics:mc-shared:$crystalGraphicsVersion")
 
 // Everything a node ships lives under its own package, so every node of every loader fits in one jar:
 // common goes to `<node>.common`, the loader's classes to `<node>`. Except the bootstrapper, the one class
