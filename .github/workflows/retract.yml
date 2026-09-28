@@ -40,7 +40,16 @@ jobs:
                   body = r.read()
                   return json.loads(body) if body else None
 
-          packages = call(f"{api}?query=version:{version}&page_size=100")
+          print("authenticated as", call("https://api.cloudsmith.io/v1/user/self/").get("slug"))
+          packages = []
+          page = 1
+          while True:
+              batch = call(f"{api}?page={page}&page_size=100")
+              packages += batch
+              if len(batch) < 100:
+                  break
+              page += 1
+          print(len(packages), "packages in the repository")
           def paths(p):
               return [p.get("cdn_url") or ""] + [f.get("cdn_url") or "" for f in p.get("files", [])]
           ours = [p for p in packages
