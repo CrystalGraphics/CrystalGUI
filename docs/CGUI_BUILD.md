@@ -79,20 +79,49 @@ python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # l
 | `-PcgJoin=host:port`, `-PcgProbe`, `-PcgProbeRole=watcher` | two-process runs and the connection probe |
 | `-PcgExtraMods=<jar>,…` | deploy another mod beside ours — into the `-PcgTargets` instances only, and removed by the next deploy |
 
-## Publishing
+## Releasing
 
-**A release is one button: Actions → Release → Run workflow** (`.github/workflows/release.yml`). Pick
-`patch`, `minor`, `major` or `as-is`, or type a version. In order:
+**One button: Actions → Release → Run workflow** (`.github/workflows/release.yml`). It runs from `master`
+on GitHub, never from a local checkout. From a terminal:
 
-1. CrystalGraphics moves to its `master`. When that commit is unreleased, it is released first: a patch
-   version, published, committed, tagged and pushed, with a GitHub release.
+```bash
+gh workflow run release.yml -R CrystalGraphics/CrystalGUI --ref master -f bump=patch      # patch | minor | major | as-is
+gh workflow run release.yml -R CrystalGraphics/CrystalGUI --ref master -f version=0.0.2   # exactly this
+gh run watch -R CrystalGraphics/CrystalGUI                                                 # follow it
+```
+
+In order:
+
+1. CrystalGraphics moves to its `master`. When that commit is not a released version, it is released first:
+   a patch version, published, committed, tagged and pushed, with a GitHub release.
 2. CrystalGUI's `modVersion` is set; `apiCheck`, `checkSingleJar` and `checkLanguageJar` run; everything,
    the consumer plugins included, is published to Cloudsmith.
 3. Only then: a commit with the version and the submodule pointer, the tag `v<version>`, the push, and the
-   GitHub release with both jars. A failure before this leaves nothing tagged; run it again once fixed.
+   GitHub release with both jars.
 
-Repository secrets: `CLOUDSMITH_USERNAME`, `CLOUDSMITH_PASSWORD` (a Cloudsmith API key) and
-`CRYSTALGRAPHICS_TOKEN` (a fine-grained token with contents: write on CrystalGraphics, for step 1).
+| Secret | Set on | Holds |
+|---|---|---|
+| `CLOUDSMITH_USERNAME` | the organization, shared with CrystalGUI and CrystalGraphics | the Cloudsmith service account's **slug**, not its display name |
+| `CLOUDSMITH_PASSWORD` | the same | that service account's API key |
+| `CRYSTALGRAPHICS_TOKEN` | CrystalGUI | a fine-grained token, Contents: read and write on CrystalGraphics, for step 1. It expires |
+
+Which account owns what, and how to rotate each: `operations/release.md` in CrystalPlans (maintainers).
+
+| A run fails at | What it left | Then |
+|---|---|---|
+| any step before *Build, check and publish* | nothing | fix on `master`, run again |
+| *Build, check and publish*, in the build or a check | nothing | fix on `master`, run again |
+| the same step, `401 Unauthorized` on a `PUT` | nothing: the first upload was refused | the two Cloudsmith secrets are wrong — a stray space in either is enough |
+| the same step, after some uploads | part of the version on Cloudsmith | delete that version's packages on Cloudsmith, or release the next version |
+| *Commit, tag and push* or *GitHub release* | the version published, untagged | tag the release commit `v<version>` by hand and push it |
+
+What a Linux runner needs that a Windows checkout hides:
+
+- `gradlew` committed executable — `git update-index --chmod=+x gradlew`. At `100644` the run dies with
+  `./gradlew: Permission denied`.
+- Zulu JDKs: RetroFuturaGradle (1.7.10) asks for Azul's by vendor.
+- The JDKs handed to Gradle through `org.gradle.java.installations.fromEnv`, since it does not look where
+  `setup-java` installs them.
 
 | Command | Publishes to |
 |---|---|
