@@ -143,6 +143,15 @@ val deploySingleJars = tasks.register("deploySingleJars") {
     val withLanguage = cgWithLanguage
     val localProperties = rootProject.file("local.properties")
     val instances = prismInstances
+    // Another mod shipped this way -- a sample, a consumer's jar -- installed beside ours, into the
+    // targeted instances only: a jar whose variants do not cover an instance stops it loading.
+    val extraMods = (providers.gradleProperty("cgExtraMods").orNull ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { file(it) }
+    val extraTargets = (providers.gradleProperty("cgTargets").orNull ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    if (extraMods.isNotEmpty() && extraTargets.isEmpty()) {
+        throw GradleException("-PcgExtraMods needs -PcgTargets: those mods go only where their variants run")
+    }
 
     doLast {
         if (!localProperties.isFile) {
@@ -155,7 +164,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             if (withLanguage) add(langJar.get().asFile)
             add(graphicsJar)
         }
-        (jars + jomlJar).filterNot { it.isFile }
+        (jars + jomlJar + extraMods).filterNot { it.isFile }
             .forEach { throw GradleException("${it.name} was not built") }
         if (!withLanguage) logger.lifecycle("[cgui] -PcgNoLanguage: crystalgui_language is NOT deployed")
 
@@ -189,6 +198,12 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             mods.listFiles().orEmpty()
                 .filter { file -> oursPrefixes.any { file.name.startsWith(it) } }
                 .forEach { it.delete() }
+            // The extra mods the last deploy installed, which this one replaces or leaves out.
+            val extraRecord = File(mods, ".cg-extra-mods")
+            if (extraRecord.isFile) extraRecord.readLines().filter { it.isNotBlank() }.forEach { File(mods, it).delete() }
+            val extras = if (inst.label in extraTargets) extraMods else emptyList()
+            if (extras.isEmpty()) extraRecord.delete()
+            else extraRecord.writeText(extras.joinToString(System.lineSeparator(), postfix = System.lineSeparator()) { it.name })
             // JOML GOES ONLY WHERE MINECRAFT SHIPS NONE, and it is the one artefact with that shape.
             //
             // MC 1.19.3+ ships JOML as a real named module, so a second copy in `mods/` is a split
@@ -196,7 +211,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             // line. 1.7.10 has no JOML at all and no module system to object, so it needs exactly
             // this. Installing it everywhere would break every 1.19.3+ instance, so it is declared
             // per instance in local.properties (prismInstanceJoml) rather than inferred here.
-            val instanceJars = if (inst.needsJoml) jars + jomlJar else jars
+            val instanceJars = (if (inst.needsJoml) jars + jomlJar else jars) + extras
 
             instanceJars.forEach { source ->
                 val target = File(mods, source.name)
