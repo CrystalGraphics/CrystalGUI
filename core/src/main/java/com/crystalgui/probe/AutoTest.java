@@ -23,10 +23,8 @@ import com.crystalgui.core.CrystalGuiCore;
  * if (!AutoTest.ENABLED) return;
  * // ...once the game is up and settled:
  * openDesktop();
- * // ...and on each painted frame:
- * AutoTest.runFrameSteps(framesPainted);
- * if (framesPainted == captureAt)     capture(AutoTest.earlyCapture());
- * if (framesPainted == lateCaptureAt) { capture(AutoTest.lateCapture()); quit(); }
+ * // ...and once per unit the host settles in -- a painted frame, a tick:
+ * AutoTest.settled(host, count);      // runs onFrame steps, takes the captures, quits
  * }</pre>
  *
  * <p><b>A capture is not a paint.</b> It proves a frame was read back, not that this engine drew it: with
@@ -182,6 +180,8 @@ public final class AutoTest {
     private static boolean opened;
     private static boolean capturedEarly;
     private static boolean capturedLate;
+    /** Calls to {@link #settled} since the desktop opened: the clock {@link #onFrame} counts on. */
+    private static int settledSinceOpen;
 
     /**
      * The phases up to opening the desktop, on the host's own tick.
@@ -221,6 +221,7 @@ public final class AutoTest {
      */
     public static void settled(Host host, int sinceOpen) {
         if (!ENABLED || !opened || capturedLate) return;
+        runSteps(++settledSinceOpen);
 
         if (!capturedEarly && sinceOpen >= host.captureAt()) {
             capturedEarly = true;
@@ -240,21 +241,28 @@ public final class AutoTest {
     }
 
     /**
-     * Runs {@code step} on the {@code frame}-th painted frame.
+     * Runs {@code step} on the {@code frame}-th settle after the desktop opened, on every host — a painted
+     * frame on 1.7.10 and legacy Forge, a tick on 1.13+. Only in an unattended run.
      *
      * <pre>{@code
      * AutoTest.onFrame(5, MyProbe::runOnce);   // from mod init, long before anything paints
      * }</pre>
      *
      * <p>Several steps may share a frame and run in registration order; a step that throws is logged and
-     * the rest still run. A step registered for a frame that has already passed simply never runs.</p>
+     * the rest still run. A step registered for a frame that has already passed simply never runs. Before
+     * the host's capture frame, a step's effect is in the photograph.</p>
      */
     public static void onFrame(int frame, Runnable step) {
         FRAME_STEPS.computeIfAbsent(frame, unused -> new ArrayList<>()).add(step);
     }
 
-    /** Called once per painted frame by the host. @see #onFrame */
+    /** @deprecated {@link #settled} runs the steps; a host calling this as well runs each twice. */
+    @Deprecated
     public static void runFrameSteps(int framesPainted) {
+        runSteps(framesPainted);
+    }
+
+    private static void runSteps(int framesPainted) {
         List<Runnable> steps = FRAME_STEPS.get(framesPainted);
         if (steps == null) return;
         for (Runnable step : steps) {
