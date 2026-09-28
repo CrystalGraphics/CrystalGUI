@@ -518,7 +518,8 @@ val stageObfMods = tasks.register<Copy>("stageObfMods") {
     // artifact by path; there is no substitution for a reobfuscated jar, because substitutions resolve
     // the DEV one.
     dependsOn(gradle.includedBuild("CrystalGraphics").task(":runtime:mc:1710:reobfJar"))
-    from(rootProject.file("CrystalGraphics/runtime/mc/1710/build/libs/crystalgraphics-1.0.0.jar"))
+    from(rootProject.file("CrystalGraphics/runtime/mc/1710/build/libs/" +
+        "crystalgraphics-${rootProject.extra["crystalgraphicsVersion"]}.jar"))
 
     // AND THE MIXIN BOOTSTRAP. CrystalGraphics declares mixins.crystalgraphics.json, so LaunchWrapper
     // asks for org.spongepowered.asm.launch.MixinTweaker before any mod loads -- and the dev run gets it
