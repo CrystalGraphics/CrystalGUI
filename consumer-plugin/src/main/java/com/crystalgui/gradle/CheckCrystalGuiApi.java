@@ -29,7 +29,9 @@ import org.gradle.api.tasks.TaskAction;
  *
  * <ul>
  *   <li>A reference to {@code com.crystalgui.mc} or {@code com.crystalgraphics.mc}: the loader hosts, whose
- *       package differs per loader in the shipped jar, so what compiles against one never links.</li>
+ *       package differs per loader in the shipped jar, so what compiles against one never links. Except
+ *       {@code com.crystalgraphics.mc.shared}, the variant selector a single-jar mod's bootstrappers call,
+ *       which ships once and unrelocated.</li>
  *   <li>A class of either mod in the mod's own jar: two copies of one class across two mods.</li>
  * </ul>
  *
@@ -39,6 +41,8 @@ import org.gradle.api.tasks.TaskAction;
 public abstract class CheckCrystalGuiApi extends DefaultTask {
 
     static final List<String> INTERNAL = Arrays.asList("com/crystalgui/mc/", "com/crystalgraphics/mc/");
+    /** The one package under {@link #INTERNAL} a mod may name: {@code com.crystalgraphics:mc-shared}. */
+    static final String SHARED = "com/crystalgraphics/mc/shared/";
     static final List<String> OURS = Arrays.asList("com/crystalgui/", "com/crystalgraphics/");
 
     /** The mod's compiled classes. */
@@ -63,7 +67,8 @@ public abstract class CheckCrystalGuiApi extends DefaultTask {
                     TreeSet<String> reached = new TreeSet<>();
                     try (InputStream in = Files.newInputStream(p)) {
                         for (String utf8 : utf8Constants(in)) {
-                            INTERNAL.stream().filter(utf8::contains).findFirst()
+                            String outside = utf8.replace(SHARED, "");
+                            INTERNAL.stream().filter(outside::contains).findFirst()
                                 .ifPresent(prefix -> reached.add(utf8));
                         }
                     } catch (IOException e) {

@@ -1120,8 +1120,8 @@ int value types.
 | `SplitView` | `splitview` | `cgui-splitview` |
 | `TabView` | `tabview` | `cgui-tabview` |
 | `Tab` | `tab` | `cgui-tabview` |
-| `Desktop` | `desktop` | `cgui-desktop` — **nobody constructs one**; `UIDocument.desktop()` owns it |
-| `WindowFrame` | `window` | `cgui-desktop` — opened with `UIDocument.openWindow(frame)` |
+| `Desktop` | `desktop` | `cgui-desktop` — **nobody constructs one**; the document owns it, found with `Desktop.of(document)` |
+| `WindowFrame` | `window` | `cgui-desktop` — opened with `desktop.addWindow(frame)` |
 | `Taskbar` | `taskbar` | `cgui-desktop` — the `WindowRegistry`, rendered; built by `Desktop` |
 | `WindowSwitcher` | — (not registered) | `cgui-desktop` — `Mod+Tab`; built by `Desktop`, nobody constructs one |
 
