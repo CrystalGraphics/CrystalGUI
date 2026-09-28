@@ -44,6 +44,9 @@ public class DocumentationPopupSizesToItsContentTest extends UiDocumentTestBase 
     /** `padding: 9px` on the popup. */
     private static final float POPUP_PADDING = 9f;
 
+    /** `--scrollbar-gutter`: the column a body that scrolls keeps free for its bar. */
+    private static final float SCROLLBAR_GUTTER = 7f;
+
     private static String prose(int length) {
         StringBuilder text = new StringBuilder(length);
         while (text.length() < length) text.append("documentation prose that wraps ");
@@ -172,8 +175,9 @@ public class DocumentationPopupSizesToItsContentTest extends UiDocumentTestBase 
         widthFor(4000);
         UIElement prose = deepestBody();
         assertNotNull("the body band is on screen", prose);
+        // 4000 characters scroll, so the body keeps the scrollbar's gutter beside the prose.
         assertEquals("the prose is still measured against the floor, not against the box",
-                popup.box().width() - POPUP_PADDING * 2f, prose.box().width(), 2f);
+                popup.box().width() - POPUP_PADDING * 2f - SCROLLBAR_GUTTER, prose.box().width(), 2f);
     }
 
     /** ...and at the other end of the ramp, where box and floor happen to agree. */

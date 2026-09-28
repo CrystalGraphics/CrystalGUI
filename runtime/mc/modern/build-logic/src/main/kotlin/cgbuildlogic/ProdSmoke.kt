@@ -329,9 +329,13 @@ abstract class ProdSmoke : DefaultTask() {
 
     private fun isArmed(cfg: File) = cfg.readLines().any { it.startsWith(ARMED_MARKER) }
 
-    /** Whether a language probe was asked for: each answers after the late capture would otherwise quit. */
+    /**
+     * Whether a slow probe was asked for: the language probes answer after the late capture would otherwise
+     * quit, and the host verifier reads the driver back after every pass.
+     */
     private fun languageProbe() = extraProperties.get().any {
         it.startsWith("crystalgui.autotest.script=") || it == "crystalgui.autotest.complete=true"
+            || it == "crystalgraphics.host.verify=true"
     }
 
     /** Past LanguageProbe's last report -- its unanswered completions, at frame 660 -- when one is asked. */
