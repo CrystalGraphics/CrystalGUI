@@ -115,6 +115,14 @@ Which account owns what, and how to rotate each: `operations/release.md` in Crys
 | the same step, after some uploads | part of the version on Cloudsmith | delete that version's packages on Cloudsmith, or release the next version |
 | *Commit, tag and push* or *GitHub release* | the version published, untagged | tag the release commit `v<version>` by hand and push it |
 
+A version that went out broken is taken back with **Retract** (`.github/workflows/retract.yml`): it deletes
+that version's `com.crystalgui` packages on Cloudsmith, its GitHub release and its tag, and leaves the release
+commit. Then release the same version again with `-f version=<version>`.
+
+```bash
+gh workflow run retract.yml -R CrystalGraphics/CrystalGUI --ref master -f version=0.0.1
+```
+
 What a Linux runner needs that a Windows checkout hides:
 
 - `gradlew` committed executable — `git update-index --chmod=+x gradlew`. At `100644` the run dies with
