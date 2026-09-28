@@ -107,6 +107,10 @@ include("runtime:mc:forge-bootstrap")
 // language jar. LaunchWrapper's API never changed, so one copy serves both.
 include("runtime:mc:launchwrapper")
 
+// Its modern counterpart: what every ModLauncher and Knot node shares and names no Minecraft, merged once
+// into the language jar instead of once per node.
+include("runtime:mc:modern-shared")
+
 // NO TIER-1 MODULES HERE. They existed briefly and held one class between them, the cursor adapters,
 // which are CrystalGraphics' now: a cursor is a toolkit's job and this engine only decides WHICH one.
 // `core`'s CursorService turns a keyword into a picture and hands it to CgCursorService, so no host

@@ -1,6 +1,7 @@
 package com.crystalgui.mc.fabric.lang;
 
-import com.crystalgui.mc.modern.lang.LanguageLifecycle;
+import com.crystalgui.mc.modern.lang.ScriptServiceModern;
+import com.crystalgui.mc.shared.modern.LanguageLifecycle;
 
 import com.crystalgraphics.mc.shared.VariantEntry;
 
@@ -13,6 +14,6 @@ public final class CrystalGuiLanguageFabric implements VariantEntry {
     /** @param context null — Fabric hands an entry point nothing. */
     @Override
     public void start(Object context) {
-        LanguageLifecycle.bootstrapClient();
+        LanguageLifecycle.bootstrapClient(ScriptServiceModern::forThisClient);
     }
 }
