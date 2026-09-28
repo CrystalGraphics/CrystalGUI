@@ -88,6 +88,11 @@ python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # l
 | `com.crystalgui:crystalgui` | the shipped jar | runs it in a dev client, with `com.crystalgraphics:crystalgraphics` |
 | `com.crystalgui:crystalgui-language` | the optional language mod | runs it, if wanted |
 
+**The API is checked on every build.** Each library's public declarations are committed as
+`api/<artifact>.api`; `apiCheck`, part of `check`, fails when one is gone or changed and the major
+version has not moved. The file is the API as last RELEASED, so additions never fail. At a release, or
+after a deliberate major break, `./gradlew apiDump` rewrites it — commit the diff with the change.
+
 The consumer plugins `com.crystalgui` and `com.crystalgui.settings` publish with them (`consumer-plugin/`,
 an included build, Java so any consumer Gradle loads it). Their use is `CGUI_BUILDING_UIS.md` §0.
 

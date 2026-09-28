@@ -4,6 +4,9 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.plugins.ExtraPropertiesExtension;
+import org.gradle.api.tasks.SourceSetContainer;
+import org.gradle.api.tasks.TaskProvider;
+import org.gradle.jvm.tasks.Jar;
 
 /**
  * {@code com.crystalgui}: CrystalGUI's API to compile against, and its mods on the dev run. The DSL is
@@ -40,6 +43,16 @@ public class CrystalGuiPlugin implements Plugin<Project> {
             run.setCanBeResolved(false);
             run.setDescription("CrystalGUI's mods on the dev run; never published.");
             project.getConfigurations().named("runtimeClasspath").configure(c -> c.extendsFrom(run));
+
+            TaskProvider<CheckCrystalGuiApi> api = project.getTasks().register("checkCrystalGuiApi",
+                CheckCrystalGuiApi.class, task -> {
+                    task.setGroup("verification");
+                    task.setDescription("Fails on a reference to CrystalGUI's per-loader hosts, or a copy of either mod bundled.");
+                    SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
+                    task.getClasses().from(sourceSets.getByName("main").getOutput().getClassesDirs());
+                    task.getJar().from(project.getTasks().named("jar", Jar.class).flatMap(Jar::getArchiveFile));
+                });
+            project.getTasks().named("check").configure(t -> t.dependsOn(api));
         });
 
         ExtraPropertiesExtension extra = project.getGradle().getExtensions().getExtraProperties();
