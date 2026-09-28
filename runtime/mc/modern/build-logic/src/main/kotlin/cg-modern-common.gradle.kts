@@ -75,6 +75,8 @@ dependencies {
     // :language reaches THIS source set and not `main`, which is what makes the rule above a compile
     // error rather than a convention.
     "langCompileOnly"(project(":language"))
+    // Merged once into the language jar, never relocated: what no node needs a copy of.
+    "langCompileOnly"(project(":runtime:mc:modern-shared"))
 }
 
 /** The language host, for the loaders' lang thin jars to consume exactly as they consume `jar`. */

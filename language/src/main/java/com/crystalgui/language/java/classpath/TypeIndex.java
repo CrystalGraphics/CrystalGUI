@@ -933,8 +933,8 @@ public final class TypeIndex {
      * Whether {@code binary} is another node's copy of a host class.
      *
      * <p>A merged jar carries each host class once per (loader, Minecraft version), relocated into that
-     * node's package, and only the running node's are ever loaded — so the rest offered 54 {@code MinecraftBytes}
-     * for one name. The running node is the platform's own {@link ScriptService}, which is that node's class.
+     * node's package, and only the running node's are ever loaded — the rest would offer one name up to 54
+     * times. The running node is the platform's own {@link ScriptService}, which is that node's class.
      * Where the service sits in no node package — a dev run, a test — nothing is hidden.</p>
      */
     private static boolean otherNode(String binary, ScriptService platform) {

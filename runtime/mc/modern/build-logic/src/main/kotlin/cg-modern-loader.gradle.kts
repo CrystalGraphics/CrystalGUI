@@ -143,6 +143,7 @@ dependencies {
     // `main` since J8: the language stack ships as its own jar, and this is what stops the host jar
     // naming it. Its 1.20.x host half comes from the common node's own lang source set.
     "langCompileOnly"(project(":language"))
+    "langCompileOnly"(project(":runtime:mc:modern-shared"))
     "langCompileOnly"(project(path = common.path, configuration = "commonLangOutput"))
     // AND ON THE RUNTIME CLASSPATH, like :core and the common node above. compileOnly alone put it on
     // no run at all: `LifecycleCrystalGUI.bootstrapClient` calls `ScriptService.install()`, so the first
@@ -157,6 +158,7 @@ dependencies {
         exclude(group = "org.apache.logging.log4j")
         exclude(group = "com.google.code.gson")
     }
+    "runtimeOnly"(project(":runtime:mc:modern-shared"))
 
     // Minecraft supplies log4j and gson. :core pins modern ones runtimeOnly for its tests and the
     // harness, and those reach a loader -- where NeoForge requires {strictly 2.19.0}/{strictly 2.10.1}

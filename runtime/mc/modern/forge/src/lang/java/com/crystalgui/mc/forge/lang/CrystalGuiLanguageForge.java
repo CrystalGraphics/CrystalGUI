@@ -1,6 +1,7 @@
 package com.crystalgui.mc.forge.lang;
 
-import com.crystalgui.mc.modern.lang.LanguageLifecycle;
+import com.crystalgui.mc.modern.lang.ScriptServiceModern;
+import com.crystalgui.mc.shared.modern.LanguageLifecycle;
 
 import com.crystalgraphics.mc.shared.VariantEntry;
 //? if <1.17 {
@@ -13,7 +14,7 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
  * The language stack's Forge 1.20.1 entry — twenty lines, which is the whole point of the source-set
  * layout: a new era costs one of these per loader rather than a module per loader.
  *
- * <p>Everything it does is in {@link LanguageLifecycle}, shared with the other two 1.20.x loaders.
+ * <p>Everything it does is in {@link LanguageLifecycle}, shared with every modern loader.
  * Ordered after {@code crystalgui} by {@code mods.toml}, so {@code CgPlatform} and the command registry
  * are already up.</p>
  */
@@ -38,9 +39,9 @@ public final class CrystalGuiLanguageForge implements VariantEntry {
     // Forge 29-31 reach the main thread through DeferredWorkQueue rather than the event.
     private void clientSetup(FMLClientSetupEvent event) {
         //? if >=1.17 {
-        event.enqueueWork(LanguageLifecycle::bootstrapClient);
+        event.enqueueWork(() -> LanguageLifecycle.bootstrapClient(ScriptServiceModern::forThisClient));
         //?} else {
-        /*DeferredWorkQueue.runLater(LanguageLifecycle::bootstrapClient);
+        /*DeferredWorkQueue.runLater(() -> LanguageLifecycle.bootstrapClient(ScriptServiceModern::forThisClient));
         *///?}
     }
 }

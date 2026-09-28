@@ -223,7 +223,7 @@ registerSingleJarPipeline(SingleJarSpec(
 
     thinJars = listOfNotNull((":runtime:mc:1710" to "reobfLangThinJar").takeIf { has1710(project) }) +
         legacyNodes(project).map { it.path to "reobfLangThinShadowJar" } + modernThinJars("langThinShadowJar"),
-    libraryProjects = listOf(":language", ":runtime:mc:launchwrapper"),
+    libraryProjects = listOf(":language", ":runtime:mc:launchwrapper", ":runtime:mc:modern-shared"),
     serviceOwners = listOf(":language"),
 
     // ASM, AND ONLY ASM. Taffy and JOML are the host jar's; tree-sitter must NOT be relocated,
@@ -305,14 +305,11 @@ registerSingleJarPipeline(SingleJarSpec(
             "assets/crystalgui/download/",
         ))
         expectSingle.set(listOf("com/crystalgui/language/"))
-        // Counted by simple name, as the host jar's own note explains. NOT `ScriptService`: J9's
-        // suffix strip renamed the 1.20.x installer `ScriptService1201` -> `ScriptService`, which is
-        // the simple name of the SPI it installs (`com.crystalgui.language.platform.ScriptService`),
-        // so this counted 4. `LanguageLifecycle` is unique. The name clash itself is a readability
-        // defect rather than a functional one -- the two are in different packages -- but the host
-        // half wants a name of its own; `ModernScriptService` is what the plan asked for.
+        // Counted by simple name, as the host jar's own note explains. The one class of the language
+        // half that must stay per node: it names Minecraft. What names none ships once, from
+        // :runtime:mc:modern-shared.
         relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/modern/lang/LanguageLifecycle.class" to modernCopies,
+            "com/crystalgui/mc/modern/lang/ScriptServiceModern.class" to modernCopies,
         ))
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
@@ -323,6 +320,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "com/crystalgui/mc/fabric/lang/LanguageFabricBootstrap.class",
             // Both LaunchWrapper hosts' language halves name it, and only the merge brings it.
             "com/crystalgui/mc/launchwrapper/LaunchWrapperBytes.class",
+            // Every modern node's language half names it, once.
+            "com/crystalgui/mc/shared/modern/MinecraftBytes.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md", "META-INF/COPYING", "META-INF/COPYING.LESSER",
             "assets/crystalgui/engines/8/index.txt",

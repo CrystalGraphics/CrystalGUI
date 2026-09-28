@@ -15,6 +15,8 @@ import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
+import com.crystalgui.mc.shared.modern.MinecraftBytes;
+import com.crystalgui.mc.shared.modern.MojangMappings;
 
 //? if >=1.14 {
 import net.minecraft.SharedConstants;
@@ -25,7 +27,7 @@ import net.minecraft.client.Minecraft;
  * The 1.20.x half of {@link ScriptService} — <b>where to put things, and nothing else</b>.
  *
  * <pre>{@code
- * LanguageHost.install(ScriptServiceModern.forThisClient());   // from LanguageLifecycle.bootstrapClient()
+ * LanguageLifecycle.bootstrapClient(ScriptServiceModern::forThisClient);   // from each loader's language entry
  * }</pre>
  *
  * <p>Registered for {@link #cacheRoot()} alone, and that is the whole reason it exists.

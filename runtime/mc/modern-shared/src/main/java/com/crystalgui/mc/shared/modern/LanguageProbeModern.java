@@ -1,4 +1,4 @@
-package com.crystalgui.mc.modern.lang;
+package com.crystalgui.mc.shared.modern;
 
 import javax.annotation.Nullable;
 
