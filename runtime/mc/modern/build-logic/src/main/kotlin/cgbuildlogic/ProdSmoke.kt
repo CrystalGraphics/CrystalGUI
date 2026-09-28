@@ -170,6 +170,9 @@ abstract class ProdSmoke : DefaultTask() {
             targets += Target(name, instanceDir, cfg, uuid)
         }
         if (targets.isEmpty()) throw GradleException("prodSmoke matched no instance")
+        // In the order they were NAMED, not local.properties': the sweep is oldest first, so the batch
+        // running says how far along it is.
+        if (only.isNotEmpty()) targets.sortBy { only.indexOf(it.name) }
 
         val failures = mutableListOf<String>()
         // The launcher must be down while the configs are written, and the sleep is the second half of
