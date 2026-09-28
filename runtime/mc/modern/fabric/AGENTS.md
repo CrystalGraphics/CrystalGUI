@@ -73,5 +73,5 @@ Commonly referenced locations under `versions/1.20.1/build/mc-src/java/`:
 
 ## Plugin
 
-Uses `fabric-loom 1.16.2`. Version pins are per node, in `versions/<version>/gradle.properties`
+Uses `fabric-loom 1.16.2`. Version pins are per node, in singlejar-logic's pin catalog (`catalog/modern/<branch>/<version>.properties`)
 (`mc.version`, `fabric.loader`, `fabric.api`, `parchment.*`).

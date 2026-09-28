@@ -51,4 +51,4 @@ Commonly referenced locations under `versions/1.20.4/build/mc-src/java/`:
 ## Plugin
 
 Uses `net.neoforged.moddev` (ModDevGradle). Version pins are per node, in
-`versions/<version>/gradle.properties` (`mc.version`, `neoforge.version`, `parchment.*`, `asm`).
+singlejar-logic's pin catalog (`catalog/modern/<branch>/<version>.properties`) (`mc.version`, `neoforge.version`, `parchment.*`, `asm`).
