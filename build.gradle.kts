@@ -527,6 +527,81 @@ fun fetchInto(url: String, into: File, probe: Boolean = false): String? = try {
     unreachable.toString()
 }
 
+// ── What a running client asks the file for, per node ────────────────────────────────────────────
+
+/** 1.20.1 before 1.20.10: numeric per segment. */
+fun compareMinecraft(a: String, b: String): Int {
+    val left = a.split('.').map { it.toIntOrNull() ?: 0 }
+    val right = b.split('.').map { it.toIntOrNull() ?: 0 }
+    for (i in 0 until maxOf(left.size, right.size)) {
+        val c = left.getOrElse(i) { 0 }.compareTo(right.getOrElse(i) { 0 })
+        if (c != 0) return c
+    }
+    return 0
+}
+
+/** Whether `version` is in a catalog range: `[1.16.1,1.17)`, `[1.21.11,1.21.12)`, `[1.7.10]`. */
+fun inMinecraftRange(range: String, version: String): Boolean {
+    val inner = range.trim().removePrefix("[").removePrefix("(").removeSuffix("]").removeSuffix(")")
+    if (',' !in inner) return compareMinecraft(version, inner) == 0
+    val low = inner.substringBefore(',').trim()
+    val high = inner.substringAfter(',').trim()
+    val lowOk = low.isEmpty() || compareMinecraft(version, low).let { it > 0 || (it == 0 && range.startsWith("[")) }
+    val highOk = high.isEmpty() || compareMinecraft(version, high).let { it < 0 || (it == 0 && range.endsWith("]")) }
+    return lowOk && highOk
+}
+
+/** version -> MCP stable release, read from the Java table the running client uses, so the two cannot drift. */
+fun mcpStableTable(source: String, pattern: Regex): List<Pair<String, String>> =
+    pattern.findAll(file(source).readText()).map { it.groupValues[1] to it.groupValues[2] }.toList()
+
+val modernMcpStable by lazy {
+    mcpStableTable("runtime/mc/modern/common/src/lang/java/com/crystalgui/mc/modern/lang/ScriptServiceModern.java",
+        Regex("""case "([\d.]+)": return "([\w.-]+)";""")).toMap()
+}
+val legacyMcpStable by lazy {
+    mcpStableTable("runtime/mc/legacy/forge/src/lang/java/com/crystalgui/mc/legacy/lang/ScriptServiceLegacy.java",
+        Regex("""\{"([\d.]+)", "([\w.-]+)"\}"""))
+}
+
+/**
+ * The ids a client of `loader` on Minecraft `version` fetches its script names through -- each must be PINNED
+ * in download/locations.json, which is what lets a second host or the mirror serve it safely.
+ *
+ * Forge runs Mojang's names from 1.20.6 and NeoForge always has, so both need nothing there.
+ */
+fun scriptingDownloads(era: String, loader: String, version: String): List<String> = when {
+    era == "legacy" -> listOf("forge/mcp-stable/" +
+        (legacyMcpStable.lastOrNull { compareMinecraft(it.first, version) <= 0 } ?: legacyMcpStable.first()).second)
+    loader == "fabric" -> listOf("fabric/intermediary/$version", "mojang/$version/client.txt")
+    loader == "forge" && compareMinecraft(version, "1.20.6") < 0 ->
+        modernMcpStable[version]?.let { listOf("forge/mcp-stable/$it") }
+            ?: listOf("mojang/$version/client.txt", "forge/mcp-config/$version")
+    else -> emptyList()
+}
+
+/** Every loader node: (era, loader, its own version, the range it claims). */
+fun scriptingNodes(): List<List<String>> = allprojects.mapNotNull { node ->
+    val parts = node.path.split(':')
+    // :runtime:mc:<era>:<loader>:<version>
+    if (parts.size != 6 || parts[3] !in setOf("modern", "legacy") || parts[4] == "common") return@mapNotNull null
+    val range = node.findProperty("variant.minecraft")?.toString() ?: return@mapNotNull null
+    listOf(parts[3], parts[4], parts[5], range)
+}
+
+/** Every (node, version) whose script downloads the file does not pin, for `versionsOf` each node's range. */
+fun scriptingCoverageOffences(versionsOf: (node: List<String>) -> List<String>): List<String> {
+    val pinned = membersOf(readDownloadLocations()["files"])
+        .filter { membersOf(it.value)["digest"] != null }.keys
+    return scriptingNodes().flatMap { node ->
+        val (era, loader) = node
+        versionsOf(node).flatMap { version ->
+            scriptingDownloads(era, loader, version).filter { it !in pinned }
+                .map { "$loader $version (node ${node[2]}): no pinned $it" }
+        }
+    }.distinct()
+}
+
 // Part of `check` through :language's, since a band re-pinned there is what makes the file stale.
 tasks.register("checkDownloadLocations") {
     group = "verification"
@@ -572,11 +647,33 @@ tasks.register("checkDownloadLocations") {
         if (listed != expected) {
             offences += "the engines are not the resolved bands; replace \"bands\" with:\n" + bandsJson(expected)
         }
+        // EVERY NODE'S OWN VERSION has its script names pinned; verifyScriptingCoverage checks its whole range.
+        offences += scriptingCoverageOffences { node -> listOf(node[2]) }
 
         if (offences.isNotEmpty()) {
             throw GradleException("download/locations.json:\n  " + offences.joinToString("\n  "))
         }
         println("download locations OK: ${lines.size} downloads, ${expected.values.sumOf { it.size }} engine jars")
+    }
+}
+
+tasks.register("verifyScriptingCoverage") {
+    group = "distribution"
+    description = "Fails if a Minecraft release a node claims has no pinned script names. Needs the network."
+    doLast {
+        // Mojang's release list is what a range expands against: a node claiming [1.16.1,1.17) runs on 1.16.3.
+        val manifest = File(temporaryDir, "version_manifest_v2.json")
+        fetchInto("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json", manifest)
+            ?.let { throw GradleException("Mojang's version list: $it") }
+        @Suppress("UNCHECKED_CAST")
+        val releases = ((groovy.json.JsonSlurper().parse(manifest) as Map<String, Any?>)["versions"] as List<Map<String, Any?>>)
+            .filter { it["type"] == "release" }.map { it["id"].toString() }
+        val offences = scriptingCoverageOffences { node -> releases.filter { inMinecraftRange(node[3], it) } }
+        if (offences.isNotEmpty()) {
+            throw GradleException("download/locations.json does not cover every version a node claims -- pin each " +
+                "(its digest from the publisher, as the others are):\n  " + offences.joinToString("\n  "))
+        }
+        println("script names pinned for every release ${scriptingNodes().size} nodes claim")
     }
 }
 
@@ -587,7 +684,7 @@ tasks.register("verifyDownloadLocations") {
         val json = readDownloadLocations()
         val self = stringsOf(json["self"])
         // A template's address has no bytes until filled, so it is probed at a version somebody runs.
-        val samples = mapOf("{minecraft}" to "1.20.1", "{java}" to "17")
+        val samples = mapOf("{minecraft}" to "1.20.1", "{java}" to "17", "{version}" to "39-1.12")
         val file = File(temporaryDir, "fetched")
         val unserved = mutableListOf<String>()
         var live = 0

@@ -1925,7 +1925,7 @@ read; the tests run that way.
 | When | Do |
 |---|---|
 | **A link has died** | Add a working URL to the download, or an address to its repository, and push to master. Every jar built since this file existed picks it up within a day, or on its next failure |
-| **A pin changes** — a band re-pinned, a new Minecraft version | Edit the download. `checkDownloadLocations`, in `check`, fails when the engines are not the resolved bands and prints the `bands` block to paste. Only jars built after the edit carry the new pin |
+| **A pin changes** — a band re-pinned, a new Minecraft version | Edit the download. `checkDownloadLocations`, in `check`, fails when the engines are not the resolved bands and prints the `bands` block to paste — and when a loader node's own version has no pinned script names (Mojang's `client.txt`, MCPConfig, intermediary or MCP stable); `verifyScriptingCoverage`, run by the Release workflow, checks every release in each node's range. Pin with the publisher's digest, and a Fabric intermediary also `from` the mirror. Only jars built after the edit carry the new pin |
 | **Before a release** | `./gradlew verifyDownloadLocations` fetches every URL and checks what it serves. Online; a dead extra URL is a warning, a download with no working URL a failure |
 | **The mirror changes** | `./gradlew stageDownloadMirror` collects every download that comes from the `mirror` repository — this repository's `download-mirror` release — verified, and prints the `gh release` commands. Only what `mirrorLicences` in the root `build.gradle.kts` covers may be mirrored — never MCP's, MCPConfig's or Mojang's data. Publishing is by hand |
 

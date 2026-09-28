@@ -226,9 +226,11 @@ its first and last in the sweep.
    target only, one run — and open its captures. Its log's `a game receiver — N rows` is the scripting
    check: 0 rows means the version's names never resolved. A running Forge or Fabric fetches its
    mappings by its own version — Mojang's `client.txt` from 1.14.4, MCPConfig's `joined.tsrg`, Fabric's
-   intermediary — through the templates in `download/locations.json`; a version Mojang published nothing
-   for takes MCP's names from the tables in `ScriptServiceModern.mcpStable` and
-   `ScriptServiceLegacy.MCP_STABLE`.
+   intermediary — each PINNED per version in `download/locations.json`, digest from its publisher, which
+   is what lets a second host or the mirror serve it. `checkDownloadLocations` (in `check`) fails a node
+   whose own version is not pinned, and `verifyScriptingCoverage` (online, run by the Release workflow)
+   every release in its range. A version Mojang published nothing for takes MCP's names from the tables
+   in `ScriptServiceModern.mcpStable` and `ScriptServiceLegacy.MCP_STABLE`, which both checks read.
 7. **`AGENTS.md`**: the node list under *Running Minecraft*, and a refused version's reason if one is refused.
 
 Nothing else is edited: descriptors, variant tables, thin-jar lists and `requiredEntries` follow the tree.
