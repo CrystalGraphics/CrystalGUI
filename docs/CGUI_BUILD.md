@@ -65,9 +65,11 @@ resolves the same property, so both builds pick the same node.
 ./gradlew :runtime:mc:modern:<branch>:<version>:serverSmoke -PcgAcceptEula   # nodes with a dev run
 ./gradlew :runtime:mc:1710:serverSmoke
 python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # legacy, on real servers
-./gradlew prodSmoke -PcgTargets=<label>,<label>             # deploy both jars, boot real clients, capture
+./gradlew prodSmoke                                         # THE SWEEP: 24 clients, one per major -- the wide check
+./gradlew prodSmoke -PcgTargets=<label>,<label>             # just these; deploys both jars first
 ./gradlew prodSmoke -PcgNoDeploy                            # installed jars only; 4 clients at a time (-PcgBatch=<n>;
                                                             # 8 at once crashed a workstation)
+./gradlew prodSmoke -PcgTargets=all                         # every instance (104): not a routine check
 ./gradlew checkFootprint                                    # build outputs under the budget (700 MB)
 ```
 
@@ -189,6 +191,17 @@ only witness for what a dev run cannot see: relocation, remapping, downgrading a
 A world comes from `runs/client/saves/` — copy the instance's save there. A server-side fault goes to
 `runServer` or `serverSmoke`. Forge ≥1.20.2 and NeoForge 1.20.2/1.20.3 have no dev run; there
 `prodSmoke -PcgNoDeploy -PcgTargets=<one>` is the loop.
+
+### A wide check is the sweep, not every instance
+
+**Checking across versions means one client per Minecraft major, never all of them.** `./gradlew prodSmoke`
+with no `-PcgTargets` runs the sweep, `prodSmokeSweep` in the root build: 1.7.10, 1.8.9, 1.10.2, 1.12.2,
+1.13.2, 1.14.4, 1.15.2, 1.16.5, 1.17.1, 1.18.2, and the first and last of each major with many minors —
+1.19 and 1.19.4, 1.20.1 and 1.20.6, 1.21.4 and 1.21.11 — with every 1.20 and 1.21 one on all three
+loaders (NeoForge's first is 1.20.2). Twenty-four clients, four at a time, about ten minutes. Every instance is over a hundred clients and an hour, and
+eight at a time took the workstation down; `-PcgTargets=all` is there for the rare release that needs it.
+A new version is checked by its own label (`-PcgTargets=<label>`), and a line that gains a minor keeps
+its first and last in the sweep.
 
 ---
 

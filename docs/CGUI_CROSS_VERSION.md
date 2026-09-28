@@ -200,9 +200,10 @@ return server.getPlayerList().isOp(player.getGameProfile());
    `forge:1.20.1` (legacyForge), `neoforge:1.20.4`, `fabric:1.20.1`, `neoforge:1.21.11`, plus
    `:runtime:mc:1710:serverSmoke` and `runtime/mc/legacy/server_smoke.py` for legacy.
 4. `./gradlew singleJar languageJar checkSingleJar checkLanguageJar`.
-5. **One** `prodSmoke` across the eras (4 at a time, the default -- 8 crashed a workstation):
-   `-PcgTargets=1710,188forge,1122forge,1132forge,1152forge,1165forge,1144fabric,1171forge,1201forge,1201fabric,1204forge,1203neoforge,1204neoforge,12111forge,12111neoforge,12111fabric`
-   — and open the captures. Forge ≥1.20.2 and NeoForge 1.20.2/1.20.3 have no dev run; prodSmoke is their
+5. **One** `./gradlew prodSmoke` — the sweep, its default: one client per Minecraft major and the first
+   and last of 1.19, 1.20 and 1.21, those of 1.20 and 1.21 on all three loaders — twenty-four, four at a
+   time — and open the
+   captures. Never every instance for a routine check; `CGUI_BUILD.md` § *A wide check is the sweep*. Forge ≥1.20.2 and NeoForge 1.20.2/1.20.3 have no dev run; prodSmoke is their
    only runtime check.
 6. A feature a smoke does not exercise (a command, an entity) needs its own probe or a manual run on
    the oldest and newest node of each loader — say which, in the commit.

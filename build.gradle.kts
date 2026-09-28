@@ -241,10 +241,26 @@ val deploySingleJars = tasks.register("deploySingleJars") {
 // The client half of the matrix. `checkSingleJar` asserts what the jar IS; this asserts that four
 // real clients each draw from it. Sequential, because there is one GPU and one launcher.
 //
-//   ./gradlew prodSmoke
-//   ./gradlew prodSmoke -PcgTargets=1710,1201forge
-//   ./gradlew prodSmoke -PcgBatch=3
+//   ./gradlew prodSmoke                                   # the SWEEP below -- the default wide check
+//   ./gradlew prodSmoke -PcgTargets=1710,1201forge        # just these
+//   ./gradlew prodSmoke -PcgTargets=all                   # every instance in local.properties: rarely
+//   ./gradlew prodSmoke -PcgBatch=2
 //   ./gradlew prodSmoke -PcgTargets=1165forge -PcgSmokeProps=crystalgui.autotest.complete=true,crystalgui.autotest.script=Probe.java
+
+/**
+ * One instance per Minecraft major, and the first and last of a major with many minors -- on every loader
+ * from 1.20, where all three ship. Twenty-four clients where every instance is over a hundred.
+ * docs/CGUI_BUILD.md § A wide check is the sweep.
+ */
+val prodSmokeSweep = listOf(
+    "1710", "189forge", "1102forge", "1122forge", "1132forge",
+    "1144fabric", "1152forge", "1165forge", "1171forge", "1182fabric",
+    "119forge", "1194fabric",
+    // NeoForge begins at 1.20.2.
+    "1201forge", "1201fabric", "1202neoforge", "1206forge", "1206fabric", "1206neoforge",
+    "1214forge", "1214fabric", "1214neoforge", "12111forge", "12111fabric", "12111neoforge",
+)
+
 val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     // -PcgNoDeploy drives whatever is ALREADY installed. Rebuilding and redeploying both single jars is
     // minutes and driving the clients is seconds, so paying for the first while iterating on the second
@@ -254,9 +270,11 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     // without being named twice. `-PcgTargets` filters it by label.
     instances.set(prismInstances.map { "${it.key}=${it.label}" })
     outputDir.set(layout.buildDirectory.dir("prodSmoke"))
-    onlyTargets.set(
-        (providers.gradleProperty("cgTargets").orNull ?: "")
-            .split(',').map { it.trim() }.filter { it.isNotEmpty() })
+    onlyTargets.set(when (val asked = providers.gradleProperty("cgTargets").orNull?.trim()) {
+        null, "", "sweep" -> prodSmokeSweep
+        "all" -> emptyList()
+        else -> asked.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    })
     // -PcgBatch=<n> clients at a time; the task defaults to 4. Eight at once crashed a workstation.
     providers.gradleProperty("cgBatch").orNull?.let { batchSize.set(it.toInt()) }
     // -PcgSmokeProps=crystalgui.autotest.complete=true,... switches a probe on for every client.
