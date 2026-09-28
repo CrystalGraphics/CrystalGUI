@@ -66,7 +66,8 @@ resolves the same property, so both builds pick the same node.
 ./gradlew :runtime:mc:1710:serverSmoke
 python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # legacy, on real servers
 ./gradlew prodSmoke -PcgTargets=<label>,<label>             # deploy both jars, boot real clients, capture
-./gradlew prodSmoke -PcgNoDeploy -PcgBatch=8                # installed jars only; 8 clients at a time
+./gradlew prodSmoke -PcgNoDeploy                            # installed jars only; 4 clients at a time (-PcgBatch=<n>;
+                                                            # 8 at once crashed a workstation)
 ./gradlew checkFootprint                                    # build outputs under the budget (700 MB)
 ```
 

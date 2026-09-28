@@ -87,7 +87,10 @@ abstract class ProdSmoke : DefaultTask() {
     @get:Input
     abstract val onlyTargets: ListProperty<String>
 
-    /** Clients launched together; each batch finishes before the next starts. Default: all at once. */
+    /**
+     * Clients launched together; each batch finishes before the next starts. Default 4: eight at once took
+     * a whole workstation down, and "all at once" is a hundred clients.
+     */
     @get:Input
     abstract val batchSize: Property<Int>
 
@@ -109,7 +112,7 @@ abstract class ProdSmoke : DefaultTask() {
         startTimeoutSeconds.convention(180)
         runTimeoutSeconds.convention(120)
         onlyTargets.convention(emptyList())
-        batchSize.convention(Int.MAX_VALUE)
+        batchSize.convention(4)
         extraProperties.convention(emptyList())
         outputs.upToDateWhen { false }
     }

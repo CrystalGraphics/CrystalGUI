@@ -85,7 +85,7 @@ Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) 
    `RESULT` line means hung.
 4. `./gradlew singleJar languageJar checkSingleJar checkLanguageJar`.
 5. One era-sweep `prodSmoke` (needs `local.properties`; say so if absent):
-   `./gradlew prodSmoke -PcgBatch=8 -PcgTargets=1710,188forge,1122forge,1132forge,1152forge,1165forge,1144fabric,1171forge,1201forge,1201fabric,1204forge,1203neoforge,1204neoforge,12111forge,12111neoforge,12111fabric`
+   `./gradlew prodSmoke -PcgTargets=1710,188forge,1122forge,1132forge,1152forge,1165forge,1144fabric,1171forge,1201forge,1201fabric,1204forge,1203neoforge,1204neoforge,12111forge,12111neoforge,12111fabric`
    — open the captures in `build/prodSmoke/`, grep each instance's `logs/latest.log` for errors.
 6. Anything no smoke exercises: run it on the oldest and newest node of each loader, and say which.
 
