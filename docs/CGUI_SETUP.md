@@ -21,8 +21,8 @@ and bundles neither.
 - JDK 25 installed. **Gradle runs on it** when you build against a CrystalGUI checkout or on
   singlejar-logic: `toolchainVersion=25` in `gradle/gradle-daemon-jvm.properties`. Your mod still compiles
   for its own Minecraft's Java.
-- Until CrystalGUI is on a public repository, publish it locally, once per update, from a clone
-  (`git clone --recursive`):
+- The artifacts are on no Maven repository yet: publish them locally, once per update, from a clone of
+  [CrystalGUI](https://github.com/CrystalGraphics/CrystalGUI) (`git clone --recursive`):
 
 ```bash
 ./gradlew publishToMavenLocal                     # CrystalGUI, its API and the com.crystalgui plugins
