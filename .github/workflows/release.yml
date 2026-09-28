@@ -122,7 +122,7 @@ jobs:
       - name: Build, check and publish
         # Checks first, alone: in one invocation Gradle runs publish tasks beside a failing check.
         run: |
-          ./gradlew apiCheck checkSingleJar checkLanguageJar $JDKS --stacktrace
+          ./gradlew apiCheck checkSingleJar checkLanguageJar checkDownloadLocations verifyScriptingCoverage $JDKS --stacktrace
           ./gradlew publish $JDKS --stacktrace
 
       - name: Commit, tag and push

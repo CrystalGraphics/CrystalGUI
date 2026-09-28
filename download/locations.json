@@ -7,7 +7,7 @@
   ],
   "repositories": {
     "maven-central": ["https://repo1.maven.org/maven2/{path}"],
-    "forge": ["https://maven.minecraftforge.net/{path}"],
+    "forge": ["https://maven.minecraftforge.net/{path}", "https://maven.neoforged.net/releases/{path}", "https://maven.creeperhost.net/{path}"],
     "fabric": ["https://maven.fabricmc.net/{path}"],
     "mirror": ["https://github.com/CrystalGraphics/CrystalGUI/releases/download/download-mirror/{file}"]
   },
@@ -24,30 +24,524 @@
       "maven": "de.oceanlabs.mcp:mcp_stable:{version}@zip",
       "from": ["forge"]
     },
+    "forge/mcp-stable/20-1.8.8": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:20-1.8.8@zip",
+      "from": ["forge"],
+      "digest": "sha1:0ceb1bd803b9d9056c5fa3c543463f68bf26f2b0"
+    },
+    "forge/mcp-stable/22-1.8.9": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:22-1.8.9@zip",
+      "from": ["forge"],
+      "digest": "sha1:a0ac11737e5e8100f91c65b66da02b1fbbf08809"
+    },
+    "forge/mcp-stable/24-1.9": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:24-1.9@zip",
+      "from": ["forge"],
+      "digest": "sha1:9086f46ee1182c83c2bde2c4d1f92a75c362e5e6"
+    },
+    "forge/mcp-stable/26-1.9.4": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:26-1.9.4@zip",
+      "from": ["forge"],
+      "digest": "sha1:0bd9b35ac48f238e27737d049e26d739cb48f385"
+    },
+    "forge/mcp-stable/29-1.10.2": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:29-1.10.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:4b5478748d19d0130dc1dd8c21e362d1b51f8d0a"
+    },
+    "forge/mcp-stable/32-1.11": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:32-1.11@zip",
+      "from": ["forge"],
+      "digest": "sha1:d5bfcd5c4adef78e3c797fd356b5dee3d2ed08d2"
+    },
+    "forge/mcp-stable/39-1.12": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:39-1.12@zip",
+      "from": ["forge"],
+      "digest": "sha1:eead02d7aea31dcd0e2080cac702720a0b979a6e"
+    },
+    "forge/mcp-stable/47-1.13.2": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:47-1.13.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:4bd078817fec520328d05efd42d77cd0f48c90e0"
+    },
+    "forge/mcp-stable/53-1.14.2": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:53-1.14.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:de2f49c0071fb848201976110dc22609c5b5059a"
+    },
+    "forge/mcp-stable/56-1.14.3": {
+      "maven": "de.oceanlabs.mcp:mcp_stable:56-1.14.3@zip",
+      "from": ["forge"],
+      "digest": "sha1:581021516596c159397815b0568b19dbce0f5890"
+    },
     "mojang/version-manifest": {
       "urls": ["https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"]
     },
+    "mojang/1.14.4/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/6073e4ba6949217eb708c4512be2ccc1850a603f/client.txt", "https://launcher.mojang.com/v1/objects/6073e4ba6949217eb708c4512be2ccc1850a603f/client.txt"],
+      "digest": "sha1:6073e4ba6949217eb708c4512be2ccc1850a603f"
+    },
+    "mojang/1.15/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/580c412cfa5869318a3a02d6b018a83781bf3ae7/client.txt", "https://launcher.mojang.com/v1/objects/580c412cfa5869318a3a02d6b018a83781bf3ae7/client.txt"],
+      "digest": "sha1:580c412cfa5869318a3a02d6b018a83781bf3ae7"
+    },
+    "mojang/1.15.1/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/054ee5085ec49b6d037d10d43c04fd4c9c3b9f4b/client.txt", "https://launcher.mojang.com/v1/objects/054ee5085ec49b6d037d10d43c04fd4c9c3b9f4b/client.txt"],
+      "digest": "sha1:054ee5085ec49b6d037d10d43c04fd4c9c3b9f4b"
+    },
+    "mojang/1.15.2/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/1fbf9f0bc9c326af859b3ccf71c2a8f5edc47ef8/client.txt", "https://launcher.mojang.com/v1/objects/1fbf9f0bc9c326af859b3ccf71c2a8f5edc47ef8/client.txt"],
+      "digest": "sha1:1fbf9f0bc9c326af859b3ccf71c2a8f5edc47ef8"
+    },
+    "mojang/1.16.1/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/ddf517a4f6750f4c15189de4e03246ae1f916cf5/client.txt", "https://launcher.mojang.com/v1/objects/ddf517a4f6750f4c15189de4e03246ae1f916cf5/client.txt"],
+      "digest": "sha1:ddf517a4f6750f4c15189de4e03246ae1f916cf5"
+    },
+    "mojang/1.16.2/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/16d12d67cd5341bfc848340f61f3ff6b957537fe/client.txt", "https://launcher.mojang.com/v1/objects/16d12d67cd5341bfc848340f61f3ff6b957537fe/client.txt"],
+      "digest": "sha1:16d12d67cd5341bfc848340f61f3ff6b957537fe"
+    },
+    "mojang/1.16.3/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/faac5028fbca3859db970cc4ca041aeec55f6d9d/client.txt", "https://launcher.mojang.com/v1/objects/faac5028fbca3859db970cc4ca041aeec55f6d9d/client.txt"],
+      "digest": "sha1:faac5028fbca3859db970cc4ca041aeec55f6d9d"
+    },
+    "mojang/1.16.4/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/0837de813d1a6b67e23da3c520a84e872c8d2f0e/client.txt", "https://launcher.mojang.com/v1/objects/0837de813d1a6b67e23da3c520a84e872c8d2f0e/client.txt"],
+      "digest": "sha1:0837de813d1a6b67e23da3c520a84e872c8d2f0e"
+    },
+    "mojang/1.16.5/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/374c6b789574afbdc901371207155661e0509e17/client.txt", "https://launcher.mojang.com/v1/objects/374c6b789574afbdc901371207155661e0509e17/client.txt"],
+      "digest": "sha1:374c6b789574afbdc901371207155661e0509e17"
+    },
+    "mojang/1.17/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/227d16f520848747a59bef6f490ae19dc290a804/client.txt", "https://launcher.mojang.com/v1/objects/227d16f520848747a59bef6f490ae19dc290a804/client.txt"],
+      "digest": "sha1:227d16f520848747a59bef6f490ae19dc290a804"
+    },
+    "mojang/1.17.1/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/e4d540e0cba05a6097e885dffdf363e621f87d3f/client.txt", "https://launcher.mojang.com/v1/objects/e4d540e0cba05a6097e885dffdf363e621f87d3f/client.txt"],
+      "digest": "sha1:e4d540e0cba05a6097e885dffdf363e621f87d3f"
+    },
+    "mojang/1.18/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/e824c89c612c0b9cb438ef739c44726c59bbf679/client.txt", "https://launcher.mojang.com/v1/objects/e824c89c612c0b9cb438ef739c44726c59bbf679/client.txt"],
+      "digest": "sha1:e824c89c612c0b9cb438ef739c44726c59bbf679"
+    },
+    "mojang/1.18.1/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/99ade839eacf69b8bed88c91bd70ca660aee47bb/client.txt", "https://launcher.mojang.com/v1/objects/99ade839eacf69b8bed88c91bd70ca660aee47bb/client.txt"],
+      "digest": "sha1:99ade839eacf69b8bed88c91bd70ca660aee47bb"
+    },
+    "mojang/1.18.2/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/a661c6a55a0600bd391bdbbd6827654c05b2109c/client.txt", "https://launcher.mojang.com/v1/objects/a661c6a55a0600bd391bdbbd6827654c05b2109c/client.txt"],
+      "digest": "sha1:a661c6a55a0600bd391bdbbd6827654c05b2109c"
+    },
+    "mojang/1.19/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/150346d1c0b4acec0b4eb7f58b86e3ea1aa730f3/client.txt", "https://launcher.mojang.com/v1/objects/150346d1c0b4acec0b4eb7f58b86e3ea1aa730f3/client.txt"],
+      "digest": "sha1:150346d1c0b4acec0b4eb7f58b86e3ea1aa730f3"
+    },
+    "mojang/1.19.1/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/fc8e22d42c0e4eb1899e2acf7e97eae917e1cb94/client.txt", "https://launcher.mojang.com/v1/objects/fc8e22d42c0e4eb1899e2acf7e97eae917e1cb94/client.txt"],
+      "digest": "sha1:fc8e22d42c0e4eb1899e2acf7e97eae917e1cb94"
+    },
+    "mojang/1.19.2/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/8e8c9be5dc27802caba47053d4fdea328f7f89bd/client.txt", "https://launcher.mojang.com/v1/objects/8e8c9be5dc27802caba47053d4fdea328f7f89bd/client.txt"],
+      "digest": "sha1:8e8c9be5dc27802caba47053d4fdea328f7f89bd"
+    },
+    "mojang/1.19.3/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/42366909cc612e76208d34bf1356f05a88e08a1d/client.txt", "https://launcher.mojang.com/v1/objects/42366909cc612e76208d34bf1356f05a88e08a1d/client.txt"],
+      "digest": "sha1:42366909cc612e76208d34bf1356f05a88e08a1d"
+    },
+    "mojang/1.19.4/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/f14771b764f943c154d3a6fcb47694477e328148/client.txt", "https://launcher.mojang.com/v1/objects/f14771b764f943c154d3a6fcb47694477e328148/client.txt"],
+      "digest": "sha1:f14771b764f943c154d3a6fcb47694477e328148"
+    },
+    "mojang/1.20/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/a4cd9a97400f7ecfe4dba23e427549ebc5815d66/client.txt", "https://launcher.mojang.com/v1/objects/a4cd9a97400f7ecfe4dba23e427549ebc5815d66/client.txt"],
+      "digest": "sha1:a4cd9a97400f7ecfe4dba23e427549ebc5815d66"
+    },
     "mojang/1.20.1/client.txt": {
-      "urls": ["https://piston-data.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/client.txt"],
+      "urls": ["https://piston-data.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/client.txt", "https://launcher.mojang.com/v1/objects/6c48521eed01fe2e8ecdadbd5ae348415f3c47da/client.txt"],
       "digest": "sha1:6c48521eed01fe2e8ecdadbd5ae348415f3c47da"
+    },
+    "mojang/1.20.2/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/5c292ff7d3161977041116698e295083fd5ec8f5/client.txt", "https://launcher.mojang.com/v1/objects/5c292ff7d3161977041116698e295083fd5ec8f5/client.txt"],
+      "digest": "sha1:5c292ff7d3161977041116698e295083fd5ec8f5"
+    },
+    "mojang/1.20.3/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/be76ecc174ea25580bdc9bf335481a5192d9f3b7/client.txt", "https://launcher.mojang.com/v1/objects/be76ecc174ea25580bdc9bf335481a5192d9f3b7/client.txt"],
+      "digest": "sha1:be76ecc174ea25580bdc9bf335481a5192d9f3b7"
+    },
+    "mojang/1.20.4/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/be76ecc174ea25580bdc9bf335481a5192d9f3b7/client.txt", "https://launcher.mojang.com/v1/objects/be76ecc174ea25580bdc9bf335481a5192d9f3b7/client.txt"],
+      "digest": "sha1:be76ecc174ea25580bdc9bf335481a5192d9f3b7"
+    },
+    "mojang/1.20.5/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/65b1468c44fbf34382716416b5c1a16d2949217a/client.txt", "https://launcher.mojang.com/v1/objects/65b1468c44fbf34382716416b5c1a16d2949217a/client.txt"],
+      "digest": "sha1:65b1468c44fbf34382716416b5c1a16d2949217a"
+    },
+    "mojang/1.20.6/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/de46c8f33d7826eb83e8ef0e9f80dc1f08cb9498/client.txt", "https://launcher.mojang.com/v1/objects/de46c8f33d7826eb83e8ef0e9f80dc1f08cb9498/client.txt"],
+      "digest": "sha1:de46c8f33d7826eb83e8ef0e9f80dc1f08cb9498"
+    },
+    "mojang/1.21/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/0530a206839eb1e9b35ec86acbbe394b07a2d9fb/client.txt", "https://launcher.mojang.com/v1/objects/0530a206839eb1e9b35ec86acbbe394b07a2d9fb/client.txt"],
+      "digest": "sha1:0530a206839eb1e9b35ec86acbbe394b07a2d9fb"
+    },
+    "mojang/1.21.1/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/2244b6f072256667bcd9a73df124d6c58de77992/client.txt", "https://launcher.mojang.com/v1/objects/2244b6f072256667bcd9a73df124d6c58de77992/client.txt"],
+      "digest": "sha1:2244b6f072256667bcd9a73df124d6c58de77992"
+    },
+    "mojang/1.21.2/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/ce0ed2eb99175df9ec5166324e3fdd1f87cee827/client.txt", "https://launcher.mojang.com/v1/objects/ce0ed2eb99175df9ec5166324e3fdd1f87cee827/client.txt"],
+      "digest": "sha1:ce0ed2eb99175df9ec5166324e3fdd1f87cee827"
+    },
+    "mojang/1.21.3/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/42c2292dfc21de314dee5205760332c807cad411/client.txt", "https://launcher.mojang.com/v1/objects/42c2292dfc21de314dee5205760332c807cad411/client.txt"],
+      "digest": "sha1:42c2292dfc21de314dee5205760332c807cad411"
+    },
+    "mojang/1.21.4/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/0cf2a0b7f056da1a5a5dd99fc6dc752f33987150/client.txt", "https://launcher.mojang.com/v1/objects/0cf2a0b7f056da1a5a5dd99fc6dc752f33987150/client.txt"],
+      "digest": "sha1:0cf2a0b7f056da1a5a5dd99fc6dc752f33987150"
+    },
+    "mojang/1.21.5/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/57669731d542f98646772e91a0d68628f9827a5c/client.txt", "https://launcher.mojang.com/v1/objects/57669731d542f98646772e91a0d68628f9827a5c/client.txt"],
+      "digest": "sha1:57669731d542f98646772e91a0d68628f9827a5c"
+    },
+    "mojang/1.21.6/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/848855615bc81e3db1c85e69b6afb150807a1261/client.txt", "https://launcher.mojang.com/v1/objects/848855615bc81e3db1c85e69b6afb150807a1261/client.txt"],
+      "digest": "sha1:848855615bc81e3db1c85e69b6afb150807a1261"
+    },
+    "mojang/1.21.7/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/8d83af626cae1865deaf55fbf96934be4886fd45/client.txt", "https://launcher.mojang.com/v1/objects/8d83af626cae1865deaf55fbf96934be4886fd45/client.txt"],
+      "digest": "sha1:8d83af626cae1865deaf55fbf96934be4886fd45"
+    },
+    "mojang/1.21.8/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/bdeb624c3aefba11d9d40f34bc96176350b549b6/client.txt", "https://launcher.mojang.com/v1/objects/bdeb624c3aefba11d9d40f34bc96176350b549b6/client.txt"],
+      "digest": "sha1:bdeb624c3aefba11d9d40f34bc96176350b549b6"
+    },
+    "mojang/1.21.10/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/7e62354a697f95cf5e7d5981face0583676a9ef7/client.txt", "https://launcher.mojang.com/v1/objects/7e62354a697f95cf5e7d5981face0583676a9ef7/client.txt"],
+      "digest": "sha1:7e62354a697f95cf5e7d5981face0583676a9ef7"
+    },
+    "mojang/1.21.11/client.txt": {
+      "urls": ["https://piston-data.mojang.com/v1/objects/031a68bebf55d824f66d6573d8c752f0e1bf232a/client.txt", "https://launcher.mojang.com/v1/objects/031a68bebf55d824f66d6573d8c752f0e1bf232a/client.txt"],
+      "digest": "sha1:031a68bebf55d824f66d6573d8c752f0e1bf232a"
+    },
+    "forge/mcp-config/{minecraft}": {
+      "maven": "de.oceanlabs.mcp:mcp_config:{minecraft}@zip",
+      "from": ["forge"]
+    },
+    "forge/mcp-config/1.13.2": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.13.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:b2e3d59e19521e1040e11d97db22d41bb9065a38"
+    },
+    "forge/mcp-config/1.14.2": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.14.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:f38135cad3008e7adee758203ce1213448b00f2a"
+    },
+    "forge/mcp-config/1.14.3": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.14.3@zip",
+      "from": ["forge"],
+      "digest": "sha1:bf17e6fc6d2ec14f1d42bdecab86b5a5a8d711d0"
+    },
+    "forge/mcp-config/1.14.4": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.14.4@zip",
+      "from": ["forge"],
+      "digest": "sha1:a250833aa1f56791b699bc65bce8fed04759907a"
+    },
+    "forge/mcp-config/1.15": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.15@zip",
+      "from": ["forge"],
+      "digest": "sha1:029cf5faa34e2ab1379ce5f9bc407c79b17a71fe"
+    },
+    "forge/mcp-config/1.15.1": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.15.1@zip",
+      "from": ["forge"],
+      "digest": "sha1:c5d5826b17d6abdc003de1c89e776cbd45449b82"
+    },
+    "forge/mcp-config/1.15.2": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.15.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:214b72157f73337709084a9858b04dcf9c3339a2"
+    },
+    "forge/mcp-config/1.16.1": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.16.1@zip",
+      "from": ["forge"],
+      "digest": "sha1:7f75605bf81d70bccb55412b4ff691ab53f35654"
+    },
+    "forge/mcp-config/1.16.2": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.16.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:42eef1b1209778787584f06dd4f762a7898e2511"
+    },
+    "forge/mcp-config/1.16.3": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.16.3@zip",
+      "from": ["forge"],
+      "digest": "sha1:03b33063fefd2f3313e9e37509fc70055e58cc43"
+    },
+    "forge/mcp-config/1.16.4": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.16.4@zip",
+      "from": ["forge"],
+      "digest": "sha1:da388e30d8c9bd5cb13a5867b33bc51cf8ab911d"
+    },
+    "forge/mcp-config/1.16.5": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.16.5@zip",
+      "from": ["forge"],
+      "digest": "sha1:a81464c686be42933aacac7898f8c0d50edccf51"
+    },
+    "forge/mcp-config/1.17.1": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.17.1@zip",
+      "from": ["forge"],
+      "digest": "sha1:167aca7986a92c1cc87ad5d7d9588983f2e81f5e"
+    },
+    "forge/mcp-config/1.18": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.18@zip",
+      "from": ["forge"],
+      "digest": "sha1:0630d060655ca299c90cf22208ccf02507800ae2"
+    },
+    "forge/mcp-config/1.18.1": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.18.1@zip",
+      "from": ["forge"],
+      "digest": "sha1:dcc5145a9968a465a348a6765c96d390650bdcc9"
+    },
+    "forge/mcp-config/1.18.2": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.18.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:ce7571bb8b3367a0368e4b94f6a182e1b523bb4a"
+    },
+    "forge/mcp-config/1.19": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.19@zip",
+      "from": ["forge"],
+      "digest": "sha1:a14f37d49a30e018f7a3cd28157230486fdf565d"
+    },
+    "forge/mcp-config/1.19.1": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.19.1@zip",
+      "from": ["forge"],
+      "digest": "sha1:918e3b593370b0a8842f3d4d4b4657999171f000"
+    },
+    "forge/mcp-config/1.19.2": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.19.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:f825e1ca07c31b1b3046fc459ba8823eed535818"
+    },
+    "forge/mcp-config/1.19.3": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.19.3@zip",
+      "from": ["forge"],
+      "digest": "sha1:b621f357dfe08655e75a99219a1bc87263779212"
+    },
+    "forge/mcp-config/1.19.4": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.19.4@zip",
+      "from": ["forge"],
+      "digest": "sha1:ec1124a8985a183739a3b084030cb7ec461ee9d3"
+    },
+    "forge/mcp-config/1.20": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.20@zip",
+      "from": ["forge"],
+      "digest": "sha1:f53fa90dce55181036f0efda49ac6cf051c86514"
     },
     "forge/mcp-config/1.20.1": {
       "maven": "de.oceanlabs.mcp:mcp_config:1.20.1@zip",
       "from": ["forge"],
       "digest": "sha1:c7d29380ddb38becad7c0819b5b325e43bca23f0"
     },
-    "forge/mcp-config/{minecraft}": {
-      "maven": "de.oceanlabs.mcp:mcp_config:{minecraft}@zip",
-      "from": ["forge"]
+    "forge/mcp-config/1.20.2": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.20.2@zip",
+      "from": ["forge"],
+      "digest": "sha1:30705bf178904457e2105af20ed43a651a4515f1"
+    },
+    "forge/mcp-config/1.20.3": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.20.3@zip",
+      "from": ["forge"],
+      "digest": "sha1:e8db71f875ee7602cf05c1c955c4d998cf005ea9"
+    },
+    "forge/mcp-config/1.20.4": {
+      "maven": "de.oceanlabs.mcp:mcp_config:1.20.4@zip",
+      "from": ["forge"],
+      "digest": "sha1:55d51be7dba2ea898d2213e4312f29f76a8788c6"
+    },
+    "fabric/intermediary/{minecraft}": {
+      "maven": "net.fabricmc:intermediary:{minecraft}:v2",
+      "from": ["fabric"]
+    },
+    "fabric/intermediary/1.14.4": {
+      "maven": "net.fabricmc:intermediary:1.14.4:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:ba7ae696906d5b076ec03bbc75c490bf164d16dc"
+    },
+    "fabric/intermediary/1.15": {
+      "maven": "net.fabricmc:intermediary:1.15:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:7e04d13f2b35e5ef5aef4a4cde94ddb77287a1b1"
+    },
+    "fabric/intermediary/1.15.1": {
+      "maven": "net.fabricmc:intermediary:1.15.1:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:ade6c638d6ceae77b129e944923e3067c4ad055a"
+    },
+    "fabric/intermediary/1.15.2": {
+      "maven": "net.fabricmc:intermediary:1.15.2:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:3e1bdf0db100aad1f5fef7f552f6a2d0060fa7ca"
+    },
+    "fabric/intermediary/1.16.2": {
+      "maven": "net.fabricmc:intermediary:1.16.2:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:ae26a216d18fe57e28700dfb6c77bf63984527b5"
+    },
+    "fabric/intermediary/1.16.3": {
+      "maven": "net.fabricmc:intermediary:1.16.3:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:9063bb9e116cec70b8fc58d17cc3ae27fcd96b9e"
+    },
+    "fabric/intermediary/1.16.4": {
+      "maven": "net.fabricmc:intermediary:1.16.4:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:880713bd78eb1749afe36e86641d499ce11bc0ec"
+    },
+    "fabric/intermediary/1.16.5": {
+      "maven": "net.fabricmc:intermediary:1.16.5:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:5da71b4e6431dbfc64f62acb11b40e381a365934"
+    },
+    "fabric/intermediary/1.17": {
+      "maven": "net.fabricmc:intermediary:1.17:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:abab55953548c5148ec8aaa26bd61e971b74e805"
+    },
+    "fabric/intermediary/1.17.1": {
+      "maven": "net.fabricmc:intermediary:1.17.1:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:c7c98a432dd633cf45bde17990f8cce2d7fdf0fc"
+    },
+    "fabric/intermediary/1.18": {
+      "maven": "net.fabricmc:intermediary:1.18:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:239eab3d91b7060c53a89fbadbd4aad39e362077"
+    },
+    "fabric/intermediary/1.18.1": {
+      "maven": "net.fabricmc:intermediary:1.18.1:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:65e833d553e9df2fad2d8a962d698b6a76334e96"
+    },
+    "fabric/intermediary/1.18.2": {
+      "maven": "net.fabricmc:intermediary:1.18.2:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:e19bddfa57da82ba4e10b5bece3fb8b90092e5e3"
+    },
+    "fabric/intermediary/1.19": {
+      "maven": "net.fabricmc:intermediary:1.19:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:633df2f570b97802620de9ee572efb4a36494d89"
+    },
+    "fabric/intermediary/1.19.1": {
+      "maven": "net.fabricmc:intermediary:1.19.1:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:e7e88f062a3ca5ace2ab55858253d8e6313d45f3"
+    },
+    "fabric/intermediary/1.19.2": {
+      "maven": "net.fabricmc:intermediary:1.19.2:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:b4122bb57b4e4e8b94376f7b41df211b8aa51d62"
+    },
+    "fabric/intermediary/1.19.3": {
+      "maven": "net.fabricmc:intermediary:1.19.3:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:450784e00cd22814b77724154be6f1ccc29f9829"
+    },
+    "fabric/intermediary/1.19.4": {
+      "maven": "net.fabricmc:intermediary:1.19.4:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:018758db7eb3a3d9587a9fe44afa5342aeb17ac3"
+    },
+    "fabric/intermediary/1.20": {
+      "maven": "net.fabricmc:intermediary:1.20:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:aa3e95512aafa9507a09d337395e9f2433cda719"
     },
     "fabric/intermediary/1.20.1": {
       "maven": "net.fabricmc:intermediary:1.20.1:v2",
       "from": ["fabric", "mirror"],
       "digest": "sha1:20ba9399cb5a23aa06ea901eff0a84e648d866db"
     },
-    "fabric/intermediary/{minecraft}": {
-      "maven": "net.fabricmc:intermediary:{minecraft}:v2",
-      "from": ["fabric"]
+    "fabric/intermediary/1.20.2": {
+      "maven": "net.fabricmc:intermediary:1.20.2:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:1779e468ccbd23b854bcd80576139e8dd568c5bd"
+    },
+    "fabric/intermediary/1.20.3": {
+      "maven": "net.fabricmc:intermediary:1.20.3:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:602420e5153b92dd5f52dfb8808395be5c524c93"
+    },
+    "fabric/intermediary/1.20.4": {
+      "maven": "net.fabricmc:intermediary:1.20.4:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:24eb81a03e2ec74bb966baffdbc0b45dc0df5e00"
+    },
+    "fabric/intermediary/1.20.5": {
+      "maven": "net.fabricmc:intermediary:1.20.5:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:25179ac7247d08c07eeb67809e90f6938c45a0bb"
+    },
+    "fabric/intermediary/1.20.6": {
+      "maven": "net.fabricmc:intermediary:1.20.6:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:1e11e491f988ef0327f2d7fcbb5ca27cef0c93ea"
+    },
+    "fabric/intermediary/1.21": {
+      "maven": "net.fabricmc:intermediary:1.21:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:0a7998a56cead9f3f43bb3bdded792427f3e2a4e"
+    },
+    "fabric/intermediary/1.21.1": {
+      "maven": "net.fabricmc:intermediary:1.21.1:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:9ce486577f40c5ed70b243b4a513bdf5dcf2cc7f"
+    },
+    "fabric/intermediary/1.21.2": {
+      "maven": "net.fabricmc:intermediary:1.21.2:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:222f069b8949eb679cfb12eba201a60487974577"
+    },
+    "fabric/intermediary/1.21.3": {
+      "maven": "net.fabricmc:intermediary:1.21.3:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:010a2f455a56665f2140a70342e6adffb6a289d1"
+    },
+    "fabric/intermediary/1.21.4": {
+      "maven": "net.fabricmc:intermediary:1.21.4:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:644745e4e54d7277cb9e89319d4c5a041ba1acf8"
+    },
+    "fabric/intermediary/1.21.5": {
+      "maven": "net.fabricmc:intermediary:1.21.5:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:8204b54acf51aacaf3bbaed2b1a49af1dc5ac95c"
+    },
+    "fabric/intermediary/1.21.6": {
+      "maven": "net.fabricmc:intermediary:1.21.6:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:22a0c6781ab72c159a997c70abbbe2bfe896147f"
+    },
+    "fabric/intermediary/1.21.7": {
+      "maven": "net.fabricmc:intermediary:1.21.7:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:1d164c1a9d57a89ad7ab26e110f6ea3c39ffb9c4"
+    },
+    "fabric/intermediary/1.21.8": {
+      "maven": "net.fabricmc:intermediary:1.21.8:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:72da29ed97d2b4357653359b884f42426846f31a"
+    },
+    "fabric/intermediary/1.21.10": {
+      "maven": "net.fabricmc:intermediary:1.21.10:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:e802e9d8590537ee8a2aea3de704a2dd6cdb19c7"
+    },
+    "fabric/intermediary/1.21.11": {
+      "maven": "net.fabricmc:intermediary:1.21.11:v2",
+      "from": ["fabric", "mirror"],
+      "digest": "sha1:016a84fabebbbfaf4950abe072f6d3653090430a"
     },
     "jdk-sources/{java}": {
       "urls": ["https://api.adoptium.net/v3/binary/latest/{java}/ga/linux/x64/sources/hotspot/normal/eclipse"]
