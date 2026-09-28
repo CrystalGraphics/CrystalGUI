@@ -100,7 +100,7 @@ All of them are knowable from `mcapi.py` before writing a line.
    table, and in `CGUI_INVARIANTS.md` if it is not a spelling.
 
 Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke` about a minute per node;
-`prodSmoke` about four minutes per 8 clients; a node made real for sources, minutes the first time.
+`prodSmoke` about two minutes per batch of 4 clients; a node made real for sources, minutes the first time.
 
 ## 1. Design the contract in `core`
 
@@ -200,8 +200,8 @@ return server.getPlayerList().isOp(player.getGameProfile());
    `forge:1.20.1` (legacyForge), `neoforge:1.20.4`, `fabric:1.20.1`, `neoforge:1.21.11`, plus
    `:runtime:mc:1710:serverSmoke` and `runtime/mc/legacy/server_smoke.py` for legacy.
 4. `./gradlew singleJar languageJar checkSingleJar checkLanguageJar`.
-5. **One** `prodSmoke` across the eras (8 at a time):
-   `-PcgTargets=1710,188forge,1122forge,1132forge,1152forge,1165forge,1144fabric,1171forge,1201forge,1201fabric,1204forge,1203neoforge,1204neoforge,12111forge,12111neoforge,12111fabric -PcgBatch=8`
+5. **One** `prodSmoke` across the eras (4 at a time, the default -- 8 crashed a workstation):
+   `-PcgTargets=1710,188forge,1122forge,1132forge,1152forge,1165forge,1144fabric,1171forge,1201forge,1201fabric,1204forge,1203neoforge,1204neoforge,12111forge,12111neoforge,12111fabric`
    — and open the captures. Forge ≥1.20.2 and NeoForge 1.20.2/1.20.3 have no dev run; prodSmoke is their
    only runtime check.
 6. A feature a smoke does not exercise (a command, an entity) needs its own probe or a manual run on

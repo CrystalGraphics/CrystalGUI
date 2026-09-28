@@ -257,7 +257,7 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     onlyTargets.set(
         (providers.gradleProperty("cgTargets").orNull ?: "")
             .split(',').map { it.trim() }.filter { it.isNotEmpty() })
-    // -PcgBatch=3 for every instance: far more clients than one machine runs at once.
+    // -PcgBatch=<n> clients at a time; the task defaults to 4. Eight at once crashed a workstation.
     providers.gradleProperty("cgBatch").orNull?.let { batchSize.set(it.toInt()) }
     // -PcgSmokeProps=crystalgui.autotest.complete=true,... switches a probe on for every client.
     extraProperties.set((providers.gradleProperty("cgSmokeProps").orNull ?: "")
