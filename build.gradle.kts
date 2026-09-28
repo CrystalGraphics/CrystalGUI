@@ -123,8 +123,9 @@ val prismInstances: List<PrismInstance> = run {
 }
 
 // The consumer plugins publish with the artifacts they name. @see consumer-plugin
-if (gradle.parent == null) tasks.named("publishToMavenLocal") {
-    dependsOn(gradle.includedBuild("consumer-plugin").task(":publishToMavenLocal"))
+if (gradle.parent == null) {
+    tasks.named("publishToMavenLocal") { dependsOn(gradle.includedBuild("consumer-plugin").task(":publishToMavenLocal")) }
+    tasks.named("publish") { dependsOn(gradle.includedBuild("consumer-plugin").task(":publish")) }
 }
 
 val deploySingleJars = tasks.register("deploySingleJars") {

@@ -4,6 +4,12 @@
 pluginManagement {
     // The build logic: the settings plugin below, the merge, the descriptors, the stub database.
     includeBuild("../../CrystalGraphics/singlejar-logic")
+    // This sample builds against the clone it sits in, so it takes that clone's version. A project of
+    // its own writes the release it wants: id("com.crystalgui") version "<version>".
+    // Read by hand: this block compiles before the script's imports exist.
+    val crystalgui = file("../../gradle.properties").readLines()
+        .first { it.startsWith("modVersion") }.substringAfter('=').trim()
+    plugins { id("com.crystalgui") version crystalgui }
     repositories {
         mavenLocal()            // com.crystalgui, after `./gradlew publishToMavenLocal` in CrystalGUI
         gradlePluginPortal()

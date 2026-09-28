@@ -7,8 +7,13 @@ plugins {
     `maven-publish`
 }
 
-fun modVersion(propertiesFile: String): String =
-    Properties().apply { file(propertiesFile).reader().use(::load) }.getProperty("modVersion")
+fun modVersion(propertiesFile: String): String = propertyIn(propertiesFile, "modVersion")
+
+fun propertyIn(propertiesFile: String, key: String): String =
+    Properties().apply { file(propertiesFile).reader().use(::load) }.getProperty(key)
+
+/** `<owner>/<repository>` on Cloudsmith, where both repositories publish. */
+val cloudsmithRepository = propertyIn("../gradle.properties", "cloudsmith.repository")
 
 group = "com.crystalgui"
 version = modVersion("../gradle.properties")
@@ -37,6 +42,7 @@ val generateVersions by tasks.registering(WriteProperties::class) {
     destinationFile.set(layout.buildDirectory.file("generated/versions/com/crystalgui/gradle/versions.properties"))
     property("crystalgui", project.version.toString())
     property("crystalgraphics", modVersion("../CrystalGraphics/gradle.properties"))
+    property("repository", "https://dl.cloudsmith.io/public/$cloudsmithRepository/maven/")
 }
 sourceSets.main {
     resources.srcDir(generateVersions.map { layout.buildDirectory.dir("generated/versions").get() })
@@ -55,6 +61,24 @@ gradlePlugin {
             implementationClass = "com.crystalgui.gradle.CrystalGuiSettingsPlugin"
             displayName = "CrystalGUI settings"
             description = "Builds CrystalGUI from a local checkout in place of the published artifacts."
+        }
+    }
+}
+
+// Where `./gradlew publish` uploads, as for every published module: Cloudsmith with CLOUDSMITH_USERNAME and
+// CLOUDSMITH_PASSWORD set, Maven local otherwise. @see cgbuildlogic.publishingRepository
+publishing {
+    repositories {
+        val username = providers.environmentVariable("CLOUDSMITH_USERNAME")
+        val password = providers.environmentVariable("CLOUDSMITH_PASSWORD")
+        if (!username.isPresent || !password.isPresent) mavenLocal()
+        else maven {
+            name = "Cloudsmith"
+            url = uri("https://maven.cloudsmith.io/$cloudsmithRepository/")
+            credentials {
+                this.username = username.get()
+                this.password = password.get()
+            }
         }
     }
 }

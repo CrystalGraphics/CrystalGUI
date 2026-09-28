@@ -2,7 +2,7 @@
 // so it compiles once and ships once, beside every loader's thin jar.
 plugins {
     `java-library`
-    id("com.crystalgui") version "1.0.0"     // CrystalGUI's API on compileOnly, and checkCrystalGuiApi
+    id("com.crystalgui")                      // CrystalGUI's API on compileOnly, and checkCrystalGuiApi
 }
 
 group = property("modGroup").toString()
