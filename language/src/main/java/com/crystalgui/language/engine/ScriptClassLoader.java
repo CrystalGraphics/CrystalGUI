@@ -99,7 +99,7 @@ public final class ScriptClassLoader extends ClassLoader {
     }
 
     /**
-     * Parent-first, and refused first of all.
+     * Its own classes from itself, anything else parent-first — and refused first of all.
      *
      * <p>The gate is <b>here rather than only in the ahead-of-time scan</b> because this is the one place
      * a late name is seen. {@code RefusedTypes} reads what a script's bytes name and can refuse the whole
@@ -118,6 +118,16 @@ public final class ScriptClassLoader extends ClassLoader {
      */
     @Override
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        // ITS OWN CLASSES FIRST, never asked of the parent: a snippet is in the default package, and the
+        // module loader of Forge 1.17's ModLauncher splits every name it is asked at the last '.' unguarded.
+        synchronized (getClassLoadingLock(name)) {
+            Class<?> own = findLoadedClass(name);
+            if (own == null && pending.containsKey(name)) own = findClass(name);
+            if (own != null) {
+                if (resolve) resolveClass(own);
+                return own;
+            }
+        }
         if (permitted != null && !pending.containsKey(name) && findLoadedClass(name) == null
                 && !INJECTED_RUNTIME.equals(name) && !LINKAGE_SURFACE.contains(name)
                 && !permitted.test(name)) {
