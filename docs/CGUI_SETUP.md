@@ -18,12 +18,15 @@ and bundles neither.
 
 ## Requirements
 
-- JDK 25 installed. **Gradle runs on it** when you build against a CrystalGUI checkout or on
-  singlejar-logic: `toolchainVersion=25` in `gradle/gradle-daemon-jvm.properties`. Your mod still compiles
-  for its own Minecraft's Java.
+- One version from Maven: your MDK's JDK, nothing more.
+- Against a CrystalGUI checkout, or many versions: JDK 25, and **Gradle runs on it** —
+  `toolchainVersion=25` in `gradle/gradle-daemon-jvm.properties`. Your mod still compiles for its own
+  Minecraft's Java.
 - Everything is published to one Maven, `https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/`.
   Your settings name it for the plugins; the plugin adds it for everything else, exclusive to the
   `com.crystalgui` and `com.crystalgraphics` groups.
+- The current release is **0.0.1**, the version every snippet here names; the badge on the README shows
+  the latest.
 - **An unreleased build**: from a clone of [CrystalGUI](https://github.com/CrystalGraphics/CrystalGUI)
   (`git clone --recursive`), `./gradlew publishToMavenLocal` and `./gradlew -p CrystalGraphics
   publishToMavenLocal`; then `crystalgui.mavenLocal = true` in your `gradle.properties` puts Maven local
@@ -40,8 +43,11 @@ and bundles neither.
 
 ## One version
 
+Start from your loader's usual MDK and add two things: the repository, and the `com.crystalgui` line.
+The toolchain lines are the versions this was verified on; keep your MDK's.
+
 ```kotlin
-// settings.gradle.kts
+// settings.gradle.kts -- beside the plugin repositories your MDK already names
 pluginManagement {
     repositories {
         maven("https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/")
@@ -49,33 +55,43 @@ pluginManagement {
     }
 }
 
-// build.gradle.kts
+// build.gradle.kts -- your toolchain and its own block (legacyForge {}, neoForge {}, loom) stay as they are
 plugins {
-    id("net.neoforged.moddev.legacyforge") version "2.0.141"   // your toolchain, unchanged
-    id("com.crystalgui") version "1.0.0"
+    id("net.neoforged.moddev.legacyforge") version "2.0.141"   // Forge 1.17-1.20.1
+    // id("net.neoforged.moddev") version "2.0.141"            // NeoForge
+    // id("fabric-loom") version "1.16.2"                      // Fabric
+    id("com.crystalgui") version "0.0.1"
 }
 crystalgui {
-    minecraft("1.20.1", "forge")   // forge, neoforge or fabric; forge covers 1.7.10 and 1.8-1.12.2 too
+    minecraft("1.20.1", "forge")   // or ("1.21.1", "neoforge"), ("1.20.1", "fabric"); forge covers 1.7.10 and 1.8-1.12.2 too
     language()                     // optional: the scripting mod on the dev run as well
     testing()                      // optional: the engine on testImplementation, runnable headless
 }
 ```
 
 The API lands on `compileOnly`; both mods land on your dev run through your toolchain's own remapping, so
-the run loads the jars players install. Your descriptor declares the dependency — the plugin writes none:
+the run loads the jars players install. Your descriptor declares the dependency — the plugin writes none.
+Add to its dependencies:
 
 ```toml
 # META-INF/mods.toml -- neoforge.mods.toml says type = "required" instead of mandatory
 [[dependencies.yourmod]]
 modId = "crystalgui"
 mandatory = true
-versionRange = "[1.0.0,)"
+versionRange = "[0.0.1,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.yourmod]]
+modId = "crystalgraphics"
+mandatory = true
+versionRange = "[0.0.1,)"
 ordering = "AFTER"
 side = "BOTH"
 ```
 
 ```json
-"depends": { "crystalgui": ">=1.0.0", "crystalgraphics": ">=1.0.0" }
+"depends": { "crystalgui": ">=0.0.1", "crystalgraphics": ">=0.0.1" }
 ```
 
 | Toolchain | Mods reach the run through | Verified |
@@ -101,7 +117,7 @@ your next run.
 
 ```kotlin
 // settings.gradle.kts
-plugins { id("com.crystalgui.settings") version "1.0.0" }
+plugins { id("com.crystalgui.settings") version "0.0.1" }
 crystalgui {
     minecraft("1.20.1", "forge")       // every project with a toolchain takes this target
     checkout("../CrystalGUI")          // -Pcrystalgui.checkout=<path> overrides it
@@ -115,7 +131,8 @@ plugins {
 }
 ```
 
-- Modern targets only; 1.7.10 and Forge 1.8–1.12.2 take CrystalGUI from Maven.
+- One modern target: 1.7.10 and Forge 1.8–1.12.2 take CrystalGUI from Maven, and a many-version project
+  from Maven local ([below](#against-an-unreleased-crystalgui)).
 - While in use, the checkout's `build/libs/crystalgui-*.jar` holds your target's variant alone; its own
   `singleJar` rebuilds the full jar.
 
@@ -140,7 +157,17 @@ runtime/mc/modern/
 
 ```kotlin
 // settings.gradle.kts
-pluginManagement { includeBuild("<path>/CrystalGraphics/singlejar-logic") }
+pluginManagement {
+    includeBuild("<path>/CrystalGraphics/singlejar-logic")   // a CrystalGraphics clone: the build logic is not published
+    plugins { id("com.crystalgui") version "0.0.1" }         // what each loader node applies
+    repositories {
+        maven("https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/")
+        gradlePluginPortal()
+        mavenCentral()
+        maven("https://maven.fabricmc.net/")
+        maven("https://maven.neoforged.net/releases")
+    }
+}
 plugins {
     id("dev.kikugie.stonecutter") version "0.9.8"
     id("com.crystalgraphics.singlejar")
@@ -155,6 +182,53 @@ singlejar {
 ```
 
 A version is a line there: its node, toolchain pins and stub come from singlejar-logic's catalog.
+
+### Starting from the sample
+
+The sample builds against the clone it sits in, so a copy of it points outside itself in three places and
+names itself everywhere else:
+
+| In | Change |
+|---|---|
+| `gradle.properties` | `modId`, `modGroup`, `modVersion`; delete `crystalgui.mavenLocal = true` to take the released CrystalGUI, keep it [against an unreleased one](#against-an-unreleased-crystalgui) |
+| `settings.gradle.kts` | `rootProject.name`; the whole `pluginManagement` block becomes the one above — the sample's reads its CrystalGUI version from `../../gradle.properties` and names only Maven local |
+| `runtime/mc/modern/loader.gradle.kts` | `crystalGraphicsVersion`, read from `../../CrystalGraphics/gradle.properties`, becomes `"0.0.1"` |
+| every file, sources and `META-INF/services` included | the package `com.example.fieldnotes` and the path `com/example/fieldnotes` — in `build.gradle.kts` they are the variant entries, `bootstrappers`, the bootstrapper classes each thin jar keeps, `shadePath` and the checks' expectations |
+
+### Against an unreleased CrystalGUI
+
+`checkout(...)` serves one target, so a many-version project takes CrystalGUI from Maven local. In the
+CrystalGUI clone:
+
+```bash
+./gradlew publishToMavenLocal                  # CrystalGUI, and the com.crystalgui plugin
+./gradlew -p CrystalGraphics publishToMavenLocal
+```
+
+Then in your project:
+
+```properties
+# gradle.properties
+crystalgui.mavenLocal = true
+```
+
+```kotlin
+// settings.gradle.kts
+pluginManagement {
+    includeBuild("<path>/CrystalGUI/CrystalGraphics/singlejar-logic")
+    plugins { id("com.crystalgui") version "0.0.1" }   // the clone's modVersion
+    repositories {
+        mavenLocal()                                   // first
+        maven("https://dl.cloudsmith.io/public/crystalgraphics/crystalgraphics/maven/")
+        gradlePluginPortal()
+        mavenCentral()
+        maven("https://maven.fabricmc.net/")
+        maven("https://maven.neoforged.net/releases")
+    }
+}
+```
+
+An edit to CrystalGUI reaches your build when it is published again.
 
 ```bash
 ./gradlew checkSingle            # build/libs/<mod>-<version>.jar, checked; no Minecraft toolchain needed

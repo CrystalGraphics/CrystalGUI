@@ -11,9 +11,9 @@ the identifier its Minecraft side built.
 ## Build it
 
 ```bash
-# once, in CrystalGUI and in CrystalGraphics: what the core and the bootstrappers compile against
-./gradlew :core:publishToMavenLocal && ./gradlew -p consumer-plugin publishToMavenLocal
-./gradlew -p CrystalGraphics :runtime:mc:shared:publishToMavenLocal
+# once, from the CrystalGUI clone: what the core, the bootstrappers and the dev runs take
+./gradlew publishToMavenLocal
+./gradlew -p CrystalGraphics publishToMavenLocal
 
 cd samples/fieldnotes
 ./gradlew checkSingle          # build/libs/fieldnotes-1.0.0.jar, checked
