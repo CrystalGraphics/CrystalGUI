@@ -1,8 +1,12 @@
 package com.crystalgui.gradle;
 
+import java.io.File;
+
+import org.gradle.api.GradleException;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
+import org.gradle.api.initialization.IncludedBuild;
 import org.gradle.api.plugins.ExtraPropertiesExtension;
 import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskProvider;
@@ -62,5 +66,23 @@ public class CrystalGuiPlugin implements Plugin<Project> {
 
         ModRoute route = ModRoute.install(project, extension::mods);
         project.afterEvaluate(p -> extension.validate(route));
+
+        if (project == project.getRootProject() && Boolean.TRUE.equals(extra.getProperties().get(Checkout.HARNESS))) {
+            registerHarness(project, new File((String) extra.get(Checkout.DIR)));
+        }
+    }
+
+    /** {@code runHarness}: the checkout's GL harness, after this project's classes it may construct. */
+    private static void registerHarness(Project project, File checkout) {
+        project.getTasks().register("runHarness", task -> {
+            task.setGroup("crystalgui");
+            task.setDescription("Runs CrystalGUI's GL harness on this build's assets and classes.");
+            task.dependsOn("classes");
+            IncludedBuild build = project.getGradle().getIncludedBuilds().stream()
+                .filter(b -> b.getProjectDir().toPath().normalize().equals(checkout.toPath().normalize()))
+                .findFirst()
+                .orElseThrow(() -> new GradleException("crystalgui: no included build at " + checkout));
+            task.dependsOn(build.task(":gl-debug-harness:runHarness"));
+        });
     }
 }

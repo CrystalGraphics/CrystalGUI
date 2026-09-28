@@ -4,10 +4,12 @@ import java.io.File;
 
 import javax.inject.Inject;
 
+import org.gradle.api.Action;
 import org.gradle.api.GradleException;
 import org.gradle.api.JavaVersion;
 import org.gradle.api.InvalidUserDataException;
 import org.gradle.api.initialization.Settings;
+import org.gradle.api.model.ObjectFactory;
 
 /**
  * The settings-side {@code crystalgui} block: build CrystalGUI from a checkout instead of Maven, for a
@@ -33,17 +35,25 @@ import org.gradle.api.initialization.Settings;
  *   <li>The path is relative to the settings directory, and the checkout must be cloned with
  *       {@code --recursive}.</li>
  *   <li>Modern targets only: 1.7.10 and Forge 1.8–1.12.2 build from Maven.</li>
+ *   <li>{@code -Pcrystalgui.checkout=<path>} builds from another checkout without editing this file.</li>
+ *   <li>{@link #harness} runs CrystalGUI's GL harness on this build's assets; see {@link HarnessSpec}.</li>
  * </ul>
  */
 public abstract class CrystalGuiSettingsExtension {
 
+    /** The Gradle property that overrides {@link #checkout}'s path. */
+    static final String OVERRIDE = "crystalgui.checkout";
+
     private final Settings settings;
+    private final HarnessSpec harness;
+    private boolean harnessWanted;
     private Target target;
     private File checkout;
 
     @Inject
-    public CrystalGuiSettingsExtension(Settings settings) {
+    public CrystalGuiSettingsExtension(Settings settings, ObjectFactory objects) {
         this.settings = settings;
+        this.harness = objects.newInstance(HarnessSpec.class);
     }
 
     /** The target every project with a toolchain builds for; its own {@code minecraft} may repeat it. */
@@ -53,16 +63,26 @@ public abstract class CrystalGuiSettingsExtension {
             .set(CrystalGuiPlugin.SETTINGS_TARGET, target.encode());
     }
 
-    /** Builds CrystalGUI and CrystalGraphics from the checkout at {@code path}. */
+    /** Builds CrystalGUI and CrystalGraphics from the checkout at {@code path}, or at {@code -Pcrystalgui.checkout}. */
     public void checkout(Object path) {
-        File dir = new File(path.toString());
-        checkout = (dir.isAbsolute() ? dir : new File(settings.getSettingsDir(), path.toString())).toPath()
-            .normalize().toFile();
+        String chosen = settings.getProviders().gradleProperty(OVERRIDE).getOrElse(path.toString());
+        File dir = new File(chosen);
+        checkout = (dir.isAbsolute() ? dir : new File(settings.getSettingsDir(), chosen)).toPath().normalize().toFile();
+    }
+
+    /** Adds {@code runHarness}: the checkout's GL harness on this build's assets and classes. */
+    public void harness(Action<? super HarnessSpec> configure) {
+        harnessWanted = true;
+        configure.execute(harness);
     }
 
     /** Includes the checkout, once settings are evaluated so the declarations can come in any order. */
     void include() {
         if (checkout == null) {
+            if (harnessWanted) {
+                throw new InvalidUserDataException("crystalgui: harness { } needs checkout(...): the harness is"
+                    + " built from CrystalGUI's sources, and is not published");
+            }
             return;
         }
         if (target == null) {
@@ -85,8 +105,17 @@ public abstract class CrystalGuiSettingsExtension {
         if (Integer.parseInt(JavaVersion.current().getMajorVersion()) < required) {
             throw new GradleException("crystalgui: a checkout runs CrystalGUI's own build logic, which needs"
                 + " Gradle on Java " + required + "; this build runs on " + JavaVersion.current() + ". Pin the"
-                + " daemon: ./gradlew updateDaemonJvm --jvm-version=" + required);
+                + " daemon with one line in gradle/gradle-daemon-jvm.properties: toolchainVersion=" + required
+                + " (updateDaemonJvm cannot run while this check fails)");
         }
-        Checkout.include(settings, checkout, target);
+        if (harnessWanted) {
+            if (harness.getAssetRoots().isEmpty()) {
+                harness.getAssetRoots().from(new File(settings.getSettingsDir(), "src/main/resources"));
+            }
+            if (harness.getClasses().isEmpty()) {
+                harness.getClasses().from(new File(settings.getSettingsDir(), "build/classes/java/main"));
+            }
+        }
+        Checkout.include(settings, checkout, target, harnessWanted ? harness : null);
     }
 }

@@ -1,5 +1,6 @@
 package com.crystalgui.gradle;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -12,6 +13,7 @@ import org.gradle.api.Project;
 import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ModuleDependency;
 import org.gradle.api.tasks.JavaExec;
+import org.gradle.api.tasks.SourceSetContainer;
 import org.gradle.api.tasks.TaskProvider;
 
 /**
@@ -47,6 +49,9 @@ import org.gradle.api.tasks.TaskProvider;
  *       RetroFuturaGradle. Declaring {@code minecraft} without one fails the build and says so.</li>
  *   <li>Every {@code run*} task first checks that both jars have a variant for the target, and names the
  *       versions they do run on when not.</li>
+ *   <li>Every {@code run*} task reads assets from this project's resource directories ahead of the jars
+ *       (and from a checkout's, with {@code com.crystalgui.settings}), so a stylesheet edit shows on F3+T.
+ *       A run that sets {@code crystalgraphics.resourceOverrideDirs} itself keeps its own.</li>
  *   <li>With {@code com.crystalgui.settings}, {@code minecraft} may be declared there instead; declaring
  *       two different targets fails. Request this plugin with no version then: settings already loaded
  *       it, and Gradle refuses a second, versioned request.</li>
@@ -55,6 +60,9 @@ import org.gradle.api.tasks.TaskProvider;
  * </ul>
  */
 public abstract class CrystalGuiExtension {
+
+    /** CrystalGraphics' resource loader tries these directories before the classpath. */
+    static final String RESOURCE_OVERRIDE = "crystalgraphics.resourceOverrideDirs";
 
     private final Project project;
     private Target target;
@@ -147,10 +155,33 @@ public abstract class CrystalGuiExtension {
                 task.getTarget().set(target.encode());
                 task.getReport().set(project.getLayout().getBuildDirectory().file("crystalgui/target.txt"));
             });
+        String overrides = resourceRoots();
         project.getTasks().withType(JavaExec.class).matching(t -> t.getName().startsWith("run"))
-            .configureEach(t -> t.dependsOn(check));
+            .configureEach(t -> {
+                t.dependsOn(check);
+                if (!t.getSystemProperties().containsKey(RESOURCE_OVERRIDE)) {
+                    t.systemProperty(RESOURCE_OVERRIDE, overrides);
+                }
+            });
         project.getPluginManager().withPlugin("base", p ->
             project.getTasks().named("check").configure(t -> t.dependsOn(check)));
+    }
+
+    /**
+     * Asset roots read ahead of the jars' on a run, so an edit shows on the next resource reload (F3+T):
+     * this project's resource directories, then a checkout's two. First found wins, so the mod's own
+     * override of an engine asset is the one being edited.
+     */
+    private String resourceRoots() {
+        List<File> roots = new ArrayList<>(project.getExtensions().getByType(SourceSetContainer.class)
+            .getByName("main").getResources().getSrcDirs());
+        Object checkout = project.getGradle().getExtensions().getExtraProperties().getProperties().get(Checkout.DIR);
+        if (checkout != null) {
+            roots.add(new File((String) checkout, "core/src/main/resources"));
+            roots.add(new File((String) checkout, "CrystalGraphics/core/src/main/resources"));
+        }
+        return roots.stream().filter(File::isDirectory).map(File::getAbsolutePath)
+            .collect(Collectors.joining(File.pathSeparator));
     }
 
     /**
