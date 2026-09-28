@@ -52,6 +52,13 @@ apply(from = rootProject.file("gradle/local-settings.gradle.kts").toURI())
 // and fails on the game. That is a convention, policed in review.
 // :runtime:mc:1710 is left to GTNH's convention, which already compiles with 25.
 val compilerJdk = providers.gradleProperty("dep.jdk.compiler").get().toInt()
+
+// CrystalGraphics' version, from its own gradle.properties: what a published module's metadata names.
+// Inside this build the composite substitutes CrystalGraphics whatever version is written.
+extra["crystalgraphicsVersion"] = Properties()
+    .apply { file("CrystalGraphics/gradle.properties").reader().use(::load) }
+    .getProperty("modVersion")
+
 subprojects {
     if (path == ":runtime:mc:1710") return@subprojects
     plugins.withType<JavaBasePlugin> {
