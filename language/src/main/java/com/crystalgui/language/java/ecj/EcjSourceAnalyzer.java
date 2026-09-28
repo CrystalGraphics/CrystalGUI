@@ -1570,10 +1570,20 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
         /** A guard on the interface graph, not a budget: a cycle here would append for ever. */
         private static final int MAX_INTERFACE_WALK = 512;
 
+        /**
+         * A member javac named for itself -- {@code access$000}, {@code lambda$run$0}, {@code this$0},
+         * {@code $VALUES}. Caught by NAME as well as flag: an obfuscated Minecraft jar keeps the names
+         * through its mappings and not always the synthetic bit, so Forge 1.14.4 offered {@code access$000}.
+         */
+        private static boolean isCompilerNamed(String name) {
+            return name.startsWith("access$") || name.startsWith("lambda$") || name.startsWith("this$")
+                    || name.startsWith("val$") || name.startsWith("$");
+        }
+
         private static void collectMembers(ITypeBinding owner, ITypeBinding asking,
                                            java.util.Set<String> seen, List<SymbolInfo> into) {
             for (IMethodBinding method : owner.getDeclaredMethods()) {
-                if (method.isConstructor() || method.isSynthetic()) continue;
+                if (method.isConstructor() || method.isSynthetic() || isCompilerNamed(method.getName())) continue;
                 // A BRIDGE HAS THE ERASED SIGNATURE and exists only so an override links. JDT does not
                 // expose isBridge() on every band, so the synthetic flag plus the modifier bit is the
                 // portable test -- 0x0040 is ACC_BRIDGE, which is also ACC_VOLATILE for a field and
@@ -1594,7 +1604,7 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
                         modifiersOf(method), null, parameterTypesOf(method)));
             }
             for (IVariableBinding field : owner.getDeclaredFields()) {
-                if (field.isSynthetic()) continue;
+                if (field.isSynthetic() || isCompilerNamed(field.getName())) continue;
                 if (!isVisible(field, owner, asking)) continue;
                 if (!seen.add("#" + field.getName())) continue;
                 // STATIC AND FINAL IS A CONSTANT, which this list said and the semantic-token pass a
