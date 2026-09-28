@@ -12,7 +12,7 @@ import net.minecraft.client.Minecraft;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * The MC 1.20.x client half of {@link MachineExample}: a key.
+ * The modern client half of {@link MachineExample}: a key.
  *
  * <p>How this era spells a key binding and where its press is polled. The request itself, and what a
  * refusal means, are the example's.</p>

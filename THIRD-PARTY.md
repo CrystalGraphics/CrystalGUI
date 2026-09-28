@@ -75,7 +75,7 @@ each need a version chosen against the band's class-file ceiling.
 0.152 is from **December 2021** and is the last published release; the author resumed work in March 2026
 with nothing published yet. Its ceiling sits above everything this feature will actually be handed:
 
-- **A mod jar cannot be newer than the JVM that loads it** — 1.7.10 is Java 8 bytecode, 1.20.x is 17.
+- **A mod jar cannot be newer than the JVM that loads it** — up to 1.16 and on 1.7.10 that is Java 8, 1.17–1.20.4 Java 17, from 1.20.5 Java 21.
 - **The JDK never reaches the decompiler at all**, because it comes from `src.zip`.
 
 What it does not cover is Java 21's record patterns and anything after, which would only appear if a
@@ -160,7 +160,10 @@ client fetches, from the addresses in [`download/locations.json`](download/locat
 | Minecraft | Data | Publisher |
 |---|---|---|
 | 1.7.10 | MCP `stable_12`: `methods.csv` and `fields.csv` | MinecraftForge's FML repository, at a pinned commit |
-| 1.20.x | Mojang's `client.txt`, joined with MCPConfig's `joined.tsrg` on Forge or intermediary on Fabric | Mojang; MinecraftForge; FabricMC |
+| Forge 1.8–1.14.3 | MCP stable per version (`mcp_stable-<n>-<mc>.zip`), with MCPConfig's SRG from 1.13.2 | MinecraftForge |
+| Forge 1.14.4–1.20.4 | Mojang's `client.txt`, joined with MCPConfig's `joined.tsrg` | Mojang; MinecraftForge |
+| Fabric 1.14.4+ | Mojang's `client.txt`, joined with intermediary | Mojang; FabricMC |
+| Forge 1.20.6+, NeoForge | nothing: they run Mojang's names | — |
 
 **None of it is in this repository and none of it is in any jar we build.** A client fetches what it
 needs on first use into its own game directory (`crystalgui/cache/mappings/<mc>/<channel>-<version>`)
@@ -181,10 +184,10 @@ Three properties follow from it, and all three are enforced in code rather than 
   having happened.
 - **The cache is the user's, not ours.** It lives under their game directory; deleting it re-fetches.
 
-**Every file is checked against a digest wherever one can be known.** The MCP CSVs are pinned to git's
-own blob hash, and 1.20.1's three files to the SHA-1 their publishers serve. Any other 1.20.x version
-takes `client.txt`'s digest from Mojang's version manifest, and its MCPConfig or intermediary archive is
-checked by parsing.
+**Every file is checked against a digest.** The 1.7.10 CSVs are pinned to git's own blob hash, and every
+other version's files to the SHA-1 their publishers serve — Mojang's version JSON for `client.txt`, the
+`.sha1` beside each Maven file. `checkDownloadLocations` fails a loader node whose own version is not
+pinned, and `verifyScriptingCoverage` every release a node claims.
 
 ## OpenJDK sources (fetched, derived on the user's machine, never redistributed)
 

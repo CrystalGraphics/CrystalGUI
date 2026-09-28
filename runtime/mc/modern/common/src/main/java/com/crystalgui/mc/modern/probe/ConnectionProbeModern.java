@@ -12,7 +12,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * The MC 1.20.x half of {@link ConnectionProbe}: six answers and two verbs.
+ * The modern half of {@link ConnectionProbe}: six answers and two verbs.
  *
  * <p>1.20.x had none of these checks — the six probes they came from were 1.7.10's alone, so the
  * session handshake, tree and state deltas, fan-out and the workspace had never been exercised over a

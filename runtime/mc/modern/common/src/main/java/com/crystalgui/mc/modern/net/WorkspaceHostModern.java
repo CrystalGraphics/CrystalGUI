@@ -25,7 +25,7 @@ import net.minecraft.world.level.storage.LevelResource;
 *///?}
 
 /**
- * The server's workspace on MC 1.20.x: where it lives, who may write to it, and who is asking.
+ * The server's workspace on the modern tree: where it lives, who may write to it, and who is asking.
  *
  * <p>Everything else -- per-peer bindings, the change and presence fan-out, the poll cadence, the seed
  * -- is {@link WorkspaceHost} in {@code core/}.</p>

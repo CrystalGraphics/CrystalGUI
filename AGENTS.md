@@ -3,7 +3,7 @@
 **Project type**: Platform-agnostic retained-mode UI engine, shaped like a lightweight web browser
 (DOM + CSS cascade + Taffy layout + immediate-mode painting).
 **Authored in**: Java 25, with a Java 8 copy of every engine module for consumers below it · **Layout**: Taffy · **Backend**: CrystalGraphics
-**Targets**: MC 1.7.10 (Forge/LWJGL2) · MC 1.20.1/1.20.4 (Forge/NeoForge/Fabric, LWJGL3) — *all four loaders are in the build and running; see [Module layout](#module-layout--what-actually-compiles)*
+**Ships**: one jar for Forge 1.7.10–1.21.11, NeoForge 1.20.2–1.21.11 and Fabric 1.14.4–1.21.11, plus an optional language jar — see [Build and run](#build-and-run)
 
 ---
 
@@ -56,31 +56,115 @@ can hold ten thousand nodes.
 📄 **[CrystalShader Manifesto](CrystalGraphics/docs/CRYSTALSHADER_MANIFESTO.md)** — the rendering
 philosophy, which outlives the milestone.
 
-# TO BUILD
+# Build and run
 
-📄 **[docs/CGUI_BUILD.md](docs/CGUI_BUILD.md)** — the build, verification and adding a Minecraft version;
-**[docs/CGUI_CROSS_VERSION.md](docs/CGUI_CROSS_VERSION.md)** — adding code or a platform service that must
-run on every version (also the `/cross-version` skill, `.claude/skills/cross-version/`).
+CrystalGUI is an engine (`core/`, `language/`, `taffy/`) plus a host per Minecraft era under
+`runtime/mc/`, shipped as two jars. **CrystalGraphics is the parent and owns the shared build
+mechanism** — the node tree, the toolchains, stub mode and the merge — so its docs come into most build
+questions too.
+
+| Read | When |
+|---|---|
+| **[`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md)** | **First, for anything about the build**: layout, commands and flags, what each check can see, releasing, and adding a Minecraft version |
+| [`CrystalGraphics/docs/BUILD.md`](CrystalGraphics/docs/BUILD.md) | The node tree, the toolchain per node, the pin catalog, stub mode — and step one of adding a Minecraft version |
+| [`docs/CGUI_CROSS_VERSION.md`](docs/CGUI_CROSS_VERSION.md) · `/cross-version` skill | Code or a platform service that must run on every version |
+| [`CrystalGraphics/singlejar-logic/README.md`](CrystalGraphics/singlejar-logic/README.md) | How one jar serves every loader. Before touching `singlejar-logic/`, relocation, remapping or the class-major ceiling |
+| [`CrystalGraphics/singlejar-logic/STUBS.md`](CrystalGraphics/singlejar-logic/STUBS.md) | Before adding a node, changing its pins, or touching a branch script's toolchain |
+| [`runtime/mc/modern/README.md`](runtime/mc/modern/README.md) | Before touching a modern node; each branch has its own `AGENTS.md` |
+| [`download/README.md`](download/README.md) | Every address the runtime downloads from, and pinning a new version's script names |
+| [`docs/CGUI_SETUP.md`](docs/CGUI_SETUP.md) | Setting up a *consumer* mod on CrystalGUI |
+| `gl-debug-harness/AGENTS.md` | Writing a harness scene |
+
+## The engine
 
 ```bash
-./gradlew :taffy:test             # the VENDORED layout engine's own regression tests
-./gradlew :core:compileJava       # the engine — enforces the MC/Forge/LWJGL import guard
-./gradlew :core:test              # unit tests, CrystalGraphics ON the classpath
-./gradlew :core:headlessTest      # server-side tests, CrystalGraphics CORE deliberately absent
-./gradlew :core:check             # both test tasks
-./gradlew :runtime:mc:1710:compileJava     # the 1.7.10 loader — IS in the build, NOT in :core:check, and
-                                  # therefore the one thing a deletion from core/ can break silently
+./gradlew :taffy:test                            # the vendored layout engine's own regression tests
+./gradlew :core:compileJava                      # enforces the Minecraft/Forge/LWJGL import guard
+./gradlew :core:test --tests "<Class>"           # CrystalGraphics ON the classpath; name classes --
+                                                 # a `com.crystalgui.ui.*` wildcard never reports
+./gradlew :core:headlessTest                     # server-side tests, CrystalGraphics core deliberately absent
+./gradlew :runtime:mc:1710:compileJava           # not in :core:check -- what a deletion from core/ breaks silently
 ```
 
-> ~~There is **no in-game Minecraft integration reachable from this build.**~~ **False since Phase 4,
-> corrected 2026-08-21.** This paragraph told three sessions in a row that only `core/` and the harness
-> could be run end to end, and ended with *"do not claim otherwise"* — so it read as a rule rather than
-> as a fact that had gone stale. `runtime/mc/1710` is in `settings.gradle.kts` and carries the whole networking
-> integration: `CgUiScreen`, `CgUiConnections`, `CgUiWorkspaceHost`, `Mc1710NetworkChannel` and four
-> probes. **Every server-side defect found this week was found by running it**, and none of them was
-> reachable from `core/` or the harness — see [Running Minecraft](#running-minecraft-the-1710-loader-is-in-the-build).
+## Every version, and the shipped jars
 
-## A loader defines wiring and owns no logic
+```bash
+./gradlew checkAllTargets                                       # every node compiles -- before every commit
+./gradlew singleJar languageJar checkSingleJar checkLanguageJar # build/libs/
+./gradlew deploySingleJars                                      # both, plus CrystalGraphics', into every Prism instance
+```
+
+| Jar | Carries |
+|---|---|
+| `crystalgui-<version>.jar` (~13 MB) | the engine, the workbench and every loader host. **Requires `crystalgraphics-<version>.jar` beside it** |
+| `crystalgui-language-<version>.jar` (~50 MB) | the optional `crystalgui_language` mod: tree-sitter grammars and natives, ECJ and Rhino per Java band, `language/`. The host jar never names it |
+
+## Running Minecraft
+
+A loader module is the only thing that sees what crosses the loader seam — networking, the workspace
+over a wire, platform services, class loading on a server. `headlessTest` reaches no loader and the
+harness is a client by design.
+
+```bash
+./gradlew :runtime:mc:modern:<branch>:<version>:serverSmoke -PcgAcceptEula   # boot a server, assert, stop
+./gradlew :runtime:mc:1710:serverSmoke
+./gradlew :runtime:mc:modern:<branch>:<version>:runClient                    # a dev client
+./gradlew :runtime:mc:1710:runClient -PcgProbe -PcgJoin=localhost:25565      # the connection probe, two processes
+./gradlew :runtime:mc:modern:<branch>:<version>:connectionProbe              # the same, driven to a verdict file
+./gradlew prodSmoke                                                          # THE SWEEP: the shipped jars on 24 real clients
+./gradlew prodSmoke -PcgTargets=<label>,<label>                             # just these
+```
+
+Every flag, which nodes have a dev run, and how to read a run: `docs/CGUI_BUILD.md` § *Commands* and
+§ *Verification*.
+
+## Rules the build will not tell you
+
+1. **CrystalGraphics first.** A version, a node or a new platform capability is added there, then here.
+2. **Nodes compile from `CrystalGraphics/singlejar-logic/stubs.zip` by default.** Code changes never touch
+   it; a node added or re-pinned means regenerating it. A run task makes its node real.
+3. **Abstract modules are Java 25** (`core`, `language`, `taffy`, and CrystalGraphics' `core`, `platform`,
+   `runtime/lwjgl/*`), each with a Java 8 copy that consumers below 25 resolve. Never lower one to suit a
+   consumer — and javac does not check the API: a Java 9+ call fails on a Java 8 instance unless jvmdg
+   stubs it.
+4. **The host jar may not name the language stack**, and a source set enforces it: `:language` is on each
+   host's `lang` source set only. Where the host needs the other jar, it publishes a seam it cannot name
+   (`CgUiAutoTest.onFrame`).
+5. **`serverSmoke` first** for anything that is a runtime property — a client-only class constructed on a
+   server, a service built eagerly. It also asserts no client-only class was *loaded*.
+6. **Only `prodSmoke` sees packaging** — relocation, remapping, downgrading, merged descriptors — since a
+   dev run reads source-set directories. **Read every new target's capture**: a capture is not a paint,
+   and `desktop painted: false` fails the run.
+7. **A failure on an installed client is reproduced in that node's dev run**, never by redeploying through
+   `prodSmoke` (ten minutes a cycle against two). `prodSmoke` confirms once, at the end.
+8. **A wide check is the sweep** — one client per Minecraft major, four at a time, oldest first — never
+   every instance (`-PcgTargets=all`, over a hundred clients).
+9. **A probe that never ran is not a pass.** The driven tasks delete their verdict file first and require
+   it after; its first line is the verdict.
+10. **Switching the active Stonecutter node rewrites `src/` in place.** Switch back before committing.
+
+## Supported versions
+
+A node per (loader, Minecraft version); a node claims the versions it was booted on (`variant.minecraft`
+in the pin catalog).
+
+| Loader | Versions | Not supported, and why |
+|---|---|---|
+| Forge | 1.7.10 · 1.8.8–1.12.2 (legacy tree) · 1.13.2–1.21.11 | 1.8 (no MixinBooter boots it) · 1.21 (Forge 51 has no HUD event) · never published: 1.14, 1.14.1, 1.16, 1.17, 1.20.5, 1.21.2 |
+| NeoForge | 1.20.2–1.21.11 | nothing for 1.20.1; 1.21.2, 1.21.6, 1.21.7 and 1.21.9 run its only builds, betas |
+| Fabric | 1.14.4–1.21.11 | 1.14–1.14.3, 1.16, 1.16.1, 1.21.9 — their only Fabric APIs lack a module the hosts use |
+
+- **Java 8** runs Forge 1.13–1.16, legacy Forge and 1.7.10, dev runs included (`uniminedDevRun` swaps in
+  the Java 8 copies). Below 1.17 the nodes are built by Loom and Unimined, above by ModDevGradle.
+- **Below 1.19.3 Minecraft ships no JOML**, and those instances take CrystalGraphics' `crystalgraphics-joml`
+  companion (`prismInstanceJoml` in `local.properties`).
+- **Forge 1.13.2 and 1.14.2–1.14.3 compile against Mojang names carried back from 1.14.4**, since Mojang
+  published none; their scripts resolve through MCP's.
+- The per-loader node lists: `runtime/mc/modern/{forge,neoforge,fabric}/AGENTS.md`.
+
+---
+
+# Loader modules: wiring, never logic
 
 **This is the rule for everything under `runtime/mc/`.** A loader module says how *this* Minecraft
 spells something; it decides nothing. The seams it answers, all in `core/`:
@@ -127,158 +211,12 @@ drifted across two loaders by the time anyone compared them.
 > would catch it in the wild — but `checkSingleJar`'s `requiredEntries` names the same classes, so it
 > fails first and on a laptop. Keep those two lists in step.
 
-## Running Minecraft: the 1.7.10 loader IS in the build
+---
 
-**For anything that crosses the loader seam — networking, the workspace over a wire, platform services,
-class loading on a server — a LOADER MODULE is the only thing that can see it.** `headlessTest` asserts
-by absence and reaches no loader; the GL harness is a client with a context by design.
-
-> **`runtime/mc/modern` answers the same seam on three loaders and is also in the build** — it was `runtime/mc/1710` alone
-> until 2026-09-05. Its own `serverSmoke` found one defect per loader, none of them alike and none
-> reachable from `core/`, so the sentence above is now about a *kind* of module rather than about one.
-
-```bash
-./gradlew :runtime:mc:1710:runClient                       # the dev client
-./gradlew :runtime:mc:1710:runServer                       # a dedicated server
-./gradlew :runtime:mc:1710:serverSmoke                     # boot a server, assert the stack came up, stop. ~48s
-./gradlew :runtime:mc:1710:runObfClient                    # SRG names — production, and the only run that is
-./gradlew :runtime:mc:1710:runClient -PcgJoin=localhost:25565   # join a server: TWO PROCESSES, ONE SOCKET
-./gradlew :runtime:mc:1710:runClient -PcgProbe             # THE connection probe: session, files, fan-out, loop
-./gradlew :runtime:mc:1710:runClient -PcgProbe -PcgJoin=localhost:25565   # ...the same checks over a real socket
-./gradlew :runtime:mc:1710:runClient -PcgProbe -PcgProbeRole=watcher      # ...and on a SECOND client, watcher first
-./gradlew :runtime:mc:1710:connectionProbe                 # the same probe, DRIVEN: loads a world, checks,
-                                                           # writes a verdict file, quits. 3-min timeout
-```
-
-```bash
-**1.20.x/1.21.x** — a node per (loader, Minecraft version): forge:1.13.2 | forge:1.14.3 | forge:1.14.4 | forge:1.15.2 | forge:1.16.5 | forge:1.17.1 | forge:1.18.2 | forge:1.19.2 | forge:1.19.3 | forge:1.19.4 | forge:1.20.1 | forge:1.20.2 | forge:1.20.4 | forge:1.20.6 | forge:1.21.1 | forge:1.21.3 | forge:1.21.4 | forge:1.21.5 | forge:1.21.6 | forge:1.21.8 | forge:1.21.10 | forge:1.21.11 | neoforge:1.20.2 | neoforge:1.20.3 | neoforge:1.20.4 | neoforge:1.20.6 | neoforge:1.21.1 | neoforge:1.21.3 | neoforge:1.21.4 | neoforge:1.21.5 | neoforge:1.21.6 | neoforge:1.21.8 | neoforge:1.21.10 | neoforge:1.21.11 | fabric:1.14.4 | fabric:1.15.2 | fabric:1.16.5 | fabric:1.17.1 | fabric:1.18.2 | fabric:1.19.2 | fabric:1.19.3 | fabric:1.19.4 | fabric:1.20.1 | fabric:1.20.2 | fabric:1.20.4 | fabric:1.20.6 | fabric:1.21.1 | fabric:1.21.3 | fabric:1.21.4 | fabric:1.21.5 | fabric:1.21.6 | fabric:1.21.8 | fabric:1.21.10 | fabric:1.21.11 — every release from 1.14.4 to 1.21.11 on Forge and Fabric (1.15.x and 1.16.x on one node each), 1.13.2 and 1.14.2-1.14.3 on Forge -- on Mojang names carried back from 1.14.4, since Mojang published none -- and from 1.20.2 on NeoForge, except Forge 1.21 (refused: Forge 51 has no HUD event), Fabric 1.16, 1.16.1 and 1.21.9 (refused: their only Fabric APIs lack a module the hosts use), Fabric 1.14-1.14.3 (the same, and 1.14.4's Fabric API fails on them) and the Forge versions never published (1.14, 1.14.1, 1.16, 1.17, 1.20.5, 1.21.2). Below 1.17 the nodes are built by Loom and Unimined rather than ModDevGradle, and Forge 1.13-1.16 instances run Java 8, as do their dev runs: `uniminedDevRun` swaps every class root of ours for its Java 8 copy. Below 1.19.3 Minecraft ships no JOML, and those instances take CrystalGraphics' `crystalgraphics-joml` companion (`prismInstanceJoml`). NeoForge 1.21.2, 1.21.6, 1.21.7 and 1.21.9 run their only builds, betas; the NeoForge and Forge 1.21.10 nodes also claim 1.21.9. A node claims the versions it was booted on; its `variant.minecraft` says which.
-./gradlew :runtime:mc:modern:<loader>:<version>:runClient
-./gradlew :runtime:mc:modern:<loader>:<version>:runServer
-./gradlew :runtime:mc:modern:<loader>:<version>:serverSmoke   # boots, asserts, stops. Needs -PcgAcceptEula
-                                                  # once per run dir: the build detects Mojang's EULA
-                                                  # and refuses to accept it for you.
-./gradlew :runtime:mc:modern:<loader>:<version>:connectionProbe   # THE connection probe, driven. fabric
-                                                  # needs -PcgNoLanguage: its dev client cannot load
-                                                  # the language mod (the shipped jar is unaffected).
-./gradlew checkAllTargets                         # every node compiled -- run it before committing
-```
-
-> **A probe that never ran must not read as a pass.** Both driven tasks delete their verdict file
-> first and require it after, so a run that dies before it starts is a failure with a message rather
-> than BUILD SUCCESSFUL — which is what a `serverSmoke` port clash once produced. The verdict is line
-> one of the file; the rest is the checklist, and its first `--` is where the run stopped.
-
-### Stub mode: every node without every Minecraft
-
-📄 **[CrystalGraphics/singlejar-logic/STUBS.md](CrystalGraphics/singlejar-logic/STUBS.md)** — read it
-before adding a node, changing a node's pins, or touching a branch script's toolchain.
-
-**By default** every node compiles against
-`CrystalGraphics/singlejar-logic/stubs.zip` — one 19 MB database of every node's Minecraft, loader and
-library API, shared by both repos — instead of setting up its real toolchain, and produces byte-identical
-jars. A node becomes real when one of its run tasks is requested, so `runClient` and `serverSmoke` work
-exactly as before, and the active Stonecutter version is real during an IDE sync, so the IDE has the game.
-
-| You | Then |
-|---|---|
-| change code in any node | nothing: the database holds the whole API |
-| add a node, or change its pins | regenerate `stubs.zip` and commit it with the node — STUBS.md § *Regenerating*. Until then that node builds real |
-| touch a branch script | ask `stubMode` before applying a toolchain; rename thin jars through `registerThinRename` |
-
-**One compiler.** Every module compiles with JDK 25 (`dep.jdk.compiler`, one rule in the root build); its
-source/target or `--release` still decides its bytecode, and its own toolchain is only a launcher. A
-module on source/target gets no API check from javac, so calling a method newer than its target is a
-review rule, not a compile error.
-
-**Abstract modules are Java 25, and a consumer below that gets a Java 8 copy.** `core`, `language` and
-`taffy` here, and CrystalGraphics' `core`, `platform` and `runtime/lwjgl/*`, each call
-`cgbuildlogic.abstractModule` — which also builds `downgradedJar` and publishes it as a second variant
-at `TargetJvmVersion` 8. Gradle picks by what a consumer requests: a node, the launchwrapper module and
-the harness get the copy, a test worker at 25 gets the original. **Never lower an abstract module's Java
-to suit a consumer**; the consumer resolves the copy instead.
-
-| Consumer | How it reaches the copy |
-|---|---|
-| Any Gradle configuration that requests a Java — compile, Loom's `runtimeClasspath` | automatically |
-| ModDevGradle's `additionalRuntimeClasspath` and `*LegacyClasspath` | `requestJvm`, in `cg-modern-loader` — they request nothing, and a request of nothing gets the Java 25 classes |
-| ModDevGradle's `mods {}` and `MOD_CLASSES` | `devRunSourceSet` / `devRunClasses` — a source set reads no variant |
-| CrystalGraphics' fabric dev jar and the fat per-loader jars | `from(zipTree(<module>.downgradedJar))` |
-| The shipped merges | never: they take `jar` and downgrade the whole tree once |
-
-```bash
-./gradlew singleJar languageJar                             # the shipped jars, no Minecraft toolchain
-./gradlew singleJar languageJar -PcgStubs=false             # every node real, as before stubs
-./gradlew :runtime:mc:modern:<branch>:<version>:checkStubEquivalence   # real vs stub, byte for byte
-```
-
-### The single jar, and driving four real clients
-
-📄 **[CrystalGraphics/singlejar-logic/README.md](CrystalGraphics/singlejar-logic/README.md)** — the
-build itself: why one jar is possible, the pipeline, the traps it exists to prevent, and what a NEW
-project does to ship this way. Read it before touching anything under `singlejar-logic/`.
-
-**One artifact installs on all four loaders.** `./gradlew singleJar` merges four *thin* jars — each
-loader's own classes plus `runtime/mc/modern/common` relocated under `com.crystalgui.mc.<loader>.common`, so three
-remapped copies can share the jar without sharing a name — with `core`, `taffy` and `runtime/mc/shared` added
-once. A class file is inert until something defines it, and every loader's scanner reads with ASM
-rather than defining, so the variants it does not want cost it nothing.
-
-**The host jar carries no third-party library at all.** Taffy is vendored and relocated; fastutil — 19.65 MB of what used to be a 31.20 MB jar, for seven collection types — was reimplemented in `dev.vfyjxf.taffy.collection` on 2026-09-10. MC 1.20.x supplies fastutil itself and 1.7.10 does not, which is the whole reason it was ever shaded. `checkSingleJar` forbids the `it/unimi/dsi/fastutil/` prefix so a transitive dependency cannot put it back.
-
-**Two mods ship from this build, not one.** `crystalgui_language` is the language stack — six tree-sitter
-grammars with their natives, ECJ and Rhino per Java band, `language/` itself — and it is **optional**:
-34 MB that only somebody who writes a script uses. The same pipeline, registered a second time.
-
-| | Task | Size | Carries |
-|---|---|---|---|
-| `crystalgui-<version>.jar` | `singleJar` · `checkSingle` | 8.4 MB | the engine, the workbench, the four loader hosts |
-| `crystalgui-language-<version>.jar` | `languageJar` · `checkLanguage` | 47.8 MB | grammars, analysis, scripting, three engine bands |
-
-```bash
-./gradlew singleJar languageJar   # build both: build/libs/
-./gradlew deploySingleJars        # both, plus CrystalGraphics', into every instance in local.properties
-./gradlew deploySingleJars -PcgNoLanguage   # the host jar alone — the degraded path, worth running
-./gradlew prodSmoke               # THE SWEEP: one client per Minecraft major (24), 4 at a time, photograph
-                                  # each, fail if one did not. Never every instance for a routine check
-./gradlew prodSmoke -PcgNoDeploy -PcgTargets=1201forge   # drive what is installed; one target
-```
-
-> **The host jar may not name the language stack, and a source set is what enforces it.** `:language`
-> is on the `lang` source sets' `compileOnly` and not on `main`'s — in `runtime/mc/1710`, `runtime/mc/modern/common` and
-> each 1.20.x loader — so a language import in a host class is a compile error rather than something a
-> guard notices afterwards. The language mod installs itself from its own entry point; the host only
-> reports which tier it has, by reading `core`'s `LanguageRegistry.contributors()`. Where the host needs
-> the other jar to run something, it publishes a seam it cannot name — `CgUiAutoTest.onFrame`.
->
-> **Cross-jar `ServiceLoader` resolves on all four loaders**, ModLauncher included; measured on
-> installed clients, not assumed. Not on ModLauncher 5 (Forge 1.15), which lists no resource inside a
-> mod file — so discovery goes through `core.provider.Providers`, and that host names the copies itself.
-
-**`prodSmoke` is the only thing that can see a packaging defect.** A dev run resolves classes from
-source-set *directories*, so nothing in one can observe relocation, remapping, downgrading or a merged
-manifest — the four failures this build is most likely to have. It arms each instance's `instance.cfg`,
-launches all four, and each client loads a world, opens the editor, photographs it and quits. Captures
-land in `build/prodSmoke/<target>-early.png` and `-late.png`; ~75s for all four with `-PcgNoDeploy`.
-
-> **A capture is not a paint.** It proves a frame was read back, not that this engine drew it: with no
-> live GL context a screen's `render` returns at once, and outside a level Minecraft never clears the
-> colour buffer, so the frame still holds the previous screen. The autotest logs `desktop painted:
-> true|false` beside every capture and `prodSmoke` fails on a stated `false` — a photograph of the main
-> menu once passed every other check.
-
-> **`serverSmoke` is the one to reach for first.** Three fatal defects — CrystalGraphics building its
-> platform services eagerly, `CgPlatform.register` demanding a GL backend, a client-only guard one level
-> too high — shipped undetected because every one is a *runtime* property ("a client-only class is
-> constructed on a server") that no test and no import scan can see. Booting a server found all three in
-> one run. It also asserts that no client-only class was **loaded**, which is the contract
-> `CommonProxy`'s javadoc has always stated and nothing checked.
-
-## Render testing — the GL debug harness
+# Render testing — the GL debug harness
 
 For anything visual, **prefer the harness over Minecraft**: it boots in seconds, needs no Minecraft
-context, and gives you a real GL surface. *(This used to say Minecraft "isn't wired up", which stopped
-being true — `runClient` works. The advice survives the correction: the harness is faster and isolates
-rendering from everything else. What it cannot see is anything that crosses the loader seam.)*
+context, and gives you a real GL surface. What it cannot see is anything that crosses the loader seam.
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"   # start here
@@ -323,36 +261,35 @@ Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; r
 | Add or change a widget | [Widgets](#widgets) | `docs/CGUI_WIDGETS.md` |
 | Add a panel, a file type or a command to a workbench | — | `docs/CGUI_WORKBENCH_EXTENSIONS.md` |
 | Add a CSS property | [Adding a CSS property](#adding-a-css-property) | `docs/CGUI_STYLE_RENDER_PIPELINE.md` |
-| Change how something paints | [Render stack](#stack-4-render--immediate-mode) | `docs/CGUI_STYLE_RENDER_PIPELINE.md` §5–§8 |
-| Work on layout / Taffy | [Style stack](#taffybridge--the-layout-seam) | — |
-| Work on events, focus, hover, drag | [Input stack](#stack-3-events-input-focus) | — |
+| Change how something paints | [Render stack](#stack-5-render--immediate-mode) | `docs/CGUI_STYLE_RENDER_PIPELINE.md` §5–§8 |
+| Work on layout / Taffy | [Style stack](#boxstyle--the-layout-seam) | — |
+| Work on events, focus, hover, drag | [Input stack](#stack-4-the-services--uiservice) | — |
 | Serialize a tree / send UI over a wire | [Server layer](#server-layer--serialization--net) | `docs/CGUI_SERVER_AND_SERIALIZATION.md` |
 | Understand a frame | [Frame lifecycle](#frame-lifecycle) | — |
 | Debug "my selector doesn't match" | [Load-bearing invariants](#load-bearing-invariants) | — |
-| Debug "my layout is wrong by default" | [Taffy default divergences](#taffy-defaults-diverge-from-css-deliberately) | — |
+| Debug "my layout is wrong by default" | [Taffy default divergences](#both-engines-defaults-and-they-diverge-from-css-deliberately) | — |
 | Add a rendering backend capability | [CrystalGraphics boundary](#crystalgraphics-ownership-boundary) | `CrystalGraphics/AGENTS.md` |
 
 ---
 
 # Module layout — what actually compiles
 
-`settings.gradle.kts` includes `taffy`, `core`, `language` and `gl-debug-harness` — of which `taffy` and
+`settings.gradle.kts` includes the engine modules, the loader trees and `gl-debug-harness`. `taffy` and
 `gl-debug-harness` are **git submodules** that are ordinary Gradle subprojects (no settings file of their
-own), while CrystalGraphics is a submodule that is a composite `includeBuild`. CrystalGraphics is an
-`includeBuild` composite with three `dependencySubstitution` entries, which is how the
-`com.crystalgraphics:core:<version>` coordinates resolve to local source — the version read from
-`CrystalGraphics/gradle.properties`, since it is also what the published metadata names.
+own); CrystalGraphics is a submodule included as a composite `includeBuild`, whose
+`dependencySubstitution` entries resolve `com.crystalgraphics:*:<version>` — and each modern node's
+common — to local source (`gradle/module_integration/composite.settings.gradle.kts`).
 
 | Module | In build? | State |
 |---|---|---|
 | `core/` | ✅ | The engine. Java 25, an abstract module (above). Everything below lives here. |
-| `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and ECJ's ~13MB off a dedicated server. **Since J8 it ships as its OWN MOD, `crystalgui_language`**, and the rule now reaches the loader hosts too: `:language` is on their `lang` source sets and not on `main`, so no host class can name it. Its 1.7.10 and 1.20.x hosts are `runtime/mc/1710/src/lang` and `runtime/mc/modern/common/src/lang`, plus one entry class per 1.20.x loader. `.grammar` (six tree-sitter grammars), `.engine` (band selection, the ONE shared loader per band — `EngineHost` — the language-neutral `Analysis` answer and the `AnalysedLanguageServices` attachment every engine extends), `.java` (everything Java, split by what a class is FOR — `.ecj` the adapters, `.classpath` what a script compiles against, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog over `.fix.catalog`/`.fix.ast`/`.fix.edit`, `.exec` the `ScriptHost` runtime), `.js` (everything JavaScript, split by WHICH LOADER defines a class — `.host` may name `language.run`/`language.java` and never Rhino, `.rhino` is the reverse and holds `.rhino.resolve`/`.rhino.fix`/`.rhino.exec`), `.map` (the readable↔runtime boundary, on ASM), `.run` (the **engine-neutral** Run shell: `ScriptRuntime` SPI + `ScriptRuntimes` registry and `ScriptPolicy` at the root — which lives there because three of its four consumers are not JavaScript — over `.exec` (capture, stop, cache), `.console` (the transcript, UI-free) and `.view` (the only one that may import `com.crystalgui.ui`). `RunShellIsEngineNeutralTest` forbids the whole tree naming `.java`, `.js`, ECJ or Rhino, and still needs no change after the split because it matches by path PREFIX). `.resolve` is reserved. *(Was `syntax-treesitter/` until M4.)* |
-| `taffy/` | ✅ | **The layout engine, VENDORED.** Git submodule ([`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), branch `master`) — so `git clone --recursive`, like the other two. A fork of the published sources of `dev.vfyjxf:taffy:1.1.4` (MIT), carrying our own fixes to its measure path — see `taffy/MODIFICATIONS.md`, which is the statement of changes MIT requires, and `plan/engine-rewrite.md` D3. The package stays `dev.vfyjxf.taffy` because `runtime/mc/1710` relocates it when shipping, so 165 call sites needed no edit and a stock copy in another mod cannot win a classloader race. **Depends on nothing** since 2026-09-10: the seven fastutil types it used are reimplemented in `dev.vfyjxf.taffy.collection`, which took the merged jar from 31.20 MB to 8.44 — fastutil was 63% of it. `MODIFICATIONS.md` §2 has the two behaviours that are silent when wrong. |
-| `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`). 17 CrystalGUI scenes. The only way to run the UI. |
+| `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and ECJ's ~13MB off a dedicated server. **Since J8 it ships as its OWN MOD, `crystalgui_language`**, and the rule now reaches the loader hosts too: `:language` is on their `lang` source sets and not on `main`, so no host class can name it. Its hosts are the `lang` source sets of `runtime/mc/1710`, the legacy tree and the modern tree (`common`, plus one entry class per loader). `.grammar` (six tree-sitter grammars), `.engine` (band selection, the ONE shared loader per band — `EngineHost` — the language-neutral `Analysis` answer and the `AnalysedLanguageServices` attachment every engine extends), `.java` (everything Java, split by what a class is FOR — `.ecj` the adapters, `.classpath` what a script compiles against, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog over `.fix.catalog`/`.fix.ast`/`.fix.edit`, `.exec` the `ScriptHost` runtime), `.js` (everything JavaScript, split by WHICH LOADER defines a class — `.host` may name `language.run`/`language.java` and never Rhino, `.rhino` is the reverse and holds `.rhino.resolve`/`.rhino.fix`/`.rhino.exec`), `.map` (the readable↔runtime boundary, on ASM), `.run` (the **engine-neutral** Run shell: `ScriptRuntime` SPI + `ScriptRuntimes` registry and `ScriptPolicy` at the root — which lives there because three of its four consumers are not JavaScript — over `.exec` (capture, stop, cache), `.console` (the transcript, UI-free) and `.view` (the only one that may import `com.crystalgui.ui`). `RunShellIsEngineNeutralTest` forbids the whole tree naming `.java`, `.js`, ECJ or Rhino, and still needs no change after the split because it matches by path PREFIX). `.resolve` is reserved. *(Was `syntax-treesitter/` until M4.)* |
+| `taffy/` | ✅ | **The layout engine, VENDORED.** Git submodule ([`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), branch `master`) — so `git clone --recursive`, like the other two. A fork of the published sources of `dev.vfyjxf:taffy:1.1.4` (MIT), carrying our own fixes to its measure path — see `taffy/MODIFICATIONS.md`, which is the statement of changes MIT requires, and `plan/engine-rewrite.md` D3. The package stays `dev.vfyjxf.taffy` because the shipped jar relocates it, so 165 call sites needed no edit and a stock copy in another mod cannot win a classloader race. **Depends on nothing** since 2026-09-10: the seven fastutil types it used are reimplemented in `dev.vfyjxf.taffy.collection`, which took the merged jar from 31.20 MB to 8.44 — fastutil was 63% of it. `MODIFICATIONS.md` §2 has the two behaviours that are silent when wrong. |
+| `gl-debug-harness/` | ✅ | Git submodule (branch `crystalgui`), Java 21. The fastest way to run the UI — [Render testing](#render-testing--the-gl-debug-harness). |
 | `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
 | `runtime/mc/1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :runtime:mc:1710:compileJava`). The real 1.7.10 host, and since W3 a HOST rather than a product — and since `plan_host` a host that decides nothing: `CgUiScreen` is Minecraft's screen lifecycle mapped onto `HostSession`'s, `Host1710` answers `HostServices`, `CgUiHud` answers `HostSession.PaintHost`, `CgUiInput` converts LWJGL2's origin and notch size and leaves the conventions to `HostPointer`, and `com.crystalgui.mc.v1710.probe` holds every probe adapter, of which `CgUiServerSmoke` is five facts over `probe.ServerSmoke`. `Mc1710Workspace` and `CgUiWindowMount` were **deleted**; anything still naming them is describing history. **It stays a module of its own on RetroFuturaGradle, deliberately** (legacy D3): it is aligned with the legacy host rather than folded into it — what the two share is in `runtime/mc/launchwrapper` and `core`, and the rest is how each version spells it. **Verified by `serverSmoke` and by running the client**; a green compile was never the claim. |
-| `runtime/mc/modern/` | ✅ | **In the build and running.** `common` holds the host — `CgUiScreen`, `HostModern`, `CgUiInput`, `CgUiHud`, `Connections`, `WorkspaceHostModern` and `LifecycleCrystalGUI`, which is **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only and forward into it. Every one of those is wiring: what opens, when it is raised, which arm paints and who may write are `core`'s — see the invariant, and `plan/crystalgui/platform-loader-cleanup.md`. **A Stonecutter tree since J11.1a** — one source tree, a node per Minecraft version, `:runtime:mc:modern:<branch>:<version>`, each node's pins from singlejar-logic's catalog through `singlejar { targets { } }` in settings; **read `runtime/mc/modern/README.md` before touching it**, and run `./gradlew checkAllTargets` before committing. CrystalGraphics has the same tree and owns its logic (`singlejar-logic`'s `ModernTree` and `ModernConventions`); every node here builds on CrystalGraphics' node of the same version. `common` is versioned too: **`neoforge` is MC 1.20.4** (NeoForge published no 20.1.x series) and compiles against `common:1.20.4`, built through NeoForm, while forge and fabric take `common:1.20.1`. All three boot a dedicated server and pass `./gradlew :runtime:mc:modern:<loader>:<version>:serverSmoke`; the desktop scene has been run on 1.20.1. Each loader also builds a **thin** jar — its own classes plus `common` relocated under `com.crystalgui.mc.<loader>.common` — which is what the root merge consumes; the fat per-loader jars still build on request and are on nobody's `assemble`. |
-| `runtime/mc/shared/` | ✅ | **Java 8, merged once and never relocated**, for anything every loader variant must share without naming Minecraft. It holds one class: `CrystalGuiForgeMixins`, the plugin that gates the Forge 1.21.6 node's HUD mixin (a node mixin's plugin must load on every loader, 1.7.10 included). `LoaderProbe`, `CrashVariant` and (since J11.0) the whole **variant selector** are CrystalGraphics': CrystalGUI requires CrystalGraphics on every loader, so a second copy bought nothing. The hosts register under their own heading, `CrashVariant.label(NAME)`, and `checkSingleJar` forbids `com/crystalgraphics/` so a copy cannot creep back in as a split package. `LoaderProbe` (which loader this process is) and `CrashVariant` (the crash-report line that says which variant ran) lived here and are **CrystalGraphics' now**: CrystalGUI requires CrystalGraphics on every loader, so a second copy bought nothing. The hosts register under their own heading, `CrashVariant.label(NAME)`, and `checkSingleJar` forbids `com/crystalgraphics/` so a copy cannot creep back in as a split package. |
+| `runtime/mc/modern/` | ✅ | **Forge 1.13.2+, NeoForge 1.20.2+, Fabric 1.14.4+**, a Stonecutter tree — one source tree, a node per Minecraft version, `:runtime:mc:modern:<branch>:<version>`; **read `runtime/mc/modern/README.md` before touching it**. `common` holds the host — `CgUiScreen`, `HostModern`, `CgUiInput`, `CgUiHud`, `Connections`, `WorkspaceHostModern` and `LifecycleCrystalGUI`, **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only. Every one of those is wiring: what opens, when it is raised, which arm paints and who may write are `core`'s. Each loader node compiles against the `common` node of its own version, and against CrystalGraphics' node of that version, and builds a **thin** jar — its own classes plus `common` relocated under `com.crystalgui.mc.<loader>.common` — which is what the root merge consumes. |
+| `runtime/mc/shared/` | ✅ | **Java 8, merged once and never relocated**, for anything every loader variant must share without naming Minecraft. It holds one class: `CrystalGuiForgeMixins`, the plugin that gates the Forge 1.21.6 node's HUD mixin (a node mixin's plugin must load on every loader, 1.7.10 included). `LoaderProbe`, `CrashVariant` and (since J11.0) the whole **variant selector** are CrystalGraphics': CrystalGUI requires CrystalGraphics on every loader, so a second copy bought nothing. The hosts register under their own heading, `CrashVariant.label(NAME)`, and `checkSingleJar` forbids `com/crystalgraphics/` so a copy cannot creep back in as a split package. |
 | `runtime/mc/legacy/` | ✅ | **Forge 1.8–1.12.2**, a second Stonecutter tree: one branch, `forge`, a node per SRG plateau (`1.8.9`, `1.10.2`, `1.12.2`), MCP names through Unimined, each shipping in `com.crystalgui.mc.v<digits>`. The host is 1.7.10's ported: `CrystalGUILegacy` (both sides) and `CrystalGUILegacyClient` stand in for the `@Mod` and its proxies, and `Game`/`client.ClientGame` spell every member Minecraft renamed between plateaus, so nothing else carries a directive. **No mixin**: Forge 1.8 added the cancellable screen input events 1.7.10 lacked. It claims every Forge version from 1.8.8 to 1.12.2 — not 1.8, which no MixinBooter boots — and prodSmoke has drawn on all eleven (`188forge` … `1122forge` in `local.properties`). The language host is `src/lang`'s `com.crystalgui.mc.legacy.lang`: MCP stable names per Minecraft version, fetched through `forge/mcp-stable/{version}`. The player needs MixinBooter. **There is no legacy dev `serverSmoke`**: `runtime/mc/legacy/server_smoke.py` boots the shipped jars on a real installed Forge server per version instead, which is what caught the production-only defects dev servers hide (client classes absent, a `jar:` code source, FML trapping every exit). `CrystalGraphics/singlejar-logic/README.md` § *the legacy tree*. |
 | `runtime/mc/launchwrapper/` | ✅ | **What the two LaunchWrapper hosts share** — 1.7.10 and Forge 1.8–1.12.2 — where the code would otherwise be one copy per host: `LaunchWrapperBytes` (live and pre-transform class bytes, and Notch → SRG names, through LaunchWrapper's own renamer) and `LaunchWrapperLanguageProbe`. The language half only, so far: on both hosts' `lang` compile path and merged once into the language jar. Java 8 out, compiled by a 21 javac so it can read `:language`. |
 | `runtime/mc/modern-shared/` | ✅ | **`launchwrapper`'s modern counterpart**: what every ModLauncher and Knot node shares and names no Minecraft and no per-node class — `MinecraftBytes`, `MojangMappings`, `LanguageProbeModern`, `LanguageLifecycle` — merged once into the language jar instead of once per node. Package `com.crystalgui.mc.shared.modern`, clear of `com.crystalgui.mc.modern`, which the node relocation matches as a string prefix. A class whose only per-node reference is a service takes it as an argument (`LanguageLifecycle.bootstrapClient(ScriptServiceModern::forThisClient)`). Java 8 out. |
@@ -1372,7 +1309,7 @@ each carrying its own absent-value):
 
 > **The clipboard is on `CgInputService`, not a service of its own.** It is not conceptually input, but it
 > is reached the same way and needed by exactly the code that handles keys — two methods do not earn a
-> registration slot. Both default to a no-op pair.
+> registration slot. Both are abstract, like everything in the bundle.
 
 **No method in the BUNDLE has a default, and `CgSoundService` ships no `NOOP` constant.** A default is
 an answer chosen for someone who never saw the question: a new platform compiles cleanly while silently

@@ -16,7 +16,7 @@ every version: [`CGUI_CROSS_VERSION.md`](CGUI_CROSS_VERSION.md).
 | `build/libs/crystalgui-language-<v>.jar` | `languageJar` · `checkLanguageJar` | optional second mod (`crystalgui_language`): grammars, ECJ, Rhino. The host jar never names it |
 
 Both install unchanged on every supported loader and version (the list, and the refused versions with
-their reasons, are in `AGENTS.md` § *Running Minecraft*).
+their reasons, are in `AGENTS.md` § *Supported versions*).
 
 ## Requirements
 
@@ -231,7 +231,8 @@ its first and last in the sweep.
    whose own version is not pinned, and `verifyScriptingCoverage` (online, run by the Release workflow)
    every release in its range. A version Mojang published nothing for takes MCP's names from the tables
    in `ScriptServiceModern.mcpStable` and `ScriptServiceLegacy.MCP_STABLE`, which both checks read.
-7. **`AGENTS.md`**: the node list under *Running Minecraft*, and a refused version's reason if one is refused.
+7. **Docs**: the range in `AGENTS.md` § *Supported versions* (and a refused version's reason), and the
+   node list in that loader branch's `AGENTS.md` — in both repos.
 
 Nothing else is edited: descriptors, variant tables, thin-jar lists and `requiredEntries` follow the tree.
 A new **loader** or **entry class** is different: entry-class names are strings in

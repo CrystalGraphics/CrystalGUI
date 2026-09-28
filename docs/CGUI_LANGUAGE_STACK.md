@@ -110,15 +110,17 @@ supplies the platform classes**, by design, because tier 2 was expected to infer
 
 ## 5. What each host actually supplies
 
-| | plain JVM (harness, tests) | mc1710 | mc1201 |
+| | plain JVM (harness, tests) | 1.7.10, Forge 1.8–1.12.2 | 1.13+ (measured on 1.20.1) |
 |---|---|---|---|
 | Classpath route that fires | `java.class.path` | `getSources()` | `java.class.path` |
 | Platform classes | ECJ infers | `rt.jar` (Java 8) or inference | ECJ infers |
-| `ScriptService` | `NONE` | `ScriptService1710` (live bytes, mappings) | `ScriptService` (`cacheRoot()` only) |
-| Live bytes (tier 1) | none | LaunchWrapper | **none — `ByteSource.NONE`** |
-| Compliance | 1.8 | 8 | **21** |
+| `ScriptService` | `NONE` | `ScriptService1710` / legacy's (live bytes, mappings) | `ScriptServiceModern` (live bytes, mappings, namespace probe) |
+| Live bytes (tier 1) | none | LaunchWrapper (`runtime/mc/launchwrapper`) | the loader that will run the class (`MinecraftBytes`) |
+| Compliance | 1.8 | 8 | the running JVM's band (**21** on the measured client) |
 
-Two of those rows carry the whole difference in behaviour between the hosts, and §6 is why.
+The compliance row is what separates the hosts: from compliance 9 ECJ resolves module-aware, which is
+where §6 bites. The modern column's service answered `cacheRoot()` alone when §6 was found; it has
+supplied live bytes since.
 
 ### Measured, 2026-09-08
 
@@ -128,7 +130,7 @@ shipped jar.
 
 ```
 plain JVM : level=1.8 classpath=0   entries; jrt-fs=true; java.lang.Object=RESOLVED
-mc1201    : level=21  classpath=125 entries; jrt-fs=true; java.lang.Object=RESOLVED
+1.20.1    : level=21  classpath=125 entries; jrt-fs=true; java.lang.Object=RESOLVED
             classpath routes: urls=0 reflective=0 sysprop=125 modulelayer=0 javalib=0
 ```
 
@@ -157,9 +159,9 @@ referenced from required .class files`, while the classpath behind it was intact
 on the delegate answered `RESOLVED`.
 
 Every other host hides it. The harness, every test and a dedicated server register no service, so `live`
-is false and resolution goes straight to the delegate. mc1710 registers a real one but compiles at band 8,
+is false and resolution goes straight to the delegate. 1.7.10 registers a real one but compiles at band 8,
 where ECJ never enters module mode. **Only a modern band plus a registered platform reaches it**, which
-1.20.x was the first host to be.
+1.20.1 was the first host to be.
 
 Two rules came out of it, and they are different rules:
 
@@ -182,12 +184,12 @@ the same file went from sixteen errors to zero.
 
 **When this layer misbehaves, reach for that flag first.** "Live" and "file-based" agree nearly
 everywhere, so the one question worth asking early is which of the two is answering. It is forwarded by
-the 1.20.x dev runs; `ClientProbe` prints the analysed file's diagnostics as text, so the answer does
+the modern dev runs; `ClientProbe` prints the analysed file's diagnostics as text, so the answer does
 not have to be read off a screenshot.
 
 ---
 
-## 7. Mappings: on 1.20.x every mapping is a JOIN
+## 7. Mappings: on the modern tree every mapping is a JOIN
 
 A script is authored in ONE namespace — the readable one, which is Mojang's official names — and
 `MappingSet` translates at the boundary: in, so the compiler is shown readable members; out, so compiled

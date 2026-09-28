@@ -1,54 +1,28 @@
 # runtime/mc/modern/neoforge — Agent Knowledge Base
 
-## Target Versions
+## Target versions
 
-**MC 1.20.4 / NeoForge 20.4.x** — despite the `runtime/mc/modern/` directory name.
-NeoForge published no stable 1.20.1 series; 20.4.x is the earliest, and the directory name is
-kept so the three loaders sit together.
+**MC 1.20.2–1.21.11 / NeoForge**, a node per `versions/<version>`: 1.20.2, 1.20.3, 1.20.4, 1.20.6 (also
+1.20.5), 1.21.1 (also 1.21), 1.21.3 (also 1.21.2), 1.21.4, 1.21.5, 1.21.6, 1.21.8 (also 1.21.7), 1.21.10
+(also 1.21.9) and 1.21.11. NeoForge published nothing for 1.20.1; 1.21.2, 1.21.6, 1.21.7 and 1.21.9 run
+its only builds, betas.
 
 ## The loader is registration only
 
-One `@Mod` class. Its `Events` inner class registers every listener on `NeoForge.EVENT_BUS`
-from the constructor, and its `Network` inner class is the payload-based transport.
+`NeoForgeBootstrap` is the one `@Mod` class for every node, and constructs the running version's
+`CrystalGUINeoForge` (a `VariantEntry`). Its `Events` inner class registers every listener on
+`NeoForge.EVENT_BUS` by hand, and its `Network` inner class is the payload-based transport.
+`LanguageNeoForgeBootstrap` (`src/lang`) is the language mod's own `@Mod`.
 
 The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
 mod and owns them. Everything this loader forwards to lives in the common branch's `LifecycleCrystalGUI`.
 
-## Minecraft Source Location
+## Toolchain, sources and checks
 
-Decompiled, Parchment-mapped sources are extracted into two subdirectories:
-
-| Path | Contents |
-|---|---|
-| `versions/1.20.4/build/mc-src/java/` | NeoForge + Mojang Java sources, Parchment-mapped |
-| `versions/1.20.4/build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) |
-
-Gitignored, not committed. Generate them with:
+1.20.2 and 1.20.3 are built from parts through NeoForm and have no dev run; from 1.20.4 it is
+ModDevGradle. Pins: `CrystalGraphics/docs/BUILD.md` § *Nodes and toolchains*.
 
 ```bash
-./gradlew :runtime:mc:modern:neoforge:1.20.4:extractMcSources
-# or all three loader modules at once:
-./gradlew extractAllMcSources
+./gradlew :runtime:mc:modern:neoforge:<version>:extractMcSources              # into versions/<version>/build/mc-src/
+./gradlew :runtime:mc:modern:neoforge:<version>:serverSmoke -PcgAcceptEula    # 1.20.4 onward
 ```
-
-Expect several minutes on the first run.
-
-Commonly referenced locations under `versions/1.20.4/build/mc-src/java/`:
-
-- `net/minecraft/client/Minecraft.java` — main game class
-- `net/minecraft/client/renderer/` — rendering pipeline
-- `net/minecraft/resources/` — resource location / pack system
-- `net/minecraft/world/` — world/level logic
-
-## Build
-
-```bash
-./gradlew :runtime:mc:modern:neoforge:1.20.4:compileJava
-./gradlew :runtime:mc:modern:neoforge:1.20.4:shadowJar
-./gradlew :runtime:mc:modern:neoforge:1.20.4:serverSmoke -PcgAcceptEula   # boots a dedicated server, asserts, stops
-```
-
-## Plugin
-
-Uses `net.neoforged.moddev` (ModDevGradle). Version pins are per node, in
-singlejar-logic's pin catalog (`catalog/modern/<branch>/<version>.properties`) (`mc.version`, `neoforge.version`, `parchment.*`, `asm`).

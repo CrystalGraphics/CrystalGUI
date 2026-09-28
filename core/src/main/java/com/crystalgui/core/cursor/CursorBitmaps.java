@@ -56,7 +56,7 @@ public final class CursorBitmaps {
     // ── The keyword table ───────────────────────────────────────────────────
     //
     // THE SINGLE COPY. Every platform adapter reads it through artFor, so a cursor added to Cursor and
-    // given a row here reaches MC 1.7.10, MC 1.20.x and the harness with none of them touched. Each art
+    // given a row here reaches every Minecraft host and the harness with none of them touched. Each art
     // is one shared instance, which is what lets an adapter cache one native object per PICTURE.
 
     private static final CursorArt HORIZONTAL_ARROW = CursorArt.centred("horizontal-arrow", CursorBitmaps::horizontalDoubleArrow);
