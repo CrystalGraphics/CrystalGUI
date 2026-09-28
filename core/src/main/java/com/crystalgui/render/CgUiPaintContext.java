@@ -21,6 +21,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
+import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
@@ -971,6 +972,14 @@ public final class CgUiPaintContext {
         paintedY0 = Float.MAX_VALUE;
         paintedX1 = -Float.MAX_VALUE;
         paintedY1 = -Float.MAX_VALUE;
+    }
+
+    /**
+     * The coverage correction every label is drawn with. A retained layer keeps the text it already holds until
+     * its subtree repaints.
+     */
+    public void textGamma(CgTextGamma gamma) {
+        textRenderer.gamma(gamma);
     }
 
     public CgTextRenderer text() {
