@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -859,7 +861,9 @@ public final class TypeIndex {
         // Forge classes -- and never net.minecraft.client.Minecraft, so nothing could offer the import
         // either. @see ScriptService#runtimeClassName
         String internalName = path.substring(0, path.length() - ".class".length());
-        String binary = CgPlatform.get(ScriptServices.SERVICE).runtimeClassName(internalName).replace('/', '.');
+        ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
+        String binary = platform.runtimeClassName(internalName).replace('/', '.');
+        if (otherNode(binary, platform)) return;
 
         // A NESTED TYPE IS INDEXED UNDER THE NAME AN AUTHOR WRITES, not discarded.
         //
@@ -906,6 +910,38 @@ public final class TypeIndex {
         // flags. CLASS is the honest majority answer and the icon is the only thing that reads it; the
         // alternative is opening every entry on the classpath to colour a letter.
         into.add(new Entry(simple, packageName, container));
+    }
+
+    /**
+     * A per-node package, and in group 1 the node: {@code fabric.v1165} from CrystalGUI's
+     * {@code com.crystalgui.mc.fabric.v1165.} and CrystalGraphics' {@code com.crystalgraphics.mc.modern.fabric.v1165.},
+     * {@code v1122} from a LaunchWrapper host's {@code com.crystalgui.mc.v1122.}. Both mods spell a node alike.
+     */
+    private static final Pattern NODE_PACKAGE = Pattern.compile(
+            "^com\\.crystal(?:gui|graphics)\\.mc\\.(?:modern\\.)?((?:fabric\\.|forge\\.|neoforge\\.)?v\\d+)\\.");
+
+    /** The node a class belongs to, or null; memoised per class, since the service is asked per scanned file. */
+    private static final ClassValue<String> NODE_OF = new ClassValue<>() {
+        @Override
+        protected String computeValue(Class<?> type) {
+            Matcher node = NODE_PACKAGE.matcher(type.getName());
+            return node.find() ? node.group(1) : null;
+        }
+    };
+
+    /**
+     * Whether {@code binary} is another node's copy of a host class.
+     *
+     * <p>A merged jar carries each host class once per (loader, Minecraft version), relocated into that
+     * node's package, and only the running node's are ever loaded — so the rest offered 54 {@code MinecraftBytes}
+     * for one name. The running node is the platform's own {@link ScriptService}, which is that node's class.
+     * Where the service sits in no node package — a dev run, a test — nothing is hidden.</p>
+     */
+    private static boolean otherNode(String binary, ScriptService platform) {
+        Matcher node = NODE_PACKAGE.matcher(binary);
+        if (!node.find()) return false;
+        String running = NODE_OF.get(platform.getClass());
+        return running != null && !running.equals(node.group(1));
     }
 
     /**
