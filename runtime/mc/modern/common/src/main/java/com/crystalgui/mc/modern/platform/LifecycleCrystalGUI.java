@@ -24,6 +24,7 @@ import com.crystalgui.probe.ConnectionProbe;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -98,8 +99,9 @@ public final class LifecycleCrystalGUI {
      * answer for the life of the process. The language mod is ordered AFTER this one, so a read from
      * this method's original home in {@code bootstrapClient} ran first, found no service, and turned
      * the live tier off permanently: every script reported {@code net.minecraft.client.Minecraft}
-     * unresolvable while the byte source behind it was perfectly healthy. A tick is after every mod's
-     * setup, which is the only ordering that is true on all three loaders.</p>
+     * unresolvable while the byte source behind it was perfectly healthy. The first tick with no loading
+     * overlay is after every mod's setup on all three loaders -- a tick alone is not: Forge 1.21.11 ticks
+     * behind the overlay before the language mod's setup work has run. @see #loadingFinished</p>
      */
     private static void announceLanguageTier() {
         List<String> contributors = LanguageRegistry.contributors();
@@ -178,7 +180,7 @@ public final class LifecycleCrystalGUI {
     // ── Client ──────────────────────────────────────────────────────────────────────────────────
 
     public static void clientTick() {
-        if (!languageTierAnnounced) {
+        if (!languageTierAnnounced && loadingFinished()) {
             languageTierAnnounced = true;
             announceLanguageTier();
         }
@@ -187,6 +189,15 @@ public final class LifecycleCrystalGUI {
         CgUiKeybinds.tick();
         Connections.onClientTick();
         run(clientTickHooks);
+    }
+
+    /** Whether the loading overlay is gone -- mod setup included. 1.13 has none and sets up before ticking. */
+    private static boolean loadingFinished() {
+        //? if >=1.14 {
+        return Minecraft.getInstance().getOverlay() == null;
+        //?} else {
+        /*return true;
+        *///?}
     }
 
     public static void clientConnected() {

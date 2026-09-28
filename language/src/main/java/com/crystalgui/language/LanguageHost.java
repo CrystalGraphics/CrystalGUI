@@ -51,7 +51,7 @@ public final class LanguageHost {
                     + "installed its ScriptService, so the engines built during that read captured no "
                     + "platform. Scripts will not resolve Minecraft types this run. Something in the "
                     + "host read LanguageRegistry during mod setup -- it must wait until every mod has "
-                    + "set up.");
+                    + "set up. The read:", LanguageRegistry.firstRead());
         }
     }
 
