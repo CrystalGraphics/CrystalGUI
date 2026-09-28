@@ -148,7 +148,6 @@ public final class CgUiAutoTest {
      * <p>This is the settling clock on the LWJGL2 eras, so the captures hang off it rather than off the tick.</p>
      */
     public static void onPainted(int framesPainted) {
-        AutoTest.runFrameSteps(framesPainted);
         AutoTest.settled(HOST, framesPainted);
     }
 
