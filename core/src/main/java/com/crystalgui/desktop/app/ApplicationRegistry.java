@@ -2,7 +2,9 @@ package com.crystalgui.desktop.app;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -57,6 +59,8 @@ public final class ApplicationRegistry {
     private final Desktop desktop;
     private final List<ApplicationKind> installed = new ArrayList<>();
     private final List<Application> running = new ArrayList<>();
+    /** Kinds already told they need a server, so a host retrying every frame says so once. */
+    private final Set<String> refusedForNoServer = new HashSet<>();
 
     /** Something was installed, launched or quit — what a launcher and a taskbar redraw from. */
     public final Signal.Action onDidChange = new Signal.Action();
@@ -172,8 +176,10 @@ public final class ApplicationRegistry {
             // without one -- and this is the refusal `ensureEditorWindow` used to make in the 1.7.10
             // screen, which is why it is here rather than in each host. A manifest that says
             // `standalone()` is offered anyway.
-            CrystalGuiCore.LOGGER.warn("[cgui] '{}' needs a server and there is none; it was not "
-                    + "launched. The desktop is open and the application is not on it.", kind.id());
+            if (refusedForNoServer.add(kind.id())) {
+                CrystalGuiCore.LOGGER.warn("[cgui] '{}' needs a server and there is none; it was not "
+                        + "launched. The desktop is open and the application is not on it.", kind.id());
+            }
             return null;
         }
         if (kind.factory() == null) {
@@ -192,6 +198,7 @@ public final class ApplicationRegistry {
             return null;
         }
         if (application == null) return null;
+        refusedForNoServer.remove(kind.id());
         running.add(application);
         onDidChange.emit();
         return application;
