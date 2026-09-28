@@ -140,6 +140,9 @@ if (!embedded) include("runtime:mc:1710")
 fun checkoutNodes(list: String): Map<String, List<String>> =
     list.split(',').map { it.substringBefore(':') to it.substringAfter(':') }
         .groupBy({ it.first }, { it.second })
+// A consumer's checkout: its projects stand in for the published modules, so publishedModule has them
+// offer what those publish (cgbuildlogic.CONSUMER_CHECKOUT).
+if (embedded && System.getProperty("crystalgui.checkout.nodes") != null) gradle.extra["cgConsumerCheckout"] = true
 val modernNodes: Map<String, List<String>> =
     if (embedded) System.getProperty("crystalgui.checkout.nodes")?.let(::checkoutNodes)
         ?: linkedMapOf("common" to listOf("1.20.1"), "forge" to listOf("1.20.1"))

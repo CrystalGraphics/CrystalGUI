@@ -95,7 +95,8 @@ Nothing in `build.gradle.kts` changes except the version:
 plugins { id("com.crystalgui.settings") version "1.0.0" }
 crystalgui {
     minecraft("1.20.1", "forge")   // every project with a toolchain takes this target
-    checkout("../CrystalGUI")      // cloned with --recursive
+    checkout("../CrystalGUI")      // cloned with --recursive; -Pcrystalgui.checkout=<path> overrides it
+    harness { mode = "rpg-console" }   // optional: ./gradlew runHarness, the GL harness on your assets
 }
 
 // build.gradle.kts
@@ -106,10 +107,17 @@ plugins {
 ```
 
 The engine compiles from the checkout's sources, and the dev run gets single jars the checkout builds
-for your target alone — so an edit in the checkout reaches your next run.
+for your target alone — so an edit in the checkout reaches your next run. A running game reads assets
+from your `src/main/resources` and the checkout's two resource trees ahead of the jars, so a stylesheet
+edit shows on F3+T (the same holds without a checkout, for your own resources).
+
+`harness { }` takes a `mode` (the scene), and `assetRoots`/`classes` when yours are not the root
+project's `src/main/resources` and `build/classes/java/main`; `runHarness` compiles your classes first,
+so the scene builds your real screen.
 
 - **Gradle must run on Java 25**, the checkout's own requirement:
-  `./gradlew updateDaemonJvm --jvm-version=25`. Your mod still compiles and runs on its own Java.
+  `toolchainVersion=25` in `gradle/gradle-daemon-jvm.properties`. Your mod still compiles and runs on its
+  own Java.
 - **Modern targets only**; 1.7.10 and Forge 1.8–1.12.2 take CrystalGUI from Maven.
 - While you use it, the checkout's `build/libs/crystalgui-*.jar` holds only your target's variant. Its own
   `singleJar` rebuilds the full jar the next time it runs there.
