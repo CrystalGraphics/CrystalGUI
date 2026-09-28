@@ -74,6 +74,10 @@ side = "BOTH"
 | RetroFuturaGradle (1.7.10) | `rfg.deobf` | not yet run |
 
 - **A module with no Minecraft in it** applies the plugin and declares nothing: it gets the API.
+- **`check` fails a mod that names `com.crystalgui.mc` or `com.crystalgraphics.mc`** (`checkCrystalGuiApi`):
+  those are the per-loader hosts, a different package on every loader, so nothing compiled against one
+  links. It also fails a jar that bundles a class of either mod. What you need from the loader side is a
+  `core` seam, and a missing one is ours to add.
 - **Every `run*` task first checks that both jars run on your target** (`checkCrystalGuiTarget`) and, when
   they do not, names the versions they do.
 - Below Minecraft 1.19.3 the plugin adds `crystalgraphics-joml` as well: Minecraft ships no JOML there.
