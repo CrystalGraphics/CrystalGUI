@@ -99,7 +99,8 @@ side = "BOTH"
 | ModDevGradle `legacyForge` (Forge 1.17–1.20.1) | its SRG remapping | Forge 1.20.1 dev client |
 | ModDevGradle `neoForge` | the runtime classpath | NeoForge 1.21.1 dev client |
 | Loom | `modLocalRuntime` | Fabric 1.20.1 dev client |
-| ForgeGradle, RetroFuturaGradle | `fg.deobf`, `rfg.deobf` | not yet run |
+| ForgeGradle 6 (Gradle 8) | `fg.deobf` | a Forge 1.20.1 scratch mod compiles and resolves the remapped mods; no client booted |
+| RetroFuturaGradle 2 | `modUtils.deobfuscate` | a 1.7.10 scratch mod compiles and resolves the mods; no client booted |
 | Unimined | — | refused: `minecraft(...)` fails and says so |
 
 - On Fabric, Fabric API must be on the run: CrystalGUI requires it (`modLocalRuntime` at least).
