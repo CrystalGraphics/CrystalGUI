@@ -10,6 +10,7 @@ import cgbuildlogic.modernLoaderNodes
 import cgbuildlogic.modernNodes
 import cgbuildlogic.modernVariants
 import cgbuildlogic.registerCheckAllTargets
+import java.util.Properties
 import cgbuildlogic.registerDescriptorTasks
 import cgbuildlogic.registerSingleJarPipeline
 import cgbuildlogic.shippedEntryPaths
@@ -35,7 +36,7 @@ repositories { mavenCentral() }
 val modId = property("modId").toString()
 
 /** The clone this sample sits in; a project of its own writes the CrystalGUI release it requires. */
-val crystalGuiVersion: String = java.util.Properties()
+val crystalGuiVersion: String = Properties()
     .apply { rootDir.resolve("../../gradle.properties").reader().use(::load) }
     .getProperty("modVersion")
 
