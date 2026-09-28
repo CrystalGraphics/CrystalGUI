@@ -75,6 +75,7 @@ val mergedServicesDir = extra["cgMergedServicesDir"] as File
 val mergeDevServices = tasks.named("mergeDevServices")
 @Suppress("UNCHECKED_CAST")
 val devRunClasses = extra["cgDevRunClasses"] as List<FileCollection>
+val langDevRunRoots = extra["cgLangDevRunRoots"] as FileCollection
 val resourceTasks: List<String> = bundledProjects.map { "${it.path}:processResources" }
 
 // Setting MOD_CLASSES REPLACES what ModDevGradle derived from mods{} rather than adding to it, so the
@@ -127,6 +128,9 @@ val modClassesValue = (
         + modClasses("crystalgui", mainSourceSet(project(":runtime:mc:forge-bootstrap")).output.classesDirs.files)
         + devRunClasses.flatMap { modClasses("crystalgui", it.files) }
         + modClasses("crystalgui", treeSitterJars)
+        // The language mod's own entry classes and descriptors, which in `crystalgui` would have no
+        // mods.toml naming them and be constructed by nobody.
+        + modClasses("crystalgui_language", langDevRunRoots.files)
         + modClasses("crystalgraphics", graphicsCommonDir)
         + modClasses("crystalgraphics", graphicsLoaderDir)
         // Its @Mod: one class for every Forge, in a module of its own.
@@ -147,6 +151,7 @@ tasks.matching {
     // everything correctly.
     inputs.property("cgModClasses", modClassesValue)
     dependsOn(stageDevResources)
+    dependsOn(langDevRunRoots)
     dependsOn(crystalGraphics.task("$graphicsCommonPath:classes"))
     dependsOn(crystalGraphics.task("$graphicsLoaderPath:classes"))
     dependsOn(crystalGraphics.task(":runtime:mc:forge-bootstrap:classes"))
