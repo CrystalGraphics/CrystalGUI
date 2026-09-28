@@ -6,6 +6,7 @@ import com.crystalgui.workbench.extension.WorkbenchExtension;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.dispose.Disposable;
@@ -471,8 +472,6 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
         }
     }
 
-    /** The UI-thread half of a run: which file, which runtime, and what it says right now. */
-    @Nullable
     /**
      * Whether this workbench may run {@code path} <b>here</b>, and a refusal that says why if not.
      *
@@ -499,6 +498,8 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
         return false;
     }
 
+    /** The UI-thread half of a run: which file, which runtime, and what it says right now. */
+    @Nullable
     private Snapshot snapshotFor(WorkbenchContext workbench, @Nullable Resource script) {
         CgPath path;
         TextEditor editor;
@@ -659,6 +660,8 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
         }
 
         Notifications.error("Script failed: " + failure);
+        // And the log, which a bug report carries and the console does not.
+        CrystalGuiCore.LOGGER.warn("Script {} failed", name, failure);
         StringWriter trace = new StringWriter();
         failure.printStackTrace(new PrintWriter(trace));
         for (String line : trace.toString().split("\\R")) {
