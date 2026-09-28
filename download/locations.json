@@ -51,6 +51,9 @@
     },
     "jdk-sources/{java}": {
       "urls": ["https://api.adoptium.net/v3/binary/latest/{java}/ga/linux/x64/sources/hotspot/normal/eclipse"]
+    },
+    "jdk-sources/16": {
+      "urls": ["https://github.com/openjdk/jdk16u/archive/refs/tags/jdk-16.0.2%2B7.tar.gz"]
     }
   },
   "engines": {
