@@ -461,6 +461,8 @@ tasks.named<JavaExec>("runServer") {
         // so this needs no code of ours.
         val port = providers.gradleProperty("cgSmokePort").orNull ?: "25599"
         args("--port", port)
+        // ...which every modern node's smoke server binds too: one at a time. @see cgbuildlogic.SmokePortLock
+        gradle.sharedServices.registrations.findByName("cgServerSmokePort")?.let { usesService(it.service) }
 
         // Deleted BEFORE the run, so a stale report from a previous run cannot pass for this one.
         doFirst { serverSmokeReport.get().asFile.delete() }

@@ -582,12 +582,15 @@ val serverSmokeReport = layout.buildDirectory.file("serverSmoke/result.txt")
 val classLoadLog = layout.buildDirectory.file("serverSmoke/classload.log")
 val acceptEula = providers.gradleProperty("cgAcceptEula").isPresent
 val smokePort = providers.gradleProperty("cgSmokePort").orNull ?: "25599"
+// Registered as the node is evaluated, so runtime/mc/1710 can find it by name. @see cgbuildlogic.SmokePortLock
+val smokePortLock = cgbuildlogic.SmokePortLock.register(gradle)
 
 // withType, not named: this plugin is applied BEFORE the loader plugin that creates runServer.
 tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
     if (!serverSmokeRequested && !providers.gradleProperty("cgServerSmoke").isPresent) return@configureEach
 
     val exec = this
+    usesService(smokePortLock)
 
     systemProperty("crystalgui.server.smoke", "true")
     systemProperty("crystalgui.server.smoke.report", serverSmokeReport.get().asFile.absolutePath)
