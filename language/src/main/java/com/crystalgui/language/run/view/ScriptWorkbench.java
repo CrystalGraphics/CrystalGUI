@@ -12,6 +12,7 @@ import com.crystalgui.core.dispose.Disposable;
 import java.util.List;
 import java.util.Map;
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -120,12 +121,23 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
         // A UI-side call by construction: `.run.view` is the package that may name `com.crystalgui.ui`,
         // so nothing headless reaches this line and no dedicated server loads a grammar through it.
         LanguageRegistry.bootstrap();
-        ScriptWorkbench installed = install(CommandRegistry.global(), workbench,
-                workbench.cacheDirectory(CACHE_DIRECTORY));
-        if (installed == null) return () -> { };
+        CommandRegistry registry = CommandRegistry.global();
+        Path cacheRoot = workbench.cacheDirectory(CACHE_DIRECTORY);
+        ScriptWorkbench[] installed = {install(registry, workbench, cacheRoot)};
+        // A RUNTIME THAT ARRIVES LATER STILL GETS ITS PANEL. On a first launch the engine band may not be
+        // open when the workbench is built, and a workbench asked only then kept no Run panel for its
+        // life. A band that opens later is announced as a capability change, on the UI thread.
+        Connection late = installed[0] != null ? null : LanguageRegistry.onCapabilityChanged.connect(() -> {
+            if (installed[0] == null) installed[0] = withRuntimes(registry, workbench, cacheRoot);
+        });
         return () -> {
+            if (late != null) late.disconnect();
+            if (installed[0] == null) {
+                MappingCommands.unregister(registry);
+                return;
+            }
             try {
-                installed.close();
+                installed[0].close();
             } catch (IOException failed) {
                 // TEARDOWN IS EXACTLY WHEN A HALF-FINISHED JOB IS WORST, and a workbench closing must
                 // not be stopped by an engine band that will not shut down. Said out loud, then dropped.
@@ -170,7 +182,13 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
         // degraded. It is here rather than in each host for the reason LanguageStack exists: which hosts
         // get a feature is a fact about this module.
         MappingCommands.register(registry, workbench);
+        return withRuntimes(registry, workbench, cacheRoot);
+    }
 
+    /** {@link #install}'s runtime half: null while no language can open a runtime. */
+    @Nullable
+    private static ScriptWorkbench withRuntimes(CommandRegistry registry, WorkbenchContext workbench,
+                                                @Nullable Path cacheRoot) {
         ScriptRuntimes runtimes = ScriptRuntimes.open(cacheRoot);
         if (runtimes.isEmpty()) return null;
 
