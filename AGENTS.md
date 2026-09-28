@@ -339,7 +339,8 @@ Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; r
 `gl-debug-harness` are **git submodules** that are ordinary Gradle subprojects (no settings file of their
 own), while CrystalGraphics is a submodule that is a composite `includeBuild`. CrystalGraphics is an
 `includeBuild` composite with three `dependencySubstitution` entries, which is how the
-`compileOnly("com.crystalgraphics:core:1.0.0")` coordinates resolve to local source.
+`com.crystalgraphics:core:<version>` coordinates resolve to local source — the version read from
+`CrystalGraphics/gradle.properties`, since it is also what the published metadata names.
 
 | Module | In build? | State |
 |---|---|---|
