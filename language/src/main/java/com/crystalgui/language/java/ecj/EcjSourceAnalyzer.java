@@ -1574,10 +1574,13 @@ public final class EcjSourceAnalyzer implements SourceAnalyzer {
          * A member javac named for itself -- {@code access$000}, {@code lambda$run$0}, {@code this$0},
          * {@code $VALUES}. Caught by NAME as well as flag: an obfuscated Minecraft jar keeps the names
          * through its mappings and not always the synthetic bit, so Forge 1.14.4 offered {@code access$000}.
+         * The {@code $} names are listed rather than prefix-matched, since Java lets an author use one.
          */
         private static boolean isCompilerNamed(String name) {
             return name.startsWith("access$") || name.startsWith("lambda$") || name.startsWith("this$")
-                    || name.startsWith("val$") || name.startsWith("$");
+                    || name.startsWith("val$") || name.startsWith("$SwitchMap$") || name.startsWith("$SWITCH_TABLE$")
+                    || name.equals("$VALUES") || name.equals("$assertionsDisabled")
+                    || name.equals("$deserializeLambda$");
         }
 
         private static void collectMembers(ITypeBinding owner, ITypeBinding asking,
