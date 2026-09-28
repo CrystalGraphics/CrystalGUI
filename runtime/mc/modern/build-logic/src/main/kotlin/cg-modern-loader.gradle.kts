@@ -89,29 +89,9 @@ val lang: SourceSet by sourceSets.creating {
     runtimeClasspath += sourceSets["main"].runtimeClasspath + sourceSets["main"].output
 }
 
-// ── KNOWN BROKEN: a 1.20.x DEV RUN does not load the language mod ───────────────────────────────
-//
-// The SHIPPED jars are fine -- all four installed clients register the ScriptService and resolve
-// Minecraft types. This is a dev-run-only hole, and it is worse than it sounds because it is the wrong
-// way round: you meet it while developing and not while testing the artifact. A dev client logs
-//
-//     [crystalgraphics] platform service 'crystalgui:script-platform' was not provided
-//
-// with no `[cgui-lang]` line at all, so grammars are present and scripting is dead.
-//
-// WHAT IS ESTABLISHED, so the next attempt does not re-derive it:
-//  - `mods { create("crystalgui_language") { sourceSet(lang) } }` is declared in forge and neoforge and
-//    does NOT cause discovery. The run gets no `-Dfml.modFolders`, and `clientLegacyClasspath.txt` is
-//    118 cache jars with zero `build/classes` entries -- `main`'s output is not in it either, yet the
-//    host mod loads, so discovery is not that file.
-//  - The line below makes Gradle BUILD the lang source set for the run (`:runtime:mc:modern:forge:1.20.1:compileLangJava`
-//    and `processLangResources` are in the run's task graph, and the descriptors land in
-//    `build/resources/lang/META-INF/mods.toml` naming `crystalgui_language`). Necessary, not sufficient.
-//  - So the remaining unknown is how ModDevGradle hands `mods {}` to BootstrapLauncher on legacyForge.
-//    Read the plugin, not this comment, and fix it there.
-//
-// Kept because it is a real part of the answer and costs nothing; NOT kept because it works.
-// `-PcgNoLanguage` skips it. Fabric is untested and is likely the same shape.
+// The language mod on a dev run's classpath. On ModDevGradle that is not what makes it a MOD: FML
+// finds `crystalgui_language` through its own MOD_CLASSES group -- `cgLangDevRunRoots` below, read by
+// crystalgraphics-run.gradle.kts, which replaces what mods {} declares. `-PcgNoLanguage` skips both.
 if (!providers.gradleProperty("cgNoLanguage").isPresent) {
     dependencies { "runtimeOnly"(files(lang.output)) }
 }
@@ -396,6 +376,20 @@ extra["cgMergedServicesDir"] = cgMergedServicesDir
 // dev JVM and FML's scanner can read. Handed to crystalgraphics-run.gradle.kts for MOD_CLASSES.
 val cgDevRunClasses: List<FileCollection> = cgBundledProjects.map { devRunClasses(it) }
 extra["cgDevRunClasses"] = cgDevRunClasses
+
+// crystalgui_language's roots, a mod of its own as in the shipped jar -- uniminedDevRun's list. Empty
+// with -PcgNoLanguage. `:language` itself stays in cgBundledProjects: no package of it is split.
+// Resources first: FML reads a mod's mods.toml from the first root named for it.
+evaluationDependsOn(":runtime:mc:forge-bootstrap")
+evaluationDependsOn(":runtime:mc:modern-shared")
+val cgLangDevRunRoots: FileCollection = if (providers.gradleProperty("cgNoLanguage").isPresent) files() else files(
+    lang.output.resourcesDir,
+    lang.output,
+    common.extensions.getByType<SourceSetContainer>()["lang"].output,
+    project(":runtime:mc:forge-bootstrap").extensions.getByType<SourceSetContainer>()["lang"].output.classesDirs,
+    cgMainSourceSet(project(":runtime:mc:modern-shared")).output,
+)
+extra["cgLangDevRunRoots"] = cgLangDevRunRoots
 
 // A dev run must BUILD what mods{} makes visible.
 //
@@ -687,16 +681,13 @@ tasks.register("serverSmoke") {
 
 // Diagnostics reach the GAME's JVM, not Gradle's. A -D on the Gradle command line sets a property on
 // the daemon and the run never sees it, which reads as a flag that does nothing -- so the ones worth
-// turning on from a command line are forwarded explicitly.
+// turning on from a command line are forwarded: every crystalgui.* and crystalgraphics.* one.
 //
 //   ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.layer.probe=true
-val cgForwardedProperties = listOf(
-    "crystalgui.layer.probe", "crystalgui.editor.trace", "crystalgui.clientProbe",
-    "crystalgui.glass.probe", "crystalgui.language.noLiveBytes")
+//   ./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgui.autotest=true -Dcrystalgui.autotest.script=Probe.java
 tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach {
-    cgForwardedProperties.forEach { key ->
-        val value = providers.systemProperty(key).orNull
-        if (value != null) systemProperty(key, value)
+    for (prefix in listOf("crystalgui.", "crystalgraphics.")) {
+        providers.systemPropertiesPrefixedBy(prefix).get().forEach { (key, value) -> systemProperty(key, value) }
     }
 }
 
