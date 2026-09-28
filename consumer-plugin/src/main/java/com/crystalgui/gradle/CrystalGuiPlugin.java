@@ -3,6 +3,7 @@ package com.crystalgui.gradle;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.gradle.api.GradleException;
 import org.gradle.api.Plugin;
@@ -53,10 +54,11 @@ public class CrystalGuiPlugin implements Plugin<Project> {
         }));
         repositories.exclusiveContent(exclusive -> exclusive
             .forRepositories(ours.toArray(new ArtifactRepository[0]))
-            .filter(content -> {
-                content.includeGroup(Artifacts.GUI_GROUP);
-                content.includeGroup(Artifacts.CG_GROUP);
-            }));
+            // Every version but ForgeGradle's remapped copies, which keep our groups under a `_mapped_`
+            // version and come from its own local repository.
+            .filter(content -> content.includeVersionByRegex(
+                Pattern.quote(Artifacts.GUI_GROUP) + "|" + Pattern.quote(Artifacts.CG_GROUP), ".*",
+                "(?!.*_mapped_).*")));
 
         project.getPluginManager().withPlugin("java", p -> {
             project.getDependencies().add("compileOnly", Artifacts.at(Artifacts.CORE));
@@ -83,6 +85,7 @@ public class CrystalGuiPlugin implements Plugin<Project> {
         }
 
         ModRoute route = ModRoute.install(project, extension::mods);
+        extension.onDeclared(route::declared);
         project.afterEvaluate(p -> extension.validate(route));
 
         if (project == project.getRootProject() && Boolean.TRUE.equals(extra.getProperties().get(Checkout.HARNESS))) {

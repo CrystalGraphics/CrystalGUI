@@ -68,6 +68,8 @@ public abstract class CrystalGuiExtension {
     private Target target;
     private boolean fromSettings;
     private boolean language;
+    /** Told whenever {@link #mods()} may have changed. @see ModRoute#declared */
+    private Runnable onDeclared = () -> { };
 
     @Inject
     public CrystalGuiExtension(Project project) {
@@ -82,11 +84,19 @@ public abstract class CrystalGuiExtension {
                 + " but " + target + " was declared first");
         }
         target = declared;
+        onDeclared.run();
     }
 
     /** Puts {@code crystalgui_language}, the optional scripting mod, on the dev run as well. */
     public void language() {
         language = true;
+        onDeclared.run();
+    }
+
+    /** Runs {@code listener} now and on every later declaration. */
+    void onDeclared(Runnable listener) {
+        onDeclared = listener;
+        listener.run();
     }
 
     /**

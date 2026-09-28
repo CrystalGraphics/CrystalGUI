@@ -1,7 +1,10 @@
 package com.crystalgui.gradle;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -19,7 +22,8 @@ import org.gradle.api.artifacts.ModuleDependency;
  * <p>Found by the toolchain plugin the project applies, never by the Minecraft version: two toolchains
  * serve one version (ForgeGradle and ModDevGradle's legacy mode both build Forge 1.20.1). The mods are
  * added LAZILY, as a provider the toolchain evaluates when it resolves: Loom resolves its mod
- * configurations in its own {@code afterEvaluate}, before one of ours would run.</p>
+ * configurations in its own {@code afterEvaluate}, before one of ours would run. The two {@code deobf}
+ * toolchains are the exception, and say why.</p>
  *
  * <p>Toolchains are reached by extension name and reflection, not by type: a consumer's toolchain may be
  * applied in another project than ours, where its classes are not ours to see.</p>
@@ -32,6 +36,8 @@ final class ModRoute {
     private final Project project;
     private final Supplier<List<ModuleDependency>> mods;
     private String toolchain;
+    /** Routes every declared mod not yet routed; set by the deobf toolchains only. */
+    private Runnable remapDeclared;
 
     private ModRoute(Project project, Supplier<List<ModuleDependency>> mods) {
         this.project = project;
@@ -90,10 +96,39 @@ final class ModRoute {
     /**
      * ForgeGradle and RetroFuturaGradle both remap a dependency through their extension: ForgeGradle 6's
      * {@code fg.deobf(dependency)}, RetroFuturaGradle 2's {@code modUtils.deobfuscate(dependency)}.
+     *
+     * <p>As each mod is declared, not lazily: ForgeGradle records the original in its own
+     * {@code __obfuscated} configuration and resolves it in an {@code afterEvaluate} registered before any
+     * of ours, so even one of ours is too late. @see #declared</p>
      */
     private void deobf(String extension, String method) {
         Object ext = project.getExtensions().getByName(extension);
-        into(bucket(project), mod -> invoke(ext, method, Object.class, mod));
+        Configuration bucket = bucket(project);
+        Set<String> routed = new HashSet<>();
+        remapDeclared = () -> {
+            for (ModuleDependency mod : mods.get()) {
+                String coordinates = mod.getGroup() + ":" + mod.getName() + ":" + mod.getVersion();
+                if (!routed.add(coordinates)) continue;
+                // A STRING: RetroFuturaGradle refuses a Dependency object. What the string cannot carry is
+                // put back on whatever comes out.
+                Object notation = invoke(ext, method, Object.class, coordinates);
+                Dependency remapped = notation instanceof Dependency
+                    ? (Dependency) notation : project.getDependencies().create(notation);
+                if (remapped instanceof ModuleDependency) {
+                    ((ModuleDependency) remapped).setTransitive(false);
+                    ((ModuleDependency) remapped).capabilities(c ->
+                        c.requireCapability(mod.getGroup() + ":" + mod.getName()));
+                }
+                bucket.getDependencies().add(remapped);
+            }
+        };
+        remapDeclared.run();
+        project.afterEvaluate(p -> remapDeclared.run());
+    }
+
+    /** The build declared a target or the language mod. Only a {@code deobf} toolchain acts on it. */
+    void declared() {
+        if (remapDeclared != null) remapDeclared.run();
     }
 
     private static Configuration bucket(Project project) {
@@ -104,6 +139,8 @@ final class ModRoute {
         try {
             Method method = target.getClass().getMethod(name, parameter);
             return method.invoke(target, argument);
+        } catch (InvocationTargetException e) {
+            throw new GradleException("crystalgui: " + name + " failed: " + e.getCause().getMessage(), e.getCause());
         } catch (ReflectiveOperationException e) {
             throw new GradleException("crystalgui: " + target.getClass().getName() + "." + name
                 + " is not what this plugin was written against", e);
