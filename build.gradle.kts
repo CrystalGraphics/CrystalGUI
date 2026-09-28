@@ -1,5 +1,6 @@
 // `java` is the JavaPluginExtension in a build script, so the PACKAGE has to be imported to be named.
 import cgbuildlogic.MODERN_TREE
+import cgbuildlogic.crystalGraphicsVersion
 import cgbuildlogic.registerCheckAllTargets
 import groovy.json.JsonSlurper
 import java.net.HttpURLConnection
@@ -53,11 +54,8 @@ apply(from = rootProject.file("gradle/local-settings.gradle.kts").toURI())
 // :runtime:mc:1710 is left to GTNH's convention, which already compiles with 25.
 val compilerJdk = providers.gradleProperty("dep.jdk.compiler").get().toInt()
 
-// CrystalGraphics' version, from its own gradle.properties: what a published module's metadata names.
-// Inside this build the composite substitutes CrystalGraphics whatever version is written.
-extra["crystalgraphicsVersion"] = Properties()
-    .apply { file("CrystalGraphics/gradle.properties").reader().use(::load) }
-    .getProperty("modVersion")
+// CrystalGraphics' version, for what a published module's metadata names. @see crystalGraphicsVersion
+extra["crystalgraphicsVersion"] = crystalGraphicsVersion()
 
 subprojects {
     if (path == ":runtime:mc:1710") return@subprojects

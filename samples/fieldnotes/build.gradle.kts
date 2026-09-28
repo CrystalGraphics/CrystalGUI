@@ -34,13 +34,18 @@ repositories { mavenCentral() }
 
 val modId = property("modId").toString()
 
+/** The clone this sample sits in; a project of its own writes the CrystalGUI release it requires. */
+val crystalGuiVersion: String = java.util.Properties()
+    .apply { rootDir.resolve("../../gradle.properties").reader().use(::load) }
+    .getProperty("modVersion")
+
 val descriptor = ModDescriptor(
     id = modId,
     name = "Field Notes",
     version = project.version.toString(),
     description = "A CrystalGUI window, from one jar on every loader and version it targets.",
     license = "MIT",
-    dependencies = listOf(Dependency("crystalgui", "[1.0.0,)", ordering = Ordering.AFTER)),
+    dependencies = listOf(Dependency("crystalgui", "[$crystalGuiVersion,)", ordering = Ordering.AFTER)),
     // One variant per loader node, its range and pack format from the node's catalog pins. Entries at
     // their SOURCE names; each node ships them relocated into its own package.
     variants = modernVariants(project, mapOf(
