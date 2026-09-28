@@ -1,7 +1,5 @@
 # CrystalGUI
 
-[![OSS hosting by Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&style=flat-square)](https://cloudsmith.com)
-
 A general platform-agnostic UI engine for shaped like a lightweight web browser: a DOM-like `UIElement` tree, Taffy
 flexbox layout, a real CSS cascade with selectors and transitions, and twelve widgets — all
 loader-blind, and able to run headless on a dedicated server.
@@ -55,5 +53,7 @@ CrystalGUI is licensed under the **GNU Lesser General Public License, version 3 
 (`notices/`, indexed by [`THIRD-PARTY.md`](THIRD-PARTY.md)).
 
 ## Hosting
+
+[![OSS hosting by Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&style=flat-square)](https://cloudsmith.com)
 
 Maven artifacts are hosted for free by [Cloudsmith](https://cloudsmith.com).
