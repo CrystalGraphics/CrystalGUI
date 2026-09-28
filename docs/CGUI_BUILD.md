@@ -222,7 +222,13 @@ its first and last in the sweep.
    companions — **Fabric API** of that version (Fabric), **MixinBooter** (Forge 1.8–1.12.2), **UniMixins**
    (1.7.10), a **Java 8** runtime for Forge ≤1.16, legacy and 1.7.10. Add `prismInstance.<label>` to
    `local.properties`, and the label to `prismInstanceJoml` if below 1.19.3.
-6. **`prodSmoke -PcgTargets=<new label>`** — the new target only, one run — and open its captures.
+6. **`prodSmoke -PcgTargets=<new label> -PcgSmokeProps=crystalgui.autotest.complete=true`** — the new
+   target only, one run — and open its captures. Its log's `a game receiver — N rows` is the scripting
+   check: 0 rows means the version's names never resolved. A running Forge or Fabric fetches its
+   mappings by its own version — Mojang's `client.txt` from 1.14.4, MCPConfig's `joined.tsrg`, Fabric's
+   intermediary — through the templates in `download/locations.json`; a version Mojang published nothing
+   for takes MCP's names from the tables in `ScriptServiceModern.mcpStable` and
+   `ScriptServiceLegacy.MCP_STABLE`.
 7. **`AGENTS.md`**: the node list under *Running Minecraft*, and a refused version's reason if one is refused.
 
 Nothing else is edited: descriptors, variant tables, thin-jar lists and `requiredEntries` follow the tree.

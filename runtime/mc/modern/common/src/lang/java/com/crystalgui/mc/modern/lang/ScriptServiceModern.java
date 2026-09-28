@@ -161,10 +161,15 @@ public final class ScriptServiceModern implements ScriptService {
                     .runtime("mappings.tiny", Source.located("fabric/intermediary/" + version),
                             "mappings/mappings.tiny");
         }
-        //? if <1.14 {
-        /*// Mojang published no mappings before 1.14.4, so there is no readable half to join.
-        return MappingCoordinates.NONE;
-        *///?} else {
+        String mcp = mcpStable(version);
+        if (mcp != null) {
+            // Mojang published nothing before 1.14.4, so MCP's names are the readable ones -- over the MCP
+            // classes and SRG members this Forge runs, which is the legacy tree's join exactly.
+            Source names = Source.located("forge/mcp-stable/" + mcp);
+            return MappingCoordinates.of(version, "stable", mcp)
+                    .readable("methods.csv", names, "methods.csv")
+                    .readable("fields.csv", names, "fields.csv");
+        }
         MappingCoordinates srg = MappingCoordinates.of(version, "srg", version)
                 .readable("client.txt", MojangMappings.clientMappings(version), null)
                 .runtime("joined.tsrg", Source.located("forge/mcp-config/" + version), "config/joined.tsrg");
@@ -172,7 +177,20 @@ public final class ScriptServiceModern implements ScriptService {
         // vocabulary is then `net/minecraft/src/C_NNNN_`, which no runtime speaks. Before 1.17 its classes
         // are the MCP names Forge ran, and are kept.
         return officialClassNames() ? srg.runtimeKeepsReadableClassNames() : srg;
-        //?}
+    }
+
+    /**
+     * MCP's stable release for a version Mojang published no mappings for, or null. Every Forge version
+     * before 1.14.4 that a node claims: 1.13.2, and 1.14.2-1.14.3 on the 1.14.3 node.
+     */
+    @Nullable
+    private static String mcpStable(String minecraft) {
+        switch (minecraft) {
+            case "1.13.2": return "47-1.13.2";
+            case "1.14.2": return "53-1.14.2";
+            case "1.14.3": return "56-1.14.3";
+            default: return null;
+        }
     }
 
     /**
