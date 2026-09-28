@@ -48,10 +48,11 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 on `langCompileOnly` only, so a host class naming it is a compile error.
 
 **Included by another build** (`gradle.parent != null`): only the loader and common node of ONE target —
-the one a consumer's `com.crystalgui.settings` names in the `crystalgui.checkout.nodes` system property,
-else `forge` 1.20.1 — with no 1.7.10, no legacy tree, no `consumer-plugin`, and no harness unless
-`-Dcrystalgui.harness=true`. Its `singleJar` then carries that target's variant alone; the 1.7.10 entries
-in the pipeline are conditional on `has1710` for exactly this. CrystalGraphics reads the same list.
+the node claiming what a consumer's `com.crystalgui.settings` names in the `singlejar.checkout.target`
+system property, else `forge` 1.20.1 — with no 1.7.10, no legacy tree, no `consumer-plugin`, and no harness
+unless `-Dcrystalgui.harness=true`. Its `singleJar` then carries that target's variant alone; the 1.7.10
+entries in the pipeline are conditional on `has1710` for exactly this. CrystalGraphics' `targets {}`
+resolves the same property, so both builds pick the same node.
 
 ## Commands
 
@@ -119,21 +120,20 @@ log fails the run; a capture alone proves nothing (a frame can be the previous s
 
 **CrystalGraphics first** — its `docs/BUILD.md` § *Adding a Minecraft version*, steps 0–3. Then here:
 
-1. **`settings.gradle.kts`** — the version on the loader's branch in `modernNodes` (and `common` if absent);
-   for legacy, the `branch("forge")` list. Must match CrystalGraphics' node for node.
-2. **`runtime/mc/modern/<branch>/versions/<version>/gradle.properties`** — the same pins as
-   CrystalGraphics' node (same `variant.minecraft`, `variant.packFormat`), plus the common node's.
-3. **`//? if` directives** in `runtime/mc/modern/<branch>/src` (and `src/lang`). `checkAllTargets`.
-4. **`stubs.zip`** — regenerate once, after both repos have the node (CrystalGraphics' doc, step 4);
+1. **`targets {}` in `settings.gradle.kts`** — the same ranges as CrystalGraphics', so the new node is here
+   too. The pins are the shared catalog's, already written in CrystalGraphics' step 2; nothing per node
+   here unless it ships a mixin (`variant.mixinPlugin` in `runtime/mc/modern/<branch>/versions/<version>/gradle.properties`).
+2. **`//? if` directives** in `runtime/mc/modern/<branch>/src` (and `src/lang`). `checkAllTargets`.
+3. **`stubs.zip`** — regenerate once, after both repos have the node (CrystalGraphics' doc, step 4);
    `checkStubEquivalence` on the new node in both repos; commit it with the CrystalGraphics node.
-5. **`serverSmoke -PcgAcceptEula`** if the node has a dev run (toolchain table).
-6. **A Prism instance**: named `Crystal <digits> <Loader>` (e.g. `Crystal 12111 NeoForge`), in its
+4. **`serverSmoke -PcgAcceptEula`** if the node has a dev run (toolchain table).
+5. **A Prism instance**: named `Crystal <digits> <Loader>` (e.g. `Crystal 12111 NeoForge`), in its
    minor-version group in PrismLauncher's `instgroups.json`; the loader at the pinned version; its
    companions — **Fabric API** of that version (Fabric), **MixinBooter** (Forge 1.8–1.12.2), **UniMixins**
    (1.7.10), a **Java 8** runtime for Forge ≤1.16, legacy and 1.7.10. Add `prismInstance.<label>` to
    `local.properties`, and the label to `prismInstanceJoml` if below 1.19.3.
-7. **`prodSmoke -PcgTargets=<new label>`** — the new target only, one run — and open its captures.
-8. **`AGENTS.md`**: the node list under *Running Minecraft*, and a refused version's reason if one is refused.
+6. **`prodSmoke -PcgTargets=<new label>`** — the new target only, one run — and open its captures.
+7. **`AGENTS.md`**: the node list under *Running Minecraft*, and a refused version's reason if one is refused.
 
 Nothing else is edited: descriptors, variant tables, thin-jar lists and `requiredEntries` follow the tree.
 A new **loader** or **entry class** is different: entry-class names are strings in

@@ -9,6 +9,8 @@ pluginManagement {
     // Supplies the 1.20.x convention plugins (cg-java, cg-modern-common, cg-modern-loader). Without
     // it every 1.20.x node fails at id("cg-modern-loader") with "plugin not found".
     includeBuild("runtime/mc/modern/build-logic")
+    // The settings plugin below: the Minecraft nodes, from the versions targeted.
+    includeBuild("CrystalGraphics/singlejar-logic")
 
     plugins {
         id("com.gtnewhorizons.gtnhconvention") version("2.0.20")
@@ -55,6 +57,7 @@ pluginManagement {
 // requires Gradle 9.0+; this build is 9.5.1.
 plugins {
     id("dev.kikugie.stonecutter") version "0.9.8"
+    id("com.crystalgraphics.singlejar")
 }
 
 rootProject.name = "CrystalGUI"
@@ -109,53 +112,25 @@ include("runtime:mc:launchwrapper")
 // `core`'s CursorService turns a keyword into a picture and hands it to CgCursorService, so no host
 // of ours names a cursor service, an adapter, or the LWJGL module either lives in.
 
-// The MC 1.7.10 loader.
+// ── The Minecraft nodes ──────────────────────────────────────────────────────────────────────────
 //
-// `include`, NOT `includeBuild` -- this line read `//includeBuild("mc1710")` for months and could never
-// have worked: includeBuild needs the directory to be a standalone Gradle build with its own settings
-// file, and runtime/mc/1710/settings.gradle does not exist and never has (`git log --all` over that path is
-// empty, and it is not gitignored either). `git log -L` finds the configuration that actually launched
-// a client, in 2a10724, and it is a plain subproject. See plan/platform-mc1710.md 25.2.
-if (!embedded) include("runtime:mc:1710")
+// The versions this build ships, resolved against singlejar-logic's pin catalog into the 1.7.10 host,
+// the legacy tree (Forge 1.8-1.12.2) and the modern tree -- a Stonecutter tree, `common` plus a branch
+// per loader, a node per Minecraft version, whose sources pass through comment directives
+// (`//? if >=1.20.2 {`). Adding a version is a catalog entry the ranges below reach.
+//
+// Embedded, only what the including build can configure: the node its target needs. @see
+// cgbuildlogic.SingleJarSettings
+singlejar {
+    targets {
+        forge("1.7.10".."1.21.11")
+        neoforge("1.20.2".."1.21.11")
+        fabric("1.14.4".."1.21.11")
+    }
+}
 
-// ── The MC 1.20.x loaders: one source tree, a node per Minecraft version (J11) ───────────────────
-//
-// Stonecutter, BRANCHED. Each loader is a branch -- `runtime/mc/modern/<loader>/` holds the shared
-// `src/` and one build script -- and each Minecraft version it targets is a NODE,
-// `:runtime:mc:modern:<loader>:<version>`, whose project directory is `<loader>/versions/<version>/`
-// and whose sources are the branch's, passed through comment directives (`//? if >=1.20.2 {`).
-//
-// `common` is versioned too, and not optionally: every loader node compiles against the common node of
-// ITS OWN version, so NeoForge (1.20.4) has a 1.20.4 common under it rather than borrowing 1.20.1's.
-//
-// A node's pins are its own `versions/<version>/gradle.properties`. ADDING A TARGET is a version below
-// plus that file; nothing else in the build names a node -- cgbuildlogic.ModernTree finds them.
-//
-// Embedded, only what a 1.20.1 Forge consumer takes: common and forge at 1.20.1. fabric pulls
-// fabric-loom, which refuses a Gradle daemon below Java 21, and 1.20.4 is no 1.20.1 consumer's business.
-//
-// A consumer building against this checkout names its nodes -- `com.crystalgui.settings` resolves its
-// target to them -- in a system property, the only channel into an included build's settings.
-// CrystalGraphics reads the same list and clears it.
-fun checkoutNodes(list: String): Map<String, List<String>> =
-    list.split(',').map { it.substringBefore(':') to it.substringAfter(':') }
-        .groupBy({ it.first }, { it.second })
-// A consumer's checkout: its projects stand in for the published modules, so publishedModule has them
-// offer what those publish (cgbuildlogic.CONSUMER_CHECKOUT).
-if (embedded && System.getProperty("crystalgui.checkout.nodes") != null) gradle.extra["cgConsumerCheckout"] = true
-val modernNodes: Map<String, List<String>> =
-    if (embedded) System.getProperty("crystalgui.checkout.nodes")?.let(::checkoutNodes)
-        ?: linkedMapOf("common" to listOf("1.20.1"), "forge" to listOf("1.20.1"))
-    else linkedMapOf(
-        "common" to listOf("1.13.2", "1.14.3", "1.14.4", "1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19.2", "1.19.3", "1.19.4", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.8", "1.21.10", "1.21.11"),
-        "forge" to listOf("1.13.2", "1.14.3", "1.14.4", "1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19.2", "1.19.3", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.8", "1.21.10", "1.21.11"),
-        "neoforge" to listOf("1.20.2", "1.20.3", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.8", "1.21.10", "1.21.11"),
-        "fabric" to listOf("1.14.4", "1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19.2", "1.19.3", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.8", "1.21.10", "1.21.11"),
-    )
-
-// Read by composite.settings.gradle.kts, which substitutes CrystalGraphics' node of each version --
-// so this table is declared before that script is applied.
-extra["cgModernNodes"] = modernNodes
+// Read by composite.settings.gradle.kts, which substitutes CrystalGraphics' node of each version.
+extra["cgModernNodes"] = singlejar.modernNodes
 
 // CrystalGraphics, and the ONE place it is included from.
 //
@@ -177,18 +152,3 @@ if (!embedded) includeBuild("consumer-plugin")
 //include(":CrystalGraphics:platform")
 //include(":CrystalGraphics:freetype-msdfgen-harfbuzz-bindings")
 
-stonecutter {
-    create("runtime:mc:modern") {
-        // EVERY branch declares its own versions and the tree declares none: a tree-level `versions`
-        // is inherited by a branch that names none, and also creates a node on the tree itself, with
-        // no build script, that builds nothing and still costs configuration.
-        modernNodes.forEach { (branchName, nodeVersions) ->
-            branch(branchName) { versions(*nodeVersions.toTypedArray()) }
-        }
-    }
-    // Forge 1.8 to 1.12.2, a node per SRG plateau -- CrystalGraphics' legacy tree, node for node.
-    // @see cgbuildlogic.LegacyTree
-    if (!embedded) create("runtime:mc:legacy") {
-        branch("forge") { versions("1.8.9", "1.10.2", "1.12.2") }
-    }
-}

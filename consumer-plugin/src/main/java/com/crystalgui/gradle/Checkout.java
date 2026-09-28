@@ -10,7 +10,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
-import org.gradle.api.GradleException;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.initialization.Settings;
 import org.gradle.api.plugins.ExtraPropertiesExtension;
@@ -18,15 +17,16 @@ import org.gradle.api.plugins.ExtraPropertiesExtension;
 /**
  * A CrystalGUI checkout in place of the published artifacts, under the same coordinates.
  *
- * <p>The checkout includes only the nodes the target runs on — the node of the target's loader whose
- * claimed range holds its version, and the common node beside it — which are the only ones the
- * consumer's Gradle can configure: Loom wants a Java 21 daemon, the 1.7.10 host a Java 25 one. Both
- * checkouts read that list from {@link #NODES_PROPERTY}, a system property, since nothing else
- * reaches an included build's settings; CrystalGraphics, included last, clears it.</p>
+ * <p>The checkout builds only the node its target runs on — the only one the consumer's Gradle can be
+ * relied on to configure: Loom wants a Java 21 daemon, the 1.7.10 host a Java 25 one. Both checkouts
+ * resolve it themselves, against singlejar-logic's catalog, from the target in {@link #TARGET_PROPERTY}:
+ * a system property, since nothing else reaches an included build's settings. It is cleared once
+ * every build's settings have read it.</p>
  */
 final class Checkout {
 
-    static final String NODES_PROPERTY = "crystalgui.checkout.nodes";
+    /** singlejar-logic's {@code CHECKOUT_TARGET}: {@code loader:minecraft}. */
+    static final String TARGET_PROPERTY = "singlejar.checkout.target";
 
     /** Where the project plugin finds the checkout, and whether the harness was asked for. */
     static final String DIR = "com.crystalgui.checkout";
@@ -36,8 +36,8 @@ final class Checkout {
     }
 
     static void include(Settings settings, File dir, Target target, HarnessSpec harness) {
-        String node = claimingNode(dir, target);
-        System.setProperty(NODES_PROPERTY, "common:" + node + "," + target.loader() + ":" + node);
+        System.setProperty(TARGET_PROPERTY, target.encode());
+        settings.getGradle().projectsLoaded(gradle -> System.clearProperty(TARGET_PROPERTY));
         // The checkout's settings include the harness on this; its build reads the rest as project
         // properties, which an included build inherits from this build's start parameter.
         System.setProperty("crystalgui.harness", String.valueOf(harness != null));
@@ -71,27 +71,6 @@ final class Checkout {
     static int daemonJava(File checkout) {
         Properties p = load(new File(checkout, "gradle/gradle-daemon-jvm.properties"));
         return p == null ? 17 : Integer.parseInt(p.getProperty("toolchainVersion", "17").trim());
-    }
-
-    /** The node whose {@code variant.minecraft} holds the target's version, read off the checkout. */
-    private static String claimingNode(File checkout, Target target) {
-        File versions = new File(checkout, "runtime/mc/modern/" + target.loader() + "/versions");
-        File[] nodes = versions.listFiles(File::isDirectory);
-        if (nodes != null) {
-            for (File node : nodes) {
-                String range = claimedRange(new File(node, "gradle.properties"));
-                if (range != null && VersionRange.parse(range).contains(target.minecraft())) {
-                    return node.getName();
-                }
-            }
-        }
-        throw new GradleException("crystalgui: the checkout at " + checkout + " has no " + target.loader()
-            + " node claiming Minecraft " + target.minecraft());
-    }
-
-    private static String claimedRange(File properties) {
-        Properties p = load(properties);
-        return p == null ? null : p.getProperty("variant.minecraft");
     }
 
     private static Properties load(File properties) {
