@@ -249,7 +249,8 @@ val deploySingleJars = tasks.register("deploySingleJars") {
 
 /**
  * One instance per Minecraft major, and the first and last of a major with many minors -- on every loader
- * from 1.20, where all three ship. Twenty-four clients where every instance is over a hundred.
+ * from 1.20, where all three ship. Twenty-four clients where every instance is over a hundred. OLDEST
+ * FIRST: prodSmoke runs a named list in its order, so the batch running says how far along it is.
  * docs/CGUI_BUILD.md § A wide check is the sweep.
  */
 val prodSmokeSweep = listOf(

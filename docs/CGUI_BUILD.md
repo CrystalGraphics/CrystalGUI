@@ -198,7 +198,8 @@ A world comes from `runs/client/saves/` — copy the instance's save there. A se
 with no `-PcgTargets` runs the sweep, `prodSmokeSweep` in the root build: 1.7.10, 1.8.9, 1.10.2, 1.12.2,
 1.13.2, 1.14.4, 1.15.2, 1.16.5, 1.17.1, 1.18.2, and the first and last of each major with many minors —
 1.19 and 1.19.4, 1.20.1 and 1.20.6, 1.21.4 and 1.21.11 — with every 1.20 and 1.21 one on all three
-loaders (NeoForge's first is 1.20.2). Twenty-four clients, four at a time, about ten minutes. Every instance is over a hundred clients and an hour, and
+loaders (NeoForge's first is 1.20.2). Twenty-four clients, four at a time, oldest first — 1.7.10, 1.8.9,
+1.10.2 and 1.12.2 lead and the three 1.21.11s close — about fifteen minutes with the language probes. Every instance is over a hundred clients and an hour, and
 eight at a time took the workstation down; `-PcgTargets=all` is there for the rare release that needs it.
 A new version is checked by its own label (`-PcgTargets=<label>`), and a line that gains a minor keeps
 its first and last in the sweep.
