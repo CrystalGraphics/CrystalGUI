@@ -21,9 +21,9 @@ import org.gradle.jvm.tasks.Jar;
  * crystalgui { minecraft("1.20.1", "forge") }
  * }</pre>
  *
- * <p>Artifacts come from Maven local until a public repository exists; the plugin adds it, filtered to
- * CrystalGUI's and CrystalGraphics' groups. A build whose settings forbid project repositories declares
- * {@code mavenLocal()} there instead.</p>
+ * <p>Artifacts come from Maven local until they are published to a Maven repository; the plugin adds
+ * it, filtered to CrystalGUI's and CrystalGraphics' groups. A build whose settings forbid project
+ * repositories declares {@code mavenLocal()} there instead.</p>
  */
 public class CrystalGuiPlugin implements Plugin<Project> {
 
