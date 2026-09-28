@@ -292,6 +292,8 @@ public final class LanguageRegistry {
     private static final List<String> CONTRIBUTORS = new ArrayList<>();
 
     private static boolean bootstrapped;
+    @Nullable
+    private static Throwable firstRead;
 
     /**
      * Finds every {@link LanguageKinds} on the classpath. Idempotent, and called by every read.
@@ -334,12 +336,22 @@ public final class LanguageRegistry {
         return bootstrapped;
     }
 
+    /**
+     * Where the first read came from, or null before one. What a host prints when {@link #isBootstrapped}
+     * says it was too late -- the read is usually in somebody else's setup code, far from the symptom.
+     */
+    @Nullable
+    public static synchronized Throwable firstRead() {
+        return firstRead;
+    }
+
     public static synchronized void bootstrap() {
         if (bootstrapped) return;
         // SET BEFORE THE LOOP. A service's register() legitimately reads the registry back -- an entry
         // that carries the previous tokenizer over is the documented way two tiers compose -- and
         // re-entering here would run every service twice.
         bootstrapped = true;
+        firstRead = new Throwable("LanguageRegistry first read here");
         // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN LANGUAGES AND NOT THE EDITOR.
         Providers.forEach(LanguageKinds.class, LanguageRegistry.class.getClassLoader(), kinds -> {
             try {
@@ -383,6 +395,7 @@ public final class LanguageRegistry {
      */
     public static synchronized void resetBootstrapForTesting() {
         bootstrapped = false;
+        firstRead = null;
         CONTRIBUTORS.clear();
     }
 }
