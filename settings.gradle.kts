@@ -133,8 +133,16 @@ if (!embedded) include("runtime:mc:1710")
 //
 // Embedded, only what a 1.20.1 Forge consumer takes: common and forge at 1.20.1. fabric pulls
 // fabric-loom, which refuses a Gradle daemon below Java 21, and 1.20.4 is no 1.20.1 consumer's business.
+//
+// A consumer building against this checkout names its nodes -- `com.crystalgui.settings` resolves its
+// target to them -- in a system property, the only channel into an included build's settings.
+// CrystalGraphics reads the same list and clears it.
+fun checkoutNodes(list: String): Map<String, List<String>> =
+    list.split(',').map { it.substringBefore(':') to it.substringAfter(':') }
+        .groupBy({ it.first }, { it.second })
 val modernNodes: Map<String, List<String>> =
-    if (embedded) linkedMapOf("common" to listOf("1.20.1"), "forge" to listOf("1.20.1"))
+    if (embedded) System.getProperty("crystalgui.checkout.nodes")?.let(::checkoutNodes)
+        ?: linkedMapOf("common" to listOf("1.20.1"), "forge" to listOf("1.20.1"))
     else linkedMapOf(
         "common" to listOf("1.13.2", "1.14.3", "1.14.4", "1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19.2", "1.19.3", "1.19.4", "1.20.1", "1.20.2", "1.20.3", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.8", "1.21.10", "1.21.11"),
         "forge" to listOf("1.13.2", "1.14.3", "1.14.4", "1.15.2", "1.16.5", "1.17.1", "1.18.2", "1.19.2", "1.19.3", "1.19.4", "1.20.1", "1.20.2", "1.20.4", "1.20.6", "1.21.1", "1.21.3", "1.21.4", "1.21.5", "1.21.6", "1.21.8", "1.21.10", "1.21.11"),
@@ -156,6 +164,10 @@ extra["cgModernNodes"] = modernNodes
 // integration.gradle.kts (applied by runtime/mc/1710/build.gradle.kts) reads its `submoduleMods` data from.
 // Applied even when embedded: :core takes com.crystalgraphics:core and :platform as compileOnly.
 apply(from = "gradle/module_integration/composite.settings.gradle.kts")
+
+// The consumer plugins, `com.crystalgui` and `com.crystalgui.settings`: a build of their own, which
+// publishes with this one. Never included into a consumer, whose own request for them it would answer.
+if (!embedded) includeBuild("consumer-plugin")
 
 //include(":CrystalGraphics")
 //include(":CrystalGraphics:core")

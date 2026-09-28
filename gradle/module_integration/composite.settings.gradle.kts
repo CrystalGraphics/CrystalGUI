@@ -82,13 +82,6 @@ fun Map<String, *>.string(key: String): String = this[key] as String
 fun Map<String, *>.mapList(key: String): List<Map<String, String>> =
     this[key] as? List<Map<String, String>> ?: emptyList()
 
-// Loader substitutions go with the loaders. CrystalGraphics drops its own loaders when neither it nor
-// CrystalGUI is the build being invoked, and a substitution naming a missing project then fails
-// configuration for every task -- "Project with path ':runtime:mc:modern:common' not found in build
-// ':CrystalGUI:CrystalGraphics'". Matched on the path so a loader added later is covered.
-val embeddedHere = gradle.parent != null
-
-fun isLoaderPath(projectPath: String): Boolean = projectPath == ":runtime:mc:1710"
 
 // CrystalGraphics' COMMON NODE of every version this build has a common node for -- which it must
 // have, since CrystalGraphics goes first (D1). The coordinate is its node coordinate:
@@ -97,6 +90,24 @@ fun isLoaderPath(projectPath: String): Boolean = projectPath == ":runtime:mc:171
 // resolution, naming the coordinate, if the two ever disagree.
 @Suppress("UNCHECKED_CAST")
 val modernNodes = extra["cgModernNodes"] as Map<String, List<String>>
+
+// Loader substitutions go with the loaders. CrystalGraphics drops its own loaders when neither it nor
+// CrystalGUI is the build being invoked, and keeps only a checkout consumer's nodes when one is; a
+// substitution naming a missing project then fails configuration for every task -- "Project with path
+// ':runtime:mc:modern:common' not found in build ':CrystalGUI:CrystalGraphics'".
+val embeddedHere = gradle.parent != null
+
+fun isPresent(projectPath: String): Boolean = when {
+    projectPath == ":runtime:mc:1710" -> !embeddedHere
+    projectPath.startsWith(":runtime:mc:modern:") -> projectPath.removePrefix(":runtime:mc:modern:").split(':')
+        .let { (branch, version) -> modernNodes[branch].orEmpty().contains(version) }
+    else -> true
+}
+
+// Embedded, CrystalGraphics' shipped jars are its root's, carrying only the included nodes' variants: a
+// consumer's dev run asks for the coordinates it would take from Maven, each with its own coordinate as
+// the capability that picks one of the root's jars (a substitution cannot ask for one).
+val shippedMods = listOf("com.crystalgraphics:crystalgraphics", "com.crystalgraphics:crystalgraphics-joml")
 val modernNodeSubstitutions: List<Map<String, String>> = modernNodes.getValue("common").map { version ->
     mapOf("module" to "com.crystalgraphics.mc.modern.common:$version",
         "projectPath" to ":runtime:mc:modern:common:$version")
@@ -106,10 +117,13 @@ submoduleData.forEach { mod ->
     includeBuild(mod.string("buildPath")) {
         dependencySubstitution {
             (mod.mapList("substitutions") + modernNodeSubstitutions)
-                .filterNot { embeddedHere && isLoaderPath(it.getValue("projectPath")) }
+                .filter { isPresent(it.getValue("projectPath")) }
                 .forEach { substitution ->
                     substitute(module(substitution.getValue("module"))).using(project(substitution.getValue("projectPath")))
                 }
+            if (embeddedHere) shippedMods.forEach { shipped ->
+                substitute(module(shipped)).using(project(":"))
+            }
         }
     }
 }

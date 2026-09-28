@@ -11,6 +11,7 @@ beside this file. Nothing here assumes you have read them.
 
 ## Contents
 
+0. [Setting up your build](#0-setting-up-your-build)
 1. [Which kind of UI do I want?](#1-which-kind-of-ui-do-i-want)
 2. [A client-only UI](#2-a-client-only-ui)
 3. [Styling](#3-styling)
@@ -24,6 +25,90 @@ beside this file. Nothing here assumes you have read them.
 10. [Owning a file type](#10-owning-a-file-type)
 11. [Writing your own widget](#11-writing-your-own-widget)
 12. [Cheat sheet](#12-cheat-sheet)
+
+---
+
+## 0. Setting up your build
+
+**One plugin.** It puts CrystalGUI's API on your compile classpath and both mods on your dev run, through
+your toolchain's own mod remapping — the dev run loads the same jars players install.
+
+```kotlin
+// settings.gradle.kts -- until CrystalGUI is on a public repository
+pluginManagement { repositories { mavenLocal(); gradlePluginPortal() } }
+
+// build.gradle.kts
+plugins {
+    id("net.neoforged.moddev.legacyforge") version "2.0.141"   // your toolchain, unchanged
+    id("com.crystalgui") version "1.0.0"
+}
+crystalgui {
+    minecraft("1.20.1", "forge")   // forge, neoforge or fabric; forge covers 1.7.10 and 1.8-1.12.2 too
+    language()                     // optional: the scripting mod on the dev run as well
+    testing()                      // optional: the engine on testImplementation, runnable headless
+}
+```
+
+And in your own descriptor, the dependency the plugin cannot write for you:
+
+```toml
+# META-INF/mods.toml (neoforge.mods.toml takes type = "required" in place of mandatory)
+[[dependencies.yourmod]]
+modId = "crystalgui"
+mandatory = true
+versionRange = "[1.0.0,)"
+ordering = "AFTER"
+side = "BOTH"
+```
+
+```json
+"depends": { "crystalgui": ">=1.0.0", "crystalgraphics": ">=1.0.0" }
+```
+
+| Your toolchain | Mods reach the dev run through | Verified |
+|---|---|---|
+| ModDevGradle `legacyForge` (Forge 1.17–1.20.1) | its SRG → official remapping | dev client run: Forge 1.20.1 |
+| ModDevGradle `neoForge` | the runtime classpath, unremapped | dev client run: NeoForge 1.21.1 |
+| Loom | `modLocalRuntime` | dev client run: Fabric 1.20.1 |
+| ForgeGradle | `fg.deobf` | not yet run |
+| RetroFuturaGradle (1.7.10) | `rfg.deobf` | not yet run |
+
+- **A module with no Minecraft in it** applies the plugin and declares nothing: it gets the API.
+- **Every `run*` task first checks that both jars run on your target** (`checkCrystalGuiTarget`) and, when
+  they do not, names the versions they do.
+- Below Minecraft 1.19.3 the plugin adds `crystalgraphics-joml` as well: Minecraft ships no JOML there.
+- The plugin adds `mavenLocal()`, filtered to CrystalGUI's two groups. A build whose settings forbid
+  project repositories declares it there.
+- Unimined builds (Forge 1.13–1.16, 1.8–1.12.2) are not supported yet: `minecraft(...)` fails and says so.
+
+### Against a checkout of CrystalGUI
+
+For a mod written against an unreleased CrystalGUI, the settings half builds it from a local clone.
+Nothing in `build.gradle.kts` changes except the version:
+
+```kotlin
+// settings.gradle.kts
+plugins { id("com.crystalgui.settings") version "1.0.0" }
+crystalgui {
+    minecraft("1.20.1", "forge")   // every project with a toolchain takes this target
+    checkout("../CrystalGUI")      // cloned with --recursive
+}
+
+// build.gradle.kts
+plugins {
+    id("net.neoforged.moddev.legacyforge") version "2.0.141"
+    id("com.crystalgui")           // NO version: the settings plugin already loaded it
+}
+```
+
+The engine compiles from the checkout's sources, and the dev run gets single jars the checkout builds
+for your target alone — so an edit in the checkout reaches your next run.
+
+- **Gradle must run on Java 25**, the checkout's own requirement:
+  `./gradlew updateDaemonJvm --jvm-version=25`. Your mod still compiles and runs on its own Java.
+- **Modern targets only**; 1.7.10 and Forge 1.8–1.12.2 take CrystalGUI from Maven.
+- While you use it, the checkout's `build/libs/crystalgui-*.jar` holds only your target's variant. Its own
+  `singleJar` rebuilds the full jar the next time it runs there.
 
 ---
 

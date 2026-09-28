@@ -47,8 +47,11 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 **Two source sets per loader module**: `main` → the host jar, `lang` → the language jar. `:language` is
 on `langCompileOnly` only, so a host class naming it is a compile error.
 
-**Included by another build** (`gradle.parent != null`, e.g. RPG-Core): only `common`/`forge` 1.20.1,
-no 1.7.10, no legacy tree, no harness unless `-Dcrystalgui.harness=true`.
+**Included by another build** (`gradle.parent != null`): only the loader and common node of ONE target —
+the one a consumer's `com.crystalgui.settings` names in the `crystalgui.checkout.nodes` system property,
+else `forge` 1.20.1 — with no 1.7.10, no legacy tree, no `consumer-plugin`, and no harness unless
+`-Dcrystalgui.harness=true`. Its `singleJar` then carries that target's variant alone; the 1.7.10 entries
+in the pipeline are conditional on `has1710` for exactly this. CrystalGraphics reads the same list.
 
 ## Commands
 
@@ -84,6 +87,9 @@ python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # l
 | `com.crystalgui:taffy` | the layout engine (MIT) | comes with `core` |
 | `com.crystalgui:crystalgui` | the shipped jar | runs it in a dev client, with `com.crystalgraphics:crystalgraphics` |
 | `com.crystalgui:crystalgui-language` | the optional language mod | runs it, if wanted |
+
+The consumer plugins `com.crystalgui` and `com.crystalgui.settings` publish with them (`consumer-plugin/`,
+an included build, Java so any consumer Gradle loads it). Their use is `CGUI_BUILDING_UIS.md` §0.
 
 `core`'s metadata carries CrystalGraphics' `core` and `platform`, `taffy`, JOML 1.10.5, gson 2.2.4,
 log4j-api 2.0-beta9 and two annotation packages — each the oldest any target ships. `language` is not
