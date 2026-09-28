@@ -1,14 +1,15 @@
-# Takes a CrystalGUI version back: its packages on Cloudsmith, its GitHub release and its tag. For a release
-# that went out broken and is to be released again at the same version. The release commit stays on master.
+# Takes a version back: its packages on Cloudsmith, its GitHub release and its tag. For a release that went
+# out broken and is to be released again at the same version. The release commit stays on master.
 #
-# Only packages under com/crystalgui/ are touched; CrystalGraphics shares the Cloudsmith repository.
+# Only packages under GROUP are touched: CrystalGUI and CrystalGraphics share the Cloudsmith repository, and
+# each carries this file with its own GROUP.
 name: Retract
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: CrystalGUI version to take back (x.y.z)
+        description: Version to take back (x.y.z)
         required: true
 
 permissions:
@@ -23,6 +24,7 @@ jobs:
       VERSION: ${{ inputs.version }}
       CLOUDSMITH_PASSWORD: ${{ secrets.CLOUDSMITH_PASSWORD }}
       CLOUDSMITH_REPOSITORY: crystalgraphics/crystalgraphics
+      GROUP: com/crystalgui
     steps:
       - name: Delete the Cloudsmith packages
         shell: python
@@ -52,10 +54,10 @@ jobs:
           print(len(packages), "packages in the repository")
           def paths(p):
               return [p.get("cdn_url") or ""] + [f.get("cdn_url") or "" for f in p.get("files", [])]
-          ours = [p for p in packages
-                  if p.get("version") == version and any("/com/crystalgui/" in u for u in paths(p))]
+          group = f"/{os.environ['GROUP']}/"
+          ours = [p for p in packages if p.get("version") == version and any(group in u for u in paths(p))]
           if not ours:
-              print(f"::warning::no com.crystalgui package at {version} among {len(packages)}")
+              print(f"::warning::nothing under {group} at {version} among {len(packages)}")
           for p in ours:
               call(f"{api}{p['slug_perm']}/", "DELETE")
               print("deleted", p["name"], p["version"], paths(p)[0])
