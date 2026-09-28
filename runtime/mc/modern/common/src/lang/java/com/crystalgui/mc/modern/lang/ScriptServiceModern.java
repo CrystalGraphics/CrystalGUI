@@ -103,14 +103,15 @@ public final class ScriptServiceModern implements ScriptService {
      * A class only a Fabric runtime has, and the question that separates the three loaders.
      *
      * <p>Fabric renames classes as well as members, so {@code Level} is not there at all under that
-     * name; Forge and NeoForge keep official class names and differ only in their members. Reading for
+     * name; NeoForge and Forge from 1.17 keep official class names and differ only in their members, and
+     * Forge before 1.17 has MCP ones ({@link #MCP_LEVEL}). Reading for
      * this one class is therefore the whole of the detection, and it is a read rather than a loader
      * check because the namespace is what actually matters — a future loader that ships intermediary
      * gets the right answer without being named here.</p>
      */
     private static final String FABRIC_LEVEL = "net/minecraft/class_1937";
 
-    /** The official spelling of the same class, which every other runtime has. */
+    /** The official spelling of the same class: NeoForge, Forge from 1.17, and every dev run. */
     private static final String OFFICIAL_LEVEL = "net/minecraft/world/level/Level";
 
     /** Whether this runtime speaks intermediary — asked once, since it cannot change. */
@@ -160,12 +161,18 @@ public final class ScriptServiceModern implements ScriptService {
                     .runtime("mappings.tiny", Source.located("fabric/intermediary/" + version),
                             "mappings/mappings.tiny");
         }
-        return MappingCoordinates.of(version, "srg", version)
+        //? if <1.14 {
+        /*// Mojang published no mappings before 1.14.4, so there is no readable half to join.
+        return MappingCoordinates.NONE;
+        *///?} else {
+        MappingCoordinates srg = MappingCoordinates.of(version, "srg", version)
                 .readable("client.txt", MojangMappings.clientMappings(version), null)
-                .runtime("joined.tsrg", Source.located("forge/mcp-config/" + version), "config/joined.tsrg")
-                // Official CLASS names with SRG MEMBERS -- what Forge has run since 1.17. MCPConfig's
-                // own class vocabulary is `net/minecraft/src/C_NNNN_` and no runtime speaks it.
-                .runtimeKeepsReadableClassNames();
+                .runtime("joined.tsrg", Source.located("forge/mcp-config/" + version), "config/joined.tsrg");
+        // Official CLASS names with SRG MEMBERS -- what Forge has run since 1.17. MCPConfig's own class
+        // vocabulary is then `net/minecraft/src/C_NNNN_`, which no runtime speaks. Before 1.17 its classes
+        // are the MCP names Forge ran, and are kept.
+        return officialClassNames() ? srg.runtimeKeepsReadableClassNames() : srg;
+        //?}
     }
 
     /**
@@ -177,12 +184,36 @@ public final class ScriptServiceModern implements ScriptService {
      */
     @Override
     public NamespaceProbe namespaceProbe() {
-        return NamespaceProbe.declaring(
-                isIntermediary() ? FABRIC_LEVEL : OFFICIAL_LEVEL, "getBlockState");
+        return NamespaceProbe.declaring(isIntermediary() ? FABRIC_LEVEL
+                : officialClassNames() ? OFFICIAL_LEVEL : MCP_LEVEL, "getBlockState");
     }
 
     /**
-     * The runtime's own spelling of a class — identity everywhere except Fabric, which renames classes.
+     * {@code Level} as Forge named it before 1.17: MCP class names, SRG members. A probe of
+     * {@link #OFFICIAL_LEVEL} found no class there and took the runtime for readable, so no mapping was
+     * fetched and no Minecraft member completed.
+     */
+    private static final String MCP_LEVEL = "net/minecraft/world/World";
+
+    /** Whether this runtime has official class names -- NeoForge, Forge from 1.17, and every dev run. */
+    private static Boolean officialClassNames;
+
+    private static synchronized boolean officialClassNames() {
+        if (officialClassNames == null) {
+            byte[] bytes;
+            try {
+                bytes = MinecraftBytes.SOURCE.bytesOf(OFFICIAL_LEVEL);
+            } catch (IOException | LinkageError unreadable) {
+                bytes = null;
+            }
+            officialClassNames = bytes != null;
+        }
+        return officialClassNames;
+    }
+
+    /**
+     * The runtime's own spelling of a class — identity except on Fabric and Forge before 1.17, whose
+     * class names are not Mojang's.
      *
      * <p>Read from the resolved mapping rather than decided here, so the two cannot disagree: whatever
      * the join produced is what the type index looks a class up by.</p>
