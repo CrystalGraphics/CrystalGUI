@@ -55,6 +55,9 @@ jobs:
           ours = [p for p in packages
                   if p.get("version") == version and any("/com/crystalgui/" in u for u in paths(p))]
           if not ours:
+              owner = os.environ["CLOUDSMITH_REPOSITORY"].split("/")[0]
+              for r in call(f"https://api.cloudsmith.io/v1/repos/{owner}/"):
+                  print("repository", r.get("slug"), "packages:", r.get("package_count"))
               for p in packages:
                   print(p.get("name"), p.get("version"), paths(p)[0])
               sys.exit(f"::error::no com.crystalgui package at {version}")
