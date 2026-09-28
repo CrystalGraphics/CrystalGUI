@@ -5,6 +5,7 @@ import cgbuildlogic.ModDescriptor
 import cgbuildlogic.Ordering
 import cgbuildlogic.Side
 import cgbuildlogic.Variant
+import cgbuildlogic.has1710
 import cgbuildlogic.legacyVariants
 import cgbuildlogic.modernVariants
 import cgbuildlogic.registerDescriptorTasks
@@ -33,13 +34,13 @@ val cgDescriptor = ModDescriptor(
     ),
     // 1.7.10 by hand; every other variant is a NODE of a tree, whose range and pack format are its
     // own pins (`variant.minecraft`, `variant.packFormat`) -- so adding a version adds its variant.
-    variants = listOf(
+    variants = listOfNotNull(
         Variant(
             loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
             commonEntry = "com.crystalgui.mc.v1710.CrystalGUI",
             mixinConfigs = listOf("mixins.crystalgui.json"),
             packFormat = 1,
-        ),
+        ).takeIf { has1710(project) },
     ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy",
         common = "com.crystalgui.mc.legacy.CrystalGUILegacy",
         client = "com.crystalgui.mc.legacy.CrystalGUILegacyClient",
@@ -86,12 +87,12 @@ val cgLangDescriptor = ModDescriptor(
         // registers into nothing and reports success.
         Dependency("crystalgui", "[1.0.0,)", ordering = Ordering.AFTER),
     ),
-    variants = listOf(
+    variants = listOfNotNull(
         Variant(
             loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
             commonEntry = "com.crystalgui.mc.v1710.lang.CrystalGuiLanguage",
             packFormat = 1,
-        ),
+        ).takeIf { has1710(project) },
     ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy",
         common = "com.crystalgui.mc.legacy.lang.CrystalGuiLanguageLegacy",
     )) + modernVariants(project, mapOf(

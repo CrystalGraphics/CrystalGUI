@@ -1,6 +1,7 @@
 import cgbuildlogic.ModDescriptor
 import cgbuildlogic.ShippedJar
 import cgbuildlogic.SingleJarSpec
+import cgbuildlogic.has1710
 import cgbuildlogic.legacyNodes
 import cgbuildlogic.modernLoaderNodes
 import cgbuildlogic.modernNodes
@@ -84,7 +85,7 @@ registerSingleJarPipeline(SingleJarSpec(
     shadePath = "com/crystalgui/shadow",
 
     // 1.7.10's production step is registered in its own build; every 1.20.x node's is read off the tree.
-    thinJars = listOf(":runtime:mc:1710" to "reobfThinJar") +
+    thinJars = listOfNotNull((":runtime:mc:1710" to "reobfThinJar").takeIf { has1710(project) }) +
         legacyNodes(project).map { it.path to "reobfThinShadowJar" } + modernThinJars("thinShadowJar"),
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
@@ -220,7 +221,7 @@ registerSingleJarPipeline(SingleJarSpec(
     fileName = "crystalgui-language-${project.version}.jar",
     shadePath = "com/crystalgui/lang/shadow",
 
-    thinJars = listOf(":runtime:mc:1710" to "reobfLangThinJar") +
+    thinJars = listOfNotNull((":runtime:mc:1710" to "reobfLangThinJar").takeIf { has1710(project) }) +
         legacyNodes(project).map { it.path to "reobfLangThinShadowJar" } + modernThinJars("langThinShadowJar"),
     libraryProjects = listOf(":language", ":runtime:mc:launchwrapper"),
     serviceOwners = listOf(":language"),
@@ -281,7 +282,8 @@ registerSingleJarPipeline(SingleJarSpec(
         // ALL THREE BANDS. 8 is what a 1.7.10 client runs, 17 what 1.20.x does, and 11 what a 1.7.10
         // client on lwjgl3ify may. Taken from the two eras that already resolve them rather than
         // re-resolved here -- any 1.20.x node will do, since the bands name no Minecraft.
-        listOf(":runtime:mc:1710", modernLoaderNodes(project).first().path).forEach { path ->
+        listOfNotNull(":runtime:mc:1710".takeIf { has1710(project) }, modernLoaderNodes(project).first().path)
+            .forEach { path ->
             val producer = project.project(path).tasks.named("bundleEngineBands")
             dependsOn(producer)
             from(producer)

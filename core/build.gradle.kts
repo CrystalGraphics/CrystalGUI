@@ -12,7 +12,7 @@ plugins {
 
 // Coordinates, so a consumer's dependencySubstitution can name this module.
 group = "com.crystalgui"
-version = "1.0.0"
+version = providers.gradleProperty("modVersion").get()
 
 // An abstract module: Java 25, with a Java 8 copy for every consumer below it. @see cgbuildlogic.abstractModule
 abstractModule("com/crystalgui/core/jvmdg")

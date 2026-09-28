@@ -122,6 +122,11 @@ val prismInstances: List<PrismInstance> = run {
     }
 }
 
+// The consumer plugins publish with the artifacts they name. @see consumer-plugin
+if (gradle.parent == null) tasks.named("publishToMavenLocal") {
+    dependsOn(gradle.includedBuild("consumer-plugin").task(":publishToMavenLocal"))
+}
+
 val deploySingleJars = tasks.register("deploySingleJars") {
     group = "crystalgui"
     description = "Puts every single jar into every Prism instance named in local.properties."
