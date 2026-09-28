@@ -207,6 +207,11 @@ return server.getPlayerList().isOp(player.getGameProfile());
 6. A feature a smoke does not exercise (a command, an entity) needs its own probe or a manual run on
    the oldest and newest node of each loader — say which, in the commit.
 
+**A failure prodSmoke or a player finds is fixed in that node's dev run, not in Prism.** Reproduce it
+with `runClient -Dcrystalgui.autotest=true ...` (or `runServer`/`serverSmoke`), iterate there, and run
+`prodSmoke` once more at the end. A cycle through the shipped jar is ten minutes; a dev client is two.
+`CGUI_BUILD.md` § *A failure on an installed client is fixed in a dev run* has the command.
+
 ## 8. Traps
 
 - **Strings are never remapped** — reflection by member name, `@Inject(method = "...")` without a

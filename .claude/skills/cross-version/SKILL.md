@@ -89,6 +89,12 @@ Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) 
    — open the captures in `build/prodSmoke/`, grep each instance's `logs/latest.log` for errors.
 6. Anything no smoke exercises: run it on the oldest and newest node of each loader, and say which.
 
+**Something crashes or misbehaves on a Prism client?** Do not iterate through `prodSmoke` (~10 min a
+cycle). Reproduce it in that node's dev run — `:runtime:mc:modern:<loader>:<version>:runClient
+-Dcrystalgui.autotest=true "-Dcrystalgui.autotest.world=*" ...` (every `-Dcrystalgui.*` is forwarded;
+copy a save into `runs/client/saves/`), or `runServer`/`serverSmoke` — fix it there, then confirm with
+one `prodSmoke`. `docs/CGUI_BUILD.md` § *A failure on an installed client is fixed in a dev run*.
+
 Report what ran, what passed, what was skipped and why. Never claim a version works that nothing ran on.
 A runtime surprise the break table missed goes into the table and, if it is not a spelling, into
 `docs/CGUI_INVARIANTS.md`.
