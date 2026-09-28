@@ -93,7 +93,8 @@ jobs:
           VERSION: ${{ steps.cg.outputs.version }}
           GH_TOKEN: ${{ secrets.CRYSTALGRAPHICS_TOKEN }}
         run: |
-          ./gradlew apiCheck checkSingleJar publish $JDKS --stacktrace
+          ./gradlew apiCheck checkSingleJar $JDKS --stacktrace      # checks alone first, as below
+          ./gradlew publish $JDKS --stacktrace
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "Release $VERSION"
@@ -119,7 +120,10 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build, check and publish
-        run: ./gradlew apiCheck checkSingleJar checkLanguageJar publish $JDKS --stacktrace
+        # Checks first, alone: in one invocation Gradle runs publish tasks beside a failing check.
+        run: |
+          ./gradlew apiCheck checkSingleJar checkLanguageJar $JDKS --stacktrace
+          ./gradlew publish $JDKS --stacktrace
 
       - name: Commit, tag and push
         env:
