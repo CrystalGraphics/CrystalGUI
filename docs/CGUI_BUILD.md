@@ -171,6 +171,24 @@ published: nothing outside CrystalGUI compiles against it.
 **Read every new target's capture.** "drew" has passed over garbled text. `desktop painted: false` in the
 log fails the run; a capture alone proves nothing (a frame can be the previous screen's).
 
+### A failure on an installed client is fixed in a dev run
+
+**When a Prism client crashes or misbehaves, reproduce it in that node's dev run and iterate there** —
+never by rebuilding and redeploying through `prodSmoke`, which costs about ten minutes a cycle where a
+dev client costs two. `prodSmoke` then confirms the fix in the shipped jar once, at the end. It stays the
+only witness for what a dev run cannot see: relocation, remapping, downgrading and the merged descriptors.
+
+```bash
+# the same unattended run prodSmoke arms, on the dev client; every -Dcrystalgui.* / -Dcrystalgraphics.* is forwarded
+./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgui.autotest=true "-Dcrystalgui.autotest.world=*"
+# ...plus a probe: -Dcrystalgui.autotest.script=Probe.java, -Dcrystalgui.autotest.complete=true
+# ...and where the captures go: -Dcrystalgui.autotest.out=build/devSmoke/1171forge.png
+```
+
+A world comes from `runs/client/saves/` — copy the instance's save there. A server-side fault goes to
+`runServer` or `serverSmoke`. Forge ≥1.20.2 and NeoForge 1.20.2/1.20.3 have no dev run; there
+`prodSmoke -PcgNoDeploy -PcgTargets=<one>` is the loop.
+
 ---
 
 ## Adding a Minecraft version
