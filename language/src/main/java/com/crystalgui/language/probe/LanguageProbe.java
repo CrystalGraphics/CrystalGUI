@@ -7,6 +7,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -236,12 +237,13 @@ public final class LanguageProbe {
         byte[] source = SCRIPT_SOURCE.getBytes(StandardCharsets.UTF_8);
         FileOperations files = workbench.workspace().files();
         Runnable open = () -> workbench.openFile(path);
-        // CREATE, and overwrite what an earlier run left: both are one request, and which one a fresh
-        // world needs is not knowable in advance.
-        files.create(file, source).then(ignored -> open.run()).onError(exists ->
-                files.write(file, source, null).then(ignored -> open.run()).onError(failed ->
-                        CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: could not write {}: {}",
-                                path, failed)));
+        // OVERWRITE what an earlier run left, or CREATE it: asked first, because a create that finds the
+        // file posts a "File operation failed" balloon into the very capture being taken.
+        Consumer<Object> failed = why ->
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: could not write {}: {}", path, why);
+        files.stat(file)
+                .then(exists -> files.write(file, source, null).then(ignored -> open.run()).onError(failed::accept))
+                .onError(missing -> files.create(file, source).then(ignored -> open.run()).onError(failed::accept));
     }
 
     /** Presses Run on the script {@link #runScriptOnce} opened, once it is open. @see #RUN_ATTEMPTS */
