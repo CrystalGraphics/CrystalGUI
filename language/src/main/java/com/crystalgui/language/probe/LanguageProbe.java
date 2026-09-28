@@ -1,5 +1,6 @@
 package com.crystalgui.language.probe;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -11,7 +12,16 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.host.HostSession;
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.fs.client.FileOperations;
+import com.crystalgui.fs.server.WorkspaceHost;
+import com.crystalgui.workbench.WorkbenchContext;
+import com.crystalgui.workbench.app.WorkbenchApplication;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgui.language.platform.ScriptServices;
@@ -92,6 +102,18 @@ public final class LanguageProbe {
     private static final String SCRIPT = emptyToNull(System.getProperty("crystalgui.autotest.script"));
 
     /**
+     * What {@link #SCRIPT} holds. The default sets {@link #SCRIPT_RAN}; JavaScript reaches System through
+     * its {@code java} global, and Java by its simple name, since a script named {@code java.java} is a
+     * class that obscures the package.
+     */
+    private static final String SCRIPT_SOURCE = System.getProperty("crystalgui.autotest.scriptSource",
+            (SCRIPT != null && SCRIPT.endsWith(".js") ? "java.lang." : "")
+                    + "System.setProperty(\"crystalgui.autotest.scriptRan\", \"yes\");");
+
+    /** What the default script leaves behind, since its own output goes to the Run console, not the log. */
+    private static final String SCRIPT_RAN = "crystalgui.autotest.scriptRan";
+
+    /**
      * A class to compare LIVE bytes against pre-transform bytes, or null.
      *
      * <p>e.g. {@code net/minecraft/client/Minecraft}. The difference between the two sources IS the
@@ -139,13 +161,39 @@ public final class LanguageProbe {
         if (!AutoTest.ENABLED) return;
         host = gameHost;
         // BEFORE the capture frame, so a probe still leaves a photograph behind.
-        if (RUN_SCRIPT_ON_FRAME > 0) AutoTest.onFrame(RUN_SCRIPT_ON_FRAME, LanguageProbe::runScriptOnce);
+        if (RUN_SCRIPT_ON_FRAME > 0) {
+            AutoTest.onFrame(RUN_SCRIPT_ON_FRAME, LanguageProbe::runScriptOnce);
+            AutoTest.onFrame(RUN_SCRIPT_ON_FRAME + OPEN_BEFORE_RUN_FRAMES, LanguageProbe::runOpenedScript);
+            AutoTest.onFrame(RUN_SCRIPT_ON_FRAME + SCRIPT_RESULT_AFTER_FRAMES, LanguageProbe::reportScriptRan);
+        }
         AutoTest.onFrame(5, LanguageProbe::probeLiveBytesOnce);
         AutoTest.onFrame(6, LanguageProbe::probeCompletionOnce);
         // ...and asked much later, because the analysis behind each one is debounced onto a worker that
         // drains on THIS thread.
         AutoTest.onFrame(REPORT_COMPLETION_ON_FRAME, LanguageProbe::reportCompletionProbes);
+        AutoTest.onFrame(REPORT_COMPLETION_ON_FRAME + UNANSWERED_AFTER_FRAMES, LanguageProbe::reportUnanswered);
     }
+
+    /** Frames a run gets to write, open, compile and execute before the probe says whether it did. */
+    private static final int SCRIPT_RESULT_AFTER_FRAMES = 90;
+
+    /**
+     * Frames between opening the script and pressing Run. {@code openFile} calls back once the tab exists
+     * and before its editor is built, so a Run from the callback finds no document -- a person never
+     * presses it that soon.
+     */
+    private static final int OPEN_BEFORE_RUN_FRAMES = 30;
+
+    /** Whether the default script executed. Silent for a {@code scriptSource} of the caller's own. */
+    static void reportScriptRan() {
+        if (!AutoTest.ENABLED || SCRIPT == null || System.getProperty("crystalgui.autotest.scriptSource") != null) return;
+        boolean ran = "yes".equals(System.getProperty(SCRIPT_RAN));
+        if (ran) CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: {} RAN", SCRIPT);
+        else CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: {} did NOT run", SCRIPT);
+    }
+
+    /** Frames after the first question by which every probe should have been answered. */
+    private static final int UNANSWERED_AFTER_FRAMES = 600;
 
     /**
      * Compiles and runs one script, on the client thread, logging every step.
@@ -161,10 +209,45 @@ public final class LanguageProbe {
     static void runScriptOnce() {
         if (!AutoTest.ENABLED || SCRIPT == null || scriptRun) return;
         scriptRun = true;
+        Application app = HostSession.isInstalled() ? HostSession.session().application() : null;
+        if (!(app instanceof WorkbenchApplication)) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: no workbench is open to run {} in", SCRIPT);
+            return;
+        }
+        WorkbenchContext workbench = ((WorkbenchApplication) app).workbench();
+        // WRITTEN, OPENED, THEN RUN -- what a person does, so the Run command compiles THIS file rather
+        // than whatever the session left in front.
+        CgPath path = CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, SCRIPT);
+        Resource file = Resource.of(path);
+        byte[] source = SCRIPT_SOURCE.getBytes(StandardCharsets.UTF_8);
+        FileOperations files = workbench.workspace().files();
+        Runnable open = () -> workbench.openFile(path);
+        // CREATE, and overwrite what an earlier run left: both are one request, and which one a fresh
+        // world needs is not knowable in advance.
+        files.create(file, source).then(ignored -> open.run()).onError(exists ->
+                files.write(file, source, null).then(ignored -> open.run()).onError(failed ->
+                        CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: could not write {}: {}",
+                                path, failed)));
+    }
+
+    /** Presses Run on the script {@link #runScriptOnce} opened, some frames later. */
+    static void runOpenedScript() {
+        if (!AutoTest.ENABLED || SCRIPT == null) return;
+        Application app = HostSession.isInstalled() ? HostSession.session().application() : null;
+        if (!(app instanceof WorkbenchApplication)) return;
+        WorkbenchContext workbench = ((WorkbenchApplication) app).workbench();
+        CgPath path = CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, SCRIPT);
+        if (!workbench.openPaths().contains(path)) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: {} never opened (open: {})",
+                    SCRIPT, workbench.openPaths());
+            return;
+        }
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: running {} through the Run command", SCRIPT);
-        if (!CommandRegistry.global().run(ScriptCommands.RUN)) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: '{}' did not run -- no engine band, or "
-                    + "nothing in front to run", ScriptCommands.RUN);
+        // THE FILE AS THE COMMAND'S SUBJECT, as Rerun passes it, so the run is of THIS file whatever the
+        // session left in front.
+        if (!CommandRegistry.global().run(ScriptCommands.RUN, new CommandContext(null, Resource.of(path)))) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: '{}' did not run -- no engine band",
+                    ScriptCommands.RUN);
         }
     }
 
@@ -320,50 +403,87 @@ public final class LanguageProbe {
         PENDING.add(new Probe(what, source.indexOf(upTo) + upTo.length(), services, expect));
     }
 
-    /** Asks every pending probe, once the frames in between have let their analyses land. */
-    @SuppressWarnings("unchecked")
+    /** Starts asking the pending probes, once the frames in between have let their analyses land. */
     static void reportCompletionProbes() {
-        if (!AutoTest.ENABLED || !COMPLETE_PROBE || PENDING.isEmpty()) return;
-        for (Probe probe : PENDING) {
-            try {
-                final List<Diagnostic>[] problems = new List[]{null};
-                probe.services.onDiagnostics(announced ->
-                        problems[0] = announced.orElse(Collections.<Diagnostic>emptyList()));
+        if (!AutoTest.ENABLED || !COMPLETE_PROBE) return;
+        askNext();
+    }
 
-                final CompletionList[] got = {CompletionList.EMPTY};
-                probe.services.completion().complete(
-                        CompletionProvider.Request.character(probe.caret, "", "."),
-                        answer -> got[0] = answer.orElse(CompletionList.EMPTY));
-                List<CompletionItem> items = got[0].items();
-                StringBuilder first = new StringBuilder();
-                for (int i = 0; i < Math.min(8, items.size()); i++) {
-                    first.append(i == 0 ? "" : ", ").append(items.get(i).label());
-                }
-                CrystalGuiCore.LOGGER.info(
-                        "CGUI AUTOTEST complete: {} — {} rows, incomplete={}, {} problems [{}]",
-                        probe.what, items.size(), got[0].incomplete(),
-                        problems[0] == null ? "no" : String.valueOf(problems[0].size()), first);
-                if (probe.expect != null) {
-                    boolean offered = false;
-                    for (CompletionItem item : items) {
-                        if (probe.expect.equals(item.filterKey())) offered = true;
-                    }
-                    CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {} offered by the editor: {}",
-                            probe.expect, offered ? "YES" : "NO");
-                }
-                if (problems[0] != null) {
-                    int shown = 0;
-                    for (Diagnostic problem : problems[0]) {
-                        if (shown++ >= 4) break;
-                        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {}", problem.message());
-                    }
-                }
-            } catch (Throwable failed) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} FAILED" + NL + "{}",
-                        probe.what, describe(failed));
-            } finally {
-                probe.services.close();
+    /** The probe whose answer is awaited, or null. */
+    @Nullable
+    private static Probe asking;
+
+    /**
+     * Asks ONE probe, and the next when its answer lands.
+     *
+     * <p>An editor's completion answers on a later frame — the provider runs on a worker and
+     * {@code onDone} drains on this thread — so reading the answer in the same call always read the
+     * initial empty list: every shape reported zero rows on every host. And every request shares one job
+     * key, so asking them all at once keeps only the last. One at a time, chained on the answer.</p>
+     */
+    @SuppressWarnings("unchecked")
+    private static void askNext() {
+        if (PENDING.isEmpty()) return;
+        Probe probe = PENDING.remove(0);
+        asking = probe;
+        try {
+            final List<Diagnostic>[] problems = new List[]{null};
+            probe.services.onDiagnostics(announced ->
+                    problems[0] = announced.orElse(Collections.<Diagnostic>emptyList()));
+            probe.services.completion().complete(CompletionProvider.Request.character(probe.caret, "", "."),
+                    answer -> {
+                        if (asking != probe) return;
+                        asking = null;
+                        report(probe, answer.orElse(CompletionList.EMPTY), problems[0]);
+                        probe.services.close();
+                        askNext();
+                    });
+        } catch (Throwable failed) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} FAILED" + NL + "{}",
+                    probe.what, describe(failed));
+            asking = null;
+            probe.services.close();
+            askNext();
+        }
+    }
+
+    private static void report(Probe probe, CompletionList got, @Nullable List<Diagnostic> problems) {
+        List<CompletionItem> items = got.items();
+        StringBuilder first = new StringBuilder();
+        for (int i = 0; i < Math.min(8, items.size()); i++) {
+            first.append(i == 0 ? "" : ", ").append(items.get(i).label());
+        }
+        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: {} — {} rows, incomplete={}, {} problems [{}]",
+                probe.what, items.size(), got.incomplete(),
+                problems == null ? "no" : String.valueOf(problems.size()), first);
+        if (probe.expect != null) {
+            boolean offered = false;
+            for (CompletionItem item : items) {
+                if (probe.expect.equals(item.filterKey())) offered = true;
             }
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {} offered by the editor: {}",
+                    probe.expect, offered ? "YES" : "NO");
+        }
+        if (problems != null) {
+            int shown = 0;
+            for (Diagnostic problem : problems) {
+                if (shown++ >= 4) break;
+                CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {}", problem.message());
+            }
+        }
+    }
+
+    /** No answer is not zero rows, and says so. */
+    static void reportUnanswered() {
+        if (!AutoTest.ENABLED || !COMPLETE_PROBE) return;
+        if (asking != null) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} was never answered", asking.what);
+            asking.services.close();
+            asking = null;
+        }
+        for (Probe probe : PENDING) {
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} was never asked", probe.what);
+            probe.services.close();
         }
         PENDING.clear();
     }

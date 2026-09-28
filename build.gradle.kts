@@ -244,6 +244,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
 //   ./gradlew prodSmoke
 //   ./gradlew prodSmoke -PcgTargets=1710,1201forge
 //   ./gradlew prodSmoke -PcgBatch=3
+//   ./gradlew prodSmoke -PcgTargets=1165forge -PcgSmokeProps=crystalgui.autotest.complete=true,crystalgui.autotest.script=Probe.java
 val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     // -PcgNoDeploy drives whatever is ALREADY installed. Rebuilding and redeploying both single jars is
     // minutes and driving the clients is seconds, so paying for the first while iterating on the second
@@ -258,6 +259,9 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
             .split(',').map { it.trim() }.filter { it.isNotEmpty() })
     // -PcgBatch=3 for every instance: far more clients than one machine runs at once.
     providers.gradleProperty("cgBatch").orNull?.let { batchSize.set(it.toInt()) }
+    // -PcgSmokeProps=crystalgui.autotest.complete=true,... switches a probe on for every client.
+    extraProperties.set((providers.gradleProperty("cgSmokeProps").orNull ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() })
 }
 
 // ── Every era target, compiled by one task ───────────────────────────────────────────────────────
