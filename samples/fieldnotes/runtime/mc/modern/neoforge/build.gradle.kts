@@ -1,6 +1,7 @@
 // The `neoforge` branch, through ModDevGradle. NeoForge runs Mojang's names, so the thin jar ships as
 // compiled.
 import cgbuildlogic.CheckThinJar
+import cgbuildlogic.modernLoader
 import cgbuildlogic.stubMode
 import cgbuildlogic.useNeoForgeApi
 import net.neoforged.moddevgradle.dsl.NeoForgeExtension
@@ -8,9 +9,11 @@ import net.neoforged.moddevgradle.dsl.NeoForgeExtension
 plugins {
     `java-library`
     id("com.gradleup.shadow")
+    id("com.crystalgui") version "1.0.0"                 // CrystalGUI and CrystalGraphics on the dev run
 }
 
 apply(from = rootDir.resolve("runtime/mc/modern/node.gradle.kts"))
+crystalgui { if (!stubMode) minecraft(property("mc.version").toString(), modernLoader) }
 
 // A node pinning neoform.version too (NeoForge 20.2, 20.3) is built from parts: ModDevGradle sets none up.
 val fromParts = findProperty("neoform.version") != null

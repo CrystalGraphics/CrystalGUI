@@ -1,13 +1,16 @@
 // What every loader node does alike, applied by each loader branch after its toolchain: what it compiles
-// against, its thin jar, and what that jar may hold. The branch then renames the thin jar to the names its
-// loader runs, and sets `checkThinJar.jar` to the result.
+// against, its thin jar and what that may hold, and its dev run. The branch then renames the thin jar to
+// the names its loader runs, and sets `checkThinJar.jar` to the result.
 import cgbuildlogic.CheckThinJar
+import cgbuildlogic.DEV_DESCRIPTORS
+import cgbuildlogic.ModDescriptor
 import cgbuildlogic.commonNode
 import cgbuildlogic.configureStubs
 import cgbuildlogic.modernLoader
 import cgbuildlogic.nodeJava
 import cgbuildlogic.nodeLibrary
 import cgbuildlogic.nodePackage
+import cgbuildlogic.registerNodeDevRun
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 
 /** The common node of THIS node's Minecraft. */
@@ -37,6 +40,7 @@ tasks.register<ShadowJar>("thinShadowJar") {
     archiveClassifier.set("thin-dev")
     configurations = emptyList()
     from(main.output)
+    exclude(DEV_DESCRIPTORS)                            // the merge writes those once
     val commonJar = common.tasks.named<Jar>("jar")
     from(commonJar.map { zipTree(it.archiveFile) })
     relocate("com.example.fieldnotes.mc.modern", "$nodeRoot.common")
@@ -51,5 +55,9 @@ tasks.register<CheckThinJar>("checkThinJar") {
     logTag.set("fieldnotes")
 }
 tasks.named("check") { dependsOn("checkThinJar") }
+
+// `runClient` and `runServer`, on a node whose toolchain has them: this node, its common node and the core
+// as one mod. CrystalGUI's and CrystalGraphics' jars are put on the run by `com.crystalgui`.
+registerNodeDevRun(rootProject.extra["fieldnotesDescriptor"] as ModDescriptor, bundled = listOf(project(":core")))
 
 configureStubs()

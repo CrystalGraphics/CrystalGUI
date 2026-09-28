@@ -4,7 +4,10 @@ A general platform-agnostic UI engine for shaped like a lightweight web browser:
 flexbox layout, a real CSS cascade with selectors and transitions, and twelve widgets — all
 loader-blind, and able to run headless on a dedicated server.
 
-**Start here:** [`AGENTS.md`](AGENTS.md) — package map and the rules. Then, by task:
+**Using CrystalGUI in your mod: [`docs/CGUI_SETUP.md`](docs/CGUI_SETUP.md)** — setting the project up,
+for one Minecraft version or many — then [`docs/CGUI_BUILDING_UIS.md`](docs/CGUI_BUILDING_UIS.md).
+
+**Working on CrystalGUI itself:** [`AGENTS.md`](AGENTS.md) — package map and the rules. Then, by task:
 [`docs/CGUI_STYLE_RENDER_PIPELINE.md`](docs/CGUI_STYLE_RENDER_PIPELINE.md) (cascade, stylesheets,
 painting) · [`docs/CGUI_WIDGETS.md`](docs/CGUI_WIDGETS.md) (the widgets) ·
 [`docs/CGUI_SERVER_AND_SERIALIZATION.md`](docs/CGUI_SERVER_AND_SERIALIZATION.md) (codecs, packets,
@@ -18,8 +21,8 @@ sessions).
 ./gradlew :core:headlessTest   # deliberately without it — the server-safety guard
 ```
 
-The UI runs today only in the GL debug harness; neither `runtime/mc/1710` nor `runtime/mc/modern` is wired into
-`settings.gradle.kts` yet:
+Minecraft — every loader, one jar, real clients — is [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md). For
+rendering work the GL debug harness is faster:
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"
