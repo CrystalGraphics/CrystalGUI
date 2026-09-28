@@ -23,6 +23,17 @@ cd samples/fieldnotes
 No Minecraft toolchain is set up: every node compiles against singlejar-logic's stub database, which the
 settings plugin finds beside the build logic. `-PcgStubs=false` builds every node for real.
 
+## Run it in a dev client
+
+```bash
+./gradlew :runtime:mc:modern:fabric:1.20.1:runClient      # or forge:1.20.1, neoforge:1.21.1
+```
+
+The node becomes real for the run (its toolchain is set up the first time). Its mod is the node, its
+common node and `core`, with CrystalGUI and CrystalGraphics beside it from Maven local. `-Dcrystalgui.*` on
+the command line reaches the game: `-Dcrystalgui.autotest=true` opens the desktop, runs the Field Notes
+step, photographs and quits.
+
 ## Run it on real clients
 
 From CrystalGUI, with its Prism instances in `local.properties`:
@@ -46,7 +57,7 @@ core/                                the application: CrystalGUI's API, no Minec
 runtime/mc/modern/
   stonecutter.gradle.kts             which node an IDE edits
   node.gradle.kts                    every node: coordinates, Java, repositories
-  loader.gradle.kts                  every loader node: its thin jar and what that may hold
+  loader.gradle.kts                  every loader node: its thin jar, what that may hold, its dev run
   common/                            names Minecraft, never a loader; one node per version
   forge/ neoforge/ fabric/           a bootstrapper, a variant entry, and the loader's rename
 ```
@@ -58,6 +69,7 @@ runtime/mc/modern/
 | `common` per Minecraft version | `Game` calls Minecraft — and `Game.id` differs by a directive, `//? if >=1.21` |
 | Everything a node ships moves to its own package | Five nodes, one jar: `mc.fabric.v1204.common.Game` beside `mc.forge.v1201.common.Game` |
 | A bootstrapper per loader, at one name | What the loader constructs whatever version runs; it asks CrystalGraphics' variant selector (`com.crystalgraphics:mc-shared`) which variant to start |
+| `com.crystalgui` on each loader node, naming its own target | Puts CrystalGUI and CrystalGraphics on that node's dev run |
 | The rename per loader | Forge 1.20.1 runs SRG, Fabric intermediary, NeoForge Mojang's names: each thin jar is renamed to what its loader runs before the merge |
 | `ApplicationKinds` in `META-INF/services` | How a jar puts an application in every desktop's launcher; the merge unions service files |
 

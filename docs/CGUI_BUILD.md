@@ -97,7 +97,7 @@ version has not moved. The file is the API as last RELEASED, so additions never 
 after a deliberate major break, `./gradlew apiDump` rewrites it — commit the diff with the change.
 
 The consumer plugins `com.crystalgui` and `com.crystalgui.settings` publish with them (`consumer-plugin/`,
-an included build, Java so any consumer Gradle loads it). Their use is `CGUI_BUILDING_UIS.md` §0.
+an included build, Java so any consumer Gradle loads it). Their use is `CGUI_SETUP.md`.
 
 `core`'s metadata carries CrystalGraphics' `core` and `platform`, `taffy`, JOML 1.10.5, gson 2.2.4,
 log4j-api 2.0-beta9 and two annotation packages — each the oldest any target ships. `language` is not

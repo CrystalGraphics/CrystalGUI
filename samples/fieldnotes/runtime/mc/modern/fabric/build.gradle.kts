@@ -1,5 +1,6 @@
 // The `fabric` branch, through Loom. Fabric runs intermediary names, so the thin jar is remapped.
 import cgbuildlogic.CheckThinJar
+import cgbuildlogic.modernLoader
 import cgbuildlogic.registerThinRename
 import cgbuildlogic.stubMode
 import net.fabricmc.loom.LoomGradleExtension
@@ -10,9 +11,11 @@ plugins {
     `java-library`
     id("fabric-loom") version "1.16.2" apply false     // applied on a real node only
     id("com.gradleup.shadow")
+    id("com.crystalgui") version "1.0.0"                 // CrystalGUI and CrystalGraphics on the dev run
 }
 
 apply(from = rootDir.resolve("runtime/mc/modern/node.gradle.kts"))
+crystalgui { if (!stubMode) minecraft(property("mc.version").toString(), modernLoader) }
 
 if (!stubMode) {
     apply(plugin = "fabric-loom")
@@ -21,6 +24,8 @@ if (!stubMode) {
         "minecraft"("com.mojang:minecraft:${property("mc.version")}")
         "mappings"(loom.officialMojangMappings())
         "modImplementation"("net.fabricmc:fabric-loader:${property("fabric.loader")}")
+        // CrystalGUI and CrystalGraphics require Fabric API; this mod calls none of it.
+        "modLocalRuntime"("net.fabricmc.fabric-api:fabric-api:${property("fabric.api")}")
     }
 }
 

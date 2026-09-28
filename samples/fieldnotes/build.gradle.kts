@@ -59,6 +59,8 @@ val descriptor = ModDescriptor(
 
 // No per-loader descriptors to hold it to: every node takes the merged ones.
 registerDescriptorTasks(descriptor, modId, checkShipped = false)
+// Each node's dev run reads its own variant from it.
+extra["fieldnotesDescriptor"] = descriptor
 
 val bootstrappers = listOf(
     "com/example/fieldnotes/mc/forge/ForgeBootstrap.class",

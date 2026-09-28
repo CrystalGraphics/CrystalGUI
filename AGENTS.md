@@ -1944,6 +1944,7 @@ better and does not go stale when it changes.
 
 | Doc | For |
 |---|---|
+| **`CGUI_SETUP.md`** | **Setting up a mod on CrystalGUI**: one Minecraft version (the `com.crystalgui` plugin) or one jar across many (`targets {}`), against Maven or a checkout. What a consumer reads first |
 | **`CGUI_BUILDING_UIS.md`** | **Using CrystalGUI rather than building it.** A client-only UI, a networked one, and how to choose. The whole `Networked` authoring surface by example, ending in a symptom→cause table for the failures that are silent |
 | **`CGUI_BUILD.md`** | The build: layout, commands, what each check can see, and adding a Minecraft version |
 | **`CGUI_CROSS_VERSION.md`** | Code against every Minecraft version and loader — seams, eras, directives, verification. The `cross-version` skill is its checklist |
