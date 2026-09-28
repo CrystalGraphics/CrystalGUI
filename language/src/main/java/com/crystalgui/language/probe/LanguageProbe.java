@@ -163,8 +163,14 @@ public final class LanguageProbe {
         // BEFORE the capture frame, so a probe still leaves a photograph behind.
         if (RUN_SCRIPT_ON_FRAME > 0) {
             AutoTest.onFrame(RUN_SCRIPT_ON_FRAME, LanguageProbe::runScriptOnce);
-            AutoTest.onFrame(RUN_SCRIPT_ON_FRAME + OPEN_BEFORE_RUN_FRAMES, LanguageProbe::runOpenedScript);
-            AutoTest.onFrame(RUN_SCRIPT_ON_FRAME + SCRIPT_RESULT_AFTER_FRAMES, LanguageProbe::reportScriptRan);
+            for (int at : RUN_ATTEMPTS) {
+                boolean last = at == RUN_ATTEMPTS[RUN_ATTEMPTS.length - 1];
+                AutoTest.onFrame(RUN_SCRIPT_ON_FRAME + at, () -> runOpenedScript(last));
+            }
+            for (int at : RESULT_CHECKS) {
+                boolean last = at == RESULT_CHECKS[RESULT_CHECKS.length - 1];
+                AutoTest.onFrame(RUN_SCRIPT_ON_FRAME + at, () -> reportScriptRan(last));
+            }
         }
         AutoTest.onFrame(5, LanguageProbe::probeLiveBytesOnce);
         AutoTest.onFrame(6, LanguageProbe::probeCompletionOnce);
@@ -174,22 +180,30 @@ public final class LanguageProbe {
         AutoTest.onFrame(REPORT_COMPLETION_ON_FRAME + UNANSWERED_AFTER_FRAMES, LanguageProbe::reportUnanswered);
     }
 
-    /** Frames a run gets to write, open, compile and execute before the probe says whether it did. */
-    private static final int SCRIPT_RESULT_AFTER_FRAMES = 90;
-
     /**
-     * Frames between opening the script and pressing Run. {@code openFile} calls back once the tab exists
-     * and before its editor is built, so a Run from the callback finds no document -- a person never
-     * presses it that soon.
+     * Frames after the write at which Run is tried, until the file is open. {@code openFile} calls back once
+     * the tab exists and before its editor is built, so even the first try waits; and with four clients
+     * sharing a machine the write and the open can take longer still.
      */
-    private static final int OPEN_BEFORE_RUN_FRAMES = 30;
+    private static final int[] RUN_ATTEMPTS = {30, 60, 120, 200};
+
+    /** Frames at which the result is looked for. Only the last may say it did not run. */
+    private static final int[] RESULT_CHECKS = {90, 200, 400};
+
+    private static boolean scriptPressed;
+    private static boolean scriptReported;
 
     /** Whether the default script executed. Silent for a {@code scriptSource} of the caller's own. */
-    static void reportScriptRan() {
-        if (!AutoTest.ENABLED || SCRIPT == null || System.getProperty("crystalgui.autotest.scriptSource") != null) return;
-        boolean ran = "yes".equals(System.getProperty(SCRIPT_RAN));
-        if (ran) CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: {} RAN", SCRIPT);
-        else CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: {} did NOT run", SCRIPT);
+    static void reportScriptRan(boolean last) {
+        if (!AutoTest.ENABLED || SCRIPT == null || scriptReported
+                || System.getProperty("crystalgui.autotest.scriptSource") != null) return;
+        if ("yes".equals(System.getProperty(SCRIPT_RAN))) {
+            scriptReported = true;
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: {} RAN", SCRIPT);
+        } else if (last) {
+            scriptReported = true;
+            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: {} did NOT run", SCRIPT);
+        }
     }
 
     /** Frames after the first question by which every probe should have been answered. */
@@ -230,18 +244,21 @@ public final class LanguageProbe {
                                 path, failed)));
     }
 
-    /** Presses Run on the script {@link #runScriptOnce} opened, some frames later. */
-    static void runOpenedScript() {
-        if (!AutoTest.ENABLED || SCRIPT == null) return;
+    /** Presses Run on the script {@link #runScriptOnce} opened, once it is open. @see #RUN_ATTEMPTS */
+    static void runOpenedScript(boolean last) {
+        if (!AutoTest.ENABLED || SCRIPT == null || scriptPressed) return;
         Application app = HostSession.isInstalled() ? HostSession.session().application() : null;
         if (!(app instanceof WorkbenchApplication)) return;
         WorkbenchContext workbench = ((WorkbenchApplication) app).workbench();
         CgPath path = CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, SCRIPT);
         if (!workbench.openPaths().contains(path)) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: {} never opened (open: {})",
-                    SCRIPT, workbench.openPaths());
+            if (last) {
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: {} never opened (open: {})",
+                        SCRIPT, workbench.openPaths());
+            }
             return;
         }
+        scriptPressed = true;
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: running {} through the Run command", SCRIPT);
         // THE FILE AS THE COMMAND'S SUBJECT, as Rerun passes it, so the run is of THIS file whatever the
         // session left in front.
