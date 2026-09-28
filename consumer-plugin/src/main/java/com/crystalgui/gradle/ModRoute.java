@@ -54,8 +54,8 @@ final class ModRoute {
         for (String loom : new String[] {"fabric-loom", "net.fabricmc.fabric-loom"}) {
             route.on(loom, "Loom", () -> route.into(project.getConfigurations().getByName("modLocalRuntime")));
         }
-        route.on("com.gtnewhorizons.retrofuturagradle", "RetroFuturaGradle", () -> route.deobf("rfg"));
-        route.on("net.minecraftforge.gradle", "ForgeGradle", () -> route.deobf("fg"));
+        route.on("com.gtnewhorizons.retrofuturagradle", "RetroFuturaGradle", () -> route.deobf("modUtils", "deobfuscate"));
+        route.on("net.minecraftforge.gradle", "ForgeGradle", () -> route.deobf("fg", "deobf"));
         return route;
     }
 
@@ -87,10 +87,13 @@ final class ModRoute {
             .collect(Collectors.toList())));
     }
 
-    /** ForgeGradle and RetroFuturaGradle both remap through their extension's {@code deobf(dependency)}. */
-    private void deobf(String extension) {
+    /**
+     * ForgeGradle and RetroFuturaGradle both remap a dependency through their extension: ForgeGradle 6's
+     * {@code fg.deobf(dependency)}, RetroFuturaGradle 2's {@code modUtils.deobfuscate(dependency)}.
+     */
+    private void deobf(String extension, String method) {
         Object ext = project.getExtensions().getByName(extension);
-        into(bucket(project), mod -> invoke(ext, "deobf", Object.class, mod));
+        into(bucket(project), mod -> invoke(ext, method, Object.class, mod));
     }
 
     private static Configuration bucket(Project project) {
