@@ -84,9 +84,10 @@ Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) 
    `neoforge:1.21.11`, and `:runtime:mc:1710:serverSmoke`. Run in the background; "Done" with no
    `RESULT` line means hung.
 4. `./gradlew singleJar languageJar checkSingleJar checkLanguageJar`.
-5. One era-sweep `prodSmoke` (needs `local.properties`; say so if absent):
-   `./gradlew prodSmoke -PcgTargets=1710,188forge,1122forge,1132forge,1152forge,1165forge,1144fabric,1171forge,1201forge,1201fabric,1204forge,1203neoforge,1204neoforge,12111forge,12111neoforge,12111fabric`
-   — open the captures in `build/prodSmoke/`, grep each instance's `logs/latest.log` for errors.
+5. One sweep `prodSmoke` (needs `local.properties`; say so if absent): `./gradlew prodSmoke` with no
+   `-PcgTargets` — one client per Minecraft major plus the first and last of 1.19/1.20/1.21, those of
+   1.20 and 1.21 on all three loaders: twenty-four, four at a time. Never every instance (`-PcgTargets=all`, 104) for a routine check. Open the captures in
+   `build/prodSmoke/`, grep each instance's `logs/latest.log` (`fml-client-latest.log` below 1.13) for errors.
 6. Anything no smoke exercises: run it on the oldest and newest node of each loader, and say which.
 
 **Something crashes or misbehaves on a Prism client?** Do not iterate through `prodSmoke` (~10 min a

@@ -238,7 +238,8 @@ grammars with their natives, ECJ and Rhino per Java band, `language/` itself —
 ./gradlew singleJar languageJar   # build both: build/libs/
 ./gradlew deploySingleJars        # both, plus CrystalGraphics', into every instance in local.properties
 ./gradlew deploySingleJars -PcgNoLanguage   # the host jar alone — the degraded path, worth running
-./gradlew prodSmoke               # boot all four installed clients, photograph each, fail if one did not
+./gradlew prodSmoke               # THE SWEEP: one client per Minecraft major (24), 4 at a time, photograph
+                                  # each, fail if one did not. Never every instance for a routine check
 ./gradlew prodSmoke -PcgNoDeploy -PcgTargets=1201forge   # drive what is installed; one target
 ```
 

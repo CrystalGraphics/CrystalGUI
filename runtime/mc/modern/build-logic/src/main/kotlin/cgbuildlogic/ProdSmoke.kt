@@ -138,6 +138,12 @@ abstract class ProdSmoke : DefaultTask() {
                 + "find the launcher. Add e.g. prismLauncherExe=C:/path/to/prismlauncher.exe")
         if (!File(exe).isFile) throw GradleException("prismLauncherExe is not a file: $exe")
 
+        // A named target nothing answers to fails, rather than a sweep silently running fewer clients.
+        val missing = only - instances.get().map { it.substringAfter('=') }.toSet()
+        if (missing.isNotEmpty()) {
+            throw GradleException("prodSmoke: no prismInstance.<label> in local.properties for $missing")
+        }
+
         val targets = mutableListOf<Target>()
         for (spec in instances.get()) {
             val key = spec.substringBefore('=')
@@ -214,9 +220,9 @@ abstract class ProdSmoke : DefaultTask() {
 
                 val up = awaitClients(batch.size, startTimeoutSeconds.get())
                 logger.lifecycle("[prodSmoke] {} of {} clients up", up, batch.size)
-                val allExited = awaitNoClients(runTimeoutSeconds.get())
+                val allExited = awaitNoClients(runTimeout())
                 if (!allExited) {
-                    logger.lifecycle("[prodSmoke] killing clients still alive after {}s", runTimeoutSeconds.get())
+                    logger.lifecycle("[prodSmoke] killing clients still alive after {}s", runTimeout())
                     killClients()
                 }
 
@@ -246,7 +252,7 @@ abstract class ProdSmoke : DefaultTask() {
     /** @return null when it drew, else why it did not. */
     private fun verdictFor(target: Target, allExited: Boolean, out: File): String? {
         if (!allExited && !captureOf(out, target, "late").isFile) {
-            return "TIMED-OUT after ${runTimeoutSeconds.get()}s; the autotest never quit" + logTail(target)
+            return "TIMED-OUT after ${runTimeout()}s; the autotest never quit" + logTail(target)
         }
         // A MISSING CAPTURE IS A FAILURE, never a pass: the client that never reached the autotest
         // wrote nothing, and that is indistinguishable from success to anything that only checks an
@@ -306,7 +312,7 @@ abstract class ProdSmoke : DefaultTask() {
         val jvm = "-Dcrystalgui.autotest=true " +
             "-Dcrystalgui.autotest.out=${out.absolutePath.replace('\\', '/')}/$name.png " +
             "-Dcrystalgui.autotest.world=* " +
-            "-Dcrystalgui.autotest.lateFrame=120" +
+            "-Dcrystalgui.autotest.lateFrame=${lateFrame()}" +
             extraProperties.get().joinToString("") { " -D$it" }
         if (' ' in extraProperties.get().joinToString("")) {
             throw GradleException("-PcgSmokeProps may hold no space: Prism splits a JvmArgs value on them")
@@ -319,6 +325,17 @@ abstract class ProdSmoke : DefaultTask() {
     }
 
     private fun isArmed(cfg: File) = cfg.readLines().any { it.startsWith(ARMED_MARKER) }
+
+    /** Whether a language probe was asked for: each answers after the late capture would otherwise quit. */
+    private fun languageProbe() = extraProperties.get().any {
+        it.startsWith("crystalgui.autotest.script=") || it == "crystalgui.autotest.complete=true"
+    }
+
+    /** Past LanguageProbe's last report -- its unanswered completions, at frame 660 -- when one is asked. */
+    private fun lateFrame() = if (languageProbe()) 700 else 120
+
+    /** And the extra seconds those frames take. */
+    private fun runTimeout() = runTimeoutSeconds.get() + if (languageProbe()) 90 else 0
 
     /**
      * Puts the two keys back as they were, and nothing else.
