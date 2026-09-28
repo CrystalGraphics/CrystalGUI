@@ -9,6 +9,9 @@ import java.util.TreeMap;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.notify.Notification;
+import com.crystalgui.core.notify.NotificationEvent;
+import com.crystalgui.core.notify.Notifications;
 
 /**
  * <b>The unattended run: what it is asked for, and where its captures go.</b>
@@ -211,6 +214,13 @@ public final class AutoTest {
         opened = true;
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST opening the desktop{}",
                 wantsWorld() ? " (in world)" : "");
+        // A refusal a person would read in a balloon, into the log a run is judged by.
+        Notifications.onDidChange.connect(event -> {
+            if (event.kind() != NotificationEvent.Kind.ADDED || event.notification() == null) return;
+            Notification added = event.notification();
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST notification: {}{}", added,
+                    added.getDetail().isEmpty() ? "" : " -- " + added.getDetail().replace((char) 10, ' '));
+        });
         host.openDesktop();
     }
 

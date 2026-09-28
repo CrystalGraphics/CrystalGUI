@@ -91,6 +91,14 @@ abstract class ProdSmoke : DefaultTask() {
     @get:Input
     abstract val batchSize: Property<Int>
 
+    /**
+     * More `key=value` system properties for every client, e.g. a probe:
+     * `-PcgSmokeProps=crystalgui.autotest.complete=true,crystalgui.autotest.script=Probe.java`.
+     * No spaces: Prism splits a `JvmArgs` value on them.
+     */
+    @get:Input
+    abstract val extraProperties: ListProperty<String>
+
     init {
         group = "verification"
         description = "Launches every installed client on the single jar and fails if one did not draw."
@@ -102,6 +110,7 @@ abstract class ProdSmoke : DefaultTask() {
         runTimeoutSeconds.convention(120)
         onlyTargets.convention(emptyList())
         batchSize.convention(Int.MAX_VALUE)
+        extraProperties.convention(emptyList())
         outputs.upToDateWhen { false }
     }
 
@@ -294,7 +303,11 @@ abstract class ProdSmoke : DefaultTask() {
         val jvm = "-Dcrystalgui.autotest=true " +
             "-Dcrystalgui.autotest.out=${out.absolutePath.replace('\\', '/')}/$name.png " +
             "-Dcrystalgui.autotest.world=* " +
-            "-Dcrystalgui.autotest.lateFrame=120"
+            "-Dcrystalgui.autotest.lateFrame=120" +
+            extraProperties.get().joinToString("") { " -D$it" }
+        if (' ' in extraProperties.get().joinToString("")) {
+            throw GradleException("-PcgSmokeProps may hold no space: Prism splits a JvmArgs value on them")
+        }
         cfg.writeText(withGeneralKeys(cfg.readText(), listOf("OverrideJavaArgs=true", "JvmArgs=$jvm")))
         // READ IT BACK. The log line announcing "armed" used to be unconditional, so a write that
         // inserted nothing read as success and the failure surfaced twenty minutes later as a missing
