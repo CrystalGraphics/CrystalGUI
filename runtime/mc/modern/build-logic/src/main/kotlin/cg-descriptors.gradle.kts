@@ -5,6 +5,7 @@ import cgbuildlogic.ModDescriptor
 import cgbuildlogic.Ordering
 import cgbuildlogic.Side
 import cgbuildlogic.Variant
+import cgbuildlogic.crystalGraphicsVersion
 import cgbuildlogic.has1710
 import cgbuildlogic.legacyVariants
 import cgbuildlogic.modernVariants
@@ -30,7 +31,9 @@ val cgDescriptor = ModDescriptor(
     dependencies = listOf(
         // AFTER, not merely required: CrystalGraphics registers the platform bundle that every
         // CrystalGUI service reads, and a UI that loads first finds no backend at all.
-        Dependency("crystalgraphics", "[1.0.0,)", ordering = Ordering.AFTER),
+        // At least the version built against. A written number here outlived a release and refused
+        // CrystalGraphics 0.0.1 on every Forge and NeoForge.
+        Dependency("crystalgraphics", "[${crystalGraphicsVersion()},)", ordering = Ordering.AFTER),
     ),
     // 1.7.10 by hand; every other variant is a NODE of a tree, whose range and pack format are its
     // own pins (`variant.minecraft`, `variant.packFormat`) -- so adding a version adds its variant.
@@ -85,7 +88,8 @@ val cgLangDescriptor = ModDescriptor(
         // AFTER, and required: this mod installs itself into seams the host owns -- CgPlatform's
         // ScriptService slot and core's command registry -- so a language stack that loads first
         // registers into nothing and reports success.
-        Dependency("crystalgui", "[1.0.0,)", ordering = Ordering.AFTER),
+        // Shipped together, so exactly this version's host or later.
+        Dependency("crystalgui", "[${property("modVersion")},)", ordering = Ordering.AFTER),
     ),
     variants = listOfNotNull(
         Variant(
