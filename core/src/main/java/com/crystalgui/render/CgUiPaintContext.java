@@ -609,7 +609,10 @@ public final class CgUiPaintContext {
         glScope = CgGlState.save(
                 CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
                 CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.SCISSOR, CgGlSlot.COLOR_MASK);
+                CgGlSlot.SCISSOR, CgGlSlot.COLOR_MASK,
+                // The host's VAO back: Minecraft 1.17+ skips its own bind while it believes its VAO is
+                // still current, so leaving ours bound failed its next GUI draw ("Array object is not active").
+                CgGlSlot.VERTEX_INPUT);
         // ALPHA_TEST is saved above only so the host gets it back; this is what turns it off, before
         // anything of ours draws. @see #disableFixedFunctionAlphaTest
         disableFixedFunctionAlphaTest();
@@ -820,7 +823,8 @@ public final class CgUiPaintContext {
         // screen. @see #disableFixedFunctionAlphaTest
         try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
                 CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
-                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST)) {
+                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST,
+                CgGlSlot.VERTEX_INPUT)) {   // the host's VAO, as in beginFrame
             disableFixedFunctionAlphaTest();
             blitLayer(frameFbo, 1f);
             // THE HOST'S OWN TARGET, and the last thing this class can observe. Content here with a flat
