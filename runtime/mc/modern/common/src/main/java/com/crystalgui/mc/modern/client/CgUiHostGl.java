@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.client;
 
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.mc.modern.platform.OwnDepthConvention;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 
 //? if >=1.21.5 {
@@ -79,6 +80,8 @@ public final class CgUiHostGl {
         //? if >=1.21.5 {
         /*LifecycleModern.bindMainTarget(Minecraft.getInstance());
         *///?}
+        // 26.2's world is reversed-Z with a 0..1 clip range; the desktop and its previews are not.
+        OwnDepthConvention.enter();
     }
 
     /**
@@ -105,6 +108,7 @@ public final class CgUiHostGl {
      * while here it MUST go through Blaze3D or Minecraft's cache is left describing the wrong world.
      */
     public static void leave() {
+        OwnDepthConvention.leave();
         //? if >=1.15 {
         GlStateManager._activeTexture(GL13.GL_TEXTURE1);
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);
