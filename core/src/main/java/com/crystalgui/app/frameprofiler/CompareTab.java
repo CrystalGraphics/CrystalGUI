@@ -1,15 +1,19 @@
 package com.crystalgui.app.frameprofiler;
 
 import com.crystalgui.core.property.ObservableList;
+import com.crystalgui.core.trace.TraceFiles;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.table.TableCellRenderer;
 import com.crystalgui.widget.collection.table.TableColumn;
 import com.crystalgui.widget.collection.table.TableView;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.overlay.Dropdown;
 import com.crystalgui.widget.text.UIText;
 
 import javax.annotation.Nullable;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
@@ -20,14 +24,14 @@ import java.util.function.Function;
  *
  * <pre>{@code
  * CompareTab tab = new CompareTab(model);
- * // select frames, press "Pin as A"; select others, press "Pin as B"
+ * // select frames, press "Pin as A"; select others, press "Pin as B" -- or load an export as B
  * tab.show();
  * }</pre>
  *
- * <p>From one ring first — this run, before and after a change — because that needs no file format and
- * answers most of the question. A side remembers its frames by INDEX, so it keeps meaning the same
- * frames as the ring moves on, and says so once they have been overwritten rather than comparing
- * against nothing.</p>
+ * <p>A side remembers its frames by INDEX, so it keeps meaning the same frames as the ring moves on, and
+ * says so once they have been overwritten rather than comparing against nothing. <b>Load trace as B</b>
+ * takes an export instead ({@link TraceFiles}) — the run before a restart, or somebody else's — and
+ * Swap makes it A.</p>
  */
 public class CompareTab extends UIElement {
 
@@ -48,6 +52,8 @@ public class CompareTab extends UIElement {
     private final Button pinA = new Button("Pin selection as A");
     private final Button pinB = new Button("Pin selection as B");
     private final Button swap = new Button("Swap");
+    private final Dropdown load = new Dropdown("Load trace as B");
+    private List<Path> traces = List.of();
 
     public CompareTab(ProfilerModel model) {
         super(NAME);
@@ -60,7 +66,8 @@ public class CompareTab extends UIElement {
         swap.attachListener(model::swapSides);
         sideA.addClass(SIDE_CLASS);
         sideB.addClass(SIDE_CLASS);
-        bar.append(pinA, sideA, pinB, sideB, swap);
+        load.attachSelectionListener(this::loadTrace);
+        bar.append(pinA, sideA, pinB, sideB, swap, load);
         append(bar);
 
         summary.addClass(SUMMARY_CLASS);
@@ -102,8 +109,37 @@ public class CompareTab extends UIElement {
         return summary.getText();
     }
 
+    public Dropdown loadDropdown() {
+        return load;
+    }
+
+    /** Re-lists the exported traces the dropdown offers; cheap when none has been added. */
+    public void refreshTraces() {
+        List<Path> now = TraceFiles.list();
+        if (now.equals(traces)) return;
+        traces = now;
+        load.clearOptions();
+        for (Path trace : now) load.addOption(trace.getFileName().toString());
+        load.setEnabled(!now.isEmpty());
+    }
+
+    private void loadTrace(int index) {
+        if (index < 0 || index >= traces.size()) return;
+        try {
+            model.loadB(traces.get(index));
+        } catch (IOException unreadable) {
+            summary.setText("Could not read " + traces.get(index).getFileName() + ": " + unreadable.getMessage());
+        }
+    }
+
     /** Re-reads both sides from the model. Cheap when neither is pinned. */
     public void show() {
+        // A PICK ONLY FIRES ON A CHANGE, so once B is no longer the file shown the list starts over and
+        // the same file can be picked again.
+        if (load.getSelectedOption() != null && (model.sideB() == null || model.sideB().file() == null)) {
+            traces = List.of();
+        }
+        refreshTraces();
         sideA.setText(describe(model.sideA()));
         sideB.setText(describe(model.sideB()));
         swap.setEnabled(model.sideA() != null || model.sideB() != null);

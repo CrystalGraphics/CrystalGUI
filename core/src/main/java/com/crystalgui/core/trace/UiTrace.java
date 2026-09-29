@@ -2,14 +2,10 @@ package com.crystalgui.core.trace;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceChannel;
-import com.crystalgraphics.trace.CgTraceExport;
 import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgraphics.trace.CgTraceReport;
 import com.crystalgui.core.CrystalGuiCore;
 
-import java.io.IOException;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -192,6 +188,7 @@ public final class UiTrace {
     public static void useCacheRoot(@Nullable Path cacheRoot) {
         if (cacheRoot == null) return;
         CgTraceLog.useRoot(cacheRoot.resolve("trace"));
+        TraceFiles.useRunRoot(cacheRoot.resolve("trace"));
     }
 
     /**
@@ -202,7 +199,9 @@ public final class UiTrace {
      */
     public static void useDirectoryProperty() {
         String configured = System.getProperty(DIR_PROPERTY);
-        if (configured != null && !configured.isEmpty()) CgTraceLog.useRoot(Paths.get(configured));
+        if (configured == null || configured.isEmpty()) return;
+        CgTraceLog.useRoot(Paths.get(configured));
+        TraceFiles.useRunRoot(Paths.get(configured));
     }
 
     /**
@@ -214,29 +213,6 @@ public final class UiTrace {
      */
     public static void log(String line) {
         CgTraceLog.line(line);
-    }
-
-    /**
-     * Writes the current trace to {@code trace.json} in the run directory.
-     *
-     * <p>Chrome's JSON, which {@code ui.perfetto.dev} opens by drag and drop — so a trace is readable
-     * in a mature viewer, queryable in SQL and attachable to a bug report, none of which this project
-     * has to build.</p>
-     *
-     * @return the file written, or null when no run directory was given
-     */
-    @Nullable
-    public static Path export() {
-        Path dir = CgTraceLog.dir();
-        if (dir == null) return null;
-        Path file = dir.resolve("trace.json");
-        try (Writer out = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
-            CgTraceExport.writeChromeJson(out, CgTrace.snapshot());
-        } catch (IOException failed) {
-            CrystalGuiCore.LOGGER.warn("trace export failed: {}", failed.toString());
-            return null;
-        }
-        return file;
     }
 
     /**

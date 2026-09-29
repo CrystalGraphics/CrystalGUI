@@ -9,10 +9,13 @@ import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceHints;
 import com.crystalgraphics.trace.CgTraceSnapshot;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.trace.TraceFiles;
 import com.crystalgui.core.trace.UiHints;
 import com.crystalgui.widget.display.CounterTrack;
 
 import javax.annotation.Nullable;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -776,16 +779,32 @@ public final class ProfilerModel {
 
     /**
      * One side of a comparison: frames by their INDEX, not their place in the ring, so a side stays the
-     * frames it was pinned to while the ring moves on.
+     * frames it was pinned to while the ring moves on — or every frame of an exported trace read back,
+     * when {@code file} is set.
+     *
+     * <pre>{@code
+     * model.pinA();                                          // this run's selection
+     * model.loadB(TraceFiles.list().get(0));                 // against the last export
+     * }</pre>
      */
-    public record Side(long fromIndex, long toIndex) {
+    public record Side(long fromIndex, long toIndex, @Nullable CgTraceSnapshot file, @Nullable String fileName) {
+
+        public Side(long fromIndex, long toIndex) {
+            this(fromIndex, toIndex, null, null);
+        }
 
         public long count() {
-            return toIndex - fromIndex + 1;
+            return file != null ? file.frames().size() : toIndex - fromIndex + 1;
         }
 
         public String label() {
+            if (fileName != null) return fileName;
             return fromIndex == toIndex ? "#" + fromIndex : "#" + fromIndex + " \u2013 #" + toIndex;
+        }
+
+        @Override
+        public String toString() {
+            return label();
         }
     }
 
@@ -824,11 +843,31 @@ public final class ProfilerModel {
         onChanged.emit();
     }
 
+    /**
+     * Reads an exported trace as side B, every frame of it.
+     *
+     * @throws IOException when the file cannot be read or is not an export; B is left as it was
+     */
+    public void loadB(Path file) throws IOException {
+        CgTraceSnapshot read = TraceFiles.read(file);
+        if (read.frames().isEmpty()) throw new IOException(file.getFileName() + " holds no frames");
+        List<CgFrameRecord> frames = read.frames();
+        sideB = new Side(frames.get(0).index(), frames.get(frames.size() - 1).index(), read,
+                file.getFileName().toString());
+        onChanged.emit();
+    }
+
     public void swapSides() {
         Side a = sideA;
         sideA = sideB;
         sideB = a;
         onChanged.emit();
+    }
+
+    /** The frames a range selection covers, or null when no range is selected — what Export writes. */
+    @Nullable
+    public Side selectedRange() {
+        return hasRange() ? selectionSide() : null;
     }
 
     @Nullable
@@ -840,9 +879,10 @@ public final class ProfilerModel {
         return new Side(frames.get(from).index(), frames.get(to).index());
     }
 
-    /** The frames of {@code side} still in the ring; empty once they have been overwritten. */
+    /** The frames of {@code side} still in the ring, or in its file; empty once they have been overwritten. */
     public List<CgFrameRecord> framesOf(@Nullable Side side) {
         if (side == null) return List.of();
+        if (side.file() != null) return side.file().frames();
         List<CgFrameRecord> out = new ArrayList<>();
         for (CgFrameRecord frame : snapshot.frames()) {
             if (frame.index() >= side.fromIndex() && frame.index() <= side.toIndex()) out.add(frame);
@@ -867,7 +907,7 @@ public final class ProfilerModel {
         long total = 0L;
         int timed = 0;
         for (CgFrameRecord held : framesOf(side)) {
-            CgFrameRecord frame = withGpu(held);
+            CgFrameRecord frame = gpuOf(side, held);
             if (!frame.hasGpu()) continue;
             total += frame.gpuNanos();
             timed++;
@@ -884,8 +924,8 @@ public final class ProfilerModel {
      */
     public List<CompareRow> compare() {
         if (sideA == null || sideB == null) return List.of();
-        Map<String, CgTraceAggregate.Stat> a = statsByName(framesOf(sideA));
-        Map<String, CgTraceAggregate.Stat> b = statsByName(framesOf(sideB));
+        Map<String, CgTraceAggregate.Stat> a = statsByName(sideA, framesOf(sideA));
+        Map<String, CgTraceAggregate.Stat> b = statsByName(sideB, framesOf(sideB));
         int aFrames = Math.max(1, framesOf(sideA).size());
         int bFrames = Math.max(1, framesOf(sideB).size());
         Set<String> names = new LinkedHashSet<>(a.keySet());
@@ -901,8 +941,8 @@ public final class ProfilerModel {
         }
         // GPU ZONES as rows of their own, per frame whose GPU figure landed: a frame still pending would
         // otherwise count as one that cost the GPU nothing.
-        Map<String, Double> gpuA = gpuMillisByZone(framesOf(sideA));
-        Map<String, Double> gpuB = gpuMillisByZone(framesOf(sideB));
+        Map<String, Double> gpuA = gpuMillisByZone(sideA, framesOf(sideA));
+        Map<String, Double> gpuB = gpuMillisByZone(sideB, framesOf(sideB));
         Set<String> gpuNames = new LinkedHashSet<>(gpuA.keySet());
         gpuNames.addAll(gpuB.keySet());
         for (String name : gpuNames) {
@@ -915,13 +955,22 @@ public final class ProfilerModel {
     /** What a GPU zone's Compare row gives as its source: it has no line of Java behind it. */
     public static final String GPU_SOURCE = "GPU";
 
-    private Map<String, Double> gpuMillisByZone(List<CgFrameRecord> frames) {
+    /** A side's frame with its GPU figure: a file's is final, the ring's may have landed since. */
+    private CgFrameRecord gpuOf(Side side, CgFrameRecord frame) {
+        return side.file() != null ? frame : withGpu(frame);
+    }
+
+    private CgTraceSnapshot sourceOf(Side side) {
+        return side.file() != null ? side.file() : snapshot;
+    }
+
+    private Map<String, Double> gpuMillisByZone(Side side, List<CgFrameRecord> frames) {
         Map<String, Double> out = new LinkedHashMap<>();
         int timed = 0;
         for (CgFrameRecord frame : frames) {
-            if (!withGpu(frame).hasGpu()) continue;
+            if (!gpuOf(side, frame).hasGpu()) continue;
             timed++;
-            for (CgTraceSnapshot.CounterView counter : snapshot.countersIn(frame)) {
+            for (CgTraceSnapshot.CounterView counter : sourceOf(side).countersIn(frame)) {
                 if (counter.name().startsWith(CgGpuTrace.PREFIX)) {
                     out.merge(counter.name(), counter.value() / 1_000_000d, Double::sum);
                 }
@@ -933,12 +982,15 @@ public final class ProfilerModel {
         return out;
     }
 
-    private static Map<String, CgTraceAggregate.Stat> statsByName(List<CgFrameRecord> frames) {
+    private static Map<String, CgTraceAggregate.Stat> statsByName(Side side, List<CgFrameRecord> frames) {
         Map<String, CgTraceAggregate.Stat> out = new LinkedHashMap<>();
         if (frames.isEmpty()) return out;
+        long from = frames.get(0).beginNanos();
+        long to = frames.get(frames.size() - 1).endNanos();
         List<CgTraceSnapshot.ZoneView> zones = new ArrayList<>();
-        for (CgTraceSnapshot.ZoneView zone : CgTrace.zonesBetween(frames.get(0).beginNanos(),
-                frames.get(frames.size() - 1).endNanos())) {
+        for (CgTraceSnapshot.ZoneView zone : side.file() != null
+                ? side.file().zones() : CgTrace.zonesBetween(from, to)) {
+            if (zone.startNanos() < from || zone.startNanos() >= to) continue;
             if (!VIEWER.name().equals(zone.channel())) zones.add(zone);
         }
         for (CgTraceAggregate.Stat stat : CgTraceAggregate.byCost(zones)) out.put(stat.name(), stat);
