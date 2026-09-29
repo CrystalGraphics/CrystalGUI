@@ -87,6 +87,18 @@ frameprofiler .__toolbar__ button.__following__ {
  * row of text that cannot shrink sets the panel's minimum width -- and a panel wider than its window
  * pushed the budget labels, the LIVE badge and half this line off the right edge behind a scrollbar.
  * Width 0 plus flex-grow means it fills what is left and never asks for more. */
+/* Where Export says what it wrote. Takes the toolbar's slack like the stats, and gives it back first. */
+frameprofiler .__export-note__ {
+    width: 0px;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0px;
+    margin-left: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--profiler-caption-fg);
+}
+
 frameprofiler .__stats__ {
     width: 0px;
     flex-grow: 1;
