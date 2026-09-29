@@ -27,7 +27,7 @@ import static org.junit.Assert.*;
  * <p><b>No layout happens in this class.</b> A Tab holds a {@code UIText} label, and laying that out
  * re-shapes through FreeType, whose native bindings aren't on the headless test classpath. So
  * anything geometric — mouse hit-testing on a tab, strip scrolling, where the panes actually sit —
- * belongs to {@code CgUiTabViewScene}, not here. See {@link #styleFrame()} and {@link #activate}.</p>
+ * belongs to {@code cgui-gallery}'s TabView page, not here. See {@link #styleFrame()} and {@link #activate}.</p>
  */
 public class TabViewTest extends UiDocumentTestBase {
 

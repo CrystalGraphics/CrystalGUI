@@ -228,22 +228,11 @@ context, and gives you a real GL surface. What it cannot see is anything that cr
 
 | Mode | Scene class | Covers |
 |---|---|---|
-| `cgui-gallery` | `CgUiGalleryScene` | Every widget at once — the default smoke test |
-| `cgui-test` | `CgUiTestScene` | General engine scratch scene |
-| `cgui-button` | `CgUiButtonScene` | `Button`, activation semantics |
-| `cgui-checkbox` | `CgUiCheckboxScene` | `Checkbox`, `CheckboxGroup` |
-| `cgui-switch` | `CgUiSwitchScene` | `Switch` (CSS-driven knob transition) |
-| `cgui-slider` | `CgUiSliderScene` | `Slider`, drag |
-| `cgui-textfield` | `CgUiTextFieldScene` | `TextField`, caret, selection |
+| `cgui-gallery` | `CgUiGalleryScene` | Every widget at once, a page each, with an Ore ⇄ default theme toggle — the default smoke test, and where a single widget is checked |
 | `cgui-text` | `CgUiTextScene` | `UIText` wrapping/measurement |
 | `cgui-text-stress` | `CgUiTextStressScene` | Many text nodes — shaping/layout cost |
-| `cgui-scroller` | `CgUiScrollerScene` | `Scroller`, `ScrollerView`, overflow |
-| `cgui-splitview` | `CgUiSplitViewScene` | `SplitView`, divider drag |
-| `cgui-tabview` | `CgUiTabViewScene` | `TabView`, `Tab` |
 | `cgui-styling` | `CgUiStylingScene` | Cascade, selectors, transitions |
 | `cgui-shadow-parts` | `CgUiShadowPartsScene` | **SPIKE S2** — a shadow-rooted `Button` beside the stock one under ONE stylesheet. `text { color: red }` reaches the stock label and **cannot** reach the shadow one, which takes its colour from `::part(label)`; the status line reports what focus retargets to. What a headless test cannot show is that an encapsulated widget still draws and behaves like a widget |
-| `cgui-nineslice` | `CgUiNineSliceScene` | `CgUiSprite` 9-slice |
-| `cgui-ore-theme` | `CgUiOreThemeScene` | `ore.css` + sprite registry end-to-end |
 | `cgui-visual-layers` | `CgUiVisualLayersScene` | FBO layer opacity + masking |
 | `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area) and **the frame readout** (F7, F8 to expand its phases). *Grows with `plan/shell-windowing.md`: every W with something visible adds its demonstration here in the same commit* |
 | `cgui-snapshot-probe` | `CgUiSnapshotProbeScene` | **DIAGNOSTIC, exits on its own** — photographs a window (`WindowSnapshot`, the real minimise path) and draws the photograph 1:1 beside the live window; writes `live` and `snapshot` PNGs to `harness-output/cgui-snapshot-probe/`. The window holds every path a photograph has to survive: rounded islands with `overflow: hidden` (mask layer), `overflow: clip`, an `opacity` layer, a scroller (scissor), text. **Any difference between the two PNGs is the render target's, since one subtree drew both** — it found three target-size assumptions in one run that six screenshots had not |
@@ -1039,12 +1028,12 @@ int value types.
 
 | Widget | Tag | Harness scene |
 |---|---|---|
-| `Button` | `button` | `cgui-button` |
-| `Checkbox` | `checkbox` | `cgui-checkbox` |
-| `CheckboxGroup` | — (not a `UINode`) | `cgui-checkbox` |
-| `Switch` | `switch` | `cgui-switch` |
-| `Slider` | `slider` | `cgui-slider` |
-| `TextField` | `textfield` | `cgui-textfield` |
+| `Button` | `button` | `cgui-gallery` (Button page) |
+| `Checkbox` | `checkbox` | `cgui-gallery` (Checkbox page) |
+| `CheckboxGroup` | — (not a `UINode`) | `cgui-gallery` (Checkbox page) |
+| `Switch` | `switch` | `cgui-gallery` (Switch page) |
+| `Slider` | `slider` | `cgui-gallery` (Slider page) |
+| `TextField` | `textfield` | `cgui-gallery` (TextField page) |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
 | `EmptyState` | `emptystate` | `cgui-desktop` — any vacant panel |
 | `FrameStatsOverlay` | `framestats` | `cgui-desktop` — F7 shows, F8 expands. The frame readout over `core.async.FrameStats`: rate, spread, misses, a coloured sparkline of the window, and the SLOWEST frame's phase breakdown. `DesktopCommands` binds F7/F8 on every surface with a desktop, so the editor and a Minecraft screen get it too; `FrameStatsOverlay.toggleOn(document)` is the one call |
@@ -1058,11 +1047,11 @@ int value types.
 | `GraphView` | `graphview` | `cgui-gallery` (graph page) |
 | `GraphNode` | `graphnode` | `cgui-gallery` (graph page) |
 | `NodePort` | `nodeport` | `cgui-gallery` (graph page) |
-| `Scroller` | `scroller` | `cgui-scroller` |
-| `ScrollerView` | `scrollerview` | `cgui-scroller` |
-| `SplitView` | `splitview` | `cgui-splitview` |
-| `TabView` | `tabview` | `cgui-tabview` |
-| `Tab` | `tab` | `cgui-tabview` |
+| `Scroller` | `scroller` | `cgui-gallery` (Scroller page) |
+| `ScrollerView` | `scrollerview` | `cgui-gallery` (Scroller page) |
+| `SplitView` | `splitview` | `cgui-gallery` (SplitView page) |
+| `TabView` | `tabview` | `cgui-gallery` (TabView page) |
+| `Tab` | `tab` | `cgui-gallery` (TabView page) |
 | `Desktop` | `desktop` | `cgui-desktop` — **nobody constructs one**; the document owns it, found with `Desktop.of(document)` |
 | `WindowFrame` | `window` | `cgui-desktop` — opened with `desktop.addWindow(frame)` |
 | `Taskbar` | `taskbar` | `cgui-desktop` — the `WindowRegistry`, rendered; built by `Desktop` |

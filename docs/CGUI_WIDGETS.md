@@ -265,7 +265,7 @@ Activates on press-then-release **over the same element** (dragging off cancels)
 when focused. Fires `CgPlatform.sound()` with `button_click`; silent unless the registered platform implements it.
 
 - Tag `button` · internal `__pre-icon__`, `__post-icon__` · pseudo `:hover :active :focus :focus-visible :disabled`
-- Scenes: `cgui-button`, `cgui-ore-theme` (forced-state matrix), `cgui-gallery`
+- Scene: `cgui-gallery` (Button page)
 
 **A button that opens a menu wears IntelliJ's dropdown gutter** — one call, drawn by the UA sheet over the
 button's box in its own colour, unhittable and out of flow. It says a menu opens; the press is still yours.
@@ -411,7 +411,7 @@ The mark is drawn entirely by CSS — `checkbox:checked .__mark__ { … }`. Ther
 "draw a tick".
 
 - Tag `checkbox` · internal `__mark__` · pseudo `:checked :hover :active :focus :focus-visible :disabled`
-- Scenes: `cgui-checkbox`, `cgui-ore-theme`, `cgui-gallery`
+- Scene: `cgui-gallery` (Checkbox page)
 
 ## 3. `Switch`
 
@@ -426,7 +426,7 @@ CSS** — `switch .__spacer__ { transition: flex-grow 150ms ease-out; }`. There 
 size anywhere in `Switch.java`.
 
 - Tag `switch` · internal `__spacer__`, `__knob__` · pseudo `:checked :hover :active :focus :focus-visible :disabled`
-- Scenes: `cgui-switch` (captures four frames mid-slide to prove it interpolates), `cgui-gallery`
+- Scene: `cgui-gallery` (Switch page)
 
 ## 4. `Slider`
 
@@ -440,7 +440,7 @@ float f = sl.getFraction();                    // 0..1
 Drag-by-delta, click-to-jump, Left/Right arrows, Home/End, and the wheel. Focus policy is `CLICK`.
 
 - Tag `slider` · internal `__fill__`, `__thumb__`, `__spacer__` · pseudo `:hover :active :focus :focus-visible :disabled`
-- Scenes: `cgui-slider`, `cgui-gallery`
+- Scene: `cgui-gallery` (Slider page)
 
 ## 5. `TextField`
 
@@ -488,7 +488,7 @@ also paints only while focused — blurring hides the band but keeps the range, 
 `CGUI_STYLE_RENDER_PIPELINE.md` §8c.
 
 - Tag `textfield` · pseudo `:blank :invalid :hover :active :focus :focus-visible :disabled`
-- Scenes: `cgui-textfield`, `cgui-gallery`
+- Scene: `cgui-gallery` (TextField page)
 
 ## 6. `UIText`
 
@@ -622,7 +622,7 @@ Step buttons exist but are `display: none` by default — a theme enables them w
 
 - Tags `scroller`, `scrollerview` · internal as listed in §0 · `Scroller` and `ScrollerView` are both
   `UIFrameTicker`s
-- Scenes: `cgui-scroller`, `cgui-gallery`
+- Scene: `cgui-gallery` (Scroller page)
 
 ## 8. `SplitView`
 
@@ -641,7 +641,7 @@ to the minimum and collapses the first pane, which looks like a layout bug and i
 The panes accept children; the `SplitView` itself does not. Splits nest.
 
 - Tag `splitview` · internal `__first__`, `__divider__`, `__second__`; root gets `__vertical__`
-- Scenes: `cgui-splitview` (both orientations, nesting, the oversized-content trap), `cgui-gallery`
+- Scene: `cgui-gallery` (SplitView page)
 
 ## 9. `TabView` + `Tab`
 
@@ -696,7 +696,7 @@ change, falls back to the first tab when nothing is selected (`selectTab(null)` 
 a removed tab to ordinarily-tabbable on the way out.
 
 - Tags `tabview`, `tab` · internal as listed in §0 · `tab:checked` works via the overridden `isChecked()`
-- Scenes: `cgui-tabview` (four sides, strip overflow, focus exclusion), `cgui-gallery`
+- Scene: `cgui-gallery` (TabView page)
 - Known gap: tabs and panes do **not** round-trip through the codec — they live in internal containers.
 
 ## 9b. `ContextToolbar`
@@ -1524,27 +1524,15 @@ raises — *why are there seventeen layers?* — and they account for every one:
 ```
 
 `cgui-gallery` is the front door: every widget, one page each, with a live Ore ⇄ default theme toggle.
-The rest are focused regression scenes with staggered pixel captures — reach for those when you are
-changing one widget's behaviour.
+The rest are focused regression scenes for what a gallery page cannot hold.
 
 | Mode | Covers |
 |---|---|
-| `cgui-gallery` | all twelve widgets + theme toggle |
-| `cgui-button` | `Button` — activation, drag-off cancel, keyboard, sound |
-| `cgui-checkbox` | `Checkbox`, `CheckboxGroup` (allowEmpty vs required) |
-| `cgui-switch` | `Switch` — captures mid-slide to prove interpolation |
-| `cgui-slider` | `Slider` — drag/click/keys/wheel, forced states, stepped |
-| `cgui-textfield` | `TextField` — nine fields covering both validation tiers, binding, clipboard |
+| `cgui-gallery` | every widget, a page each, + theme toggle |
 | `cgui-text` | `UIText` — auto-size, wrap, font fallback, live binding |
 | `cgui-text-stress` | many text nodes at once — shaping/layout cost, retained-shape reuse |
-| `cgui-scroller` | `ScrollerView` vs programmatic-only element scrolling |
-| `cgui-splitview` | `SplitView` — both orientations, nesting, oversized content |
-| `cgui-tabview` | `TabView` — four sides, arrow nav, strip overflow |
-| `cgui-ore-theme` | the Ore theme + forced hover/pressed/focus/checked/disabled matrices |
 | `cgui-styling` | selectors, cascade, `!important`, transitions, background cross-fades |
 | `cgui-visual-layers` | overflow masking, opacity isolation, scissor vs mask |
-| `cgui-nineslice` | 9-slice tiling modes, CPU 9-quad path vs SDF shader path |
-| `cgui-test` | the original raw-`UINode` DOM smoke test |
 
 All are `INTERACTIVE` and **stay open until you close the window** — they do not exit on their own.
 Kill lingering `java.exe` processes matching `harness` after a run.
