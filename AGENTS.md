@@ -83,6 +83,7 @@ questions too.
 ./gradlew :core:test --tests "<Class>"           # CrystalGraphics ON the classpath; name classes --
                                                  # a `com.crystalgui.ui.*` wildcard never reports
 ./gradlew :core:headlessTest                     # server-side tests, CrystalGraphics core deliberately absent
+./gradlew :core:trackedTest                      # every shipped shader and keyword variant, linked as on Vulkan
 ./gradlew :runtime:mc:1710:compileJava           # not in :core:check -- what a deletion from core/ breaks silently
 ```
 
@@ -302,12 +303,13 @@ common — to local source (`gradle/module_integration/composite.settings.gradle
 importing `net.minecraft.*`, `cpw.mods.fml.*`, `net.minecraftforge.*`, or `org.lwjgl.*` fails the
 build. There are currently **no exemptions** — the guard is clean.
 
-## Three test source sets, and they are not interchangeable
+## Four test source sets, and they are not interchangeable
 
 | Source set | CrystalGraphics on classpath? | What belongs there |
 |---|---|---|
 | `core/src/test/` | ✅ `testImplementation` | Anything needing `CgIO`, fonts, `StyleSheet`, sprites, drawables |
 | `core/src/headlessTest/` | ❌ **core deliberately absent**, `platform` present | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic, and **`text.lang` — the language SPIs, which run here precisely because no engine and no grammar is on this classpath** |
+| `core/src/trackedTest/` | ✅ `core`, `platform` and `vulkan`, with LWJGL 3 | CrystalGUI's shaders on CrystalGraphics' tracked backend over shaderc: every `.shader`, pass and keyword variant, linked as a Vulkan device will link them. Its own task, `:core:trackedTest` — the backend it installs is process-wide |
 | `language/src/test/` | ✅ (plus the tree-sitter natives) | Grammars, queries, the tokenizer. Skips cleanly when a native will not load on the running platform |
 | harness scenes | ✅ full GL | Anything visual |
 
