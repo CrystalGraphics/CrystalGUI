@@ -5,6 +5,9 @@ import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import com.crystalgui.ui.input.HostPointer;
+//? if >=26.1 {
+/*import com.crystalgui.lifecycle.CgUiLifecycle;
+*///?}
 
 import net.minecraft.client.Minecraft;
 
@@ -30,13 +33,13 @@ public final class CgUiHud {
         @Override
         public boolean ownScreenUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && mc.screen instanceof CgUiScreen;
+            return mc != null && ClientGame.screen(mc) instanceof CgUiScreen;
         }
 
         @Override
         public boolean anyScreenUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && mc.screen != null;
+            return mc != null && ClientGame.screen(mc) != null;
         }
 
         /**
@@ -77,6 +80,16 @@ public final class CgUiHud {
     }
 
     private static void paint(DesktopPresentation arm) {
+        // 26.1 extracts the GUI before it draws the level, so a paint from its hooks lands under the
+        // world: the arm paints at the frame end instead, over everything. @see CgUiLifecycle#atFrameEnd
+        //? if >=26.1 {
+        /*CgUiLifecycle.atFrameEnd(arm, () -> paintNow(arm));
+        *///?} else {
+        paintNow(arm);
+        //?}
+    }
+
+    private static void paintNow(DesktopPresentation arm) {
         // Whether there is anything to draw INTO is this loader's question, and it is asked before the
         // session is: the engine initialises on the first WORLD render, and these hooks also fire over a
         // title screen where there has never been one.

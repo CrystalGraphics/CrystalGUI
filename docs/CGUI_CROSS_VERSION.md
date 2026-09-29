@@ -2,7 +2,7 @@
 
 **For an agent adding anything that touches Minecraft or a loader** — commands, permissions, entities,
 containers, events, a new platform service — so that it builds and runs on all of them: Forge 1.7.10,
-1.8.8–1.21.11, NeoForge 1.20.2–1.21.11, Fabric 1.14.4–1.21.11, one jar. The build itself:
+1.8.8–26.2, NeoForge 1.20.2–26.2, Fabric 1.14.4–26.2, one jar. The build itself:
 [`CGUI_BUILD.md`](CGUI_BUILD.md). The invocable version of this doc is the `cross-version` skill.
 
 ## The rule
@@ -15,7 +15,7 @@ others got wrong, and nothing detects it (`AGENTS.md` § *A loader defines wirin
 ```
 core (contract + logic, Java 25 → 8)      ←  the only place behaviour lives
   └─ seam: an interface, Minecraft-free
-       ├─ runtime/mc/modern/common   one class, Forge + NeoForge + Fabric, 1.13.2–1.21.11, //? directives
+       ├─ runtime/mc/modern/common   one class, Forge + NeoForge + Fabric, 1.13.2–26.2, //? directives
        │    └─ forge / neoforge / fabric branches: registration only, forward into common
        ├─ runtime/mc/legacy/forge    Forge 1.8.9 · 1.10.2 · 1.12.2, directives in Game / ClientGame
        └─ runtime/mc/1710            Forge 1.7.10, no directives
@@ -82,10 +82,10 @@ All of them are knowable from `mcapi.py` before writing a line.
 
    | Touch point | Spelling | Nodes |
    |---|---|---|
-   | register commands | `RegisterCommandsEvent.getDispatcher()` (Forge) | forge:1.16.5-1.21.11 |
+   | register commands | `RegisterCommandsEvent.getDispatcher()` (Forge) | forge:1.16.5-26.2 |
    | | `FMLServerStartingEvent.getCommandDispatcher()` | forge:1.13.2-1.15.2 |
-   | | `RegisterCommandsEvent` (NeoForge's) | neoforge:1.20.2-1.21.11 |
-   | | `CommandRegistrationCallback` v1 → v2 (Fabric) | v1 fabric:1.14.4-1.18.2 · v2 fabric:1.19.2-1.21.11 |
+   | | `RegisterCommandsEvent` (NeoForge's) | neoforge:1.20.2-26.2 |
+   | | `CommandRegistrationCallback` v1 → v2 (Fabric) | v1 fabric:1.14.4-1.18.2 · v2 fabric:1.19.2-26.2 |
    | | `ICommand` in the server-starting event | legacy, 1.7.10 |
    | is op | `isOp(GameProfile)` → `isOp(NameAndId)` | break at 1.21.9 |
 

@@ -17,12 +17,12 @@ pluginManagement {
         id("com.gtnewhorizons.gtnhsettingsconvention") version("2.0.20")
 
         // The 1.20.x loader scripts request these with no version, so the pins live here. moddev
-        // matches runtime/mc/modern/build-logic's net.neoforged:moddev-gradle:2.0.141 -- one version, one
+        // matches runtime/mc/modern/build-logic's net.neoforged:moddev-gradle:2.0.147 -- one version, one
         // spelling. No net.neoforged.moddev.repositories settings plugin pins them: nothing applies
         // that plugin in either repository.
         id("com.gradleup.shadow") version("9.2.2")
-        id("net.neoforged.moddev") version("2.0.141")
-        id("net.neoforged.moddev.legacyforge") version("2.0.141")
+        id("net.neoforged.moddev") version("2.0.147")
+        id("net.neoforged.moddev.legacyforge") version("2.0.147")
 
         // Applied by the root build.gradle.kts; see there. 1.3 is what gtnhgradle resolves, and
         // ModDevGradle asks for 1.2 but uses only API 1.3 still carries.
@@ -127,9 +127,9 @@ include("runtime:mc:modern-shared")
 // cgbuildlogic.SingleJarSettings
 singlejar {
     targets {
-        forge("1.7.10".."1.21.11")
-        neoforge("1.20.2".."1.21.11")
-        fabric("1.14.4".."1.21.11")
+        forge("1.7.10".."26.2")
+        neoforge("1.20.2".."26.2")
+        fabric("1.14.4".."26.2")
     }
 }
 

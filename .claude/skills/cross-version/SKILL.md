@@ -1,6 +1,6 @@
 ---
 name: cross-version
-description: Add a feature, platform service or Minecraft-facing code (commands, permissions, entities, containers, events, networking, a new service) to CrystalGUI/CrystalGraphics so it builds and runs on EVERY supported Minecraft version and loader (Forge 1.7.10, 1.8.8-1.21.11, NeoForge 1.20.2-1.21.11, Fabric 1.14.4-1.21.11) without breaking any. Use whenever a change touches runtime/mc/**, a loader, a platform seam, or needs Minecraft API.
+description: Add a feature, platform service or Minecraft-facing code (commands, permissions, entities, containers, events, networking, a new service) to CrystalGUI/CrystalGraphics so it builds and runs on EVERY supported Minecraft version and loader (Forge 1.7.10, 1.8.8-26.2, NeoForge 1.20.2-26.2, Fabric 1.14.4-26.2) without breaking any. Use whenever a change touches runtime/mc/**, a loader, a platform seam, or needs Minecraft API.
 ---
 
 # Cross-version change
@@ -62,7 +62,7 @@ Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) 
 
 | Era | Where |
 |---|---|
-| Modern shared (Forge+NeoForge+Fabric 1.13.2-1.21.11) | `runtime/mc/modern/common/src/main/java/com/crystalgui/mc/modern/` |
+| Modern shared (Forge+NeoForge+Fabric 1.13.2-26.2) | `runtime/mc/modern/common/src/main/java/com/crystalgui/mc/modern/` |
 | Modern registration | `runtime/mc/modern/{forge,neoforge,fabric}/src/...` entry classes — one-line forwards |
 | Legacy Forge 1.8.9/1.10.2/1.12.2 | `runtime/mc/legacy/forge/src/...`; renamed members via `Game` / `client.ClientGame` |
 | 1.7.10 | `runtime/mc/1710/src/...` |

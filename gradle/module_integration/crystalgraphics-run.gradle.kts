@@ -32,8 +32,8 @@ val (graphicsLoaderPath, graphicsLoaderDir) = graphicsNodes.getValue("loader")
 // ModDevGradle refuses additionalRuntimeClasspath from Minecraft 1.21.10; runtimeOnly takes its place.
 // @see cgbuildlogic.devRunLibraries, which this script plugin cannot see
 val mcOrdinal = property("mc.version").toString().split('.').map { it.toIntOrNull() ?: 0 }
-    .let { v -> v.getOrElse(1) { 0 } * 1000 + v.getOrElse(2) { 0 } }
-val devRunLibraries = if (mcOrdinal >= 21_010) "runtimeOnly" else "additionalRuntimeClasspath"
+    .let { v -> v.getOrElse(0) { 0 } * 1_000_000 + v.getOrElse(1) { 0 } * 1000 + v.getOrElse(2) { 0 } }
+val devRunLibraries = if (mcOrdinal >= 1_021_010) "runtimeOnly" else "additionalRuntimeClasspath"
 
 dependencies {
     add(devRunLibraries, project(":taffy"))
@@ -51,7 +51,7 @@ dependencies {
     add(devRunLibraries, "com.crystalgraphics:lwjgl3:1.0.0")
     // Minecraft ships JOML from 1.19.3; below it the shipped jar's companion supplies it, and a dev run
     // takes it as a library.
-    if (mcOrdinal < 19_003) add(devRunLibraries, "org.joml:joml-jdk8:1.10.1")
+    if (mcOrdinal < 1_019_003) add(devRunLibraries, "org.joml:joml-jdk8:1.10.1")
 }
 
 /** Classes and resources are separate roots to FML, and a mod needs both -- mods.toml is a resource. */

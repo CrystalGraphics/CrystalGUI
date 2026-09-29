@@ -3,7 +3,7 @@
 **Project type**: Platform-agnostic retained-mode UI engine, shaped like a lightweight web browser
 (DOM + CSS cascade + Taffy layout + immediate-mode painting).
 **Authored in**: Java 25, with a Java 8 copy of every engine module for consumers below it · **Layout**: Taffy · **Backend**: CrystalGraphics
-**Ships**: one jar for Forge 1.7.10–1.21.11, NeoForge 1.20.2–1.21.11 and Fabric 1.14.4–1.21.11, plus an optional language jar — see [Build and run](#build-and-run)
+**Ships**: one jar for Forge 1.7.10–26.2, NeoForge 1.20.2–26.2 and Fabric 1.14.4–26.2, plus an optional language jar — see [Build and run](#build-and-run)
 
 ---
 
@@ -111,7 +111,7 @@ harness is a client by design.
 ./gradlew :runtime:mc:modern:<branch>:<version>:runClient                    # a dev client
 ./gradlew :runtime:mc:1710:runClient -PcgProbe -PcgJoin=localhost:25565      # the connection probe, two processes
 ./gradlew :runtime:mc:modern:<branch>:<version>:connectionProbe              # the same, driven to a verdict file
-./gradlew prodSmoke                                                          # THE SWEEP: the shipped jars on 24 real clients
+./gradlew prodSmoke                                                          # THE SWEEP: the shipped jars on 30 real clients
 ./gradlew prodSmoke -PcgTargets=<label>,<label>                             # just these
 ```
 
@@ -150,12 +150,15 @@ in the pin catalog).
 
 | Loader | Versions | Not supported, and why |
 |---|---|---|
-| Forge | 1.7.10 · 1.8.8–1.12.2 (legacy tree) · 1.13.2–1.21.11 | 1.8 (no MixinBooter boots it) · 1.21 (Forge 51 has no HUD event) · never published: 1.14, 1.14.1, 1.16, 1.17, 1.20.5, 1.21.2 |
-| NeoForge | 1.20.2–1.21.11 | nothing for 1.20.1; 1.21.2, 1.21.6, 1.21.7 and 1.21.9 run its only builds, betas |
-| Fabric | 1.14.4–1.21.11 | 1.14–1.14.3, 1.16, 1.16.1, 1.21.9 — their only Fabric APIs lack a module the hosts use |
+| Forge | 1.7.10 · 1.8.8–1.12.2 (legacy tree) · 1.13.2–1.21.11 · 26.1.1–26.2 | 1.8 (no MixinBooter boots it) · 1.21 (Forge 51 has no HUD event) · 26.1 (Forge 62 fails in Minecraft's own bootstrap, before any mod loads) · never published: 1.14, 1.14.1, 1.16, 1.17, 1.20.5, 1.21.2 |
+| NeoForge | 1.20.2–1.21.11 · 26.1–26.2 | nothing for 1.20.1; 1.21.2, 1.21.6, 1.21.7, 1.21.9, 26.1 and 26.1.1 run its only builds, betas |
+| Fabric | 1.14.4–1.21.11 · 26.1–26.2 | 1.14–1.14.3, 1.16, 1.16.1, 1.21.9 — their only Fabric APIs lack a module the hosts use |
 
 - **Java 8** runs Forge 1.13–1.16, legacy Forge and 1.7.10, dev runs included (`uniminedDevRun` swaps in
   the Java 8 copies). Below 1.17 the nodes are built by Loom and Unimined, above by ModDevGradle.
+- **26.x is Java 25 and unobfuscated**: every loader runs Mojang's names, so a Fabric node from 26.1 ships
+  as compiled, with no intermediary. On 26.2 Blaze3D may run on Vulkan, and CrystalGraphics then stands
+  down (`CgGraphicsLifecycle.standDown`).
 - **Below 1.19.3 Minecraft ships no JOML**, and those instances take CrystalGraphics' `crystalgraphics-joml`
   companion (`prismInstanceJoml` in `local.properties`).
 - **Forge 1.13.2 and 1.14.2–1.14.3 compile against Mojang names carried back from 1.14.4**, since Mojang

@@ -1,6 +1,6 @@
 package com.crystalgui.mc.forge.mixin;
 
-//? if >=1.21.6 {
+//? if >=1.21.6 <1.21.8 {
 /*import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.Gui;

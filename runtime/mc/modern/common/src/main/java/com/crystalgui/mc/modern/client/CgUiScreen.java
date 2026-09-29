@@ -9,13 +9,18 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
+//? if >=26.1 {
+/*import com.crystalgui.lifecycle.CgUiLifecycle;
+*///?}
 import com.crystalgui.probe.ConnectionProbe;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 
 import net.minecraft.client.Minecraft;
-//? if >=1.20 {
+//? if >=26.1 {
+/*import net.minecraft.client.gui.GuiGraphicsExtractor;
+*///?} elif >=1.20 {
 import net.minecraft.client.gui.GuiGraphics;
 //?} elif >=1.15 {
 /*import com.mojang.blaze3d.vertex.PoseStack;
@@ -85,7 +90,7 @@ public final class CgUiScreen extends Screen {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        if (mc != null) mc.setScreen(new CgUiScreen());
+        if (mc != null) ClientGame.setScreen(mc, new CgUiScreen());
     }
 
     // ── What the rest of this loader reads ──────────────────────────────────────────────────────
@@ -128,19 +133,54 @@ public final class CgUiScreen extends Screen {
     protected void init() {
         HostSession.session().shown();
         //? if >=1.21.6 {
-        /*if (hudHiddenBefore == null) hudHiddenBefore = minecraft.options.hideGui;
-        minecraft.options.hideGui = true;
+        /*if (hudHiddenBefore == null) hudHiddenBefore = ClientGame.hudHidden(minecraft);
+        ClientGame.setHudHidden(minecraft, true);
         *///?}
     }
 
-    @Override
-    //? if >=1.20 {
+    // DRAIN MINECRAFT'S OWN BATCH FIRST. GuiGraphics queues its geometry into a BufferSource that is
+    // flushed only after render() returns, so anything Minecraft still had pending would composite ON TOP
+    // of the immediate-mode GL below rather than under it. The symptom is the whole UI reading one shade
+    // darker, with nothing in the UI itself to blame. Before 1.20 the batch is the game's own buffer
+    // source, which GuiGraphics.flush wraps. 1.21.6 records GUI draws and renders them at the end of the
+    // frame, so there is no batch to drain. 26.1 EXTRACTS the GUI before it draws the level at all, so a
+    // paint there lands under the world: the desktop paints at the frame end instead, over everything.
+    //? if >=26.1 {
+    /*@Override
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        CgUiLifecycle.atFrameEnd(DesktopPresentation.DESKTOP, CgUiScreen::paintDesktop);
+    }
+    *///?} elif >=1.21.6 {
+    /*@Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        paintDesktop();
+    }
+    *///?} elif >=1.20 {
+    @Override
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        graphics.flush();
+        paintDesktop();
+    }
     //?} elif >=1.16 {
-    /*public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+    /*@Override
+    public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
+        Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
+        paintDesktop();
+    }
+    *///?} elif >=1.15 {
+    /*@Override
+    public void render(int mouseX, int mouseY, float partialTick) {
+        Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
+        paintDesktop();
+    }
     *///?} else {
-    /*public void render(int mouseX, int mouseY, float partialTick) {
+    /*@Override
+    public void render(int mouseX, int mouseY, float partialTick) {
+        paintDesktop();
+    }
     *///?}
+
+    private static void paintDesktop() {
         HostSession session = HostSession.session();
         if (!session.isBuilt()) return;
         // The engine initialises on the first WORLD render and this screen also opens over the title
@@ -156,27 +196,16 @@ public final class CgUiScreen extends Screen {
                 (float) (System.nanoTime() / 1_000_000_000.0);
 
         session.frame(delta);
-
-        // DRAIN MINECRAFT'S OWN BATCH FIRST. GuiGraphics queues its geometry into a BufferSource that is
-        // flushed only after render() returns, so anything Minecraft still had pending would composite ON
-        // TOP of the immediate-mode GL below rather than under it. The symptom is the whole UI reading one
-        // shade darker, with nothing in the UI itself to blame. 1.21.6 records GUI draws and renders them
-        // at the end of the frame, so there is no batch to drain here. Before 1.20 the batch is the game's
-        // own buffer source, which GuiGraphics.flush wraps.
-        //? if >=1.21.6 {
-        /*// (nothing)
-        *///?} elif >=1.20 {
-        graphics.flush();
-        //?} elif >=1.15 {
-        /*Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
-        *///?}
-
         session.paint(DesktopPresentation.DESKTOP, delta, PAINT_HOST);
     }
 
     // 1.21.6 draws the background from renderWithTooltip, before render() and deferred to the end of the
     // frame -- so its blur and dim would land OVER the desktop painted above. The desktop is its own.
-    //? if >=1.21.6 {
+    //? if >=26.1 {
+    /*@Override
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+    }
+    *///?} elif >=1.21.6 {
     /*@Override
     public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
     }
@@ -202,13 +231,13 @@ public final class CgUiScreen extends Screen {
         @Override
         public boolean ownScreenUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && mc.screen instanceof CgUiScreen;
+            return mc != null && ClientGame.screen(mc) instanceof CgUiScreen;
         }
 
         @Override
         public boolean anyScreenUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && mc.screen != null;
+            return mc != null && ClientGame.screen(mc) != null;
         }
 
         @Override
@@ -226,7 +255,7 @@ public final class CgUiScreen extends Screen {
     public void removed() {
         HostSession.session().hidden();
         //? if >=1.21.6 {
-        /*if (hudHiddenBefore != null) minecraft.options.hideGui = hudHiddenBefore;
+        /*if (hudHiddenBefore != null) ClientGame.setHudHidden(minecraft, hudHiddenBefore);
         hudHiddenBefore = null;
         *///?}
     }

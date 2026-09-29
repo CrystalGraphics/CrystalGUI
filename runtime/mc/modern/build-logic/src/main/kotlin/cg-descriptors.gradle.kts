@@ -54,9 +54,9 @@ val cgDescriptor = ModDescriptor(
         "fabric" to LoaderEntries("com.crystalgui.mc.fabric",
             common = "com.crystalgui.mc.fabric.CrystalGUIFabricCommon",
             client = "com.crystalgui.mc.fabric.CrystalGUIFabric",
-            // `fabric`, not `fabric-api`: Fabric API's id was `fabric` through its 1.19.1 builds, and every
-            // later one still provides it.
-            fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0", "fabric" to "*")),
+            // No Fabric API entry: its id was `fabric` through 1.17, `fabric-api` providing `fabric` after,
+            // and `fabric-api` alone from 26.1, so no one id holds on every version. FabricBootstrap asks.
+            fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0")),
     )),
     // WHAT THE LOADER CONSTRUCTS, where that is not the variant itself. Fabric's descriptor names
     // entry points and Fabric constructs EVERY one it names, so with more than one variant it would

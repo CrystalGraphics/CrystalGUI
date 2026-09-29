@@ -18,6 +18,8 @@ import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -185,7 +187,41 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     public void onFrame(long frame) {
         Runnable due;
         while ((due = pending.poll()) != null) due.run();
+
+        if (atFrameEnd.isEmpty()) return;
+        Runnable[] paints = atFrameEnd.values().toArray(new Runnable[0]);
+        atFrameEnd.clear();
+        for (Runnable paint : paints) paint.run();
     }
+
+    /** Render thread only; keyed so an arm recorded twice in one frame paints once. */
+    private static final Map<Object, Runnable> atFrameEnd = new LinkedHashMap<>();
+
+    /**
+     * Paints at this frame's end instead of now: once the host has drawn its own GUI, the last point to
+     * draw over its picture. For a host whose GUI hook runs before the frame is drawn — Minecraft 26.1
+     * extracts its GUI before it renders the level, so painting there lands under the world.
+     *
+     * <pre>{@code
+     * // a screen's extraction hook, every frame the screen is up
+     * CgUiLifecycle.atFrameEnd(DesktopPresentation.DESKTOP, this::paintDesktop);
+     * }</pre>
+     *
+     * <p>Runs from {@link #onFrame}, so registers CrystalGUI first: the usual registration is the paint
+     * context's first use, which would never come. Nothing runs after the engine stands down.</p>
+     *
+     * @param key   one paint per key per frame — the arm
+     * @param paint the paint, on the render thread
+     */
+    public static void atFrameEnd(Object key, Runnable paint) {
+        if (!registeredForFrameEnd) {
+            register();
+            registeredForFrameEnd = true;
+        }
+        atFrameEnd.put(key, paint);
+    }
+
+    private static boolean registeredForFrameEnd;
 
     /**
      * Releases the GL resources CrystalGUI owns outright.

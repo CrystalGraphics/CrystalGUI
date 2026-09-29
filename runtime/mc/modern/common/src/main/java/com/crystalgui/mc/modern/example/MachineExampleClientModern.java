@@ -7,6 +7,7 @@ import com.crystalgui.mc.modern.net.Connections;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 
 import net.minecraft.client.KeyMapping;
+import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 
 import org.lwjgl.glfw.GLFW;
@@ -35,7 +36,7 @@ public final class MachineExampleClientModern {
 
     private static void poll() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.screen != null) return;
+        if (mc == null || ClientGame.screen(mc) != null) return;
         if (!OPEN_MACHINE.consumeClick()) return;
 
         MachineExample.requestPanel(Connections.client());
