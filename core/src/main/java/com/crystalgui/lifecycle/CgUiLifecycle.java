@@ -13,7 +13,6 @@ import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
-import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
@@ -159,8 +158,9 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
 
-        // Warmup the paint context, around 1000ms on first init done before world frame time.
-        try (CgGlScope ignored = CgGlState.save(CgGlSlot.DEPTH, CgGlSlot.PROGRAM)) {
+        // Warmup the paint context, around 1000ms on first init done before world frame time. Every domain:
+        // a material bind applies its pass's whole render state, and this runs inside the host's world pass.
+        try (CgGlScope ignored = CgGlState.saveAll()) {
             CgUiPaintContext.getInstance().warm(width, height);
         }
     }
