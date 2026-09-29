@@ -37,6 +37,7 @@ The fastest way to see the UI is the GL debug harness: no Minecraft, a window in
 |---|---|
 | [`AGENTS.md`](AGENTS.md) | The package map and the rules — first, before any change |
 | [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md) | The build, the shipped jars, running real Minecraft clients |
+| [`docs/CGUI_CROSS_VERSION.md`](docs/CGUI_CROSS_VERSION.md) | Code that must run on every Minecraft version and loader |
 | [`docs/CGUI_STYLE_RENDER_PIPELINE.md`](docs/CGUI_STYLE_RENDER_PIPELINE.md) | The cascade, stylesheets and painting |
 | [`docs/CGUI_WIDGETS.md`](docs/CGUI_WIDGETS.md) | Every widget, its parts and its states |
 | [`docs/CGUI_SERVER_AND_SERIALIZATION.md`](docs/CGUI_SERVER_AND_SERIALIZATION.md) | Codecs, packets and sessions |
@@ -44,7 +45,7 @@ The fastest way to see the UI is the GL debug harness: no Minecraft, a window in
 A library bundled into the shipped jars must run on Java 8: the jars are downgraded whole, and a JNI
 library's natives must be compiled against Java 8 too.
 
-## Licence
+## License
 
 [LGPL-3.0-or-later](COPYING.LESSER), building on the [GPL-3.0](COPYING). Both texts ship in each jar
 under `META-INF/`, beside the third-party notices indexed by [`THIRD-PARTY.md`](THIRD-PARTY.md).
