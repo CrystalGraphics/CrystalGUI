@@ -1,6 +1,7 @@
 package com.crystalgui.widget.text;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.Rope;
@@ -75,7 +76,7 @@ public final class SyntaxHighlighting {
      */
     public static List<SyntaxToken> tokenize(String source, @Nullable Language language) {
         if (source == null || source.isEmpty() || language == null) return List.of();
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         List<SyntaxToken> got = fromGrammar(source, language);
         String tier = "grammar";
         // TIER TWO. An empty answer here is not "this text has nothing in it" -- a grammar always finds
@@ -85,8 +86,8 @@ public final class SyntaxHighlighting {
             got = fromKeywords(source, language);
             tier = "keywords";
         }
-        FrameProfile.step(timed, "static.tokenize " + source.length() + " chars -> "
-                + got.size() + " tokens (" + tier + ")");
+        CgTrace.spanDone(UiTrace.FLOW, "static.tokenize " + source.length() + " chars -> "
+                + got.size() + " tokens (" + tier + ")", timed);
         return got;
     }
 

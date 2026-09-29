@@ -16,3 +16,4 @@ com.crystalgui.workbench.extension.PresenceExtension
 com.crystalgui.workbench.extension.ProjectExtension
 com.crystalgui.app.shadergraph.ShaderGraphContribution
 com.crystalgui.app.uibuilder.UiBuilderContribution
+com.crystalgui.app.frameprofiler.FrameProfilerExtension

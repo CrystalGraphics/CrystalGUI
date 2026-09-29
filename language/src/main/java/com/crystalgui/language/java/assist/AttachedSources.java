@@ -1,6 +1,7 @@
 package com.crystalgui.language.java.assist;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.language.java.classpath.ClassFileParameterNames;
 
 import javax.annotation.Nullable;
@@ -294,10 +295,10 @@ public final class AttachedSources {
             // Reported per class so the SHARED setup and the per-class parse can be told apart: if the
             // first is dear and later ones are cheap, a warm-up fixes the first hover; if every one is
             // dear, nothing can be warmed and the answer has to be that the popup does not wait for it.
-            long timed = FrameProfile.begin();
+            long timed = CgTrace.stamp(UiTrace.FLOW);
             CompilationUnit unit = parseAttached(topLevelName, found);
-            FrameProfile.step(timed, "attached.parse " + topLevelName
-                    + " (" + found.text.length() + " chars)");
+            CgTrace.spanDone(UiTrace.FLOW, "attached.parse " + topLevelName
+                    + " (" + found.text.length() + " chars)", timed);
             if (Boolean.getBoolean("crystalgui.attached.trace")) {
                 StringBuilder who = new StringBuilder("[attached] who asked for " + topLevelName + ":");
                 StackTraceElement[] stack = new Throwable().getStackTrace();

@@ -2,7 +2,8 @@ package com.crystalgui.render.texture.svg;
 
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.util.io.CgIO;
-import com.crystalgraphics.util.profiling.CgProfiler;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
@@ -215,7 +216,7 @@ public final class SvgDocument {
                 // looks identical whether it landed on one frame or twenty. This records the distribution,
                 // so the max IS the worst frame.
                 if (lodNanosThisFrame > 0L) {
-                    CgProfiler.sample("svg.lodMsPerFrame", lodNanosThisFrame / 1_000_000.0);
+                    CgTrace.counter(UiTrace.FRAME, "svg.lodMsPerFrame", lodNanosThisFrame / 1_000_000.0);
                 }
                 lodBudgetFrame = frame;
                 lodNanosThisFrame = 0L;
@@ -237,22 +238,22 @@ public final class SvgDocument {
                 SvgDocument fallback = coarsestBuilt();
                 if (fallback != null) {
                     // Counted, so "the budget deferred work" is visible rather than inferred from its absence.
-                    CgProfiler.count("svg.lodDeferred.count");
-                    CgProfiler.sample("svg.lodDeferred", 1.0);
+                    CgTrace.add(UiTrace.FRAME, "svg.lodDeferred.count", 1);
+                    CgTrace.counter(UiTrace.FRAME, "svg.lodDeferred", 1.0);
                     return fallback;
                 }
-                CgProfiler.count("svg.lodOverBudget.count");
+                CgTrace.add(UiTrace.FRAME, "svg.lodOverBudget.count", 1);
             }
             long startedAt = System.nanoTime();
             // Scoped so the COST OF BUILDING one is visible separately from drawing with it: this runs on
             // the first frame a size is used, so a zoom crossing a threshold rebuilds every visible icon
             // in a single frame. That is the hitch worth knowing about, and it cannot be seen in a steady
             // state average.
-            try (CgProfiler.Scope ignored = CgProfiler.scope("svg.lodBuild")) {
-                CgProfiler.count("svg.lodBuild.count");
-                CgProfiler.count("svg.lodBuild.steps" + LOD_STEPS[i]);
-                CgProfiler.sample("svg.lodDevicePx", devicePx);
-                CgProfiler.sample("svg.lodDeferred", 0.0);
+            try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "svg.lodBuild")) {
+                CgTrace.add(UiTrace.FRAME, "svg.lodBuild.count", 1);
+                CgTrace.add(UiTrace.FRAME, "svg.lodBuild.steps" + LOD_STEPS[i], 1);
+                CgTrace.counter(UiTrace.FRAME, "svg.lodDevicePx", devicePx);
+                CgTrace.counter(UiTrace.FRAME, "svg.lodDeferred", 0.0);
                 SvgDocument built = lods.computeIfAbsent(LOD_STEPS[i], steps -> {
                     SvgDocument tier = fromScene(SvgResolver.resolve(tags, steps));
                     // Forced HERE rather than left to the first draw. ops() is lazy now, and the whole
@@ -425,8 +426,8 @@ public final class SvgDocument {
      * <p>Daemon threads, so a process that exits mid-preload is not held open by icon parsing, and at most
      * a few of them: this is CPU-bound work competing with the render thread for cores, and the point is to
      * be finished before the first draw rather than to finish as fast as physically possible. Bounded at
-     * two below the core count for the same reason {@code CgProfiler}-era measurements showed the render
-     * thread starving when a pool took everything.</p>
+     * two below the core count because measurements showed the render thread starving when a pool took
+     * everything.</p>
      */
     private static final class PreloadPool {
 
@@ -443,15 +444,15 @@ public final class SvgDocument {
     @Nullable
     public static SvgDocument load(String path) {
         String source;
-        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.loadSource")) {
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "svg.loadSource")) {
             source = CgIO.loadSource(path);
         }
         if (source == null) {
             CrystalGuiCore.LOGGER.warn("Icon {} could not be read", path);
             return null;
         }
-        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.parse")) {
-            CgProfiler.count("svg.parse.count");
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "svg.parse")) {
+            CgTrace.add(UiTrace.FRAME, "svg.parse.count", 1);
             SvgDocument document = parse(source);
             document.sourceFingerprint = fingerprint(source);
             return document;
@@ -466,17 +467,12 @@ public final class SvgDocument {
     /**
      * Parses SVG text into a document.
      *
-     * <h3>No profiler scopes in here, and they cannot be added</h3>
+     * <h3>Recording from here</h3>
      *
-     * <p>Parsing is pure geometry, so this is reachable from {@code headlessTest} — where CrystalGraphics
-     * <em>core</em> is deliberately absent, and {@code CgProfiler} lives there. A scope inside a method body
-     * still compiles and still passes {@code :core:test}; it fails at run time with
-     * {@code NoClassDefFoundError}, in the one source set that exists to catch it. This method shipped
-     * instrumented for exactly one session before that surfaced.</p>
-     *
-     * <p>{@link #load} is the profiled entry point and is <b>not</b> headless — it reads through {@code CgIO},
-     * which is CrystalGraphics core already. Anything wanting a finer breakdown than {@code svg.parse}
-     * should add it there, or temporarily, and take it back out.</p>
+     * <p>Parsing is pure geometry, reachable from {@code headlessTest} and a dedicated server: it may record
+     * through {@code CgTrace} and never through a CrystalGraphics core type, which fails there with
+     * {@code NoClassDefFoundError} on first execution. {@link #load} reads through {@code CgIO}, which is
+     * core already, and times the whole call as {@code svg.parse}.</p>
      */
     public static SvgDocument parse(String svg) {
         List<SvgScanner.Tag> tags = SvgScanner.scan(svg);
@@ -840,9 +836,9 @@ public final class SvgDocument {
         // so per-cell instrumentation would measure itself. The cell count rides along as a counter
         // instead, which is what turns "drawFill is slow" into "drawFill is slow per cell" or "there are
         // simply a lot of cells".
-        CgProfiler.Scope scope = CgProfiler.scope("svg.drawFill");
-        CgProfiler.count("svg.fillCells", op.data().length / 8);
-        try (CgProfiler.Scope ignored = scope) {
+        CgTrace.Zone scope = CgTrace.zone(UiTrace.FRAME, "svg.drawFill");
+        CgTrace.add(UiTrace.FRAME, "svg.fillCells", op.data().length / 8);
+        try (CgTrace.Zone ignored = scope) {
         float[] q = op.data();
         int[] edges = op.edges();
         int[] start = op.colours();
@@ -880,8 +876,8 @@ public final class SvgDocument {
 
     private static void drawStroke(CgUiPaintContext ctx, DrawOp op,
                                    float x, float y, float scale, int argb, float halfWidth) {
-        CgProfiler.count("svg.strokeSegments", op.data().length / 4);
-        try (CgProfiler.Scope ignored = CgProfiler.scope("svg.drawStroke")) {
+        CgTrace.add(UiTrace.FRAME, "svg.strokeSegments", op.data().length / 4);
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "svg.drawStroke")) {
         float[] s = op.data();
         for (int i = 0; i < s.length; i += 4) {
             // Per SEGMENT, not per op: the caps were decided where the contour structure was still known,

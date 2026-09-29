@@ -196,6 +196,18 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
      */
     public static final String ICON_CLASS = "__icon__";
 
+    /**
+     * On every button {@link #addCaptionAction} makes — what gives an application's own caption button the
+     * same size, padding and glyph box as the four the frame draws.
+     */
+    public static final String CAPTION_ACTION_CLASS = "__caption-action__";
+
+    /** The shared settings gear, drawn by the desktop sheet, for {@link #addCaptionAction}. */
+    public static final String SETTINGS_ACTION_CLASS = "__settings__";
+
+    /** On a caption action while what it opens is showing — a toggle drawn pressed. */
+    public static final String ACTION_ON_CLASS = "__on__";
+
     /** The maximise affordance. Its glyph swaps to "restore" while {@link #MAXIMIZED_CLASS} is on. */
     public static final String MAXIMIZE_CLASS = "__maximize__";
 
@@ -1470,6 +1482,28 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
      * counter — which is exactly what the band model predicted when always-on-top was refused for
      * having no consumer.</p>
      */
+    /**
+     * Adds a button of the application's own to the caption, left of the pin — a settings gear, help.
+     *
+     * <pre>{@code
+     * Button gear = frame.addCaptionAction(WindowFrame.SETTINGS_ACTION_CLASS, "Settings", page::toggle);
+     * gear.addClass(WindowFrame.ACTION_ON_CLASS);   // while what it opens is showing
+     * }</pre>
+     *
+     * <p>The glyph is the sheet's, keyed on {@code partClass}; {@link #SETTINGS_ACTION_CLASS} is drawn by
+     * the desktop sheet already. Added in call order, each to the left of the one before it would be —
+     * so the first added sits nearest the pin.</p>
+     */
+    public Button addCaptionAction(String partClass, String tooltip, Runnable action) {
+        Button button = new Button("");
+        button.addClass(CAPTION_ACTION_CLASS);
+        button.addClass(partClass);
+        button.attachListener(action);
+        Tooltip.attach(button, tooltip).addClass(Tooltip.WAIT_CLASS);
+        controls.insertAt(controls.indexOf(pinButton), button);
+        return button;
+    }
+
     public boolean isPinned() {
         return pinned;
     }

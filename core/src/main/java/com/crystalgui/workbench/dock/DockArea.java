@@ -1,7 +1,8 @@
 package com.crystalgui.workbench.dock;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.style.StyleGroup;
@@ -811,9 +812,9 @@ public class DockArea extends UIElement implements MinimumSize {
             rebuild();
         } else if (syncPending) {
             syncPending = false;
-            long timed = FrameProfile.begin();
+            long timed = CgTrace.stamp(UiTrace.FLOW);
             syncGroups();
-            FrameProfile.step(timed, "dock.syncGroups (deferred)");
+            CgTrace.spanDone(UiTrace.FLOW, "dock.syncGroups (deferred)", timed);
         }
         applyCloseFocus();
         applyPendingFocus();
@@ -1447,19 +1448,19 @@ public class DockArea extends UIElement implements MinimumSize {
         DockArea holding = leaf != null ? areaOwning(leaf) : areaHolding(panel);
         if (holding == null) return;
         DockLeaf from = leaf != null ? leaf : holding.leafShowing(panel);
-        long profiled = FrameProfile.enter("closePanel " + panel.state(DockPanelRef.PATH, "?"));
+        long profiled = CgTrace.spanBegin(UiTrace.FLOW, "closePanel " + panel.state(DockPanelRef.PATH, "?"));
         try {
             holding.closePanelDiscardingImpl(from, panel);
         } finally {
-            FrameProfile.leave(profiled, "closePanel");
+            CgTrace.spanEnd(profiled);
         }
     }
 
     private void closePanelDiscardingImpl(@Nullable DockLeaf held, DockPanelRef panel) {
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         captureDividerPositions();
-        FrameProfile.step(timed, "close.captureDividers");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "close.captureDividers", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         // WHICH LEAF, CAPTURED BEFORE THE CLOSE, so we can tell afterwards whether the TREE changed or
         // only one strip did. `closePanel` answers true either way -- it removes the leaf only when that
         // leaf empties and is not the central one -- and that difference is the whole cost of a close.
@@ -1467,8 +1468,8 @@ public class DockArea extends UIElement implements MinimumSize {
         UIElement closingContent = closingGroup == null ? null : closingGroup.builtContentFor(panel);
         boolean removed = layout.closePanel(held, panel);
         boolean shapeChanged = held == null || !layout.leaves().contains(held);
-        FrameProfile.step(timed, "close.layout.closePanel"
-                + (shapeChanged ? " (the leaf went too)" : " (the leaf stands)"));
+        CgTrace.spanDone(UiTrace.FLOW, "close.layout.closePanel"
+                + (shapeChanged ? " (the leaf went too)" : " (the leaf stands)"), timed);
         if (!removed) return;
         // AND SOMEBODY HAS TO ANSWER "NOW WHO HAS THE KEYBOARD?". Closing detaches the element that had
         // it and the focus service is right to forget a detached one, so without this Ctrl+W ends with
@@ -1505,7 +1506,7 @@ public class DockArea extends UIElement implements MinimumSize {
         // test (reopeningAClosedFileShowsTheLiveEditor) sat red. If this ever conflicts again, the method
         // is the half to keep. The restore then left the loop written TWICE, one above the rebuild and
         // one below, each with its own half of this comment; they are the same loop and one is enough.
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         // BEFORE THE DETACH BELOW, and that is the whole reason this is a second signal. forgetContent
         // takes the widget out of the tree, and a detached element has no boxes -- so anything that
         // needs to MEASURE what is closing (an editor saving where its floating panels sat) has to be
@@ -1517,7 +1518,7 @@ public class DockArea extends UIElement implements MinimumSize {
         for (DockGroup group : groups.values()) {
             if (group.leaf().indexOf(panel) < 0) group.forgetContent(panel);
         }
-        FrameProfile.step(timed, "close.forgetContent x" + groups.size());
+        CgTrace.spanDone(UiTrace.FLOW, "close.forgetContent x" + groups.size(), timed);
         // A STRIP RESYNC WHEN ONLY A STRIP CHANGED, and the full rebuild only when the tree did.
         //
         // The distinction is already the rule here -- the split path says "requestRebuild, not
@@ -1544,9 +1545,9 @@ public class DockArea extends UIElement implements MinimumSize {
         // stayed reachable, and anything it owned -- a preview pool, a renderer -- lived until the
         // process did. `Disposer` could not help, because the thing that knew the panel was gone had no
         // way to say so. This is that way.
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FLOW);
         home().onDidClosePanel.emit(closing);
-        FrameProfile.step(timed, "close.onDidClosePanel (releases the document)");
+        CgTrace.spanDone(UiTrace.FLOW, "close.onDidClosePanel (releases the document)", timed);
     }
 
     /** A panel that is about to close, while its widget is still in the tree. @see #onDidClosePanel */

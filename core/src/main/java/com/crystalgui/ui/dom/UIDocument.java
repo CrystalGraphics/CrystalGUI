@@ -4,7 +4,8 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.ui.box.Box;
@@ -460,24 +461,24 @@ public final class UIDocument extends UIElement {
         // A FRAME STARTS HERE AND ENDS IN THE PAINT CONTEXT, because the host drives the two halves
         // separately: this is animation, style and layout, and the paint that follows is a call the
         // host makes itself. @see CgUiPaintContext#endFrame
-        FrameProfile.frameBegin();
+        UiTrace.frameBegin();
         if (JobScheduler.hasShared()) {
-            FrameProfile.count("jobs-busy", JobScheduler.shared().runningCount());
+            CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
             JobScheduler.shared().drain();
         }
         input().beginFrame();
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         animation().tick(deltaSeconds);
-        FrameProfile.end(timed, "frame:hooks");
+        CgTrace.zoneDone(UiTrace.FRAME, "frame:hooks", timed);
         calculateStyle(deltaSeconds);
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FRAME);
         layout(width, height);
-        FrameProfile.end(timed, "frame:layout");
+        CgTrace.zoneDone(UiTrace.FRAME, "frame:layout", timed);
         // AFTER layout, for the hooks that READ geometry -- see Animation.afterLayout. Before
         // endFrame, so a placement made here is what the hover diff and the paint both see.
-        timed = FrameProfile.begin();
+        timed = CgTrace.stamp(UiTrace.FRAME);
         settleAfterLayout(width, height, deltaSeconds);
-        FrameProfile.end(timed, "frame:afterLayout");
+        CgTrace.zoneDone(UiTrace.FRAME, "frame:afterLayout", timed);
         if (input().endFrame()) {
             // THE HOVER MOVED AFTER THE CASCADE RAN, so `:hover` would paint on the element the pointer just
             // left for one frame. A reflow under a still pointer does exactly that: a virtualised list recycles
@@ -491,11 +492,11 @@ public final class UIDocument extends UIElement {
             // everything shown straight from an input dispatch rather than from a ticker. It is why
             // Popover parks itself off-screen on open and Tooltip, which has no such hack, showed the
             // flash wherever `tooltip-delay` is 0 and the enter shows the tip at once.
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FRAME);
             calculateStyle(0f);
             layout(width, height);
             settleAfterLayout(width, height, 0f);
-            FrameProfile.end(timed, "frame:hover");
+            CgTrace.zoneDone(UiTrace.FRAME, "frame:hover", timed);
         }
     }
 

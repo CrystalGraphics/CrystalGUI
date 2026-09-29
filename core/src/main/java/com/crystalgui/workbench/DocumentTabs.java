@@ -1,6 +1,7 @@
 package com.crystalgui.workbench;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.document.DocumentState;
@@ -10,19 +11,16 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.render.texture.asset.FileIconTheme;
-import com.crystalgui.text.lang.ProjectSources;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.workbench.decoration.FileDecoration;
 import com.crystalgui.workbench.decoration.FileDecorations;
 import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.dock.DockGroup;
-import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
-import java.util.ArrayList;
+
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -501,17 +499,17 @@ public final class DocumentTabs {
             if (still != null) still.closeView(closedPanel.content());
             return;
         }
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         // THE TAB'S REFERENCE, and nothing more. The document is disposed by its LAST holder, which may
         // be the Problems panel, an index or a background compile -- later than the tab, and never
         // earlier. That ordering is the "Parser is closed" defect, inverted.
         EditorService.Tab tab = workbench.editors.tabFor(EditorInput.of(Resource.of(path)));
         if (tab != null) workbench.editors.close(tab);
-        FrameProfile.step(timed, "close.editors.close (release the tab's reference)");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "close.editors.close (release the tab's reference)", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         workbench.onDidCloseDocument.emit(path);
-        FrameProfile.step(timed, "close.onDidCloseDocument -> "
-                + workbench.onDidCloseDocument.connectionCount() + " listeners");
+        CgTrace.spanDone(UiTrace.FLOW, "close.onDidCloseDocument -> "
+                + workbench.onDidCloseDocument.connectionCount() + " listeners", timed);
     }
 
     /**

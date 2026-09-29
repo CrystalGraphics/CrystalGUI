@@ -1,5 +1,17 @@
 package com.crystalgui.app;
 
+import com.crystalgui.app.frameprofiler.CallTreeTab;
+import com.crystalgui.app.frameprofiler.ChannelsControl;
+import com.crystalgui.app.frameprofiler.CountersTab;
+import com.crystalgui.app.frameprofiler.FrameImageView;
+import com.crystalgui.app.frameprofiler.ScreenTab;
+import com.crystalgui.app.frameprofiler.FlameChart;
+import com.crystalgui.app.frameprofiler.ChainsTab;
+import com.crystalgui.app.frameprofiler.CompareTab;
+import com.crystalgui.app.frameprofiler.FrameProfilerPanel;
+import com.crystalgui.app.frameprofiler.HintsTab;
+import com.crystalgui.app.frameprofiler.ProfilerSettingsPage;
+import com.crystalgui.app.frameprofiler.ZonesTab;
 import com.crystalgui.app.shadergraph.ShaderGraphView;
 import com.crystalgui.app.uibuilder.canvas.Artboard;
 import com.crystalgui.app.uibuilder.canvas.BuilderPane;
@@ -70,5 +82,20 @@ public final class AppKinds implements NodeKinds {
         UIElementRegistry.registerTag(LibraryPanel.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(LibraryToolWindow.NAME, NodeContract.INERT);
         UIElementRegistry.registerTag(LibraryDetail.NAME, NodeContract.INERT);
+        // THE FRAME PROFILER'S FOUR. Tags only: nothing describes a profiler over a wire, and what a
+        // registration buys is the selector -- `ua/profiler.css` gives every band its geometry, and a
+        // band whose rule matches nothing lays out at its content and reads as a broken window.
+        UIElementRegistry.registerTag(FrameProfilerPanel.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(FlameChart.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ZonesTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(CallTreeTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ChannelsControl.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(CountersTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ScreenTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(FrameImageView.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ProfilerSettingsPage.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(HintsTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(ChainsTab.NAME, NodeContract.INERT);
+        UIElementRegistry.registerTag(CompareTab.NAME, NodeContract.INERT);
     }
 }

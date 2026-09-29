@@ -8,7 +8,8 @@ import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.style.transition.TransitionEngine;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 
@@ -197,13 +198,11 @@ public final class StyleEngine {
      * <p>Routed through one method purely so it can be blamed. A frame reported 243 elements re-matched
      * with <b>no</b> {@code markDirty} caller at all, which is only possible from here: an invalidation
      * that names one element and one that names every element are indistinguishable downstream, and the
-     * second is the one that costs a frame. @see FrameProfile</p>
+     * second is the one that costs a frame. @see UiTrace#blame</p>
      */
     private void markAllDirty() {
-        if (FrameProfile.ENABLED) {
-            FrameProfile.blame("markAllDirty", "com.crystalgui.style");
-            FrameProfile.count("whole-window-invalidations", 1);
-        }
+        UiTrace.blame("markAllDirty", "com.crystalgui.style");
+        CgTrace.add(UiTrace.FRAME, "whole-window-invalidations", 1);
         dirtyMatch.addAll(elements.get());
     }
 
@@ -267,12 +266,8 @@ public final class StyleEngine {
     /** Called from {@link Styleable#invalidateStyleMatch()} — marks an element for re-matching. */
     public void markDirty(Styleable element) {
         // BLAMED WHILE PROFILING. A count says three hundred elements were re-matched; only the caller
-        // says why, and "why" is the whole question when nothing on screen is moving. @see FrameProfile
-        if (FrameProfile.ENABLED && dirtyMatch.add(element)) {
-            FrameProfile.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement");
-            return;
-        }
-        dirtyMatch.add(element);
+        // says why, and "why" is the whole question when nothing on screen is moving. @see UiTrace#blame
+        if (dirtyMatch.add(element)) UiTrace.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement");
     }
 
     /**
@@ -295,12 +290,12 @@ public final class StyleEngine {
         // THE TWO HALVES REPORTED APART. They cost differently and for unrelated reasons -- the drain is
         // proportional to how many elements were invalidated, the tick to how many transitions are in
         // flight -- so one `style` bucket cannot say which of them a slow frame is.
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         drainDirtyMatch();
-        FrameProfile.end(timed, "style:drainDirtyMatch");
-        timed = FrameProfile.begin();
+        CgTrace.zoneDone(UiTrace.FRAME, "style:drainDirtyMatch", timed);
+        timed = CgTrace.stamp(UiTrace.FRAME);
         transitionEngine.tick(deltaSeconds);
-        FrameProfile.end(timed, "style:transitions");
+        CgTrace.zoneDone(UiTrace.FRAME, "style:transitions", timed);
     }
 
     /**
@@ -361,15 +356,16 @@ public final class StyleEngine {
         // same pass, bounded, so one calculateStyle() answers for the whole tree. Snapshot-and-clear
         // per round, so those reentrant calls land in the cleared set rather than throwing a
         // ConcurrentModificationException.
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         int total = 0;
         for (int round = 0; round < MAX_SETTLE_ROUNDS && !dirtyMatch.isEmpty(); round++) {
             var batch = new ArrayList<>(dirtyMatch);
             dirtyMatch.clear();
             batch.sort((a, b) -> Integer.compare(depthOf(a), depthOf(b)));
             // NAMES WHAT IS CHURNING, not merely how much. "Style is slow" is not actionable; "2,143
-            // elements re-matched, 2,000 of them .__error-stripe__" is a fix. Off unless asked for.
-            if (FrameProfile.ENABLED) profileBatch(batch);
+            // elements re-matched, 2,000 of them .__error-stripe__" is a fix. On the blame channel: it asks
+            // who is churning, and eight shifting counters a batch would bury the frame's own.
+            if (CgTrace.isEnabled(UiTrace.BLAME)) profileBatch(batch);
             if (recordRematches) rematchedForTesting.addAll(batch);
             for (var element : batch) {
                 rematch(element);
@@ -385,7 +381,7 @@ public final class StyleEngine {
         // THE PER-ELEMENT COST, stated rather than assumed. Everything about narrowing invalidation rests
         // on "a rematch costs ~20-25us", which was a comment in this file and never a measurement -- and
         // the trade between marking fewer elements and walking a smaller tree is decided by that number.
-        FrameProfile.step(timed, "style:rematch x" + batch.size());
+        CgTrace.spanDone(UiTrace.FLOW, "style:rematch x" + batch.size(), timed);
     }
 
     /** Counts the batch by the most specific class each element carries, for the frame report. */
@@ -396,7 +392,7 @@ public final class StyleEngine {
     }
 
     private static void profileBatch(List<Styleable> batch) {
-        FrameProfile.count("rematched", batch.size());
+        CgTrace.add(UiTrace.FRAME, "rematched", batch.size());
         Map<String, Integer> byName = new HashMap<>();
         for (Styleable element : batch) {
             String name = element.getClasses().isEmpty()
@@ -406,7 +402,7 @@ public final class StyleEngine {
         byName.entrySet().stream()
                 .sorted((a, b) -> Integer.compare(b.getValue(), a.getValue()))
                 .limit(8)
-                .forEach(entry -> FrameProfile.count("~" + entry.getKey(), entry.getValue()));
+                .forEach(entry -> CgTrace.add(UiTrace.FRAME, "~" + entry.getKey(), entry.getValue()));
     }
 
     /** Declarations within one rule share the rule's own {@code sourceOrder} — this multiplier

@@ -92,14 +92,12 @@ import java.util.Map;
  * parallel-array note on {@link #sortByX} already made this argument for the innermost loop; this is the
  * same argument applied to the two structures around it.</p>
  *
- * <h3>This class cannot profile itself</h3>
+ * <h3>Recording from here</h3>
  *
- * <p><b>No {@code CgProfiler} scopes here, and that is a constraint rather than an oversight.</b> Filling is
- * pure geometry, so it is reachable from {@code headlessTest} — where CrystalGraphics <em>core</em> is
- * deliberately absent — and {@code CgProfiler} lives there. A scope in a method body resolves on first
- * execution, so adding one does not fail the build: it fails at run time with {@code NoClassDefFoundError},
- * and only in the source set that exists to catch exactly that. {@link SvgTessellator} is one level up, is
- * not headless-reachable, and already times the whole call as {@code svg.tessellate} — put the scope there.</p>
+ * <p>Filling is pure geometry, reachable from {@code headlessTest} and a dedicated server, so it may record
+ * through {@code CgTrace} (CrystalGraphics' platform module, which both have) and never through a
+ * CrystalGraphics <em>core</em> type: that resolves on first execution and fails there with
+ * {@code NoClassDefFoundError}.</p>
  */
 public final class SvgTriangulator {
 

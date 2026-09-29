@@ -8,7 +8,7 @@ import java.util.List;
 
 import org.junit.Test;
 
-import com.crystalgui.core.async.FrameStats;
+import com.crystalgui.core.trace.FrameStats;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.widget.text.UIText;

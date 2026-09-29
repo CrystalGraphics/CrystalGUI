@@ -1,15 +1,17 @@
 package com.crystalgui.widget.display;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.async.FrameStats;
+import com.crystalgui.core.trace.FrameStats;
 import com.crystalgui.text.TextRange;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 
@@ -22,11 +24,10 @@ import com.crystalgui.widget.text.UIText;
  * hud.stats().setBudgetMs(1000f / 144f);                        // this host's refresh rate
  * }</pre>
  *
- * <p>It reads {@link FrameStats}, which takes its frame boundary from
- * {@link com.crystalgui.core.async.FrameProfile} — so the same overlay works in a harness scene, in the
- * editor and on a Minecraft screen, and measures the whole frame rather than its own subtree. The phase
- * breakdown follows the readout rather than a property: {@code FrameProfile} times its phases whenever
- * something is collecting, and {@code -Dcrystalgui.frameprofile=true} adds the LOGGING on top.</p>
+ * <p>It reads {@link FrameStats}, which reads the frames {@link UiTrace#frameBegin()} marks — so the same
+ * overlay works in a harness scene, in the editor and on a Minecraft screen, and measures the whole frame
+ * rather than its own subtree. The phase breakdown is whatever the frame channel recorded while
+ * something is collecting.</p>
  *
  * <h3>It holds the collector only while it is in the tree</h3>
  *
@@ -54,6 +55,14 @@ public class FrameStatsOverlay extends UIElement {
 
     /** The frame-time bars. Its own class so a sheet can style the one row made of characters. */
     public static final String SPARK_CLASS = "__spark__";
+
+    /**
+     * What a hidden readout, or a row the readout has stopped needing, wears.
+     *
+     * <p>A class rather than an inline {@code display: none} because the engine may not write into the
+     * cascade — see {@code EngineBoundaryTest}. The sheet says what hidden means.</p>
+     */
+    public static final String HIDDEN_CLASS = "__hidden__";
 
     /**
      * The two highlight names the bars are coloured through.
@@ -118,8 +127,10 @@ public class FrameStatsOverlay extends UIElement {
         this.stats = stats;
         refusePublicChildren();
         // A READOUT IS NOT A CONTROL. It sits over the corner of whatever it measures, and a HUD that
-        // ate the clicks under it would break the thing being profiled.
-        setHitTest(false);
+        // ate the clicks under it would break the thing being profiled. TRANSPARENT rather than
+        // `hit-test: false`, which is subtree-wide: the plate is never the answer to a click, and its rows
+        // are not either -- except the sparkline, once something can open the frame a bar stands for.
+        set(Attribute.HIT_TRANSPARENT, true);
     }
 
     /**
@@ -180,6 +191,27 @@ public class FrameStatsOverlay extends UIElement {
         return stats;
     }
 
+    /**
+     * Opens a frame somewhere that can show it. The readout cannot name a viewer — it is a widget, and
+     * the viewer is an application above it — so the application puts itself here.
+     *
+     * <pre>{@code
+     * FrameStatsOverlay.onOpenFrame((document, frameIndex) -> FrameProfiler.openAt(document, frameIndex));
+     * }</pre>
+     */
+    @FunctionalInterface
+    public interface FrameOpener {
+        void open(UIDocument document, long frameIndex);
+    }
+
+    @Nullable
+    private static volatile FrameOpener opener;
+
+    /** Makes the sparkline clickable: a press on a bar opens that frame. Null takes it back. */
+    public static void onOpenFrame(@Nullable FrameOpener value) {
+        opener = value;
+    }
+
     public boolean isShowing() {
         return showing;
     }
@@ -188,7 +220,11 @@ public class FrameStatsOverlay extends UIElement {
     public FrameStatsOverlay setShowing(boolean value) {
         if (showing == value) return this;
         showing = value;
-        set(Attribute.HIDDEN, !value);
+        // A CLASS, NOT A CASCADE WRITE. `EngineBoundaryTest` forbids the engine writing style at
+        // IMPORTANT origin, and it is right to: a widget that pushes its own geometry in is the habit
+        // the three-tree rewrite exists to end. The sheet decides what hidden looks like.
+        if (value) removeClass(HIDDEN_CLASS);
+        else addClass(HIDDEN_CLASS);
         applyCollection();
         return this;
     }
@@ -250,6 +286,7 @@ public class FrameStatsOverlay extends UIElement {
     }
 
     private boolean tickFrame(float deltaSeconds) {
+        ticks++;
         sinceRefresh += deltaSeconds;
         if (sinceRefresh < REFRESH_SECONDS) return true;
         sinceRefresh = 0f;
@@ -263,11 +300,29 @@ public class FrameStatsOverlay extends UIElement {
      * <p>A row whose text is unchanged is left alone — {@link UIText#setText} re-shapes, and most of
      * these lines are the same from one refresh to the next.</p>
      */
+    /**
+     * The frame each sparkline bar stood for when it was DRAWN. The ring moves on between one refresh and
+     * the next, so a press mapped against the ring as it is now opened a neighbour of the bar pressed.
+     */
+    private long[] barFrames = new long[0];
+    /**
+     * The mapping before the last rewrite, and the tick it happened on. A frame ticks animation BEFORE
+     * it dispatches input, so a press dispatched on the tick that rewrote the bars was aimed at the bars
+     * still on screen -- the previous ones.
+     */
+    private long[] shownBarFrames = new long[0];
+    private long ticks;
+    private long rewroteOnTick = -1L;
+
     private void write(List<FrameStats.Row> lines) {
         while (rows.size() < lines.size()) {
             UIText row = new UIText("");
             row.addClass(ROW_CLASS);
             if (rows.isEmpty()) row.addClass(HEAD_CLASS);
+            // ONLY THE SPARKLINE TAKES A CLICK, and only once something can open a frame: the rest of the
+            // readout stays transparent to the pointer, over whatever it is measuring.
+            row.setHitTest(false);
+            row.onMouseDown.attachListener((element, event) -> openBarUnder(row, event), false, true);
             rows.add(row);
             appendStructural(row);
         }
@@ -281,7 +336,9 @@ public class FrameStatsOverlay extends UIElement {
             }
             if (health != null && !row.hasClass(health)) row.addClass(health);
             paintBars(row, wanted.barHealth());
-            row.set(Attribute.HIDDEN, wanted.text().isEmpty());
+            // Same rule as the plate itself: a retired row wears the class and the sheet hides it.
+            if (wanted.text().isEmpty()) row.addClass(HIDDEN_CLASS);
+            else row.removeClass(HIDDEN_CLASS);
         }
     }
 
@@ -296,10 +353,20 @@ public class FrameStatsOverlay extends UIElement {
             // `remove` only fires a change when there was something to remove, so an ordinary row pays
             // nothing for being asked every refresh.
             if (row.hasClass(SPARK_CLASS)) row.removeClass(SPARK_CLASS);
+            row.setHitTest(false);
             row.highlights().remove(WARN_HIGHLIGHT).remove(BAD_HIGHLIGHT);
             return;
         }
         if (!row.hasClass(SPARK_CLASS)) row.addClass(SPARK_CLASS);
+        row.setHitTest(opener != null);
+        int columns = bars.size();
+        long[] frames = new long[columns];
+        for (int column = 0; column < columns; column++) frames[column] = stats.frameIndexAt(column, columns);
+        if (!Arrays.equals(frames, barFrames)) {
+            shownBarFrames = barFrames;
+            barFrames = frames;
+            rewroteOnTick = ticks;
+        }
         row.highlights().set(WARN_HIGHLIGHT, runsOf(bars, FrameStats.Health.WARN));
         row.highlights().set(BAD_HIGHLIGHT, runsOf(bars, FrameStats.Health.BAD));
     }
@@ -327,8 +394,28 @@ public class FrameStatsOverlay extends UIElement {
         return out;
     }
 
+    /** The bar under the press, opened through {@link #onOpenFrame}. */
+    private void openBarUnder(UIText row, MouseEvent.Down event) {
+        FrameOpener open = opener;
+        UIDocument window = document();
+        if (open == null || window == null || !row.hasClass(SPARK_CLASS)) return;
+        long[] frames = rewroteOnTick == ticks ? shownBarFrames : barFrames;
+        int column = row.offsetAtScreen(event.getPosition().x(), event.getPosition().y());
+        if (frames.length == 0 || column < 0) return;
+        long index = frames[Math.min(frames.length - 1, column)];
+        if (index < 0L) return;
+        event.stopPropagation();
+        open.open(window, index);
+    }
+
     /** A row the readout has stopped needing — hidden rather than removed, so the tree stops churning. */
     private static final FrameStats.Row EMPTY_ROW = new FrameStats.Row("", FrameStats.Health.NONE);
+
+    /** The frame the sparkline's {@code column} was drawn for, or -1 — what a press on it opens. */
+    public long barFrame(int column) {
+        long[] frames = barFrames;
+        return column >= 0 && column < frames.length ? frames[column] : -1L;
+    }
 
     /** The row elements, for a test asserting on what the readout says. */
     public List<UIText> rows() {
