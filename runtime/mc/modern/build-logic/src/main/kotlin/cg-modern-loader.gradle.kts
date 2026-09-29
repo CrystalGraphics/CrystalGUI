@@ -6,6 +6,7 @@ import cgbuildlogic.nodeJava
 import cgbuildlogic.nodePackage
 import cgbuildlogic.devNodeMixinConfigs
 import cgbuildlogic.devRunClasses
+import cgbuildlogic.devRunLibraries
 import cgbuildlogic.requestJvm
 import cgbuildlogic.registerNodeMixins
 import cgbuildlogic.registerNodeVariants
@@ -111,10 +112,11 @@ dependencies {
     "runtimeOnly"(sameVersionNodeCoordinate("com.crystalgraphics", "common"))
 
     // compileOnly and NOT bundled: the merge adds :runtime:mc:shared once, under a package no variant
-    // relocates. EMPTY today -- the variant selector it briefly held is CrystalGraphics' (J11.0),
-    // reached through mc1201CompileDeps like CrashVariant, which adds it both compileOnly and
-    // runtimeOnly.
+    // relocates. On a dev run's classpath too, since it holds the nodes' mixin plugins -- a plugin Mixin
+    // cannot load is dropped with an error and its mixins apply ungated. Loom reads runtimeClasspath;
+    // ModDevGradle below 1.21.10 needs `additionalRuntimeClasspath`, at the foot of this file.
     "compileOnly"(project(":runtime:mc:shared"))
+    "runtimeOnly"(project(":runtime:mc:shared"))
 
     // Taffy and JOML: :core has them compileOnly so they reach nobody transitively, and UIElement holds
     // a NodeId and a Matrix4f as fields. Needed at RUNTIME too -- a field descriptor resolves at class
@@ -417,6 +419,16 @@ tasks.matching { it.name.startsWith("run") || it.name.startsWith("prepare") }.co
 // classes. The per-run ones are what it resolves, and extending one passes on no attribute.
 configurations.matching { it.name == "additionalRuntimeClasspath" || it.name.endsWith("LegacyClasspath") }
     .configureEach { requestJvm(this, nodeJava) }
+
+// :runtime:mc:shared as a LIBRARY on a ModDevGradle dev run, not a mod: CrystalGraphics' rule, for the
+// same reason. afterEvaluate because ModDevGradle creates the configuration with its extension.
+afterEvaluate {
+    if (devRunLibraries == "additionalRuntimeClasspath") {
+        configurations.findByName("additionalRuntimeClasspath")?.let { runtime ->
+            dependencies.add(runtime.name, project(":runtime:mc:shared"))
+        }
+    }
+}
 
 // CrystalGraphics' nodes of THIS loader and version, for the same script: an applied script cannot
 // import this build's classes, so the tree's rule is applied here and the answers handed over.
