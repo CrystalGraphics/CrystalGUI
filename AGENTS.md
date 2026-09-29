@@ -53,7 +53,7 @@ for the rest. What the goal leaves behind is the standard: every widget here was
 node editor, which is why the box tree lays out once, why `transform` never reflows, and why a canvas
 can hold ten thousand nodes.
 
-📄 **[CrystalShader Manifesto](CrystalGraphics/docs/CRYSTALSHADER_MANIFESTO.md)** — the rendering
+📄 **CrystalShader Manifesto** (`plan/crystalgraphics/archive/CRYSTALSHADER_MANIFESTO.md`, in the private plan repository) — the rendering
 philosophy, which outlives the milestone.
 
 # Build and run
