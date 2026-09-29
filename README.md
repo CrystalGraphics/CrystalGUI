@@ -3,7 +3,7 @@
 A platform-agnostic UI engine shaped like a lightweight web browser: a DOM-like node tree with shadow
 roots, Taffy flexbox and grid layout, a real CSS cascade with selectors and transitions, and a full
 widget set up to a code editor and a node graph — all loader-blind, able to run headless on a dedicated
-server, and shipped as one jar for Forge 1.7.10 through 1.21.11, NeoForge and Fabric.
+server, and shipped as one jar for Forge 1.7.10 through 26.2, NeoForge and Fabric.
 
 **Using CrystalGUI in your mod: [`docs/CGUI_SETUP.md`](docs/CGUI_SETUP.md)** — setting the project up,
 for one Minecraft version or many — then [`docs/CGUI_BUILDING_UIS.md`](docs/CGUI_BUILDING_UIS.md).

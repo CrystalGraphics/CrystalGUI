@@ -2,11 +2,17 @@
 
 ## Target Versions
 
-MC 1.14.4–1.21.11 / Fabric, a node per `versions/<version>`; 1.14-1.14.3, 1.16 and 1.16.1 are refused, their
+MC 1.14.4–26.2 / Fabric, a node per `versions/<version>` (26.1.2 also claims 26.1 and 26.1.1); 1.14-1.14.3, 1.16 and 1.16.1 are refused, their
 only Fabric API builds lacking `lifecycle-events-v1` or `networking-api-v1`. Fabric API for 1.14 has no
 HUD callback either, so there the HUD is a node mixin on `Gui.render` (`mixin/HudHook`, gated by
 `CrystalGuiFabricMixins`). Below 1.16 Fabric API has no screen
-events, so a pinned window draws no overlay over another mod's screen there.
+events, so a pinned window draws no overlay over another mod's screen there. Fabric API for 26.1 renamed
+`KeyBindingHelper` to `KeyMappingHelper`, replaced `HudRenderCallback` with `HudElementRegistry` and
+`ScreenEvents.afterRender` with `afterExtract`, and names its payload registries by direction.
+
+**Fabric API is required and is not in `fabric.mod.json`**: its id was `fabric` through 1.17, `fabric-api`
+providing `fabric` through 1.21.11, and `fabric-api` alone from 26.1, so no one id holds on every version.
+`FabricBootstrap` checks for either and refuses to start without one.
 
 ## The loader is registration only
 

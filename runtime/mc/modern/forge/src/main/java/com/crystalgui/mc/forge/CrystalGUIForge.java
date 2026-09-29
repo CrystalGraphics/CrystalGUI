@@ -393,7 +393,7 @@ public final class CrystalGUIForge implements VariantEntry {
             // Predicate, and older Forge is told through setCanceled.
             //? if >=1.21.6 {
             /*static void register(BusGroup modBus) {
-                RegisterKeyMappingsEvent.getBus(modBus).addListener(ClientBus::onRegisterKeyMappings);
+                registerKeyMappings(modBus);
                 registerHud(modBus);
                 TickEvent.ClientTickEvent.Post.BUS.addListener(event -> LifecycleCrystalGUI.clientTick());
                 ClientPlayerNetworkEvent.LoggingIn.BUS.addListener(ClientBus::onClientLoggedIn);
@@ -508,7 +508,22 @@ public final class CrystalGUIForge implements VariantEntry {
 
             // The HUD: a layer where Forge offers one. Forge 56-57 (1.21.6-1.21.7) offer none, and a
             // node mixin paints it there. @see com.crystalgui.mc.forge.mixin.HudHook
-            //? if >=1.21.8 {
+            // Forge 64 (26.1) moved its mod-bus events onto a static BUS of their own.
+            //? if >=26.1 {
+            /*private static void registerKeyMappings(BusGroup modBus) {
+                RegisterKeyMappingsEvent.BUS.addListener(ClientBus::onRegisterKeyMappings);
+            }
+            *///?} elif >=1.21.6 {
+            /*private static void registerKeyMappings(BusGroup modBus) {
+                RegisterKeyMappingsEvent.getBus(modBus).addListener(ClientBus::onRegisterKeyMappings);
+            }
+            *///?}
+
+            //? if >=26.1 {
+            /*private static void registerHud(BusGroup modBus) {
+                AddGuiOverlayLayersEvent.BUS.addListener(ClientBus::onAddGuiLayers);
+            }
+            *///?} elif >=1.21.8 {
             /*private static void registerHud(BusGroup modBus) {
                 AddGuiOverlayLayersEvent.getBus(modBus).addListener(ClientBus::onAddGuiLayers);
             }

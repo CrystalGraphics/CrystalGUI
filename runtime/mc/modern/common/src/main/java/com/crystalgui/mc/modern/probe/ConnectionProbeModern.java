@@ -7,6 +7,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.ConnectionProbe;
 
+import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -51,13 +52,13 @@ public final class ConnectionProbeModern {
         @Override
         public boolean screenIsUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && mc.screen != null;
+            return mc != null && ClientGame.screen(mc) != null;
         }
 
         @Override
         public void closeScreen() {
             Minecraft mc = Minecraft.getInstance();
-            if (mc != null) mc.setScreen(null);
+            if (mc != null) ClientGame.setScreen(mc, null);
         }
 
         @Override

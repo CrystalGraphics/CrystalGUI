@@ -7,6 +7,7 @@ import com.crystalgui.mc.modern.client.CgUiHud;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
+import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -74,16 +75,16 @@ public final class ClientProbe {
         public void openForeignScreen() {
             Minecraft mc = Minecraft.getInstance();
             //? if >=1.21.9 {
-            /*if (mc != null) mc.setScreen(new ChatScreen("", false));
+            /*if (mc != null) ClientGame.setScreen(mc, new ChatScreen("", false));
             *///?} else {
-            if (mc != null) mc.setScreen(new ChatScreen(""));
+            if (mc != null) ClientGame.setScreen(mc, new ChatScreen(""));
             //?}
         }
 
         @Override
         public void closeScreen() {
             Minecraft mc = Minecraft.getInstance();
-            if (mc != null) mc.setScreen(null);
+            if (mc != null) ClientGame.setScreen(mc, null);
         }
 
         @Override
@@ -111,13 +112,13 @@ public final class ClientProbe {
             Minecraft mc = Minecraft.getInstance();
             if (mc == null) return;
             //? if >=1.21.6 {
-            /*Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget(), 1, message -> { });
+            /*Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc), 1, message -> { });
             *///?} elif >=1.17.1 {
-            Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget(), message -> { });
+            Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc), message -> { });
             //?} else {
             /*// Before 1.17.1 grab also takes the frame's size.
-            Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget().width,
-                    mc.getMainRenderTarget().height, mc.getMainRenderTarget(), message -> { });
+            Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc).width,
+                    ClientGame.mainTarget(mc).height, ClientGame.mainTarget(mc), message -> { });
             *///?}
         }
 

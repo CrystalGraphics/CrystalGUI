@@ -1,5 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
+import cgbuildlogic.fabricRunsIntermediary
+import cgbuildlogic.loomPluginId
 import cgbuildlogic.registerThinRename
 import cgbuildlogic.sameVersionNodeDir
 import cgbuildlogic.sameVersionNodePath
@@ -14,23 +16,20 @@ import net.fabricmc.loom.task.RemapJarTask
 
 plugins {
     id("cg-modern-loader")
-    // Upstream fabric-loom 1.15.x supports Gradle 9.x (1.16 requires 9.4+, 1.15 works on 9.0+).
-    // Architectury-loom 1.14.473 was replaced because its Forge mode uses detachedConfiguration
-    // resolution without an exclusive lock — a Gradle 9 hard error (not fixable via properties).
-    // fabric-loom 1.16.x requires Gradle 9.4+ — that's where the runtimeClasspath
-    // exclusive-lock fix lives (1.15.x still triggers it via the jvmArguments getter).
-    // Applied below, on a real node only (cgbuildlogic.StubMode).
-    id("fabric-loom") version "1.16.2" apply false
+    // CrystalGraphics' Loom, and the same two ids (cgbuildlogic.loomPluginId). Applied below, on a
+    // real node only (cgbuildlogic.StubMode).
+    id("fabric-loom") version "1.17.21" apply false
     id("com.gradleup.shadow") // version pinned in settings.gradle.kts pluginManagement
 }
 
 val mcVersion = property("mc.version").toString()
+val remaps = fabricRunsIntermediary(project.name)
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
 if (!stubMode) {
-    apply(plugin = "fabric-loom")
+    apply(plugin = loomPluginId(project.name))
     val loom = the<LoomGradleExtensionAPI>()
 
     // CrystalGraphics' fabric node of THIS Minecraft. The producing task is wired in below: a bare path
@@ -46,9 +45,10 @@ if (!stubMode) {
     }
 
     // Requesting this node's run makes CrystalGraphics' node of the same version real too, so its
-    // remapJar exists (cgbuildlogic.StubMode).
+    // mod jar exists (cgbuildlogic.StubMode): `remapJar` while Fabric remaps, `jar` from 26.1.
+    val graphicsModTask = "${project.sameVersionNodePath("fabric")}:${if (remaps) "remapJar" else "jar"}"
     tasks.matching { it.name in setOf("runClient", "runServer") }.configureEach {
-        dependsOn(crystalGraphicsBuild.task("${project.sameVersionNodePath("fabric")}:remapJar"))
+        dependsOn(crystalGraphicsBuild.task(graphicsModTask))
     }
 
     // LOOM READS A MOD FILE WHILE THE BUILD IS CONFIGURED, before the task above has run. On the first
@@ -59,20 +59,22 @@ if (!stubMode) {
     if (crystalGraphicsMod.isEmpty) {
         logger.warn("[cgui] {}: CrystalGraphics' fabric mod jar is not built yet, so a dev run started by " +
             "THIS invocation has no CrystalGraphics. It is built on the way; run again, or build " +
-            "{}:remapJar first.", path, project.sameVersionNodePath("fabric"))
+            "{} first.", path, graphicsModTask)
     }
 
     dependencies {
         "minecraft"("com.mojang:minecraft:$mcVersion")
-        "mappings"(loom.layered {
+        if (remaps) "mappings"(loom.layered {
             officialMojangMappings()
             // Parchment starts at 1.16.5; a node below it pins none and gets Mojang's names alone.
             findProperty("parchment.version")?.let {
                 parchment("org.parchmentmc.data:parchment-${property("parchment.mc")}:$it@zip")
             }
         })
-        "modImplementation"("net.fabricmc:fabric-loader:${property("fabric.loader")}")
-        "modImplementation"("net.fabricmc.fabric-api:fabric-api:${property("fabric.api")}")
+        // Unobfuscated Minecraft has nothing to remap a mod dependency to: plain configurations.
+        val mod = if (remaps) "modImplementation" else "implementation"
+        mod("net.fabricmc:fabric-loader:${property("fabric.loader")}")
+        mod("net.fabricmc.fabric-api:fabric-api:${property("fabric.api")}")
 
         // CRYSTALGRAPHICS, AS A MOD. It registers CgPlatform from its own entrypoint and nothing here
         // does it, so without this every class resolves and the desktop paints nothing. One dependency
@@ -88,7 +90,8 @@ if (!stubMode) {
         // named for a dev run; a plain runtimeOnly would put an intermediary mod on a named classpath and
         // fail at class load rather than at resolution. Local, because this is how a dev run finds
         // CrystalGraphics and not something a published POM should demand.
-        "modLocalRuntime"(crystalGraphicsMod)
+        // From 26.1 there is no intermediary, and the mod jar goes on the classpath as it is.
+        (if (remaps) "modLocalRuntime" else "runtimeOnly")(crystalGraphicsMod)
     }
 
     // Per NODE: relative to versions/<version>/, so two versions never share a world.
@@ -105,8 +108,8 @@ dependencies {
     // Minecraft ships JOML from 1.19.3; below it the shipped jar's companion supplies it, and a dev run
     // takes it as a library.
     val mcOrdinal = property("mc.version").toString().split('.').map { it.toIntOrNull() ?: 0 }
-        .let { v -> v.getOrElse(1) { 0 } * 1000 + v.getOrElse(2) { 0 } }
-    if (mcOrdinal < 19_003) runtimeOnly("org.joml:joml-jdk8:1.10.1")
+        .let { v -> v.getOrElse(0) { 0 } * 1_000_000 + v.getOrElse(1) { 0 } * 1000 + v.getOrElse(2) { 0 } }
+    if (mcOrdinal < 1_019_003) runtimeOnly("org.joml:joml-jdk8:1.10.1")
 }
 
 // NO fabric.mod.json OF ITS OWN (J11.1b): a node's dev run takes the merged one, which cg-modern-loader
@@ -136,7 +139,7 @@ dependencies {
 // shipped jar now comes from a pipeline that assembles far more than it did.
 val shadedShadowJar = tasks.named<AbstractArchiveTask>("shadeDowngradedShadowJar")
 
-if (!stubMode) tasks.named<RemapJarTask>("remapJar") {
+if (!stubMode && remaps) tasks.named<RemapJarTask>("remapJar") {
     inputFile.set(shadedShadowJar.flatMap { it.archiveFile })
 }
 

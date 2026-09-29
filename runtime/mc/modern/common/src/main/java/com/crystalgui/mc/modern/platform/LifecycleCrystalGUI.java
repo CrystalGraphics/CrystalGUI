@@ -24,6 +24,7 @@ import com.crystalgui.probe.ConnectionProbe;
 import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
+import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -193,11 +194,7 @@ public final class LifecycleCrystalGUI {
 
     /** Whether the loading overlay is gone -- mod setup included. 1.13 has none and sets up before ticking. */
     private static boolean loadingFinished() {
-        //? if >=1.14 {
-        return Minecraft.getInstance().getOverlay() == null;
-        //?} else {
-        /*return true;
-        *///?}
+        return !ClientGame.overlayUp(Minecraft.getInstance());
     }
 
     public static void clientConnected() {

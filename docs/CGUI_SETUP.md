@@ -57,8 +57,8 @@ pluginManagement {
 
 // build.gradle.kts -- your toolchain and its own block (legacyForge {}, neoForge {}, loom) stay as they are
 plugins {
-    id("net.neoforged.moddev.legacyforge") version "2.0.141"   // Forge 1.17-1.20.1
-    // id("net.neoforged.moddev") version "2.0.141"            // NeoForge
+    id("net.neoforged.moddev.legacyforge") version "2.0.147"   // Forge 1.17-1.20.1
+    // id("net.neoforged.moddev") version "2.0.147"            // NeoForge
     // id("fabric-loom") version "1.16.2"                      // Fabric
     id("com.crystalgui") version "0.0.1"
 }
@@ -127,7 +127,7 @@ crystalgui {
 
 // build.gradle.kts
 plugins {
-    id("net.neoforged.moddev.legacyforge") version "2.0.141"
+    id("net.neoforged.moddev.legacyforge") version "2.0.147"
     id("com.crystalgui")               // no version: settings already loaded it
 }
 ```

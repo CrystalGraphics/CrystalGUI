@@ -9,7 +9,7 @@ import net.fabricmc.loom.task.RemapJarTask
 
 plugins {
     `java-library`
-    id("fabric-loom") version "1.16.2" apply false     // applied on a real node only
+    id("fabric-loom") version "1.17.21" apply false     // applied on a real node only
     id("com.gradleup.shadow")
     id("com.crystalgui")                                 // CrystalGUI and CrystalGraphics on the dev run
 }
@@ -18,7 +18,7 @@ apply(from = rootDir.resolve("runtime/mc/modern/node.gradle.kts"))
 crystalgui { if (!stubMode) minecraft(property("mc.version").toString(), modernLoader) }
 
 if (!stubMode) {
-    apply(plugin = "fabric-loom")
+    apply(plugin = "net.fabricmc.fabric-loom-remap")
     val loom = the<LoomGradleExtensionAPI>()
     dependencies {
         "minecraft"("com.mojang:minecraft:${property("mc.version")}")

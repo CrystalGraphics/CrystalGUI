@@ -249,7 +249,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
 
 /**
  * One instance per Minecraft major, and the first and last of a major with many minors -- on every loader
- * from 1.20, where all three ship. Twenty-four clients where every instance is over a hundred. OLDEST
+ * from 1.20, where all three ship. Thirty clients where every instance is over a hundred. OLDEST
  * FIRST: prodSmoke runs a named list in its order, so the batch running says how far along it is.
  * docs/CGUI_BUILD.md § A wide check is the sweep.
  */
@@ -260,6 +260,8 @@ val prodSmokeSweep = listOf(
     // NeoForge begins at 1.20.2.
     "1201forge", "1201fabric", "1202neoforge", "1206forge", "1206fabric", "1206neoforge",
     "1214forge", "1214fabric", "1214neoforge", "12111forge", "12111fabric", "12111neoforge",
+    // Forge's first 26.x is 26.1.1: Forge 62 cannot boot 26.1.
+    "261fabric", "261neoforge", "2611forge", "262forge", "262fabric", "262neoforge",
 )
 
 val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {

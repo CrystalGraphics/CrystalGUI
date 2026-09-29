@@ -13,7 +13,7 @@ compiles against one loader and is used by three.
 | Package | What it contains |
 |---|---|
 | `com.crystalgui.mc.modern.platform` | `LifecycleCrystalGUI` — **the one class a loader talks to**: bootstrap, client init, the server and client ticks, player join/leave, overlay paint, and the mouse/key offers. Plus `CrystalGUI`, which holds the mod id and name |
-| `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `HostModern` (`HostServices`), `CgUiInput`, `CgUiHud`, `CgUiHostGl`, `CgUiKeybinds` |
+| `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `HostModern` (`HostServices`), `CgUiInput`, `CgUiHud`, `CgUiHostGl`, `CgUiKeybinds`, and `ClientGame` — the client state Minecraft moved (26.2 put the screen, the overlay and the HUD's hidden flag on `mc.gui`), spelled once |
 | `com.crystalgui.mc.modern.net` | `Connections`, `Peer`, `WorkspaceHostModern` — where the served workspace is |
 | `com.crystalgui.mc.modern.probe` | Every adapter over `core`'s probes: `CgUiAutoTest`, `ClientProbe`, `ConnectionProbeModern`, `ServerSmokeModern`. **`serverSmoke` enumerates this package as client-only**, the smoke itself excepted — so a probe added here is checked without anyone listing it |
 | `com.crystalgui.mc.modern.example` | `MachineExampleModern` and its client half — a key and a tick over `app.machine.MachineExample`; the worked example, not engine code |
@@ -31,6 +31,9 @@ compiles against one loader and is used by three.
   the game at ten fps. `RenderGuiEvent.Post` fires once; Fabric's `HudRenderCallback` already did.
 - **One arm per hook.** A frame with a screen open fires the HUD hook AND the screen hook, so each paints only
   its own presentation (`paintHud` / `paintOverScreen`) — otherwise the compositor is drawn twice.
+- **26.1+ paints at the frame end, not from its hooks.** 26.1 extracts the GUI before it renders the
+  level, so a paint from `extractRenderState` or a HUD element lands under the world. Each arm there hands
+  its paint to `CgUiLifecycle.atFrameEnd`, which runs it from CrystalGraphics' `onFrame`, after the GUI.
 - **No GL in constructors or static initialisers.** GL work waits for the first paint.
 - **Mixin AP comes from the toolchain.** A second `annotationProcessor` for Mixin produces duplicate-AP
   SRG mapping errors.
