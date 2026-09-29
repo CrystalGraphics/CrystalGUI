@@ -61,6 +61,7 @@ resolves the same property, so both builds pick the same node.
 ./gradlew checkAllTargets                                   # every node compiles -- before every commit
 ./gradlew singleJar languageJar checkSingleJar checkLanguageJar
 ./gradlew :core:headlessTest                                # server-side tests, no CrystalGraphics core
+./gradlew :core:trackedTest                                 # every shipped shader and keyword variant, linked as on Vulkan
 ./gradlew :core:test --tests "<Class>"                      # name classes: `com.crystalgui.ui.*` never reports
 ./gradlew :runtime:mc:modern:<branch>:<version>:serverSmoke -PcgAcceptEula   # nodes with a dev run
 ./gradlew :runtime:mc:1710:serverSmoke
@@ -167,6 +168,7 @@ published: nothing outside CrystalGUI compiles against it.
 |---|---|---|
 | `checkAllTargets` | every node compiles against its Minecraft | anything at runtime |
 | `headlessTest` | engine logic with no CrystalGraphics core — what a dedicated server has | loaders |
+| `trackedTest` | every shipped shader and keyword variant compiled to SPIR-V and linked, as on Vulkan | a driver: what a pipeline asks of the device is the harness's audit, `--device=vulkan` |
 | `serverSmoke` (dev) | a real server boots, the stack comes up, no client-only class loaded | packaging, remapping, relocation |
 | `server_smoke.py` | the same on the SHIPPED jars, legacy Forge | clients |
 | `prodSmoke` | the shipped jars on real clients: load a world, open the editor, capture | behaviour past the first screen |
