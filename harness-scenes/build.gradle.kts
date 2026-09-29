@@ -26,6 +26,14 @@ dependencies {
     implementation("com.google.code.findbugs:jsr305:3.0.2")
 }
 
+// -Pharness.bytecode=8: run against the engine modules' Java 8 copies -- the bytecode the shipped jars
+// carry -- instead of their Java 25 originals, on the same JVM. Same switch as the harness's own.
+(findProperty("harness.bytecode") as String?)?.toInt()?.let { level ->
+    configurations.named("runtimeClasspath") {
+        attributes { attribute(TargetJvmVersion.TARGET_JVM_VERSION_ATTRIBUTE, level) }
+    }
+}
+
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
 }
