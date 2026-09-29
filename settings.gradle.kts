@@ -84,7 +84,8 @@ include("core")
 // a composite gives each build its own StartParameter, so neither -P nor the parent's gradle.properties
 // reaches here. RPG-Core's settings.gradle sets it; -Dcrystalgui.harness=true works too.
 val harnessRequested = System.getProperty("crystalgui.harness") == "true"
-if (!embedded || harnessRequested) include("gl-debug-harness")
+// The harness is CrystalGraphics-only; harness-scenes is CrystalGUI's half, and puts itself on its run.
+if (!embedded || harnessRequested) include("gl-debug-harness", "harness-scenes")
 
 // The tree-sitter syntax backend. Its jars are checked in under lib/tree-sitter/, so this is an ordinary
 // module rather than one conditional on a local checkout -- see that directory's README for why.
