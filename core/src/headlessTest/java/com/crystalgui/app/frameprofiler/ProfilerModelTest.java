@@ -4,12 +4,17 @@ import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceChannel;
+import com.crystalgraphics.trace.CgTraceExport;
 import com.crystalgraphics.trace.CgTraceSnapshot;
 import com.crystalgui.widget.display.CounterTrack;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
@@ -544,6 +549,51 @@ public class ProfilerModelTest {
         assertEquals("B is not the root's time per frame", 8d, root.bMillis(), 0.01d);
         assertEquals(4d, root.delta(), 0.01d);
         assertEquals("the biggest change is not first", "root", model.compare().get(0).name());
+    }
+
+    /**
+     * An export loaded as B compares against this run's A — and keeps its own frames, which the ring
+     * moving on or being cleared cannot take away.
+     */
+    @Test
+    public void anExportLoadedAsBComparesAgainstThisRun() throws Exception {
+        frame(10d);
+        frame(10d);
+        close();
+        Path file = Files.createTempFile("profiler-model-test", ".json");
+        try {
+            try (Writer out = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+                CgTraceExport.writeChromeJson(out, CgTrace.snapshot());
+            }
+
+            CgTrace.resetForTesting();
+            CgTrace.setEnabled(CHANNEL, true);
+            frame(5d);
+            frame(5d);
+            close();
+
+            ProfilerModel model = new ProfilerModel();
+            model.refresh();
+            model.setFollowing(false);
+            model.selectRange(0, 1);
+            model.pinA();
+            model.loadB(file);
+
+            assertEquals("B is not every frame of the file", 2L, model.sideB().count());
+            assertEquals("B's frame time", 10d, model.meanFrameMillis(model.sideB()), 0.01d);
+            ProfilerModel.CompareRow root = model.compare().stream()
+                    .filter(row -> row.name().equals("root")).findFirst().orElseThrow();
+            assertEquals("A is this run's root", 4d, root.aMillis(), 0.01d);
+            assertEquals("B is the file's root", 8d, root.bMillis(), 0.01d);
+            assertTrue("B is labelled by position rather than by its file",
+                    model.sideB().label().startsWith("profiler-model-test"));
+
+            CgTrace.resetForTesting();
+            model.refresh();
+            assertEquals("clearing the ring took the loaded side's frames", 2, model.framesOf(model.sideB()).size());
+        } finally {
+            Files.deleteIfExists(file);
+        }
     }
 
     /** Over a range a rule is listed once, with how many frames it fired in and the first of them. */
