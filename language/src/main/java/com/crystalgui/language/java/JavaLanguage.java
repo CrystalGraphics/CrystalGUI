@@ -343,6 +343,8 @@ public final class JavaLanguage {
         } catch (RuntimeException unavailable) {
             System.err.println("[crystalgui] the Java engine did not open; the editor will colour but "
                     + "not analyse: " + unavailable);
+            // The message alone named a StringIndexOutOfBoundsException with no frame to find it by.
+            unavailable.printStackTrace();
         }
     }
 

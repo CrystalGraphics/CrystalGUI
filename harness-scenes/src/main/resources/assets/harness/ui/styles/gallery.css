@@ -1,0 +1,1326 @@
+/* The gallery's own demo furniture -- page layout, widths, and the boxes each page needs to show
+
+ * something. NOT a theme: everything that styles a WIDGET lives in default.css (the user-agent sheet)
+
+ * or in ore.css / graph.css.
+
+ *
+
+ * It used to be a Java text block on CgUiGalleryScene, which meant it could not be hot reloaded -- a
+
+ * string literal is compiled in, so Ctrl+R had nothing to re-read. As a file under assets/harness/ it
+
+ * goes through StyleSheetRegistry like every other sheet, so Ctrl+R picks it up with the rest.
+
+ *
+
+ * WHAT IS DELIBERATELY ABSENT: the editor's caret, selection, gutter, line-number and current-line
+
+ * colours. This sheet restated all five, and because it is an AUTHOR sheet it beat default.css at any
+
+ * specificity -- so editing those rules in default.css changed nothing on screen and read as the
+
+ * stylesheet reload being broken. Their values were near-identical anyway (the selection colour was
+
+ * byte-for-byte the same), so nothing was being expressed by the duplication except an override.
+
+ *
+
+ * The rule of thumb this leaves: a `__double-underscore__` selector belongs here only when the gallery
+
+ * genuinely wants something different from every other host -- the scrollbar width and the resizer
+
+ * handles below are the two that qualify, and both say why. */
+
+
+
+/* Percent root: UIWindow resolves it against the logical screen size, so the gallery
+
+
+ * fills whatever window it is given instead of being pinned to 800x600 like the
+
+
+ * single-widget scenes. */
+
+
+.gallery-root  { width: 100%; height: 100%; flex-direction: column;
+
+
+                 padding: 8px; gap: 6px; }
+
+
+.gallery-head  { flex-direction: row; align-items: center; gap: 8px; }
+
+
+/* `height: 0` is load-bearing, and it is the fix for a real overflow.
+
+
+ *
+
+
+ * flex-shrink defaults to ZERO in this engine (a deliberate Taffy divergence — see AGENTS.md),
+
+
+ * so a flex item can never shrink below its content. With twenty ore-themed tabs the strip's
+
+
+ * content is ~360px against ~284 available, and the tabview simply overflowed its parent: the
+
+
+ * `__panes__` background stretches to the tabview's height, so the dark pane spilled past the
+
+
+ * frame that contains it, and the rail never scrolled because it was never constrained.
+
+
+ *
+
+
+ * `height: 0` + `flex-grow: 1` is the classic flexbox answer — basis zero, then grow into
+
+
+ * exactly the space that is left — and it makes the row robust at any window size instead of
+
+
+ * only at large ones. Setting `flex-shrink: 1` would work too, but only after content already
+
+
+ * exceeded the box; this never lets it get there. */
+
+
+.gallery-tabs  { flex-grow: 1; height: 0; width: 100%; }
+
+
+/* Twenty pages in a sidebar. The rail scrolls correctly — its max scroll covers the whole
+
+
+ * content, verified — but default.css deliberately gives the strip a 2px scrollbar, which is
+
+
+ * below the size at which anything is grabbable. Its own comment says a theme wanting more
+
+
+ * thickens it, so: compact the tabs enough that twenty fit without scrolling at the harness's
+
+
+ * default window size, AND widen the bar so the moment a twenty-first is added the overflow
+
+
+ * is visible and draggable rather than silently unreachable. */
+
+
+/* NO `font-size` here, and that is the whole rule. It used to say 7 and the label went on drawing at
+
+ * 10, because `default.css` opens with `* { font-size: 10 }` -- a STYLESHEET candidate on every
+
+ * element, and inheritance only applies where there is no candidate at any origin, so a size set on a
+
+ * wrapper never reached the UIText inside it. The new engine puts a widget's label in its SHADOW tree,
+
+ * which no outer rule reaches, so the label finally has no candidate and inherits -- and the 7 nobody
+
+ * had ever seen applied started applying, shrinking the rail from ~153px to ~107px. Saying nothing
+
+ * lets the tab take the universal 10 and the label inherit it, which is what this always rendered. */
+
+.gallery-tabs tab            { height: 13px; }
+
+
+.gallery-tabs .__strip-bar__ { width: 5px; }
+
+
+.theme-btn     { width: 118px; }
+
+
+
+
+
+.page          { flex-direction: column; gap: 6px; padding: 4px; }
+
+
+.page-row      { flex-direction: row; align-items: center; gap: 8px; }
+
+
+/* An explicit width is what makes a UIText wrap: it self-sizes only while no ancestor
+
+
+ * has constrained it (see UIText.recompute's selfSizesWidth). */
+
+
+.desc          { width: 300px; color: #A8B0B8; font-size: 8; }
+
+
+.slot          { width: 86px; }
+
+
+.field         { width: 150px; }
+
+
+
+
+
+/* The button page's pre-icon. `setPreIcon` puts a CALLER'S node into the button's SHADOW tree as
+
+ * `::part(pre-icon)`, and an outer bare-class rule cannot reach into a shadow tree -- so `.swatch`
+
+ * alone matched nothing and the icon drew at 0x0 with no background: an invisible node inside a
+
+ * button that otherwise looked right. Combining the class with the part is what every other
+
+ * consumer in the engine already does (`taskbar .__entry__::part(pre-icon).__tile-1__`,
+
+ * `::part(pre-icon).__completion-icon__`). The bare spelling stays for a swatch in the light tree. */
+
+.swatch,
+
+::part(pre-icon).swatch { width: 14px; height: 14px; background: #6FA8DC; }
+
+
+.box           { width: 96px; height: 40px; }
+
+
+/* Canvas for the curve page. A plain element with a background — everything drawn on it
+
+
+ * comes from ctx.curve() in paintSelf, so its only job is to give the strokes a box with
+
+
+ * a known origin and a visible backdrop to sit on. */
+
+
+.curve-canvas  { width: 420px; height: 74px; background: #23262E; border-radius: 4px; }
+
+
+.curve-mid     { height: 104px; }
+
+
+.curve-tall    { height: 150px; }
+
+
+
+
+
+/* The graph page. `height: 0` + `flex-grow: 1` for exactly the reason .gallery-tabs
+
+
+ * needs it: flex-shrink is 0 in this engine, so without a zero basis the canvas sizes to
+
+
+ * its content — which is an unbounded plane — and spills straight out of the pane. */
+
+
+.graph-view    { width: 100%; height: 0; flex-grow: 1; border-radius: 4px; }
+
+
+/* The node's look comes entirely from `crystalgui:graph`, which is the point — this page
+
+
+ * adds only the dropdown's width, a fact about this demo rather than about graphs. */
+
+
+.graph-dropdown { width: 62px; height: 12px; font-size: 7; }
+
+
+.canvas-status { color: #A8B0B8; font-size: 8; width: 300px; }
+
+
+.canvas-btn    { width: 62px; }
+
+
+/* The shadergraph page is a split: the graph takes the slack, the generated source is a
+
+
+   fixed column beside it. Both need a zero basis for the same flex-shrink reason the
+
+
+   graph-view rule above spells out. */
+
+
+/* Two classes deep, deliberately. `.ed` gives this editor its syntax colours and its look,
+
+
+   but also a fixed 560x340 — and `.ed` sits LATER in this sheet, so at equal specificity it
+
+
+   would win and the editor would ignore its pane. A descendant selector weighs 20 against
+
+
+   its 10 and settles it without reordering rules that have nothing to do with each other. */
+
+
+.shader-split .shader-source { width: 100%; height: 300px; font-size: 7; }
+
+
+/* The split takes the pane's slack; SplitView owns the divider, its drag and its cursor. */
+
+
+/* Draggable by its title bar, but NOT resizable — no `resize`, so no handles. The picker is
+
+
+   a fixed composition of fixed-size controls, so a bigger box only ever meant more empty
+
+
+   space around it; scaling it instead needed a transform, which a promoted dropdown does
+
+
+   not inherit. Dragging is Dialog's own and costs nothing. */
+
+
+.color-dialog  { }
+
+
+.color-row     { flex-direction: row; gap: 16px; }
+
+
+.color-side    { flex-direction: column; gap: 8px; width: 260px; }
+
+
+.color-swatch  { width: 100%; height: 40px; border-radius: 4px; border-width: 1px; border-color: #1A1A1A; }
+
+
+
+
+
+/* P6.1.8's kit. The panel is given a REAL, narrowish width on purpose: the label column is
+
+
+   a percentage, and a kit that only lines up at 800px is a kit that has not been tested at
+
+
+   the width an inspector actually gets. */
+
+
+.cfg-row       { flex-direction: row; gap: 16px; width: 100%; height: 0; flex-grow: 1; }
+
+
+/* NO background of its own any more: the panel carries Unity's #2E2E2E from default.css,
+
+
+   and a window colour set here would sit behind it and only ever show at the edges - two
+
+
+   greys disagreeing across a 1px seam. The window contributes its title bar and nothing
+
+
+   else. (This was #3F3F3F while the panel had none, which is why it is worth a note.) */
+
+
+.cfg-window    { width: 300px; height: 420px; min-width: 200px; min-height: 160px;
+
+
+                 resize: both; }
+
+
+.cfg-panel     { width: 100%; height: 0; flex-grow: 1;
+
+
+                 padding-left: 4px; padding-right: 4px; padding-top: 4px; padding-bottom: 4px; }
+
+
+/* Three handles, not eight. A Dialog is out of flow so it offers all eight; the leading five
+
+
+   are switched off here because a panel that can be dragged by its title bar has no use for
+
+
+   edges that MOVE it - two ways to do one thing, one of which also resizes. */
+
+
+.cfg-window .__resizer-top__,
+
+
+.cfg-window .__resizer-left__,
+
+
+.cfg-window .__resizer-top-left__,
+
+
+.cfg-window .__resizer-top-right__,
+
+
+.cfg-window .__resizer-bottom-left__ { display: none; }
+
+
+.cfg-side      { flex-direction: column; gap: 8px; width: 0; flex-grow: 1;
+
+
+                 margin-left: 336px; }
+
+
+.cfg-log       { flex-direction: column; gap: 1px; }
+
+
+.cfg-log-line  { color: #9AD08A; font-size: 8; }
+
+
+.shader-split  { width: 100%; height: 0; flex-grow: 1; }
+
+
+/* .graph-view's own `height: 0; flex-grow: 1` is written for a COLUMN parent, where grow
+
+
+   means height. Inside a SplitView pane it must fill both axes instead — the axes swap with
+
+
+   the container, and a rule written for one is actively wrong in the other. Getting this
+
+
+   wrong made the canvas full-width and zero-tall, i.e. invisible. */
+
+
+.shader-split .graph-view { width: 100%; height: 100%; }
+
+
+/* The curve page holds far more than a pane's worth, so it scrolls. `height: 0` +
+
+
+ * `flex-grow: 1` for the same reason .gallery-tabs needs it: flex-shrink is 0 in this
+
+
+ * engine, so without a zero basis the scroller sizes to its content and never scrolls. */
+
+
+.curve-scroll  { flex-grow: 1; height: 0; width: 100%; }
+
+
+.box-flat      { background: #4A6E9A; }
+
+
+/* `border-radius`, not `border-radius-all` — unlike the box-model shorthands this one
+
+
+ * has no `-all` alias; it expands into 8 corner longhands at parse time. */
+
+
+.box-round     { background: #9A6E4A; border-radius: 10px; }
+
+
+.box-sprite    { background: asset("crystalgui:ore", "panel"); }
+
+
+/* Regression rows for the bug where a radius on a BACKGROUNDLESS element painted an opaque
+
+
+ * white box: resolveRoundedFill treated CgUiDrawable.EMPTY as a white fill, and paintSelf's
+
+
+ * guard for "no background" sat after the rounded path's early return. Every pre-existing
+
+
+ * radius case in every scene paired the radius with a background, which is why nothing
+
+
+ * caught it. `.box-none-round` must render NOTHING; `.box-border-only` must render a clean
+
+
+ * ring with a transparent middle and no colour fringe on its inner edge.
+
+
+ *
+
+
+ * Both set their own radius rather than relying on a sheet, so they exercise the rounded
+
+
+ * path under either theme — default.css rounds per widget and never `*`, and Ore resets
+
+
+ * the widgets it has sprites for, so neither sheet would reach a bare div like these. */
+
+
+.box-none-round   { border-radius: 6px; }
+
+
+.box-border-only  { border-radius: 6px; border-width: 2px; border-color: #C86464; }
+
+
+
+
+
+/* overflow: hidden, because a resizable box should contain its content. Without it the
+
+
+ * label spills once you shrink the panel below the text -- which is correct CSS for
+
+
+ * overflow: visible, and is also the second (better) reason the spec restricts `resize`
+
+
+ * to scroll containers. We keep the divergence; the clipping is the demo's job. */
+
+
+.rz            { width: 110px; height: 60px; background: #3A4450; padding: 6px;
+
+
+                 overflow: hidden; }
+
+
+.rz-capped     { max-width: 160px; max-height: 90px; min-width: 0px; min-height: 0px; }
+
+
+
+
+
+/* Dialogs are position:absolute, so they resolve left/top against their containing
+
+
+ * block -- this stage, not the whole page. It also gives the clamp something to bite. */
+
+
+.dlg-stage     { width: 340px; height: 190px; background: #23272E; }
+
+
+.dlg-a         { width: 150px; height: 90px; }
+
+
+.dlg-b         { width: 160px; height: 80px; }
+
+
+
+
+
+.chip          { width: 70px; height: 22px; background: #4A6E9A; padding-left: 6px;
+
+
+                 align-items: center; }
+
+
+/* Hidden until a drag activates. The controller only learns about a ghost at mousedown
+
+
+ * (setGhost), so without this every chip would render a second copy of itself in flow
+
+
+ * from the moment the page is built. show/hide use IMPORTANT origin, which outranks this. */
+
+
+.chip-ghost    { display: none; opacity: 0.75; }
+
+
+.bin           { width: 110px; height: 48px; background: #3A4450; padding: 6px; }
+
+
+.bin-hot       { background: #3C8527; }
+
+
+
+
+
+.scroll-demo   { width: 300px; height: 96px; }
+
+
+.scroll-row    { height: 22px; width: 100%; background: #3A4450; }
+
+
+.scroll-row-alt{ height: 22px; width: 100%; background: #FFAAAA; }
+
+
+.split-demo    { width: 320px; height: 110px; }
+
+
+.pane-a        { background: #3A4A6A; padding: 4px; }
+
+
+.pane-b        { background: #4A3A5A; padding: 4px; }
+
+
+.pane-c        { background: #3A5A4A; padding: 4px; }
+
+
+.nested-tabs   { width: 320px; height: 110px; }
+
+
+.pane-filler   { width: 100%; height: 30px; background: #45525F; }
+
+
+
+
+
+/* transform page. Every one of these is pure CSS — the scene makes no transform calls.
+
+
+ *
+
+
+ * The two `chain` rules are the same two functions in the two orders, and they must NOT
+
+
+ * land in the same place: translate-then-scale moves by 12 and then doubles the moved
+
+
+ * space, scale-then-translate doubles first so the same 12 becomes 24. Seeing them line
+
+
+ * up would mean the ordered op list has silently collapsed back into a decomposition.
+
+
+ *
+
+
+ * `transform-origin` is what the middle rows isolate: identical scales, different anchors.
+
+
+ * The default is 50% 50%, so tf-scale grows about its centre and tf-origin about its own
+
+
+ * top-left corner and drifts right. */
+
+
+.tf-scale      { transform: scale(1.6); }
+
+
+.tf-origin     { transform: scale(1.6); transform-origin: 0 0; }
+
+
+.tf-rotate     { transform: rotate(-8deg); }
+
+
+.tf-skew       { transform: skewX(20deg); }
+
+
+.tf-chain      { transform: translate(12px) scale(2); transform-origin: left center; }
+
+
+.tf-chain-rev  { transform: scale(2) translate(12px); transform-origin: left center; }
+
+/* The edges page: the same transforms on things big enough to see an edge on. The gaps leave room for
+ * the skew's overhang and the rotation's corners. */
+.tf-big          { width: 340px; height: 130px; font-size: 40px; margin: 16px 48px 16px 24px; }
+.tf-big-gradient { width: 340px; height: 130px; margin: 16px 48px 16px 24px;
+                   background: linear-gradient(135deg, #4f83ff, #1f3a8a); }
+.tf-big-flat     { width: 340px; height: 130px; margin: 16px 48px 16px 24px; background-color: #d0d4dc; }
+.tf-big-rounded  { width: 340px; height: 90px; margin: 16px 48px 16px 24px; border-radius: 12px;
+                   border-width: 2px; border-color: #5b8dff; background-color: #2d4fa8; }
+
+
+/* Transitionable like any other interpolatable property, and this is the case CSS's
+
+
+ * list-matching rule covers: both ends are a single scale(), so it lerps rather than
+
+
+ * snapping at the halfway point. */
+
+
+.tf-hover      { transition: transform 160ms ease; }
+
+
+.tf-hover:hover{ transform: scale(1.35); }
+
+
+
+
+
+/* text-css page (5.2). Every one of these is pure CSS — the scene sets no text properties
+
+
+ * from Java, which is the point: they cascade, they inherit (all but text-overflow), and
+
+
+ * they theme.
+
+
+ *
+
+
+ * The `.tx-box` width is load-bearing. A UIText self-sizes only while nothing has
+
+
+ * constrained it, so an unconstrained label would have no leftover space and every
+
+
+ * alignment would look identical — the wrapper is what gives alignment something to
+
+
+ * align WITHIN. Same reason `.desc` above carries a width. */
+
+
+.tx-box        { width: 190px; background: #2E3540; padding: 4px; }
+
+
+/* 6.1.1 — the CSS Custom Highlight API.
+
+
+ *
+
+
+ * Java registers WHERE (named TextRanges on the element); CSS says WHAT. That split is the
+
+
+ * whole point of the mechanism on the web, and it is why none of these colours live in the
+
+
+ * scene any more: a theme can restyle every highlight below without touching a line of Java.
+
+
+ *
+
+
+ * ::highlight() accepts only properties that cannot affect layout — colour, background,
+
+
+ * text-decoration-line, text-shadow. CSS Pseudo-Elements 4 restricts it that way so a
+
+
+ * highlight can never reflow the text it highlights, and the engine drops anything else with
+
+
+ * a warning rather than accepting a rule that does nothing. */
+
+
+.tx-rich       { width: 300px; background: #23282F; padding: 5px; color: #D6DEE8; }
+
+
+
+
+
+/* A syntax theme, in CSS, exactly as it should be. One Dark's palette. */
+
+
+.tx-rich ::highlight(keyword)  { color: #C678DD; }
+
+
+.tx-rich ::highlight(function) { color: #61AFEF; }
+
+
+.tx-rich ::highlight(variable) { color: #E06C75; }
+
+
+
+
+
+/* Decoration-only: no colour at all, so the text keeps its own and stays readable. This is
+
+
+ * what a spell-check mark or a search hit actually wants. */
+
+
+.tx-rich ::highlight(spelling) { text-decoration-line: underline; }
+
+
+.tx-rich ::highlight(removed)  { text-decoration-line: line-through; color: #7F848E; }
+
+
+/* A search hit, recoloured and underlined rather than banded.
+
+
+ *
+
+
+ * `background-color` IS valid on ::highlight() per CSS, and is deliberately not used here
+
+
+ * because this engine cannot paint it yet: a band behind a character range needs per-range
+
+
+ * rects from the text layout, and CgStyleSpan carries colour and decorations only. The engine
+
+
+ * logs that distinction rather than silently dropping the declaration. */
+
+
+.tx-rich ::highlight(search)   { color: #E5C07B; text-decoration-line: underline; }
+
+
+
+
+
+/* Light on purpose, and the only row here that is. The shadow is what `text-shadow: true` used to
+ * draw -- 1px down and right, the text's colour at a quarter brightness -- written as real CSS, so the
+ * row still compares against how it looked. Every glyph's shadow is the SHADOW's colour now, whatever a
+ * highlight does to the glyph, and the green highlight adds a glow of its own beneath it. */
+.tx-shadow-row { text-shadow: 1px 1px #050607; background: #C9D2DD; color: #14181D; }
+
+/* ── text-stroke ──────────────────────────────────────────────────────────────────────────
+ * Large, because the field only describes 0.0375em and a 1px outline is a third of a pixel on a
+ * label. Every row below sits on one dark ground so a light stroke and a dark one are judged
+ * against the same thing. */
+.textcss-scroll { width: 100%; height: 0; flex-grow: 1; }
+
+/* FONT-SIZE GOES ON THE LABEL, not on the box. It is the one property here that does not
+ * effectively inherit -- the UA sheet opens with `* { font-size: 10 }`, which plants a candidate on
+ * every element including this label, so a size set on the wrapper loses to it. Everything else in
+ * these rules is genuinely inherited and is set on the box on purpose, which is what the
+ * `inherited` row demonstrates. Setting the size on the box is also how the first version of this
+ * page showed no strokes at all: every label stayed at 10px, rasterised to bitmap coverage, and
+ * bitmap has no distance field to threshold. */
+.tx-stroke, .tx-stroke-2, .tx-stroke-huge, .tx-stroke-inherit {
+    width: 460px;
+    color: #E8EDF2;
+    background: #171C22;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+/* 72, not something more modest, and the number is doing work. The field describes 0.0375em, so
+ * the widest stroke it can hold is about 0.0375 * fontSize minus half a pixel of antialiasing
+ * headroom -- roughly 1.2px at 44, and 2.2px at 72. The 2px row has to sit INSIDE that or it is
+ * demonstrating the clamp rather than the width. */
+.tx-stroke .label,
+.tx-stroke-2 .label,
+.tx-stroke-current .label,
+.tx-stroke-huge .label,
+.tx-stroke-inherit .label { font-size: 72; }
+
+/* `text-stroke` is the only spelling a sheet may write: text-stroke-width and -color still cascade,
+ * inherit and serialise, but DeclarationParser refuses them by name so there is one thing to learn.
+ * The two halves survive underneath so a partial override composes -- see .tx-align-inset, which
+ * restates only the width, and .tx-stroke-current, which states only a width and lets the colour fall
+ * back to `color`. */
+.tx-stroke   { text-stroke: 0px #0B5D8F; }
+.tx-stroke-2 { text-stroke: 2px #0B5D8F; }
+
+/* An INWARD stroke has to fit the letterform's thinnest part, which is its joints -- a shoulder
+ * springing or a bowl link is thinned by the type designer so the merge does not read as a blot.
+ * Measured on this face at font-size 72: stem 6.3px, joint about 4px across. `inset` spends the whole
+ * width inward, so it closes the joint at 2px and needs 1; `center` spends half, so 2px is its
+ * equivalent; `outset` never touches the letterform. Widen inset here and the g and h pinch shut. */
+.tx-align-outset { stroke-align: outset; }
+.tx-align-center { stroke-align: center; }
+.tx-align-inset  { stroke-align: inset; text-stroke: 1px; }
+
+/* Stroke under the fill. Only legible against `center`, where there is an inner half to hide. */
+.tx-paint-stroke { paint-order: stroke; }
+
+/* No stroke colour at all, so it falls back to `color`: this row must come out AMBER, outline and
+ * fill alike.
+ *
+ * THE COLOUR GOES ON THE LABEL, not the wrapper, and that is not a stylistic choice. The UA sheet
+ * owns `.label` (overlays.css: `color: var(--label-fg, #FFFFFF)`) and txBox puts that very class on
+ * its UIText -- so a direct rule beats inheritance, which only applies where nothing set a candidate,
+ * and the label came out white however amber its wrapper was. Three runs of this row proved nothing
+ * about the engine; it was losing to the user-agent sheet. */
+.tx-stroke-current .label { color: #E0A33C; }
+
+.tx-stroke-current {
+    width: 460px;
+    text-stroke: 2px;
+    color: #E0A33C;
+    background: #171C22;
+    padding-left: 10px;
+    padding-right: 10px;
+}
+
+/* A fill of nothing, so only the outline is left. Note `color` is untouched and still inherits. */
+.tx-hollow { text-fill-color: #00000000; }
+
+/* Far past what the field can describe -- this renders the same as the 2px row, not thicker. */
+.tx-stroke-huge { text-stroke: 8px #B4541A; }
+
+/* Declared on the WRAPPER; the label inside inherits all of it. */
+.tx-stroke-inherit { text-stroke: 2px #2E7D4F; }
+
+/* Small enough to rasterise as bitmap coverage, which carries no distance to threshold. AFTER the
+ * label rules above: same specificity, so source order is what makes this one win. */
+.tx-small .label { font-size: 10; }
+
+
+.tx-shadow-row ::highlight(red)   { color: #CC0000; }
+
+
+.tx-shadow-row ::highlight(green) { color: #00892B; text-shadow: 0 0 5px #3DFF7A; }
+
+
+.tx-shadow-row ::highlight(blue)  { color: #1240D0; }
+
+
+
+
+
+.tx-left       { text-align: left; }
+
+
+.tx-center     { text-align: center; }
+
+
+.tx-right      { text-align: right; }
+
+
+/* nowrap collapses to one line and OVERFLOWS the 190px box rather than widening it —
+
+
+ * max-width caps the box, which is exactly CSS and exactly why ellipsis exists. Paired
+
+
+ * with overflow: hidden so the spill is clipped instead of painting over the next row. */
+
+
+.tx-nowrap     { white-space: nowrap; overflow: hidden; }
+
+
+/* ...and the same line with the ellipsis.
+
+
+ *
+
+
+ * NOTE the `.label` descendant: `text-overflow` must sit on the UIText ITSELF, because it
+
+
+ * does not inherit (CSS UI 4 — the property belongs to the block container that owns the
+
+
+ * line, and here that container IS the UIText, not this wrapper). `white-space` DOES inherit,
+
+
+ * which is what made the first version of this page so misleading: the nowrap half arrived
+
+
+ * on the label from the wrapper, the truncation half silently did not, and the row rendered
+
+
+ * as a plain clipped line that looked exactly like the row above it.
+
+
+ *
+
+
+ * The wrapper still owns `overflow: hidden` — clipping is the box's job either way. */
+
+
+.tx-ellipsis   { white-space: nowrap; overflow: hidden; }
+
+
+.tx-ellipsis .label { text-overflow: ellipsis; }
+
+
+/* text-shadow inherits, so the wrapper's declaration reaches the label. This label's colour is
+ * inherited too, and a quarter of an inherited colour is not writable in CSS, so the row is the
+ * blurred specimen rather than the old 1px copy. */
+.tx-shadow     { text-shadow: 2px 2px 3px rgba(0, 0, 0, 0.75); }
+
+/* ── text-shadow, one kind per row ─────────────────────────────────────────────────────────── */
+.tx-sh-hard      { text-shadow: 2px 2px #000000; }
+.tx-sh-soft      { text-shadow: 0 4px 8px rgba(0, 0, 0, 0.9); }
+.tx-sh-glow      { text-shadow: 0 0 10px #E0A33C; }
+.tx-sh-neon      { text-shadow: 0 0 2px #FFFFFF, 0 0 8px #4FC3F7, 0 0 20px #0B5D8F; }
+.tx-sh-order     { text-shadow: 0 0 12px #FF4F4F, 4px 4px #000000; }
+.tx-sh-current   { text-shadow: 0 0 9px; }
+.tx-sh-spread    { text-shadow: 0 0 6px 3px #D94F4F; }
+.tx-sh-inset     { text-shadow: 2px 2px 3px rgba(0, 0, 0, 0.85) inset; }
+.tx-sh-stroked   { text-shadow: 3px 3px 4px #000000; text-stroke: 2px #0B5D8F; }
+/* Light, so the underline's own blurred shadow -- an analytic rect blur, not a glyph -- can be seen. */
+.tx-sh-underline { text-shadow: 0 3px 3px rgba(0, 0, 0, 0.8); text-decoration-line: underline; background: #C9D2DD; }
+/* The theme colours `.label` itself, so a colour on the box never reaches the glyphs: each goes on the label.
+ * The shadow stays on the box and inherits, and the currentcolor row glows in the LABEL's colour. */
+.tx-sh-underline .label { color: #14181D; }
+.tx-sh-glow .label      { color: #FFF4DC; }
+.tx-sh-neon .label      { color: #E6F7FF; }
+.tx-sh-current .label   { color: #7FD6FF; }
+.tx-sh-spread .label    { color: #FFFFFF; }
+.tx-sh-inset .label     { color: #C9D2DD; }
+.tx-sh-stroked .label   { color: #F2F5F8; }
+/* On the LABEL: an em resolves where it is declared, so on the box it would be tenths of a pixel. */
+.tx-sh-em .label { text-shadow: 0.08em 0.08em 0.2em #000000; }
+.tx-sh-rotated   { text-shadow: 3px 3px 3px #000000; transform: rotate(-8deg); }
+/* font-size does not inherit here (`* { font-size: 10 }`), so the size goes on the label. */
+.tx-sh-hard .label, .tx-sh-soft .label, .tx-sh-glow .label, .tx-sh-neon .label, .tx-sh-order .label, .tx-sh-current .label, .tx-sh-spread .label, .tx-sh-underline .label, .tx-sh-rotated .label { font-size: 18; }
+.tx-sh-inset .label, .tx-sh-stroked .label { font-size: 22; }
+.tx-sh-em .label { font-size: 26; }
+
+
+.tx-inherit    { white-space: nowrap; overflow: hidden; text-align: right; }
+
+
+
+
+
+/* keymap page (6.1.2).
+
+
+ *
+
+
+ * Sizes are small on purpose: a pane's content box is only ~230 logical px at the harness's
+
+
+ * default window size, and the first version of this page put two 230px panels in one row.
+
+
+ * They did not wrap, they overflowed and the second one was clipped away entirely — the same
+
+
+ * trap as the sidebar, since nothing shrinks below its content here.
+
+
+ *
+
+
+ * Two focusable panels so scoping is visible: the SAME chord is bound in both, to different
+
+
+ * commands, and which fires depends only on where focus is. */
+
+
+.km-panel      { width: 62px; height: 30px; background: #2E3540; padding: 4px;
+
+
+                 outline: 1px solid #46505E; font-size: 7; }
+
+
+.km-panel:focus{ outline: 2px solid #61AFEF; }
+
+
+.km-log        { width: 140px; height: 18px; background: #1B1F25; padding: 3px;
+
+
+                 color: #98C379; font-size: 7; }
+
+
+.km-pending    { width: 140px; height: 18px; padding: 3px; color: #E5C07B; font-size: 7; }
+
+
+.km-field      { width: 140px; }
+
+
+.km-hint       { color: #7F848E; font-size: 7; }
+
+
+
+
+
+/* list page (6.1.3). The row height here MUST match ListView.setItemHeight -- the strategy
+
+
+ * decides where a row is positioned, the sheet decides how it looks, and if they disagree the
+
+
+ * rows overlap or leave gaps. A future measured strategy is what removes the duplication. */
+
+
+.lv            { width: 200px; height: 130px; background: #23282F; outline: 1px solid #46505E; }
+
+
+.lv-row        { padding-left: 4px; font-size: 7; }
+
+
+.lv-row:hover  { background: #2E3540; }
+
+
+.lv-row:focus  { background: #3A4553; }
+
+
+.lv-row.__selected__ { background: #2C5A8C; }
+
+
+.lv-stat       { color: #98C379; font-size: 7; }
+
+
+
+
+
+/* tree page (6.1.4). Indentation is applied by the VIEW from each row's depth, so the row
+
+
+ * template is identical at every level — the sheet only styles the twisty, which the view
+
+
+ * marks with __expanded__ / __collapsed__ / __leaf__. */
+
+
+/* 300 wide matches `.desc` and `.tx-rich`, so this row is no wider than ones the page
+
+
+ * already has — deliberately, since nothing shrinks below its content here and a row wider
+
+
+ * than the pane is clipped rather than wrapped. Height is the free axis: the page scrolls. */
+
+
+.tv            { width: 300px; height: 280px; background: #23282F; outline: 1px solid #46505E; }
+
+
+.tv-row        { flex-direction: row; align-items: center; gap: 3px; font-size: 7; }
+
+
+.tv-row:hover  { background: #2E3540; }
+
+
+.tv-row.__selected__ { background: #2C5A8C; }
+
+
+/* Focus and selection are different things in a tree — the APG says so explicitly — and
+
+
+ * without a separate focus style there is no way to tell which row the arrows will act on. */
+
+
+.tv-row:focus  { outline: 1px solid #61AFEF; }
+
+
+/* padding on the TWISTY, not on the panel: rows are absolutely positioned and TreeView owns
+
+
+ * their padding-left (it is the depth indent), so a sheet rule there would out-specify the
+
+
+ * indent and flatten the whole tree. Insetting the shape inside its own box cannot collide. */
+
+
+.tv-twisty     { width: 11px; height: 11px; flex-shrink: 0; padding-left: 3px;
+                 color: #98C379; overlay: shape("chevron-right"); }
+
+
+.tv-row:hover .tv-twisty { color: #FFFFFF; }
+.tv-row.__expanded__ > .tv-twisty { transform: rotate(90deg); }
+.tv-row.__leaf__ > .tv-twisty { overlay: none; }
+
+
+.tv-status     { color: #E5C07B; font-size: 7; }
+
+
+
+
+
+/* editor page (6.1.6). The editor paints its own caret and selection bands from
+
+
+ * default.css, and forces its own font onto its lines -- so the letterforms follow whichever
+
+
+ * theme is loaded. Everything here is the frame around it.
+
+
+ *
+
+
+ * font-size is 11 rather than 8 on purpose: at 8 every font in the atlas looks blocky, which
+
+
+ * reads as "the theme did not apply" when it had. */
+
+
+.ed            { width: 560px; height: 340px; background: #1E2228; outline: 1px solid #46505E;
+
+
+                 font-size: 11; line-height: 1.5; color: #D7DAE0;
+
+
+                 /* CSS UI 4 resize, implemented by UIResizer -- drag the bottom-right
+
+
+                  * corner. min-* stops it being collapsed to nothing. */
+
+
+                 resize: both; min-width: 200px; min-height: 90px; }
+
+
+/* Syntax highlighting: the tokenizer publishes capture names, the sheet decides what they
+
+
+ * look like. Same mechanism as a search hit -- the Custom Highlight API from 6.1.1.
+
+
+ *
+
+
+ * THE SELECTOR MUST NAME THE TEXT ELEMENT, not the editor. A HighlightRegistry belongs to a
+
+
+ * UIText and StyleEngine resolves ::highlight() against THAT element, so `.ed::highlight(x)`
+
+
+ * matches an element which owns no ranges and silently colours nothing. */
+
+
+.ed text::highlight(keyword)  { color: #C678DD; }
+
+
+.ed text::highlight(type)     { color: #E5C07B; }
+
+
+.ed text::highlight(string)   { color: #98C379; }
+
+
+.ed text::highlight(number)   { color: #D19A66; }
+
+
+.ed text::highlight(comment)  { color: #5C6370; }
+
+
+.ed text::highlight(function) { color: #61AFEF; }
+
+
+.ed text::highlight(search)   { background-color: #4E5B2A; }
+
+
+.ed text::highlight(bracket)  { color: #4EC9A0; }
+
+
+.ed-status     { color: #7F8C99; font-size: 7; }
+
+
+/* Content-sized, not a fixed 54px. These labels report their own state -- "Whitespace:
+
+
+ * boundary", "Scroll past end: on" -- so a fixed width truncates whichever one happens to be
+
+
+ * longest, and the overflow lands on the hint text beside it. */
+
+
+.ed-lang       { padding-left: 6px; padding-right: 6px; }
+
+
+.ed-lang-on    { background-color: #3E5A7A; }
+
+
+.ed-find       { width: 110px; }
+
+
+
+
+
+/* focus page (5.3). The strip is a real TabView; the buttons on either side of it are what
+
+
+ * make the roving tabindex visible — Tab must go before -> the SELECTED tab -> after,
+
+
+ * skipping the other tabs entirely, and arrows must still move between them. */
+
+
+.fc-strip      { width: 300px; height: 78px; }
+
+
+.fc-btn        { width: 96px; }
+
+
+
+
+
+/* modal page. `.md-stage` is the containing block, so the backdrop covers IT rather than the
+
+
+ * whole gallery -- the dialog is promoted, and `100%` on the backdrop resolves against the
+
+
+ * initial containing block, which is the root. That means the scrim dims the entire window,
+
+
+ * which is correct for a real modal and worth seeing here rather than a tidy inset rectangle. */
+
+
+.md-stage      { width: 340px; height: 120px; background: #23272E; padding: 8px;
+
+
+                 gap: 6px; }
+
+
+.md-dialog     { width: 190px; height: 96px; }
+
+
+.md-btn        { width: 150px; }
+
+
+
+
+
+/* menus page. Nothing here positions anything -- AnchoredPlacement owns left/top, and a rule
+
+
+ * setting either would fight it every frame. Widths only. */
+
+
+.mn-stage      { width: 340px; height: 130px; background: #23272E; padding: 8px;
+
+
+                 gap: 6px; }
+
+
+.mn-drop       { width: 130px; }
+
+
+/* The right-click surface. Deliberately tall enough to aim at, and it reports where the menu
+
+
+ * was opened so pointer->root conversion is visibly correct rather than merely plausible. */
+
+
+.mn-canvas     { width: 300px; height: 56px; background: #31363F; padding: 6px; }
+
+
+/* ── text-lab page ──────────────────────────────────────────────────────────────────────────
+ * The same specimen on two grounds, because an outline cannot be judged on one: a dark stroke is a
+ * crisp edge on light and a halo on dark. Both take identical INLINE declarations from the controls,
+ * so any difference between the panels is the ground and not the style.
+ *
+ * NO `font-size` on `.tl-specimen`, deliberately -- the size slider writes it inline, and a rule here
+ * would not lose to that (inline beats stylesheet) but would decide the value before the first drag
+ * and disagree with the slider's own readout. The Java sets the initial size instead. */
+.tl-stage      { flex-direction: row; gap: 10px; width: 100%; }
+.tl-ground     { width: 0; flex-grow: 1; height: 210px; border-radius: 12px;
+                 overflow: hidden; padding: 12px; }
+.tl-dark       { background: #10141A; }
+.tl-light      { background: #E9EDF2; }
+/* NO width on the specimen: it is a canvas NODE, so it self-sizes on an unbounded plane and a long
+ * string runs off the side to be panned to, rather than wrapping under the controls. */
+/* A mid grey, because the same rule labels a near-black panel and a near-white one -- white at low
+ * alpha vanished on the light ground. */
+.tl-hint       { position: absolute; right: 8px; top: 6px; font-size: 9px; color: #8A93A0; }
+
+.tl-controls   { flex-direction: row; gap: 18px; }
+.tl-col        { gap: 4px; }
+.tl-ctl        { flex-direction: row; align-items: center; gap: 8px; }
+.tl-ctl-name   { width: 82px; font-size: 11px; color: #B9BCC4; }
+.tl-ctl-val    { width: 42px; font-size: 11px; color: #6E7681; }
+.tl-slider     { width: 120px; }
+.tl-drop       { width: 128px; height: 15px; font-size: 10px; }
+.tl-field      { width: 128px; }
+
+.tl-swatches   { flex-direction: row; gap: 3px; align-items: center; }
+.tl-chip       { width: 17px; height: 17px; border-radius: 4px;
+                 border-width: 1px; border-color: #00000055; cursor: pointer; }
+
+.tl-note       { width: 172px; font-size: 9px; color: #7E8691; }
+
+/* ── glass page ─────────────────────────────────────────────────────────────────────────────────
+ * A backdrop worth refracting. Glass over a flat colour is a rectangle with a slightly different
+ * flat colour in it -- it tells you nothing, and it is exactly the case the `noise` layer exists to
+ * rescue. So the stage under these panels is deliberately BUSY: saturated overlapping blobs for the
+ * blur to average and for the saturation lift to fight over, and hard-edged type for the refraction
+ * to bend, because a straight edge crossing a bezel is the only thing that makes a lens legible.
+ *
+ * The stage CLIPS. The blobs are larger than it and hang off every side on purpose, so there is no
+ * frame of empty ground anywhere a glass panel might sit. */
+.gl-stage      { width: 100%; height: 300px; overflow: hidden; border-radius: 14px;
+                 background: #140B26; }
+
+/* Everything inside is out of flow: this page is a picture, not a column. */
+.gl-blobs      { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.gl-blob       { position: absolute; border-radius: 999px; }
+.gl-b1         { left: -40px;  top: -50px;  width: 240px; height: 240px; background: #E0409B; }
+.gl-b2         { left: 150px;  top: 60px;   width: 300px; height: 300px; background: #3C5BF0; }
+.gl-b3         { left: 380px;  top: -70px;  width: 260px; height: 260px; background: #F07A2B; }
+.gl-b4         { left: 520px;  top: 120px;  width: 300px; height: 300px; background: #17C4A8; }
+.gl-b5         { left: 260px;  top: 170px;  width: 220px; height: 220px; background: #8B3CF0; }
+
+/* Type behind the glass. Big, tight, high-contrast: the refraction shows up as letterforms bending
+ * at a bezel long before it shows up on a colour gradient. */
+.gl-label      { position: absolute; left: 24px; top: 116px; font-size: 44px; color: #FFFFFFEE; }
+.gl-sub        { position: absolute; left: 26px; top: 168px; font-size: 15px; color: #FFFFFFAA; }
+
+/* The specimens. Four shapes because the bezel behaves differently on each: a capsule is all corner,
+ * a card is mostly straight edge, a circle has no straight edge at all, and the tiles are small
+ * enough that the bezel is a large fraction of the whole -- which is where a too-wide bezel stops
+ * looking like glass and starts looking like a bubble. */
+.gl-capsule    { position: absolute; left: 40px;  top: 30px;  width: 300px; height: 62px;
+                 border-radius: 31px; }
+.gl-card       { position: absolute; left: 372px; top: 30px;  width: 210px; height: 150px;
+                 border-radius: 18px; padding: 12px; gap: 4px; }
+.gl-circle     { position: absolute; left: 612px; top: 40px;  width: 120px; height: 120px;
+                 border-radius: 999px; }
+.gl-tiles      { position: absolute; left: 40px;  top: 214px; flex-direction: row; gap: 10px; }
+.gl-tile       { width: 58px; height: 58px; border-radius: 16px; }
+
+.gl-card-title { font-size: 15px; color: #FFFFFF; }
+.gl-card-body  { font-size: 11px; color: #FFFFFFCC; }
+
+/* Controls. A fixed label column so the numbers line up as they change -- a readout that reflows
+ * while you drag is unreadable, which is the whole reason `slot()` exists on this page too. */
+.gl-controls   { flex-direction: row; gap: 18px; }
+.gl-col        { gap: 4px; }
+.gl-ctl        { flex-direction: row; align-items: center; gap: 8px; }
+.gl-ctl-name   { width: 74px; font-size: 11px; color: #B9BCC4; }
+.gl-ctl-val    { width: 42px; font-size: 11px; color: #6E7681; }
+.gl-slider     { width: 132px; }

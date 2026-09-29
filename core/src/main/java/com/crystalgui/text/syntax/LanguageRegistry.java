@@ -1,5 +1,6 @@
 package com.crystalgui.text.syntax;
 
+import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.pattern.FilePatternMap;
@@ -9,11 +10,8 @@ import com.crystalgui.text.lang.LanguageServices;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.List;
-import java.util.ServiceConfigurationError;
-import java.util.ServiceLoader;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
@@ -294,6 +292,8 @@ public final class LanguageRegistry {
     private static final List<String> CONTRIBUTORS = new ArrayList<>();
 
     private static boolean bootstrapped;
+    @Nullable
+    private static Throwable firstRead;
 
     /**
      * Finds every {@link LanguageKinds} on the classpath. Idempotent, and called by every read.
@@ -336,27 +336,24 @@ public final class LanguageRegistry {
         return bootstrapped;
     }
 
+    /**
+     * Where the first read came from, or null before one. What a host prints when {@link #isBootstrapped}
+     * says it was too late -- the read is usually in somebody else's setup code, far from the symptom.
+     */
+    @Nullable
+    public static synchronized Throwable firstRead() {
+        return firstRead;
+    }
+
     public static synchronized void bootstrap() {
         if (bootstrapped) return;
         // SET BEFORE THE LOOP. A service's register() legitimately reads the registry back -- an entry
         // that carries the previous tokenizer over is the documented way two tiers compose -- and
         // re-entering here would run every service twice.
         bootstrapped = true;
-        Iterator<LanguageKinds> services =
-                ServiceLoader.load(LanguageKinds.class, LanguageRegistry.class.getClassLoader()).iterator();
-        while (true) {
-            LanguageKinds kinds;
-            try {
-                if (!services.hasNext()) break;
-                kinds = services.next();
-            } catch (ServiceConfigurationError | RuntimeException | LinkageError broken) {
-                // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN LANGUAGES AND NOT THE EDITOR. The iterator
-                // throws on the ENTRY, so this brackets next(): catching only around the body would let
-                // one jar's missing class stop every contributor after it in the file.
-                CrystalGuiCore.LOGGER.error("[cgui] a LanguageKinds service could not be loaded; its "
-                        + "languages are absent on this host", broken);
-                continue;
-            }
+        firstRead = new Throwable("LanguageRegistry first read here");
+        // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN LANGUAGES AND NOT THE EDITOR.
+        Providers.forEach(LanguageKinds.class, LanguageRegistry.class.getClassLoader(), kinds -> {
             try {
                 kinds.register();
                 // SAID OUT LOUD, because live and inert look identical here: a file with no grammar and
@@ -368,7 +365,8 @@ public final class LanguageRegistry {
                 CrystalGuiCore.LOGGER.error("[cgui] the language contributor {} failed; its languages are "
                         + "absent on this host", kinds.getClass().getName(), failed);
             }
-        }
+        }, broken -> CrystalGuiCore.LOGGER.error("[cgui] a LanguageKinds service could not be loaded; its "
+                + "languages are absent on this host", broken));
     }
 
     /** Which contributors ran, by class name, in discovery order. Diagnostics — and what a test asserts. */
@@ -397,6 +395,7 @@ public final class LanguageRegistry {
      */
     public static synchronized void resetBootstrapForTesting() {
         bootstrapped = false;
+        firstRead = null;
         CONTRIBUTORS.clear();
     }
 }

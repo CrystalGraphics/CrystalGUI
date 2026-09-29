@@ -146,7 +146,6 @@ public final class CgUiAutoTest {
      * <p>This is the settling clock on 1.7.10, so the captures hang off it rather than off the tick.</p>
      */
     public static void onPainted(int framesPainted) {
-        AutoTest.runFrameSteps(framesPainted);
         AutoTest.settled(HOST, framesPainted);
     }
 

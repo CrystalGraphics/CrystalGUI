@@ -3,12 +3,15 @@ package com.crystalgui.language.engine;
 import com.crystalgui.language.engine.bridge.ScriptCompiler;
 
 import org.junit.Assume;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -60,6 +63,23 @@ public class ScriptRunsTest {
         Class<?> loaded = Class.forName(className, true, loader);
         Method entry = loaded.getMethod(method);
         return entry.invoke(null);
+    }
+
+    /** A default-package script class under a parent that splits every name it is asked at the last '.'. */
+    @Test
+    public void aScriptsOwnClassIsNeverAskedOfTheParent() throws Exception {
+        ClassWriter writer = new ClassWriter(0);
+        writer.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "java", null, "java/lang/Object", null);
+        writer.visitEnd();
+        ClassLoader forge1171 = new ClassLoader(ScriptRunsTest.class.getClassLoader()) {
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                name.substring(0, name.lastIndexOf('.'));
+                return super.loadClass(name, resolve);
+            }
+        };
+        ScriptClassLoader loader = new ScriptClassLoader(Map.of("java", writer.toByteArray()), forge1171);
+        assertEquals("java", Class.forName("java", true, loader).getName());
     }
 
     @Test

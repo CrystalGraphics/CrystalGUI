@@ -1,14 +1,12 @@
 package com.crystalgui.widget.surface.extension;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.ServiceConfigurationError;
-import java.util.ServiceLoader;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.widget.surface.SurfaceContext;
@@ -93,23 +91,10 @@ public final class SurfaceExtensions {
         // Set before the loop: a service's constructor may legitimately read this, and re-entering
         // would run every service twice.
         bootstrapped = true;
-        Iterator<SurfaceExtension> services =
-                ServiceLoader.load(SurfaceExtension.class, SurfaceExtensions.class.getClassLoader())
-                        .iterator();
-        while (true) {
-            SurfaceExtension extension;
-            try {
-                if (!services.hasNext()) break;
-                extension = services.next();
-            } catch (ServiceConfigurationError | RuntimeException | LinkageError broken) {
-                // The iterator throws on the ENTRY, so this brackets next(): catching only around the
-                // body would let one mod's missing class stop every extension after it in the file.
-                CrystalGuiCore.LOGGER.error("[cgui] a SurfaceExtension service could not be loaded; "
-                        + "its feature is absent on this host", broken);
-                continue;
-            }
-            contribute(extension);
-        }
+        Providers.forEach(SurfaceExtension.class, SurfaceExtensions.class.getClassLoader(),
+                SurfaceExtensions::contribute,
+                broken -> CrystalGuiCore.LOGGER.error("[cgui] a SurfaceExtension service could not be "
+                        + "loaded; its feature is absent on this host", broken));
     }
 
     /**

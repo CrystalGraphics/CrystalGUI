@@ -65,7 +65,7 @@ public final class HostClasspath {
         try {
             addModuleLayers(loader, entries);
         } catch (LinkageError noModuleSystem) {
-            // ModuleLayer is Java 9+, and mc1710 downgrades this class to Java 8 bytecode for a host
+            // ModuleLayer is Java 9+, and the shipped jar downgrades this class to Java 8 bytecode for a host
             // that may genuinely be on Java 8 -- where entering the method above cannot resolve it.
             // Caught at the CALL, because that is where resolution happens; a guard inside the method
             // would already have failed. "This route has nothing", like every other route's absence.

@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.net;
 
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import javax.annotation.Nullable;
 
@@ -16,10 +17,15 @@ import com.mojang.authlib.GameProfile;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+//? if >=1.16 {
 import net.minecraft.world.level.storage.LevelResource;
+//?}
+//? if >=1.21.9 {
+/*import net.minecraft.server.players.NameAndId;
+*///?}
 
 /**
- * The server's workspace on MC 1.20.x: where it lives, who may write to it, and who is asking.
+ * The server's workspace on the modern tree: where it lives, who may write to it, and who is asking.
  *
  * <p>Everything else -- per-peer bindings, the change and presence fan-out, the poll cadence, the seed
  * -- is {@link WorkspaceHost} in {@code core/}.</p>
@@ -41,6 +47,18 @@ public final class WorkspaceHostModern {
     private static boolean registered;
     private static WorkspaceHost host;
     private static volatile MinecraftServer currentServer;
+
+    /** The directory the running world is saved in. */
+    public static Path worldRoot(MinecraftServer server) {
+        // LevelResource is 1.16's; before it the save is a folder of the storage source's base.
+        //? if >=1.16 {
+        return server.getWorldPath(LevelResource.ROOT);
+        //?} elif >=1.14 {
+        /*return server.getStorageSource().getBaseDir().resolve(server.getLevelIdName());
+        *///?} else {
+        /*return server.getStorageSource().getLevelPath(server.getLevelIdName());
+        *///?}
+    }
 
     /** Called by each loader when its server starts and stops. */
     public static void setServer(@Nullable MinecraftServer server) {
@@ -90,9 +108,11 @@ public final class WorkspaceHostModern {
         public Path root() {
             MinecraftServer server = currentServer;
             if (server == null) return null;
+            // getServerDirectory() is a File before 1.21 and a Path from it; toString is the one spelling
+            // both have, so this line serves every node without a directive.
             Path base = server.isDedicatedServer()
-                    ? server.getServerDirectory().toPath()
-                    : server.getWorldPath(LevelResource.ROOT);
+                    ? Paths.get(server.getServerDirectory().toString())
+                    : worldRoot(server);
             return base == null ? null : StorageLayout.projectsIn(base).resolve(PROJECT_DIR);
         }
 
@@ -135,8 +155,17 @@ public final class WorkspaceHostModern {
         public boolean isOwner(String actorId) {
             MinecraftServer server = currentServer;
             if (server == null) return false;
+            // 1.19 made the single-player owner a profile; before it is just a name.
+            //? if >=1.21.9 {
+            /*GameProfile owner = server.getSingleplayerProfile();
+            return owner != null && owner.name() != null && owner.name().equalsIgnoreCase(actorId);
+            *///?} elif >=1.19 {
             GameProfile owner = server.getSingleplayerProfile();
             return owner != null && owner.getName() != null && owner.getName().equalsIgnoreCase(actorId);
+            //?} else {
+            /*String owner = server.getSingleplayerName();
+            return owner != null && owner.equalsIgnoreCase(actorId);
+            *///?}
         }
 
         @Override
@@ -144,7 +173,12 @@ public final class WorkspaceHostModern {
             MinecraftServer server = currentServer;
             if (server == null || server.getPlayerList() == null) return false;
             ServerPlayer player = server.getPlayerList().getPlayerByName(actorId);
+            // 1.21.9 asks by NameAndId.
+            //? if >=1.21.9 {
+            /*return player != null && server.getPlayerList().isOp(new NameAndId(player.getGameProfile()));
+            *///?} else {
             return player != null && server.getPlayerList().isOp(player.getGameProfile());
+            //?}
         }
     }
 }

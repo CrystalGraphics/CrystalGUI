@@ -20,24 +20,38 @@
 
 import java.io.File
 
-// "forge" or "neoforge" -- CrystalGraphics lays its loaders out under the same names.
-val loader = project.name
 val crystalGraphics = gradle.includedBuild("CrystalGraphics")
 
+// CrystalGraphics' nodes of this node's loader AND Minecraft version -- its tree has the same layout.
+// Answered by cg-modern-loader through cgbuildlogic.ModernTree; see `cgGraphicsNodes` there.
+@Suppress("UNCHECKED_CAST")
+val graphicsNodes = extra["cgGraphicsNodes"] as Map<String, Pair<String, File>>
+val (graphicsCommonPath, graphicsCommonDir) = graphicsNodes.getValue("common")
+val (graphicsLoaderPath, graphicsLoaderDir) = graphicsNodes.getValue("loader")
+
+// ModDevGradle refuses additionalRuntimeClasspath from Minecraft 1.21.10; runtimeOnly takes its place.
+// @see cgbuildlogic.devRunLibraries, which this script plugin cannot see
+val mcOrdinal = property("mc.version").toString().split('.').map { it.toIntOrNull() ?: 0 }
+    .let { v -> v.getOrElse(0) { 0 } * 1_000_000 + v.getOrElse(1) { 0 } * 1000 + v.getOrElse(2) { 0 } }
+val devRunLibraries = if (mcOrdinal >= 1_021_010) "runtimeOnly" else "additionalRuntimeClasspath"
+
 dependencies {
-    add("additionalRuntimeClasspath", project(":taffy"))
-    add("additionalRuntimeClasspath", "com.crystalgraphics:core:1.0.0")
-    add("additionalRuntimeClasspath", "com.crystalgraphics:platform:1.0.0")
-    add("additionalRuntimeClasspath", "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings:1.0.0")
+    add(devRunLibraries, project(":taffy"))
+    add(devRunLibraries, "com.crystalgraphics:core:1.0.0")
+    add(devRunLibraries, "com.crystalgraphics:platform:1.0.0")
+    add(devRunLibraries, "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings:1.0.0")
     // CrashVariant and LoaderProbe, which every CrystalGUI host names from its own entry point.
     // MISSING UNTIL 2026-09-12: compileOnly through mc1201CompileDeps and on no run at all, so a dev
     // server died at mod construction with NoClassDefFoundError for a class the shipped jar carries.
     // The shipped jar was never affected -- the merge adds this module once -- which is why a
     // dev-run-only hole survived J5's four boots.
-    add("additionalRuntimeClasspath", "com.crystalgraphics:mc-shared:1.0.0")
+    add(devRunLibraries, "com.crystalgraphics:mc-shared:1.0.0")
     // Tier 1 for LWJGL3, which PlatformServiceModern assembles over. Same J9 move, same hole: it left
     // runtime/mc/modern/common -- which IS on the run -- for a module that was on no run at all.
-    add("additionalRuntimeClasspath", "com.crystalgraphics:lwjgl3:1.0.0")
+    add(devRunLibraries, "com.crystalgraphics:lwjgl3:1.0.0")
+    // Minecraft ships JOML from 1.19.3; below it the shipped jar's companion supplies it, and a dev run
+    // takes it as a library.
+    if (mcOrdinal < 1_019_003) add(devRunLibraries, "org.joml:joml-jdk8:1.10.1")
 }
 
 /** Classes and resources are separate roots to FML, and a mod needs both -- mods.toml is a resource. */
@@ -46,19 +60,22 @@ fun modClasses(modId: String, roots: Iterable<File>) = roots.map { "$modId%%$it"
 fun modClasses(modId: String, sourceSet: SourceSet) = modClasses(modId,
     sourceSet.output.classesDirs.files + listOfNotNull(sourceSet.output.resourcesDir))
 
-/** The same for a module in another build, where only the output LAYOUT is reachable from here. */
-fun modClasses(modId: String, moduleDir: File) = modClasses(modId, listOf(
-    File(moduleDir, "build/classes/java/main"), File(moduleDir, "build/resources/main")))
+/** The same for a node in another build, where only the output LAYOUT is reachable from here. */
+fun modClasses(modId: String, nodeDir: File) = modClasses(modId, listOf(
+    File(nodeDir, "build/classes/java/main"), File(nodeDir, "build/resources/main")))
 
 fun mainSourceSet(project: Project) =
     project.extensions.getByType(SourceSetContainer::class.java)["main"]
 
 // The bundled-project list, the service merge and its output directory are the LOADER PLUGIN's:
-// `ShadowUtils` needs them for the shipped jar and fabric never applies this script. @see cg-mc1201-loader
+// `ShadowUtils` needs them for the shipped jar and fabric never applies this script. @see cg-modern-loader
 @Suppress("UNCHECKED_CAST")
 val bundledProjects = extra["cgBundledProjects"] as List<Project>
 val mergedServicesDir = extra["cgMergedServicesDir"] as File
 val mergeDevServices = tasks.named("mergeDevServices")
+@Suppress("UNCHECKED_CAST")
+val devRunClasses = extra["cgDevRunClasses"] as List<FileCollection>
+val langDevRunRoots = extra["cgLangDevRunRoots"] as FileCollection
 val resourceTasks: List<String> = bundledProjects.map { "${it.path}:processResources" }
 
 // Setting MOD_CLASSES REPLACES what ModDevGradle derived from mods{} rather than adding to it, so the
@@ -108,11 +125,16 @@ val treeSitterJars: List<File> = rootProject.file("lib/tree-sitter").listFiles()
 val modClassesValue = (
     modClasses("crystalgui", listOf(devResourcesDir))
         + modClasses("crystalgui", mainSourceSet(project))
-        + bundledProjects
-            .flatMap { modClasses("crystalgui", mainSourceSet(it).output.classesDirs.files) }
+        + modClasses("crystalgui", mainSourceSet(project(":runtime:mc:forge-bootstrap")).output.classesDirs.files)
+        + devRunClasses.flatMap { modClasses("crystalgui", it.files) }
         + modClasses("crystalgui", treeSitterJars)
-        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "runtime/mc/modern/common"))
-        + modClasses("crystalgraphics", File(crystalGraphics.projectDir, "runtime/mc/modern/$loader"))
+        // The language mod's own entry classes and descriptors, which in `crystalgui` would have no
+        // mods.toml naming them and be constructed by nobody.
+        + modClasses("crystalgui_language", langDevRunRoots.files)
+        + modClasses("crystalgraphics", graphicsCommonDir)
+        + modClasses("crystalgraphics", graphicsLoaderDir)
+        // Its @Mod: one class for every Forge, in a module of its own.
+        + modClasses("crystalgraphics", listOf(File(crystalGraphics.projectDir, "runtime/mc/forge-bootstrap/build/classes/java/main")))
     // FML splits MOD_CLASSES on the PLATFORM's path separator, not on a semicolon.
     ).joinToString(File.pathSeparator)
 
@@ -129,14 +151,18 @@ tasks.matching {
     // everything correctly.
     inputs.property("cgModClasses", modClassesValue)
     dependsOn(stageDevResources)
-    dependsOn(crystalGraphics.task(":runtime:mc:modern:common:classes"))
-    dependsOn(crystalGraphics.task(":runtime:mc:modern:$loader:classes"))
+    dependsOn(langDevRunRoots)
+    dependsOn(crystalGraphics.task("$graphicsCommonPath:classes"))
+    dependsOn(crystalGraphics.task("$graphicsLoaderPath:classes"))
+    dependsOn(crystalGraphics.task(":runtime:mc:forge-bootstrap:classes"))
+    dependsOn(":runtime:mc:forge-bootstrap:classes")
 
     // And the jars the runtime classpath is made of. These arrive as substituted coordinates, which
     // ModDevGradle resolves with nothing ordering them before the launch -- so a jar could still be
     // mid-rewrite when the JVM reads it, presenting as a NoClassDefFoundError for a class that is in it.
-    dependsOn(crystalGraphics.task(":core:jar"))
-    dependsOn(crystalGraphics.task(":platform:jar"))
+    dependsOn(crystalGraphics.task(":core:downgradedJar"))
+    dependsOn(crystalGraphics.task(":platform:downgradedJar"))
+    dependsOn(crystalGraphics.task(":runtime:lwjgl:3:downgradedJar"))
     dependsOn(crystalGraphics.task(":freetype-msdfgen-harfbuzz-bindings:jar"))
 }
 

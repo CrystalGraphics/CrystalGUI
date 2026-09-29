@@ -2,6 +2,9 @@ package com.crystalgui.mc.modern.probe;
 
 import java.io.File;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -10,12 +13,18 @@ import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.AutoTest;
 
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.network.chat.Component;
+//? if >=1.19 {
 import net.minecraft.client.gui.screens.worldselection.WorldOpenFlows;
+//?}
 
 /**
- * The MC 1.20.x half of {@link AutoTest}: load a world, open the desktop, photograph it, quit.
+ * The modern half of {@link AutoTest}: load a world, open the desktop, photograph it, quit.
  *
  * <p>The sequence is {@code core}'s. What is here is how this era loads a save, takes a screenshot and
  * stops — and the screenshot is the interesting one, because it is <b>asynchronous</b>.</p>
@@ -29,10 +38,14 @@ public final class CgUiAutoTest {
     /** @see AutoTest#ENABLED */
     public static final boolean ENABLED = AutoTest.ENABLED;
 
-    /** How long to keep trying to move a capture out of {@code screenshots/}: 150 x 20ms = 3s. */
-    private static final int MOVE_ATTEMPTS = 150;
+    /** Ticks a quit waits for captures still being written: 200 = 10s. */
+    private static final int QUIT_WAIT_TICKS = 200;
 
-    private static final long MOVE_RETRY_MS = 20;
+    /** Captures grabbed and not yet on disk. Written from Minecraft's IO pool. */
+    private static final AtomicInteger PENDING_CAPTURES = new AtomicInteger();
+
+    /** Ticks since the sequence asked to quit, or -1 until it does. */
+    private static int quitWaited = -1;
 
     /** TICKS on this era. @see AutoTest.Host */
     private static int sinceOpen;
@@ -43,6 +56,10 @@ public final class CgUiAutoTest {
     /** Called once per client tick. Cheap when off: one static boolean read. */
     public static void tick() {
         if (!ENABLED) return;
+        if (quitWaited >= 0) {
+            quitWhenWritten();
+            return;
+        }
         AutoTest.tick(HOST);
         AutoTest.settled(HOST, sinceOpen++);
     }
@@ -62,11 +79,16 @@ public final class CgUiAutoTest {
         Minecraft mc = Minecraft.getInstance();
         // A client tick fires underneath the loading overlay, so a launch requested before the game is
         // up races Mojang's splash.
-        if (mc == null || mc.getOverlay() != null) return false;
+        if (mc == null || loading(mc)) return false;
         // -PcgJoin pointed this client at a server: it is already on its way, and there is no save.
         if (mc.getCurrentServer() != null) return true;
         loadWorld(mc);
         return true;
+    }
+
+    /** Mojang's loading overlay is up. 1.13 has none: its splash blocks the thread instead. */
+    private static boolean loading(Minecraft mc) {
+        return ClientGame.overlayUp(mc);
     }
 
     private static final AutoTest.Host HOST = new AutoTest.Host() {
@@ -79,7 +101,7 @@ public final class CgUiAutoTest {
         @Override
         public boolean readyToDrive() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && mc.getOverlay() == null;
+            return mc != null && !loading(mc);
         }
 
         @Override
@@ -106,11 +128,8 @@ public final class CgUiAutoTest {
 
         @Override
         public void quit() {
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST done; quitting");
-            // stop() rather than System.exit: it runs Minecraft's own shutdown, which is what
-            // CgGraphicsLifecycle.destroyContext hangs off. Exiting under it would skip the teardown
-            // this is partly here to exercise.
-            Minecraft.getInstance().stop();
+            quitWaited = 0;
+            quitWhenWritten();
         }
 
         @Override
@@ -130,12 +149,20 @@ public final class CgUiAutoTest {
     };
 
     /**
-     * Asks Minecraft to load the save, through whichever entry point this version has.
-     *
-     * <p>1.20.1 is the compiled path and 1.20.4 the reflective one, because there is no common method
-     * and this module runs on both: 1.20.1 has {@code loadLevel(Screen, String)} and 1.20.4 deleted it
-     * in favour of {@code checkForBackupAndLoad(String, Runnable)}.</p>
+     * Quits once every capture is on disk, or after {@link #QUIT_WAIT_TICKS}. From 1.21.5 a screenshot is
+     * a GPU readback that completes on a LATER frame, so the render thread has to keep running for it.
      */
+    private static void quitWhenWritten() {
+        if (PENDING_CAPTURES.get() > 0 && quitWaited++ < QUIT_WAIT_TICKS) return;
+        quitWaited = Integer.MIN_VALUE;
+        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST done; quitting");
+        // stop() rather than System.exit: it runs Minecraft's own shutdown, which is what
+        // CgGraphicsLifecycle.destroyContext hangs off. Exiting under it would skip the teardown
+        // this is partly here to exercise.
+        Minecraft.getInstance().stop();
+    }
+
+    /** Asks Minecraft to load the save, through whichever entry point this version has. */
     private static void loadWorld(Minecraft mc) {
         String name = resolveWorld(mc);
         if (name == null) {
@@ -144,40 +171,24 @@ public final class CgUiAutoTest {
             return;
         }
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST loading world '{}'", name);
+        // COMPILED on both sides of the break, never reflective: each thin jar is remapped as it is
+        // built, so this becomes the SRG member on Forge and the intermediary one on Fabric, where a
+        // lookup by Mojang name is a string no remapper rewrites. The Runnable is the GIVE-UP path,
+        // taken when the save cannot be read, not a completion callback. `openWorld` arrived with
+        // 1.20.5's world-recovery flow (read on 1.20.6); `checkForBackupAndLoad` is 1.20.3-1.20.4;
+        // WorldOpenFlows itself is 1.19's, and before it Minecraft loads a save directly.
+        //? if >=1.20.5 {
+        /*mc.createWorldOpenFlows().openWorld(name, () -> { });
+        *///?} elif >=1.20.3 {
+        /*mc.createWorldOpenFlows().checkForBackupAndLoad(name, () -> { });
+        *///?} elif >=1.19 {
         WorldOpenFlows flows = mc.createWorldOpenFlows();
-        // A COMPILED call, not a reflective one: each loader's thin jar is remapped as it is built, so
-        // this becomes the SRG member on Forge and the intermediary one on Fabric. A reflective lookup
-        // by Mojang name is a plain string and no remapper rewrites a string, so it resolved on
-        // NeoForge -- which runs official names -- and on neither of the others.
-        try {
-            flows.loadLevel(mc.screen, name);
-            return;
-        } catch (NoSuchMethodError deletedIn1204) {
-            // 1.20.4 dropped loadLevel. That build DOES run official names, so the lookup below works
-            // there for the same reason it failed above.
-        }
-        // The Runnable is the GIVE-UP path -- taken when the save cannot be read -- not a completion
-        // callback, so there is nothing to do in it.
-        if (call(flows, "checkForBackupAndLoad", new Class<?>[] {String.class, Runnable.class},
-                name, (Runnable) () -> { })) return;
-        CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST {} offers no world-open method this build knows",
-                flows.getClass().getName());
-    }
-
-    /** @return true when the method EXISTS, whether or not the call itself then succeeded. */
-    private static boolean call(Object target, String name, Class<?>[] types, Object... args) {
-        Method method;
-        try {
-            method = target.getClass().getMethod(name, types);
-        } catch (NoSuchMethodException otherVersion) {
-            return false;
-        }
-        try {
-            method.invoke(target, args);
-        } catch (ReflectiveOperationException failed) {
-            CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST {} failed", name, failed);
-        }
-        return true;
+        flows.loadLevel(ClientGame.screen(mc), name);
+        //?} elif >=1.16 {
+        /*mc.loadLevel(name);
+        *///?} else {
+        /*mc.selectLevel(name, name, null);
+        *///?}
     }
 
     /**
@@ -200,47 +211,77 @@ public final class CgUiAutoTest {
         File parent = file.getParentFile();
         if (parent != null) parent.mkdirs();
         // Screenshot.grab's first argument is the GAME DIRECTORY, not the output directory: it writes
-        // to <dir>/screenshots/<name> and creates that subdirectory itself. So the frame is grabbed
-        // into it and then moved to the path that was actually asked for -- otherwise a caller that
-        // waits for its own path sees nothing and calls a successful run a failure.
+        // to <dir>/screenshots/<name>. So the frame is grabbed into it and moved to the path asked for.
         File gameDir = parent == null ? new File(".") : parent;
-        Screenshot.grab(gameDir, file.getName(), mc.getMainRenderTarget(), message -> { });
-
-        // The PNG is encoded on Util.ioPool(), so it does NOT exist when grab returns -- and the first
-        // capture additionally pays for that pool starting its thread, which is why an immediate move
-        // left the early one behind in screenshots/ and moved the late one. Retrying is also what
-        // makes a partial file safe: renameTo fails while the writer still holds it, so a rename that
-        // succeeds is itself the proof that the write finished.
         File written = new File(new File(gameDir, "screenshots"), file.getName());
-        boolean moved = written.equals(file);
-        for (int attempt = 0; !moved && attempt < MOVE_ATTEMPTS; attempt++) {
-            if (written.isFile()) {
-                file.delete();
-                moved = written.renameTo(file);
+        // Read HERE, on the render thread: the callback runs on Minecraft's IO pool. Whether the desktop
+        // painted matters because a capture proves only that a frame was read back -- with no live GL
+        // context the screen's render() returns at once, and with no level Minecraft does not clear the
+        // colour buffer, so a photograph of the main menu is indistinguishable from a working desktop.
+        int width = ClientGame.mainTarget(mc).width;
+        int height = ClientGame.mainTarget(mc).height;
+        boolean painted = HostSession.isInstalled() && HostSession.session().hasPainted();
+        // Which screen is up, since `painted` is the session's and says nothing about what is in front.
+        Screen up = ClientGame.screen(mc);
+        String screen = up == null ? "none" : up.getClass().getSimpleName();
+        PENDING_CAPTURES.incrementAndGet();
+        // The callback fires once the PNG is written, on every version: encoded on the IO pool through
+        // 1.21.4, and from 1.21.5 read back from the GPU on a later frame first.
+        // 1.21.6 added a downscale factor; 1 is the frame as drawn.
+        Consumer<Component> onWritten = message -> {
+            try {
+                boolean moved = written.equals(file);
+                if (!moved && written.isFile()) {
+                    file.delete();
+                    moved = written.renameTo(file);
+                }
+                if (!moved) {
+                    // Never claim the path that was asked for unless the file is on it: this line is
+                    // the only evidence a caller has.
+                    CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST capture stayed at {}; nothing was written to {}",
+                            written.getAbsolutePath(), file.getAbsolutePath());
+                    return;
+                }
+                CrystalGuiCore.LOGGER.info("CGUI AUTOTEST wrote {}x{} capture to {} (desktop painted: {}, screen: {})",
+                        width, height, file.getAbsolutePath(), painted, screen);
+            } finally {
+                PENDING_CAPTURES.decrementAndGet();
             }
-            if (!moved) sleep(MOVE_RETRY_MS);
+        };
+        //? if >=1.21.6 {
+        /*Screenshot.grab(gameDir, file.getName(), ClientGame.mainTarget(mc), 1, onWritten);
+        *///?} elif >=1.17 {
+        try {
+            Screenshot.grab(gameDir, file.getName(), ClientGame.mainTarget(mc), onWritten);
+        } catch (NoSuchMethodError before1171) {
+            grabWithSize(gameDir, file.getName(), ClientGame.mainTarget(mc), onWritten);
         }
-        if (!moved) {
-            // Never claim the path that was asked for unless the file is on it: this line is the only
-            // evidence a caller has, and an unconditional one reported a capture that was not there.
-            CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST capture stayed at {}; nothing was written to {}",
-                    written.getAbsolutePath(), file.getAbsolutePath());
-            return;
-        }
-        // WHETHER THE DESKTOP ACTUALLY PAINTED, beside the file. A capture proves only that a frame was
-        // read back: with no live GL context the screen's render() returns at once, and with no level
-        // Minecraft does not clear the colour buffer, so the frame still holds the PREVIOUS screen and
-        // a photograph of the main menu is indistinguishable from a working desktop.
-        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST wrote {}x{} capture to {} (desktop painted: {})",
-                mc.getMainRenderTarget().width, mc.getMainRenderTarget().height, file.getAbsolutePath(),
-                HostSession.isInstalled() && HostSession.session().hasPainted());
+        //?} else {
+        /*RenderTarget target = ClientGame.mainTarget(mc);
+        Screenshot.grab(gameDir, file.getName(), target.width, target.height, target, onWritten);
+        *///?}
     }
 
-    private static void sleep(long millis) {
-        try {
-            Thread.sleep(millis);
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
+    /**
+     * 1.17's grab, which also takes the frame's size: the node that claims 1.17 is compiled against
+     * 1.17.1, which dropped it. Found by parameter shape, since its runtime name is an intermediary one.
+     */
+    private static void grabWithSize(File gameDir, String name, RenderTarget target, Consumer<Component> done) {
+        for (Method method : Screenshot.class.getDeclaredMethods()) {
+            Class<?>[] p = method.getParameterTypes();
+            // Public: a private helper of the same shape sits beside it.
+            if (Modifier.isStatic(method.getModifiers()) && Modifier.isPublic(method.getModifiers())
+                    && p.length == 6 && p[0] == File.class
+                    && p[1] == String.class && p[2] == int.class && p[3] == int.class
+                    && p[4].isInstance(target) && p[5] == Consumer.class) {
+                try {
+                    method.invoke(null, gameDir, name, target.width, target.height, target, done);
+                    return;
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException("CGUI AUTOTEST could not take a screenshot", e);
+                }
+            }
         }
+        throw new IllegalStateException("CGUI AUTOTEST found no Screenshot.grab this version answers");
     }
 }

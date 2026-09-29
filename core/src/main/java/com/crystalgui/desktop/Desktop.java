@@ -56,8 +56,8 @@ import java.util.List;
 /**
  * The compositor host — CrystalOS's desktop, and the parent of every {@link WindowFrame}.
  *
- * <p><b>Nobody constructs one.</b> Every {@code UIDocument} owns a desktop and hands it out through
- * {@code UIDocument.desktop()}; opening a UI is {@code window.openWindow(frame)} and nothing else. That
+ * <p><b>Nobody constructs one.</b> Every {@code UIDocument} owns a desktop, found with
+ * {@link #of(UIDocument)}; opening a UI is {@code desktop.addWindow(frame)} and nothing else. That
  * is the same ownership {@code UIDocument.windowOverlayLayer()} already has — an engine-owned layer built
  * on first use, which is observably "always there" while costing nothing to a window that never opens
  * one. A compositor that each application had to assemble for itself would be a compositor each

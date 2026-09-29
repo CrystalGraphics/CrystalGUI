@@ -1,11 +1,13 @@
 package com.crystalgui.mc.modern.probe;
 
+import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import com.crystalgui.mc.modern.client.CgUiHud;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
+import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -13,14 +15,14 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * The MC 1.20.x half of {@link DesktopProbe}: thirteen one-liners.
+ * The modern half of {@link DesktopProbe}: thirteen one-liners.
  *
  * <p>The routine itself — minimise, restore mid-animation, the jump list, pin, click through an
  * overlay, click with the mouse grabbed — is {@code core}'s. It used to be 353 lines here, and 1.7.10
  * had no version of it at all.</p>
  *
  * <pre>{@code
- * ./gradlew :runtime:mc:modern:forge:runClient -Dcrystalgui.clientProbe=true
+ * ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.clientProbe=true
  * }</pre>
  *
  * <p>Screenshots land in {@code runs/client/screenshots} as {@code cgui-NN-step.png}. Add
@@ -54,19 +56,35 @@ public final class ClientProbe {
         @Override
         public int fps() {
             Minecraft mc = Minecraft.getInstance();
-            return mc == null ? -1 : mc.getFps();
+            if (mc == null) return -1;
+            // getFps arrived in 1.19.3; before it the count leads the debug string, "60 fps T: ...".
+            //? if >=1.19.3 {
+            return mc.getFps();
+            //?} else {
+            /*String fps = mc.fpsString;
+            int end = fps == null ? -1 : fps.indexOf(' ');
+            try {
+                return end > 0 ? Integer.parseInt(fps.substring(0, end)) : -1;
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+            *///?}
         }
 
         @Override
         public void openForeignScreen() {
             Minecraft mc = Minecraft.getInstance();
-            if (mc != null) mc.setScreen(new ChatScreen(""));
+            //? if >=1.21.9 {
+            /*if (mc != null) ClientGame.setScreen(mc, new ChatScreen("", false));
+            *///?} else {
+            if (mc != null) ClientGame.setScreen(mc, new ChatScreen(""));
+            //?}
         }
 
         @Override
         public void closeScreen() {
             Minecraft mc = Minecraft.getInstance();
-            if (mc != null) mc.setScreen(null);
+            if (mc != null) ClientGame.setScreen(mc, null);
         }
 
         @Override
@@ -84,8 +102,8 @@ public final class ClientProbe {
         @Override
         public void movePointerTo(int surfaceX, int surfaceY) {
             Minecraft mc = Minecraft.getInstance();
-            if (mc == null || mc.getWindow() == null) return;
-            GLFW.glfwSetCursorPos(mc.getWindow().getWindow(), surfaceX, surfaceY);
+            if (mc == null || Windows.of(mc) == null) return;
+            GLFW.glfwSetCursorPos(Windows.handle(mc), surfaceX, surfaceY);
         }
 
         /** Minecraft's own main target, which is where our composite lands. */
@@ -93,7 +111,15 @@ public final class ClientProbe {
         public void shoot(String fileName) {
             Minecraft mc = Minecraft.getInstance();
             if (mc == null) return;
-            Screenshot.grab(mc.gameDirectory, fileName, mc.getMainRenderTarget(), message -> { });
+            //? if >=1.21.6 {
+            /*Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc), 1, message -> { });
+            *///?} elif >=1.17.1 {
+            Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc), message -> { });
+            //?} else {
+            /*// Before 1.17.1 grab also takes the frame's size.
+            Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc).width,
+                    ClientGame.mainTarget(mc).height, ClientGame.mainTarget(mc), message -> { });
+            *///?}
         }
 
         @Override

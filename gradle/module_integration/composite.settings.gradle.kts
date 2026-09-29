@@ -9,14 +9,14 @@ val submoduleData = listOf(
         // mc1710 dev dependency — added via integration.gradle.kts to devOnlyNonPublishable.
         "devDependencies" to listOf("com.crystalgraphics:crystalgraphics:1.0.0"),
 
-        // mc1201 compile-time dependencies — CrystalGraphics subprojects that mc1201 loader
-        // sources import directly. Added as compileOnly + runtimeOnly by integration.gradle.kts.
-        // Substitution rules below resolve these to CrystalGraphics' composite build projects.
-        "mc1201CompileDeps" to listOf(
+        // CrystalGraphics' libraries every 1.20.x node imports. Added as compileOnly + runtimeOnly by
+        // integration.gradle.kts; the substitutions below resolve them to projects. Its COMMON is not
+        // here: that is per Minecraft version, so each node names the one of its own version
+        // (cgbuildlogic.sameVersionNodeCoordinate) and `modernNodeSubstitutions` below maps it.
+        "modernCompileDeps" to listOf(
             "com.crystalgraphics:core:1.0.0",
             "com.crystalgraphics:platform:1.0.0",
             "com.crystalgraphics:mc-shared:1.0.0",
-            "com.crystalgraphics:crystalgraphics-mc1201-common:1.0.0",
             "com.crystalgraphics:freetype-msdfgen-harfbuzz-bindings:1.0.0"
         ),
 
@@ -45,15 +45,12 @@ val submoduleData = listOf(
             // carrying their own; not a loader path, so it survives an embedded build.
             mapOf("module" to "com.crystalgraphics:mc-shared",
                 "projectPath" to ":runtime:mc:shared"),
-            // Must be added and removed in the same commit as :runtime:mc:modern:common in CrystalGraphics'
-            // settings.gradle.kts: a substitution naming a project that is not in the target build
-            // fails configuration for every task, and the error names the module, not this file.
-            mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-common",
-                "projectPath" to ":runtime:mc:modern:common"),
+            mapOf("module" to "com.crystalgraphics:forge-stubs",
+                "projectPath" to ":runtime:mc:forge-stubs"),
             // The 1.20.1 Forge MOD, for a consumer that wants CrystalGraphics in its own dev run's mod
-            // list rather than merely on its compile classpath.
+            // list rather than merely on its compile classpath -- RPG-Core names this coordinate.
             mapOf("module" to "com.crystalgraphics:crystalgraphics-mc1201-forge",
-                "projectPath" to ":runtime:mc:modern:forge")
+                "projectPath" to ":runtime:mc:modern:forge:1.20.1")
         ),
 
         // mc1710-specific bootstrap args injected into RunMinecraftTask by integration.gradle.kts.
@@ -85,22 +82,48 @@ fun Map<String, *>.string(key: String): String = this[key] as String
 fun Map<String, *>.mapList(key: String): List<Map<String, String>> =
     this[key] as? List<Map<String, String>> ?: emptyList()
 
+
+// CrystalGraphics' COMMON NODE of every version this build has a common node for -- which it must
+// have, since CrystalGraphics goes first (D1). The coordinate is its node coordinate:
+// `<modGroup>.mc.modern.<branch>:<version>`, @see cgbuildlogic.useNodeCoordinates. A settings script
+// cannot reach build-logic's classes, so the format is spelled here as well; the build breaks at
+// resolution, naming the coordinate, if the two ever disagree.
+@Suppress("UNCHECKED_CAST")
+val modernNodes = extra["cgModernNodes"] as Map<String, List<String>>
+
 // Loader substitutions go with the loaders. CrystalGraphics drops its own loaders when neither it nor
-// CrystalGUI is the build being invoked, and a substitution naming a missing project then fails
-// configuration for every task -- "Project with path ':runtime:mc:modern:common' not found in build
-// ':CrystalGUI:CrystalGraphics'". Matched on the path so a loader added later is covered.
+// CrystalGUI is the build being invoked, and keeps only a checkout consumer's nodes when one is; a
+// substitution naming a missing project then fails configuration for every task -- "Project with path
+// ':runtime:mc:modern:common' not found in build ':CrystalGUI:CrystalGraphics'".
 val embeddedHere = gradle.parent != null
 
-fun isLoaderPath(projectPath: String): Boolean = projectPath == ":runtime:mc:1710"
+fun isPresent(projectPath: String): Boolean = when {
+    projectPath == ":runtime:mc:1710" -> !embeddedHere
+    projectPath.startsWith(":runtime:mc:modern:") -> projectPath.removePrefix(":runtime:mc:modern:").split(':')
+        .let { (branch, version) -> modernNodes[branch].orEmpty().contains(version) }
+    else -> true
+}
+
+// Embedded, CrystalGraphics' shipped jars are its root's, carrying only the included nodes' variants: a
+// consumer's dev run asks for the coordinates it would take from Maven, each with its own coordinate as
+// the capability that picks one of the root's jars (a substitution cannot ask for one).
+val shippedMods = listOf("com.crystalgraphics:crystalgraphics", "com.crystalgraphics:crystalgraphics-joml")
+val modernNodeSubstitutions: List<Map<String, String>> = modernNodes.getValue("common").map { version ->
+    mapOf("module" to "com.crystalgraphics.mc.modern.common:$version",
+        "projectPath" to ":runtime:mc:modern:common:$version")
+}
 
 submoduleData.forEach { mod ->
     includeBuild(mod.string("buildPath")) {
         dependencySubstitution {
-            mod.mapList("substitutions")
-                .filterNot { embeddedHere && isLoaderPath(it.getValue("projectPath")) }
+            (mod.mapList("substitutions") + modernNodeSubstitutions)
+                .filter { isPresent(it.getValue("projectPath")) }
                 .forEach { substitution ->
                     substitute(module(substitution.getValue("module"))).using(project(substitution.getValue("projectPath")))
                 }
+            if (embeddedHere) shippedMods.forEach { shipped ->
+                substitute(module(shipped)).using(project(":"))
+            }
         }
     }
 }

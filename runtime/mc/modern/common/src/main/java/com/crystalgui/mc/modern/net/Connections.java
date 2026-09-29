@@ -13,7 +13,7 @@ import com.crystalgui.net.wire.CgNetworkChannel;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * The peer table for MC 1.20.x. Everything here is vanilla; each loader only forwards its join, leave,
+ * The peer table for the modern tree. Everything here is vanilla; each loader only forwards its join, leave,
  * connect, disconnect and tick events.
  *
  * <p>The table itself is {@link com.crystalgui.net.protocol.Connections} in {@code core/} -- open/close/route/tick and the rule that

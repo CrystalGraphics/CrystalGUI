@@ -90,11 +90,10 @@ jvmdg.multiReleaseOriginal.set(false)
 
 // :core subproject — platform-agnostic UI engine, bundled into this JAR.
 //
-// compileOnly, and it MUST NOT be api()/implementation(). :core compiles to Java 21 bytecode (its Jabel
-// annotationProcessor is commented out, so nothing desugars it), and a dev run puts every runtime
-// dependency on LaunchWrapper's classpath, where FML's ModDiscoverer opens each jar with
-// asm-debug-all-5.0.3 looking for @Mod. ASM 5.0.3 tops out at Java 8 class files, so it fails on the
-// first entry with:
+// compileOnly, and it MUST NOT be api()/implementation(). :core compiles to Java 25 bytecode, and a
+// dev run puts every runtime dependency on LaunchWrapper's classpath, where FML's ModDiscoverer opens
+// each jar with asm-debug-all-5.0.3 looking for @Mod. ASM 5.0.3 tops out at Java 8 class files, so it
+// fails on the first entry with:
 //
 //     There was a problem reading the entry com/crystalgui/core/CrystalGuiCore.class in the jar
 //     .../core/build/libs/core.jar - probably a corrupt zip
@@ -104,7 +103,7 @@ jvmdg.multiReleaseOriginal.set(false)
 // to diagnose from the message alone.
 //
 // The classes still reach runtime, downgraded: shadowJar below bundles core's output and jvmdg rewrites
-// the result to major 52. So the mod jar carries a Java 8 core and the raw Java 21 jar stays off the
+// the result to major 52. So the mod jar carries a Java 8 core and the raw Java 25 jar stays off the
 // classpath entirely. Verify with:
 //     unzip -p runtime/mc/1710/build/libs/crystalgui-1.0.0-dev.jar com/crystalgui/ui/UIWindow.class | od -An -t u1 -N 8
 dependencies {
@@ -462,6 +461,8 @@ tasks.named<JavaExec>("runServer") {
         // so this needs no code of ours.
         val port = providers.gradleProperty("cgSmokePort").orNull ?: "25599"
         args("--port", port)
+        // ...which every modern node's smoke server binds too: one at a time. @see cgbuildlogic.SmokePortLock
+        gradle.sharedServices.registrations.findByName("cgServerSmokePort")?.let { usesService(it.service) }
 
         // Deleted BEFORE the run, so a stale report from a previous run cannot pass for this one.
         doFirst { serverSmokeReport.get().asFile.delete() }
@@ -519,7 +520,8 @@ val stageObfMods = tasks.register<Copy>("stageObfMods") {
     // artifact by path; there is no substitution for a reobfuscated jar, because substitutions resolve
     // the DEV one.
     dependsOn(gradle.includedBuild("CrystalGraphics").task(":runtime:mc:1710:reobfJar"))
-    from(rootProject.file("CrystalGraphics/runtime/mc/1710/build/libs/crystalgraphics-1.0.0.jar"))
+    from(rootProject.file("CrystalGraphics/runtime/mc/1710/build/libs/" +
+        "crystalgraphics-${rootProject.extra["crystalgraphicsVersion"]}.jar"))
 
     // AND THE MIXIN BOOTSTRAP. CrystalGraphics declares mixins.crystalgraphics.json, so LaunchWrapper
     // asks for org.spongepowered.asm.launch.MixinTweaker before any mod loads -- and the dev run gets it
@@ -651,6 +653,8 @@ val lang: SourceSet by sourceSets.creating {
 
 dependencies {
     "langCompileOnly"(project(":language"))
+    // What this host shares with Forge 1.8-1.12.2's; merged once into the language jar.
+    "langCompileOnly"(project(":runtime:mc:launchwrapper"))
     "langCompileOnly"("org.projectlombok:lombok:1.18.44")
     "langAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
 }
@@ -658,8 +662,18 @@ dependencies {
 // A DEV RUN SEES crystalgui_language BECAUSE FML SCANS THE CLASSPATH for @Mod (J8) -- no descriptor
 // needed here, unlike the three ModLauncher/Knot loaders. `-PcgNoLanguage` leaves it off, which is
 // how the degraded configuration is exercised without building a jar.
+//
+// INSIDE the dev jar, not beside it: `lang` compiles to Java 25 like `main`, and only the jar is
+// downgraded. Its class directory on the run classpath was refused by FML's ASM 5 ("probably a corrupt
+// file"), so the language mod never loaded in a dev run.
 if (!providers.gradleProperty("cgNoLanguage").isPresent) {
-    dependencies { "runtimeOnly"(files(lang.output)) }
+    tasks.shadowJar {
+        from(lang.output)
+        // Looked up here, lazily: that project is configured after this one.
+        val launchWrapperJar = project(":runtime:mc:launchwrapper").tasks.named<Jar>("jar")
+        dependsOn(launchWrapperJar)
+        from(launchWrapperJar.map { zipTree(it.archiveFile) }) { exclude("META-INF/MANIFEST.MF") }
+    }
 }
 
 /** The language host's own classes, the input to its thin jar. */
@@ -668,6 +682,28 @@ val langJar = tasks.register<Jar>("langJar") {
     description = "The language stack's 1.7.10 host, the language mod's own half."
     archiveClassifier.set("lang-dev")
     from(lang.output)
+}
+
+/**
+ * Every mapping input TAKEN FROM `reobfJar` rather than re-derived: a thin jar must reobfuscate against
+ * the same SRG, CSVs and reference classpath as the fat one, and a second spelling of that configuration
+ * is a second thing to keep in step.
+ *
+ * - Its PROPERTIES, never providers mapped off the task: those carry a dependency on `reobfJar` itself,
+ *   which pulled the fat shadowJar into every singleJar -- and on a clean clone that failed, resolving
+ *   taffy's jar before :taffy:jar had run.
+ */
+fun com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar.mappingsOfReobfJar() {
+    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar").get()
+    mcVersion.set(fat.mcVersion)
+    srg.set(fat.srg)
+    fieldCsv.set(fat.fieldCsv)
+    methodCsv.set(fat.methodCsv)
+    exceptorCfg.set(fat.exceptorCfg)
+    recompMcJar.set(fat.recompMcJar)
+    extraSrgEntries.set(fat.extraSrgEntries)
+    extraSrgFiles.from(fat.extraSrgFiles)
+    referenceClasspath.from(fat.referenceClasspath)
 }
 
 /**
@@ -681,17 +717,8 @@ val reobfLangThinJar = tasks.register<com.gtnewhorizons.retrofuturagradle.mcp.Re
     description = "This loader's language half at SRG names, the language merge's input."
     archiveClassifier.set("lang")
 
-    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar")
     inputJar.set(langJar.flatMap { it.archiveFile })
-    mcVersion.set(fat.flatMap { it.mcVersion })
-    srg.set(fat.flatMap { it.srg })
-    fieldCsv.set(fat.flatMap { it.fieldCsv })
-    methodCsv.set(fat.flatMap { it.methodCsv })
-    exceptorCfg.set(fat.flatMap { it.exceptorCfg })
-    recompMcJar.set(fat.flatMap { it.recompMcJar })
-    extraSrgEntries.set(fat.flatMap { it.extraSrgEntries })
-    extraSrgFiles.from(fat.map { it.extraSrgFiles })
-    referenceClasspath.from(fat.map { it.referenceClasspath })
+    mappingsOfReobfJar()
 }
 
 // ── The thin jar (J1) ────────────────────────────────────────────────────────────────────────────
@@ -720,20 +747,8 @@ val reobfThinJar = tasks.register<com.gtnewhorizons.retrofuturagradle.mcp.Reobfu
     description = "This loader's own classes at SRG names -- the merge's input."
     archiveClassifier.set("thin")
 
-    // Every mapping input is TAKEN FROM `reobfJar` rather than re-derived: the two must reobfuscate
-    // against the same SRG, the same CSVs and the same reference classpath, and a second spelling of
-    // that configuration is a second thing to keep in step. Providers, so nothing resolves early.
-    val fat = tasks.named<com.gtnewhorizons.retrofuturagradle.mcp.ReobfuscatedJar>("reobfJar")
     inputJar.set(tasks.named<Jar>("jar").flatMap { it.archiveFile })
-    mcVersion.set(fat.flatMap { it.mcVersion })
-    srg.set(fat.flatMap { it.srg })
-    fieldCsv.set(fat.flatMap { it.fieldCsv })
-    methodCsv.set(fat.flatMap { it.methodCsv })
-    exceptorCfg.set(fat.flatMap { it.exceptorCfg })
-    recompMcJar.set(fat.flatMap { it.recompMcJar })
-    extraSrgEntries.set(fat.flatMap { it.extraSrgEntries })
-    extraSrgFiles.from(fat.map { it.extraSrgFiles })
-    referenceClasspath.from(fat.map { it.referenceClasspath })
+    mappingsOfReobfJar()
 }
 
 // Written out here rather than reusing `cgbuildlogic.CheckThinJar`, which the three 1.20.x loaders

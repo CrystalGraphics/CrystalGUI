@@ -1,5 +1,13 @@
+import cgbuildlogic.ModDescriptor
+import cgbuildlogic.ShippedJar
 import cgbuildlogic.SingleJarSpec
+import cgbuildlogic.has1710
+import cgbuildlogic.legacyNodes
+import cgbuildlogic.modernLoaderNodes
+import cgbuildlogic.modernNodes
 import cgbuildlogic.registerSingleJarPipeline
+import cgbuildlogic.shippedEntryPaths
+import cgbuildlogic.thinJarTask
 
 // ── One jar for every loader (J4) ────────────────────────────────────────────────────────────────
 //
@@ -41,6 +49,34 @@ repositories {
 // TASK, not the project, and fails with "unknown property 'modId'".
 val singleJarModId = property("modId").toString()
 
+// ── The 1.20.x thin jars, one per NODE, read off the tree ────────────────────────────────────────
+//
+// Every node of :runtime:mc:modern ships a thin jar, so nothing here names one: a version added in
+// settings.gradle.kts is merged, counted and checked with no edit to this file. The hierarchy is known
+// before any project is configured, so reading it here configures nothing.
+//
+// Each node's production step is `thinJarTask`'s answer, per NODE rather than per loader: Forge runs
+// SRG below 1.20.6 and Mojang's names from it on.
+fun modernThinJars(shadowTask: String): List<Pair<String, String>> =
+    modernLoaderNodes(project).map { it.path to thinJarTask(it, shadowTask) }
+
+/** Declared once by cg-descriptors, which the root applies first. */
+@Suppress("UNCHECKED_CAST")
+val modDescriptors = extra["cgModDescriptors"] as Map<String, ModDescriptor>
+
+/**
+ * How many relocated copies of a `common` class the merged jar must hold: one per loader node, since
+ * each thin jar carries its own common, relocated under its own loader.
+ */
+val modernCopies = modernLoaderNodes(project).size
+
+/**
+ * The Fabric thin jar whose manifest supplies every Fabric-* attribute; any Fabric node's will do. Null
+ * in an embedded build, which has no Fabric node and never builds the single jar.
+ */
+fun fabricThinJar(task: String): Pair<String, String>? =
+    modernNodes(project, "fabric").firstOrNull()?.let { it.path to task }
+
 registerSingleJarPipeline(SingleJarSpec(
     modId = singleJarModId,
     fileName = "$singleJarModId-${project.version}.jar",
@@ -48,19 +84,13 @@ registerSingleJarPipeline(SingleJarSpec(
     // legal package identifier, so the module system rejects the jar before the early display.
     shadePath = "com/crystalgui/shadow",
 
-    // Named per loader because each toolchain names its own production step: ModDevGradle's
-    // `reobfuscate` derives `reobfThinShadowJar` from the task it consumes, Loom's remap task is the
-    // one registered by name, NeoForge needs no mapping step at all, and 1.7.10's is registered here.
-    thinJars = listOf(
-        ":runtime:mc:1710" to "reobfThinJar",
-        ":runtime:mc:modern:forge" to "reobfThinShadowJar",
-        ":runtime:mc:modern:neoforge" to "thinShadowJar",
-        ":runtime:mc:modern:fabric" to "remapThinJar",
-    ),
+    // 1.7.10's production step is registered in its own build; every 1.20.x node's is read off the tree.
+    thinJars = listOfNotNull((":runtime:mc:1710" to "reobfThinJar").takeIf { has1710(project) }) +
+        legacyNodes(project).map { it.path to "reobfThinShadowJar" } + modernThinJars("thinShadowJar"),
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
-    libraryProjects = listOf(":core", ":taffy", ":runtime:mc:shared"),
+    libraryProjects = listOf(":core", ":taffy", ":runtime:mc:shared", ":runtime:mc:forge-bootstrap"),
 
     // One owner today, and the union is still the mechanism: the language jar ships its own
     // META-INF/services, and a second jar's providers never merge into this one's file.
@@ -92,12 +122,12 @@ registerSingleJarPipeline(SingleJarSpec(
         "FMLCorePluginContainsFMLMod" to true,
         "ForceLoadAsMod" to true,
         "TweakClass" to "org.spongepowered.asm.launch.MixinTweaker",
-        "MixinConfigs" to "mixins.crystalgui.json",
+        "MixinConfigs" to modDescriptors.getValue("main").manifestMixinConfigs(),
         // mods.toml says ${file.jarVersion}, which FML reads from here.
         "Implementation-Version" to project.version.toString(),
         "Automatic-Module-Name" to singleJarModId,
     ),
-    fabricThinJar = ":runtime:mc:modern:fabric" to "remapThinJar",
+    fabricThinJar = fabricThinJar("remapThinJar"),
 
     // THE NOTICE TRAVELS WITH THE BINARY (G7). MIT, Apache 2.0 and the OFL each require it to reach
     // whoever receives the jar, and a file in the source repository does not. J8 moved code between
@@ -106,6 +136,11 @@ registerSingleJarPipeline(SingleJarSpec(
         from(project.rootProject.file("notices/crystalgui.md")) {
             into("META-INF")
             rename { "NOTICE.md" }
+        }
+        // The licence itself: LGPL-3.0 is a set of additions to the GPL-3.0, and both require every
+        // recipient of the object code to get a copy.
+        from(project.rootProject.files("COPYING.LESSER", "COPYING")) {
+            into("META-INF")
         }
     },
 
@@ -132,36 +167,33 @@ registerSingleJarPipeline(SingleJarSpec(
         // this asked for 3 copies of CgUiScreen.class and found 4. `CgUiKeybinds` has no 1.7.10
         // counterpart, so it counts the relocation and nothing else.
         relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/modern/platform/LifecycleCrystalGUI.class" to 3,
-            "com/crystalgui/mc/modern/client/CgUiKeybinds.class" to 3,
+            "com/crystalgui/mc/modern/platform/LifecycleCrystalGUI.class" to modernCopies,
+            "com/crystalgui/mc/modern/client/CgUiKeybinds.class" to modernCopies,
         ))
         requiredEntries.set(listOf(
-            "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
+            "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             "mixins.crystalgui.json",
             "com/crystalgui/mc/v1710/mixins/CrystalGuiMixins.class",
-            // Every entry point the descriptors name -- see the language jar's list for what this
-            // catches. These four are each loader's own package, which no relocation touches.
-            "com/crystalgui/mc/v1710/CrystalGUI.class",
-            "com/crystalgui/mc/forge/CrystalGUIForge.class",
-            "com/crystalgui/mc/neoforge/CrystalGUINeoForge.class",
-            "com/crystalgui/mc/fabric/CrystalGUIFabric.class",
-            // J11.0. The table decides which of those runs, and the three bootstrappers are what the
-            // loaders actually construct -- the classes above carry no annotation any more, so a jar
-            // missing one of these loads nothing at all on that loader and says nothing about why.
+            // J11.0. The table decides which entry runs, and the three bootstrappers are what the
+            // loaders actually construct -- the entries carry no annotation any more, so a jar missing
+            // one of these loads nothing at all on that loader and says nothing about why.
             "META-INF/crystalgui/variants.json",
             "com/crystalgui/mc/fabric/FabricBootstrap.class",
             "com/crystalgui/mc/forge/ForgeBootstrap.class",
             "com/crystalgui/mc/neoforge/NeoForgeBootstrap.class",
             // G7: the notice for what THIS jar carries, in the jar.
-            "META-INF/NOTICE.md",
+            "META-INF/NOTICE.md", "META-INF/COPYING", "META-INF/COPYING.LESSER",
             // Where every download comes from, beside core's DownloadLocations, which reads it.
             "assets/crystalgui/download/locations.json",
-        ))
+        // EVERY ENTRY POINT THE TABLE NAMES, at its shipped name: one per node, relocated into that
+        // node's package (cgbuildlogic.ModernVariants). A table naming a class absent from the jar is
+        // a crash at mod construction on that version alone.
+        ) + modDescriptors.getValue("main").shippedEntryPaths())
         requiredManifest.set(mapOf(
             "FMLCorePluginContainsFMLMod" to "true",
             "ForceLoadAsMod" to "true",
             "TweakClass" to "org.spongepowered.asm.launch.MixinTweaker",
-            "MixinConfigs" to "mixins.crystalgui.json",
+            "MixinConfigs" to modDescriptors.getValue("main").manifestMixinConfigs(),
             "Fabric-Loom-Mixin-Remap-Type" to "",
         ))
         // core's own eight, which is the whole of what this jar contributes since J8. The language
@@ -170,6 +202,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "com.crystalgui.workbench.extension.WorkbenchExtension" to "com.crystalgui.workbench",
         ))
     },
+    publication = ShippedJar("com.crystalgui", "crystalgui", "CrystalGUI",
+        "The CrystalGUI mod: one jar for every loader and Minecraft version."),
 ))
 
 // ── The language stack, as its own jar (J8) ─────────────────────────────────────────────────────
@@ -187,13 +221,9 @@ registerSingleJarPipeline(SingleJarSpec(
     fileName = "crystalgui-language-${project.version}.jar",
     shadePath = "com/crystalgui/lang/shadow",
 
-    thinJars = listOf(
-        ":runtime:mc:1710" to "reobfLangThinJar",
-        ":runtime:mc:modern:forge" to "reobfLangThinShadowJar",
-        ":runtime:mc:modern:neoforge" to "langThinShadowJar",
-        ":runtime:mc:modern:fabric" to "remapLangThinJar",
-    ),
-    libraryProjects = listOf(":language"),
+    thinJars = listOfNotNull((":runtime:mc:1710" to "reobfLangThinJar").takeIf { has1710(project) }) +
+        legacyNodes(project).map { it.path to "reobfLangThinShadowJar" } + modernThinJars("langThinShadowJar"),
+    libraryProjects = listOf(":language", ":runtime:mc:launchwrapper", ":runtime:mc:modern-shared"),
     serviceOwners = listOf(":language"),
 
     // ASM, AND ONLY ASM. Taffy and JOML are the host jar's; tree-sitter must NOT be relocated,
@@ -220,15 +250,25 @@ registerSingleJarPipeline(SingleJarSpec(
         "Implementation-Version" to project.version.toString(),
         "Automatic-Module-Name" to "crystalgui_language",
     ),
-    fabricThinJar = ":runtime:mc:modern:fabric" to "remapLangThinJar",
+    fabricThinJar = fabricThinJar("remapLangThinJar"),
     descriptorsTask = "generateLanguageDescriptors",
 
     extraContent = {
+        // The language mod's @Mod for every Forge: the bootstrap module's `lang` half.
+        val langBootstrap = project(":runtime:mc:forge-bootstrap").tasks.named<Jar>("langJar")
+        dependsOn(langBootstrap)
+        from(langBootstrap.map { project.zipTree(it.archiveFile) }) { exclude("META-INF/MANIFEST.MF") }
+
         // THE NOTICE, in the binary (G7). Most of this jar by weight is somebody else's work, and
         // EPL-2.0 and MPL-2.0 both require the notice to reach whoever receives it.
         from(project.rootProject.file("notices/crystalgui-language.md")) {
             into("META-INF")
             rename { "NOTICE.md" }
+        }
+        // The licence itself: LGPL-3.0 is a set of additions to the GPL-3.0, and both require every
+        // recipient of the object code to get a copy.
+        from(project.rootProject.files("COPYING.LESSER", "COPYING")) {
+            into("META-INF")
         }
 
         // The tree-sitter jars go in VERBATIM and are never relocated: each carries the JNI natives
@@ -240,9 +280,10 @@ registerSingleJarPipeline(SingleJarSpec(
             ?.forEach { from(project.zipTree(it)) }
 
         // ALL THREE BANDS. 8 is what a 1.7.10 client runs, 17 what 1.20.x does, and 11 what a 1.7.10
-        // client on lwjgl3ify may. Taken from the two loaders that already resolve them rather than
-        // re-resolved here.
-        listOf(":runtime:mc:1710", ":runtime:mc:modern:forge").forEach { path ->
+        // client on lwjgl3ify may. Taken from the two eras that already resolve them rather than
+        // re-resolved here -- any 1.20.x node will do, since the bands name no Minecraft.
+        listOfNotNull(":runtime:mc:1710".takeIf { has1710(project) }, modernLoaderNodes(project).first().path)
+            .forEach { path ->
             val producer = project.project(path).tasks.named("bundleEngineBands")
             dependsOn(producer)
             from(producer)
@@ -264,38 +305,32 @@ registerSingleJarPipeline(SingleJarSpec(
             "assets/crystalgui/download/",
         ))
         expectSingle.set(listOf("com/crystalgui/language/"))
-        // Counted by simple name, as the host jar's own note explains. NOT `ScriptService`: J9's
-        // suffix strip renamed the 1.20.x installer `ScriptService1201` -> `ScriptService`, which is
-        // the simple name of the SPI it installs (`com.crystalgui.language.platform.ScriptService`),
-        // so this counted 4. `LanguageLifecycle` is unique. The name clash itself is a readability
-        // defect rather than a functional one -- the two are in different packages -- but the host
-        // half wants a name of its own; `ModernScriptService` is what the plan asked for.
+        // Counted by simple name, as the host jar's own note explains. The one class of the language
+        // half that must stay per node: it names Minecraft. What names none ships once, from
+        // :runtime:mc:modern-shared.
         relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/modern/lang/LanguageLifecycle.class" to 3,
+            "com/crystalgui/mc/modern/lang/ScriptServiceModern.class" to modernCopies,
         ))
         requiredEntries.set(listOf(
-            "META-INF/mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
-            // EVERY ENTRY POINT THE DESCRIPTORS NAME. A descriptor naming a class that is not here is
-            // a crash at mod construction on Forge and a hard loader error on Fabric, and nothing else
-            // in this build looks: a rename that updated the classes and mangled the descriptor
-            // strings passed every other check and produced a jar whose Fabric entrypoint did not
-            // exist. Only `com.crystalgui.mc.modern.lang` is relocated, so 1.7.10's and the three
-            // loader entries all keep their own package.
-            "com/crystalgui/mc/v1710/lang/CrystalGuiLanguage.class",
-            "com/crystalgui/mc/forge/lang/CrystalGuiLanguageForge.class",
-            "com/crystalgui/mc/neoforge/lang/CrystalGuiLanguageNeoForge.class",
-            "com/crystalgui/mc/fabric/lang/CrystalGuiLanguageFabric.class",
+            "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             // J11.0: the table, and the three bootstrappers the loaders actually construct.
             "META-INF/crystalgui_language/variants.json",
             "com/crystalgui/mc/forge/lang/LanguageForgeBootstrap.class",
             "com/crystalgui/mc/neoforge/lang/LanguageNeoForgeBootstrap.class",
             "com/crystalgui/mc/fabric/lang/LanguageFabricBootstrap.class",
+            // Both LaunchWrapper hosts' language halves name it, and only the merge brings it.
+            "com/crystalgui/mc/launchwrapper/LaunchWrapperBytes.class",
+            // Every modern node's language half names it, once.
+            "com/crystalgui/mc/shared/modern/MinecraftBytes.class",
             // G7: the notice for what THIS jar carries, in the jar.
-            "META-INF/NOTICE.md",
+            "META-INF/NOTICE.md", "META-INF/COPYING", "META-INF/COPYING.LESSER",
             "assets/crystalgui/engines/8/index.txt",
             "assets/crystalgui/engines/11/index.txt",
             "assets/crystalgui/engines/17/index.txt",
-        ))
+        // EVERY ENTRY POINT THE TABLE NAMES, at its shipped name. A table naming a class that is not
+        // here is a crash at mod construction, and nothing else in this build looks: a rename once
+        // updated the classes, mangled the descriptor strings and passed every other check.
+        ) + modDescriptors.getValue("lang").shippedEntryPaths())
         requiredManifest.set(mapOf(
             "FMLCorePluginContainsFMLMod" to "true",
             "ForceLoadAsMod" to "true",
@@ -306,6 +341,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "com.crystalgui.workbench.extension.WorkbenchExtension" to "com.crystalgui.language",
         ))
     },
+    publication = ShippedJar("com.crystalgui", "crystalgui-language", "CrystalGUI Language",
+        "The optional CrystalGUI language mod: grammars, analysis and scripting."),
 ))
 
 dependencies {

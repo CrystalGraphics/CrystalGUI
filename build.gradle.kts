@@ -1,4 +1,7 @@
 // `java` is the JavaPluginExtension in a build script, so the PACKAGE has to be imported to be named.
+import cgbuildlogic.MODERN_TREE
+import cgbuildlogic.crystalGraphicsVersion
+import cgbuildlogic.registerCheckAllTargets
 import groovy.json.JsonSlurper
 import java.net.HttpURLConnection
 import java.net.URI
@@ -9,8 +12,9 @@ import java.util.Properties
 //
 // MC version subprojects:
 //   :runtime:mc:1710         — Minecraft 1.7.10 + Forge (LWJGL 2, gtnhconvention)
-//   :runtime:mc:modern:common  — the 1.20.x platform seam, shared by all three loaders
-//   :runtime:mc:modern:{forge,neoforge,fabric} — registration only
+//   :runtime:mc:modern:<branch>:<version> — a Stonecutter tree, one node per Minecraft version:
+//     common    — the 1.20.x platform seam, shared by all three loaders
+//     forge, neoforge, fabric — registration only
 //
 // Platform-agnostic subprojects:
 //   :core     — platform-agnostic UI engine
@@ -38,6 +42,30 @@ plugins {
 // Machine-local settings (`local.properties`, gitignored) onto every project's `extra`, before
 // anything reads one. @see gradle/local-settings.gradle.kts
 apply(from = rootProject.file("gradle/local-settings.gradle.kts").toURI())
+
+// ── One compiler ─────────────────────────────────────────────────────────────────────────────────
+//
+// Every module compiles with ONE JDK, `dep.jdk.compiler`; its own source/target or --release still
+// decides its bytecode, and its toolchain stays for launchers only -- so building the jars provisions
+// no other JDK. The abstract modules are authored at this Java, and every consumer below it resolves
+// their Java 8 copies (cgbuildlogic.abstractModule). Where a module uses source/target rather than
+// --release, javac does not check the API: calling a method newer than the module's target compiles
+// and fails on the game. That is a convention, policed in review.
+// :runtime:mc:1710 is left to GTNH's convention, which already compiles with 25.
+val compilerJdk = providers.gradleProperty("dep.jdk.compiler").get().toInt()
+
+// CrystalGraphics' version, for what a published module's metadata names. @see crystalGraphicsVersion
+extra["crystalgraphicsVersion"] = crystalGraphicsVersion()
+
+subprojects {
+    if (path == ":runtime:mc:1710") return@subprojects
+    plugins.withType<JavaBasePlugin> {
+        val toolchains = extensions.getByType<JavaToolchainService>()
+        tasks.withType<JavaCompile>().configureEach {
+            javaCompiler.set(toolchains.compilerFor { languageVersion.set(JavaLanguageVersion.of(compilerJdk)) })
+        }
+    }
+}
 
 // ── Everything a consuming mod's dev run reads, built ────────────────────────────────────────────
 //
@@ -99,6 +127,12 @@ val prismInstances: List<PrismInstance> = run {
     }
 }
 
+// The consumer plugins publish with the artifacts they name. @see consumer-plugin
+if (gradle.parent == null) {
+    tasks.named("publishToMavenLocal") { dependsOn(gradle.includedBuild("consumer-plugin").task(":publishToMavenLocal")) }
+    tasks.named("publish") { dependsOn(gradle.includedBuild("consumer-plugin").task(":publish")) }
+}
+
 val deploySingleJars = tasks.register("deploySingleJars") {
     group = "crystalgui"
     description = "Puts every single jar into every Prism instance named in local.properties."
@@ -115,6 +149,15 @@ val deploySingleJars = tasks.register("deploySingleJars") {
     val withLanguage = cgWithLanguage
     val localProperties = rootProject.file("local.properties")
     val instances = prismInstances
+    // Another mod shipped this way -- a sample, a consumer's jar -- installed beside ours, into the
+    // targeted instances only: a jar whose variants do not cover an instance stops it loading.
+    val extraMods = (providers.gradleProperty("cgExtraMods").orNull ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { file(it) }
+    val extraTargets = (providers.gradleProperty("cgTargets").orNull ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    if (extraMods.isNotEmpty() && extraTargets.isEmpty()) {
+        throw GradleException("-PcgExtraMods needs -PcgTargets: those mods go only where their variants run")
+    }
 
     doLast {
         if (!localProperties.isFile) {
@@ -127,7 +170,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             if (withLanguage) add(langJar.get().asFile)
             add(graphicsJar)
         }
-        (jars + jomlJar).filterNot { it.isFile }
+        (jars + jomlJar + extraMods).filterNot { it.isFile }
             .forEach { throw GradleException("${it.name} was not built") }
         if (!withLanguage) logger.lifecycle("[cgui] -PcgNoLanguage: crystalgui_language is NOT deployed")
 
@@ -137,6 +180,12 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             if (dir.isNullOrBlank()) {
                 logger.lifecycle("[cgui] {} is not set; skipping", key)
                 return@forEach
+            }
+            // An instance renamed in Prism leaves this pointing at nothing, and creating `mods/` there would
+            // turn a stale entry into a folder Prism lists as a broken instance.
+            if (!File(dir, "instance.cfg").isFile) {
+                throw GradleException("$key names $dir, which is not a Prism instance (no instance.cfg) "
+                    + "-- renamed in Prism? Fix the path in local.properties.")
             }
             val mods = File(dir, ".minecraft/mods")
             mods.mkdirs()
@@ -155,6 +204,12 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             mods.listFiles().orEmpty()
                 .filter { file -> oursPrefixes.any { file.name.startsWith(it) } }
                 .forEach { it.delete() }
+            // The extra mods the last deploy installed, which this one replaces or leaves out.
+            val extraRecord = File(mods, ".cg-extra-mods")
+            if (extraRecord.isFile) extraRecord.readLines().filter { it.isNotBlank() }.forEach { File(mods, it).delete() }
+            val extras = if (inst.label in extraTargets) extraMods else emptyList()
+            if (extras.isEmpty()) extraRecord.delete()
+            else extraRecord.writeText(extras.joinToString(System.lineSeparator(), postfix = System.lineSeparator()) { it.name })
             // JOML GOES ONLY WHERE MINECRAFT SHIPS NONE, and it is the one artefact with that shape.
             //
             // MC 1.19.3+ ships JOML as a real named module, so a second copy in `mods/` is a split
@@ -162,7 +217,7 @@ val deploySingleJars = tasks.register("deploySingleJars") {
             // line. 1.7.10 has no JOML at all and no module system to object, so it needs exactly
             // this. Installing it everywhere would break every 1.19.3+ instance, so it is declared
             // per instance in local.properties (prismInstanceJoml) rather than inferred here.
-            val instanceJars = if (inst.needsJoml) jars + jomlJar else jars
+            val instanceJars = (if (inst.needsJoml) jars + jomlJar else jars) + extras
 
             instanceJars.forEach { source ->
                 val target = File(mods, source.name)
@@ -186,8 +241,29 @@ val deploySingleJars = tasks.register("deploySingleJars") {
 // The client half of the matrix. `checkSingleJar` asserts what the jar IS; this asserts that four
 // real clients each draw from it. Sequential, because there is one GPU and one launcher.
 //
-//   ./gradlew prodSmoke
-//   ./gradlew prodSmoke -PcgTargets=1710,1201forge
+//   ./gradlew prodSmoke                                   # the SWEEP below -- the default wide check
+//   ./gradlew prodSmoke -PcgTargets=1710,1201forge        # just these
+//   ./gradlew prodSmoke -PcgTargets=all                   # every instance in local.properties: rarely
+//   ./gradlew prodSmoke -PcgBatch=2
+//   ./gradlew prodSmoke -PcgTargets=1165forge -PcgSmokeProps=crystalgui.autotest.complete=true,crystalgui.autotest.script=Probe.java
+
+/**
+ * One instance per Minecraft major, and the first and last of a major with many minors -- on every loader
+ * from 1.20, where all three ship. Thirty clients where every instance is over a hundred. OLDEST
+ * FIRST: prodSmoke runs a named list in its order, so the batch running says how far along it is.
+ * docs/CGUI_BUILD.md § A wide check is the sweep.
+ */
+val prodSmokeSweep = listOf(
+    "1710", "189forge", "1102forge", "1122forge", "1132forge",
+    "1144fabric", "1152forge", "1165forge", "1171forge", "1182fabric",
+    "119forge", "1194fabric",
+    // NeoForge begins at 1.20.2.
+    "1201forge", "1201fabric", "1202neoforge", "1206forge", "1206fabric", "1206neoforge",
+    "1214forge", "1214fabric", "1214neoforge", "12111forge", "12111fabric", "12111neoforge",
+    // Forge's first 26.x is 26.1.1: Forge 62 cannot boot 26.1.
+    "261fabric", "261neoforge", "2611forge", "262forge", "262fabric", "262neoforge",
+)
+
 val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     // -PcgNoDeploy drives whatever is ALREADY installed. Rebuilding and redeploying both single jars is
     // minutes and driving the clients is seconds, so paying for the first while iterating on the second
@@ -197,36 +273,56 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     // without being named twice. `-PcgTargets` filters it by label.
     instances.set(prismInstances.map { "${it.key}=${it.label}" })
     outputDir.set(layout.buildDirectory.dir("prodSmoke"))
-    onlyTargets.set(
-        (providers.gradleProperty("cgTargets").orNull ?: "")
-            .split(',').map { it.trim() }.filter { it.isNotEmpty() })
+    onlyTargets.set(when (val asked = providers.gradleProperty("cgTargets").orNull?.trim()) {
+        null, "", "sweep" -> prodSmokeSweep
+        "all" -> emptyList()
+        else -> asked.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    })
+    // -PcgBatch=<n> clients at a time; the task defaults to 4. Eight at once crashed a workstation.
+    providers.gradleProperty("cgBatch").orNull?.let { batchSize.set(it.toInt()) }
+    // -PcgSmokeProps=crystalgui.autotest.complete=true,... switches a probe on for every client.
+    extraProperties.set((providers.gradleProperty("cgSmokeProps").orNull ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() })
 }
 
-// ── J10 / E-A1 day 3: every era target, compiled by one task ─────────────────────────────────────
+// ── Every era target, compiled by one task ───────────────────────────────────────────────────────
 //
-// The spike's exit condition includes "checkAllTargets compiles every target", and the reason it is
-// one task is the rule it enforces: a refactor is compiled against EVERY version before it is
-// committed, not just against whichever node the IDE happens to have active. A break line that only
-// holds for the active version is invisible until somebody else builds.
-//
-// The node list mirrors the `stonecutter { }` declaration in settings.gradle.kts and has to be
-// updated with it. Deriving it instead would mean configuring those projects eagerly, which is the
-// cost this task exists to keep measurable.
-//
-// Absent when `-PcgNoSpike` drops the tree, so the flag stays a clean switch.
-val cgSpikeNodes = listOf(
-    ":runtime:mc:spike:common:1.20.1",
-    ":runtime:mc:spike:common:1.19.4",
-    ":runtime:mc:spike:forge:1.20.1",
-    ":runtime:mc:spike:fabric:1.20.1",
-    ":runtime:mc:spike:fabric:1.19.4",
-)
+// Every node of the 1.20.x tree, every source set -- the rule is that a change is compiled against
+// every Minecraft version before it is committed, not only the IDE's active node. CrystalGraphics'
+// definition, shared with it: @see cgbuildlogic.registerCheckAllTargets
+registerCheckAllTargets()
 
-if (cgSpikeNodes.all { findProject(it) != null }) {
-    tasks.register("checkAllTargets") {
-        group = "verification"
-        description = "Compiles every era target the spike declares -- all versions, both loaders."
-        dependsOn(cgSpikeNodes.map { "$it:compileJava" })
+// ── The footprint budget ─────────────────────────────────────────────────────────────────────────
+//
+//   git clone --recursive <repo> fresh && cd fresh
+//   ./gradlew singleJar languageJar checkFootprint
+//
+// What a FRESH clone's jar build leaves in the checkout: every build/ and project .gradle/ directory,
+// both repositories. A working checkout holds real nodes, run directories and server installs and is over
+// any budget, so this is run on a fresh clone rather than wired into `check`. ~/.gradle is shared by every
+// clone on the machine and is not counted. 700 MB: a fresh clone measured 655 on 2026-09-27, 236 of
+// them the two 1.7.10 RFG modules. -PcgFootprintBudgetMb overrides it.
+tasks.register("checkFootprint") {
+    group = "verification"
+    description = "Fails when this checkout's build output is over budget -- run it on a fresh clone."
+    val root = rootDir
+    val budgetMb = (providers.gradleProperty("cgFootprintBudgetMb").orNull ?: "700").toLong()
+    mustRunAfter("singleJar", "languageJar")
+    doLast {
+        val found = mutableListOf<Pair<File, Long>>()
+        fun sizeOf(dir: File): Long = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        fun visit(dir: File) {
+            dir.listFiles().orEmpty().filter { it.isDirectory && it.name != ".git" }.forEach {
+                if (it.name == "build" || it.name == ".gradle") found += it to sizeOf(it) else visit(it)
+            }
+        }
+        visit(root)
+        val totalMb = found.sumOf { it.second } / (1024 * 1024)
+        found.sortedByDescending { it.second }.take(10).forEach { (dir, bytes) ->
+            logger.lifecycle("[footprint] {} MB  {}", bytes / (1024 * 1024), dir.relativeTo(root))
+        }
+        logger.lifecycle("[footprint] {} MB in {} directories; budget {} MB", totalMb, found.size, budgetMb)
+        if (totalMb > budgetMb) throw GradleException("build output is $totalMb MB, over the $budgetMb MB budget")
     }
 }
 
@@ -234,10 +330,11 @@ tasks.register("assembleConsumerRuntime") {
     group = "crystalgui"
     description = "Builds every jar a consuming mod's dev run puts on its classpath."
 
-    dependsOn(":core:jar", ":taffy:jar", ":runtime:mc:modern:common:jar", ":runtime:mc:modern:forge:jar")
+    // A 1.20.1 Forge consumer's, so the 1.20.1 nodes -- in both builds, which share the layout.
+    dependsOn(":core:jar", ":taffy:jar", "$MODERN_TREE:common:1.20.1:jar", "$MODERN_TREE:forge:1.20.1:jar")
 
     listOf(":core:jar", ":platform:jar", ":freetype-msdfgen-harfbuzz-bindings:jar",
-           ":runtime:mc:modern:common:jar", ":runtime:mc:modern:forge:jar")
+           "$MODERN_TREE:common:1.20.1:jar", "$MODERN_TREE:forge:1.20.1:jar")
         .forEach { dependsOn(gradle.includedBuild("CrystalGraphics").task(it)) }
 }
 
@@ -432,6 +529,81 @@ fun fetchInto(url: String, into: File, probe: Boolean = false): String? = try {
     unreachable.toString()
 }
 
+// ── What a running client asks the file for, per node ────────────────────────────────────────────
+
+/** 1.20.1 before 1.20.10: numeric per segment. */
+fun compareMinecraft(a: String, b: String): Int {
+    val left = a.split('.').map { it.toIntOrNull() ?: 0 }
+    val right = b.split('.').map { it.toIntOrNull() ?: 0 }
+    for (i in 0 until maxOf(left.size, right.size)) {
+        val c = left.getOrElse(i) { 0 }.compareTo(right.getOrElse(i) { 0 })
+        if (c != 0) return c
+    }
+    return 0
+}
+
+/** Whether `version` is in a catalog range: `[1.16.1,1.17)`, `[1.21.11,1.21.12)`, `[1.7.10]`. */
+fun inMinecraftRange(range: String, version: String): Boolean {
+    val inner = range.trim().removePrefix("[").removePrefix("(").removeSuffix("]").removeSuffix(")")
+    if (',' !in inner) return compareMinecraft(version, inner) == 0
+    val low = inner.substringBefore(',').trim()
+    val high = inner.substringAfter(',').trim()
+    val lowOk = low.isEmpty() || compareMinecraft(version, low).let { it > 0 || (it == 0 && range.startsWith("[")) }
+    val highOk = high.isEmpty() || compareMinecraft(version, high).let { it < 0 || (it == 0 && range.endsWith("]")) }
+    return lowOk && highOk
+}
+
+/** version -> MCP stable release, read from the Java table the running client uses, so the two cannot drift. */
+fun mcpStableTable(source: String, pattern: Regex): List<Pair<String, String>> =
+    pattern.findAll(file(source).readText()).map { it.groupValues[1] to it.groupValues[2] }.toList()
+
+val modernMcpStable by lazy {
+    mcpStableTable("runtime/mc/modern/common/src/lang/java/com/crystalgui/mc/modern/lang/ScriptServiceModern.java",
+        Regex("""case "([\d.]+)": return "([\w.-]+)";""")).toMap()
+}
+val legacyMcpStable by lazy {
+    mcpStableTable("runtime/mc/legacy/forge/src/lang/java/com/crystalgui/mc/legacy/lang/ScriptServiceLegacy.java",
+        Regex("""\{"([\d.]+)", "([\w.-]+)"\}"""))
+}
+
+/**
+ * The ids a client of `loader` on Minecraft `version` fetches its script names through -- each must be PINNED
+ * in download/locations.json, which is what lets a second host or the mirror serve it safely.
+ *
+ * Forge runs Mojang's names from 1.20.6 and NeoForge always has, so both need nothing there.
+ */
+fun scriptingDownloads(era: String, loader: String, version: String): List<String> = when {
+    era == "legacy" -> listOf("forge/mcp-stable/" +
+        (legacyMcpStable.lastOrNull { compareMinecraft(it.first, version) <= 0 } ?: legacyMcpStable.first()).second)
+    loader == "fabric" -> listOf("fabric/intermediary/$version", "mojang/$version/client.txt")
+    loader == "forge" && compareMinecraft(version, "1.20.6") < 0 ->
+        modernMcpStable[version]?.let { listOf("forge/mcp-stable/$it") }
+            ?: listOf("mojang/$version/client.txt", "forge/mcp-config/$version")
+    else -> emptyList()
+}
+
+/** Every loader node: (era, loader, its own version, the range it claims). */
+fun scriptingNodes(): List<List<String>> = allprojects.mapNotNull { node ->
+    val parts = node.path.split(':')
+    // :runtime:mc:<era>:<loader>:<version>
+    if (parts.size != 6 || parts[3] !in setOf("modern", "legacy") || parts[4] == "common") return@mapNotNull null
+    val range = node.findProperty("variant.minecraft")?.toString() ?: return@mapNotNull null
+    listOf(parts[3], parts[4], parts[5], range)
+}
+
+/** Every (node, version) whose script downloads the file does not pin, for `versionsOf` each node's range. */
+fun scriptingCoverageOffences(versionsOf: (node: List<String>) -> List<String>): List<String> {
+    val pinned = membersOf(readDownloadLocations()["files"])
+        .filter { membersOf(it.value)["digest"] != null }.keys
+    return scriptingNodes().flatMap { node ->
+        val (era, loader) = node
+        versionsOf(node).flatMap { version ->
+            scriptingDownloads(era, loader, version).filter { it !in pinned }
+                .map { "$loader $version (node ${node[2]}): no pinned $it" }
+        }
+    }.distinct()
+}
+
 // Part of `check` through :language's, since a band re-pinned there is what makes the file stale.
 tasks.register("checkDownloadLocations") {
     group = "verification"
@@ -477,11 +649,33 @@ tasks.register("checkDownloadLocations") {
         if (listed != expected) {
             offences += "the engines are not the resolved bands; replace \"bands\" with:\n" + bandsJson(expected)
         }
+        // EVERY NODE'S OWN VERSION has its script names pinned; verifyScriptingCoverage checks its whole range.
+        offences += scriptingCoverageOffences { node -> listOf(node[2]) }
 
         if (offences.isNotEmpty()) {
             throw GradleException("download/locations.json:\n  " + offences.joinToString("\n  "))
         }
         println("download locations OK: ${lines.size} downloads, ${expected.values.sumOf { it.size }} engine jars")
+    }
+}
+
+tasks.register("verifyScriptingCoverage") {
+    group = "distribution"
+    description = "Fails if a Minecraft release a node claims has no pinned script names. Needs the network."
+    doLast {
+        // Mojang's release list is what a range expands against: a node claiming [1.16.1,1.17) runs on 1.16.3.
+        val manifest = File(temporaryDir, "version_manifest_v2.json")
+        fetchInto("https://piston-meta.mojang.com/mc/game/version_manifest_v2.json", manifest)
+            ?.let { throw GradleException("Mojang's version list: $it") }
+        @Suppress("UNCHECKED_CAST")
+        val releases = ((groovy.json.JsonSlurper().parse(manifest) as Map<String, Any?>)["versions"] as List<Map<String, Any?>>)
+            .filter { it["type"] == "release" }.map { it["id"].toString() }
+        val offences = scriptingCoverageOffences { node -> releases.filter { inMinecraftRange(node[3], it) } }
+        if (offences.isNotEmpty()) {
+            throw GradleException("download/locations.json does not cover every version a node claims -- pin each " +
+                "(its digest from the publisher, as the others are):\n  " + offences.joinToString("\n  "))
+        }
+        println("script names pinned for every release ${scriptingNodes().size} nodes claim")
     }
 }
 
@@ -492,7 +686,7 @@ tasks.register("verifyDownloadLocations") {
         val json = readDownloadLocations()
         val self = stringsOf(json["self"])
         // A template's address has no bytes until filled, so it is probed at a version somebody runs.
-        val samples = mapOf("{minecraft}" to "1.20.1", "{java}" to "17")
+        val samples = mapOf("{minecraft}" to "1.20.1", "{java}" to "17", "{version}" to "39-1.12")
         val file = File(temporaryDir, "fetched")
         val unserved = mutableListOf<String>()
         var live = 0

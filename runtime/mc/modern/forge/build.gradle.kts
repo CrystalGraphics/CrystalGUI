@@ -1,39 +1,92 @@
-// runtime/mc/modern/forge — MinecraftForge 1.20.1 loader subproject.
-// Uses ModDevGradle legacyForge plugin (net.neoforged.moddev.legacyforge), which explicitly
-// supports MinecraftForge 1.17–1.20.1 and is Gradle 9 + JDK 25 compatible.
+// The `forge` branch — MinecraftForge, one node per Minecraft version (`versions/<version>/`, whose
+// gradle.properties pins the toolchain and Parchment). Three toolchains, chosen by those pins
+// (cgbuildlogic.useModernMinecraft):
+//
+//   - below 1.17 the node pins `minecraft.unimined`: Unimined, its dev runs made real by uniminedDevRun.
+//
+//   - 1.20.1 pins `forge.version` alone: ModDevGradle's legacyForge, Forge's userdev, dev runs included.
+//     legacyForge stops at 1.20.1.
+//   - 1.20.2+ pins `neoform.version` too: vanilla Minecraft through NeoForm with Forge's own jars
+//     compileOnly, and no dev run. @see cgbuildlogic.useForgeApi
 //
 // Previously used dev.architectury.loom:1.14.473, replaced because:
 //   - Architectury-loom's Forge mode eagerly resolves a detachedConfiguration inside the
 //     jvmArguments property getter, which is a Gradle 9 hard error.
 //   - No fix exists upstream (1.14.473 is the last published build, March 2026).
 //   - There is no Gradle 9 property to suppress the exclusive-lock requirement.
-//
-// The legacyForge plugin version is inherited from settings.gradle.kts where
-// net.neoforged.moddev.repositories:2.0.141 is applied — that settings plugin pins
-// all three net.neoforged.moddev.* plugins to the same version automatically.
+
+import cgbuildlogic.commonNode
+import cgbuildlogic.devRunSourceSet
+import cgbuildlogic.registerSrgReobf
+import cgbuildlogic.registerThinRename
+import cgbuildlogic.stubMode
+import cgbuildlogic.useForgeApi
+import cgbuildlogic.uniminedDevRun
+import cgbuildlogic.useModernMinecraft
+import cgbuildlogic.backportedMojmap
+import cgbuildlogic.usesUniminedMinecraft
+import net.neoforged.moddevgradle.dsl.NeoForgeExtension
+import net.neoforged.moddevgradle.legacyforge.dsl.LegacyForgeExtension
+import net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension
+import xyz.wagyourtail.unimined.api.UniminedExtension
 
 plugins {
-    id("cg-mc1201-loader")
-    id("net.neoforged.moddev.legacyforge")
+    id("cg-modern-loader")
     id("com.gradleup.shadow")
+    // Declared here and applied only on a node below 1.17, so it loads in this branch alone.
+    id("xyz.wagyourtail.unimined") version "1.4.1" apply false
 }
 
-group = property("modGroup").toString()
-version = property("modVersion").toString()
-base { archivesName.set("crystalgui-mc1201-forge") }
+useModernMinecraft()
+val legacyForge = extensions.findByType<LegacyForgeExtension>()
+
+// Forge below 1.17 through Unimined, which neither ModDevGradle mode reaches: Forge's userdev at
+// Mojang's names. Its dev run is on the node's own Java, 8 below 1.17, which the abstract modules'
+// Java 8 copies make possible. @see cgbuildlogic.uniminedDevRun
+if (!stubMode && usesUniminedMinecraft) {
+    apply(plugin = "xyz.wagyourtail.unimined")
+    the<UniminedExtension>().minecraft {
+        version(property("mc.version").toString())
+        mappings {
+            searge()
+            // Mojang named nothing before 1.14.4: the backported names stand in, under the same namespace.
+            val backport = backportedMojmap()
+            if (backport != null) mapping(backport, "mojmap") { requires("official"); provides("mojmap" to true) }
+            else mojmap()
+        }
+        minecraftForge { loader(property("forge.version").toString()) }
+        // The shipped jar is the thin shadow jar, renamed by SrgReobfJar like the NeoForm nodes'.
+        defaultRemapJar = false
+    }
+    // Unimined attaches Minecraft to `main` alone; the language mod's source set needs it too.
+    sourceSets.findByName("lang")?.let { lang ->
+        the<UniminedExtension>().minecraft(lang) { combineWith(sourceSets.main.get()) }
+    }
+    uniminedDevRun()
+}
 
 // Adds CrystalGraphics compile-time deps (core, platform, mc1201-common) via composite substitution.
 apply(from = rootProject.file("gradle/module_integration/integration.gradle.kts").toURI())
 
-legacyForge {
-    // MinecraftForge artifact ID format: "<mcVersion>-<forgeVersion>"
-    version = "1.20.1-${property("mc1201.forge")}"
+if (!stubMode && legacyForge == null && !usesUniminedMinecraft) {
+    useForgeApi()
+    configure<NeoForgeExtension> {
+        // Parchment publishes nothing for 26.x: a node pinning none gets Mojang's names alone.
+        if (findProperty("parchment.version") != null) parchment {
+            minecraftVersion = property("parchment.mc").toString()
+            mappingsVersion = property("parchment.version").toString()
+        }
+    }
+}
 
-    parchment {
-        minecraftVersion = property("mc1201.parchment.mc").toString()
-        mappingsVersion = property("mc1201.parchment").toString()
+legacyForge?.apply {
+    // Parchment publishes nothing for 26.x: a node pinning none gets Mojang's names alone.
+    if (findProperty("parchment.version") != null) parchment {
+        minecraftVersion = property("parchment.mc").toString()
+        mappingsVersion = property("parchment.version").toString()
     }
 
+    // Per NODE: `project.file` resolves under versions/<version>/, so two versions never share a world.
     runs {
         create("client") {
             client()
@@ -48,19 +101,22 @@ legacyForge {
     mods {
         create("crystalgui") {
             sourceSet(sourceSets.main.get())
-            // Dev-run classpath: core and mc1201:common are compileOnly for production
+            // Dev-run classpath: core and the common node are compileOnly for production
             // (shadowJar bundles them via from(zipTree(...))), but ModDevGradle dev runs only see
             // what's declared in this mods{} block. Adding their source sets here puts their
             // compiled classes in the mod's virtual JAR, making them visible to ModuleClassLoader.
-            sourceSet(project(":core").extensions.getByType<SourceSetContainer>()["main"])
-            sourceSet(project(":runtime:mc:modern:common").extensions.getByType<SourceSetContainer>()["main"])
+            sourceSet(devRunSourceSet(project(":core")))
+            sourceSet(project.commonNode.extensions.getByType<SourceSetContainer>()["main"])
+            // The @Mod itself: one class for every Forge, compiled apart from any node.
+            sourceSet(project(":runtime:mc:forge-bootstrap").extensions.getByType<SourceSetContainer>()["main"])
         }
         // A SECOND MOD ON THE DEV RUN (J8), because that is what it is in production. `-PcgNoLanguage`
         // leaves it out, which is how the degraded configuration is exercised without building a jar.
         if (!providers.gradleProperty("cgNoLanguage").isPresent) {
             create("crystalgui_language") {
                 sourceSet(sourceSets["lang"])
-                sourceSet(project(":runtime:mc:modern:common").extensions.getByType<SourceSetContainer>()["lang"])
+                sourceSet(project.commonNode.extensions.getByType<SourceSetContainer>()["lang"])
+                sourceSet(project(":runtime:mc:forge-bootstrap").extensions.getByType<SourceSetContainer>()["lang"])
             }
         }
     }
@@ -70,83 +126,83 @@ legacyForge {
 // loader block on purpose -- ModDevGradle creates additionalRuntimeClasspath while that extension is
 // configured, not when its plugin is applied, so an apply above it fails with "Configuration with
 // name 'additionalRuntimeClasspath' not found".
-apply(from = rootProject.file("gradle/module_integration/crystalgraphics-run.gradle.kts").toURI())
+if (legacyForge != null) apply(from = rootProject.file("gradle/module_integration/crystalgraphics-run.gradle.kts").toURI())
 
-// Extracts MinecraftForge 1.20.1 sources and resources into build/mc-src for local navigation.
+// Extracts this node's Minecraft + Forge sources and resources into build/mc-src for local navigation.
 // Sync (not Copy) removes stale files when the source jar changes between toolchain version bumps.
-val extractMcSources by tasks.registering(Sync::class) {
-    description = "Extracts MinecraftForge 1.20.1 sources and resources into build/mc-src for local navigation."
-    group = "crystalgui"
+// A real node only: in stub mode there are no sources to extract.
+if (!stubMode) {
+    val extractMcSources = tasks.register<Sync>("extractMcSources") {
+        description = "Extracts this node's Minecraft + Forge sources and resources into build/mc-src for local navigation."
+        group = "crystalgui"
 
-    // dependsOn (not mustRunAfter) — mustRunAfter does not cause this task to run on a clean checkout.
-    dependsOn("createMinecraftArtifacts")
+        // dependsOn (not mustRunAfter) — mustRunAfter does not cause this task to run on a clean checkout.
+        dependsOn("createMinecraftArtifacts")
 
-    // Lazy providers resolved at execution time — never at configuration time (Gradle 9 rule).
-    val sourcesJar = layout.buildDirectory.dir("moddev/artifacts").map { dir ->
-        dir.asFileTree.matching { include("*-sources.jar") }.singleFile
+        // Lazy providers resolved at execution time — never at configuration time (Gradle 9 rule).
+        val sourcesJar = layout.buildDirectory.dir("moddev/artifacts").map { dir ->
+            dir.asFileTree.matching { include("*-sources.jar") }.singleFile
+        }
+        val resourcesJar = layout.buildDirectory.dir("moddev/artifacts").map { dir ->
+            // `client-extra-<v>.jar` on 1.20.x, `<loader>-<v>-client-extra-aka-minecraft-resources.jar` on 1.21.
+            // 26.x makes none: the resources ride in the merged jar, beside its classes.
+            dir.asFileTree.matching { include("*client-extra*.jar") }.files.singleOrNull()
+                ?: dir.asFileTree.matching { include("*-merged.jar") }.singleFile
+        }
+
+        from(zipTree(sourcesJar)) { into("java") }
+        from(zipTree(resourcesJar)) { into("resources"); exclude("**/*.class", "META-INF/**") }
+        into(layout.buildDirectory.dir("mc-src"))
     }
-    val resourcesJar = layout.buildDirectory.dir("moddev/artifacts").map { dir ->
-        dir.asFileTree.matching { include("client-extra-*.jar") }.singleFile
-    }
 
-    from(zipTree(sourcesJar)) { into("java") }
-    from(zipTree(resourcesJar)) { into("resources") }
-    into(layout.buildDirectory.dir("mc-src"))
+    // extractMcSources is cheap (unzips an already-present jar — createMinecraftArtifacts ran first).
+    // Wire it into classes so build/mc-src/ is always populated after a normal compile.
+    if (!usesUniminedMinecraft) tasks.named("classes") { dependsOn(extractMcSources) }
 }
 
-// extractMcSources is cheap (unzips an already-present jar — createMinecraftArtifacts ran first).
-// Wire it into classes so build/mc-src/ is always populated after a normal compile.
-tasks.named("classes") { dependsOn(extractMcSources) }
-
-// The SHIPPED jar has to be reobfuscated, and it is the SHADOW jar that ships.
+// The SHIPPED jars are reobfuscated where Forge runs SRG, and it is the SHADOW jar that ships.
 //
-// Forge 1.20.1 runs SRG member names; a mod is compiled against official ones. ModDevGradle
+// Forge 1.17–1.20.4 runs SRG member names; a mod is compiled against official ones. ModDevGradle
 // reobfuscates `jar` by default, which here is the six-class loader stub -- so `assemble` produced a
 // 10 KB jar that was correctly mapped and had no engine in it, beside a 54 MB one that had everything
 // and called `Minecraft.getInstance()` under a name production does not have. Both are unusable, and a
-// dev run cannot show it: dev is deobfuscated, so official names are the right ones there.
+// dev run cannot show it: dev is deobfuscated, so official names are the right ones there. From 1.20.6
+// Forge runs official names too, and the jars ship as compiled. @see cgbuildlogic.forgeRunsSrg
 //
-// Downgrade, then SHADE, then remap. jvmdg rewrites bytecode and adds a dependency on its own stubs;
-// the remapper only rewrites names, so it has to run last, on the class files that will actually ship.
-val reobfShadowJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension>()
-    .reobfuscate(
-        tasks.named<org.gradle.api.tasks.bundling.AbstractArchiveTask>("shadeDowngradedShadowJar"),
-        sourceSets.main.get()) {
+// Through registerThinRename, which runs the committed stub.tsrg instead on a node in stub mode.
+val main = sourceSets.main.get()
+if (legacyForge != null) {
+    // Downgrade, then SHADE, then remap. jvmdg rewrites bytecode and adds a dependency on its own
+    // stubs; the remapper only rewrites names, so it runs last, on the class files that ship. Not on
+    // `assemble` (J7): `./gradlew reobfShadeDowngradedShadowJar` still produces the fat jar.
+    the<ObfuscationExtension>().reobfuscate(tasks.named<AbstractArchiveTask>("shadeDowngradedShadowJar"), main) {
         archiveClassifier.set("srg")
     }
-
-// Not on `assemble` (J7): the single jar is the shipping artifact, and reobfuscating a fat jar nothing
-// installs was pure cost. `./gradlew reobfShadowJar` still produces one.
-
-// -- The thin jar, reobfuscated (J1) --------------------------------------------------------------
-//
-// The merge's input from this loader: its own classes plus the relocated :runtime:mc:modern:common, at SRG
-// names. Reobfuscated for the same reason the shadow jar is -- production runs SRG members and a jar
-// built against official ones calls methods this Minecraft does not have.
-val reobfThinJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension>()
-    .reobfuscate(
-        tasks.named<org.gradle.api.tasks.bundling.AbstractArchiveTask>("thinShadowJar"),
-        sourceSets.main.get()) {
-        archiveClassifier.set("thin")
-    }
-
-// Registered by cg-mc1201-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
-tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
-    jar.set(reobfThinJar.flatMap { it.archiveFile })
 }
-tasks.named("assemble") { dependsOn(reobfThinJar) }
-
-// -- The language thin jar, reobfuscated (J8) -----------------------------------------------------
-//
 // `main` and not `lang` as the second argument: ModDevGradle looks for `<sourceSet>RuntimeElements`,
-// which only `main` has, and what that argument supplies is the REMAPPER's classpath rather than the
-// jar's contents. Passing `lang` fails with "langRuntimeElements not found".
-val reobfLangThinJar = the<net.neoforged.moddevgradle.legacyforge.dsl.ObfuscationExtension>()
-    .reobfuscate(
-        tasks.named<org.gradle.api.tasks.bundling.AbstractArchiveTask>("langThinShadowJar"),
-        sourceSets.main.get()) {
+// which only `main` has, and what it supplies is the REMAPPER's classpath rather than the jar's
+// contents. Passing `lang` fails with "langRuntimeElements not found". main's classpath for the same
+// reason on the other nodes: the renamer only needs what Minecraft members are overridden, and the
+// language libraries (ECJ, Rhino) trip its inheritance scan.
+registerThinRename("langThinShadowJar", "lang-thin") {
+    if (legacyForge == null) registerSrgReobf("langThinShadowJar", "lang-thin", main.compileClasspath)
+    else the<ObfuscationExtension>().reobfuscate(tasks.named<AbstractArchiveTask>("langThinShadowJar"), main) {
         archiveClassifier.set("lang-thin")
     }
+}
+// The merge's input from this node: its own classes plus its relocated common node, at SRG names.
+val thinJar = registerThinRename("thinShadowJar", "thin") {
+    if (legacyForge == null) registerSrgReobf("thinShadowJar", "thin", main.compileClasspath)
+    else the<ObfuscationExtension>().reobfuscate(tasks.named<AbstractArchiveTask>("thinShadowJar"), main) {
+        archiveClassifier.set("thin")
+    }
+}
+
+// Registered by cg-modern-loader with what a CrystalGUI thin jar may contain; only the jar is ours.
+tasks.named<cgbuildlogic.CheckThinJar>("checkThinJar") {
+    jar.set(thinJar.flatMap { it.archiveFile })
+}
+tasks.named("assemble") { dependsOn(thinJar) }
 
 
 // The per-loader `deployMods` is retired (J7). One artifact installs on every loader now, so the root

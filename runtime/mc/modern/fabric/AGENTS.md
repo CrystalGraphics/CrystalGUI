@@ -2,12 +2,24 @@
 
 ## Target Versions
 
-MC 1.20.1 / Fabric
+MC 1.14.4–26.2 / Fabric, a node per `versions/<version>` (26.1.2 also claims 26.1 and 26.1.1); 1.14-1.14.3, 1.16 and 1.16.1 are refused, their
+only Fabric API builds lacking `lifecycle-events-v1` or `networking-api-v1`. Fabric API for 1.14 has no
+HUD callback either, so there the HUD is a node mixin on `Gui.render` (`mixin/HudHook`, gated by
+`CrystalGuiFabricMixins`). Below 1.16 Fabric API has no screen
+events, so a pinned window draws no overlay over another mod's screen there. Fabric API for 26.1 renamed
+`KeyBindingHelper` to `KeyMappingHelper`, replaced `HudRenderCallback` with `HudElementRegistry` and
+`ScreenEvents.afterRender` with `afterExtract`, and names its payload registries by direction.
+
+**Fabric API is required and is not in `fabric.mod.json`**: its id was `fabric` through 1.17, `fabric-api`
+providing `fabric` through 1.21.11, and `fabric-api` alone from 26.1, so no one id holds on every version.
+`FabricBootstrap` checks for either and refuses to start without one.
 
 ## The loader is registration only
 
-**Two entry points, and both are needed.** `fabric.mod.json` names them separately: `main` runs on
-both sides, `client` only on a client, and they are different interfaces.
+**Two entry points, and both are needed**: `main` runs on both sides, `client` only on a client.
+`fabric.mod.json` names one class for both, `FabricBootstrap`, which hands off by the running version —
+Fabric constructs every entry point its descriptor names, so naming the variants there would construct
+one compiled against a Minecraft that is not running.
 
 `CrystalGUIFabricCommon` is the `main` one and carries the `Network` transport and the `Events`
 inner class, because a dedicated server needs the channel. `CrystalGUIFabric` is the `client` one
@@ -15,7 +27,7 @@ and does nothing but call `Events.registerClient()` — the half that touches cl
 server must never load.
 
 The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in `:runtime:mc:modern:common`'s `LifecycleCrystalGUI`.
+mod and owns them. Everything this loader forwards to lives in the common branch's `LifecycleCrystalGUI`.
 
 ## Input is GLFW's callbacks, chained
 
@@ -33,40 +45,13 @@ consumes, Minecraft never sees. One path covers the HUD and a screen alike, so t
 > the focused editor at the same time. Key, mouse-button and scroll are the slots Minecraft uses, which
 > is why only typing doubles and everything else looks correct.
 
-## Minecraft Source Location
+## Toolchain, sources and checks
 
-Decompiled, Parchment-mapped sources are extracted into two subdirectories:
-
-| Path | Contents |
-|---|---|
-| `build/mc-src/java/` | MC 1.20.1 Java sources, decompiled by Loom via Vineflower, Parchment-mapped |
-| `build/mc-src/resources/` | MC client assets (assets/, data/, *.json, *.mcmeta) |
-
-Gitignored, not committed. Generate them with:
+Every node is built by Loom; pins in the catalog (`CrystalGraphics/docs/BUILD.md` § *Nodes and
+toolchains*).
 
 ```bash
-./gradlew :runtime:mc:modern:fabric:extractMcSources
-# or all three loader modules at once:
-./gradlew extractAllMcSources
+./gradlew :runtime:mc:modern:fabric:<version>:extractMcSources              # Vineflower, into versions/<version>/build/mc-src/
+./gradlew :runtime:mc:modern:fabric:<version>:serverSmoke -PcgAcceptEula
+./gradlew :runtime:mc:modern:fabric:<version>:connectionProbe -PcgNoLanguage   # the dev client cannot load the language mod
 ```
-
-Expect several minutes on the first run.
-
-Commonly referenced locations under `build/mc-src/java/`:
-
-- `net/minecraft/client/Minecraft.java` — main game class
-- `net/minecraft/client/renderer/` — rendering pipeline
-- `net/minecraft/resources/` — resource location / pack system
-- `net/minecraft/world/` — world/level logic
-
-## Build
-
-```bash
-./gradlew :runtime:mc:modern:fabric:compileJava
-./gradlew :runtime:mc:modern:fabric:shadowJar
-./gradlew :runtime:mc:modern:fabric:serverSmoke -PcgAcceptEula   # boots a dedicated server, asserts, stops
-```
-
-## Plugin
-
-Uses `fabric-loom 1.16.2`. Version pins live in `build.gradle.kts` under the `mc1201.*` keys.

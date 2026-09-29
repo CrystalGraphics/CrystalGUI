@@ -190,6 +190,46 @@ public class ModernFormatsTest {
                 "m_8055_", srgToOfficial.runtimeMethod(level, "getBlockState"));
     }
 
+    /** MCPConfig for 1.13–1.16: no header, and its classes are the MCP names Forge ran. */
+    private static final String JOINED_TSRG_V1 = String.join("\n",
+            "dhg net/minecraft/world/World",
+            "\ta (Lfx;)Ldkr; func_180495_p",
+            "\tc field_73012_v",
+            "fx net/minecraft/util/math/BlockPos",
+            "\tu ()I func_177958_n");
+
+    @Test
+    public void tsrgV1IsRecognisedByContentAndClaimsNoOtherFormat() throws IOException {
+        Path v1 = write("joined-v1.txt", JOINED_TSRG_V1);
+        assertTrue(new TsrgFormat().matches(v1));
+        assertFalse(new Tsrg2Format().matches(v1));
+        assertFalse(new TsrgFormat().matches(write("joined.tsrg", JOINED_TSRG)));
+        assertFalse(new TsrgFormat().matches(write("client.txt", CLIENT_TXT)));
+        assertFalse(new TsrgFormat().matches(write("mappings.tiny", MAPPINGS_TINY)));
+        assertEquals("tsrg", MappingFiles.formatOf(v1).id());
+    }
+
+    /**
+     * Forge before 1.17: MCP class names at runtime, so the join renames CLASSES too -- the runtime's
+     * {@code World} is Mojang's {@code Level}, and a script naming {@code Level} links against {@code World}.
+     */
+    @Test
+    public void tsrgV1JoinsIntoWhatAPre117ForgeRuntimeNeeds() throws IOException {
+        MappingSet.Builder official = MappingSet.builder();
+        new ProGuardFormat().parse(write("client.txt", CLIENT_TXT), official);
+        MappingSet.Builder srg = MappingSet.builder();
+        new TsrgFormat().parse(write("joined-v1.txt", JOINED_TSRG_V1), srg);
+
+        MappingSet srgToOfficial = srg.build().invert().then(official.build());
+
+        String world = "net/minecraft/world/World";
+        assertEquals("net/minecraft/world/level/Level", srgToOfficial.readableClass(world));
+        assertEquals("getBlockState", srgToOfficial.readableMethod(world, "func_180495_p"));
+        assertEquals("random", srgToOfficial.readableField(world, "field_73012_v"));
+        assertEquals("func_180495_p",
+                srgToOfficial.runtimeMethod("net/minecraft/world/level/Level", "getBlockState"));
+    }
+
     /** An unparseable file is skipped by every format rather than refused by one. */
     @Test
     public void somethingElseEntirelyIsNobodys() throws IOException {

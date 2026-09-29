@@ -156,6 +156,9 @@ taskbar {
     padding-bottom: 3px;
     padding-left: 8px;
     padding-right: 8px;
+    /* An entry's 28px plus the padding: with nothing running -- a desktop opened over the title screen,
+     * where the editor needs a server -- the bar would otherwise be the 6px of its padding. */
+    min-height: 34px;
     /* MICA, NOT ACRYLIC. The backdrop is blurred hard, desaturated, and then almost entirely replaced
      * by the tint, so what survives is a tone. Every lens term is off — `ior 1` is the documented
      * off-switch for refraction, `bezel 1` leaves no sharp band, `specular`/`glow`/`edge` at 0 draw

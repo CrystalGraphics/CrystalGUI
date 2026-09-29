@@ -1,5 +1,6 @@
 package com.crystalgui.mc.modern.client;
 
+import com.crystalgraphics.mc.modern.platform.Windows;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -8,14 +9,14 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.mc.modern.net.Connections;
+import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
-import net.minecraft.world.level.storage.LevelResource;
 
 /**
- * How MC 1.20.x answers the questions only a platform can. Nothing here decides anything.
+ * How the modern tree answers the questions only a platform can. Nothing here decides anything.
  *
  * @see HostServices
  */
@@ -42,7 +43,7 @@ final class HostModern implements HostServices {
     public Path localWorldDirectory() {
         Minecraft mc = Minecraft.getInstance();
         IntegratedServer server = mc == null ? null : mc.getSingleplayerServer();
-        return server == null ? null : server.getWorldPath(LevelResource.ROOT);
+        return server == null ? null : WorkspaceHostModern.worldRoot(server);
     }
 
     /**
@@ -60,13 +61,13 @@ final class HostModern implements HostServices {
     @Override
     public int surfaceWidth() {
         Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.getWindow() == null ? 0 : mc.getWindow().getWidth();
+        return mc == null || Windows.of(mc) == null ? 0 : Windows.of(mc).getWidth();
     }
 
     @Override
     public int surfaceHeight() {
         Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.getWindow() == null ? 0 : mc.getWindow().getHeight();
+        return mc == null || Windows.of(mc) == null ? 0 : Windows.of(mc).getHeight();
     }
 
     @Override

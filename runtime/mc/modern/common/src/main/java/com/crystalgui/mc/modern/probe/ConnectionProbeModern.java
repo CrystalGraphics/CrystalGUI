@@ -7,12 +7,13 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.ConnectionProbe;
 
+import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * The MC 1.20.x half of {@link ConnectionProbe}: six answers and two verbs.
+ * The modern half of {@link ConnectionProbe}: six answers and two verbs.
  *
  * <p>1.20.x had none of these checks — the six probes they came from were 1.7.10's alone, so the
  * session handshake, tree and state deltas, fan-out and the workspace had never been exercised over a
@@ -51,13 +52,13 @@ public final class ConnectionProbeModern {
         @Override
         public boolean screenIsUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && mc.screen != null;
+            return mc != null && ClientGame.screen(mc) != null;
         }
 
         @Override
         public void closeScreen() {
             Minecraft mc = Minecraft.getInstance();
-            if (mc != null) mc.setScreen(null);
+            if (mc != null) ClientGame.setScreen(mc, null);
         }
 
         @Override
