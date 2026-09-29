@@ -234,10 +234,12 @@ context, and gives you a real GL surface. What it cannot see is anything that cr
 | `cgui-styling` | `CgUiStylingScene` | Cascade, selectors, transitions |
 | `cgui-shadow-parts` | `CgUiShadowPartsScene` | **SPIKE S2** — a shadow-rooted `Button` beside the stock one under ONE stylesheet. `text { color: red }` reaches the stock label and **cannot** reach the shadow one, which takes its colour from `::part(label)`; the status line reports what focus retargets to. What a headless test cannot show is that an encapsulated widget still draws and behaves like a widget |
 | `cgui-visual-layers` | `CgUiVisualLayersScene` | FBO layer opacity + masking |
-| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area) and **the frame readout** (F7, F8 to expand its phases). *Grows with `plan/shell-windowing.md`: every W with something visible adds its demonstration here in the same commit* |
+| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area) **the frame readout** (F7, F8 to expand its phases) and **the Frame Profiler** — from the taskbar's **start button**, or F9 -- `profiler.open`, a command on every surface with a desktop, so the scene's key is the game's -- or a press on a bar of the F7 readout's sparkline, which opens that frame. **`-Dcrystalgui.harness.desktop.profiler=true` drives the profiler by itself**: opens it, records, then clicks the strip, a zone, wheels, pans, drags ranges (paused and live), steps with the arrow keys, presses Worst frame twice, toggles Record, ticks a channel, drags the split, opens the settings gear, sets 300 frames kept-first and waits for the ring to fill and stop, wheels the strip in and presses Home to reach frame #0, then Restore defaults, opens Hints and follows a link, pins two ranges and reads Compare, shows and hides the viewer's own work from the footer, opens Chains, presses a readout bar and checks the frame it opens, toggles the window with F9, then ticks `images`, reads what the captures cost a frame, hovers the strip for a frame's picture and opens the Screen tab -- all through the real `Input` path -- printing what the model says each gesture did (`[profiler-shot]` lines) and writing `cgui-desktop-profiler-*.png` after each. ~15s, exits on its own. Run it after any change to the window; a gesture that stopped working shows as a wrong number, not a subtle picture *Grows with `plan/shell-windowing.md`: every W with something visible adds its demonstration here in the same commit* |
 | `cgui-snapshot-probe` | `CgUiSnapshotProbeScene` | **DIAGNOSTIC, exits on its own** — photographs a window (`WindowSnapshot`, the real minimise path) and draws the photograph 1:1 beside the live window; writes `live` and `snapshot` PNGs to `harness-output/cgui-snapshot-probe/`. The window holds every path a photograph has to survive: rounded islands with `overflow: hidden` (mask layer), `overflow: clip`, an `opacity` layer, a scroller (scissor), text. **Any difference between the two PNGs is the render target's, since one subtree drew both** — it found three target-size assumptions in one run that six screenshots had not |
 | `cgui-gradient-probe` | `CgUiGradientProbeScene` | **DIAGNOSTIC, exits on its own** — every claim `gui_gradient.shader` makes on one screen: the taskbar's glow, a 16-level ramp across the width (the banding torture), a `to bottom right` on a rounded box (gradient line + corner mask), ten stops (two draws, one seam), a fade to `transparent` over white (premultiplied), a hard stop. One PNG in `harness-output/cgui-gradient-probe/`; the readback that verified it counted levels, run lengths and the fade's hue against the straight-lerp prediction |
+| `gpu-trace-probe` | `CgGpuTraceProbeScene` | **DIAGNOSTIC, exits on its own** — T7's gate for `CgGpuTrace`: light frames painted without waiting, each fenced, where a `gpuNanos` must land within one boundary of the GPU finishing its frame; then frames bracketed by a spun fence wait, cycling heavy/light/empty, where heavy-minus-empty GPU time must be within 5% of heavy-minus-empty waited time. **Compare by difference**: a bracket costs a fixed 5-9 ms round trip on its own, which compared whole reads as a query missing a quarter of the work. Prints `[gpu-trace-probe]` lines ending PASS or FAIL, ~20 s |
 | `cgui-library` | `CgUiLibraryScene` | The UI builder's Library: every placeable kind as a live card, every category open, Button selected. Writes `top`/`bottom` captures once every sample is built; `-Dcrystalgui.harness.library.width=140` docks it narrow, `-Dcrystalgui.harness.library.bench=scroll|resize|search` runs that workload forever and prints frame-time percentiles |
+| `cgui-timeline` | `CgUiTimelineScene` | **The profiler's navigation surfaces under load** — 10,000 nested spans on one shared axis, 600 frame bars, and two counter rows on the strip's own columns (one deliberate gap per row, since an unrecorded frame must not read as a measured zero). Wheel zooms about the pointer, drag pans, a click selects a span, a drag across the strip selects a range, ←/→ step frames, R refits, G reseeds. The status line prints THIS SCENE's own frame time, p50 and p99, so the gate is read off the screen it gates |
 | `cgui-insert-menu` | `CgUiInsertMenuScene` | The UI builder's Insert menu over a small page: opened under a selected row, searched, Tab-cycled, then opened by the right-click route. Writes `browse`, `search`, `cycle` and `pointer` captures; interactive afterwards (Shift+Space, right-click on blank page) |
 
 Harness scenes live in `gl-debug-harness/src/main/java/.../harness/scene/ui/`; register new ones in
@@ -1036,7 +1038,11 @@ int value types.
 | `TextField` | `textfield` | `cgui-gallery` (TextField page) |
 | `UIText` | `text` | `cgui-text`, `cgui-text-stress` |
 | `EmptyState` | `emptystate` | `cgui-desktop` — any vacant panel |
-| `FrameStatsOverlay` | `framestats` | `cgui-desktop` — F7 shows, F8 expands. The frame readout over `core.async.FrameStats`: rate, spread, misses, a coloured sparkline of the window, and the SLOWEST frame's phase breakdown. `DesktopCommands` binds F7/F8 on every surface with a desktop, so the editor and a Minecraft screen get it too; `FrameStatsOverlay.toggleOn(document)` is the one call |
+| `FrameStatsOverlay` | `framestats` | `cgui-desktop` — F7 shows, F8 expands. The frame readout over `core.trace.FrameStats`: rate, spread, misses, a coloured sparkline of the window, and the SLOWEST frame's phase breakdown. `DesktopCommands` binds F7/F8 on every surface with a desktop, so the editor and a Minecraft screen get it too; `FrameStatsOverlay.toggleOn(document)` is the one call. The plate is `hit-transparent`, never `hit-test: false`: only the sparkline takes a press, and only once an application has registered `onOpenFrame` -- the Frame Profiler does, and a press opens the frame the bar was DRAWN for |
+| `FrameStripTrack` | `framestrip` | `cgui-timeline` — one bar per frame over the whole ring. Buckets to the WORST frame in a column, never the mean, because averaging is what erases the spike the row exists to show. A violet tick under a bar marks a frame a garbage collection ran in — counted, since a young pause under 1 ms adds nothing to `gcMillis`. The wheel zooms the FRAME axis, Shift+wheel or a middle-button drag pans, a LEFT drag is a range; `onViewChanged`/`showView` keep every row on those columns in step |
+| `FrameScrollbar` | `framescrollbar` | `cgui-desktop` scripted run — the strip's scrollbar: drag the thumb to scrub, drag either end to zoom (both grab even at full width), press the track to jump |
+| `CounterTrack` | `countertrack` | `cgui-timeline` — one counter across the ring, on the strip's own columns. `CounterTrack.ABSENT` is a gap and not a zero |
+| `SpanTrack` | `spantrack` | `cgui-timeline` — zones stacked by depth, one leaf. A zone's hue is a hash of its NAME, so it keeps its colour across frames and across runs |
 | `Tooltip` | `tooltip` | `cgui-gallery` (Tooltip page) |
 | `Dialog` | `dialog` | `cgui-gallery` (Dialog page, modal page) |
 | `Popover` | `popover` | `cgui-gallery` (menus page) |
@@ -1055,6 +1061,8 @@ int value types.
 | `Desktop` | `desktop` | `cgui-desktop` — **nobody constructs one**; the document owns it, found with `Desktop.of(document)` |
 | `WindowFrame` | `window` | `cgui-desktop` — opened with `desktop.addWindow(frame)` |
 | `Taskbar` | `taskbar` | `cgui-desktop` — the `WindowRegistry`, rendered; built by `Desktop` |
+| `LauncherButton` | `launcherbutton` | `cgui-desktop` — the start button, leftmost on the taskbar. Built by `Taskbar`; nobody constructs one |
+| `Launcher` | `launcher` | `cgui-desktop` — **what CAN run**, beside the strip that shows what IS running: every `ApplicationKind` the desktop has installed, searched by name, id and `keywords()`. It names no application, which is what lets it live in `desktop` — a mod's `ApplicationKinds` service appears in it with no edit here |
 | `WindowSwitcher` | — (not registered) | `cgui-desktop` — `Mod+Tab`; built by `Desktop`, nobody constructs one |
 
 ## Conventions — all enforced in code
@@ -1397,6 +1405,43 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                CursorService (+ its CgService slot). Was CrystalGraphics' `platform.input`
                                / `platform.service` until CgService gave CrystalGUI a way to own a
                                service; it names no GL and no loader
+  .trace                       WHAT A FRAME COST, and who asked. UiTrace (CrystalGUI's three channels —
+                               `crystalgui.frame` for phases and counters, `.flow` for chains that
+                               outlive a frame, `.blame` for the stack walk — plus `useCacheRoot`, the
+                               run directory, `export()` and `writeMeta()`, and the frame boundary a
+                               UIDocument brackets its frame with -- `frameBegin`/`frameEnd`, `blame`),
+                               SlowFrameLog (the `[frame]` line, read back off the ring) and
+                               FrameStats (the readout's model — a VIEW over the ring, with no storage
+                               of its own). The capture engine itself is CrystalGraphics'
+                               `com.crystalgraphics.trace`, in its PLATFORM module rather than core, so
+                               a dedicated server and `headlessTest` can both reach it. Call sites
+                               write to it DIRECTLY -- `CgTrace.zone(UiTrace.FRAME, "...")`,
+                               `CgTrace.add` for a per-frame count, `CgTrace.stamp` + `zoneDone` for
+                               a split begin/end -- and CrystalGraphics' own on `CgChannels.TEXT`/
+                               `GL`/`ASYNC`/`MISC`. There is no facade left: `FrameProfile` and
+                               `CgProfiler` were deleted in T9, and the harness reads the ring through
+                               `harness.trace.TraceReport`/`TraceDump`. The GPU is `CgGpuTrace` (T7): timer queries
+                               landing in the frame they were issued in, one to three frames late, as
+                               `gpuNanos` and a `gpu:<name>` counter per zone -- absent, never zero.
+                               Frame images are `CgFrameImages` (T8), on the `images` channel: the
+                               paint context's finished frame every 30 frames, read back through
+                               CrystalGraphics' `CgPixelReadback` without a stall.
+                               **A run writes `cache/trace/latest/`** — `trace.log` (off the frame
+                               thread, on a bounded queue that drops and COUNTS), `trace.json` (Chrome's
+                               format, which ui.perfetto.dev opens) and `meta.json` (which channels were
+                               and were not recording). NOTHING goes to the game console unless
+                               `-Dcrystalgui.frameprofile=true`, which adds it rather than replacing it.
+                               **The ring is sized at run time**: `CgTrace.configure(first, newest,
+                               zonesPerFrame)` keeps the FIRST frames of a recording for good (their own
+                               arenas and counters, never overwritten) and the NEWEST after them; 0
+                               newest stops once the first are full. `frames()` skips the gap between.
+                               `stopAfterHitch(ns, framesAfter)` stops recording after a slow frame.
+                               A thread's zone arena starts small and doubles up to the ceiling, so a
+                               worker never holds the frame thread's arena. The Frame Profiler's
+                               settings (`apps/crystalgui.frameprofiler/settings.json`) drive all three.
+                               A viewer refreshing on a clock reads `frameSnapshot()` (no zones) plus
+                               `zonesBetween` for its selection: a full `snapshot()` copies every zone.
+                               plan/platform-trace-engine.md
   .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
                                DOCUMENT, never per window
   .window                      WindowState, WindowPolicy, DesktopPresentation — three types BOTH engines
@@ -1448,12 +1493,21 @@ com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (t
                                is, is there a connection, what language the player reads) and it gets a
                                desktop, a workspace that
                                follows the wire, and somewhere for a server's windows to land
+  .launcher                    WHAT CAN RUN: LauncherButton (the taskbar's start button) and Launcher
+                               (the ApplicationRegistry, rendered -- searched by name, id and the
+                               keywords() slot that was deliberately withheld until this existed to
+                               read it). It names no concrete application, which is the whole reason
+                               a launcher can live in `desktop` at all: a launcher that named
+                               CrystalEditor would have to sit above `app` and could never be
+                               reached from the taskbar
   .app                         WHAT AN APPLICATION IS, and it names no workbench: ApplicationKinds (the
                                ServiceLoader SPI a layer declares its products through -- nothing
                                installs one, the way nothing registers a widget tag), ApplicationKind (the
                                manifest — freedesktop's .desktop entry, macOS's Info.plist: id, name,
-                               icon, keywords, the files it opens, singleInstance, and a launch
-                               factory), Application (one running instance: kind, mainWindow, open,
+                               icon, keywords, the files it opens, singleInstance, a launch factory,
+                               and `autostart` -- run once per desktop the moment it has storage,
+                               before the first frame, whether or not the application ever opens:
+                               how the profiler records from launch), Application (one running instance: kind, mainWindow, open,
                                activate, dispose — where dispose is QUITTING and closing the window is
                                not), ApplicationRegistry (per Desktop: install/installed/launch/running/
                                handlerFor — a launcher, "open with" and taskbar grouping all answerable
@@ -1773,7 +1827,7 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 
 | Path | Notes |
 |---|---|
-| `ui/styles/ua/*.css` | **User-agent sheet, in twelve domain parts** (core, widgets, editor, overlays, config-kit, inspector, workbench, panels, search, samples, uibuilder, desktop) concatenated in `StyleSheetRegistry.DEFAULT_SHEET_PARTS` order into `StyleSheet.DEFAULT` — one sheet, one parse, one variable scope, and cross-part order is as load-bearing as order within a file. Functional geometry for every widget with no theme loaded; every colour is `var(--token, #fallback)`. Was a single 6,200-line `default.css` until plan/style-overhaul.md step 8. |
+| `ui/styles/ua/*.css` | **User-agent sheet, in thirteen domain parts** (core, widgets, editor, overlays, config-kit, inspector, workbench, panels, search, samples, uibuilder, profiler, desktop) concatenated in `StyleSheetRegistry.DEFAULT_SHEET_PARTS` order into `StyleSheet.DEFAULT` — one sheet, one parse, one variable scope, and cross-part order is as load-bearing as order within a file. Functional geometry for every widget with no theme loaded; every colour is `var(--token, #fallback)`. Was a single 6,200-line `default.css` until plan/style-overhaul.md step 8. |
 | `ui/themes/base.css`, `ui/themes/crystal-dark.css` | The token tables: component→system derivations, and the default theme (pins today's look exactly). See `docs/CGUI_THEMING.md`. |
 | `ui/schemes/dark-plus.css` | The default editor colour scheme — the second, independently-selectable axis. |
 | `ui/styles/ore.css` | Minecraft Ore UI theme, ported from LDLib2's `ore.lss`. |

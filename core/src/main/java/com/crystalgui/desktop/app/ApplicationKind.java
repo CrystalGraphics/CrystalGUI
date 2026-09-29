@@ -2,6 +2,7 @@ package com.crystalgui.desktop.app;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 import javax.annotation.Nullable;
@@ -50,12 +51,15 @@ public final class ApplicationKind {
 
     @Nullable
     private String icon;
+    private final List<String> keywords = new ArrayList<>();
     @Nullable
     private final List<DocumentKind.Matcher> opens = new ArrayList<>();
     @Nullable
     private Function<LaunchContext, Application> factory;
     private boolean singleInstance;
     private boolean requiresConnection = true;
+    @Nullable
+    private Consumer<LaunchContext> autostart;
     private boolean frozen;
 
     private ApplicationKind(String id, String displayName) {
@@ -74,12 +78,29 @@ public final class ApplicationKind {
         return this;
     }
 
-    // `keywords(...)` and `category(...)` ARE NOT HERE, and their absence is the same call as
-    // `action(...)`'s: a slot nothing sets and nothing reads is the write-only failure this repository
-    // documents five times over, and it is worse on a manifest than elsewhere because a manifest READS
-    // like a complete declaration -- an author writing `.keywords("code")` would reasonably conclude the
-    // launcher can find their application by it. Both arrive at W8, with the launcher and the desktop
-    // search that are their only consumers.
+    /**
+     * Other words this application answers to in the launcher's search.
+     *
+     * <p>The display name is always matched and needs no entry here; this is for what somebody types
+     * when they do not know what the thing is called — {@code "fps"} and {@code "performance"} for a
+     * profiler, {@code "code"} for an editor. freedesktop's {@code Keywords=} and macOS's Spotlight
+     * aliases are the same idea.</p>
+     *
+     * <p><b>It exists because the launcher does.</b> This slot was deliberately withheld while nothing
+     * read it: a manifest reads like a complete declaration, so an author writing
+     * {@code .keywords("code")} against a launcher that never consulted it would reasonably conclude
+     * their application was findable by it, and be wrong with no way to tell. {@code category(...)} is
+     * still absent for exactly that reason — nothing groups applications yet.</p>
+     */
+    public ApplicationKind keywords(String... words) {
+        check();
+        if (words != null) {
+            for (String word : words) {
+                if (word != null && !word.isBlank()) keywords.add(word.trim());
+            }
+        }
+        return this;
+    }
 
     /**
      * The files this application opens — its associations.
@@ -127,6 +148,34 @@ public final class ApplicationKind {
         return this;
     }
 
+    /**
+     * Work to do when a desktop starts, whether or not this application is ever opened.
+     *
+     * <p>freedesktop's autostart entry, for what an application must set up <b>before</b> its window
+     * exists — a profiler that records from the first frame, a tool that restores a background service.
+     * Run once per desktop, as soon as the desktop has storage, with this application's own
+     * {@link LaunchContext#storage()} and no workspace.</p>
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:profiler", "Profiler")
+     *         .autostart(ctx -> MySettings.load(ctx.storage()).applyAtLaunch())
+     *         .launch(ctx -> ...);
+     * }</pre>
+     *
+     * <p>It must be quick and must not open a window: it runs inside the host's startup, before the
+     * first frame.</p>
+     */
+    public ApplicationKind autostart(Consumer<LaunchContext> hook) {
+        check();
+        this.autostart = hook;
+        return this;
+    }
+
+    @Nullable
+    Consumer<LaunchContext> autostartHook() {
+        return autostart;
+    }
+
     private void check() {
         if (frozen) throw new IllegalStateException("'" + id + "' is registered; a manifest is data");
     }
@@ -144,13 +193,15 @@ public final class ApplicationKind {
         return displayName;
     }
 
+    /** @see #keywords(String...) */
+    public List<String> keywordList() {
+        return List.copyOf(keywords);
+    }
+
     @Nullable
     public String icon() {
         return icon;
     }
-
-    @Nullable
-
 
     public boolean isSingleInstance() {
         return singleInstance;

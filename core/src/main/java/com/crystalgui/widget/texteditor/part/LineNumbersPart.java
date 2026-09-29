@@ -1,6 +1,7 @@
 package com.crystalgui.widget.texteditor.part;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.wrap.ProjectedLines;
 import com.crystalgui.ui.box.Box;
@@ -71,20 +72,20 @@ public final class LineNumbersPart extends EditorViewPart {
             // ONE NUMBER PER DOCUMENT ROW, on the row's first view line. Numbering every view line would
             // report line counts the file does not have, and repeating the row's number down its
             // continuations reads as the editor being stuck. Both are what a blank continuation avoids.
-            long timed = FrameProfile.begin();
+            long timed = CgTrace.stamp(UiTrace.FRAME);
             ProjectedLines.ModelPosition model = editor.modelAt(viewLine);
-            FrameProfile.end(timed, "ln:modelAt");
+            CgTrace.zoneDone(UiTrace.FRAME, "ln:modelAt", timed);
             if (model.viewLineInRow() != 0) continue;
             int row = model.row();
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FRAME);
             UIElement number = numbers.next();
-            FrameProfile.end(timed, "ln:poolNext");
-            timed = FrameProfile.begin();
+            CgTrace.zoneDone(UiTrace.FRAME, "ln:poolNext", timed);
+            timed = CgTrace.stamp(UiTrace.FRAME);
             ((UIText) number.children().get(0)).setText(numberFor(row));
-            FrameProfile.end(timed, "ln:setText");
-            timed = FrameProfile.begin();
+            CgTrace.zoneDone(UiTrace.FRAME, "ln:setText", timed);
+            timed = CgTrace.stamp(UiTrace.FRAME);
             editor.pushEditorFontTo(number.children().get(0));
-            FrameProfile.end(timed, "ln:pushFont");
+            CgTrace.zoneDone(UiTrace.FRAME, "ln:pushFont", timed);
             // Scroll-exempt, so the offset has to be subtracted by hand -- see the class note.
             final float top = editor.topOfViewLine(viewLine);
             // The NUMBERS' column, not the whole gutter. Spanning the full width right-aligns the digits
@@ -104,11 +105,11 @@ public final class LineNumbersPart extends EditorViewPart {
             final float numberLeft = editor.paddingLeft() + editor.gutterChevronWidth()
                     + editor.gutterPadLeft();
             final float numberWidth = editor.gutterNumbersWidth();
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FRAME);
             StyleGroup.defaultPipeline(number.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE)
                             .left(numberLeft).top(top).width(numberWidth).height(height));
-            FrameProfile.end(timed, "ln:place");
+            CgTrace.zoneDone(UiTrace.FRAME, "ln:place", timed);
         }
         numbers.endPass();
     }

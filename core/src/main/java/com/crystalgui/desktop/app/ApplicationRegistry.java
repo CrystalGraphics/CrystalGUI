@@ -5,6 +5,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.ServiceConfigurationError;
+import java.util.ServiceLoader;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -125,10 +128,41 @@ public final class ApplicationRegistry {
         }
         kind.freeze();
         installed.add(kind);
+        if (autostarted) runAutostart(kind);
         onDidChange.emit();
         return () -> {
             if (installed.remove(kind)) onDidChange.emit();
         };
+    }
+
+    /** Whether {@link #autostart()} has run. */
+    private boolean autostarted;
+
+    /**
+     * Runs every installed application's {@link ApplicationKind#autostart} hook, once.
+     *
+     * <p>Called by the desktop the moment it has storage, since an autostart hook reads its application's
+     * own settings. A kind installed afterwards runs its hook on install. A hook that throws costs its own
+     * application and not the desktop.</p>
+     */
+    public void autostart() {
+        if (autostarted || desktop.config() == null) return;
+        autostarted = true;
+        bootstrap();
+        for (ApplicationKind kind : List.copyOf(installed)) runAutostart(kind);
+    }
+
+    private void runAutostart(ApplicationKind kind) {
+        Consumer<LaunchContext> hook = kind.autostartHook();
+        ConfigStorage storage = desktop.config();
+        if (hook == null || storage == null) return;
+        try {
+            hook.accept(LaunchContext.of(kind, desktop, null, scoped(kind, storage),
+                    cacheFor(kind, desktop.cacheRoot())));
+        } catch (RuntimeException | LinkageError failed) {
+            CrystalGuiCore.LOGGER.error("[cgui] the autostart of '{}' failed: {}", kind.id(),
+                    failed.getMessage(), failed);
+        }
     }
 
     /** Everything installed, in installation order. */

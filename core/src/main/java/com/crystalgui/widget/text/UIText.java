@@ -625,10 +625,35 @@ public final class UIText extends UIElement implements Measurable {
         float x = localX - contentX;
         float at = 0f;
         for (CgShapedRun run : lines.get(lineIndex)) {
+            if (x < at + run.totalAdvance()) return offsetInRun(run, x - at);
             at += run.totalAdvance();
-            if (x < at) return run.sourceStart();
         }
         return -1;
+    }
+
+    /**
+     * The character under {@code x}, measured from the run's own start.
+     *
+     * <p>Not the run's start: a run is every character in one font and one style, so a line with no
+     * highlights is ONE run and answering its start put every point on the line at character 0. By the
+     * glyph under {@code x} when the run is one glyph per character, which is plain text; proportionally
+     * across the run otherwise (ligatures, clusters), which is never worse than the start.</p>
+     */
+    private static int offsetInRun(CgShapedRun run, float x) {
+        int chars = run.sourceEnd() - run.sourceStart();
+        if (chars <= 1) return run.sourceStart();
+        float[] advances = run.advancesX();
+        if (advances != null && advances.length == chars) {
+            float edge = 0f;
+            for (int glyph = 0; glyph < advances.length; glyph++) {
+                edge += advances[glyph];
+                if (x < edge) return run.sourceStart() + (run.rtl() ? chars - 1 - glyph : glyph);
+            }
+            return run.sourceEnd() - 1;
+        }
+        float share = run.totalAdvance() <= 0f ? 0f : Math.max(0f, Math.min(1f, x / run.totalAdvance()));
+        int within = Math.min(chars - 1, (int) (share * chars));
+        return run.sourceStart() + (run.rtl() ? chars - 1 - within : within);
     }
 
     /** {@link #offsetAt} from a point in surface pixels. */

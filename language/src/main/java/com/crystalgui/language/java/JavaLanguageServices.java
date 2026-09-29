@@ -1,6 +1,7 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -120,16 +121,16 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
         this.platform = platform;
         this.className = className;
         this.classpath = classpath == null ? Collections.emptyList() : new ArrayList<>(classpath);
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         this.completion = offThread(new JavaCompletionProvider(buffer, this::current,
                 typeIndexFor(this.classpath), this::analyseText));
-        FrameProfile.step(timed, "new JavaCompletionProvider (+ typeIndexFor)");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "new JavaCompletionProvider (+ typeIndexFor)", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         this.actions = new JavaCodeActions(this::current, typeIndexFor(this.classpath));
-        FrameProfile.step(timed, "new JavaCodeActions");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "new JavaCodeActions", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         start();
-        FrameProfile.step(timed, "start() -- first analysis (inline only when there is no scheduler)");
+        CgTrace.spanDone(UiTrace.FLOW, "start() -- first analysis (inline only when there is no scheduler)", timed);
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.crystalgui.widget.texteditor.part;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
@@ -47,9 +48,9 @@ public final class QuickFixBulbPart extends EditorViewPart {
 
     @Override
     public void render(int firstViewLine, int lastViewLine) {
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         boolean offer = editor.isGutterVisible() && somethingToOffer();
-        FrameProfile.step(timed, "bulb.somethingToOffer -> " + offer);
+        CgTrace.spanDone(UiTrace.FLOW, "bulb.somethingToOffer -> " + offer, timed);
         if (!offer) {
             hide();
             return;
@@ -62,7 +63,7 @@ public final class QuickFixBulbPart extends EditorViewPart {
             hide();
             return;
         }
-        long placed = FrameProfile.begin();
+        long placed = CgTrace.stamp(UiTrace.FLOW);
         bulbElement().setDisplayed(true);
 
         float height = editor.lineHeight();
@@ -73,7 +74,7 @@ public final class QuickFixBulbPart extends EditorViewPart {
         StyleGroup.defaultPipeline(bulbElement().getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .left(0f).top(top).width(width).height(height));
-        FrameProfile.step(placed, "bulb.place");
+        CgTrace.spanDone(UiTrace.FLOW, "bulb.place", placed);
     }
 
     /**

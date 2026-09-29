@@ -1,6 +1,7 @@
 package com.crystalgui.widget.texteditor.fold;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobKey;
 import com.crystalgui.core.async.JobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -96,13 +97,13 @@ public final class EditorFolding {
         // which. Asking the provider is a query over the whole document; applying the answer rebuilds
         // per-row visibility across the projection. One is a language question and one is a view
         // question, and they would be fixed in different files.
-        long asked = FrameProfile.begin();
+        long asked = CgTrace.stamp(UiTrace.FLOW);
         ensureFoldingCurrent();
-        FrameProfile.step(asked, "fold:computeRegions ("
-                + (provider == null ? "none" : provider.getClass().getSimpleName()) + ")");
-        long applied = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "fold:computeRegions ("
+                + (provider == null ? "none" : provider.getClass().getSimpleName()) + ")", asked);
+        long applied = CgTrace.stamp(UiTrace.FLOW);
         boolean changed = applyHiddenRows();
-        FrameProfile.step(applied, "fold:applyHiddenRows");
+        CgTrace.spanDone(UiTrace.FLOW, "fold:applyHiddenRows", applied);
         return changed;
     }
 

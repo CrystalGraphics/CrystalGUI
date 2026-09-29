@@ -1,6 +1,7 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.document.DocumentKind;
@@ -101,17 +102,17 @@ public final class WorkbenchOpener {
             // The selection is captured and PUT BACK when the caller asked not to activate. DockLeaf.add
             // activates what it inserts, which is right for a file and wrong for a companion panel.
             DockPanelRef wasActive = target.activePanel();
-            long timed = FrameProfile.begin();
+            long timed = CgTrace.stamp(UiTrace.FLOW);
             target.add(ref);
-            FrameProfile.step(timed, "dock.leaf.add");
+            CgTrace.spanDone(UiTrace.FLOW, "dock.leaf.add", timed);
             if (!options.activates() && wasActive != null) target.activate(wasActive);
-            timed = FrameProfile.begin();
+            timed = CgTrace.stamp(UiTrace.FLOW);
             dock.syncGroups();
-            FrameProfile.step(timed, "dock.syncGroups");
+            CgTrace.spanDone(UiTrace.FLOW, "dock.syncGroups", timed);
             if (options.activates()) {
-                timed = FrameProfile.begin();
+                timed = CgTrace.stamp(UiTrace.FLOW);
                 dock.setActiveGroup(dock.groupFor(target));
-                FrameProfile.step(timed, "dock.setActiveGroup");
+                CgTrace.spanDone(UiTrace.FLOW, "dock.setActiveGroup", timed);
                 dock.focusPanel(ref);
             }
             return target;

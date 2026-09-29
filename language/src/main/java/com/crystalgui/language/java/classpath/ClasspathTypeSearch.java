@@ -1,7 +1,8 @@
 package com.crystalgui.language.java.classpath;
 
 import com.crystalgui.language.java.JavaLanguageServices;
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.text.lang.TypeSearch;
 import com.crystalgui.text.lang.TypeSearchRegistry;
 
@@ -51,27 +52,27 @@ public final class ClasspathTypeSearch implements TypeSearch {
 
         TypeIndex index;
         try {
-            long timed = FrameProfile.begin();
+            long timed = CgTrace.stamp(UiTrace.FLOW);
             List<String> classpath = HostClasspath.detect();
-            FrameProfile.step(timed, "HostClasspath.detect");
-            timed = FrameProfile.begin();
+            CgTrace.spanDone(UiTrace.FLOW, "HostClasspath.detect", timed);
+            timed = CgTrace.stamp(UiTrace.FLOW);
             index = JavaLanguageServices.typeIndexFor(classpath);
-            FrameProfile.step(timed, "typeIndexFor (SCANS THE CLASSPATH if cold)");
+            CgTrace.spanDone(UiTrace.FLOW, "typeIndexFor (SCANS THE CLASSPATH if cold)", timed);
         } catch (RuntimeException unavailable) {
             // A classpath that cannot be detected is a host we cannot answer for. Empty, not an exception
             // out of a keystroke handler.
             return Results.EMPTY;
         }
 
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         TypeIndex.Match matched = index.matching(query);
-        FrameProfile.step(timed, "index.matching -> " + matched.entries().size());
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "index.matching -> " + matched.entries().size(), timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         List<Result> out = new ArrayList<>(Math.min(limit, matched.entries().size()));
         for (TypeIndex.Entry entry : matched.entries()) {
             if (out.size() >= limit) {
                 // Our own cap truncated the index's answer, so say so even where the index did not.
-                FrameProfile.step(timed, "kindOf x" + out.size());
+                CgTrace.spanDone(UiTrace.FLOW, "kindOf x" + out.size(), timed);
                 return new Results(out, true);
             }
             TypeIndex.Kind kind = index.kindOf(entry);
@@ -79,7 +80,7 @@ public final class ClasspathTypeSearch implements TypeSearch {
                     kind == null ? null : kind.kind(), kind != null && kind.isAbstract(),
                     entry.binaryName()));
         }
-        FrameProfile.step(timed, "kindOf x" + out.size());
+        CgTrace.spanDone(UiTrace.FLOW, "kindOf x" + out.size(), timed);
         return new Results(out, matched.truncated());
     }
 }

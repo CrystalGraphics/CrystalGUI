@@ -1,6 +1,7 @@
 package com.crystalgui.widget.text;
 
-import com.crystalgui.core.async.FrameProfile;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
@@ -313,25 +314,25 @@ public class MarkupView extends UIElement {
         // markup cost 3.3ms and rendering the signature 500us. So the cost was here, and the split below
         // is what says whether it is the teardown, the number of nodes, or what each one costs to build.
         // Kept through the port as the baseline it is to be re-measured against.
-        long timed = FrameProfile.begin();
+        long timed = CgTrace.stamp(UiTrace.FLOW);
         removeAll();
-        FrameProfile.step(timed, "markup.removeAll");
-        timed = FrameProfile.begin();
+        CgTrace.spanDone(UiTrace.FLOW, "markup.removeAll", timed);
+        timed = CgTrace.stamp(UiTrace.FLOW);
         int built = 0;
         for (MarkupBlock block : this.document.blocks()) {
             // PER BLOCK, AND BY KIND. Seven blocks cost 21,567us on the old engine -- about 3ms each,
             // far past what registering a node costs, so the expense is inside building ONE of them and
             // the kinds do completely different work.
-            long one = FrameProfile.begin();
+            long one = CgTrace.stamp(UiTrace.FLOW);
             UIElement node = build(block);
-            FrameProfile.step(one, "markup.block " + block.kind() + " spans=" + block.spans().size()
-                    + " kids=" + block.children().size());
+            CgTrace.spanDone(UiTrace.FLOW, "markup.block " + block.kind() + " spans=" + block.spans().size()
+                    + " kids=" + block.children().size(), one);
             if (node != null) {
                 append(node);
                 built++;
             }
         }
-        FrameProfile.step(timed, "markup.build " + built + " blocks");
+        CgTrace.spanDone(UiTrace.FLOW, "markup.build " + built + " blocks", timed);
         return this;
     }
 
