@@ -1,10 +1,14 @@
 # CrystalGUI
 
-A general platform-agnostic UI engine for shaped like a lightweight web browser: a DOM-like `UIElement` tree, Taffy
-flexbox layout, a real CSS cascade with selectors and transitions, and twelve widgets — all
-loader-blind, and able to run headless on a dedicated server.
+A platform-agnostic UI engine shaped like a lightweight web browser: a DOM-like node tree with shadow
+roots, Taffy flexbox and grid layout, a real CSS cascade with selectors and transitions, and a full
+widget set up to a code editor and a node graph — all loader-blind, able to run headless on a dedicated
+server, and shipped as one jar for Forge 1.7.10 through 26.2, NeoForge and Fabric.
 
-**Start here:** [`AGENTS.md`](AGENTS.md) — package map and the rules. Then, by task:
+**Using CrystalGUI in your mod: [`docs/CGUI_SETUP.md`](docs/CGUI_SETUP.md)** — setting the project up,
+for one Minecraft version or many — then [`docs/CGUI_BUILDING_UIS.md`](docs/CGUI_BUILDING_UIS.md).
+
+**Working on CrystalGUI itself:** [`AGENTS.md`](AGENTS.md) — package map and the rules. Then, by task:
 [`docs/CGUI_STYLE_RENDER_PIPELINE.md`](docs/CGUI_STYLE_RENDER_PIPELINE.md) (cascade, stylesheets,
 painting) · [`docs/CGUI_WIDGETS.md`](docs/CGUI_WIDGETS.md) (the widgets) ·
 [`docs/CGUI_SERVER_AND_SERIALIZATION.md`](docs/CGUI_SERVER_AND_SERIALIZATION.md) (codecs, packets,
@@ -18,8 +22,8 @@ sessions).
 ./gradlew :core:headlessTest   # deliberately without it — the server-safety guard
 ```
 
-The UI runs today only in the GL debug harness; neither `runtime/mc/1710` nor `runtime/mc/modern` is wired into
-`settings.gradle.kts` yet:
+Minecraft — every loader, one jar, real clients — is [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md). For
+rendering work the GL debug harness is faster:
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"
@@ -30,14 +34,27 @@ Harness scenes stay open until you close the window. Kill lingering `java.exe` p
 
 # VERY IMPORTANT
 During development, use the `Run Client (Java 25, hotswap)` task <br>
-<sub>(An IDE run configuration — not checked into this repository. Note the Gradle toolchain for
-`core/` is pinned to **Java 21**, because Jabel is stable on 17 and 21 but not on 25.)</sub>
+<sub>(An IDE run configuration — not checked into this repository. `core/` is Java 25; every consumer
+below 25 gets its Java 8 copy — `docs/CGUI_BUILD.md`.)</sub>
 
 
-## Shadowed libraries
-Shadowed libraries will also get downgraded to Java 8. 
+## Bundled libraries
+The shipped jars are downgraded to Java 8 whole, bundled libraries included — the host jar carries none
+(Taffy is vendored), the language jar carries its grammars and engines.
 
+**DO NOT** bundle a library that relies on JNI *unless* its natives were compiled against Java 8.
+<br>Natives built against a higher Java API break on a Java 8 instance; recompile them if the project is
+open source.
 
-**DO NOT** use libraries that rely on JNI *unless* their natives were compiled against Java 8.
-<br>If the natives were compiled against a higher version of the Java API, there will be major problems.
-<br>(Recompiling shouldn't be too big of an issue if the project is OpenSource)
+## Licence
+
+CrystalGUI is licensed under the **GNU Lesser General Public License, version 3 or later**
+(LGPL-3.0-or-later): [`COPYING.LESSER`](COPYING.LESSER), which builds on the GPL-3.0 in
+[`COPYING`](COPYING). Both texts ship inside each jar under `META-INF/`, beside the third-party notice
+(`notices/`, indexed by [`THIRD-PARTY.md`](THIRD-PARTY.md)).
+
+## Hosting
+
+[![OSS hosting by Cloudsmith](https://img.shields.io/badge/OSS%20hosting%20by-cloudsmith-blue?logo=cloudsmith&style=flat-square)](https://cloudsmith.com)
+
+Maven artifacts are hosted for free by [Cloudsmith](https://cloudsmith.com).

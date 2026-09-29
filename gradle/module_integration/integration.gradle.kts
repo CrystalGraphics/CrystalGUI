@@ -54,9 +54,9 @@ if (project.path == ":runtime:mc:1710") {
         }
     }
 } else if (project.path.startsWith(":runtime:mc:modern")) {
-    // --- mc1201: compile + runtime dependencies ---
+    // --- 1.20.x nodes: compile + runtime dependencies ---
     dependencies {
-        submoduleMods.flatMap { stringList(it, "mc1201CompileDeps") }
+        submoduleMods.flatMap { stringList(it, "modernCompileDeps") }
             .distinct()
             .forEach { dep ->
                 // compileOnly: loader sources can import CrystalGraphics APIs.

@@ -77,7 +77,7 @@ public final class ScriptCommands {
          * real host it is a message to a server, delivered by the frame loop; a compile running ON the
          * frame thread is therefore waiting for an answer only it can deliver, and can only time out.
          * That is the whole of the difference between the two hosts: the harness resolved a cold file and
-         * mc1710 reported {@code cannot be resolved} for it, forever.</p>
+         * 1.7.10 reported {@code cannot be resolved} for it, forever.</p>
          *
          * <p>{@code onReady} is called on the UI thread — a caller opens tool windows from it — and is
          * called exactly once, with null for every ordinary refusal ({@link #compile}'s own contract).</p>

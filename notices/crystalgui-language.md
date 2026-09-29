@@ -25,9 +25,9 @@ convenience and a technical requirement at once: relocating inside ECJ would ren
 reflection looks up by string.
 
 **Minecraft's name mappings are not in this jar and are not redistributed.** They are fetched at
-runtime into the user's own game directory — MCP `stable_12` from MinecraftForge's FML repository for
-1.7.10; Mojang's `client.txt` with MinecraftForge's MCPConfig or Fabric's intermediary for 1.20.x — from
+runtime into the user's own game directory — MCP stable from MinecraftForge for 1.7.10 and Forge
+1.8–1.14.3; Mojang's `client.txt` with MinecraftForge's MCPConfig or Fabric's intermediary from 1.14.4 — from
 the addresses `crystalgui-<version>.jar` carries in `assets/crystalgui/download/locations.json`.
 
 `com/crystalgui/language/**`, `com/crystalgui/mc/v1710/lang/**` and `com/crystalgui/mc/*/lang/**` are
-CrystalGUI's own and are LGPL-3.0-or-later.
+CrystalGUI's own and are LGPL-3.0-or-later. The licence texts are beside this file: `META-INF/COPYING.LESSER` (LGPL-3.0) and `META-INF/COPYING` (the GPL-3.0 it builds on).

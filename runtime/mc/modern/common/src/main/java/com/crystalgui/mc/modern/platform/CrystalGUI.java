@@ -1,8 +1,8 @@
 package com.crystalgui.mc.modern.platform;
 
 /**
- * Shared constants for all CrystalGUI mc1201 loader subprojects.
- * Kept in mc1201:common so every loader (Fabric, Forge, NeoForge) can import
+ * Shared constants for every modern loader node.
+ * Kept in the common branch so every loader (Fabric, Forge, NeoForge) can import
  * without duplicating the strings.
  */
 public final class CrystalGUI {
@@ -12,9 +12,6 @@ public final class CrystalGUI {
 
     /** Human-readable mod name used in log messages. */
     public static final String NAME = "CrystalGUI";
-
-    /** Mod version string (kept in sync with gradle.properties). */
-    public static final String VERSION = "1.0.0";
 
     private CrystalGUI() {}
 }

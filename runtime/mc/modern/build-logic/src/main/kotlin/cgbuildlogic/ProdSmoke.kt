@@ -38,6 +38,7 @@ private const val POWERSHELL_TIMEOUT_SECONDS = 60L
  * <pre>
  * ./gradlew prodSmoke                       # every instance in local.properties
  * ./gradlew prodSmoke -PcgTargets=1710      # one of them
+ * ./gradlew prodSmoke -PcgBatch=3           # every instance, three clients at a time
  * </pre>
  *
  * <p>EVERY INSTANCE IS ARMED FIRST, with the launcher closed. Prism serves a {@code --launch} from the
@@ -86,6 +87,21 @@ abstract class ProdSmoke : DefaultTask() {
     @get:Input
     abstract val onlyTargets: ListProperty<String>
 
+    /**
+     * Clients launched together; each batch finishes before the next starts. Default 4: eight at once took
+     * a whole workstation down, and "all at once" is a hundred clients.
+     */
+    @get:Input
+    abstract val batchSize: Property<Int>
+
+    /**
+     * More `key=value` system properties for every client, e.g. a probe:
+     * `-PcgSmokeProps=crystalgui.autotest.complete=true,crystalgui.autotest.script=Probe.java`.
+     * No spaces: Prism splits a `JvmArgs` value on them.
+     */
+    @get:Input
+    abstract val extraProperties: ListProperty<String>
+
     init {
         group = "verification"
         description = "Launches every installed client on the single jar and fails if one did not draw."
@@ -96,6 +112,8 @@ abstract class ProdSmoke : DefaultTask() {
         startTimeoutSeconds.convention(180)
         runTimeoutSeconds.convention(120)
         onlyTargets.convention(emptyList())
+        batchSize.convention(4)
+        extraProperties.convention(emptyList())
         outputs.upToDateWhen { false }
     }
 
@@ -120,6 +138,12 @@ abstract class ProdSmoke : DefaultTask() {
                 + "find the launcher. Add e.g. prismLauncherExe=C:/path/to/prismlauncher.exe")
         if (!File(exe).isFile) throw GradleException("prismLauncherExe is not a file: $exe")
 
+        // A named target nothing answers to fails, rather than a sweep silently running fewer clients.
+        val missing = only - instances.get().map { it.substringAfter('=') }.toSet()
+        if (missing.isNotEmpty()) {
+            throw GradleException("prodSmoke: no prismInstance.<label> in local.properties for $missing")
+        }
+
         val targets = mutableListOf<Target>()
         for (spec in instances.get()) {
             val key = spec.substringBefore('=')
@@ -136,9 +160,19 @@ abstract class ProdSmoke : DefaultTask() {
             if (!cfg.isFile) throw GradleException("$name: no instance.cfg at $instanceDir")
             val uuid = cfg.readLines().firstOrNull { it.startsWith("uuid=") }?.removePrefix("uuid=")
                 ?: throw GradleException("$name: instance.cfg names no uuid")
+            // A copied instance keeps its original's uuid, and `--launch` then starts the ORIGINAL,
+            // unarmed: it sits on the title screen and reads as a hung autotest.
+            val twins = instanceDir.parentFile.listFiles().orEmpty().filter { other ->
+                other != instanceDir && File(other, "instance.cfg").let { it.isFile && "uuid=$uuid" in it.readLines() }
+            }
+            if (twins.isNotEmpty()) throw GradleException(
+                "$name: uuid $uuid is also ${twins.joinToString { it.name }}'s; give the copy a new uuid in its instance.cfg")
             targets += Target(name, instanceDir, cfg, uuid)
         }
         if (targets.isEmpty()) throw GradleException("prodSmoke matched no instance")
+        // In the order they were NAMED, not local.properties': the sweep is oldest first, so the batch
+        // running says how far along it is.
+        if (only.isNotEmpty()) targets.sortBy { only.indexOf(it.name) }
 
         val failures = mutableListOf<String>()
         // The launcher must be down while the configs are written, and the sleep is the second half of
@@ -160,32 +194,46 @@ abstract class ProdSmoke : DefaultTask() {
                     + lost.joinToString(", ") { it.name } + "; their configs no longer carry $ARMED_MARKER")
             }
 
-            // ALL AT ONCE, a second apart -- every client is up within seconds. Driving them
-            // one at a time costs some 2.5 minutes per instance, because a `--launch` FORWARDED to a
-            // launcher that has just had a client exit sits that long before it is acted on, and
-            // restarting the launcher between instances to dodge that is slower still. The instances
-            // are independent (separate game directories, separate capture paths) and a capture reads
-            // the RENDER TARGET rather than the screen, so an overlapped window still photographs.
-            targets.forEach { target ->
-                captureOf(out, target, "early").delete()
-                captureOf(out, target, "late").delete()
-                logger.lifecycle("[prodSmoke] {}: launching {}", target.name, target.uuid)
-                powershell("Start-Process -FilePath '$exe' -ArgumentList '--launch','${target.uuid}'")
-                Thread.sleep(LAUNCHER_SETTLE_MS)
-            }
+            // ALL AT ONCE within a batch, a second apart -- every client is up within seconds. Driving
+            // them one at a time costs some 2.5 minutes per instance, because a `--launch` FORWARDED to
+            // a launcher that has just had a client exit sits that long before it is acted on. The
+            // instances are independent (separate game directories, separate capture paths) and a
+            // capture reads the RENDER TARGET rather than the screen, so an overlapped window still
+            // photographs.
+            val batches = targets.chunked(batchSize.get().coerceAtLeast(1))
+            batches.forEachIndexed { index, batch ->
+                if (index > 0) {
+                    // A fresh launcher per batch, for the forwarded-launch stall above. The configs stay
+                    // armed: the launcher re-reads them on every start.
+                    killLauncher()
+                    Thread.sleep(3000)
+                    startLauncher(exe)
+                }
+                if (batches.size > 1) {
+                    logger.lifecycle("[prodSmoke] batch {} of {}: {}", index + 1, batches.size,
+                        batch.joinToString(", ") { it.name })
+                }
+                batch.forEach { target ->
+                    captureOf(out, target, "early").delete()
+                    captureOf(out, target, "late").delete()
+                    logger.lifecycle("[prodSmoke] {}: launching {}", target.name, target.uuid)
+                    powershell("Start-Process -FilePath '$exe' -ArgumentList '--launch','${target.uuid}'")
+                    Thread.sleep(LAUNCHER_SETTLE_MS)
+                }
 
-            val up = awaitClients(targets.size, startTimeoutSeconds.get())
-            logger.lifecycle("[prodSmoke] {} of {} clients up", up, targets.size)
-            val allExited = awaitNoClients(runTimeoutSeconds.get())
-            if (!allExited) {
-                logger.lifecycle("[prodSmoke] killing clients still alive after {}s", runTimeoutSeconds.get())
-                killClients()
-            }
+                val up = awaitClients(batch.size, startTimeoutSeconds.get())
+                logger.lifecycle("[prodSmoke] {} of {} clients up", up, batch.size)
+                val allExited = awaitNoClients(runTimeout())
+                if (!allExited) {
+                    logger.lifecycle("[prodSmoke] killing clients still alive after {}s", runTimeout())
+                    killClients()
+                }
 
-            targets.forEach { target ->
-                val verdict = verdictFor(target, allExited, out)
-                if (verdict != null) failures += "${target.name}: $verdict"
-                else logger.lifecycle("[prodSmoke] {} drew", target.name)
+                batch.forEach { target ->
+                    val verdict = verdictFor(target, allExited, out)
+                    if (verdict != null) failures += "${target.name}: $verdict"
+                    else logger.lifecycle("[prodSmoke] {} drew", target.name)
+                }
             }
         } finally {
             // Kill THEN restore: Prism rewrites instance.cfg from memory as it exits, so a restore
@@ -207,7 +255,7 @@ abstract class ProdSmoke : DefaultTask() {
     /** @return null when it drew, else why it did not. */
     private fun verdictFor(target: Target, allExited: Boolean, out: File): String? {
         if (!allExited && !captureOf(out, target, "late").isFile) {
-            return "TIMED-OUT after ${runTimeoutSeconds.get()}s; the autotest never quit" + logTail(target)
+            return "TIMED-OUT after ${runTimeout()}s; the autotest never quit" + logTail(target)
         }
         // A MISSING CAPTURE IS A FAILURE, never a pass: the client that never reached the autotest
         // wrote nothing, and that is indistinguishable from success to anything that only checks an
@@ -267,7 +315,11 @@ abstract class ProdSmoke : DefaultTask() {
         val jvm = "-Dcrystalgui.autotest=true " +
             "-Dcrystalgui.autotest.out=${out.absolutePath.replace('\\', '/')}/$name.png " +
             "-Dcrystalgui.autotest.world=* " +
-            "-Dcrystalgui.autotest.lateFrame=120"
+            "-Dcrystalgui.autotest.lateFrame=${lateFrame()}" +
+            extraProperties.get().joinToString("") { " -D$it" }
+        if (' ' in extraProperties.get().joinToString("")) {
+            throw GradleException("-PcgSmokeProps may hold no space: Prism splits a JvmArgs value on them")
+        }
         cfg.writeText(withGeneralKeys(cfg.readText(), listOf("OverrideJavaArgs=true", "JvmArgs=$jvm")))
         // READ IT BACK. The log line announcing "armed" used to be unconditional, so a write that
         // inserted nothing read as success and the failure surfaced twenty minutes later as a missing
@@ -276,6 +328,21 @@ abstract class ProdSmoke : DefaultTask() {
     }
 
     private fun isArmed(cfg: File) = cfg.readLines().any { it.startsWith(ARMED_MARKER) }
+
+    /**
+     * Whether a slow probe was asked for: the language probes answer after the late capture would otherwise
+     * quit, and the host verifier reads the driver back after every pass.
+     */
+    private fun languageProbe() = extraProperties.get().any {
+        it.startsWith("crystalgui.autotest.script=") || it == "crystalgui.autotest.complete=true"
+            || it == "crystalgraphics.host.verify=true"
+    }
+
+    /** Past LanguageProbe's last report -- its unanswered completions, at frame 660 -- when one is asked. */
+    private fun lateFrame() = if (languageProbe()) 700 else 120
+
+    /** And the extra seconds those frames take. */
+    private fun runTimeout() = runTimeoutSeconds.get() + if (languageProbe()) 90 else 0
 
     /**
      * Puts the two keys back as they were, and nothing else.

@@ -1,12 +1,21 @@
 package com.crystalgui.mc.modern.client;
 
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.mc.modern.platform.OwnDepthConvention;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 
+//? if >=1.21.5 {
+/*import com.crystalgraphics.mc.modern.platform.LifecycleModern;
+import com.mojang.blaze3d.opengl.GlStateManager;
+import net.minecraft.client.Minecraft;
+*///?} else {
 import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
+//?}
 
 import org.lwjgl.opengl.GL13;
+//? if <1.15 {
+/*import org.lwjgl.opengl.GL20;
+*///?}
 
 /**
  * The GL discipline around every CrystalGUI paint on 1.20.x, in one place because both paint paths --
@@ -66,6 +75,13 @@ public final class CgUiHostGl {
      */
     public static void enter() {
         CgGlState.invalidateAllIfPresent();
+        // 1.21.5 binds a target only inside its own render passes, so a screen or HUD paint finds the
+        // last pass's still bound and the desktop composites into it, unseen.
+        //? if >=1.21.5 {
+        /*LifecycleModern.bindMainTarget(Minecraft.getInstance());
+        *///?}
+        // 26.2's world is reversed-Z with a 0..1 clip range; the desktop and its previews are not.
+        OwnDepthConvention.enter();
     }
 
     /**
@@ -92,9 +108,17 @@ public final class CgUiHostGl {
      * while here it MUST go through Blaze3D or Minecraft's cache is left describing the wrong world.
      */
     public static void leave() {
-        RenderSystem.activeTexture(GL13.GL_TEXTURE1);
-        RenderSystem.activeTexture(GL13.GL_TEXTURE0);
+        OwnDepthConvention.leave();
+        //? if >=1.15 {
+        GlStateManager._activeTexture(GL13.GL_TEXTURE1);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0);
         GlStateManager._glUseProgram(0);
+        //?} else {
+        /*// Before 1.15 the names lack the prefix, and the program is not cached at all.
+        GlStateManager.activeTexture(GL13.GL_TEXTURE1);
+        GlStateManager.activeTexture(GL13.GL_TEXTURE0);
+        GL20.glUseProgram(0);
+        *///?}
         // The three lines above went through Blaze3D and not CgGL, so our own shadow cannot see them
         // either -- the same rule, pointing the other way.
         CgGlState.invalidateAllIfPresent();

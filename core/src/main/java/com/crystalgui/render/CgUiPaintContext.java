@@ -22,6 +22,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
+import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgGpuTrace;
@@ -617,10 +618,18 @@ public final class CgUiPaintContext {
         glScope = CgGlState.save(
                 CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
                 CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.SCISSOR);
+                CgGlSlot.SCISSOR, CgGlSlot.COLOR_MASK,
+                // The host's VAO back: Minecraft 1.17+ skips its own bind while it believes its VAO is
+                // still current, so leaving ours bound failed its next GUI draw ("Array object is not active").
+                CgGlSlot.VERTEX_INPUT);
         // ALPHA_TEST is saved above only so the host gets it back; this is what turns it off, before
         // anything of ours draws. @see #disableFixedFunctionAlphaTest
         disableFixedFunctionAlphaTest();
+
+        // Every channel, alpha included. A host that leaves alpha writes off (1.21.6+ does) leaves the
+        // frame's alpha at 0 through the clear and every draw, and the premultiplied composite then
+        // ADDS the UI to the scene -- a pale desktop with the world showing through it.
+        CgGL.glColorMask(true, true, true, true);
 
         // A frame owns the whole surface, so a clip the host left enabled would clip the clear below and
         // every draw after it. SCISSOR is in the save list above for the other direction: popScissor
@@ -826,7 +835,8 @@ public final class CgUiPaintContext {
         // screen. @see #disableFixedFunctionAlphaTest
         try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
                 CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
-                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST)) {
+                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST,
+                CgGlSlot.VERTEX_INPUT)) {   // the host's VAO, as in beginFrame
             disableFixedFunctionAlphaTest();
             blitLayer(frameFbo, 1f);
             // THE HOST'S OWN TARGET, and the last thing this class can observe. Content here with a flat
@@ -979,6 +989,14 @@ public final class CgUiPaintContext {
         paintedY0 = Float.MAX_VALUE;
         paintedX1 = -Float.MAX_VALUE;
         paintedY1 = -Float.MAX_VALUE;
+    }
+
+    /**
+     * The coverage correction every label is drawn with. A retained layer keeps the text it already holds until
+     * its subtree repaints.
+     */
+    public void textGamma(CgTextGamma gamma) {
+        textRenderer.gamma(gamma);
     }
 
     public CgTextRenderer text() {

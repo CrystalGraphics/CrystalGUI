@@ -1,14 +1,12 @@
 package com.crystalgui.workbench.extension;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.ServiceConfigurationError;
-import java.util.ServiceLoader;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.workbench.WorkbenchContext;
@@ -110,24 +108,11 @@ public final class WorkbenchExtensions {
         // SET BEFORE THE LOOP: `contribute` reads nothing that bootstraps, but a service's constructor
         // legitimately might, and re-entering here would run every service twice.
         bootstrapped = true;
-        Iterator<WorkbenchExtension> services =
-                ServiceLoader.load(WorkbenchExtension.class, WorkbenchExtensions.class.getClassLoader())
-                        .iterator();
-        while (true) {
-            WorkbenchExtension extension;
-            try {
-                if (!services.hasNext()) break;
-                extension = services.next();
-            } catch (ServiceConfigurationError | RuntimeException | LinkageError broken) {
-                // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN FEATURE AND NOT THE WORKBENCH. The
-                // iterator throws on the ENTRY, so this brackets `next()` -- catching only around the
-                // body would let one mod's missing class stop every extension after it in the file.
-                CrystalGuiCore.LOGGER.error("[cgui] a WorkbenchExtension service could not be loaded; "
-                        + "its feature is absent on this host", broken);
-                continue;
-            }
-            contribute(extension);
-        }
+        // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN FEATURE AND NOT THE WORKBENCH.
+        Providers.forEach(WorkbenchExtension.class, WorkbenchExtensions.class.getClassLoader(),
+                WorkbenchExtensions::contribute,
+                broken -> CrystalGuiCore.LOGGER.error("[cgui] a WorkbenchExtension service could not be "
+                        + "loaded; its feature is absent on this host", broken));
     }
 
     /**

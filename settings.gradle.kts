@@ -6,21 +6,23 @@ pluginManagement {
     // id("com.gtnewhorizons.gtnhconvention") with no version. Applying gtnhsettingsconvention here
     // would inject spotless onto every subproject's buildscript classpath -- including :core and
     // :language, which are ordinary Java modules and are not GTNH builds.
-    // Supplies the mc1201 convention plugins (cg-java17, cg-mc1201-common, cg-mc1201-loader). Without
-    // it every mc1201 subproject fails at id("cg-mc1201-loader") with "plugin not found".
+    // Supplies the 1.20.x convention plugins (cg-java, cg-modern-common, cg-modern-loader). Without
+    // it every 1.20.x node fails at id("cg-modern-loader") with "plugin not found".
     includeBuild("runtime/mc/modern/build-logic")
+    // The settings plugin below: the Minecraft nodes, from the versions targeted.
+    includeBuild("CrystalGraphics/singlejar-logic")
 
     plugins {
         id("com.gtnewhorizons.gtnhconvention") version("2.0.20")
         id("com.gtnewhorizons.gtnhsettingsconvention") version("2.0.20")
 
-        // The mc1201 loader scripts request these with no version, so the pins live here. moddev
-        // matches runtime/mc/modern/build-logic's net.neoforged:moddev-gradle:2.0.141 -- one version, one
-        // spelling. (BUILD_SETUP.md claims a net.neoforged.moddev.repositories settings plugin pins
-        // them; nothing applies that plugin in either repository. Corrected at L8.)
+        // The 1.20.x loader scripts request these with no version, so the pins live here. moddev
+        // matches runtime/mc/modern/build-logic's net.neoforged:moddev-gradle:2.0.147 -- one version, one
+        // spelling. No net.neoforged.moddev.repositories settings plugin pins them: nothing applies
+        // that plugin in either repository.
         id("com.gradleup.shadow") version("9.2.2")
-        id("net.neoforged.moddev") version("2.0.141")
-        id("net.neoforged.moddev.legacyforge") version("2.0.141")
+        id("net.neoforged.moddev") version("2.0.147")
+        id("net.neoforged.moddev.legacyforge") version("2.0.147")
 
         // Applied by the root build.gradle.kts; see there. 1.3 is what gtnhgradle resolves, and
         // ModDevGradle asks for 1.2 but uses only API 1.3 still carries.
@@ -42,17 +44,20 @@ pluginManagement {
         mavenLocal()
         maven("https://repo.spongepowered.org/repository/maven-public/") { name = "Sponge" }
         maven("https://maven.minecraftforge.net/") { name = "Forge" }
-        // For the mc1201 loader plugins. No exclusiveContent: ModDevGradle and Loom add their own
+        // For the 1.20.x loader plugins. No exclusiveContent: ModDevGradle and Loom add their own
         // buildscript.repositories at configuration time, which Gradle 9 forbids while it is active.
         maven("https://maven.neoforged.net/releases") { name = "NeoForge" }
         maven("https://maven.fabricmc.net/") { name = "Fabric" }
+        maven("https://maven.wagyourtail.xyz/releases") { name = "Unimined" }
     }
 }
 
-// J10 / E-A1: the multi-version preprocessor under test. A SETTINGS plugin -- the pins above are for
-// project plugins and cannot apply this one. Stonecutter requires Gradle 9.0+; this build is 9.5.1.
+// The multi-version preprocessor the 1.20.x loaders are built with (J10 proved it, J11 ships from it).
+// A SETTINGS plugin -- the pins above are for project plugins and cannot apply this one. Stonecutter
+// requires Gradle 9.0+; this build is 9.5.1.
 plugins {
     id("dev.kikugie.stonecutter") version "0.9.8"
+    id("com.crystalgraphics.singlejar")
 }
 
 rootProject.name = "CrystalGUI"
@@ -79,7 +84,8 @@ include("core")
 // a composite gives each build its own StartParameter, so neither -P nor the parent's gradle.properties
 // reaches here. RPG-Core's settings.gradle sets it; -Dcrystalgui.harness=true works too.
 val harnessRequested = System.getProperty("crystalgui.harness") == "true"
-if (!embedded || harnessRequested) include("gl-debug-harness")
+// The harness is CrystalGraphics-only; harness-scenes is CrystalGUI's half, and puts itself on its run.
+if (!embedded || harnessRequested) include("gl-debug-harness", "harness-scenes")
 
 // The tree-sitter syntax backend. Its jars are checked in under lib/tree-sitter/, so this is an ordinary
 // module rather than one conditional on a local checkout -- see that directory's README for why.
@@ -94,19 +100,42 @@ include("language")
 // the toolchains the loader modules below do.
 include("runtime:mc:shared")
 
+// The @Mod classes every Forge constructs -- modern and legacy FML scan for the same annotation --
+// compiled once against CrystalGraphics' forge-stubs.
+include("runtime:mc:forge-bootstrap")
+
+// What the two LaunchWrapper hosts share -- 1.7.10 and Forge 1.8 to 1.12.2 -- merged once into the
+// language jar. LaunchWrapper's API never changed, so one copy serves both.
+include("runtime:mc:launchwrapper")
+
+// Its modern counterpart: what every ModLauncher and Knot node shares and names no Minecraft, merged once
+// into the language jar instead of once per node.
+include("runtime:mc:modern-shared")
+
 // NO TIER-1 MODULES HERE. They existed briefly and held one class between them, the cursor adapters,
 // which are CrystalGraphics' now: a cursor is a toolkit's job and this engine only decides WHICH one.
 // `core`'s CursorService turns a keyword into a picture and hands it to CgCursorService, so no host
 // of ours names a cursor service, an adapter, or the LWJGL module either lives in.
 
-// The MC 1.7.10 loader.
+// ── The Minecraft nodes ──────────────────────────────────────────────────────────────────────────
 //
-// `include`, NOT `includeBuild` -- this line read `//includeBuild("mc1710")` for months and could never
-// have worked: includeBuild needs the directory to be a standalone Gradle build with its own settings
-// file, and runtime/mc/1710/settings.gradle does not exist and never has (`git log --all` over that path is
-// empty, and it is not gitignored either). `git log -L` finds the configuration that actually launched
-// a client, in 2a10724, and it is a plain subproject. See plan/platform-mc1710.md 25.2.
-if (!embedded) include("runtime:mc:1710")
+// The versions this build ships, resolved against singlejar-logic's pin catalog into the 1.7.10 host,
+// the legacy tree (Forge 1.8-1.12.2) and the modern tree -- a Stonecutter tree, `common` plus a branch
+// per loader, a node per Minecraft version, whose sources pass through comment directives
+// (`//? if >=1.20.2 {`). Adding a version is a catalog entry the ranges below reach.
+//
+// Embedded, only what the including build can configure: the node its target needs. @see
+// cgbuildlogic.SingleJarSettings
+singlejar {
+    targets {
+        forge("1.7.10".."26.2")
+        neoforge("1.20.2".."26.2")
+        fabric("1.14.4".."26.2")
+    }
+}
+
+// Read by composite.settings.gradle.kts, which substitutes CrystalGraphics' node of each version.
+extra["cgModernNodes"] = singlejar.modernNodes
 
 // CrystalGraphics, and the ONE place it is included from.
 //
@@ -119,64 +148,12 @@ if (!embedded) include("runtime:mc:1710")
 // Applied even when embedded: :core takes com.crystalgraphics:core and :platform as compileOnly.
 apply(from = "gradle/module_integration/composite.settings.gradle.kts")
 
+// The consumer plugins, `com.crystalgui` and `com.crystalgui.settings`: a build of their own, which
+// publishes with this one. Never included into a consumer, whose own request for them it would answer.
+if (!embedded) includeBuild("consumer-plugin")
+
 //include(":CrystalGraphics")
 //include(":CrystalGraphics:core")
 //include(":CrystalGraphics:platform")
 //include(":CrystalGraphics:freetype-msdfgen-harfbuzz-bindings")
 
-// The MC 1.20.x loaders. `include`, not `includeBuild` -- there is no runtime/mc/modern/settings.gradle.kts, and
-// the loader scripts already say project(":runtime:mc:modern:common"). Same trap as mc1710; see plan/platform-mc1710.md 25.2.
-//
-// :runtime:mc:modern:common holds everything vanilla and the three loaders are registration only, reaching it
-// through LoaderBridge. :runtime:mc:modern:neoforge targets MC 1.20.4 -- NeoForge published no 20.1.x series
-// (plan/platform-mc1201.md 3.8).
-//
-// Gated like :runtime:mc:1710: these download and decompile a Minecraft toolchain, which an embedding consumer
-// has no use for.
-// MC 1.20.1 Forge is included even when embedded: it is what a 1.20.1 Forge mod consumes, and putting
-// its jar on that mod's run classpath is how CrystalGUI appears in the game's mod list at all.
-//
-// The other two do not cross. :runtime:mc:modern:fabric pulls fabric-loom, which refuses a Gradle daemon below
-// Java 21, and :runtime:mc:modern:neoforge targets MC 1.20.4 -- neither is a 1.20.1 Forge consumer's business,
-// and configuring them would impose a daemon requirement for a module it never builds.
-include(":runtime:mc:modern:common")
-include(":runtime:mc:modern:forge")
-
-// ── J10 / E-A1: the era spike ────────────────────────────────────────────────────────────────────
-//
-// A SECOND TREE beside the shipping modules, never in place of them: the question A1 asks is whether
-// a multi-version preprocessor runs under ModDevGradle and Loom in THIS build, and answering it must
-// not be able to break what already ships. Delete this block and the spike is gone.
-//
-// BRANCHED with a build script per loader, which is what Stonecutter's own multi-loader guide
-// recommends for a mod that depends on each loader's toolkit -- the flat shape would force
-// ModDevGradle and Loom through one script, and a failure there would say nothing about A1.
-//
-// `-PcgNoSpike` drops the whole tree, which is how day 3 measured what it COSTS: the same
-// configuration with and without it. It is also the fastest way to rule the spike out of any
-// failure that looks unrelated.
-val spikeDisabled = gradle.startParameter.projectProperties.containsKey("cgNoSpike")
-
-if (!embedded && !spikeDisabled) {
-    stonecutter {
-        create("runtime:mc:spike") {
-            // EVERY branch declares its own versions, and the tree declares none. A tree-level
-            // `versions(...)` is inherited by a branch that names none -- and it also creates a node
-            // ON THE TREE ITSELF (`:runtime:mc:spike:1.20.1`), which has no build script and builds
-            // nothing while still costing configuration.
-            //
-            // `common` carries the vanilla-facing code the loaders name, so it exists at BOTH
-            // versions: a loader node cannot borrow the shipping module, which is pinned to 1.20.1.
-            // Forge has one node only because E-A1 needed one Forge target, not because it is
-            // special -- adding 1.19.4 here is a line.
-            branch("common") { versions("1.20.1", "1.19.4") }
-            branch("forge") { versions("1.20.1") }
-            branch("fabric") { versions("1.20.1", "1.19.4") }
-        }
-    }
-}
-
-if (!embedded) {
-    include(":runtime:mc:modern:neoforge")
-    include(":runtime:mc:modern:fabric")
-}

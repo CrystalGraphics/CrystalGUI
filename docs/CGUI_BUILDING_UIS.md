@@ -11,6 +11,7 @@ beside this file. Nothing here assumes you have read them.
 
 ## Contents
 
+0. [Setting up your build](#0-setting-up-your-build)
 1. [Which kind of UI do I want?](#1-which-kind-of-ui-do-i-want)
 2. [A client-only UI](#2-a-client-only-ui)
 3. [Styling](#3-styling)
@@ -24,6 +25,13 @@ beside this file. Nothing here assumes you have read them.
 10. [Owning a file type](#10-owning-a-file-type)
 11. [Writing your own widget](#11-writing-your-own-widget)
 12. [Cheat sheet](#12-cheat-sheet)
+
+---
+
+## 0. Setting up your build
+
+[`CGUI_SETUP.md`](CGUI_SETUP.md): the `com.crystalgui` plugin for a mod on one Minecraft version,
+singlejar-logic's `targets {}` for one jar across many, and building against a CrystalGUI checkout.
 
 ---
 

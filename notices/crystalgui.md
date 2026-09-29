@@ -25,7 +25,7 @@ The repository-level index, with the full reasoning behind each entry, is
 | **jvmDowngrader** runtime stubs | `com/crystalgui/shadow/xyz/wagyourtail/` | MIT — © wagyourtail | Emitted by the downgrade that makes one jar load on Java 8 and Java 17 alike |
 
 `com/crystalgui/**` outside the rows above, and every shader, stylesheet and sprite under
-`assets/crystalgui/`, is CrystalGUI's own and is LGPL-3.0-or-later.
+`assets/crystalgui/`, is CrystalGUI's own and is LGPL-3.0-or-later. The licence texts are beside this file: `META-INF/COPYING.LESSER` (LGPL-3.0) and `META-INF/COPYING` (the GPL-3.0 it builds on).
 
 `assets/crystalgui/sources/` is this project's own Java sources, shipped so the documentation popup
 can quote a real declaration. Same licence as the classes beside them.

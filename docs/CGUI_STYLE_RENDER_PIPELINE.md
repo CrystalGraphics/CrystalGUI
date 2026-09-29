@@ -757,10 +757,9 @@ Blur listener deliberately does only `commit(); resetBlink();`. The fix for a bl
 live-looking highlight is in the paint guard, not in the blur handler; reaching for `clearSelection()`
 there would lose the range rather than just stop drawing it.
 
-Both are only observable in `cgui-textfield`, which forces two rows into states that cannot coexist
-through real input — one focused with a selection, one focused without and with the blink disabled for
-a deterministic capture. Nothing else in the harness shows either, which is why both being 2px too tall
-went unnoticed.
+Both show only in a focused field — one with a selection, one without and with the blink disabled for a
+deterministic capture — and a screenshot of a page catches neither, which is why both being 2px too
+tall went unnoticed.
 
 ---
 
@@ -1009,4 +1008,4 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |
 | SDF material | `core/src/main/resources/assets/crystalgui/shaders/gui_rect.shader` |
 | Named 9-slice assets | `core/src/main/java/com/crystalgui/render/texture/asset/CgUiSpriteRegistry.java` |
-| Demo scenes | `gl-debug-harness/src/main/java/io/github/somehussar/crystalgraphics/harness/scene/ui/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiNineSliceScene` (tiling modes, CPU vs SDF path), `CgUiOreThemeScene` (the theme + forced-state matrices), `CgUiTextFieldScene` (the only visible caret), `CgUiGalleryScene` (everything, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |
+| Demo scenes | `harness-scenes/src/main/java/com/crystalgui/harness/scene/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiGalleryScene` (every widget, a page each, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |

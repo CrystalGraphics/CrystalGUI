@@ -8,7 +8,7 @@ import org.gradle.api.tasks.bundling.Jar
 import java.io.File
 
 /**
- * Shared shadow JAR bundling — call from each mc1201 loader's build.gradle.kts.
+ * Shared shadow JAR bundling — applied to every 1.20.x loader node by cg-modern-loader.
  *
  * Wires assemble → shadowJar and puts into the jar everything a SHIPPED mod needs, which a dev run
  * never exercises: a dev run resolves from MOD_CLASSES and the library classpath and consults the jar's
@@ -28,9 +28,11 @@ import java.io.File
  */
 fun configureShadowJarBundling(project: Project) {
     with(project) {
+        // THIS node's common, never another version's. @see ModernTree
+        val common = commonNode.path
         afterEvaluate {
             tasks.named("shadowJar").configure {
-                dependsOn(":core:jar", ":runtime:mc:modern:common:jar", ":language:jar", ":taffy:jar")
+                dependsOn(":core:jar", "$common:jar", ":language:jar", ":taffy:jar")
                 dependsOn("bundleEngineBands")
 
                 // ShadowJar.configurations = empty list (no runtime classpath shadowing).
@@ -73,7 +75,7 @@ fun configureShadowJarBundling(project: Project) {
                 // collision the other way round -- two roots of one module, one answering for the path.
                 // One merge, both consumers.
                 dependsOn("mergeDevServices")
-                for (path in listOf(":core", ":runtime:mc:modern:common", ":language", ":taffy")) {
+                for (path in listOf(":core", common, ":language", ":taffy")) {
                     val jar: File = project(path).tasks.named("jar", Jar::class.java)
                         .get().archiveFile.get().asFile
                     copy.from(zipTree(jar), Action<CopySpec> { exclude("META-INF/services/**") })

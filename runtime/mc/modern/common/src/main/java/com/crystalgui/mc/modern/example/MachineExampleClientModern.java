@@ -7,12 +7,13 @@ import com.crystalgui.mc.modern.net.Connections;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 
 import net.minecraft.client.KeyMapping;
+import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 
 import org.lwjgl.glfw.GLFW;
 
 /**
- * The MC 1.20.x client half of {@link MachineExample}: a key.
+ * The modern client half of {@link MachineExample}: a key.
  *
  * <p>How this era spells a key binding and where its press is polled. The request itself, and what a
  * refusal means, are the example's.</p>
@@ -20,7 +21,7 @@ import org.lwjgl.glfw.GLFW;
 public final class MachineExampleClientModern {
 
     public static final KeyMapping OPEN_MACHINE =
-            new KeyMapping("key.crystalgui.machine", GLFW.GLFW_KEY_F8, "key.categories.crystalgui");
+            new KeyMapping("key.crystalgui.machine", GLFW.GLFW_KEY_F8, CgUiKeybinds.CATEGORY);
 
     private MachineExampleClientModern() {}
 
@@ -35,7 +36,7 @@ public final class MachineExampleClientModern {
 
     private static void poll() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.screen != null) return;
+        if (mc == null || ClientGame.screen(mc) != null) return;
         if (!OPEN_MACHINE.consumeClick()) return;
 
         MachineExample.requestPanel(Connections.client());

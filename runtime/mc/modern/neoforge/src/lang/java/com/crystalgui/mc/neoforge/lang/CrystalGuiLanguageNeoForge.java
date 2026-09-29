@@ -1,6 +1,7 @@
 package com.crystalgui.mc.neoforge.lang;
 
-import com.crystalgui.mc.modern.lang.LanguageLifecycle;
+import com.crystalgui.mc.modern.lang.ScriptServiceModern;
+import com.crystalgui.mc.shared.modern.LanguageLifecycle;
 
 import net.neoforged.bus.api.IEventBus;
 import com.crystalgraphics.mc.shared.VariantEntry;
@@ -24,6 +25,6 @@ public final class CrystalGuiLanguageNeoForge implements VariantEntry {
     }
 
     private void clientSetup(FMLClientSetupEvent event) {
-        event.enqueueWork(LanguageLifecycle::bootstrapClient);
+        event.enqueueWork(() -> LanguageLifecycle.bootstrapClient(ScriptServiceModern::forThisClient));
     }
 }

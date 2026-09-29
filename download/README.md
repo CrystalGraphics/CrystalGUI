@@ -22,6 +22,21 @@ The copy on `master` can move a download and never change one. A jar checks ever
 it was built with and ignores the digests here, so a wrong address costs a failed download, never a wrong
 file. A changed digest, or a new download, reaches only jars built after the edit.
 
+## A new Minecraft version
+
+A running client fetches its script names by its OWN version, and every one is pinned here per version,
+so a second host or the mirror can serve it without being trusted:
+
+| Loader | Pins |
+|---|---|
+| Fabric | `fabric/intermediary/<v>` (also `from` the mirror — CC0), `mojang/<v>/client.txt` |
+| Forge before 1.20.6 | `mojang/<v>/client.txt` and `forge/mcp-config/<v>`; before 1.14.4, `forge/mcp-stable/<mcp>` |
+| Forge 1.20.6+, NeoForge | nothing: they run Mojang's names |
+
+Digests are the publisher's: Mojang's version JSON for `client.txt`, the `.sha1` beside a Maven file.
+`checkDownloadLocations` fails a node whose own version is unpinned; `verifyScriptingCoverage` (online)
+every release its range claims. A new mirrored file then goes up with `stageDownloadMirror`.
+
 ## What is in it
 
 | Key | Holds |

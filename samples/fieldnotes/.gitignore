@@ -1,0 +1,4 @@
+.gradle/
+build/
+# A node's dev-run game directories
+runs/

@@ -2,14 +2,16 @@ package com.crystalgui.desktop.app;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
@@ -60,6 +62,8 @@ public final class ApplicationRegistry {
     private final Desktop desktop;
     private final List<ApplicationKind> installed = new ArrayList<>();
     private final List<Application> running = new ArrayList<>();
+    /** Kinds already told they need a server, so a host retrying every frame says so once. */
+    private final Set<String> refusedForNoServer = new HashSet<>();
 
     /** Something was installed, launched or quit — what a launcher and a taskbar redraw from. */
     public final Signal.Action onDidChange = new Signal.Action();
@@ -92,30 +96,16 @@ public final class ApplicationRegistry {
         // SET BEFORE THE LOOP: a service installs, and `install` bootstraps, so anything else would
         // re-enter here and run every service twice.
         bootstrapped = true;
-        Iterator<ApplicationKinds> services =
-                ServiceLoader.load(ApplicationKinds.class, ApplicationRegistry.class.getClassLoader())
-                        .iterator();
-        while (true) {
-            ApplicationKinds kinds;
-            try {
-                if (!services.hasNext()) break;
-                kinds = services.next();
-            } catch (ServiceConfigurationError | RuntimeException | LinkageError broken) {
-                // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN PRODUCTS AND NOT THE DESKTOP. The
-                // iterator throws on the ENTRY, so this has to bracket `next()` rather than the body --
-                // catching only around the call below leaves one mod's missing class emptying the
-                // launcher.
-                CrystalGuiCore.LOGGER.error("[cgui] an ApplicationKinds service could not be loaded; "
-                        + "its applications are not installed", broken);
-                continue;
-            }
+        // A SERVICE THAT WILL NOT LOAD COSTS ITS OWN PRODUCTS AND NOT THE DESKTOP.
+        Providers.forEach(ApplicationKinds.class, ApplicationRegistry.class.getClassLoader(), kinds -> {
             try {
                 kinds.register(this);
             } catch (RuntimeException | LinkageError failed) {
                 CrystalGuiCore.LOGGER.error("[cgui] the ApplicationKinds service '{}' failed to install "
                         + "its applications: {}", kinds.getClass().getName(), failed.getMessage(), failed);
             }
-        }
+        }, broken -> CrystalGuiCore.LOGGER.error("[cgui] an ApplicationKinds service could not be loaded; "
+                + "its applications are not installed", broken));
     }
 
     /**
@@ -220,8 +210,10 @@ public final class ApplicationRegistry {
             // without one -- and this is the refusal `ensureEditorWindow` used to make in the 1.7.10
             // screen, which is why it is here rather than in each host. A manifest that says
             // `standalone()` is offered anyway.
-            CrystalGuiCore.LOGGER.warn("[cgui] '{}' needs a server and there is none; it was not "
-                    + "launched. The desktop is open and the application is not on it.", kind.id());
+            if (refusedForNoServer.add(kind.id())) {
+                CrystalGuiCore.LOGGER.warn("[cgui] '{}' needs a server and there is none; it was not "
+                        + "launched. The desktop is open and the application is not on it.", kind.id());
+            }
             return null;
         }
         if (kind.factory() == null) {
@@ -240,6 +232,7 @@ public final class ApplicationRegistry {
             return null;
         }
         if (application == null) return null;
+        refusedForNoServer.remove(kind.id());
         running.add(application);
         onDidChange.emit();
         return application;

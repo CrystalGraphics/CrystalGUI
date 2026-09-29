@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.probe;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import com.crystalgui.mc.modern.net.Connections;
@@ -11,7 +12,7 @@ import javax.annotation.Nullable;
 import net.minecraft.server.MinecraftServer;
 
 /**
- * The MC 1.20.x half of the dedicated-server smoke: five facts and a way to stop the server.
+ * The modern half of the dedicated-server smoke: five facts and a way to stop the server.
  *
  * <p>Every check, the report and the exit code are {@link ServerSmoke}'s.</p>
  */
@@ -68,16 +69,24 @@ public final class ServerSmokeModern {
 
         @Override
         public List<String> alsoNeverLoaded() {
-            return Arrays.asList(
-                    // Client-side content that does not live in the client package.
-                    "com.crystalgui.mc.modern.example.MachineExampleClientModern",
-                    // Naming this from a common path is the commonest spelling of the bug.
-                    "net.minecraft.client.Minecraft");
+            // Client-side content that does not live in the client package.
+            return Collections.singletonList("com.crystalgui.mc.modern.example.MachineExampleClientModern");
+        }
+
+        /** Naming this from a common path is the commonest spelling of the bug. */
+        @Override
+        public List<String> gameClientClasses() {
+            return Collections.singletonList("net.minecraft.client.Minecraft");
         }
 
         @Override
         public void halt() {
+            // 1.14 added halt's wait-for-the-thread flag.
+            //? if >=1.14 {
             if (server != null) server.halt(false);
+            //?} else {
+            /*if (server != null) server.halt();
+            *///?}
         }
     }
 }

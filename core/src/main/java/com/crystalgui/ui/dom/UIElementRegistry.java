@@ -1,8 +1,8 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import java.util.Map;
-import java.util.ServiceLoader;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,14 +90,14 @@ public final class UIElementRegistry {
         synchronized (UIElementRegistry.class) {
             if (bootstrapped) return;
             bootstrapped = true;
-            for (NodeKinds kinds : ServiceLoader.load(NodeKinds.class, UIElementRegistry.class.getClassLoader())) {
+            Providers.forEach(NodeKinds.class, UIElementRegistry.class.getClassLoader(), kinds -> {
                 try {
                     kinds.register();
                 } catch (RuntimeException | LinkageError e) {
                     CrystalGuiCore.LOGGER.error("A NodeKinds service failed to register its kinds: {}",
                             kinds.getClass().getName(), e);
                 }
-            }
+            }, broken -> CrystalGuiCore.LOGGER.error("A NodeKinds service could not be loaded", broken));
         }
     }
 

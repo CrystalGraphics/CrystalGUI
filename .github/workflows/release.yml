@@ -1,0 +1,150 @@
+# The Release button (Actions -> Release -> Run workflow). Everything a release is, in order:
+#
+#   1. CrystalGraphics: the submodule moves to its master. When that commit is not a released version yet,
+#      it is released first -- a patch version, published, committed, tagged, pushed, with a GitHub release.
+#   2. CrystalGUI: the version is set, everything built and checked, published to Cloudsmith, and only then
+#      committed (with the submodule pointer), tagged, pushed and released on GitHub with the jars.
+#
+# A failure publishes and tags nothing after it. Run it again once fixed: a CrystalGraphics release that
+# already went out is found by its tag and not repeated.
+#
+# Secrets: CLOUDSMITH_USERNAME, CLOUDSMITH_PASSWORD (a Cloudsmith API key), and CRYSTALGRAPHICS_TOKEN -- a
+# fine-grained token with contents: write on CrystalGraphics/CrystalGraphics, for step 1's push and release.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Next CrystalGUI version
+        type: choice
+        options: [patch, minor, major, as-is]
+        default: patch
+      version:
+        description: Or exactly this version (x.y.z)
+        required: false
+
+permissions:
+  contents: write
+
+concurrency: release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      CLOUDSMITH_USERNAME: ${{ secrets.CLOUDSMITH_USERNAME }}
+      CLOUDSMITH_PASSWORD: ${{ secrets.CLOUDSMITH_PASSWORD }}
+      CG_TOKEN: ${{ secrets.CRYSTALGRAPHICS_TOKEN }}
+      # Gradle finds setup-java's JDKs only when told where.
+      JDKS: -Porg.gradle.java.installations.fromEnv=JAVA_HOME_8_X64,JAVA_HOME_17_X64,JAVA_HOME_21_X64,JAVA_HOME_25_X64
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Refuse without Cloudsmith credentials
+        # Without them the build publishes to Maven local and would report success.
+        run: |
+          if [ -z "$CLOUDSMITH_USERNAME" ] || [ -z "$CLOUDSMITH_PASSWORD" ]; then
+            echo "::error::Set the CLOUDSMITH_USERNAME and CLOUDSMITH_PASSWORD repository secrets"; exit 1
+          fi
+
+      # Zulu: RetroFuturaGradle (1.7.10) asks for Azul's JDKs by vendor.
+      - uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: |
+            8
+            17
+            21
+            25
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: CrystalGraphics at its master
+        id: cg
+        working-directory: CrystalGraphics
+        run: |
+          git fetch --tags origin master
+          git checkout --quiet origin/master
+          git submodule update --init --recursive
+          if git describe --tags --exact-match HEAD >/dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "CrystalGraphics $(git describe --tags --exact-match HEAD) is released; using it"
+          else
+            if [ -z "$CG_TOKEN" ]; then
+              echo "::error::CrystalGraphics' master is unreleased and CRYSTALGRAPHICS_TOKEN is not set"; exit 1
+            fi
+            VERSION=$(python3 .github/scripts/set_version.py gradle.properties patch)
+            if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+              echo "::error::CrystalGraphics v$VERSION exists but is not master; release CrystalGraphics by hand"; exit 1
+            fi
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Release CrystalGraphics
+        if: steps.cg.outputs.release == 'true'
+        working-directory: CrystalGraphics
+        env:
+          VERSION: ${{ steps.cg.outputs.version }}
+          GH_TOKEN: ${{ secrets.CRYSTALGRAPHICS_TOKEN }}
+        run: |
+          ./gradlew apiCheck checkSingleJar $JDKS --stacktrace      # checks alone first, as below
+          ./gradlew publish $JDKS --stacktrace
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release $VERSION"
+          git tag "v$VERSION"
+          REMOTE="https://x-access-token:$CG_TOKEN@github.com/CrystalGraphics/CrystalGraphics.git"
+          # The tag names what was built and published; the release commit then goes on top of whatever
+          # master is now, and CrystalGUI builds against the tag itself.
+          git push "$REMOTE" "v$VERSION"
+          git fetch "$REMOTE" master
+          git rebase FETCH_HEAD
+          git push "$REMOTE" HEAD:master
+          git checkout --quiet "v$VERSION"
+          gh release create "v$VERSION" -R CrystalGraphics/CrystalGraphics --title "CrystalGraphics $VERSION" \
+            --generate-notes "build/libs/crystalgraphics-$VERSION.jar" "build/libs/crystalgraphics-joml-$VERSION.jar"
+
+      - name: Set the version
+        id: version
+        run: |
+          VERSION=$(python3 .github/scripts/set_version.py gradle.properties "${{ inputs.version || inputs.bump }}")
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::v$VERSION is already released"; exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build, check and publish
+        # Checks first, alone: in one invocation Gradle runs publish tasks beside a failing check.
+        run: |
+          ./gradlew apiCheck checkSingleJar checkLanguageJar checkDownloadLocations verifyScriptingCoverage $JDKS --stacktrace
+          ./gradlew publish $JDKS --stacktrace
+
+      - name: Commit, tag and push
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add gradle.properties CrystalGraphics
+          git diff --cached --quiet || git commit -m "Release $VERSION"
+          git tag "v$VERSION"
+          # The tag names what was built and published. Master may have moved meanwhile: the release commit
+          # changes only the version and the submodule pointer, so it goes on top of whatever master is now.
+          git push origin "v$VERSION"
+          git fetch origin "${{ github.ref_name }}"
+          git rebase "origin/${{ github.ref_name }}"
+          git push origin "HEAD:${{ github.ref_name }}"
+
+      - name: GitHub release
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" --title "CrystalGUI $VERSION" --generate-notes \
+            "build/libs/crystalgui-$VERSION.jar" "build/libs/crystalgui-language-$VERSION.jar"

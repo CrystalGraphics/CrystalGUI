@@ -40,7 +40,7 @@ public final class MappingFiles {
      * a set would depend on iteration order.</p>
      */
     private static final List<MappingFormat> FORMATS = List.of(
-            new McpCsvFormat(), new ProGuardFormat(), new Tsrg2Format(), new TinyV2Format());
+            new McpCsvFormat(), new ProGuardFormat(), new Tsrg2Format(), new TsrgFormat(), new TinyV2Format());
 
     private MappingFiles() {
     }
