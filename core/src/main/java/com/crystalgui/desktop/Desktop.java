@@ -3,6 +3,7 @@ package com.crystalgui.desktop;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.box.BoxPainter;
@@ -1369,6 +1370,9 @@ public class Desktop extends UIElement implements DataProvider {
         // A PATH, NOT A STORAGE: LocalConfigStorage creates its directory eagerly, and a cache/ that
         // exists before anything derived does is a directory nobody can explain.
         this.cacheRoot = StorageLayout.cacheIn(installation);
+        // THE TRACE'S RUN DIRECTORY AND ITS EXPORTS, under the same cache: without it a run writes no
+        // trace.log and the Frame Profiler's Export has nowhere to put a file.
+        UiTrace.useCacheRoot(cacheRoot);
         // AUTOSTART AS SOON AS THERE IS SOMEWHERE TO READ SETTINGS FROM: a hook that records from the
         // first frame is only worth anything before the first frame.
         applications().autostart();

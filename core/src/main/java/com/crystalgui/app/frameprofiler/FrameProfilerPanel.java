@@ -1,5 +1,6 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgFrameRecord;
@@ -8,6 +9,7 @@ import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.trace.TraceFiles;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -28,7 +30,9 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -75,6 +79,7 @@ public class FrameProfilerPanel extends UIElement {
     public static final String TOOLBAR_CLASS = "__toolbar__";
     public static final String SPACER_CLASS = "__spacer__";
     public static final String STATS_CLASS = "__stats__";
+    public static final String EXPORT_NOTE_CLASS = "__export-note__";
     public static final String RECORD_CLASS = "__record__";
     public static final String RECORDING_CLASS = "__recording__";
     public static final String LIVE_CLASS = "__live__";
@@ -437,19 +442,54 @@ public class FrameProfilerPanel extends UIElement {
         worst.attachListener(model::selectWorst);
         bar.append(worst);
 
+        exportButton.attachListener(this::export);
+        bar.append(exportButton);
+
         // THE CHANNEL MASK. Ticking `crystalgraphics` takes everything beneath it, because the names
         // are hierarchical — so the common gesture really is `CrystalGraphics | CrystalGUI` while a
         // mod's own channel stays separately reachable in the same list.
         channels.bindTo(model);
         bar.append(channels);
 
-        UIElement spacer = new UIElement();
-        spacer.addClass(SPACER_CLASS);
-        bar.append(spacer);
+        exportNote.addClass(EXPORT_NOTE_CLASS);
+        bar.append(exportNote);
 
         stats.addClass(STATS_CLASS);
         bar.append(stats);
         return bar;
+    }
+
+    // ── Export ──────────────────────────────────────────────────────────────────────────────
+
+    private final Button exportButton = new Button("Export");
+    private final UIText exportNote = new UIText("");
+
+    public Button exportButton() {
+        return exportButton;
+    }
+
+    public UIText exportNote() {
+        return exportNote;
+    }
+
+    /**
+     * Writes the selected range, or every frame held, to a trace file Perfetto opens and Compare loads —
+     * and puts its path on the clipboard, since a file dialog is where it goes next.
+     */
+    private void export() {
+        ProfilerModel.Side range = model.selectedRange();
+        try {
+            Path file = TraceFiles.export(CgTrace.snapshot(),
+                    range == null ? Long.MIN_VALUE : range.fromIndex(),
+                    range == null ? Long.MAX_VALUE : range.toIndex());
+            String path = file.toAbsolutePath().toString();
+            CgPlatform.input().setClipboard(path);
+            exportNote.setText("Saved " + (range == null ? "every frame held" : range.label())
+                    + " to " + path + "  (path copied)");
+            compare.refreshTraces();
+        } catch (IOException failed) {
+            exportNote.setText("Export failed: " + failed.getMessage());
+        }
     }
 
     private UIElement buildTabs() {
