@@ -94,20 +94,22 @@ public final class CgUiHud {
         // session is: the engine initialises on the first WORLD render, and these hooks also fire over a
         // title screen where there has never been one.
         if (!HostSession.isInstalled() || !CgUiHostGl.contextIsLive()) return;
-        HostSession session = HostSession.session();
-        // The delta read ONCE and passed in -- reading it again inside would advance the clock twice.
-        session.paint(arm, session.frameDelta(), HOST);
+        HostSession.session().paint(arm, HOST);
     }
 
     // ── Input, offered to the compositor ────────────────────────────────────────────────────────
 
-    /** @return whether the desktop consumed it and the foreign screen must not see it */
+    /**
+     * @param button the host's numbering, or -1 for none
+     * @return whether the desktop consumed it and the foreign screen must not see it
+     */
     public static boolean offerMouse(int button, boolean pressed, float platformWheel) {
         // Signed here, not by the loaders: this path consumes a scroll over any window and cancels the
         // screen event, so it -- not CgUiScreen.mouseScrolled -- is what a scroll in our own screen
         // reaches.
         return HostSession.isInstalled() && HostSession.session().offerMouse(HOST, pointerGrabbed(),
-                pointerX(), pointerY(), button, pressed, CgUiInput.wheel(platformWheel));
+                pointerX(), pointerY(), CgPlatform.input().translateMouseCodes(button), pressed,
+                CgUiInput.wheel(platformWheel));
     }
 
     /** The pointer's position, delivered and never consumed. @see ScreenOverlay#offerMouse */
@@ -118,9 +120,9 @@ public final class CgUiHud {
     }
 
     /** @return whether the desktop consumed it */
-    public static boolean offerKey(int glfwKey, char typed, boolean pressed) {
+    public static boolean offerKey(int hostKey, char typed, boolean pressed) {
         return HostSession.isInstalled() && HostSession.session().offerKey(
-                CgPlatform.input().translateKeyboardCodes(glfwKey), typed, pressed);
+                CgPlatform.input().translateKeyboardCodes(hostKey), typed, pressed);
     }
 
     /** Whether the game holds the pointer; no mouse handler counts as held. */

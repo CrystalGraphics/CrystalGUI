@@ -3,6 +3,8 @@ package com.crystalgui.mc.modern.client;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.api.render.CgRenderPipeline;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
@@ -35,6 +37,10 @@ import net.minecraft.network.chat.Component;
 /*import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+*///?}
+//? if >=26.3 {
+/*import java.util.Arrays;
+import net.minecraft.client.input.PreeditEvent;
 *///?}
 
 /**
@@ -112,10 +118,6 @@ public final class CgUiScreen extends Screen {
         return app instanceof WorkbenchApplication ? ((WorkbenchApplication) app).workbench() : null;
     }
 
-    static float frameDelta() {
-        return HostSession.session().frameDelta();
-    }
-
     static float uiScale() {
         return HostSession.session().services().uiScale();
     }
@@ -132,6 +134,11 @@ public final class CgUiScreen extends Screen {
     @Override
     protected void init() {
         HostSession.session().shown();
+        // SDL sends characters only while an owner has started text input, which Minecraft's own text
+        // boxes do on focus. The desktop is ours to type into while it is up. Owner-checked on release.
+        //? if >=26.3 {
+        /*minecraft.onTextInputFocusChange(this, true);
+        *///?}
         //? if >=1.21.6 {
         /*if (hudHiddenBefore == null) hudHiddenBefore = ClientGame.hudHidden(minecraft);
         ClientGame.setHudHidden(minecraft, true);
@@ -197,7 +204,44 @@ public final class CgUiScreen extends Screen {
 
         session.frame(delta);
         session.paint(DesktopPresentation.DESKTOP, delta, PAINT_HOST);
+        //? if >=26.3 {
+        /*placeTextInputArea();
+        *///?}
     }
+
+    // An input method's run in progress, and where its candidate list opens: 26.3's SDL reports both and
+    // Minecraft hands the first to the screen, drawing nothing itself. The engine's side is CompositionEvent.
+    //? if >=26.3 {
+    /*@Override
+    public boolean preeditUpdated(@Nullable PreeditEvent event) {
+        UIDocument window = window();
+        // NULL ENDS THE COMPOSITION: Minecraft passes no event rather than an empty one.
+        if (window == null) return false;
+        return event == null
+                ? window.input().consumeComposition("", 0)
+                : window.input().consumeComposition(event.fullText(), event.caretPosition());
+    }
+
+    private static int[] placedTextInputArea;
+
+    // The focus owner's caret, in GUI units -- setTextInputArea scales by the GUI scale itself, and takes
+    // two CORNERS, as EditBox passes them, not a size. Sent only on a change: SDL passes it to the OS each time.
+    private static void placeTextInputArea() {
+        UIDocument window = window();
+        float[] area = window == null ? null : window.input().textInputArea();
+        if (area == null) return;
+        Minecraft mc = Minecraft.getInstance();
+        float scale = Math.max(1, mc.getWindow().getGuiScale());
+        int left = (int) Math.floor(area[0] / scale);
+        int top = (int) Math.floor(area[1] / scale);
+        int[] corners = { left, top,
+                Math.max(left + 1, (int) Math.ceil((area[0] + area[2]) / scale)),
+                Math.max(top + 1, (int) Math.ceil((area[1] + area[3]) / scale)) };
+        if (Arrays.equals(corners, placedTextInputArea)) return;
+        placedTextInputArea = corners;
+        mc.textInputManager().setTextInputArea(corners[0], corners[1], corners[2], corners[3]);
+    }
+    *///?}
 
     // 1.21.6 draws the background from renderWithTooltip, before render() and deferred to the end of the
     // frame -- so its blur and dim would land OVER the desktop painted above. The desktop is its own.
@@ -254,6 +298,9 @@ public final class CgUiScreen extends Screen {
     @Override
     public void removed() {
         HostSession.session().hidden();
+        //? if >=26.3 {
+        /*minecraft.onTextInputFocusChange(this, false);
+        *///?}
         //? if >=1.21.6 {
         /*if (hudHiddenBefore != null) ClientGame.setHudHidden(minecraft, hudHiddenBefore);
         hudHiddenBefore = null;
@@ -362,14 +409,12 @@ public final class CgUiScreen extends Screen {
 
         // Escape is a cascade -- a live drag eats it, then a popover, then a modal -- so the screen
         // closes only on one nothing wanted. shouldCloseOnEsc() is false for the same reason.
-        if (keyCode == ESCAPE_KEY) {
+        if (CgPlatform.input().translateKeyboardCodes(keyCode) == CgKeyCodes.KEY_ESCAPE) {
             onClose();
             return true;
         }
         return false;
     }
-
-    private static final int ESCAPE_KEY = 256;
 
     //? if >=1.21.9 {
     /*@Override

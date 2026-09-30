@@ -222,7 +222,7 @@ public final class LifecycleCrystalGUI {
     }
 
     /** @return whether the desktop consumed it */
-    public static boolean offerKey(int glfwKey, char typed, boolean pressed) {
-        return CgUiHud.offerKey(glfwKey, typed, pressed);
+    public static boolean offerKey(int hostKey, char typed, boolean pressed) {
+        return CgUiHud.offerKey(hostKey, typed, pressed);
     }
 }

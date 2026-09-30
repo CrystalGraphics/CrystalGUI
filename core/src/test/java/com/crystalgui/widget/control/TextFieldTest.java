@@ -902,6 +902,42 @@ public class TextFieldTest extends UiDocumentTestBase {
         assertEquals("configuration must not emit a value change", 0, fired[0]);
     }
 
+    // ── Input-method composition ────────────────────────────────────────────
+
+    /** Each update replaces the run; the commit arrives as characters and replaces it again. */
+    @Test
+    public void compositionShowsTheRunAndTheCommitReplacesIt() {
+        type("a");
+        assertTrue(document.input().consumeComposition("に", 1));
+        document.input().consumeComposition("にほ", 2);
+        assertEquals("aにほ", field.getText());
+        assertEquals(3, field.getCaret());
+
+        type("日本");
+        assertEquals("a日本", field.getText());
+        // The end may follow the commit; there is nothing left to remove by then.
+        document.input().consumeComposition("", 0);
+        assertEquals("a日本", field.getText());
+    }
+
+    /** The other order: the end first, which removes the run, then the commit typed normally. */
+    @Test
+    public void anEndBeforeTheCommitStillLeavesOnlyTheCommit() {
+        document.input().consumeComposition("にほ", 2);
+        document.input().consumeComposition("", 0);
+        assertEquals("", field.getText());
+        type("日本");
+        assertEquals("日本", field.getText());
+    }
+
+    @Test
+    public void aCompositionReplacesTheSelection() {
+        type("abc");
+        field.setSelection(0, 3);
+        document.input().consumeComposition("に", 1);
+        assertEquals("に", field.getText());
+    }
+
     // ── Word-wise editing ───────────────────────────────────────────────────
 
     /**
