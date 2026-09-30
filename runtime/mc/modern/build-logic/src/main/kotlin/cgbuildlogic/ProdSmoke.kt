@@ -305,9 +305,7 @@ abstract class ProdSmoke : DefaultTask() {
 
     private fun arm(cfg: File, out: File, name: String) {
         // ONE SET OF ARGUMENTS for every loader, and each reads what it understands: `world=*` loads
-        // the first save on 1.7.10, where the editor application needs a server, and is ignored on
-        // 1.20.x, whose autotest stays on the title screen because loading a save needs a call that
-        // differs between 1.20.1 and 1.20.4.
+        // the first save, so every client captures over a world and runs its world passes.
         //
         // NO SPACE IN ANY VALUE. Prism strips the quotes from a JvmArgs value and splits on spaces
         // anyway, gluing the tail onto the next argument -- and the failure is launcher-side, so no

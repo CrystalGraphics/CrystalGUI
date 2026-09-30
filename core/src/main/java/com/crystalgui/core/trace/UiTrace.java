@@ -189,6 +189,27 @@ public final class UiTrace {
         if (cacheRoot == null) return;
         CgTraceLog.useRoot(cacheRoot.resolve("trace"));
         TraceFiles.useRunRoot(cacheRoot.resolve("trace"));
+        closeOnExit();
+    }
+
+    private static boolean closesOnExit;
+
+    /**
+     * On exit, writes {@code meta.json} and — when anything was recorded — {@code report.txt}, at the tier
+     * {@code -Dcrystalgraphics.trace.report} names or the breakdown otherwise, then closes the log.
+     */
+    private static synchronized void closeOnExit() {
+        if (closesOnExit || CgTraceLog.dir() == null) return;
+        closesOnExit = true;
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            writeMeta();
+            if (CgTrace.frameCount() > 0) {
+                String asked = System.getProperty("crystalgraphics.trace.report");
+                if (asked == null || asked.isEmpty()) writeReport(CgTraceReport.Tier.BREAKDOWN);
+                else writeReportIfAsked();
+            }
+            CgTraceLog.stop();
+        }, "crystalgui-trace-exit"));
     }
 
     /**
@@ -202,6 +223,7 @@ public final class UiTrace {
         if (configured == null || configured.isEmpty()) return;
         CgTraceLog.useRoot(Paths.get(configured));
         TraceFiles.useRunRoot(Paths.get(configured));
+        closeOnExit();
     }
 
     /**
