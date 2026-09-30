@@ -1,5 +1,6 @@
 package com.crystalgui.mc.v1710.client;
 
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
@@ -87,11 +88,13 @@ public final class CgUiHud {
 
         @Override
         public void enter() {
+            CgGL.fromHost();
             CgGlState.invalidateAllIfPresent();
         }
 
         @Override
         public void leave() {
+            CgGL.toHost();
             // MINECRAFT GETS ITS FIXED-FUNCTION STATE BACK. It drew with alpha and blend on and lighting
             // off and will assume the same next frame; CrystalGUI's endFrame restores what IT saved,
             // which is not the same thing.
@@ -124,9 +127,7 @@ public final class CgUiHud {
     /** Paints {@code arm}, and only if the compositor is in it. @see HostSession#paint */
     private static void paint(DesktopPresentation arm) {
         if (!HostSession.isInstalled()) return;
-        HostSession session = HostSession.session();
-        // The delta read ONCE and passed in -- reading it again inside would advance the clock twice.
-        session.paint(arm, session.frameDelta(), HOST);
+        HostSession.session().paint(arm, HOST);
     }
 
     // ── Input, offered to the compositor ────────────────────────────────────────────────────────

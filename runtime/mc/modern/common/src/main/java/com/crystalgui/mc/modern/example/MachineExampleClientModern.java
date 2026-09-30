@@ -1,6 +1,8 @@
 package com.crystalgui.mc.modern.example;
 
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.app.machine.MachineExample;
+import com.crystalgui.mc.modern.client.CgUiInput;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.mc.modern.net.Connections;
@@ -9,8 +11,6 @@ import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import net.minecraft.client.KeyMapping;
 import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
-
-import org.lwjgl.glfw.GLFW;
 
 /**
  * The modern client half of {@link MachineExample}: a key.
@@ -21,7 +21,7 @@ import org.lwjgl.glfw.GLFW;
 public final class MachineExampleClientModern {
 
     public static final KeyMapping OPEN_MACHINE =
-            new KeyMapping("key.crystalgui.machine", GLFW.GLFW_KEY_F8, CgUiKeybinds.CATEGORY);
+            new KeyMapping("key.crystalgui.machine", CgUiInput.hostKey(CgKeyCodes.KEY_F8), CgUiKeybinds.CATEGORY);
 
     private MachineExampleClientModern() {}
 

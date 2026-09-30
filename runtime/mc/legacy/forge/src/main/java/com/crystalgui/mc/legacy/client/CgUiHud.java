@@ -1,5 +1,6 @@
 package com.crystalgui.mc.legacy.client;
 
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
@@ -52,11 +53,13 @@ public final class CgUiHud {
 
         @Override
         public void enter() {
+            CgGL.fromHost();
             CgGlState.invalidateAllIfPresent();
         }
 
         @Override
         public void leave() {
+            CgGL.toHost();
             CgGlState.invalidateAllIfPresent();
         }
     };
@@ -83,9 +86,7 @@ public final class CgUiHud {
     /** Paints {@code arm}, and only if the compositor is in it. */
     private static void paint(DesktopPresentation arm) {
         if (!HostSession.isInstalled()) return;
-        HostSession session = HostSession.session();
-        // Read once: reading it again inside would advance the clock twice.
-        session.paint(arm, session.frameDelta(), HOST);
+        HostSession.session().paint(arm, HOST);
     }
 
     // ── Synthetic input, for the desktop probe ──────────────────────────────────────────────────

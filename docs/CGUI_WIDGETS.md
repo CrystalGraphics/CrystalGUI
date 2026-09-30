@@ -487,6 +487,20 @@ also carries, because that gap is leading *between* lines and this field is sing
 also paints only while focused — blurring hides the band but keeps the range, as browsers do. See
 `CGUI_STYLE_RENDER_PIPELINE.md` §8c.
 
+**Input-method composition** (Japanese, Chinese, Korean): a host that reports a run in progress sends
+it through `Input.consumeComposition(text, caret)`. The field shows the run in its text, underlined,
+replacing it on every update; the committed characters then arrive as ordinary typing, filtered as
+usual, and drop the run first. `textInputArea()` answers the caret's box in surface pixels, where the
+host opens the IME's candidate list. `TextEditor` does the same, underlining through
+`::highlight(ime-composition)`. Only Minecraft 26.3 (SDL3) reports a composition; everywhere else the
+OS draws the run itself.
+
+```java
+// a host with a composing input method -- Minecraft 26.3's CgUiScreen.preeditUpdated
+document.input().consumeComposition(preedit.fullText(), preedit.caretPosition());
+float[] caret = document.input().textInputArea();   // {x, y, w, h}, or null
+```
+
 - Tag `textfield` · pseudo `:blank :invalid :hover :active :focus :focus-visible :disabled`
 - Scene: `cgui-gallery` (TextField page)
 

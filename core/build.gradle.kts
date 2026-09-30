@@ -233,6 +233,48 @@ val headlessTestTask = tasks.register<Test>("headlessTest") {
 
 tasks.named("check") { dependsOn(headlessTestTask) }
 
+// -- trackedTest ---------------------------------------------------------------
+// CrystalGUI's shaders compiled by shaderc and linked on CrystalGraphics' tracked backend, as a Vulkan device
+// will run them (plan/device-seam.md §6). Its own source set and task: the backend it installs is process-wide,
+// and LWJGL 3's natives belong on no other test's classpath.
+val trackedTest: SourceSet by sourceSets.creating {
+    runtimeClasspath += sourceSets["main"].output
+}
+
+val lwjglVulkan = rootProject.properties["dep.lwjgl3.vulkan"].toString()
+val lwjglNatives = System.getProperty("os.name").lowercase().let { os ->
+    when {
+        os.contains("win") -> "natives-windows"
+        os.contains("mac") -> if (System.getProperty("os.arch") == "aarch64") "natives-macos-arm64" else "natives-macos"
+        else -> "natives-linux"
+    }
+}
+
+dependencies {
+    "trackedTestImplementation"("junit:junit:4.13.2")
+    "trackedTestImplementation"("com.crystalgraphics:core:$crystalgraphics")
+    "trackedTestImplementation"("com.crystalgraphics:platform:$crystalgraphics")
+    "trackedTestImplementation"("com.crystalgraphics:vulkan:$crystalgraphics")
+    "trackedTestImplementation"("org.joml:joml:${rootProject.properties["jomlVersion"]}")
+    "trackedTestRuntimeOnly"("org.apache.logging.log4j:log4j-core:2.26.1")
+    for (module in listOf("lwjgl", "lwjgl-shaderc", "lwjgl-spvc")) {
+        "trackedTestImplementation"("org.lwjgl:$module:$lwjglVulkan")
+        "trackedTestRuntimeOnly"("org.lwjgl:$module:$lwjglVulkan:$lwjglNatives")
+    }
+}
+
+val trackedTestTask = tasks.register<Test>("trackedTest") {
+    description = "CrystalGUI's shaders compiled and linked on CrystalGraphics' tracked backend, as on Vulkan."
+    group = "verification"
+    testClassesDirs = trackedTest.output.classesDirs
+    classpath = trackedTest.runtimeClasspath
+    useJUnit()
+    // shaderc's natives load through System.load, which JDK 25 warns about unless native access is granted.
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+}
+
+tasks.named("check") { dependsOn(trackedTestTask) }
+
 
 // -- M5 acceptance ------------------------------------------------------------
 // The new engine's own definition of done, as ONE invocation: `./gradlew :core:m5Acceptance`.

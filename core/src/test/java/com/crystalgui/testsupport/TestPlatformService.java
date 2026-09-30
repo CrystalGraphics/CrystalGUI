@@ -27,7 +27,7 @@ import com.crystalgraphics.platform.service.CgSoundService;
  * CrystalGraphics' {@code CgCursorService} slot, which no test fills, so there is nothing to leak.</p>
  *
  * <p>The six GL-facing services all answer {@code null}. Nothing in a unit test reaches them —
- * {@code CgPlatform.register} only stores {@code gl()} and {@code capabilities()} into static fields, and
+ * {@code CgPlatform.register} calls neither {@code gl()} nor {@code capabilities()}, and
  * {@code CgIO} explicitly null-checks {@code resources()} before falling through to the classpath, which
  * is the path these tests load stylesheets and fonts by.</p>
  *

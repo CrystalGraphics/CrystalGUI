@@ -53,6 +53,7 @@ import com.crystalgui.text.WordOperations;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
+import com.crystalgui.ui.event.CompositionEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -383,6 +384,13 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     private int highlightedFrom = -1;
     private int highlightedTo = -1;
     private boolean highlightsDirty = true;
+
+    /** The {@code ::highlight()} name an input method's run in progress is published under. */
+    public static final String COMPOSITION_HIGHLIGHT = "ime-composition";
+
+    /** Where the run an input method is composing starts, or -1; and its length. @see #compose */
+    private int compositionStart = -1;
+    private int compositionLength;
 
     /**
      * The model rows the pending rebuild is confined to, or null for every realised row.
@@ -1379,6 +1387,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     private void installInput() {
+        events.getGroup(CompositionEvent.class).attachListener((el, event) -> {
+            if (!isEnabled() || readOnly) return;
+            compose(event.getText(), event.getCaret());
+            event.stopPropagation();
+        }, false, false);
+
         events.getGroup(KeyboardEvent.Down.class).attachListener((el, event) -> {
             if (!isEnabled()) return;
             // THE POPUP GETS THE KEYS FIRST, and only the four it owns. Arrows, Enter, Tab and Escape mean
@@ -1413,6 +1427,8 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             }
             char typed = event.getCharacter();
             if (typed != '\0' && !Character.isISOControl(typed)) {
+                // A COMMIT: the run in progress gives way to the characters that finish it.
+                dropCompositionRun();
                 typeCharacter(typed);
                 event.stopPropagation();
             }
@@ -2522,23 +2538,10 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      */
     @Nullable
     public float[] anchorInWindow(int at) {
-        int anchorOffset = Math.max(0, Math.min(at, buffer.length()));
-        int viewLine = viewLineOf(anchorOffset, LineProjection.Affinity.RIGHT);
-        ProjectedLines.ModelPosition model = modelAt(viewLine);
-        int rowStart = buffer.document().lineStartOffset(model.row());
-        LineProjection.ViewPosition view = projectionAt(viewLine)
-                .toViewPosition(anchorOffset - rowStart, LineProjection.Affinity.RIGHT);
-
-        // THE SCROLL OFFSET CAN BE NaN, and this is the seam where that stops being someone else's problem.
-        //
-        // A NaN scroll poisons everything downstream silently: it propagates through the subtraction, then
-        // through the min/max in the placement, and lands the popup at the window's corner looking
-        // deliberately placed. Treating a non-finite offset as zero is right rather than merely defensive —
-        // "scrolled by an unknown amount" and "not scrolled" are the same picture for a document that has
-        // not been scrolled, and the alternative is a popup nobody can find.
-        float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(scrollLeft());
-        float localY = screenTopOfViewLine(viewLine);
-        if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
+        float[] local = caretLocalPoint(at);
+        if (local == null) return null;
+        float localX = local[0];
+        float localY = local[1];
         Box self = box();
         if (self == null) return new float[] { localX, localY, lineHeight() };
         // OUT THROUGH THIS EDITOR'S WORLD MATRIX AND BACK IN THROUGH THE ROOT'S, never `worldX() +
@@ -2561,6 +2564,29 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         Vector3f world = new Vector3f(localX, localY, 0f).mulPosition(self.localToWorld());
         Vector2f inRoot = Transform2D.apply(root.worldToLocal(), world.x, world.y);
         return new float[] { inRoot.x, inRoot.y, lineHeight() };
+    }
+
+    /** The top of the line box at {@code at}, in this editor's own space, or null while unmeasurable. */
+    @Nullable
+    private float[] caretLocalPoint(int at) {
+        int anchorOffset = Math.max(0, Math.min(at, buffer.length()));
+        int viewLine = viewLineOf(anchorOffset, LineProjection.Affinity.RIGHT);
+        ProjectedLines.ModelPosition model = modelAt(viewLine);
+        int rowStart = buffer.document().lineStartOffset(model.row());
+        LineProjection.ViewPosition view = projectionAt(viewLine)
+                .toViewPosition(anchorOffset - rowStart, LineProjection.Affinity.RIGHT);
+
+        // THE SCROLL OFFSET CAN BE NaN, and this is the seam where that stops being someone else's problem.
+        //
+        // A NaN scroll poisons everything downstream silently: it propagates through the subtraction, then
+        // through the min/max in the placement, and lands the popup at the window's corner looking
+        // deliberately placed. Treating a non-finite offset as zero is right rather than merely defensive —
+        // "scrolled by an unknown amount" and "not scrolled" are the same picture for a document that has
+        // not been scrolled, and the alternative is a popup nobody can find.
+        float localX = textOriginX() + xOfView(viewLine, view.column()) - finiteOrZero(scrollLeft());
+        float localY = screenTopOfViewLine(viewLine);
+        if (!Float.isFinite(localX) || !Float.isFinite(localY)) return null;
+        return new float[] { localX, localY };
     }
 
     /**
@@ -2742,6 +2768,12 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // than VS Code's (opacity, which keeps the hue). The alternative would be blending colours in
             // the paint path, and the sheet can express one of these and not the other.
             addTagRanges(byName, lineStart, lineEnd);
+
+            // LAST, so an input method's run in progress wins its characters from everything above.
+            if (compositionStart >= 0 && compositionLength > 0) {
+                addDocumentRanges(byName, COMPOSITION_HIGHLIGHT, List.of(
+                        TextRange.of(compositionStart, compositionStart + compositionLength)), lineStart, lineEnd);
+            }
 
             // CLAMPED to what is actually painted. A collapsed header stops drawing its trailing bracket,
             // so a token covering it would publish a range past the end of the string. Correct to do
@@ -3636,6 +3668,59 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         float step = Math.signum(outside) * Math.min(Math.abs(outside), 200f) * deltaSeconds * 1.5f;
         setScrollNow(scrollLeft(), scrollTop() + step);
         extendDragTo(offsetAtLocal(pointerX, Math.max(0f, Math.min(pointerY, viewport))));
+    }
+
+    // ── Input-method composition ────────────────────────────────────────────────────────────────
+
+    /**
+     * Shows an input method's run in progress in the document, underlined -- Monaco's
+     * {@code compositionType}: each update replaces the previous run, and the committed characters then
+     * arrive as ordinary typing, which drops the run first ({@link #dropCompositionRun}).
+     *
+     * <p>At the primary caret only: a selection is replaced first, as typing would, and other carets
+     * collapse. An empty run ends the composition.</p>
+     */
+    private void compose(String text, int caretInText) {
+        if (compositionStart < 0 || compositionStart + compositionLength > buffer.length()) {
+            if (text.isEmpty()) {
+                compositionStart = -1;
+                return;
+            }
+            if (hasSelection()) insertAtCaret("");
+            collapseCarets();
+            buffer.breakUndoCoalescing();
+            compositionStart = getCaret();
+            compositionLength = 0;
+        }
+        int start = compositionStart;
+        applyEdit(new ArrayList<>(List.of(new Change(start, start + compositionLength, text))));
+        compositionLength = text.length();
+        setCaret(start + Math.min(caretInText, text.length()));
+        if (text.isEmpty()) compositionStart = -1;
+        highlightsDirty = true;
+    }
+
+    /** Removes a run still in progress, before the characters that commit it are typed. */
+    private void dropCompositionRun() {
+        if (compositionStart < 0) return;
+        int start = compositionStart;
+        int end = Math.min(buffer.length(), start + compositionLength);
+        compositionStart = -1;
+        if (end > start) applyEdit(new ArrayList<>(List.of(new Change(start, end, ""))));
+        setCaret(start);
+        highlightsDirty = true;
+    }
+
+    /** The caret's line box in surface pixels, where an input method opens its candidate list. */
+    @Nullable
+    @Override
+    public float[] textInputArea() {
+        Box self = box();
+        float[] local = caretLocalPoint(getCaret());
+        if (self == null || local == null) return null;
+        Vector3f top = new Vector3f(local[0], local[1], 0f).mulPosition(self.localToWorld());
+        Vector3f bottom = new Vector3f(local[0], local[1] + lineHeight(), 0f).mulPosition(self.localToWorld());
+        return new float[] { top.x, top.y, 1f, Math.max(1f, bottom.y - top.y) };
     }
 
     // ── Typing aids ─────────────────────────────────────────────────────────────────────────────
