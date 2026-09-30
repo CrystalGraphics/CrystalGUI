@@ -1,5 +1,7 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.ui.dom.UIElement;
@@ -395,28 +397,16 @@ public class BlackboardPanel extends UIElement implements DataProvider {
      * <p>The widget owns this, like its theme and its commands — a host that has to remember to drive
      * another widget's geometry is a host that will forget, and this one did.</p>
      */
-        public boolean tickFrame(float deltaSeconds) {
-        move.reclampIfPlaced(placedLeft(), placedTop());
-        return true;
+    public boolean tickFrame(float deltaSeconds) {
+        CgTrace.add(UiTrace.FRAME, "blackboard-tick-calls", 1);
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "blackboard:tick")) {
+            return tickFrameTraced(deltaSeconds);
+        }
     }
 
-    /**
-     * Starts the re-clamp ticker, once.
-     *
-     * <p>From here rather than the constructor because there is no window then. {@code registerTicker} is
-     * {@code HashSet}-backed and this registers {@code this}, so re-registering is genuinely idempotent —
-     * unlike a lambda, which would be a new object every layout pass.</p>
-     */
-    /**
-     * Geometry that can only be settled once layout has run.
-     *
-     * <p>{@code onLayoutChanged()} on the old engine; there is no such override here, because layout
-     * is ONE pass with no feedback into it. A post-layout hook may move a box and read a box and may
-     * not add one — a structural change would need a second pass, and there is not one.</p>
-     */
-    private void onLayoutSettled() {
-        UIDocument window = document();
-        if (window != null) document().animation().every(this, this::tickFrame);
+    private boolean tickFrameTraced(float deltaSeconds) {
+        move.reclampIfPlaced(placedLeft(), placedTop());
+        return true;
     }
 
     /**
@@ -1393,15 +1383,22 @@ public class BlackboardPanel extends UIElement implements DataProvider {
         }
         return typeId;
     }
+    /** The re-clamp ticker, once per attach: {@code Animation.every} is a plain add. */
     @Override
     protected void connected() {
         super.connected();
-        document().animation().afterLayout(this, delta -> {
-            onLayoutSettled();
-            return true;
-        });
+        if (!ticking) {
+            ticking = true;
+            document().animation().every(this, this::tickFrame);
+        }
     }
 
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        ticking = false;
+    }
 
+    private boolean ticking;
 
 }

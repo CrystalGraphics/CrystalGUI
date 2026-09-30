@@ -1,6 +1,8 @@
 package com.crystalgui.app.shadergraph;
 
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.shadergraph.*;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;
@@ -351,6 +353,15 @@ public final class ShaderGraphBridge {
     @Nullable
     public static CgShaderGraph toShaderGraph(GraphDocument document, CgShaderNodeRegistry shaderNodes,
                                               CgMasterNode master) {
+        CgTrace.add(UiTrace.FRAME, "sg-to-shader-graph", 1);
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:toShaderGraph")) {
+            return toShaderGraphTraced(document, shaderNodes, master);
+        }
+    }
+
+    @Nullable
+    private static CgShaderGraph toShaderGraphTraced(GraphDocument document, CgShaderNodeRegistry shaderNodes,
+                                                     CgMasterNode master) {
         CgShaderGraph graph = new CgShaderGraph();
         Map<String, Boolean> present = new LinkedHashMap<>();
         String masterId = null;
@@ -459,6 +470,15 @@ public final class ShaderGraphBridge {
     public static CgShaderEmitter.Result compile(GraphDocument document,
                                                  CgShaderNodeRegistry shaderNodes,
                                                  CgMasterNode master) {
+        CgTrace.add(UiTrace.FRAME, "sg-compiles", 1);
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:compile")) {
+            return compileTraced(document, shaderNodes, master);
+        }
+    }
+
+    private static CgShaderEmitter.Result compileTraced(GraphDocument document,
+                                                        CgShaderNodeRegistry shaderNodes,
+                                                        CgMasterNode master) {
         // The document's own settings reach the master HERE, immediately before the emit, and nowhere
         // else. The master is the compiler's object rather than storage — see ShaderGraphSettings for
         // what holding them on it used to cost — so it is written at the last possible moment and never

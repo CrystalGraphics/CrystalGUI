@@ -1,5 +1,7 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
@@ -331,6 +333,7 @@ final class PortDefaultEditor {
         }
 
         private void onLayoutSettled() {
+            CgTrace.add(UiTrace.FRAME, "graph-port-editor-settles", 1);
             // Mounted only: an unmounted box has no plane to be positioned on, and moveNode would write
             // world coordinates onto an element that is not in the world.
             if (mounted) reposition();

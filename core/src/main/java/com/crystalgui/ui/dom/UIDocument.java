@@ -469,6 +469,10 @@ public final class UIDocument extends UIElement {
             CgTrace.zoneDone(UiTrace.FRAME, "frame:jobs", drained);
         }
         input().beginFrame();
+        // READINGS, not counts: a hook registered again every frame without its twin being dropped grows
+        // these by one a frame for as long as its owner lives -- a leak nothing else shows.
+        CgTrace.counter(UiTrace.FRAME, "anim-hooks", animation().hookCount());
+        CgTrace.counter(UiTrace.FRAME, "anim-after-layout-hooks", animation().afterLayoutCount());
         long timed = CgTrace.stamp(UiTrace.FRAME);
         animation().tick(deltaSeconds);
         CgTrace.zoneDone(UiTrace.FRAME, "frame:hooks", timed);

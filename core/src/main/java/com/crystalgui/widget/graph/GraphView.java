@@ -1,5 +1,7 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.dom.Name;
@@ -439,10 +441,17 @@ public class GraphView extends SurfaceEditor implements GraphContext {
      *
      * <p>Always ticking, regardless of {@link #setCullingEnabled}: a floating editor still has to track
      * its port even in a huge graph where node culling is doing real work, so this cannot piggyback on
-     * {@link CanvasView#tickFrame}'s own early-out.</p>
+     * {@link CanvasView#tickFrame}'s own early-out. Not an override of it, or the canvas's culling hook
+     * would run this too.</p>
      */
-    public boolean tickFrame(float deltaSeconds) {
-        super.tickFrame(deltaSeconds);
+    private boolean tickPorts(float deltaSeconds) {
+        CgTrace.add(UiTrace.FRAME, "graph-tick-calls", 1);
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "graph:tick")) {
+            return tickPortsTraced();
+        }
+    }
+
+    private boolean tickPortsTraced() {
         // WHAT THE DOCUMENT DID WITHOUT THIS VIEW -- another view of it, an undo, a server -- applied here and not on
         // the change: a view's own edit reaches the document before it has registered its widget, so following on the
         // signal would build that node a second time.
@@ -456,21 +465,6 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     public void dispose() {
         document.closeChangeset(pending);
         super.dispose();
-    }
-
-    /**
-     * Geometry that can only be settled once layout has run.
-     *
-     * <p>{@code onLayoutChanged()} on the old engine; there is no such override here, because layout
-     * is ONE pass with no feedback into it. A post-layout hook may move a box and read a box and may
-     * not add one — a structural change would need a second pass, and there is not one.</p>
-     */
-    private void onLayoutSettled() {
-        // super's own ensureTicking() only registers while culling is enabled — this view needs to tick
-        // unconditionally, for the reason tickFrame's javadoc gives. registerTicker is HashSet-backed, so
-        // calling it again every layout pass is idempotent rather than wasteful.
-        UIDocument window = document();
-        if (window != null) document().animation().every(this, this::tickFrame);
     }
 
     /** Called by {@link GraphNode#addPort}. @see GraphPorts#watch */
@@ -1098,14 +1092,24 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     @Override
     protected void connected() {
         super.connected();
-        document().animation().afterLayout(this, delta -> {
-            onLayoutSettled();
-            return true;
-        });
+        // Once per attach: `Animation.every` is a plain add. Registered from a post-layout hook, this was
+        // one more hook every frame for as long as the graph stayed open.
+        if (!ticking) {
+            ticking = true;
+            document().animation().every(this, this::tickPorts);
+        }
         // @see #everyFrame. Drained rather than replayed: `every` is owned by this node, so a re-attach
         // would otherwise register each hook a second time.
         for (Animation.Hook hook : pendingFrameHooks) document().animation().every(this, hook);
         pendingFrameHooks.clear();
     }
+
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        ticking = false;
+    }
+
+    private boolean ticking;
 
 }

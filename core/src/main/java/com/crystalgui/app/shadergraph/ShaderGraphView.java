@@ -1,5 +1,7 @@
 package com.crystalgui.app.shadergraph;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import java.util.List;
 import java.util.Map;
 
@@ -449,6 +451,12 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
      * may not exist on the first frame. Drops itself once both are up. NOTHING PER-FRAME BELONGS HERE.
      */
     private boolean attachPreviews(float deltaSeconds) {
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:attachPreviews")) {
+            return attachPreviewsTraced(deltaSeconds);
+        }
+    }
+
+    private boolean attachPreviewsTraced(float deltaSeconds) {
         ensureGraphTheme();
         ShaderGraphPreviews built = document.shader().previews(graph);
         MainPreviewPanel panel = mainPreview();
@@ -471,6 +479,12 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
      * nothing left to report it; this is one comparison per frame against a value that changes about once a minute.
      */
     private boolean reportPreviewVerdicts(float deltaSeconds) {
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:verdicts")) {
+            return reportPreviewVerdictsTraced(deltaSeconds);
+        }
+    }
+
+    private boolean reportPreviewVerdictsTraced(float deltaSeconds) {
         MainPreviewPanel panel = mainPreview();
         if (panel != null) document.reportDriverError(panel.lastDriverError());
         ShaderGraphPreviews built = document.shader().previews(graph);
