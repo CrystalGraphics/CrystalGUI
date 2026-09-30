@@ -43,6 +43,8 @@ val submoduleData = listOf(
                 "projectPath" to ":runtime:lwjgl:3"),
             mapOf("module" to "com.crystalgraphics:vulkan",
                 "projectPath" to ":runtime:lwjgl:vulkan"),
+            mapOf("module" to "com.crystalgraphics:sdl",
+                "projectPath" to ":runtime:lwjgl:sdl"),
             // LoaderProbe and CrashVariant. CrystalGUI's hosts use CrystalGraphics' copies rather than
             // carrying their own; not a loader path, so it survives an embedded build.
             mapOf("module" to "com.crystalgraphics:mc-shared",

@@ -2,7 +2,7 @@
 
 ## Target Versions
 
-MC 1.14.4–26.2 / Fabric, a node per `versions/<version>` (26.1.2 also claims 26.1 and 26.1.1); 1.14-1.14.3, 1.16 and 1.16.1 are refused, their
+MC 1.14.4–26.3 / Fabric, a node per `versions/<version>` (26.1.2 also claims 26.1 and 26.1.1); 1.14-1.14.3, 1.16 and 1.16.1 are refused, their
 only Fabric API builds lacking `lifecycle-events-v1` or `networking-api-v1`. Fabric API for 1.14 has no
 HUD callback either, so there the HUD is a node mixin on `Gui.render` (`mixin/HudHook`, gated by
 `CrystalGuiFabricMixins`). Below 1.16 Fabric API has no screen

@@ -378,12 +378,23 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 if (LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDeltaY())) event.setCanceled(true);
             }
 
+            // The key in Minecraft's numbering: from 26.3 getKey(), the scancode -- getKeycode() is SDL's keycode.
             private static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
-                if (LifecycleCrystalGUI.offerKey(event.getKeyCode(), (char) 0, true)) event.setCanceled(true);
+                //? if >=26.3 {
+                /*int key = event.getKey();
+                *///?} else {
+                int key = event.getKeyCode();
+                //?}
+                if (LifecycleCrystalGUI.offerKey(key, (char) 0, true)) event.setCanceled(true);
             }
 
             private static void onKeyReleased(ScreenEvent.KeyReleased.Pre event) {
-                if (LifecycleCrystalGUI.offerKey(event.getKeyCode(), (char) 0, false)) event.setCanceled(true);
+                //? if >=26.3 {
+                /*int key = event.getKey();
+                *///?} else {
+                int key = event.getKeyCode();
+                //?}
+                if (LifecycleCrystalGUI.offerKey(key, (char) 0, false)) event.setCanceled(true);
             }
 
             private static void onCharTyped(ScreenEvent.CharacterTyped.Pre event) {

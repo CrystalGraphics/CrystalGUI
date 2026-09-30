@@ -3,6 +3,8 @@ package com.crystalgui.mc.modern.client;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.api.render.CgRenderPipeline;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
@@ -358,14 +360,12 @@ public final class CgUiScreen extends Screen {
 
         // Escape is a cascade -- a live drag eats it, then a popover, then a modal -- so the screen
         // closes only on one nothing wanted. shouldCloseOnEsc() is false for the same reason.
-        if (keyCode == ESCAPE_KEY) {
+        if (CgPlatform.input().translateKeyboardCodes(keyCode) == CgKeyCodes.KEY_ESCAPE) {
             onClose();
             return true;
         }
         return false;
     }
-
-    private static final int ESCAPE_KEY = 256;
 
     //? if >=1.21.9 {
     /*@Override
