@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.provider.CgFileCapability;
 import com.crystalgui.fs.provider.CgFileEntry;
 import com.crystalgui.fs.provider.CgFileEvent;
@@ -20,6 +21,7 @@ import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -365,6 +367,95 @@ public class WatchHubTest {
 
         assertTrue("a fresh subscription must not report the file as changed",
                 hub.poll(WorkspaceActor.LOCAL).isEmpty());
+    }
+
+    // ── The reconcile, off the calling thread ───────────────────────────────────────────────────
+
+    /** Jobs the test runs by hand, so what ran on the calling thread and what ran on the worker is visible. */
+    private final List<Runnable> worker = new ArrayList<>();
+
+    private WatchHub hubOnWorker() {
+        return new WatchHub(service, new JobScheduler(worker::add, () -> 0L, 1));
+    }
+
+    private void runWorker() {
+        List<Runnable> due = new ArrayList<>(worker);
+        worker.clear();
+        due.forEach(Runnable::run);
+    }
+
+    /** <b>The sweep stats nothing on the caller's thread</b>, and what it finds arrives on the next update. */
+    @Test
+    public void aSweepStatsOnTheWorkerAndReportsOnTheNextUpdate() {
+        WatchHub hub = hubOnWorker();
+        for (String path : List.of("src/Main.java", "src/Other.java", "README.md")) {
+            hub.watch(ALICE, WorkspaceActor.LOCAL, p(path), false);
+        }
+        // Behind the hub's back, as an editor outside the game would.
+        files.write(p("src/Other.java"), "class Other { int x; }".getBytes(StandardCharsets.UTF_8), false, true);
+
+        int before = files.stats;
+        assertTrue(hub.update(WorkspaceActor.LOCAL, WatchHub.RECONCILE_SECONDS).isEmpty());
+        assertEquals("the caller's thread stats nothing", before, files.stats);
+
+        runWorker();
+        assertEquals("the worker stats each watched file once", before + 3, files.stats);
+        Map<Object, List<FsMessages.FileChange>> out = hub.update(WorkspaceActor.LOCAL, 0.01f);
+        assertEquals("proj:src/Other.java", out.get(ALICE).get(0).path());
+        assertEquals(FsMessages.ChangeKind.MODIFIED, out.get(ALICE).get(0).kind());
+    }
+
+    /** <b>A stale sweep cannot undo a save</b> the server made while its stats were in flight. */
+    @Test
+    public void aSweepOlderThanAServerWriteIsDropped() {
+        WatchHub hub = hubOnWorker();
+        hub.watch(ALICE, WorkspaceActor.LOCAL, p("src/Main.java"), false);
+        hub.update(WorkspaceActor.LOCAL, WatchHub.RECONCILE_SECONDS);
+        runWorker();   // stats the file as it was
+
+        byte[] saved = "class Main { int y; }".getBytes(StandardCharsets.UTF_8);
+        service.write(WorkspaceActor.LOCAL, p("src/Main.java"), saved, null);
+        hub.noteWritten(p("src/Main.java"), service.stat(WorkspaceActor.LOCAL, p("src/Main.java")).etag());
+
+        assertTrue("the sweep's old etag must neither be reported nor recorded",
+                hub.update(WorkspaceActor.LOCAL, 0.01f).isEmpty());
+        assertTrue("and the next sweep agrees with the save", reconcileOnce(hub).isEmpty());
+    }
+
+    /**
+     * <b>A deletion the sweep finds pairs with the watcher's creation into one rename</b>, because the
+     * sweep joins the tick's changes before renames are paired.
+     */
+    @Test
+    public void aSweptDeletionPairsWithAnEventCreationIntoARename() {
+        List<CgFileEvent> events = new ArrayList<>();
+        service.attachEvents(new CgFileEvent.Source() {
+            @Override public List<CgFileEvent> drain() {
+                List<CgFileEvent> out = new ArrayList<>(events);
+                events.clear();
+                return out;
+            }
+            @Override public void close() { }
+        });
+        WatchHub hub = hubOnWorker();
+        hub.watch(ALICE, WorkspaceActor.LOCAL, p("src"), true);
+
+        files.rename(p("src/Other.java"), p("src/Moved.java"), false);
+        hub.update(WorkspaceActor.LOCAL, WatchHub.RECONCILE_SECONDS);
+        runWorker();   // finds Other.java gone
+        events.add(CgFileEvent.of(CgFileEvent.Kind.CREATED, p("src/Moved.java")));
+
+        List<FsMessages.FileChange> out = hub.update(WorkspaceActor.LOCAL, 0.01f).get(ALICE);
+        assertEquals(1, out.size());
+        assertEquals(FsMessages.ChangeKind.RENAMED, out.get(0).kind());
+        assertEquals("proj:src/Moved.java", out.get(0).path());
+    }
+
+    /** Runs one sweep to completion and answers what the update after it reports. */
+    private Map<Object, List<FsMessages.FileChange>> reconcileOnce(WatchHub hub) {
+        hub.update(WorkspaceActor.LOCAL, WatchHub.RECONCILE_SECONDS);
+        runWorker();
+        return hub.update(WorkspaceActor.LOCAL, 0.01f);
     }
 
     /** Watching something that is not there yet is legitimate — a file about to be created. */

@@ -123,6 +123,25 @@ public class LocalFileSystemTest {
                 Files.exists(outside.resolve("planted.txt")));
     }
 
+    /**
+     * <b>A Windows junction out of the project is refused like a symlink.</b> It is not one to Java --
+     * {@code isSymbolicLink} is false and it reads as {@code isOther} -- and it needs no privilege to
+     * create, so it is the escape an ordinary account can actually make.
+     */
+    @Test
+    public void aJunctionOutOfTheProjectIsRefused() throws Exception {
+        Assume.assumeTrue("junctions are Windows-only",
+                System.getProperty("os.name").toLowerCase().contains("win"));
+        Process mklink = new ProcessBuilder("cmd", "/c", "mklink", "/J",
+                projectRoot.resolve("junction").toString(), outside.toString())
+                .redirectErrorStream(true).start();
+        Assume.assumeTrue("mklink /J failed", mklink.waitFor() == 0);
+
+        expect(CgFileError.INVALID_PATH, () -> fs.read(p("mymod.proj:junction/secret.txt")));
+        expect(CgFileError.INVALID_PATH, () -> fs.stat(p("mymod.proj:junction/secret.txt")));
+        expect(CgFileError.INVALID_PATH, () -> fs.list(p("mymod.proj:junction")));
+    }
+
     /** A symlink to a single file outside is caught as surely as one to a directory. */
     @Test
     public void aSymlinkToAFileOutsideIsRefused() {

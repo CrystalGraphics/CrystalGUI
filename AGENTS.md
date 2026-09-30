@@ -1779,7 +1779,9 @@ com.crystalgui.fs              FOUR classes, and each is vocabulary every tier b
                                WatchHub (ONE subscription table for the whole server: a path is stat-ed
                                once per tick however many peers watch it, a save's several events
                                coalesce into one change, and a delete plus a create carrying one etag
-                               pair into a RENAME), WorkspaceAudit, RecentOperations
+                               pair into a RENAME; `update` is a host's ONE call a tick, and it owns the
+                               reconcile cadence, stat-ing on its own JobScheduler off the host's thread),
+                               WorkspaceAudit, RecentOperations
   .client                      Workspace (the entry point; facades by noun — files(), presence(),
                                capabilities(), health() — and the ONE door a provider is reached
                                through, which is where UiBudget times it), FileOperations (every answer

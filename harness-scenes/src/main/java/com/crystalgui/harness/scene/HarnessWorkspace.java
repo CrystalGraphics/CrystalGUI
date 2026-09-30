@@ -1,6 +1,8 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementTreeSource;
 import com.crystalgui.net.mirror.UIElementMirror;
@@ -8,7 +10,6 @@ import com.crystalgui.text.syntax.LanguageRegistry;
 import com.crystalgui.language.java.JavaLanguage;
 import com.crystalgui.language.js.JsLanguage;
 import com.crystalgui.language.run.ScriptPolicy;
-import com.crystalgui.fs.provider.CgFileEvent;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.provider.LocalFileSystem;
 import com.crystalgui.fs.project.ProjectRegistry;
@@ -69,10 +70,6 @@ final class HarnessWorkspace {
     private final WorkspaceService service;
     private final ClientUiSession<UIElement, Object> session;
     private final Workspace workspace;
-
-    /** Seconds until the next watcher poll. Every poll stats each watched file, so a per-frame poll would
-     * be a stat storm at 60 Hz for no benefit a human could perceive. The cadence is the HOST's call. */
-    private float untilPoll;
 
     HarnessWorkspace() {
         // WARMING THE LANGUAGES, and nothing more. `language/` declares its grammars, ECJ and Rhino as
@@ -144,26 +141,19 @@ final class HarnessWorkspace {
         return session.windowId() >= 0;
     }
 
-    /** One network tick, plus the watcher poll when it is due. Called once a frame. */
+    /** One network tick, and the watch hub's. Called once a frame. */
     void pump(float deltaSeconds) {
-        fromServer.deliver();
-        fromClient.deliver();
-        session.tick();
-        server.tick();
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "workspace:transport")) {
+            fromServer.deliver();
+            fromClient.deliver();
+            session.tick();
+            server.tick();
+        }
 
-        untilPoll -= deltaSeconds;
-        if (untilPoll <= 0f) {
-            untilPoll = 0.5f;
-            // THE EVENTS FIRST, then the reconciling rescan. A watcher loses events by design when its
-            // queue overflows, so the poll is what makes the answer eventually right rather than an
-            // alternative to listening.
-            List<CgFileEvent> events = service.drainFileEvents();
-            // OR SOMETHING THE SERVER DID: a tick carries both, and gating on the watcher alone leaves
-            // an operation queued until an unrelated file happens to move.
-            if (!events.isEmpty() || hub.hasStated()) {
-                notifyChanges(hub.tick(WorkspaceActor.LOCAL, events));
-            }
-            notifyChanges(hub.poll(WorkspaceActor.LOCAL));
+        // The hub decides everything about the watcher -- events, cadence, reconciling -- as it does for
+        // WorkspaceHost; this host only carries the answer.
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "workspace:hubUpdate")) {
+            notifyChanges(hub.update(WorkspaceActor.LOCAL, deltaSeconds));
         }
     }
 
