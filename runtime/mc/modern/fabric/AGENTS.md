@@ -45,6 +45,15 @@ consumes, Minecraft never sees. One path covers the HUD and a screen alike, so t
 > the focused editor at the same time. Key, mouse-button and scroll are the slots Minecraft uses, which
 > is why only typing doubles and everything else looks correct.
 
+### From 26.3: SDL's event filter
+
+26.3 windows through SDL3 and ships no GLFW. The same chain is `SDL_SetEventFilter`, installed at
+`CLIENT_STARTED` after reading any filter already set with `SDL_GetEventFilter`: returning false drops
+an event before Minecraft polls it. Keys arrive as SDL scancodes and buttons count from 1; the host
+translates both. Characters are `SDL_EVENT_TEXT_INPUT`, which SDL sends only while text input is started
+-- `CgUiScreen` starts it while the desktop is up, as Minecraft's own text boxes do on focus. A filter can
+be called for an event pushed from another thread; it acts only on the render thread's.
+
 ## Toolchain, sources and checks
 
 Every node is built by Loom; pins in the catalog (`CrystalGraphics/docs/BUILD.md` § *Nodes and
