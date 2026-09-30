@@ -348,20 +348,30 @@ public final class ShaderGraphCostProbe {
         List<Double> wall = new ArrayList<>();
         List<Double> cpu = new ArrayList<>();
         List<Double> gpu = new ArrayList<>();
+        List<Double> zones = new ArrayList<>();
         int collections = 0;
         long gcMillis = 0;
+        long dropped = 0;
+        long leaked = 0;
+        int droppingFrames = 0;
         for (CgFrameRecord record : CgTrace.frames()) {
             if (record.index() < block.from() || record.index() > block.to()) continue;
             wall.add(record.wallMillis());
             if (record.hasCpu()) cpu.add(record.cpuMillis());
             if (record.hasGpu()) gpu.add(record.gpuMillis());
+            zones.add((double) CgTrace.zonesIn(record).size());
             collections += record.gcCollections();
             gcMillis += record.gcMillis();
+            dropped += record.droppedZones();
+            leaked += record.leakedZones();
+            if (record.droppedZones() > 0) droppingFrames++;
         }
         return String.format(Locale.ROOT,
-                "[graph-cost]   %-16s frames #%d-#%d (%d held)  wall %s  cpu %s  gpu %s  gc %d in %d ms  hooks %d  afterLayout %d",
+                "[graph-cost]   %-16s frames #%d-#%d (%d held)  wall %s  cpu %s  gpu %s  gc %d in %d ms  hooks %d  afterLayout %d"
+                        + "  zones %s  dropped %d in %d frames  leaked %d",
                 block.name(), block.from(), block.to(), wall.size(), stat(wall), stat(cpu), stat(gpu),
-                collections, gcMillis, block.hooks(), block.afterLayoutHooks());
+                collections, gcMillis, block.hooks(), block.afterLayoutHooks(), stat(zones), dropped, droppingFrames,
+                leaked);
     }
 
     /** The GPU zones and the shader graph's own counters, which a zone table leaves out. */
