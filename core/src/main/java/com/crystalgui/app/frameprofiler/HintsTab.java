@@ -7,6 +7,7 @@ import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -76,21 +77,67 @@ public class HintsTab extends UIElement {
 
     /** @param frames how many frames the selection is, so a range row can say "in 3 of 40" */
     public void show(List<ProfilerModel.HintRow> hints, int frames) {
-        list.removeAll();
-        rows.clear();
+        // THE SAME ROWS WHEN THE SAME RULES FIRE, with only their texts rewritten: the window shows on a clock,
+        // and a rebuild changed the element tree every time, which restyles and re-syncs it on the next frame.
         if (hints.isEmpty()) {
-            UIText empty = new UIText(frames > 1
+            String empty = frames > 1
                     ? "Nothing to accuse these " + frames + " frames of."
-                    : "Nothing to accuse this frame of.");
-            empty.addClass(EMPTY_CLASS);
-            list.append(empty);
+                    : "Nothing to accuse this frame of.";
+            if (empty.equals(shownEmpty)) return;
+            list.removeAll();
+            rows.clear();
+            shownShapes = List.of();
+            shownEmpty = empty;
+            UIText none = new UIText(empty);
+            none.addClass(EMPTY_CLASS);
+            list.append(none);
             return;
         }
+        List<Shape> shapes = new ArrayList<>(hints.size());
+        for (ProfilerModel.HintRow hint : hints) shapes.add(Shape.of(hint, frames));
+        if (shapes.equals(shownShapes)) {
+            for (int i = 0; i < hints.size(); i++) {
+                setText(texts.get(i), hints.get(i).hint().text());
+                if (frames > 1) setText(metas.get(i), meta(hints.get(i), frames));
+            }
+            return;
+        }
+        list.removeAll();
+        rows.clear();
+        texts.clear();
+        metas.clear();
+        shownShapes = shapes;
+        shownEmpty = null;
         for (ProfilerModel.HintRow hint : hints) {
             UIElement row = row(hint, frames);
             rows.add(row);
             list.append(row);
         }
+    }
+
+    /** What decides a row's elements: its rule, where its links go, and whether it speaks for a range. */
+    private record Shape(String code, @Nullable String zone, @Nullable String counter, @Nullable String link,
+                         int first, boolean range) {
+        static Shape of(ProfilerModel.HintRow row, int frames) {
+            CgTraceHints.Hint hint = row.hint();
+            return new Shape(hint.code(), hint.linkedZone(), hint.linkedCounter(), hint.link(),
+                    frames > 1 ? row.firstPosition() : -1, frames > 1);
+        }
+    }
+
+    private List<Shape> shownShapes = List.of();
+    @Nullable
+    private String shownEmpty;
+    /** Each shown row's text and, for a range, its "in N of M" line, in row order. */
+    private final List<UIText> texts = new ArrayList<>();
+    private final List<UIText> metas = new ArrayList<>();
+
+    private static String meta(ProfilerModel.HintRow row, int frames) {
+        return "in " + row.frames() + " of " + frames + " frames";
+    }
+
+    private static void setText(UIText label, String text) {
+        if (!label.getText().equals(text)) label.setText(text);
     }
 
     private UIElement row(ProfilerModel.HintRow row, int frames) {
@@ -104,15 +151,17 @@ public class HintsTab extends UIElement {
         code.addClass(CODE_CLASS);
         head.append(code);
         if (frames > 1) {
-            UIText meta = new UIText("in " + row.frames() + " of " + frames + " frames");
+            UIText meta = new UIText(meta(row, frames));
             meta.addClass(META_CLASS);
             head.append(meta);
+            metas.add(meta);
         }
         box.append(head);
 
         UIText text = new UIText(hint.text());
         text.addClass(TEXT_CLASS);
         box.append(text);
+        texts.add(text);
 
         UIElement links = new UIElement();
         links.addClass(LINKS_CLASS);

@@ -73,12 +73,12 @@ public final class ProfilerSettings {
                     + "is always there to go back to. 0 keeps none. Clears the recording.");
 
     public static final Setting<Integer> FRAMES = Setting.integer(
-            "profiler.recording.frames", "Newest frames kept", 600)
+            "profiler.recording.frames", "Newest frames kept", 10_000)
             .description("The newest frames after those, the oldest overwritten. 0 stops recording once the "
                     + "first frames are full. Up to 100,000 each. Clears the recording.");
 
     public static final Setting<Integer> ZONES_PER_FRAME = Setting.integer(
-            "profiler.recording.zonesPerFrame", "Zones per frame", 256)
+            "profiler.recording.zonesPerFrame", "Zones per frame", 512)
             .description("The most zones a thread may keep per frame kept. A thread's buffer grows as it "
                     + "records and never past this, at 24 bytes a zone. Clears the recording.");
 

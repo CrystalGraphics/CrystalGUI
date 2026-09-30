@@ -96,7 +96,8 @@ public class ZonesTab extends UIElement {
         this.wallNanos = wallNanos;
         this.scoped = scoped;
         rows.setAll(stats);
-        table.refreshColumns();
+        // Rows only: Self % divides by the new wall time. The columns never change.
+        table.refreshRows();
         if (scoped == null) return;
         for (int i = 0; i < stats.size(); i++) {
             if (stats.get(i).name().equals(scoped)) {

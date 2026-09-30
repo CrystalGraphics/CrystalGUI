@@ -14,6 +14,7 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -58,6 +59,7 @@ public class FlameChart extends UIElement {
         layout(l -> l.flexDirection(FlexDirection.COLUMN));
         detail.addClass(DETAIL_CLASS);
         append(detail);
+        append(empty);
         describe(null);
     }
 
@@ -110,9 +112,6 @@ public class FlameChart extends UIElement {
      */
     public void show(List<CgTraceSnapshot.ZoneView> zones, long from, long to, @Nullable String frameThread,
                      long[] boundaries) {
-        removeAll();
-        tracks.clear();
-        append(detail);
         selectedSpan = null;
         describe(null);
 
@@ -126,15 +125,34 @@ public class FlameChart extends UIElement {
         fit();
 
         Map<String, List<SpanTrack.Span>> byThread = group(zones, to);
-        if (byThread.isEmpty()) {
-            // AN ABSENT STATE, not an empty chart: a blank band reads as "the frame did nothing",
-            // which is the one thing a profiler must never say when it simply was not recording.
-            UIText none = new UIText("No zones in this frame \u2014 nothing on an enabled channel recorded one.");
-            none.addClass("__empty__");
-            append(none);
-            return;
-        }
+        List<Map.Entry<String, List<SpanTrack.Span>>> ordered = ordered(byThread, frameThread);
+        List<String> order = new ArrayList<>(ordered.size());
+        for (Map.Entry<String, List<SpanTrack.Span>> entry : ordered) order.add(entry.getKey());
+        // THE SAME ELEMENTS FROM ONE FRAME TO THE NEXT: the window refreshes on a clock, and rebuilding the rows
+        // changed the element tree every time, which restyles and re-syncs it on the next frame.
+        if (!order.equals(shownThreads)) rebuildRows(order);
 
+        // AN ABSENT STATE, not an empty chart: a blank band reads as "the frame did nothing",
+        // which is the one thing a profiler must never say when it simply was not recording.
+        empty.setDisplayed(ordered.isEmpty());
+        tracks.clear();
+        for (Map.Entry<String, List<SpanTrack.Span>> entry : ordered) {
+            SpanTrack track = rows.get(entry.getKey());
+            track.showSelected(null);
+            track.setSpans(withGaps(entry.getValue(), from, to));
+            track.setBoundaries(boundaries);
+            tracks.add(track);
+        }
+    }
+
+    /** Replaces the thread rows with one per name in {@code order}, keeping the detail line and the empty state. */
+    private void rebuildRows(List<String> order) {
+        removeAll();
+        rows.clear();
+        append(detail);
+        append(empty);
+        shownThreads = order;
+        if (order.isEmpty()) return;
         // THE RULER, in a row of its own with an empty label slot, so its ticks sit exactly over the
         // spans below it rather than a label's width to their left.
         UIElement rulerRow = new UIElement();
@@ -146,16 +164,14 @@ public class FlameChart extends UIElement {
         rulerRow.append(new TimelineRuler(axis));
         append(rulerRow);
 
-        for (Map.Entry<String, List<SpanTrack.Span>> entry : ordered(byThread, frameThread)) {
+        for (String thread : order) {
             UIElement row = new UIElement();
             row.addClass(ROW_CLASS);
-            UIText label = new UIText(entry.getKey());
+            UIText label = new UIText(thread);
             label.addClass(LABEL_CLASS);
             row.append(label);
 
             SpanTrack track = new SpanTrack(axis);
-            track.setSpans(withGaps(entry.getValue(), from, to));
-            track.setBoundaries(boundaries);
             track.onSelected(span -> {
                 // ONE SELECTION ACROSS THE CHART: a ring left on a zone in another thread's row would
                 // read as two things selected.
@@ -168,9 +184,22 @@ public class FlameChart extends UIElement {
             });
             track.onHover(this::describe);
             row.append(track);
-            tracks.add(track);
+            rows.put(thread, track);
             append(row);
         }
+    }
+
+    /** The threads the rows are built for, in order, and each one's track. */
+    private List<String> shownThreads = List.of();
+    private final Map<String, SpanTrack> rows = new HashMap<>();
+
+    private final UIText empty = emptyState();
+
+    private static UIText emptyState() {
+        UIText none = new UIText("No zones in this frame \u2014 nothing on an enabled channel recorded one.");
+        none.addClass("__empty__");
+        none.setDisplayed(false);
+        return none;
     }
 
     /**
