@@ -1,6 +1,7 @@
 package com.crystalgui.widget.control;
 
 import javax.annotation.Nullable;
+import org.joml.Vector3f;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -26,6 +27,7 @@ import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.CompositionEvent;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
@@ -228,6 +230,14 @@ public class TextField extends UIElement implements Measurable {
     /** Horizontal scroll, in logical px, keeping the caret in view on a too-long string. */
     private float displayOffset = 0f;
 
+    /** Where an input method's run in progress starts in {@link #text}, or -1; and its length. */
+    private int compositionStart = -1;
+    private int compositionLength;
+
+    /** The caret's line box as last painted, in this field's space: x, y, height. Null until then. */
+    @Nullable
+    private float[] paintedCaret;
+
     /** {@code prefixWidths[i]} = rendered width of {@code text.substring(0, i)}. */
     private float[] prefixWidths = {0f};
     private String measuredText = null;
@@ -322,9 +332,17 @@ public class TextField extends UIElement implements Measurable {
             if (CgModifiers.hasAlt(event.getModifiers())) return;
             char typed = event.getCharacter();
             if (typed != '\0' && !Character.isISOControl(typed)) {
+                // A COMMIT: the run in progress gives way to the characters that finish it.
+                dropCompositionRun();
                 insertChar(typed);
                 event.stopPropagation();
             }
+        }, false, false);
+
+        this.events.getGroup(CompositionEvent.class).attachListener((el, event) -> {
+            if (!isEnabled()) return;
+            compose(event.getText(), event.getCaret());
+            event.stopPropagation();
         }, false, false);
 
         // Wheel-to-step, like a browser's number input. Gated on FOCUS so a wheel passing over a
@@ -1003,6 +1021,50 @@ public class TextField extends UIElement implements Measurable {
     }
 
     /**
+     * Shows an input method's run in progress in the field, underlined. Each update replaces the last;
+     * the committed characters then arrive as typing, filtered as usual, and drop the run first. A
+     * selection is replaced when a run starts; an empty run ends it.
+     */
+    private void compose(String run, int caretInRun) {
+        if (compositionStart < 0 || compositionStart + compositionLength > text.length()) {
+            if (run.isEmpty()) {
+                compositionStart = -1;
+                return;
+            }
+            int start = getSelectionStart();
+            if (hasSelection()) editText(text.substring(0, start) + text.substring(getSelectionEnd()), start);
+            compositionStart = caret;
+            compositionLength = 0;
+        }
+        int start = compositionStart;
+        editText(text.substring(0, start) + run + text.substring(start + compositionLength),
+                start + Math.min(caretInRun, run.length()));
+        compositionLength = run.length();
+        if (run.isEmpty()) compositionStart = -1;
+    }
+
+    /** Removes a run still in progress, before the characters that commit it are typed. */
+    private void dropCompositionRun() {
+        if (compositionStart < 0) return;
+        int start = compositionStart;
+        int end = Math.min(text.length(), start + compositionLength);
+        compositionStart = -1;
+        editText(text.substring(0, start) + text.substring(end), start);
+    }
+
+    /** The caret's line box in surface pixels, where an input method opens its candidate list. */
+    @Nullable
+    @Override
+    public float[] textInputArea() {
+        Box self = box();
+        float[] local = paintedCaret;
+        if (self == null || local == null) return null;
+        Vector3f top = new Vector3f(local[0], local[1], 0f).mulPosition(self.localToWorld());
+        Vector3f bottom = new Vector3f(local[0], local[1] + local[2], 0f).mulPosition(self.localToWorld());
+        return new float[] { top.x, top.y, 1f, Math.max(1f, bottom.y - top.y) };
+    }
+
+    /**
      * The path every USER edit takes — and the reason {@link UpdateMode#ON_COMMIT} works at all.
      *
      * <p>Editing must not go through {@link #setText}: that is the programmatic path and publishes
@@ -1401,6 +1463,14 @@ public class TextField extends UIElement implements Measurable {
             draw.submit();
             if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
         }
+
+        // An input method's run in progress, underlined along the ink box's foot in the text colour.
+        int runEnd = compositionStart + compositionLength;
+        if (drawsFocused() && compositionStart >= 0 && compositionLength > 0 && runEnd < prefixWidths.length) {
+            float from = originX + prefixWidths[compositionStart];
+            ctx.fillRect(from, originY + inkHeight - 1f, originX + prefixWidths[runEnd] - from, 1f, styleGen.color());
+        }
+        paintedCaret = new float[] { originX + prefixWidths[Math.min(caret, prefixWidths.length - 1)], originY, inkHeight };
 
         // Caret only while focused, never alongside a selection, and only in the visible half of the
         // blink. No invalidation needed: the tree repaints every frame and tickAnimations runs first.
