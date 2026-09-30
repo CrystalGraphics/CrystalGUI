@@ -61,7 +61,7 @@ public final class ProfilerSettings {
     public static final Setting<String> CHANNELS = Setting.string(
             "profiler.recording.channels", "Channels",
             String.join(", ", UiTrace.FRAME.name(), UiTrace.FLOW.name(), CgGpuTrace.GPU.name(),
-                    "crystalgraphics.async"))
+                    "crystalgraphics.async", "crystalgraphics.world"))
             .description("What Record and Record from launch switch on, comma-separated. A name takes "
                     + "every channel beneath it, including ones that load later.");
 
