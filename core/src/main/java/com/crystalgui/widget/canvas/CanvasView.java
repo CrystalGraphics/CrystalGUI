@@ -21,7 +21,9 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 import lombok.Getter;
+import org.joml.Matrix4f;
 import org.joml.Vector2f;
+import org.joml.Vector3f;
 
 import javax.annotation.Nullable;
 import java.util.HashSet;
@@ -585,21 +587,31 @@ public class CanvasView extends UIElement {
 
     private void updateCullingTraced() {
         if (!cullingEnabled) return;
-        // visibleWorldRect().expand(cullMargin) and worldBoundsOf(child), as edges rather than rects: this runs
-        // twice a frame over every node.
         Box cache = box();
-        float left = cache == null ? 0f : -panX / zoom, top = cache == null ? 0f : -panY / zoom;
-        float width = cache == null ? 0f : cache.width() / zoom, height = cache == null ? 0f : cache.height() / zoom;
-        float viewX0 = left - cullMargin, viewY0 = top - cullMargin;
-        float viewX1 = viewX0 + Math.max(0f, width + 2f * cullMargin), viewY1 = viewY0 + Math.max(0f, height + 2f * cullMargin);
+        if (cache == null) return;
+        // IN WORLD SPACE, against each child's INK: what it can paint, descendants and decorations included. Its
+        // layout box can be far smaller -- an item whose content overflows it, or collapsed to a point -- and was
+        // culled whole the moment its corner left the view while most of it was still on screen.
+        Matrix4f toWorld = cache.localToWorld();
+        toWorld.transformPosition(0f, 0f, 0f, cornerA);
+        toWorld.transformPosition(cache.width(), cache.height(), 0f, cornerB);
+        float viewX0 = Math.min(cornerA.x, cornerB.x), viewX1 = Math.max(cornerA.x, cornerB.x);
+        float viewY0 = Math.min(cornerA.y, cornerB.y), viewY1 = Math.max(cornerA.y, cornerB.y);
+        // The margin is in plane units, so it scales with the zoom and with whatever scales the canvas.
+        float margin = cache.width() <= 0f ? 0f : cullMargin * zoom * (viewX1 - viewX0) / cache.width();
+        viewX0 -= margin;
+        viewY0 -= margin;
+        viewX1 += margin;
+        viewY1 += margin;
         List<UIElement> children = content.children();
         for (int i = 0; i < children.size(); i++) {
             UIElement child = children.get(i);
             if (cullExempt.contains(child)) continue;
             Box bounds = child.box();
-            float x0 = bounds == null ? 0f : bounds.x(), y0 = bounds == null ? 0f : bounds.y();
-            float x1 = bounds == null ? 0f : x0 + bounds.width(), y1 = bounds == null ? 0f : y0 + bounds.height();
-            applyCulled(child, !(viewX0 <= x1 && x0 <= viewX1 && viewY0 <= y1 && y0 <= viewY1));
+            // No box paints nothing, and has no ink to judge by.
+            if (bounds == null) continue;
+            applyCulled(child, !(viewX0 <= bounds.inkX1() && bounds.inkX0() <= viewX1
+                    && viewY0 <= bounds.inkY1() && bounds.inkY0() <= viewY1));
         }
         // A node removed from the plane while culled would otherwise keep its forced opacity — and
         // stay invisible after being re-parented somewhere else entirely.
@@ -609,8 +621,26 @@ public class CanvasView extends UIElement {
             if (node.parent() == content) continue;
             clearCullOpacity(node);
             it.remove();
+            cullRevision++;
         }
     }
+
+    /** The canvas's own corners in world space, per cull. */
+    private final Vector3f cornerA = new Vector3f(), cornerB = new Vector3f();
+
+    /**
+     * Changes whenever a node is culled or comes back, so a feature doing per-node work only for what is on
+     * screen can keep its set and redo it only then.
+     *
+     * <pre>{@code
+     * if (canvas.cullRevision() != seen) { seen = canvas.cullRevision(); rebuildOnScreenSet(); }
+     * }</pre>
+     */
+    public int cullRevision() {
+        return cullRevision;
+    }
+
+    private int cullRevision;
 
     /**
      * Culls by <b>skipping paint, not layout</b>: {@code opacity: 0} at IMPORTANT origin, which
@@ -628,6 +658,7 @@ public class CanvasView extends UIElement {
      */
     private void applyCulled(UIElement node, boolean cull) {
         if (cull == culled.contains(node)) return;
+        cullRevision++;
         if (cull) {
             culled.add(node);
             node.getStyle().getGeneralGroup().set(StyleOrigin.INLINE, StylePropertyRegistry.OPACITY, 0f);
@@ -747,8 +778,11 @@ public class CanvasView extends UIElement {
         this.panX = newPanX;
         this.panY = newPanY;
         this.zoom = z;
-        applyView();
-        onViewChanged.emit();
+        CgTrace.add(UiTrace.FRAME, "canvas-view-changes", 1);
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "canvas:setView")) {
+            applyView();
+            onViewChanged.emit();
+        }
         return this;
     }
 

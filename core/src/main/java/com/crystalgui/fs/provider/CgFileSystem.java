@@ -58,6 +58,9 @@ public interface CgFileSystem {
     /**
      * One entry's metadata.
      *
+     * <p><b>May be called from a worker thread</b>, alongside any other call on the owning thread: a
+     * watch hub reconciles off the server thread.</p>
+     *
      * @throws CgFileSystemException {@link CgFileError#FILE_NOT_FOUND}
      */
     CgFileEntry stat(CgPath path);

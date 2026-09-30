@@ -1,5 +1,10 @@
 package com.crystalgui.fs.server;
 
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.fs.provider.CgFileEntry;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.provider.CgFileEvent;
@@ -15,19 +20,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /**
  * Who is watching what, for the whole workspace — <b>one hub, not one watcher per peer</b>.
  *
  * <pre>{@code
- * hub.watch(peer, actor, folder, true);              // a subscription
- * Map<Object, List<FileChange>> out = hub.tick(actor, service.drainFileEvents());
- * out = hub.poll(actor);                             // the reconciling rescan
+ * hub.watch(peer, actor, folder, true);                           // a subscription
+ * Map<Object, List<FileChange>> out = hub.update(actor, delta);   // the host's one call a tick
  * }</pre>
  *
- * <p>A host drains the filesystem's events once a tick and hands them here; the hub answers a list per
- * peer, and a peer with nothing to hear about is absent from the map rather than present with an empty
- * list. What it does on the way:</p>
+ * <p>{@link #update} drains the filesystem's events, reconciles, and answers a list per peer; a peer with
+ * nothing to hear about is absent from the map rather than present with an empty list. The host decides
+ * nothing about cadence. {@link #tick} and {@link #poll} are the same steps apart, for a caller that
+ * drains its own events. What the hub does on the way:</p>
  *
  * <ul>
  *   <li><b>Stats a path once</b> however many peers watch it — the cost is per file, not per peer.</li>
@@ -46,6 +52,13 @@ import java.util.Objects;
  * its queue fills, and macOS's {@code WatchService} is itself a poll. The documented recovery is a
  * re-scan, so the poll is the reconciliation rather than the mechanism, and an OVERFLOW falls straight
  * through to it.</p>
+ *
+ * <p><b>{@link #update} reconciles on a worker</b>: every {@link #RECONCILE_SECONDS} it snapshots the
+ * watched etags, authorises on this thread, and stats as a job on the hub's own {@link JobScheduler}
+ * (the shared pool, drained by {@code update} on this thread). The results join the
+ * next update's changes ahead of the events, and a path whose etag moved since the snapshot is skipped, so
+ * a late stat can neither undo a save nor report one twice. A stat is about 0.2 ms on Windows, so a
+ * rescan here held a frame or a server tick for tens of milliseconds twice a second.</p>
  */
 public final class WatchHub {
 
@@ -71,8 +84,33 @@ public final class WatchHub {
      */
     private final Map<CgPath, String> lastEtag = new LinkedHashMap<>();
 
+    /** Seconds in which every watched file is re-stated once, by {@link #update}. */
+    public static final float RECONCILE_SECONDS = 0.5f;
+
+    /**
+     * The hub's own scheduler, on the shared pool and drained by {@link #update}: the hub runs on the
+     * server thread, and {@link JobScheduler#shared()} is drained by the UI frame, which a dedicated
+     * server has none of.
+     */
+    private final JobScheduler jobs;
+    /** Named for the log: a failed sweep is reported as "job ... failed" with this key. */
+    private final JobKey sweepKey = JobKey.of(this, "fs-watch-reconcile");
+    /** Sweeps delivered by {@link #jobs} and not yet applied. */
+    private final List<Sweep> swept = new ArrayList<>();
+    private float untilSweep = RECONCILE_SECONDS;
+
+    /** One reconcile: the etags it started from, and what the filesystem said. */
+    private record Sweep(Map<CgPath, String> expected, List<WorkspaceService.Stat> stats) {
+    }
+
     public WatchHub(WorkspaceService service) {
+        this(service, new JobScheduler(JobScheduler.sharedPool(), System::currentTimeMillis, 1));
+    }
+
+    /** @param jobs where a sweep's stats run, drained by {@link #update}; a test passes a same-thread one */
+    public WatchHub(WorkspaceService service, JobScheduler jobs) {
         this.service = Objects.requireNonNull(service, "service");
+        this.jobs = Objects.requireNonNull(jobs, "jobs");
     }
 
     // ── Subscribing ─────────────────────────────────────────────────────────────────────────────
@@ -171,11 +209,74 @@ public final class WatchHub {
     // ── The tick ────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * <b>One tick's worth of changes, per peer.</b>
+     * <b>The host's one call a tick</b>: the filesystem's events, what the server did, and the
+     * reconciliation, per peer.
      *
-     * <p>Called once with the batch {@code WorkspaceService.drainFileEvents} produced — draining is
-     * destructive, so a second caller would steal the first one's events, which is why the hub takes
-     * the batch rather than draining it itself.</p>
+     * <pre>{@code
+     * fanOut(hub.update(serverActor, deltaSeconds));
+     * }</pre>
+     *
+     * <p>Drains {@code WorkspaceService.drainFileEvents} itself, so nothing else may drain it: draining is
+     * destructive. A sweep started here lands on a later call, merged ahead of that call's events.</p>
+     */
+    public Map<Object, List<FsMessages.FileChange>> update(WorkspaceActor actor, float deltaSeconds) {
+        // Delivers a finished sweep through its onDone, here on this thread.
+        jobs.drain();
+        Map<CgPath, FsMessages.FileChange> found = new LinkedHashMap<>();
+        applySwept(found);
+        List<CgFileEvent> events = service.drainFileEvents();
+
+        untilSweep -= deltaSeconds;
+        if (untilSweep <= 0f) {
+            untilSweep = RECONCILE_SECONDS;
+            // STILL RUNNING is a stat that hangs -- a network drive, an antivirus lock -- and the
+            // reconcile stopping rather than hitching. Counted so it can be seen. Not re-submitted:
+            // that would supersede the sweep, and a hung one would be superseded for ever.
+            if (jobs.runningCount() + jobs.waitingCount() > 0) CgTrace.add(UiTrace.FS, "watch-sweep-busy", 1);
+            else startSweep(actor);
+        }
+
+        if (found.isEmpty() && events.isEmpty() && stated.isEmpty()) return Map.of();
+        return tick(actor, events, found);
+    }
+
+    /** Snapshots the watched etags, authorises here, and stats on a worker. */
+    private void startSweep(WorkspaceActor actor) {
+        if (lastEtag.isEmpty()) return;
+        Map<CgPath, String> expected = new LinkedHashMap<>(lastEtag);
+        Supplier<List<WorkspaceService.Stat>> reads = service.statsFor(actor, new ArrayList<>(expected.keySet()));
+        jobs.job(sweepKey, JobLane.BACKGROUND, context -> {
+                    try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FS, "fs:reconcile.sweep")) {
+                        return reads.get();
+                    }
+                })
+                .onDone(stats -> swept.add(new Sweep(expected, stats)))
+                .submit();
+        // Promoted now rather than on the next tick.
+        jobs.drain();
+    }
+
+    /** Judges every finished sweep's stats into {@code into}, skipping a path that moved since its snapshot. */
+    private void applySwept(Map<CgPath, FsMessages.FileChange> into) {
+        for (Sweep sweep : swept) {
+            CgTrace.add(UiTrace.FS, "watch-rechecked", sweep.stats().size());
+            for (WorkspaceService.Stat stat : sweep.stats()) {
+                CgPath path = stat.path();
+                // PRESENCE AND VALUE both, because a null etag means "watched and absent": a path
+                // unwatched meanwhile, or written by the server, is the snapshot's no longer.
+                if (!lastEtag.containsKey(path) || !Objects.equals(lastEtag.get(path), sweep.expected().get(path))) {
+                    continue;
+                }
+                FsMessages.FileChange change = judge(path, null, stat);
+                if (change != null) into.put(path, change);
+            }
+        }
+        swept.clear();
+    }
+
+    /**
+     * <b>One tick's worth of changes, per peer</b>, for a caller that drained the events itself.
+     * {@link #update} is the host's call; this is its middle step.
      *
      * <p>Every path is stat-ed at most once here whatever the number of peers, and every peer gets one
      * list. A peer with nothing to hear about is absent from the answer rather than present with an
@@ -183,8 +284,15 @@ public final class WatchHub {
      */
     public Map<Object, List<FsMessages.FileChange>> tick(WorkspaceActor actor,
                                                          List<CgFileEvent> events) {
-        Map<CgPath, FsMessages.FileChange> coalesced = new LinkedHashMap<>();
+        return tick(actor, events, new LinkedHashMap<>());
+    }
 
+    /**
+     * @param coalesced changes already found this tick -- a sweep's -- which the events then overwrite,
+     *                  since theirs are fresher, before renames are paired and the server's own go last
+     */
+    private Map<Object, List<FsMessages.FileChange>> tick(WorkspaceActor actor, List<CgFileEvent> events,
+                                                          Map<CgPath, FsMessages.FileChange> coalesced) {
         boolean overflowed = false;
         for (CgFileEvent event : events) {
             if (event.isOverflow()) {
@@ -220,12 +328,29 @@ public final class WatchHub {
         // etag any longer would let a create minutes later be reported as a rename of it.
         etagBefore.clear();
         renamedAway.entrySet().removeIf(each -> each.setValue(each.getValue() - 1) <= 1);
-        if (coalesced.isEmpty()) return Map.of();
+        return forPeers(coalesced);
+    }
+
+    /**
+     * The reconciliation: re-stat everything watched and report what moved.
+     *
+     * <p>Once per file over the union of every peer's subscriptions, so the cost is the number of
+     * watched files rather than that times the number of peers.</p>
+     */
+    public Map<Object, List<FsMessages.FileChange>> poll(WorkspaceActor actor) {
+        Map<CgPath, FsMessages.FileChange> found = new LinkedHashMap<>();
+        rescan(actor, found);
+        return forPeers(found);
+    }
+
+    /** Each peer's share of {@code found}. A peer with nothing to hear about is absent. */
+    private Map<Object, List<FsMessages.FileChange>> forPeers(Map<CgPath, FsMessages.FileChange> found) {
+        if (found.isEmpty()) return Map.of();
 
         Map<Object, List<FsMessages.FileChange>> out = new LinkedHashMap<>();
         for (Map.Entry<Object, Map<CgPath, Subscription>> peer : byPeer.entrySet()) {
             List<FsMessages.FileChange> mine = new ArrayList<>();
-            for (FsMessages.FileChange change : coalesced.values()) {
+            for (FsMessages.FileChange change : found.values()) {
                 // INCLUDING WHOEVER ASKED. Withholding it looked right -- they already know -- and was
                 // wrong twice over: nothing else updates that client's own tree, so a folder they moved
                 // a file into never listed it, and their own open tab never retargeted. The two harms
@@ -238,29 +363,8 @@ public final class WatchHub {
         return out;
     }
 
-    /**
-     * The reconciliation: re-stat everything watched and report what moved.
-     *
-     * <p>Once per file over the union of every peer's subscriptions, so the cost is the number of
-     * watched files rather than that times the number of peers.</p>
-     */
-    public Map<Object, List<FsMessages.FileChange>> poll(WorkspaceActor actor) {
-        Map<CgPath, FsMessages.FileChange> found = new LinkedHashMap<>();
-        rescan(actor, found);
-        if (found.isEmpty()) return Map.of();
-
-        Map<Object, List<FsMessages.FileChange>> out = new LinkedHashMap<>();
-        for (Map.Entry<Object, Map<CgPath, Subscription>> peer : byPeer.entrySet()) {
-            List<FsMessages.FileChange> mine = new ArrayList<>();
-            for (FsMessages.FileChange change : found.values()) {
-                if (covers(peer.getValue().values(), CgPath.parse(change.path()))) mine.add(change);
-            }
-            if (!mine.isEmpty()) out.put(peer.getKey(), mine);
-        }
-        return out;
-    }
-
     private void rescan(WorkspaceActor actor, Map<CgPath, FsMessages.FileChange> into) {
+        CgTrace.add(UiTrace.FS, "watch-rechecked", lastEtag.size());
         for (CgPath path : new ArrayList<>(lastEtag.keySet())) {
             FsMessages.FileChange change = recheck(actor, path, null);
             if (change != null) into.put(path, change);
@@ -279,10 +383,22 @@ public final class WatchHub {
     @Nullable
     private FsMessages.FileChange recheck(WorkspaceActor actor, CgPath path,
                                           @Nullable CgFileEvent.Kind hint) {
+        WorkspaceService.Stat stat;
+        try {
+            stat = new WorkspaceService.Stat(path, service.stat(actor, path), null);
+        } catch (CgFileSystemException failed) {
+            stat = new WorkspaceService.Stat(path, null, failed);
+        }
+        return judge(path, hint, stat);
+    }
+
+    /** What a stat of {@code path} means against what the hub last knew: the one rule a recheck and a sweep share. */
+    @Nullable
+    private FsMessages.FileChange judge(CgPath path, @Nullable CgFileEvent.Kind hint, WorkspaceService.Stat stat) {
         boolean known = lastEtag.containsKey(path);
         String last = lastEtag.get(path);
-        try {
-            CgFileEntry entry = service.stat(actor, path);
+        CgFileEntry entry = stat.entry();
+        if (entry != null) {
             if (entry.isDirectory()) {
                 // A DIRECTORY'S OWN APPEARANCE IS NEWS; its mtime is not. A parent's timestamp moves
                 // whenever a child is added, so reporting a directory by etag would make every file
@@ -301,29 +417,29 @@ public final class WatchHub {
             lastEtag.put(path, now);
             return new FsMessages.FileChange(path.toString(),
                     created ? FsMessages.ChangeKind.CREATED : FsMessages.ChangeKind.MODIFIED, now);
-        } catch (CgFileSystemException gone) {
-            if (gone.getError() != CgFileError.FILE_NOT_FOUND) return null;
-            // THE WATCHER SAW IT GO, and that is evidence in its own right. A rescan re-stats paths
-            // speculatively, so "not there now, not there before" is genuinely not news there -- but
-            // only what a client OPENED is ever in lastEtag, since a recursive watch primes nothing
-            // for its descendants. Applying the rescan's rule to an explicit event meant a deletion
-            // was reported for a file somebody had open and for no other file in the project.
-            // ...unless the server itself moved it away, and this is that move coming back.
-            boolean sighted = hint == CgFileEvent.Kind.DELETED && renamedAway.remove(path) == null;
-            if (!sighted && (!known || last == null)) {
-                lastEtag.put(path, null);
-                return null;
-            }
-            // RECORDED AS IT GOES, because it is the only evidence a rename pairing has of its source
-            // and this is the last moment anybody holds it. Absent for a file never stat-ed, which is
-            // why such a move arrives as a delete and a create rather than as one RENAMED.
-            if (last != null) etagBefore.put(path.toString(), last);
-            lastEtag.put(path, null);
-            // A DIRECTORY IS WHAT WE RECORDED IT AS. It is gone, so nothing can be asked about it now;
-            // the empty etag is the marker the directory branch above wrote when it first appeared.
-            return new FsMessages.FileChange(path.toString(), FsMessages.ChangeKind.DELETED, "", "", "",
-                    "".equals(last));
         }
+        CgFileSystemException gone = stat.failure();
+        if (gone == null || gone.getError() != CgFileError.FILE_NOT_FOUND) return null;
+        // THE WATCHER SAW IT GO, and that is evidence in its own right. A rescan re-stats paths
+        // speculatively, so "not there now, not there before" is genuinely not news there -- but
+        // only what a client OPENED is ever in lastEtag, since a recursive watch primes nothing
+        // for its descendants. Applying the rescan's rule to an explicit event meant a deletion
+        // was reported for a file somebody had open and for no other file in the project.
+        // ...unless the server itself moved it away, and this is that move coming back.
+        boolean sighted = hint == CgFileEvent.Kind.DELETED && renamedAway.remove(path) == null;
+        if (!sighted && (!known || last == null)) {
+            lastEtag.put(path, null);
+            return null;
+        }
+        // RECORDED AS IT GOES, because it is the only evidence a rename pairing has of its source
+        // and this is the last moment anybody holds it. Absent for a file never stat-ed, which is
+        // why such a move arrives as a delete and a create rather than as one RENAMED.
+        if (last != null) etagBefore.put(path.toString(), last);
+        lastEtag.put(path, null);
+        // A DIRECTORY IS WHAT WE RECORDED IT AS. It is gone, so nothing can be asked about it now;
+        // the empty etag is the marker the directory branch above wrote when it first appeared.
+        return new FsMessages.FileChange(path.toString(), FsMessages.ChangeKind.DELETED, "", "", "",
+                "".equals(last));
     }
 
     /**

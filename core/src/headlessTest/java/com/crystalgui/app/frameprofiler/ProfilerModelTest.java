@@ -83,6 +83,33 @@ public class ProfilerModelTest {
     }
 
     @Test
+    public void aBackgroundRefreshLandsWhatARefreshWould() throws InterruptedException {
+        frame(5d);
+        frame(40d);
+        frame(6d);
+        close();
+        ProfilerModel direct = new ProfilerModel();
+        direct.refresh();
+
+        ProfilerModel background = new ProfilerModel();
+        boolean[] landed = {false};
+        background.onChanged.connect(() -> landed[0] = true);
+        background.refreshInBackground();
+        long giveUp = System.nanoTime() + 5_000_000_000L;
+        while (!landed[0] && System.nanoTime() < giveUp) {
+            background.drainJobs();
+            Thread.sleep(1L);
+        }
+
+        assertTrue("the background refresh never landed", landed[0]);
+        assertEquals(direct.frameCount(), background.frameCount());
+        assertEquals(direct.selectedIndex(), background.selectedIndex());
+        assertEquals(direct.statsOfSelection().toString(), background.statsOfSelection().toString());
+        assertEquals(direct.treeOfSelection().toString(), background.treeOfSelection().toString());
+        assertEquals(direct.hintsOfSelection().toString(), background.hintsOfSelection().toString());
+    }
+
+    @Test
     public void worstFrameSelectsTheSlowestAndPauses() {
         frame(5d);
         frame(40d);

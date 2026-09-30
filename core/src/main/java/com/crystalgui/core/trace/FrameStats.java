@@ -298,7 +298,7 @@ public final class FrameStats {
 
     /** The last frame's phases, slowest first. @see #peakPhasesByCost() — the one worth reading. */
     public List<Map.Entry<String, Long>> phasesByCost() {
-        return phasesOf(newest());
+        return newestPhases.of(newest());
     }
 
     /** The last frame's counts — draw calls, layers, re-matched elements. @see #peakCounts() */
@@ -317,7 +317,26 @@ public final class FrameStats {
      * frame is usually the one that waited longest, and there is nothing in it to fix.</p>
      */
     public List<Map.Entry<String, Long>> peakPhasesByCost() {
-        return phasesOf(peakFrame());
+        return peakPhases.of(peakFrame());
+    }
+
+    private final PhaseMemo newestPhases = new PhaseMemo(), peakPhases = new PhaseMemo();
+
+    /** One frame's phases, kept while it is the frame asked about: a finished frame's zones never change. */
+    private static final class PhaseMemo {
+        private long index = -1, begin;
+        private List<Map.Entry<String, Long>> phases = List.of();
+
+        List<Map.Entry<String, Long>> of(@Nullable CgFrameRecord frame) {
+            if (frame == null) return List.of();
+            // The begin time as well: a cleared ring numbers its frames from the start again.
+            if (frame.index() != index || frame.beginNanos() != begin) {
+                phases = phasesOf(frame);
+                index = frame.index();
+                begin = frame.beginNanos();
+            }
+            return phases;
+        }
     }
 
     /** That same frame's counts — the draw calls and layers of the frame that cost, not of this one. */

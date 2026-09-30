@@ -58,6 +58,12 @@ public final class ShaderGraphCostProbe {
 
         /** Changes one constant in the graph as an edit in its editor would, so every affected shader recompiles. */
         void edit(int n);
+
+        /** Pans the graph's canvas by screen pixels, as a drag does. */
+        void pan(float dx, float dy);
+
+        /** Moves one node by world units, as one frame of dragging it does. */
+        void moveNode(float dx, float dy);
     }
 
     private static final int SETTLE = 120;
@@ -67,9 +73,22 @@ public final class ShaderGraphCostProbe {
     private static final int EDITS = 6;
     /** Frames between edits: long enough for every recompile an edit causes to land before the next. */
     private static final int EDIT_GAP = 90;
+    private static final int PANS = 3;
+    /** Screen pixels a pan moves: far enough that every node leaves the viewport and is culled. */
+    private static final float PAN_DISTANCE = 6000f;
+    /** Frames spent away before panning back. */
+    private static final int PAN_AWAY = 30;
+    /** Frames from one pan-away to the next: past the ~2 s a returning node's work was seen to land after. */
+    private static final int PAN_GAP = 360;
+    private static final int DRAGS = 3;
+    /** Frames a drag lasts, moving the node a step each. */
+    private static final int DRAG_FRAMES = 40;
+    private static final float DRAG_STEP = 4f;
+    /** Frames from one drag's start to the next: past the ~2 s a release was seen to cost after. */
+    private static final int DRAG_GAP = 360;
     /** The baseline block is kept for good in the ring's first frames; the rest must fit the newest. */
     private static final int FIRST_FRAMES = SETTLE + BLOCK;
-    private static final int NEWEST_FRAMES = 2000;
+    private static final int NEWEST_FRAMES = 3500;
     /** Sized so each arena stays at one power-of-two step; the open desktop records ~3,000 zones a frame. */
     private static final int ZONES_PER_FRAME = 4000;
 
@@ -113,6 +132,26 @@ public final class ShaderGraphCostProbe {
             CgTrace.marker(UiTrace.FRAME, "graph-cost:edit");
             target.edit(at / EDIT_GAP);
             edits.add(CgTrace.currentFrameIndex());
+        }));
+        steps.add(new Step("panning", PANS * PAN_GAP, true, () -> { }, at -> {
+            int into = at % PAN_GAP;
+            if (into == 0) {
+                CgTrace.marker(UiTrace.FRAME, "graph-cost:pan-away");
+                target.pan(PAN_DISTANCE, 0f);
+            } else if (into == PAN_AWAY) {
+                CgTrace.marker(UiTrace.FRAME, "graph-cost:pan-back");
+                target.pan(-PAN_DISTANCE, 0f);
+                pans.add(CgTrace.currentFrameIndex());
+            }
+        }));
+        steps.add(new Step("dragging", DRAGS * DRAG_GAP, true, () -> { }, at -> {
+            int into = at % DRAG_GAP;
+            // Out and back, so the graph ends where it began.
+            if (into < DRAG_FRAMES) target.moveNode((at / DRAG_GAP) % 2 == 0 ? DRAG_STEP : -DRAG_STEP, 0f);
+            if (into == DRAG_FRAMES - 1) {
+                CgTrace.marker(UiTrace.FRAME, "graph-cost:release");
+                releases.add(CgTrace.currentFrameIndex());
+            }
         }));
         steps.add(new Step("closing", SETTLE, false, () -> {
             CgTrace.marker(UiTrace.FRAME, "graph-cost:close");
@@ -160,6 +199,10 @@ public final class ShaderGraphCostProbe {
 
     /** The frame each edit was made in; its cost lands in the frames after. */
     private final List<Long> edits = new ArrayList<>();
+    /** The frame each pan back was made in: every node returns to view then. */
+    private final List<Long> pans = new ArrayList<>();
+    /** The last frame of each node drag. */
+    private final List<Long> releases = new ArrayList<>();
 
     private void endBlock(Step step) {
         blocks.add(new Block(step.name(), blockFrom, CgTrace.currentFrameIndex(),
@@ -184,10 +227,31 @@ public final class ShaderGraphCostProbe {
         Block after = blocks.get(blocks.size() - 1);
         out.add("");
         out.add("[graph-cost] each edit: the worst frame in the " + EDIT_GAP + " after it, and how many went over 16.7 ms");
-        for (long edit : edits) out.add(editLine(edit));
-        out.add(compileLine(snapshot, editing));
+        for (long edit : edits) out.add(afterLine("edit", edit, EDIT_GAP));
+        out.add(compileLine(snapshot, editing, edits.size()));
         for (long edit : edits) {
-            CgFrameRecord worst = worstAfter(edit);
+            CgFrameRecord worst = worstAfter(edit, EDIT_GAP);
+            if (worst != null) out.add(report.frame(worst.index()));
+        }
+        int panWindow = PAN_GAP - PAN_AWAY;
+        Block panning = blocks.get(OPEN_BLOCKS + 2);
+        out.add("");
+        out.add("[graph-cost] each pan back: the worst frame in the " + panWindow + " after it, and how many went over 16.7 ms");
+        for (long pan : pans) out.add(afterLine("pan back", pan, panWindow));
+        out.add(compileLine(snapshot, panning, pans.size()));
+        for (long pan : pans) {
+            CgFrameRecord worst = worstAfter(pan, panWindow);
+            if (worst != null) out.add(report.frame(worst.index()));
+        }
+        int releaseWindow = DRAG_GAP - DRAG_FRAMES;
+        Block dragging = blocks.get(OPEN_BLOCKS + 3);
+        out.add("");
+        out.add("[graph-cost] each node drag's release: the worst frame in the " + releaseWindow
+                + " after it, and how many went over 16.7 ms");
+        for (long release : releases) out.add(afterLine("release", release, releaseWindow));
+        out.add(compileLine(snapshot, dragging, releases.size()));
+        for (long release : releases) {
+            CgFrameRecord worst = worstAfter(release, releaseWindow);
             if (worst != null) out.add(report.frame(worst.index()));
         }
         out.add("[graph-cost] last open block -> editing (what an edit costs, spread over the block)");
@@ -214,8 +278,8 @@ public final class ShaderGraphCostProbe {
     private static final Set<String> COMPILES = Set.of("material.recompile", "material.submitRecompile",
             "material.commit", "material.awaitPending");
 
-    /** What compiling cost the frame thread across the edits: per edit, and in the single worst frame. */
-    private String compileLine(CgTraceSnapshot snapshot, Block block) {
+    /** What compiling cost the frame thread across a block: per event in it, and in the single worst frame. */
+    private String compileLine(CgTraceSnapshot snapshot, Block block, int events) {
         // ONE pass over the zones: zonesIn scans every zone held, and per frame of a block that is millions each.
         List<CgFrameRecord> frames = new ArrayList<>();
         for (CgFrameRecord record : snapshot.frames()) {
@@ -248,34 +312,34 @@ public final class ShaderGraphCostProbe {
                 worstFrame = frame.getKey();
             }
         }
+        int count = Math.max(1, events);
         StringBuilder line = new StringBuilder(String.format(Locale.ROOT,
-                "[graph-cost] compiling on the frame thread: %.2f ms per edit, worst frame #%d with %.2f ms",
-                total / Math.max(1, edits.size()), worstFrame, worst));
-        int count = Math.max(1, edits.size());
-        parts.forEach((name, ms) -> line.append(String.format(Locale.ROOT, "%n[graph-cost]     %-28s %8.2f ms per edit",
+                "[graph-cost] compiling on the frame thread in %s: %.2f ms per event, worst frame #%d with %.2f ms",
+                block.name(), total / count, worstFrame, worst));
+        parts.forEach((name, ms) -> line.append(String.format(Locale.ROOT, "%n[graph-cost]     %-28s %8.2f ms per event",
                 name, ms / count)));
         return line.toString();
     }
 
     @Nullable
-    private static CgFrameRecord worstAfter(long edit) {
+    private static CgFrameRecord worstAfter(long event, int window) {
         CgFrameRecord worst = null;
         for (CgFrameRecord record : CgTrace.frames()) {
-            if (record.index() <= edit || record.index() > edit + EDIT_GAP) continue;
+            if (record.index() <= event || record.index() > event + window) continue;
             if (worst == null || record.wallMillis() > worst.wallMillis()) worst = record;
         }
         return worst;
     }
 
-    private static String editLine(long edit) {
-        CgFrameRecord worst = worstAfter(edit);
+    private static String afterLine(String what, long event, int window) {
+        CgFrameRecord worst = worstAfter(event, window);
         int over = 0;
         for (CgFrameRecord record : CgTrace.frames()) {
-            if (record.index() > edit && record.index() <= edit + EDIT_GAP && record.wallMillis() > 1000d / 60d) over++;
+            if (record.index() > event && record.index() <= event + window && record.wallMillis() > 1000d / 60d) over++;
         }
-        if (worst == null) return "[graph-cost]   edit at #" + edit + ": no frames held";
-        return String.format(Locale.ROOT, "[graph-cost]   edit at #%d: worst #%d (+%d)  wall %.2f  cpu %s  gpu %s  over budget %d",
-                edit, worst.index(), worst.index() - edit, worst.wallMillis(),
+        if (worst == null) return "[graph-cost]   " + what + " at #" + event + ": no frames held";
+        return String.format(Locale.ROOT, "[graph-cost]   %s at #%d: worst #%d (+%d)  wall %.2f  cpu %s  gpu %s  over budget %d",
+                what, event, worst.index(), worst.index() - event, worst.wallMillis(),
                 worst.hasCpu() ? String.format(Locale.ROOT, "%.2f", worst.cpuMillis()) : "absent",
                 worst.hasGpu() ? String.format(Locale.ROOT, "%.2f", worst.gpuMillis()) : "absent", over);
     }
@@ -284,20 +348,30 @@ public final class ShaderGraphCostProbe {
         List<Double> wall = new ArrayList<>();
         List<Double> cpu = new ArrayList<>();
         List<Double> gpu = new ArrayList<>();
+        List<Double> zones = new ArrayList<>();
         int collections = 0;
         long gcMillis = 0;
+        long dropped = 0;
+        long leaked = 0;
+        int droppingFrames = 0;
         for (CgFrameRecord record : CgTrace.frames()) {
             if (record.index() < block.from() || record.index() > block.to()) continue;
             wall.add(record.wallMillis());
             if (record.hasCpu()) cpu.add(record.cpuMillis());
             if (record.hasGpu()) gpu.add(record.gpuMillis());
+            zones.add((double) CgTrace.zonesIn(record).size());
             collections += record.gcCollections();
             gcMillis += record.gcMillis();
+            dropped += record.droppedZones();
+            leaked += record.leakedZones();
+            if (record.droppedZones() > 0) droppingFrames++;
         }
         return String.format(Locale.ROOT,
-                "[graph-cost]   %-16s frames #%d-#%d (%d held)  wall %s  cpu %s  gpu %s  gc %d in %d ms  hooks %d  afterLayout %d",
+                "[graph-cost]   %-16s frames #%d-#%d (%d held)  wall %s  cpu %s  gpu %s  gc %d in %d ms  hooks %d  afterLayout %d"
+                        + "  zones %s  dropped %d in %d frames  leaked %d",
                 block.name(), block.from(), block.to(), wall.size(), stat(wall), stat(cpu), stat(gpu),
-                collections, gcMillis, block.hooks(), block.afterLayoutHooks());
+                collections, gcMillis, block.hooks(), block.afterLayoutHooks(), stat(zones), dropped, droppingFrames,
+                leaked);
     }
 
     /** The GPU zones and the shader graph's own counters, which a zone table leaves out. */

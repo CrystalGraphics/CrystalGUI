@@ -234,15 +234,23 @@ public final class ShaderGraphPreviews  {
 
         // Newly added nodes get their slot here rather than through a second signal, and only when the plane's
         // nodes changed -- a node rebuilt under its old id is a removal and an insertion, so it counts.
-        if (view.nodesRevision() != nodesSeen) {
+        boolean nodesMoved = view.nodesRevision() != nodesSeen;
+        if (nodesMoved || view.cullRevision() != cullSeen) {
             nodesSeen = view.nodesRevision();
+            cullSeen = view.cullRevision();
             visible.clear();
+            present.clear();
             List<GraphNode> nodes = view.nodes();
             for (int i = 0; i < nodes.size(); i++) {
                 GraphNode node = nodes.get(i);
-                attachTo(node);
-                if (node.getNodeId() != null) visible.add(node.getNodeId());
+                if (nodesMoved) attachTo(node);
+                if (node.getNodeId() == null) continue;
+                present.add(node.getNodeId());
+                // ON SCREEN ONLY: the renderer's visible set is its render set, and a culled node's thumbnail
+                // is drawn into a target nobody composites.
+                if (!view.isCulled(node)) visible.add(node.getNodeId());
             }
+            if (nodesMoved) renderer.retainNodes(present);
             renderer.setVisible(visible);
         }
         renderer.renderPending(graph);
@@ -252,9 +260,13 @@ public final class ShaderGraphPreviews  {
 
     /** {@link GraphContext#nodesRevision} when the nodes were last attached; the first tick always attaches. */
     private int nodesSeen = Integer.MIN_VALUE;
+    /** {@link GraphContext#cullRevision} when the visible set was last sent. */
+    private int cullSeen = Integer.MIN_VALUE;
 
-    /** Their ids, as last sent to the renderer. */
+    /** The on-screen nodes' ids, as last sent to the renderer. */
     private final Set<String> visible = new HashSet<>();
+    /** Every node's id, culled or not: what the renderer may keep materials for. */
+    private final Set<String> present = new HashSet<>();
 
     /**
      * Frees every target and mesh. Must run before the GL context goes away.
