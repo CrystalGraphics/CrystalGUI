@@ -105,6 +105,10 @@ public final class CgUiPaintContext {
     private static final float WARM_UI_SCALE = 2f;
 
     private static final int GPU_UI = CgGpuTrace.name("ui");
+    /** Inside {@link #GPU_UI}, which they pause, so "ui" is what is left: the batched quads, text and icons. */
+    private static final int GPU_LAYER_CLEAR = CgGpuTrace.name("ui.layerClear");
+    private static final int GPU_LAYER_BLIT = CgGpuTrace.name("ui.layerBlit");
+    private static final int GPU_LAYER_MASK = CgGpuTrace.name("ui.layerMask");
     /** {@code namespace:path} resolved through {@link CgIO}'s waterfall (filesystem override →
      * MC resource manager → classpath) — works identically in-game and in the harness/tests,
      * unlike the hardcoded absolute Windows path this replaced ({@code C:\WINDOWS\Fonts\arial.ttf},
@@ -826,7 +830,9 @@ public final class CgUiPaintContext {
         CgTrace.zoneDone(UiTrace.FRAME, "glend:flush", timed);
 
         // The finished picture, before it goes anywhere: frameFbo holds exactly what this frame drew.
+        timed = CgTrace.stamp(UiTrace.FRAME);
         captureFrameImage();
+        CgTrace.zoneDone(UiTrace.FRAME, "glend:captureImage", timed);
 
         // Composite the frame's own target (see beginFrame/frameFbo) back onto whatever the real
         // target was. Closing glScope HERE — early, not at this method's usual end — is what puts
@@ -835,8 +841,12 @@ public final class CgUiPaintContext {
         // active frame the same as any other draw call in this class, which is why this whole block
         // still runs before frameActive is cleared.
         if (glScope != null) {
+            // Timed: the first GL call after a long frame's submission is where a driver whose queue is
+            // full makes the CPU wait for the GPU.
+            timed = CgTrace.stamp(UiTrace.FRAME);
             glScope.close();
             glScope = null;
+            CgTrace.zoneDone(UiTrace.FRAME, "glend:restoreState", timed);
         }
         // Full opacity — the frame texture already carries whatever per-element opacity the UI tree
         // itself applied while painting into it; this composite is the "put the finished picture
@@ -1946,8 +1956,10 @@ public final class CgUiPaintContext {
         }
         candidates.remove(key);
 
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         CgFrameBuffer fbo = CgFrameBuffer.createOwned("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);
         warmUpLayer(fbo);
+        CgTrace.zoneDone(UiTrace.FRAME, "retain:createFbo", timed);
         layer = new RetainedLayer(fbo, region, revision);
         layer.lastFrame = frameId;
         layer.setFresh(false, revision);
@@ -2149,12 +2161,14 @@ public final class CgUiPaintContext {
             // behind. Nothing ever samples that: the composite reads the region and no more, which is
             // the same argument that made the full-screen clear correct when every layer was a screen.
             long timed = CgTrace.stamp(UiTrace.FRAME);
+            CgGpuTrace.begin(GPU_LAYER_CLEAR);
             int width = region == null ? fbo.getWidth() : Math.min(fbo.getWidth(), region.width());
             int height = region == null ? fbo.getHeight() : Math.min(fbo.getHeight(), region.height());
             scissorStack.pushScissor(0, 0, width, height);
             scissorStack.applyScissorIfNeeded(fbo.getHeight());
             fbo.clearColor(0f, 0f, 0f, 0f);
             scissorStack.popScissor();
+            CgGpuTrace.end();
             CgTrace.zoneDone(UiTrace.FRAME, "layer:clear", timed);
             CgTrace.add(UiTrace.FRAME, "layer-clear-kpx", width * height / 1000);
         }
@@ -2338,6 +2352,9 @@ public final class CgUiPaintContext {
     public void blitLayer(CgFrameBuffer fbo, float opacity, LayerRegion region) {
         if (region.isEmpty()) return;
         long timed = CgTrace.stamp(UiTrace.FRAME);
+        // Queued draws go first, so the GPU timer below holds the composite alone.
+        flush();
+        CgGpuTrace.begin(GPU_LAYER_BLIT);
         CgTrace.add(UiTrace.FRAME, "layer-blit-kpx", region.width() * region.height() / 1000);
         CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
         float u1 = Math.min(1f, (float) region.width() / fbo.getWidth());
@@ -2360,6 +2377,7 @@ public final class CgUiPaintContext {
             // the two symptoms this composite is blamed for, and neither looks like a binding fault.
             poseStack.popPose();
         }));
+        CgGpuTrace.end();
         CgTrace.zoneDone(UiTrace.FRAME, "layer:blit", timed);
     }
 
@@ -2395,6 +2413,7 @@ public final class CgUiPaintContext {
         if (region.isEmpty()) return;
         long timed = CgTrace.stamp(UiTrace.FRAME);
         flush();
+        CgGpuTrace.begin(GPU_LAYER_MASK);
         try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
             subtreeFbo.bind();
             CgGL.glViewport(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight());
@@ -2455,6 +2474,7 @@ public final class CgUiPaintContext {
                 CgRenderPipeline.getInstance().prepareFrame();
             }
         }
+        CgGpuTrace.end();
         // The scope put the enclosing target back; the clip has to follow it.
         reapplyScissor();
         currentTexture = null;

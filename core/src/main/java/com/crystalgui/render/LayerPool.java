@@ -87,9 +87,11 @@ final class LayerPool {
 
         int width = bucketSize(wi, surface.width);
         int height = bucketSize(hi, surface.height);
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         fbo = CgFrameBuffer.createOwned("cgui_layer_" + created++, width, height, CgUiPaintContext.LAYER_FORMAT);
         slots[slot] = fbo;
         warmUp.accept(fbo);
+        CgTrace.zoneDone(UiTrace.FRAME, "layer:createFbo", timed);
         CgTrace.add(UiTrace.FRAME, "layer-fbos", 1);
         return fbo;
     }

@@ -245,19 +245,25 @@ public final class BoxTree {
     public void layout(float width, float height) {
         document.require("layout");
         if (structureDirty || root == null) {
+            long synced = CgTrace.stamp(UiTrace.FRAME);
             sync();
             structureDirty = false;
+            CgTrace.zoneDone(UiTrace.FRAME, "layout:sync", synced);
         }
         Box root = this.root;
         if (root == null) throw new IllegalStateException("the document has no box");
         boolean viewportMoved = width != viewportWidth || height != viewportHeight;
         viewportWidth = width;
         viewportHeight = height;
+        long restyled = CgTrace.stamp(UiTrace.FRAME);
+        restyledBoxes = 0;
         refreshStyles(root);
         for (Mirror mirror : mirrors) {
             refreshStyles(mirror.root);
             pinMirrorSize(mirror);
         }
+        CgTrace.zoneDone(UiTrace.FRAME, "layout:restyle", restyled);
+        CgTrace.add(UiTrace.FRAME, "layout-restyled-boxes", restyledBoxes);
         // The document's box IS the viewport, whatever its style says -- written after the style
         // refresh, which would otherwise hand it back its sheet's `auto` on the next restyle. And it
         // is a BLOCK container unless a sheet says otherwise: CSS's root is one, so children stack
@@ -269,15 +275,25 @@ public final class BoxTree {
         }
         if (viewportMoved) taffy.markDirty(root.taffyId);
         if (taffy.isDirty(root.taffyId)) {
+            long computed = CgTrace.stamp(UiTrace.FRAME);
             taffy.computeLayout(root.taffyId,
                     TaffySize.of(AvailableSpace.definite(width), AvailableSpace.definite(height)));
+            CgTrace.zoneDone(UiTrace.FRAME, "layout:compute", computed);
+            CgTrace.add(UiTrace.FRAME, "layout-computes", 1);
             layoutPasses++;
+            long readBack = CgTrace.stamp(UiTrace.FRAME);
             read(root);
             clampScrolls(root);
+            CgTrace.zoneDone(UiTrace.FRAME, "layout:read", readBack);
             transformsDirty = true;
         }
         composeIfDirty();
     }
+
+    /** Boxes whose computed style changed in this pass's restyle. A trace count. */
+    private int restyledBoxes;
+    /** Boxes the last compose walked. A trace count. */
+    private int composedBoxes;
 
     /**
      * Whether another {@link #layout} pass would actually compute anything.
@@ -319,7 +335,11 @@ public final class BoxTree {
             return;
         }
         paintEpoch++;
+        long composed = CgTrace.stamp(UiTrace.FRAME);
+        composedBoxes = 0;
         compose(root, rootTransform, 0f, 0f);
+        CgTrace.zoneDone(UiTrace.FRAME, "layout:compose", composed);
+        CgTrace.add(UiTrace.FRAME, "layout-composed-boxes", composedBoxes);
         transformsDirty = false;
     }
 
@@ -574,6 +594,7 @@ public final class BoxTree {
             box.pinnedWidth = Float.NaN;
             box.pinnedHeight = Float.NaN;
             box.appliedStyle = computed;
+            restyledBoxes++;
             taffy.markDirty(box.taffyId);
             transformsDirty = true;
             box.reclassify();
@@ -614,6 +635,7 @@ public final class BoxTree {
     }
 
     private void compose(Box box, Matrix4f hostWorld, float hostScrollLeft, float hostScrollTop) {
+        composedBoxes++;
         // SCROLL-EXEMPT: this box does not move with what hosts it. A scroller's own bars, an
         // editor's gutter and its find bar are all children of the thing that scrolls, and without
         // this they scroll away with the content they are for. It is applied HERE because this is
@@ -823,6 +845,8 @@ public final class BoxTree {
 
     void structureChanged() {
         structureDirty = true;
+        // Who changed the tree, past the node and box bookkeeping: a whole rebuild follows on the next layout.
+        UiTrace.blame("structure", "com.crystalgui.ui.box", "com.crystalgui.ui.dom");
     }
 
     /**

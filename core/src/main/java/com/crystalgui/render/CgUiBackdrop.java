@@ -10,6 +10,7 @@ import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import org.jetbrains.annotations.Nullable;
@@ -438,6 +439,9 @@ final class CgUiBackdrop {
             return true;
         }
         long probeT0 = PROBE ? System.nanoTime() : CgTrace.stamp(UiTrace.FRAME);
+        // Queued draws go first, so the GPU timer holds the capture alone.
+        ctx.flush();
+        CgGpuTrace.begin(GPU_CAPTURE);
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
         if (captureFbo.getWidth() != w || captureFbo.getHeight() != h) captureFbo.resize(w, h);
 
@@ -545,6 +549,7 @@ final class CgUiBackdrop {
         captureDepth = depth;
         captureTarget = innermost.getId();
         blurFrame = -1L;   // the capture moved, so whatever was blurred describes somewhere else
+        CgGpuTrace.end();
         CgTrace.zoneDone(UiTrace.FRAME, "backdrop:capture", probeT0);
         CgTrace.add(UiTrace.FRAME, "backdrop-capture-kpx", (capW * capH) / 1000);
         if (PROBE) {
@@ -671,6 +676,18 @@ final class CgUiBackdrop {
         CgTexture2D captured = (CgTexture2D) captureFbo.getColorTexture(0);
         if (captured == null) return null;
 
+        ctx.flush();
+        CgGpuTrace.begin(GPU_BLUR);
+        try {
+            return blurCaptured(captured, radiusPx, fracW, fracH, probeB0);
+        } finally {
+            CgGpuTrace.end();
+        }
+    }
+
+    /** {@link #blurredBackdrop}'s passes, apart so its GPU timer closes on every exit. */
+    @Nullable
+    private CgTexture2D blurCaptured(CgTexture2D captured, float radiusPx, float fracW, float fracH, long probeB0) {
         // Sigma at the working scale, and the taps that reach three of it. The radius is CLAMPED rather
         // than the scale raised past 4 (the box prefilter reduces 4x cleanly and no further), so a blur
         // asked to reach beyond 3 * MAX_KERNEL_RADIUS * 4 surface pixels comes back slightly narrower
@@ -868,6 +885,10 @@ final class CgUiBackdrop {
     // desktop costs. Read them together: if the stages barely move and the period doubles, the cost is
     // GPU-side in the very work they enqueue.
     private static final boolean PROBE = Boolean.getBoolean("crystalgui.glass.probe");
+
+    /** Inside the paint context's "ui", which they pause. */
+    private static final int GPU_CAPTURE = CgGpuTrace.name("ui.backdropCapture");
+    private static final int GPU_BLUR = CgGpuTrace.name("ui.backdropBlur");
     private long probeLastStart;
     private long pFramePeriod, pCapture, pBlur;
     private int pConsumers, pRecaptures, pFrames, pLayerDepth, pCapW, pCapH;
