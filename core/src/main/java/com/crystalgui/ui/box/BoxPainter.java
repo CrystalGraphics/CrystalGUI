@@ -368,20 +368,31 @@ public final class BoxPainter {
         Box clip = clips.get(at);
         ComputedStyle style = clip.node().computedStyle();
         PoseStack pose = ctx.getPoseStack();
-        if (radiiOf(style, clip.width(), clip.height()).isZero()) {
+        boolean square = radiiOf(style, clip.width(), clip.height()).isZero();
+        LayerRegion region = square ? null : regionOf(lifted, ctx, base);
+        if (region != null && region.isEmpty()) return;
+        // A LAYER PAIR PER LIFTED BOX PER ROUNDED ANCESTOR, for corners it was nowhere near: every graph node and
+        // port editor inside a rounded window paid two targets and a composite for a clip a scissor makes exactly.
+        boolean elided = !square && !CgUiPaintContext.LEGACY_LAYERS && missesRoundedCorners(clip, style, region, base);
+        if (square || elided) {
             pose.pushPose();
             pose.last().pose().set(base).mul(clip.localToWorld());
             pushPaddingScissor(clip, ctx);
+            // The layer it replaces was also a clip to the region, and a box painting past its own ink relied on it.
+            if (elided) {
+                CgTrace.add(UiTrace.FRAME, "masks-elided", 1);
+                pose.last().pose().identity();
+                ctx.pushScissor(region.x(), region.y(), region.width(), region.height());
+            }
             pose.popPose();
             try {
                 paintClipped(lifted, clips, at - 1, ctx, base);
             } finally {
+                if (elided) ctx.popScissor();
                 ctx.popScissor();
             }
             return;
         }
-        LayerRegion region = regionOf(lifted, ctx, base);
-        if (region.isEmpty()) return;
         Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
         LayerRegion inside = region.atOrigin();
         CgFrameBuffer content = ctx.beginLayerFbo(region);
@@ -528,6 +539,14 @@ public final class BoxPainter {
     /** The default {@code overflow: hidden} mask: the box's own rounded shape with the border band at alpha 0. */
     private static void paintMask(Box box, ComputedStyle style, CgUiPaintContext ctx) {
         float borderWidth = borderSides(box);
+        CgUiDrawable source = layMask(box, style);
+        Radii radii = radiiOf(style, LAID[2], LAID[3]);
+        ctx.setColor(WHITE);
+        paintMaskShape(ctx, source, LAID[0], LAID[1], LAID[2], LAID[3], radii, borderWidth);
+    }
+
+    /** Lays the mask's rectangle out into {@link #LAID} and answers what it is drawn from: the mask, else the background. */
+    private static CgUiDrawable layMask(Box box, ComputedStyle style) {
         CgUiDrawable maskDrawable = style.get(StylePropertyRegistry.MASK);
         CgUiDrawable source = maskDrawable != CgUiDrawable.EMPTY ? maskDrawable : style.get(StylePropertyRegistry.BACKGROUND);
         originBox(box, style.get(StylePropertyRegistry.MASK_ORIGIN), ORIGIN_BOX);
@@ -539,10 +558,45 @@ public final class BoxPainter {
                 Math.max(0f, ORIGIN_BOX[2] + 2f * offsetX),
                 Math.max(0f, ORIGIN_BOX[3] + 2f * offsetY),
                 style.get(StylePropertyRegistry.MASK_SIZE), style.get(StylePropertyRegistry.MASK_POSITION), LAID);
-        Radii radii = radiiOf(style, LAID[2], LAID[3]);
-        ctx.setColor(WHITE);
-        paintMaskShape(ctx, source, LAID[0], LAID[1], LAID[2], LAID[3], radii, borderWidth);
+        return source;
     }
+
+    /**
+     * Whether {@code clip}'s rounded mask cuts {@code region} exactly as its padding-box scissor would: the mask is
+     * opaque and laid on the box itself, the box is axis-aligned in the target, and the region misses all four
+     * rounded corners. A node deep inside a rounded window is the common case.
+     */
+    private static boolean missesRoundedCorners(Box clip, ComputedStyle style, LayerRegion region, Matrix4f base) {
+        Matrix4f space = CLIP_SPACE.set(base).mul(clip.localToWorld());
+        if (space.m10() != 0f || space.m01() != 0f || space.m00() <= 0f || space.m11() <= 0f) return false;
+        if (style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY) return false;
+        CgUiDrawable source = layMask(clip, style);
+        boolean opaque = revealsNothing(source)
+                || ((CgUiRect) source).getFill() instanceof CgUiRect.Fill.Color(int argb) && (argb >>> 24) == 0xFF;
+        float w = clip.width(), h = clip.height();
+        if (!opaque || !near(LAID[0], 0f) || !near(LAID[1], 0f) || !near(LAID[2], w) || !near(LAID[3], h)) return false;
+
+        float x0 = (region.x() - space.m30()) / space.m00();
+        float y0 = (region.y() - space.m31()) / space.m11();
+        float x1 = (region.x() + region.width() - space.m30()) / space.m00();
+        float y1 = (region.y() + region.height() - space.m31()) / space.m11();
+        Radii r = radiiOf(style, w, h);
+        return !overlaps(x0, y0, x1, y1, 0f, 0f, r.rxTL, r.ryTL)
+                && !overlaps(x0, y0, x1, y1, w - r.rxTR, 0f, w, r.ryTR)
+                && !overlaps(x0, y0, x1, y1, w - r.rxBR, h - r.ryBR, w, h)
+                && !overlaps(x0, y0, x1, y1, 0f, h - r.ryBL, r.rxBL, h);
+    }
+
+    private static boolean overlaps(float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1, float by1) {
+        return ax0 < bx1 && bx0 < ax1 && ay0 < by1 && by0 < ay1;
+    }
+
+    private static boolean near(float a, float b) {
+        return Math.abs(a - b) < 1e-3f;
+    }
+
+    /** @see #missesRoundedCorners */
+    private static final Matrix4f CLIP_SPACE = new Matrix4f();
 
     private static void paintMaskShape(CgUiPaintContext ctx, CgUiDrawable d, float x, float y, float width, float height,
                                        Radii radii, float borderWidth) {
