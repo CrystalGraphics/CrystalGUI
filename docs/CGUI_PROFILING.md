@@ -99,7 +99,7 @@ cpu mark, so it shows as idle — the verdict names it.
 
 | Scene | Profile it for |
 |---|---|
-| `cgui-desktop` | the real shell: windows, taskbar, the editor, the Frame Profiler. `-Dcrystalgui.harness.desktop.profiler=true` drives the profiler window itself; `-Dcrystalgui.harness.desktop.traceCost=true` measures the engine's own cost with channels off and on |
+| `cgui-desktop` | the real shell: windows, taskbar, the editor, the Frame Profiler. `-Dcrystalgui.harness.desktop.profiler=true` drives the profiler window itself; `-Dcrystalgui.harness.desktop.traceCost=true` measures the engine's own cost with channels off and on; `-Dcrystalgui.harness.desktop.graphCost=true` measures the scratch shader graph: the desktop without it, open and idle, six constant edits, and closed again, in one process (`ShaderGraphCostProbe`, writes `graph-cost.txt`) |
 | `cgui-gallery` | one widget, a page each |
 | `cgui-text-stress` | text shaping and layout under load |
 | `cgui-timeline` | the profiler's own tracks under 10,000 spans |
@@ -185,15 +185,16 @@ opens that frame in the profiler.
 | Markup, syntax | flow | `widget/text/MarkupView`, `SyntaxHighlighting` |
 | Workbench actions | flow | `workbench/DocumentTabs`, `dock/DockArea`, `dock/WorkbenchOpener`, `search/GoToFile`, `chrome/palette/QuickPick`, `explorer/ExplorerCommands` |
 | Language stack | frame, flow | `language/…/grammar`, `engine/AnalysedLanguageServices`, `java/*`, `js/JsLanguageServices` |
+| Node graph, shader graph | frame | `canvas:cull`, `graph:tick`, `graph:paintNode`, `graph:paintWires`, `blackboard:tick`, `sg:previews`, `sg:mainPreview`, `sg:toShaderGraph`, `sg:compile`, `sg:paintPreview`; counters `graph-*`, `sg-*`. `widget/canvas`, `widget/graph`, `app/shadergraph`; the renderers under them are CrystalGraphics' `shadergraph` channel |
+| Hooks | frame | `anim-hooks`, `anim-after-layout-hooks`: live per-frame and post-layout hooks, a count that climbs while nothing happens being a leak (`UIDocument`) |
 
 **Not instrumented** — zone these before any question that touches them:
 
-- **The node graph and the shader graph** (`widget/canvas`, `widget/graph`, `app/shadergraph`) — none at
-  all, and the graph has been seen dragging frames while merely open;
 - **input dispatch** (`ui/service/Input`) inside `frame:input` — hit testing, the three-phase walk, the
   keymap — and key events, which dispatch as the host delivers them rather than in the frame;
 - **the desktop compositor** (`desktop/**`): window motion, the taskbar, snapshots, the switcher;
 - **individual widgets' paint** outside the editor and SVG;
 - **Taffy's compute** inside `frame:layout`, and `UIText` measurement;
 - **the wire and the workspace** (`net/**`, `fs/**`) — spans where an action waits on them;
-- **per-frame hooks and `afterLayout` hooks**, only as their phase totals.
+- **per-frame hooks and `afterLayout` hooks**, only as their phase totals and counts — a hook of its own is
+  zoned by its owner.

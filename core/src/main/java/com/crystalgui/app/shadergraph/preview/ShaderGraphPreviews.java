@@ -1,5 +1,7 @@
 package com.crystalgui.app.shadergraph.preview;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.widget.graph.node.NodeFieldBinder;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
@@ -188,6 +190,12 @@ public final class ShaderGraphPreviews  {
     }
 
         public boolean tickFrame(float deltaSeconds) {
+            try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:previews")) {
+                return tickFrameTraced(deltaSeconds);
+            }
+        }
+
+        private boolean tickFrameTraced(float deltaSeconds) {
         if (deleted) return false;
         // The debounce. Fires once the changes stop arriving, never per keystroke, and always fires —
         // a pane left showing a stale shader is worse than one that updates a beat late.

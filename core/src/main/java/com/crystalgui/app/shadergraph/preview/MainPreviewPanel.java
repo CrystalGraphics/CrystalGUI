@@ -1,5 +1,7 @@
 package com.crystalgui.app.shadergraph.preview;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
@@ -156,15 +158,19 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
 
         buildMeshMenu();
         installGestures();
+        whileConnected(() -> document.onChanged.connect(() -> graph = null));
     }
+
+    /** The document as a shader graph, rebuilt only after it changes. Null until the first tick needs it. */
+    @Nullable
+    private CgShaderGraph graph;
 
     /**
      * Starts redrawing, and reports whether it managed to.
      *
-     * <p><b>Safe to call every frame.</b> Ticker registration is {@code HashSet}-backed and therefore
-     * idempotent, and a caller that gives up after one attempt gets a panel that never draws at all if
-     * the panel was not yet in a window — a page built into an unselected tab, for instance. Silently
-     * doing nothing and returning {@code this} was the earlier shape, and it hid exactly that.</p>
+     * <p><b>Call until it answers true, then never again:</b> {@code Animation.every} is a plain add, so each
+     * successful call is one more redraw per frame. A caller that gives up after one attempt gets a panel that
+     * never draws if it was not yet in a window — a page built into an unselected tab, for instance.</p>
      *
      * @return true once a window was found and the ticker is registered
      */
@@ -397,9 +403,18 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
         return renderer.lastDriverError();
     }
 
-        public boolean tickFrame(float delta) {
+    public boolean tickFrame(float delta) {
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:mainPreview")) {
+            return tickFrameTraced(delta);
+        }
+    }
+
+    private boolean tickFrameTraced(float delta) {
         move.reclampIfPlaced(placedLeft(), placedTop());
-        CgShaderGraph graph = ShaderGraphBridge.toShaderGraph(document, shaderNodes, master);
+        // Not while hidden: an inactive tab is `display: none`, not detached, so it still ticks.
+        Box box = surface.box();
+        if (box == null || box.width() <= 0f || box.height() <= 0f) return true;        // Rebuilt on change and not per frame. A null answer (no master node) is rebuilt every frame, which is cheap.
+        if (graph == null) graph = ShaderGraphBridge.toShaderGraph(document, shaderNodes, master);
         // The camera is framed for the panel, so the picture fills it rather than sitting letterboxed in
         // the middle of it. Read from the SURFACE, not from the panel: the header takes a strip off the
         // top, and framing to the outer box would crop the mesh by exactly that much.
@@ -449,6 +464,12 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
 
         @Override
         public void paintContent(CgUiPaintContext ctx, Box box) {
+            try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:paintMainPreview")) {
+                paintContentTraced(ctx, box);
+            }
+        }
+
+        private void paintContentTraced(CgUiPaintContext ctx, Box box) {
             super.paintContent(ctx, box);
 
             CgTexture texture = renderer.currentTexture();

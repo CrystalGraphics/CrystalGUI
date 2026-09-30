@@ -58,7 +58,14 @@ import com.crystalgui.workbench.toolwindow.ToolWindowType;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
+import com.crystalgui.fs.CgPath;
+import com.crystalgui.app.shadergraph.ShaderGraphDocument;
+import com.crystalgui.document.Document;
+import com.crystalgui.graph.NodeData;
+import com.crystalgui.harness.ShaderGraphCostProbe;
 import com.crystalgui.harness.TraceCostProbe;
+
+import javax.annotation.Nullable;
 
 import com.crystalgui.core.data.Transform2D;
 import org.joml.Matrix4f;
@@ -342,6 +349,7 @@ public class CgUiDesktopScene
                 workspace.workspace());
         if (editor == null) return;
         editor.addClass("desktop-editor");
+        if (GRAPH_COST) graphCost = graphCostProbe();
         // A SIZE THIS SCENE CHOOSES, over whatever the arrangement record says: the whole exercise here
         // is watching the editor share a desktop, so it starts small enough to see the other windows.
         editor.mainWindow().moveTo(300, 55).resizeTo(600, 400);
@@ -448,6 +456,8 @@ public class CgUiDesktopScene
         document.paint(context);
         context.endFrame();
         if (traceCost != null && traceCost.frame(System.nanoTime() - workStart)) traceCostDone = true;
+        if (graphCost != null && graphCost.capturesNow()) ctx.getArtifactService().requestCapture("graph-open");
+        if (graphCost != null && graphCost.frame()) graphCostDone = true;
 
         // Late enough that the first window's placement, the entry animations and the editor's own
         // deferred rebuilds have all settled -- a capture at frame 5 photographs a desktop that is
@@ -464,6 +474,67 @@ public class CgUiDesktopScene
 
     private final TraceCostProbe traceCost = TRACE_COST ? new TraceCostProbe(240) : null;
     private boolean traceCostDone;
+
+    /**
+     * -Dcrystalgui.harness.desktop.graphCost=true: what the scratch shader graph costs a frame while open and
+     * untouched, against the same desktop without it. Prints {@code [graph-cost]} lines and exits.
+     * @see ShaderGraphCostProbe
+     */
+    private static final boolean GRAPH_COST = Boolean.getBoolean("crystalgui.harness.desktop.graphCost");
+
+    /** The desktop runs the language stack and generates glyphs for seconds after it opens. */
+    private static final int GRAPH_COST_WARMUP = Integer.getInteger("crystalgui.harness.desktop.graphCost.warmup", 900);
+
+    private static final CgPath GRAPH_COST_FILE = CgPath.of(HarnessWorkspace.PROJECT_ID, "src/other/new.shadergraph");
+
+    @Nullable
+    private ShaderGraphCostProbe graphCost;
+    private boolean graphCostDone;
+
+    private ShaderGraphCostProbe graphCostProbe() {
+        return new ShaderGraphCostProbe(GRAPH_COST_WARMUP, new ShaderGraphCostProbe.Target() {
+            @Override
+            public boolean isOpen() {
+                return editor != null && editor.workbench().openPaths().contains(GRAPH_COST_FILE);
+            }
+
+            @Override
+            public void open() {
+                if (editor != null) editor.workbench().openFile(GRAPH_COST_FILE);
+            }
+
+            @Override
+            public void close() {
+                if (editor != null) editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE));
+            }
+
+            @Override
+            public int hooks() {
+                return document.animation().hookCount();
+            }
+
+            @Override
+            public int afterLayoutHooks() {
+                return document.animation().afterLayoutCount();
+            }
+
+            /** An unwired input's constant, the way a port editor writes it, and the recompile its binder asks for. */
+            @Override
+            public void edit(int n) {
+                if (editor == null) return;
+                for (Document open : editor.workbench().documents().all()) {
+                    if (!(open.model() instanceof ShaderGraphDocument graph)) continue;
+                    NodeData node = graph.graph().node(GRAPH_COST_NODE);
+                    if (node == null) continue;
+                    graph.graph().replaceNode(node.withProperty("B", String.valueOf(0.3f + 0.1f * n)));
+                    graph.shader().requestRecompile();
+                }
+            }
+        });
+    }
+
+    /** A Multiply in the scratch graph whose B is unwired, with four previews and the output downstream of it. */
+    private static final String GRAPH_COST_NODE = "htsi617tga";
 
     // ── -Dcrystalgui.harness.desktop.profiler=true: open the profiler, drive it, photograph it ──
 
@@ -1539,7 +1610,7 @@ public class CgUiDesktopScene
 
     @Override
     public boolean isRunning() {
-        return !profilerShotDone && !traceCostDone;
+        return !profilerShotDone && !traceCostDone && !graphCostDone;
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.InkOverflow;
@@ -343,6 +345,13 @@ public class GraphNode extends UIElement {
      */
     @Override
     public void paintDecoration(CgUiPaintContext ctx, Box box) {
+        CgTrace.add(UiTrace.FRAME, "graph-nodes-painted", 1);
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "graph:paintNode")) {
+            paintDecorationTraced(ctx, box);
+        }
+    }
+
+    private void paintDecorationTraced(CgUiPaintContext ctx, Box box) {
         super.paintDecoration(ctx, box);
         GraphView view = graphView();
         if (view == null) return;

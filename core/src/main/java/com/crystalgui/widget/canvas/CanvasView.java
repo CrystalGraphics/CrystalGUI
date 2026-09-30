@@ -1,5 +1,7 @@
 package com.crystalgui.widget.canvas;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Input;
@@ -574,6 +576,12 @@ public class CanvasView extends UIElement {
      * cheaper by orders of magnitude than the per-element material bind it avoids.</p>
      */
     public void updateCulling() {
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "canvas:cull")) {
+            updateCullingTraced();
+        }
+    }
+
+    private void updateCullingTraced() {
         if (!cullingEnabled) return;
         WorldRect view = visibleWorldRect().expand(cullMargin);
         for (UIElement child : content.children()) {

@@ -1,5 +1,7 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.CgUiPaintContext;
@@ -279,6 +281,12 @@ public class NodeWireLayer extends UIElement {
 
     @Override
     public void paintContent(CgUiPaintContext ctx, Box box) {
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "graph:paintWires")) {
+            paintContentTraced(ctx, box);
+        }
+    }
+
+    private void paintContentTraced(CgUiPaintContext ctx, Box box) {
         super.paintContent(ctx, box);
         if (connections.isEmpty() && !pendingLive) return;
 
