@@ -13,6 +13,7 @@ import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.framebuffer.CgPixelReadback;
+import com.crystalgraphics.platform.gl.state.CgGlCensus;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
@@ -623,6 +624,8 @@ public final class CgUiPaintContext {
     public void beginFrame(int screenWidth, int screenHeight) {
         frameId++;
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
+        // What the host handed us, off unless -Dcrystalgraphics.host.census. Before the scope reads anything.
+        CgGlCensus.at("gui");
         // Everything the UI asks of the GPU this frame, the composite included. @see #endFrame
         CgGpuTrace.begin(GPU_UI);
         layerOriginX = 0;
