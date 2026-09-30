@@ -69,6 +69,9 @@ public final class UiTrace {
     /** Who asked for the work — a stack walk per invalidation, so it is opted into on its own. */
     public static final CgTraceChannel BLAME = CgTrace.channel("crystalgui.blame");
 
+    /** The workspace server's filesystem work: a watcher poll, each stat and its path checks. */
+    public static final CgTraceChannel FS = CgTrace.channel("crystalgui.fs");
+
     static {
         // HERE, because this class is loaded by anything that records a CrystalGUI zone -- so the
         // accusations exist wherever the counters do, without a host being told to install them.
@@ -151,7 +154,7 @@ public final class UiTrace {
             String at = frame.getClassName();
             if (at.equals(UiTrace.class.getName()) || ignored(at, ignorePackages)) continue;
             int dot = at.lastIndexOf('.');
-            SITES.merge((dot < 0 ? at : at.substring(dot + 1)) + '.' + frame.getMethodName() + ':'
+            SITES.merge(what + '@' + (dot < 0 ? at : at.substring(dot + 1)) + '.' + frame.getMethodName() + ':'
                     + frame.getLineNumber(), weight, Integer::sum);
             return;
         }

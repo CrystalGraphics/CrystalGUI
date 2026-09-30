@@ -24,6 +24,7 @@ the coverage (`unzoned`, `unexplained`, `GAP`, `SELF TIME`) before any number.
 |---|---|---|---|
 | `crystalgui.frame` | the frame's phases and counters | two clock reads a zone | every timing question |
 | `crystalgui.flow` | spans: chains that cross frames or happen outside one — open a file, close a tab, an edit, a search | the same | "this action is slow", never "this frame is slow" |
+| `crystalgui.fs` | the workspace server's filesystem: each `fs:stat` and its path checks, `fs:reconcile.sweep` on the worker, `watch-rechecked`, `watch-sweep-busy` | cheap | a hitch from the watcher, or a sweep that has stopped (`watch-sweep-busy` climbing) |
 | `crystalgui.blame` | a stack walk per invalidation, written as `invalidated-by` markers | **expensive** — once a quarter of the frames it measured | *who* causes churn. **Never on while timing** — take the numbers in one run and the attribution in another, or record both and ignore its frame times |
 
 `CgTrace.enable("crystalgui")` takes all three. The one-run default for a UI question:
