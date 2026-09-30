@@ -14,6 +14,7 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UISlot;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.CompositionEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.event.PropagationPhase;
@@ -865,6 +866,32 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         if (button < 0 || button >= BUTTONS) return null;
         if (buttons[button] == null) buttons[button] = new ButtonState();
         return buttons[button];
+    }
+
+    /**
+     * An input method's run in progress, sent to the focus owner as a {@link CompositionEvent}.
+     *
+     * <pre>{@code
+     * // a host whose toolkit reports composition (Minecraft 26.3's PreeditEvent)
+     * boolean shown = document.input().consumeComposition(preedit.fullText(), preedit.caretPosition());
+     * }</pre>
+     *
+     * @param text the whole run so far; empty when the composition ended
+     * @return whether a node showed it -- when false, a host may draw the run itself
+     */
+    public boolean consumeComposition(String text, int caret) {
+        UIElement focused = document.focus().focused();
+        if (focused == null) return false;
+        CompositionEvent event = new CompositionEvent(focused, text, caret);
+        send(focused, event);
+        return event.isPropagationStopped() || event.isDefaultPrevented();
+    }
+
+    /** The focus owner's {@link UIElement#textInputArea()}, or null with nothing focused. */
+    @Nullable
+    public float[] textInputArea() {
+        UIElement focused = document.focus().focused();
+        return focused == null ? null : focused.textInputArea();
     }
 
     @Override

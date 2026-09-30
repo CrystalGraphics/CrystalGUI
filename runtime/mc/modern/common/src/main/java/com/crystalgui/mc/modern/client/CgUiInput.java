@@ -2,6 +2,11 @@ package com.crystalgui.mc.modern.client;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+//? if >=26.3 {
+/*import com.crystalgraphics.platform.input.CgSdlKeyCodes;
+*///?} else {
+import com.crystalgraphics.platform.input.CgGlfwKeyCodes;
+//?}
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.HostPointer;
@@ -28,7 +33,7 @@ public final class CgUiInput {
     private CgUiInput() {}
 
     /**
-     * A GLFW wheel delta in the engine's convention. GLFW already reports one unit per notch, so the
+     * A wheel delta in the engine's convention. GLFW and SDL both report one unit per notch, so the
      * sign is the whole conversion. @see HostPointer#scroll
      */
     public static float wheel(double platformDelta) {
@@ -48,13 +53,39 @@ public final class CgUiInput {
         return mc == null || mc.mouseHandler == null ? 0 : (int) mc.mouseHandler.ypos();
     }
 
-    /** @return whether the desktop consumed it */
+    /**
+     * A key in this Minecraft's own numbering -- GLFW's before 26.3, SDL scancodes from it -- for a
+     * {@code KeyMapping} default or a synthetic press.
+     *
+     * <pre>{@code
+     * new KeyMapping("key.crystalgui.open", CgUiInput.hostKey(CgKeyCodes.KEY_F6), CATEGORY);
+     * }</pre>
+     */
+    public static int hostKey(int cgKey) {
+        //? if >=26.3 {
+        /*return CgSdlKeyCodes.toSdl(cgKey);
+        *///?} else {
+        return CgGlfwKeyCodes.toGlfw(cgKey);
+        //?}
+    }
+
+    /** {@link #hostKey} for a mouse button: SDL counts from 1 with middle second, GLFW as the engine does. */
+    public static int hostButton(int cgButton) {
+        //? if >=26.3 {
+        /*return CgSdlKeyCodes.mouseToSdl(cgButton);
+        *///?} else {
+        return cgButton;
+        //?}
+    }
+
+    /** @param button the host's numbering. @return whether the desktop consumed it */
     public static boolean mouseButton(UIDocument window, int button, boolean pressed) {
         int x = rawX();
         int y = rawY();
         lastX = x;
         lastY = y;
-        return send(window, x, y, 0, 0, button, pressed, 0f, System.currentTimeMillis());
+        return send(window, x, y, 0, 0, CgPlatform.input().translateMouseCodes(button), pressed, 0f,
+                System.currentTimeMillis());
     }
 
     /** A move carries no button, and {@link HostPointer#of} is what drops the click time with it. */
@@ -75,13 +106,13 @@ public final class CgUiInput {
     }
 
     /**
-     * A key with no character. GLFW splits the two, so a press sends the key and {@code charTyped} sends
-     * the character; synthesising one here would be layout-dependent and GLFW has already done it.
+     * A key with no character. GLFW and SDL split the two, so a press sends the key and {@code charTyped}
+     * sends the character; synthesising one here would be layout-dependent and the toolkit has done it.
      *
      * @return whether the desktop consumed it
      */
-    public static boolean key(UIDocument window, int glfwKey, boolean pressed) {
-        int local = CgPlatform.input().translateKeyboardCodes(glfwKey);
+    public static boolean key(UIDocument window, int hostKey, boolean pressed) {
+        int local = CgPlatform.input().translateKeyboardCodes(hostKey);
         return window.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
                 (char) 0, local, pressed, false, System.currentTimeMillis()));
     }

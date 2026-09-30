@@ -1,9 +1,11 @@
 package com.crystalgui.mc.modern.probe;
 
 import com.crystalgraphics.mc.modern.platform.Windows;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import com.crystalgui.mc.modern.client.CgUiHud;
+import com.crystalgui.mc.modern.client.CgUiInput;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
@@ -12,7 +14,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.ChatScreen;
 
+//? if >=26.3 {
+/*import org.lwjgl.sdl.SDLMouse;
+*///?} else {
 import org.lwjgl.glfw.GLFW;
+//?}
 
 /**
  * The modern half of {@link DesktopProbe}: thirteen one-liners.
@@ -103,7 +109,11 @@ public final class ClientProbe {
         public void movePointerTo(int surfaceX, int surfaceY) {
             Minecraft mc = Minecraft.getInstance();
             if (mc == null || Windows.of(mc) == null) return;
+            //? if >=26.3 {
+            /*SDLMouse.SDL_WarpMouseInWindow(Windows.handle(mc), surfaceX, surfaceY);
+            *///?} else {
             GLFW.glfwSetCursorPos(Windows.handle(mc), surfaceX, surfaceY);
+            //?}
         }
 
         /** Minecraft's own main target, which is where our composite lands. */
@@ -130,7 +140,7 @@ public final class ClientProbe {
 
         @Override
         public boolean offerMouse(int button, boolean pressed) {
-            return LifecycleCrystalGUI.offerMouse(button, pressed, 0f);
+            return LifecycleCrystalGUI.offerMouse(CgUiInput.hostButton(button), pressed, 0f);
         }
 
         @Override
@@ -140,7 +150,7 @@ public final class ClientProbe {
 
         @Override
         public int keyZ() {
-            return GLFW.GLFW_KEY_Z;
+            return CgUiInput.hostKey(CgKeyCodes.KEY_Z);
         }
 
         @Override

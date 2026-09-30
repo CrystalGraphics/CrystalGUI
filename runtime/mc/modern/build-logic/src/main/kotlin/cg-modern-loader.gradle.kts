@@ -96,8 +96,13 @@ val lang: SourceSet by sourceSets.creating {
 // The language mod on a dev run's classpath. On ModDevGradle that is not what makes it a MOD: FML
 // finds `crystalgui_language` through its own MOD_CLASSES group -- `cgLangDevRunRoots` below, read by
 // crystalgraphics-run.gradle.kts, which replaces what mods {} declares. `-PcgNoLanguage` skips both.
+// Common's lang half too, which Loom's run reads from nowhere else: without it the language entrypoint
+// dies on ClassNotFoundException: com.crystalgui.mc.modern.lang.ScriptServiceModern.
 if (!providers.gradleProperty("cgNoLanguage").isPresent) {
-    dependencies { "runtimeOnly"(files(lang.output)) }
+    dependencies {
+        "runtimeOnly"(files(lang.output))
+        "runtimeOnly"(project(path = common.path, configuration = "commonLangOutput"))
+    }
 }
 
 dependencies {

@@ -127,9 +127,7 @@ public final class CgUiHud {
     /** Paints {@code arm}, and only if the compositor is in it. @see HostSession#paint */
     private static void paint(DesktopPresentation arm) {
         if (!HostSession.isInstalled()) return;
-        HostSession session = HostSession.session();
-        // The delta read ONCE and passed in -- reading it again inside would advance the clock twice.
-        session.paint(arm, session.frameDelta(), HOST);
+        HostSession.session().paint(arm, HOST);
     }
 
     // ── Input, offered to the compositor ────────────────────────────────────────────────────────

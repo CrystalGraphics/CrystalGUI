@@ -298,6 +298,11 @@ texteditor .__indent-guide__ {
  * Deliberately fainter than a find match: a search is something you asked for, an occurrence is
  * something the caret happened to be standing in. TextEditor publishes them in that order so a find hit
  * wins the character where the two overlap. */
+/* An input method's run in progress, underlined as every editor shows it. */
+.__syntax__::highlight(ime-composition) {
+    text-decoration-line: underline;
+}
+
 .__syntax__::highlight(occurrence) {
     background-color: var(--editor-occurrence-bg, #3A3D41);
 }

@@ -289,13 +289,18 @@ public final class HostSession {
      *
      * <pre>{@code
      * // one hook per arm; a frame with a screen open fires both
-     * void onHudHook()    { session.paint(HUD, session.frameDelta(), myPaintHost); }
-     * void onScreenHook() { session.paint(OVERLAY, session.frameDelta(), myPaintHost); }
+     * void onHudHook()    { session.paint(HUD, myPaintHost); }
+     * void onScreenHook() { session.paint(OVERLAY, myPaintHost); }
+     *
+     * // our own screen, which also runs the host tick: one read, both uses
+     * float delta = session.frameDelta();
+     * session.frame(delta);
+     * session.paint(DESKTOP, delta, myPaintHost);
      * }</pre>
      *
-     * <p>Read the delta <b>once</b> per frame and pass it in — {@link #frameDelta()} advances the clock,
-     * so a frame that reads it for its own use and lets the paint read it again hands the compositor a
-     * delta of nearly zero and every animation stops.</p>
+     * <p>A hook passes no delta: {@link #frameDelta()} advances the clock, and a hook that read it and then
+     * stood down would leave the arm that does paint a delta of nearly zero. Every animation then stalls,
+     * a smooth scroll included, and its timeline writes the old offset back over a thumb drag.</p>
      */
     public interface PaintHost {
 
@@ -407,8 +412,22 @@ public final class HostSession {
      * dropped instead, which puts them back in a working game with their windows intact on the desktop.
      * Deciding what to present is inside the guard too: it reads the compositor and can throw for the
      * same reasons painting it can.</p>
+     *
+     * <p>Reads the frame clock only when {@code arm} paints. @see PaintHost</p>
+     */
+    public void paint(DesktopPresentation arm, PaintHost host) {
+        paint(arm, host, false, 0f);
+    }
+
+    /**
+     * {@link #paint(DesktopPresentation, PaintHost)} with a delta already read this frame, for a caller
+     * that also handed it to {@link #frame}.
      */
     public void paint(DesktopPresentation arm, float deltaSeconds, PaintHost host) {
+        paint(arm, host, true, deltaSeconds);
+    }
+
+    private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
         Desktop desktop = desktop();
         if (desktop == null) return;
 
@@ -422,6 +441,7 @@ public final class HostSession {
         }
         // NONE paints nothing, and the other arm's hook owns the rest.
         if (now != arm) return;
+        if (!deltaRead) deltaSeconds = frameDelta();
 
         host.beforePaint();
         host.enter();
