@@ -974,6 +974,21 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     }
 
     /**
+     * Where this node's text caret is, so an input method can open its candidate list beside it —
+     * {@code {x, y, width, height}} in surface pixels, or null when there is no caret to show.
+     *
+     * <pre>{@code
+     * float[] area = document.input().textInputArea();   // asks the focus owner
+     * }</pre>
+     *
+     * <p>Only the focus owner is asked, and a host that can place an IME window reads it each frame.</p>
+     */
+    @Nullable
+    public float[] textInputArea() {
+        return null;
+    }
+
+    /**
      * Whether this node wants a MODIFIED chord for itself, before the keymap sees it.
      *
      * <p>The inverse of the old engine's yield lists: a widget stated which chords it would GIVE UP

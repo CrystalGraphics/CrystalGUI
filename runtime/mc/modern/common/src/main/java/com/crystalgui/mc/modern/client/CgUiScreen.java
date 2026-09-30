@@ -38,6 +38,10 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 *///?}
+//? if >=26.3 {
+/*import java.util.Arrays;
+import net.minecraft.client.input.PreeditEvent;
+*///?}
 
 /**
  * The CrystalGUI desktop as a 1.20.x {@link Screen} — <b>and nothing more than that</b>.
@@ -200,7 +204,44 @@ public final class CgUiScreen extends Screen {
 
         session.frame(delta);
         session.paint(DesktopPresentation.DESKTOP, delta, PAINT_HOST);
+        //? if >=26.3 {
+        /*placeTextInputArea();
+        *///?}
     }
+
+    // An input method's run in progress, and where its candidate list opens: 26.3's SDL reports both and
+    // Minecraft hands the first to the screen, drawing nothing itself. The engine's side is CompositionEvent.
+    //? if >=26.3 {
+    /*@Override
+    public boolean preeditUpdated(@Nullable PreeditEvent event) {
+        UIDocument window = window();
+        // NULL ENDS THE COMPOSITION: Minecraft passes no event rather than an empty one.
+        if (window == null) return false;
+        return event == null
+                ? window.input().consumeComposition("", 0)
+                : window.input().consumeComposition(event.fullText(), event.caretPosition());
+    }
+
+    private static int[] placedTextInputArea;
+
+    // The focus owner's caret, in GUI units -- setTextInputArea scales by the GUI scale itself, and takes
+    // two CORNERS, as EditBox passes them, not a size. Sent only on a change: SDL passes it to the OS each time.
+    private static void placeTextInputArea() {
+        UIDocument window = window();
+        float[] area = window == null ? null : window.input().textInputArea();
+        if (area == null) return;
+        Minecraft mc = Minecraft.getInstance();
+        float scale = Math.max(1, mc.getWindow().getGuiScale());
+        int left = (int) Math.floor(area[0] / scale);
+        int top = (int) Math.floor(area[1] / scale);
+        int[] corners = { left, top,
+                Math.max(left + 1, (int) Math.ceil((area[0] + area[2]) / scale)),
+                Math.max(top + 1, (int) Math.ceil((area[1] + area[3]) / scale)) };
+        if (Arrays.equals(corners, placedTextInputArea)) return;
+        placedTextInputArea = corners;
+        mc.textInputManager().setTextInputArea(corners[0], corners[1], corners[2], corners[3]);
+    }
+    *///?}
 
     // 1.21.6 draws the background from renderWithTooltip, before render() and deferred to the end of the
     // frame -- so its blur and dim would land OVER the desktop painted above. The desktop is its own.
