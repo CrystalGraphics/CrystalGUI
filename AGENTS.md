@@ -160,8 +160,9 @@ in the pin catalog).
 - **Java 8** runs Forge 1.13–1.16, legacy Forge and 1.7.10, dev runs included (`uniminedDevRun` swaps in
   the Java 8 copies). Below 1.17 the nodes are built by Loom and Unimined, above by ModDevGradle.
 - **26.x is Java 25 and unobfuscated**: every loader runs Mojang's names, so a Fabric node from 26.1 ships
-  as compiled, with no intermediary. On 26.2 Blaze3D may run on Vulkan, and CrystalGraphics then stands
-  down (`CgGraphicsLifecycle.standDown`).
+  as compiled, with no intermediary. On 26.2 Blaze3D may run on Vulkan, and CrystalGraphics then draws
+  through its own Vulkan device hosted on Minecraft's (`Blaze3dVulkanHost`); a dev client picks the API
+  with `-PcgGraphics=vulkan|opengl`.
 - **Below 1.19.3 Minecraft ships no JOML**, and those instances take CrystalGraphics' `crystalgraphics-joml`
   companion (`prismInstanceJoml` in `local.properties`).
 - **Forge 1.13.2 and 1.14.2–1.14.3 compile against Mojang names carried back from 1.14.4**, since Mojang

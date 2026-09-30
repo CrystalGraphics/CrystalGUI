@@ -709,6 +709,23 @@ tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach 
     }
 }
 
+// Which API a 26.2+ client renders through, whatever options.txt says -- Minecraft resets a Vulkan
+// preference after any unclean start -- and Minecraft's Vulkan validation layer, which checks our
+// commands along with its own. NeoForge's early window must be off for Vulkan (earlyWindowControl in
+// the run's config/fml.toml): it creates the window with an OpenGL context.
+//
+//   ./gradlew :runtime:mc:modern:neoforge:26.2:runClient -PcgGraphics=vulkan -PcgVulkanValidation
+tasks.matching { it.name == "runClient" }.configureEach {
+    val api = providers.gradleProperty("cgGraphics").orNull
+    val validate = providers.gradleProperty("cgVulkanValidation").isPresent
+    if (api != null || validate) {
+        (this as JavaExec).argumentProviders.add(CommandLineArgumentProvider {
+            (if (api != null) listOf("--graphicsBackend", api) else emptyList()) +
+                (if (validate) listOf("--vulkanValidation") else emptyList())
+        })
+    }
+}
+
 // The scripted client run joins a world by itself:
 //
 //   ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.clientProbe=true [-PcgWorld="Some World"]

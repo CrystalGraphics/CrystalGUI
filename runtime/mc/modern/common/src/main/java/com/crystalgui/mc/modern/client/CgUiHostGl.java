@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.client;
 
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.mc.modern.platform.GraphicsApi;
 import com.crystalgraphics.mc.modern.platform.OwnDepthConvention;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
@@ -113,7 +114,15 @@ public final class CgUiHostGl {
         OwnDepthConvention.leave();
         // Ours ends here; the repair below is Minecraft's own state, through its own API.
         CgGL.toHost();
-        //? if >=1.15 {
+        // Under Vulkan Minecraft keeps no GL cache: the hand-over above was the whole of it.
+        if (GraphicsApi.vulkan()) return;
+        //? if >=1.21.5 {
+        /*GlStateManager._activeTexture(GL13.GL_TEXTURE1);
+        GlStateManager._activeTexture(GL13.GL_TEXTURE0);
+        // No program reset: from 1.21.5 Blaze3D binds a program only when its pipeline changes
+        // (GlCommandEncoder.lastProgram), and the paint's own scope has put that program back. A reset left
+        // Minecraft's next draw on the same pipeline with no program at all.
+        *///?} elif >=1.15 {
         GlStateManager._activeTexture(GL13.GL_TEXTURE1);
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);
         GlStateManager._glUseProgram(0);
@@ -123,7 +132,7 @@ public final class CgUiHostGl {
         GlStateManager.activeTexture(GL13.GL_TEXTURE0);
         GL20.glUseProgram(0);
         *///?}
-        // The three lines above went through Blaze3D and not CgGL, so our own shadow cannot see them
+        // The lines above went through Blaze3D and not CgGL, so our own shadow cannot see them
         // either -- the same rule, pointing the other way.
         CgGlState.invalidateAllIfPresent();
     }
