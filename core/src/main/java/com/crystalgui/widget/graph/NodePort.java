@@ -409,7 +409,12 @@ public class NodePort extends UIElement {
     /** The dot's centre, in the plane's coordinate space — i.e. the same space a paint call inside the
      * canvas uses, and the space {@link UIElement#toLocal} reports in. Read live; never cached. */
     public Vector2f dotCenterIn(@Nullable UIElement space) {
-        return Box.centreIn(dot.box(), space == null ? null : space.box());
+        return dotCenterIn(space, new Vector2f());
+    }
+
+    /** As {@link #dotCenterIn(UIElement)}, into {@code out}: the wires and port editors ask every frame. */
+    public Vector2f dotCenterIn(@Nullable UIElement space, Vector2f out) {
+        return Box.centreIn(dot.box(), space == null ? null : space.box(), out);
     }
 
     /** The dot's live outer radius (half its width) — what {@link NodeWireLayer} and {@link

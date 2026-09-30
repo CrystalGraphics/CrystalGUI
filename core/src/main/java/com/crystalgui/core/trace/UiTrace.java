@@ -5,7 +5,9 @@ import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgraphics.trace.CgTraceReport;
 import com.crystalgui.core.CrystalGuiCore;
+import com.sun.management.ThreadMXBean;
 
+import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -87,13 +89,38 @@ public final class UiTrace {
     public static void frameBegin() {
         CgTrace.frameBegin();
         SlowFrameLog.frameCommitted();
+        allocatedAtBegin = CgTrace.isEnabled(FRAME) ? allocatedByThisThread() : -1L;
     }
 
     /** The painter's last line: this frame's blame as markers, and the engine's CPU mark. */
     public static void frameEnd() {
         flushBlame();
+        // What the frame thread allocated in the frame, which is what a GC pause is paid for. Read here and not
+        // after the idle, which allocates nothing of the frame's.
+        if (allocatedAtBegin >= 0L) {
+            long now = allocatedByThisThread();
+            if (now >= 0L) CgTrace.counter(FRAME, "alloc-kb", (now - allocatedAtBegin) >> 10);
+        }
         CgTrace.frameEnd();
     }
+
+    /** Bytes this thread has allocated so far, or -1 where the JVM does not say. */
+    @SuppressWarnings("deprecation") // Thread.getId: threadId() is Java 19, and a Java 8 copy of this class ships
+    private static long allocatedByThisThread() {
+        return ALLOCATION == null ? -1L : ALLOCATION.getThreadAllocatedBytes(Thread.currentThread().getId());
+    }
+
+    @Nullable
+    private static final ThreadMXBean ALLOCATION = allocationBean();
+
+    @Nullable
+    private static ThreadMXBean allocationBean() {
+        var threads = ManagementFactory.getThreadMXBean();
+        return threads instanceof ThreadMXBean hotspot && hotspot.isThreadAllocatedMemorySupported() ? hotspot : null;
+    }
+
+    /** {@link #allocatedByThisThread} at the top of the frame, or -1 while the frame channel is off. */
+    private static long allocatedAtBegin = -1L;
 
     // ── Blame ───────────────────────────────────────────────────────────────────────────────
 

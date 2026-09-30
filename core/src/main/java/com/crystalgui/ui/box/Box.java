@@ -217,8 +217,11 @@ public final class Box {
      * override. Not paint order, which is the stacking context's. @see #isStackingContext
      */
     public List<Box> children() {
-        return Collections.unmodifiableList(hosted);
+        return hostedView;
     }
+
+    /** Built once: the painter asks per box per frame. */
+    private final List<Box> hostedView = Collections.unmodifiableList(hosted);
 
     private boolean stacksByInsertion;
 
@@ -336,9 +339,14 @@ public final class Box {
     }
 
     public static Vector2f centreIn(@Nullable Box box, @Nullable Box space) {
-        if (box == null || space == null) return new Vector2f();
-        Vector2f origin = Transform2D.apply(space.worldToLocal(), box.worldX(), box.worldY());
-        return origin.add(box.width() * 0.5f, box.height() * 0.5f);
+        return centreIn(box, space, new Vector2f());
+    }
+
+    /** As {@link #centreIn(Box, Box)}, into {@code out}: for a caller asking per frame, which keeps one. */
+    public static Vector2f centreIn(@Nullable Box box, @Nullable Box space, Vector2f out) {
+        if (box == null || space == null) return out.zero();
+        Transform2D.apply(space.worldToLocal(), box.worldX(), box.worldY(), out);
+        return out.add(box.width() * 0.5f, box.height() * 0.5f);
     }
 
     /** Offset from the host's border-box origin, before the host's scroll. */

@@ -54,8 +54,18 @@ public interface GraphContext extends SurfaceContext {
      * rather than taking a payload, so a spare emit is a no-op and a missing one is a stale panel. */
     Signal.Action connectionsChanged();
 
-    /** Every node currently on the plane, in insertion order. */
+    /** Every node currently on the plane, in insertion order. A snapshot: unmodifiable, and free while unchanged. */
     List<GraphNode> nodes();
+
+    /**
+     * Changes whenever a node is added to the plane or taken off it, so a feature can keep what it derives from
+     * {@link #nodes} and redo it only then.
+     *
+     * <pre>{@code
+     * if (graph.nodesRevision() != seen) { seen = graph.nodesRevision(); reattach(graph.nodes()); }
+     * }</pre>
+     */
+    int nodesRevision();
 
     /** The widget projecting {@code nodeId}, or null. */
     @Nullable

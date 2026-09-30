@@ -16,6 +16,7 @@ import com.crystalgui.widget.graph.GraphContext;
 
 import javax.annotation.Nullable;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -231,18 +232,29 @@ public final class ShaderGraphPreviews  {
         Box box = view.viewportBox();
         if (box == null || box.width() <= 0f || box.height() <= 0f) return true;
 
-        // Newly added nodes get their slot here rather than through a second signal: the set is small,
-        // the check is an identity scan over one child, and it cannot go stale.
-        Set<String> visible = new HashSet<>();
-        for (GraphNode node : view.nodes()) {
-            attachTo(node);
-            if (node.getNodeId() != null) visible.add(node.getNodeId());
+        // Newly added nodes get their slot here rather than through a second signal, and only when the plane's
+        // nodes changed -- a node rebuilt under its old id is a removal and an insertion, so it counts.
+        if (view.nodesRevision() != nodesSeen) {
+            nodesSeen = view.nodesRevision();
+            visible.clear();
+            List<GraphNode> nodes = view.nodes();
+            for (int i = 0; i < nodes.size(); i++) {
+                GraphNode node = nodes.get(i);
+                attachTo(node);
+                if (node.getNodeId() != null) visible.add(node.getNodeId());
+            }
+            renderer.setVisible(visible);
         }
-        renderer.setVisible(visible);
         renderer.renderPending(graph);
         // Always keeps ticking: a Time-driven preview has nothing else to wake it.
         return true;
     }
+
+    /** {@link GraphContext#nodesRevision} when the nodes were last attached; the first tick always attaches. */
+    private int nodesSeen = Integer.MIN_VALUE;
+
+    /** Their ids, as last sent to the renderer. */
+    private final Set<String> visible = new HashSet<>();
 
     /**
      * Frees every target and mesh. Must run before the GL context goes away.

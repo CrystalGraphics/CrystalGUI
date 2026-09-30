@@ -174,8 +174,15 @@ public final class CanvasOverlayMove {
         float right = Math.max(0f, containerWidth - (left + panelWidth));
         float bottom = Math.max(0f, containerHeight - (top + panelHeight));
 
-        // No-ops when unchanged: replaceOrPutCandidate drops an identical value, which is what lets this
-        // run every frame without re-dirtying layout forever.
+        // WRITTEN ONLY WHEN IT MOVED: this runs every frame, and a style write builds its slots before it can
+        // tell the value is the one already there. This is the only writer of these insets.
+        float x = toRight ? right : left, y = toBottom ? bottom : top;
+        if (written && toRight == wroteRight && toBottom == wroteBottom && x == wroteX && y == wroteY) return;
+        written = true;
+        wroteRight = toRight;
+        wroteBottom = toBottom;
+        wroteX = x;
+        wroteY = y;
         StyleGroup.inlinePipeline(panel.getStyle().getLayoutGroup(), l -> {
             if (toRight) l.leftAuto().right(right);
             else l.rightAuto().left(left);
@@ -183,6 +190,10 @@ public final class CanvasOverlayMove {
             else l.bottomAuto().top(top);
         });
     }
+
+    /** What {@link #placeAt} last wrote: the anchor per axis and the inset on it. */
+    private boolean written, wroteRight, wroteBottom;
+    private float wroteX, wroteY;
 
     /**
      * Re-clamps after the container changed size. Call it per frame; it is cheap and idempotent.

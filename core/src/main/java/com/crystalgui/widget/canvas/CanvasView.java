@@ -25,6 +25,8 @@ import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -583,18 +585,31 @@ public class CanvasView extends UIElement {
 
     private void updateCullingTraced() {
         if (!cullingEnabled) return;
-        WorldRect view = visibleWorldRect().expand(cullMargin);
-        for (UIElement child : content.children()) {
+        // visibleWorldRect().expand(cullMargin) and worldBoundsOf(child), as edges rather than rects: this runs
+        // twice a frame over every node.
+        Box cache = box();
+        float left = cache == null ? 0f : -panX / zoom, top = cache == null ? 0f : -panY / zoom;
+        float width = cache == null ? 0f : cache.width() / zoom, height = cache == null ? 0f : cache.height() / zoom;
+        float viewX0 = left - cullMargin, viewY0 = top - cullMargin;
+        float viewX1 = viewX0 + Math.max(0f, width + 2f * cullMargin), viewY1 = viewY0 + Math.max(0f, height + 2f * cullMargin);
+        List<UIElement> children = content.children();
+        for (int i = 0; i < children.size(); i++) {
+            UIElement child = children.get(i);
             if (cullExempt.contains(child)) continue;
-            applyCulled(child, !view.intersects(worldBoundsOf(child)));
+            Box bounds = child.box();
+            float x0 = bounds == null ? 0f : bounds.x(), y0 = bounds == null ? 0f : bounds.y();
+            float x1 = bounds == null ? 0f : x0 + bounds.width(), y1 = bounds == null ? 0f : y0 + bounds.height();
+            applyCulled(child, !(viewX0 <= x1 && x0 <= viewX1 && viewY0 <= y1 && y0 <= viewY1));
         }
         // A node removed from the plane while culled would otherwise keep its forced opacity — and
         // stay invisible after being re-parented somewhere else entirely.
-        culled.removeIf(node -> {
-            if (node.parent() == content) return false;
+        if (culled.isEmpty()) return;
+        for (Iterator<UIElement> it = culled.iterator(); it.hasNext(); ) {
+            UIElement node = it.next();
+            if (node.parent() == content) continue;
             clearCullOpacity(node);
-            return true;
-        });
+            it.remove();
+        }
     }
 
     /**

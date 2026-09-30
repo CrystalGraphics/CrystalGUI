@@ -710,14 +710,33 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         return clipboard.asClipboard;
     }
 
-    /** Every node currently on the plane, in insertion order. */
+    /**
+     * Every node currently on the plane, in insertion order: a snapshot, rebuilt only when the plane's children
+     * change, so a per-frame caller costs nothing. Unmodifiable; a node added after it was taken is in the next.
+     */
     public List<GraphNode> nodes() {
-        List<GraphNode> found = new ArrayList<>();
-        for (UIElement child : content().children()) {
-            if (child instanceof GraphNode node) found.add(node);
+        UIElement plane = content();
+        if (nodeList == null || nodeListRevision != plane.childRevision()) {
+            List<GraphNode> found = new ArrayList<>();
+            List<UIElement> children = plane.children();
+            for (int i = 0; i < children.size(); i++) {
+                if (children.get(i) instanceof GraphNode node) found.add(node);
+            }
+            nodeList = Collections.unmodifiableList(found);
+            nodeListRevision = plane.childRevision();
         }
-        return found;
+        return nodeList;
     }
+
+    @Override
+    public int nodesRevision() {
+        return content().childRevision();
+    }
+
+    /** @see #nodes */
+    @Nullable
+    private List<GraphNode> nodeList;
+    private int nodeListRevision;
 
     // ── Stacking ────────────────────────────────────────────────────────────
 

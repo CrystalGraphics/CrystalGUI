@@ -312,7 +312,9 @@ public final class BoxPainter {
         try {
             StackingOrder order = asContext ? box.stackingOrder() : null;
             if (order != null) paintLifted(order.negative, box, ctx, base);
-            for (Box child : box.children()) {
+            List<Box> children = box.children();
+            for (int i = 0; i < children.size(); i++) {
+                Box child = children.get(i);
                 if (!child.isZOrdered()) paintBox(child, ctx, base, false);
             }
             if (order != null) {
@@ -334,27 +336,40 @@ public final class BoxPainter {
 
     /** A context's list, each box painted through the clips of every box between it and {@code context}. */
     private static void paintLifted(List<Box> lifted, Box context, CgUiPaintContext ctx, Matrix4f base) {
-        for (Box box : lifted) {
+        for (int i = 0; i < lifted.size(); i++) {
+            Box box = lifted.get(i);
             // CULLED BEFORE THE WALK UP: a context lists every realised row of every virtualised list under it.
             if (CgUiPaintContext.CULL) {
                 inkThrough(box, base);
                 if (ctx.outsideClip(INK[0], INK[1], INK[2], INK[3])) continue;
             }
             List<Box> clips = clipsBetween(box, context);
-            paintClipped(box, clips, clips.size() - 1, ctx, base);
+            try {
+                paintClipped(box, clips, clips.size() - 1, ctx, base);
+            } finally {
+                clipDepth--;
+            }
         }
     }
 
-    /** The boxes between {@code lifted} and {@code context} that clip, innermost first; empty without allocating. */
+    /**
+     * The boxes between {@code lifted} and {@code context} that clip, innermost first, in a list held for this
+     * nesting depth: a lifted box's paint can reach another context's lifted boxes before it is done with its
+     * own. The caller releases it by decrementing {@link #clipDepth}.
+     */
     private static List<Box> clipsBetween(Box lifted, Box context) {
-        List<Box> clips = List.of();
+        if (clipDepth == CLIP_LISTS.size()) CLIP_LISTS.add(new ArrayList<>(4));
+        List<Box> clips = CLIP_LISTS.get(clipDepth++);
+        clips.clear();
         for (Box between = lifted.host(); between != null && between != context; between = between.host()) {
-            if (!between.clips()) continue;
-            if (clips.isEmpty()) clips = new ArrayList<>(2);
-            clips.add(between);
+            if (between.clips()) clips.add(between);
         }
         return clips;
     }
+
+    /** @see #clipsBetween */
+    private static final List<List<Box>> CLIP_LISTS = new ArrayList<>();
+    private static int clipDepth;
 
     /**
      * {@code lifted} under {@code clips[0..at]}, outermost applied first: a square clip as a scissor in its own

@@ -380,13 +380,47 @@ public final class UIText extends UIElement implements Measurable {
 
     private CgFontFamily resolveFamily() {
         var general = getStyle().getGeneralGroup();
-        return FontFamilyCache.resolve(general.fontFamily(), Math.round(general.fontSize()));
+        List<String> stack = general.fontFamily();
+        int px = Math.round(general.fontSize());
+        // HELD while the stack, the size and the cache are: resolving builds a key string and a lambda even on a
+        // hit, and a text asks several times a frame. The stack is the computed value's own list, so identity.
+        if (heldFamily == null || stack != familyStack || px != familyPx || FontFamilyCache.generation() != familyGeneration) {
+            heldFamily = FontFamilyCache.resolve(stack, px);
+            familyStack = stack;
+            familyPx = px;
+            familyGeneration = FontFamilyCache.generation();
+        }
+        return heldFamily;
     }
 
     private CgFontFamilyGroup resolveGroup() {
         var general = getStyle().getGeneralGroup();
-        return FontFamilyCache.resolveGroup(general.fontFamily(), Math.round(general.fontSize()));
+        List<String> stack = general.fontFamily();
+        int px = Math.round(general.fontSize());
+        if (heldGroup == null || stack != groupStack || px != groupPx || FontFamilyCache.generation() != groupGeneration) {
+            heldGroup = FontFamilyCache.resolveGroup(stack, px);
+            groupStack = stack;
+            groupPx = px;
+            groupGeneration = FontFamilyCache.generation();
+        }
+        return heldGroup;
     }
+
+    /** @see #resolveFamily */
+    @Nullable
+    private CgFontFamily heldFamily;
+    @Nullable
+    private List<String> familyStack;
+    private int familyPx;
+    private int familyGeneration;
+
+    /** @see #resolveGroup */
+    @Nullable
+    private CgFontFamilyGroup heldGroup;
+    @Nullable
+    private List<String> groupStack;
+    private int groupPx;
+    private int groupGeneration;
 
     private boolean wraps() {
         // THE COMPUTED STYLE, not the authored group. `white-space` INHERITS -- a container sets it

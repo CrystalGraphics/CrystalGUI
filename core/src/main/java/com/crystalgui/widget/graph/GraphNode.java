@@ -355,7 +355,7 @@ public class GraphNode extends UIElement {
         super.paintDecoration(ctx, box);
         GraphView view = graphView();
         if (view == null) return;
-        for (NodePort port : inputPorts) view.paintPortEditorStub(ctx, port, this);
+        for (int i = 0; i < inputPorts.size(); i++) view.paintPortEditorStub(ctx, inputPorts.get(i), this);
     }
 
     /**
@@ -364,9 +364,11 @@ public class GraphNode extends UIElement {
      */
     @Override
     public InkOverflow inkOverflow() {
-        return inputPorts.isEmpty() ? InkOverflow.NONE
-                : new InkOverflow(PortDefaultEditor.stubReach(), 0f, 0f, 0f);
+        return inputPorts.isEmpty() ? InkOverflow.NONE : STUB_INK;
     }
+
+    /** One value, since the reach is a constant: asked per node whenever ink bounds are composed. */
+    private static final InkOverflow STUB_INK = new InkOverflow(PortDefaultEditor.stubReach(), 0f, 0f, 0f);
 
     /** Ports and chrome are structure. A caller's element goes in {@link #preview()} or through
      * {@link #addControl}. */

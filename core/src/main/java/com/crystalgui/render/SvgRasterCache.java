@@ -94,8 +94,46 @@ public final class SvgRasterCache {
     private static final CgFrameBufferFormat ATLAS_FORMAT =
             CgFrameBufferFormat.builder("cgui_svg_raster").color(0, CgTextureType.RGBA16F).build();
 
-    private record Key(SvgDocument document, int op, int deviceScaleBits, boolean flat, int halfWidthBits) {
+    /**
+     * A raster's identity. Mutable so every draw looks up through {@link #probe} and only a miss stores a copy:
+     * an icon draw is per frame, and a key per draw was a steady stream for nothing.
+     */
+    private static final class Key {
+        SvgDocument document;
+        int op, deviceScaleBits, halfWidthBits;
+        boolean flat;
+
+        Key set(SvgDocument document, int op, int deviceScaleBits, boolean flat, int halfWidthBits) {
+            this.document = document;
+            this.op = op;
+            this.deviceScaleBits = deviceScaleBits;
+            this.flat = flat;
+            this.halfWidthBits = halfWidthBits;
+            return this;
+        }
+
+        Key copy() {
+            return new Key().set(document, op, deviceScaleBits, flat, halfWidthBits);
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Key key && key.document == document && key.op == op
+                    && key.deviceScaleBits == deviceScaleBits && key.flat == flat && key.halfWidthBits == halfWidthBits;
+        }
+
+        @Override
+        public int hashCode() {
+            int h = System.identityHashCode(document);
+            h = 31 * h + op;
+            h = 31 * h + deviceScaleBits;
+            h = 31 * h + (flat ? 1 : 0);
+            return 31 * h + halfWidthBits;
+        }
     }
+
+    /** @see Key */
+    private final Key probe = new Key();
 
     /** One rasterised fill: its atlas rect, and where the document's origin sits inside it, in device pixels. */
     private static final class Entry {
@@ -178,11 +216,11 @@ public final class SvgRasterCache {
         float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
         boolean stroke = !document.ops().get(op).fill();
         float override = stroke && halfWidth > 0f ? halfWidth * atlasPerLogical : 0f;
-        Key key = new Key(document, op, Float.floatToIntBits(rasterScale), flat, Float.floatToIntBits(override));
+        Key key = probe.set(document, op, Float.floatToIntBits(rasterScale), flat, Float.floatToIntBits(override));
         Entry entry = entries.get(key);
         if (entry == null) {
             entry = rasterise(document, op, rasterScale, flat, override);
-            entries.put(key, entry);
+            entries.put(key.copy(), entry);
         }
 
         // LOGICAL PIXELS PER ATLAS PIXEL. Was `/ device`, which is the same number until the raster is

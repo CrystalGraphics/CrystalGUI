@@ -266,6 +266,7 @@ final class PortDefaultEditor {
     void setMounted(boolean value) {
         if (mounted == value) return;
         mounted = value;
+        placed = false;
         UIElement content = view.content();
         if (value) {
             StyleGroup.defaultPipeline(box.getStyle().getLayoutGroup(),
@@ -345,7 +346,7 @@ final class PortDefaultEditor {
         // IS the conversion the subtraction used to perform by hand -- and it is now the only one
         // that holds, `Box.x()` being parent-relative where the old cache accumulated through every
         // ancestor. @see NodePort#dotCenterIn
-        Vector2f portDot = port.dotCenterIn(view.content());
+        Vector2f portDot = port.dotCenterIn(view.content(), scratchA);
         float dotWorldX = portDot.x();
         float dotWorldY = portDot.y();
 
@@ -366,16 +367,35 @@ final class PortDefaultEditor {
         if (boxCache == null || dotBox == null) return;
         float boxX = dotWorldX - GAP - boxCache.width();
         float boxY = dotWorldY - boxCache.height() * 0.5f;
-        view.moveNode(box, boxX, boxY);
-
         Box dotCache = dotBox;
         float boxRightEdge = boxX + boxCache.width();
         float dotX = boxRightEdge - DOT_OVERLAP - dotCache.width() * 0.5f;
         float dotY = dotWorldY - dotCache.height() * 0.5f;
-        view.moveNode(dot, dotX, dotY);
+        int color = port.typeColor();
 
-        StyleGroup.inlinePipeline(core.getStyle().getGeneralGroup(), g -> g.backgroundColor(port.typeColor()));
+        // WRITTEN ONLY WHEN MOVED: this runs twice a frame for every editor, and a style write builds its slot
+        // before it can tell the value is the same one -- a garbage stream and a relayout for a graph at rest.
+        if (!placed || boxX != placedBoxX || boxY != placedBoxY) view.moveNode(box, boxX, boxY);
+        if (!placed || dotX != placedDotX || dotY != placedDotY) view.moveNode(dot, dotX, dotY);
+        if (!placed || color != placedColor) {
+            StyleGroup.inlinePipeline(core.getStyle().getGeneralGroup(), g -> g.backgroundColor(color));
+        }
+        placed = true;
+        placedBoxX = boxX;
+        placedBoxY = boxY;
+        placedDotX = dotX;
+        placedDotY = dotY;
+        placedColor = color;
     }
+
+    /** What {@link #reposition} last wrote, so an editor at rest writes nothing. Cleared on unmount. */
+    private boolean placed;
+    private float placedBoxX, placedBoxY, placedDotX, placedDotY;
+    private int placedColor;
+
+    /** Held for the per-frame geometry reads. */
+    private final Vector2f scratchA = new Vector2f();
+    private final Vector2f scratchB = new Vector2f();
 
     /**
      * Draws the stub joining {@link #dot} to the real port — called from {@link GraphNode#paintDecoration},
@@ -405,11 +425,11 @@ final class PortDefaultEditor {
         // pose is the NODE's — while this editor's own dot hangs off the plane and the port's dot off
         // another subtree entirely. Reading either one's raw `x()` mixes three different parents'
         // coordinate systems; the old engine got away with it because that accessor was absolute.
-        Vector2f own = Box.centreIn(cache, space == null ? null : space.box());
+        Vector2f own = Box.centreIn(cache, space == null ? null : space.box(), scratchA);
         float radius0 = cache.width() * 0.5f;
         float y0 = own.y();
         float x0 = own.x() + radius0; // trimmed forward, off this dot's own edge
-        Vector2f target = port.dotCenterIn(space);
+        Vector2f target = port.dotCenterIn(space, scratchB);
         float x1 = target.x() - port.dotRadius();
         int color = port.typeColor();
         ctx.curve()
