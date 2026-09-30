@@ -109,10 +109,6 @@ public final class CgUiScreen extends GuiScreen {
         return HostSession.isInstalled() ? HostSession.session().desktop() : null;
     }
 
-    static float frameDelta() {
-        return HostSession.session().frameDelta();
-    }
-
     /** Whether the desktop has been built — read by the pump before it touches anything. */
     static boolean isReady() {
         return HostSession.isInstalled() && HostSession.session().isBuilt();
