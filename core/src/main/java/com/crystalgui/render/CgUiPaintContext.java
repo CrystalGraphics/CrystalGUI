@@ -13,6 +13,7 @@ import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.framebuffer.CgPixelReadback;
+import com.crystalgraphics.gl.texture.CgHostSamplers;
 import com.crystalgraphics.platform.gl.state.CgGlCensus;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
@@ -177,6 +178,7 @@ public final class CgUiPaintContext {
 
     /** Leaves a frame that threw part-way: its batches closed, its GL state back, and no frame open. */
     private void abortFrame() {
+        unparkSamplers();
         endTextPath();
         renderer.end();   // safe unbegun: begin() may be what never ran
         if (glScope != null) {
@@ -184,6 +186,14 @@ public final class CgUiPaintContext {
             glScope = null;
         }
         frameActive = false;
+    }
+
+    private boolean samplersParked;
+
+    private void unparkSamplers() {
+        if (!samplersParked) return;
+        samplersParked = false;
+        CgHostSamplers.unpark();
     }
 
     public static CgUiPaintContext getInstance() {
@@ -660,6 +670,11 @@ public final class CgUiPaintContext {
         scissorStack.reset();
         CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
 
+        // The host's sampler objects override our textures' filtering and wrapping on the units they hold
+        // (Minecraft 1.21.5+ leaves three bound). Off until endFrame's composite, which samples too.
+        CgHostSamplers.park();
+        samplersParked = true;
+
         // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
         backdrop.captureSceneTarget();
 
@@ -866,6 +881,7 @@ public final class CgUiPaintContext {
             // fill on screen means the presenting broke, not the drawing — which is the reading the
             // comment above has described for two loaders without anything ever measuring it.
         }
+        unparkSamplers();
 
         currentMaterial = null;
         currentTexture = null;
