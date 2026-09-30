@@ -12,6 +12,7 @@ import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceSnapshot;
+import com.crystalgui.core.trace.UiTrace;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.util.HashSet;
@@ -416,7 +417,9 @@ public class CgUiDesktopScene
         long workStart = System.nanoTime();
 
         // ONE NETWORK TICK, before anything reads the workspace.
-        workspace.pump(frame.getDeltaTime());
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "scene:workspacePump")) {
+            workspace.pump(frame.getDeltaTime());
+        }
         // THE PROJECT ASK AND THE SESSION RESTORE WERE HERE, behind a "have I asked yet" flag this scene
         // kept for itself and the 1.7.10 screen kept for itself. Both are the application's now: it
         // hangs them off the greeting and the project listing, so the ordering is stated once and a
@@ -425,7 +428,9 @@ public class CgUiDesktopScene
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
         document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
-        refreshReadout();
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "scene:readout")) {
+            refreshReadout();
+        }
 
         CgUiPaintContext context = CgUiPaintContext.getInstance();
         context.beginFrame(w, h);

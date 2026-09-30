@@ -2,6 +2,7 @@ package com.crystalgui.mc.modern.client;
 
 import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.mc.modern.platform.OwnDepthConvention;
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 
 //? if >=1.21.5 {
@@ -74,6 +75,7 @@ public final class CgUiHostGl {
      * driver.
      */
     public static void enter() {
+        CgGL.fromHost();
         CgGlState.invalidateAllIfPresent();
         // 1.21.5 binds a target only inside its own render passes, so a screen or HUD paint finds the
         // last pass's still bound and the desktop composites into it, unseen.
@@ -109,6 +111,8 @@ public final class CgUiHostGl {
      */
     public static void leave() {
         OwnDepthConvention.leave();
+        // Ours ends here; the repair below is Minecraft's own state, through its own API.
+        CgGL.toHost();
         //? if >=1.15 {
         GlStateManager._activeTexture(GL13.GL_TEXTURE1);
         GlStateManager._activeTexture(GL13.GL_TEXTURE0);

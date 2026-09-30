@@ -249,6 +249,11 @@ val connectionProbeReport = layout.buildDirectory.file("connectionProbe/result.t
 
 listOf("runClient", "runObfClient").forEach { runTask ->
 tasks.named<JavaExec>(runTask) {
+    // A -D on the Gradle command line reaches the daemon, not the game: forward the engine's own, as the
+    // modern and legacy dev runs do (-Dcrystalgraphics.trace.channels=... among them).
+    for (prefix in listOf("crystalgui.", "crystalgraphics.")) {
+        providers.systemPropertiesPrefixedBy(prefix).get().forEach { (key, value) -> systemProperty(key, value) }
+    }
     if (providers.gradleProperty("cgNoDedup").isPresent) {
         systemProperty("crystalgraphics.state.noDedup", "true")
     }
