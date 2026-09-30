@@ -10,7 +10,9 @@ import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -318,6 +320,13 @@ public class SpanTrack extends TimelineTrack {
      */
     public static int colorOf(String name) {
         if (name == null || name.isEmpty()) return FAMILIES[0];
+        // Asked per span per paint: a zone name is one of a finite, interned set.
+        return COLORS.computeIfAbsent(name, SpanTrack::computeColor);
+    }
+
+    private static final Map<String, Integer> COLORS = new ConcurrentHashMap<>();
+
+    private static int computeColor(String name) {
         String category = categoryOf(name);
         int family = FAMILIES[Math.floorMod(category.hashCode(), FAMILIES.length)];
         // A STEP, not a new hue: siblings in one subsystem must stay visibly one family and still be
