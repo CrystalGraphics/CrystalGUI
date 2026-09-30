@@ -319,6 +319,8 @@ public class FrameProfilerPanel extends UIElement {
     private int revealedIndex = -1;
 
     private boolean tick(float deltaSeconds) {
+        // A background refresh's answer lands here, on the frame thread, and redraws through onChanged.
+        model.drainJobs();
         boolean following = model.isFollowing() && model.isCapturing();
         // PAUSED, ONLY THE GPU IS WAITED FOR: a held frame's figure lands frames after it, and the
         // snapshot is kept still on purpose, so the figures are read from the ring rather than the whole
@@ -332,7 +334,7 @@ public class FrameProfilerPanel extends UIElement {
         if (sinceRefresh < ProfilerSettings.refreshSeconds()) return true;
         sinceRefresh = 0f;
         if (following) {
-            model.refresh();
+            model.refreshInBackground();
         } else {
             render();
         }
@@ -508,6 +510,10 @@ public class FrameProfilerPanel extends UIElement {
         compareTab.content().append(compare);
         screenTab = tabs.addTab("Screen");
         screenTab.content().append(screen);
+        // The counter series are built only while their tab shows, so selecting it builds them now.
+        tabs.onTabSelected.connect(tab -> {
+            if (tab == countersTab) render();
+        });
         return tabs;
     }
 
@@ -653,6 +659,16 @@ public class FrameProfilerPanel extends UIElement {
     }
 
     private static final int RENDER_ZONE = CgTrace.name("viewer:render");
+    private static final int CHART_ZONE = CgTrace.name("viewer:render.chart");
+    private static final int TABLES_ZONE = CgTrace.name("viewer:render.tables");
+    private static final int HINTS_ZONE = CgTrace.name("viewer:render.hints");
+    private static final int TABLES_ANALYSE_ZONE = CgTrace.name("viewer:render.tables.analyse");
+    private static final int TABLES_ZONES_ZONE = CgTrace.name("viewer:render.tables.zones");
+    private static final int TABLES_CALLS_ZONE = CgTrace.name("viewer:render.tables.calls");
+    private static final int REST_ZONE = CgTrace.name("viewer:render.compareChainsFooter");
+    private static final int COMPARE_ZONE = CgTrace.name("viewer:render.compare");
+    private static final int CHAINS_ZONE = CgTrace.name("viewer:render.chains");
+    private static final int FOOTER_ZONE = CgTrace.name("viewer:render.footer");
 
     private void renderNow() {
         List<CgFrameRecord> frames = model.frames();
@@ -728,27 +744,58 @@ public class FrameProfilerPanel extends UIElement {
                         boundaries[i] = frames.get(model.rangeFrom() + 1 + i).beginNanos();
                     }
                 }
-                chart.show(model.zonesOfSelection(), from, to, frameThread(), boundaries);
+                try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, CHART_ZONE)) {
+                    chart.show(model.zonesOfSelection(), from, to, frameThread(), boundaries);
+                }
             } else {
                 chart.show(List.of(), 0L, 1L, null, new long[0]);
             }
             shownZone = null;
-            refreshTables();
+            try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, TABLES_ZONE)) {
+                refreshTables();
+            }
         } else if (!Objects.equals(model.selectedZone(), shownZone)) {
-            refreshTables();
+            try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, TABLES_ZONE)) {
+                refreshTables();
+            }
         }
-        counters.show(model.counterSeries(), model.frameIndices(), model.selectedIndex(), comparable);
-        refreshCompare();
-        chains.show(model.snapshot().spans());
-        renderFooter();
+        // ONLY WHILE IT SHOWS: the series walk every counter in the ring, and a refresh building them for a hidden
+        // tab was most of what the viewer cost a frame. Selecting the tab renders.
+        if (tabs.getSelectedTab() == countersTab) {
+            counters.show(model.counterSeries(), model.frameIndices(), model.selectedIndex(), comparable);
+        }
+        try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, REST_ZONE)) {
+            try (CgTrace.Zone compareZone = CgTrace.zone(ProfilerModel.VIEWER, COMPARE_ZONE)) {
+                refreshCompare();
+            }
+            try (CgTrace.Zone chainsZone = CgTrace.zone(ProfilerModel.VIEWER, CHAINS_ZONE)) {
+                chains.show(model.snapshot().spans());
+            }
+            try (CgTrace.Zone footerZone = CgTrace.zone(ProfilerModel.VIEWER, FOOTER_ZONE)) {
+                renderFooter();
+            }
+        }
         counters.showView(strip.viewFrom(), strip.isZoomed() ? strip.visible() : 0d);
     }
 
     private void refreshTables() {
         shownZone = model.selectedZone();
-        zones.show(model.statsOfSelection(), shownZone, selectionWallNanos());
-        callers.show(model.treeOfSelection(), shownZone);
-        List<ProfilerModel.HintRow> found = model.hintsOfSelection();
+        List<CgTraceAggregate.Stat> stats;
+        List<CgTraceAggregate.Node> tree;
+        try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, TABLES_ANALYSE_ZONE)) {
+            stats = model.statsOfSelection();
+            tree = model.treeOfSelection();
+        }
+        try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, TABLES_ZONES_ZONE)) {
+            zones.show(stats, shownZone, selectionWallNanos());
+        }
+        try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, TABLES_CALLS_ZONE)) {
+            callers.show(tree, shownZone);
+        }
+        List<ProfilerModel.HintRow> found;
+        try (CgTrace.Zone ignored = CgTrace.zone(ProfilerModel.VIEWER, HINTS_ZONE)) {
+            found = model.hintsOfSelection();
+        }
         hints.show(found, model.selectionFrameCount());
         // THE COUNT ON THE TAB, so a hint is seen from whichever tab is open.
         hintsTab.setText(found.isEmpty() ? "Hints" : "Hints (" + found.size() + ")");
