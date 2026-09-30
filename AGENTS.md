@@ -68,6 +68,7 @@ questions too.
 | **[`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md)** | **First, for anything about the build**: layout, commands and flags, what each check can see, releasing, and adding a Minecraft version |
 | [`CrystalGraphics/docs/BUILD.md`](CrystalGraphics/docs/BUILD.md) | The node tree, the toolchain per node, the pin catalog, stub mode — and step one of adding a Minecraft version |
 | [`docs/CGUI_CROSS_VERSION.md`](docs/CGUI_CROSS_VERSION.md) · `/cross-version` skill | Code or a platform service that must run on every version |
+| [`docs/CGUI_PROFILING.md`](docs/CGUI_PROFILING.md) · `/profiling` skill | Measuring anything — a slow frame, a hitch, an action, a before/after. After [`CrystalGraphics/docs/PROFILING.md`](CrystalGraphics/docs/PROFILING.md) |
 | [`CrystalGraphics/singlejar-logic/README.md`](CrystalGraphics/singlejar-logic/README.md) | How one jar serves every loader. Before touching `singlejar-logic/`, relocation, remapping or the class-major ceiling |
 | [`CrystalGraphics/singlejar-logic/STUBS.md`](CrystalGraphics/singlejar-logic/STUBS.md) | Before adding a node, changing its pins, or touching a branch script's toolchain |
 | [`runtime/mc/modern/README.md`](runtime/mc/modern/README.md) | Before touching a modern node; each branch has its own `AGENTS.md` |
@@ -1408,7 +1409,7 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
   .trace                       WHAT A FRAME COST, and who asked. UiTrace (CrystalGUI's three channels —
                                `crystalgui.frame` for phases and counters, `.flow` for chains that
                                outlive a frame, `.blame` for the stack walk — plus `useCacheRoot`, the
-                               run directory, `export()` and `writeMeta()`, and the frame boundary a
+                               run directory, `writeReport()` and `writeMeta()`, and the frame boundary a
                                UIDocument brackets its frame with -- `frameBegin`/`frameEnd`, `blame`),
                                SlowFrameLog (the `[frame]` line, read back off the ring) and
                                FrameStats (the readout's model — a VIEW over the ring, with no storage
@@ -1418,7 +1419,7 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                write to it DIRECTLY -- `CgTrace.zone(UiTrace.FRAME, "...")`,
                                `CgTrace.add` for a per-frame count, `CgTrace.stamp` + `zoneDone` for
                                a split begin/end -- and CrystalGraphics' own on `CgChannels.TEXT`/
-                               `GL`/`ASYNC`/`MISC`. There is no facade left: `FrameProfile` and
+                               `GL`/`WORLD`/`ASYNC`/`MISC`. There is no facade left: `FrameProfile` and
                                `CgProfiler` were deleted in T9, and the harness reads the ring through
                                `harness.trace.TraceReport`/`TraceDump`. TraceFiles is EXPORTED TRACES:
                                the Frame Profiler's Export writes Chrome JSON (ui.perfetto.dev opens it)
@@ -1433,9 +1434,10 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                paint context's finished frame every 30 frames, read back through
                                CrystalGraphics' `CgPixelReadback` without a stall.
                                **A run writes `cache/trace/latest/`** — `trace.log` (off the frame
-                               thread, on a bounded queue that drops and COUNTS), `trace.json` (Chrome's
-                               format, which ui.perfetto.dev opens) and `meta.json` (which channels were
-                               and were not recording). NOTHING goes to the game console unless
+                               thread, on a bounded queue that drops and COUNTS), and on exit
+                               `report.txt` (the tiered text report, with each frame's unzoned time and
+                               GAPs) and `meta.json` (which channels were and were not recording).
+                               Profiling end to end: docs/CGUI_PROFILING.md. NOTHING goes to the game console unless
                                `-Dcrystalgui.frameprofile=true`, which adds it rather than replacing it.
                                **The ring is sized at run time**: `CgTrace.configure(first, newest,
                                zonesPerFrame)` keeps the FIRST frames of a recording for good (their own
@@ -1940,6 +1942,7 @@ better and does not go stale when it changes.
 | **`CGUI_BUILDING_UIS.md`** | **Using CrystalGUI rather than building it.** A client-only UI, a networked one, and how to choose. The whole `Networked` authoring surface by example, ending in a symptom→cause table for the failures that are silent |
 | **`CGUI_BUILD.md`** | The build: layout, commands, what each check can see, and adding a Minecraft version |
 | **`CGUI_CROSS_VERSION.md`** | Code against every Minecraft version and loader — seams, eras, directives, verification. The `cross-version` skill is its checklist |
+| **`CGUI_PROFILING.md`** | Profiling CrystalGUI in one run: its channels, what a frame records, the Frame Profiler, scenes and the game, what is not yet instrumented. Read after CrystalGraphics' `docs/PROFILING.md`; the `profiling` skill is its checklist |
 | **`CGUI_WORKBENCH_EXTENSIONS.md`** | The other user-facing guide: getting a panel, a file type, a command or a status entry into somebody else's workbench |
 | **`CGUI_INVARIANTS.md`** | What is invisible from any single class and expensive to rediscover, by subsystem. **Read the section for what you are touching** |
 | `CGUI_STYLE_RENDER_PIPELINE.md` | The cascade and the paint path in full — origins, selectors, transitions, drawables, compositing, `background:` grammar, the visual-layer FBO pass |

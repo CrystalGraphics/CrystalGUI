@@ -464,7 +464,9 @@ public final class UIDocument extends UIElement {
         UiTrace.frameBegin();
         if (JobScheduler.hasShared()) {
             CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
+            long drained = CgTrace.stamp(UiTrace.FRAME);
             JobScheduler.shared().drain();
+            CgTrace.zoneDone(UiTrace.FRAME, "frame:jobs", drained);
         }
         input().beginFrame();
         long timed = CgTrace.stamp(UiTrace.FRAME);
@@ -479,7 +481,11 @@ public final class UIDocument extends UIElement {
         timed = CgTrace.stamp(UiTrace.FRAME);
         settleAfterLayout(width, height, deltaSeconds);
         CgTrace.zoneDone(UiTrace.FRAME, "frame:afterLayout", timed);
-        if (input().endFrame()) {
+        // The hover diff, and every listener the frame's pointer events reach.
+        timed = CgTrace.stamp(UiTrace.FRAME);
+        boolean hoverMoved = input().endFrame();
+        CgTrace.zoneDone(UiTrace.FRAME, "frame:input", timed);
+        if (hoverMoved) {
             // THE HOVER MOVED AFTER THE CASCADE RAN, so `:hover` would paint on the element the pointer just
             // left for one frame. A reflow under a still pointer does exactly that: a virtualised list recycles
             // the row element under it, and the highlight jumps to wherever that element went, then back.
