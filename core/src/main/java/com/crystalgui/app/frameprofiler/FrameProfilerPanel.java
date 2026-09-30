@@ -880,12 +880,46 @@ public class FrameProfilerPanel extends UIElement {
     }
 
     private void renderHeader(@Nullable CgFrameRecord frame) {
-        header.removeAll();
+        pieces.clear();
+        buildHeader(frame);
+        reconcileHeader();
+    }
+
+    /** The header line's pieces, built detached each render and applied by {@link #reconcileHeader}. */
+    private final List<UIElement> pieces = new ArrayList<>();
+
+    /**
+     * Puts {@link #pieces} on screen: the texts only when the pieces line up one to one with what is showing,
+     * and a rebuild only when they do not. The header renders on every refresh, and rebuilding it changed the
+     * element tree four times a second, which restyles and re-syncs it on the next frame.
+     */
+    private void reconcileHeader() {
+        List<UIElement> shown = header.children();
+        boolean same = shown.size() == pieces.size();
+        for (int i = 0; same && i < pieces.size(); i++) {
+            UIElement was = shown.get(i);
+            UIElement now = pieces.get(i);
+            same = was.getClass() == now.getClass() && was.classes().equals(now.classes());
+        }
+        if (!same) {
+            header.removeAll();
+            for (UIElement piece : pieces) header.append(piece);
+            return;
+        }
+        for (int i = 0; i < pieces.size(); i++) {
+            if (shown.get(i) instanceof UIText label && pieces.get(i) instanceof UIText piece
+                    && !label.getText().equals(piece.getText())) {
+                label.setText(piece.getText());
+            }
+        }
+    }
+
+    private void buildHeader(@Nullable CgFrameRecord frame) {
         if (frame == null) {
             // TWO DIFFERENT ABSENCES, and saying which is the whole value of the line: recording off
             // is something to press a button about, recording on with no frames is something to go and
             // use the application about.
-            header.append(absent(model.isCapturing()
+            pieces.add(absent(model.isCapturing()
                     ? "Recording — no frame has completed yet."
                     : "Not recording. Press Record to capture CrystalGraphics and CrystalGUI."));
             return;
@@ -894,31 +928,31 @@ public class FrameProfilerPanel extends UIElement {
             renderRangeHeader();
             return;
         } else {
-            header.append(caption("Frame"));
-            header.append(figure("#" + frame.index()));
-            header.append(headline(ms(frame.wallNanos())));
+            pieces.add(caption("Frame"));
+            pieces.add(figure("#" + frame.index()));
+            pieces.add(headline(ms(frame.wallNanos())));
             // WHEN, against the process: frame #0 is the first frame RECORDED, and whether that was the
             // program's first frame or one an hour in is exactly what this answers.
-            header.append(caption("at"));
-            header.append(figure(sinceLaunch(frame.beginNanos())));
+            pieces.add(caption("at"));
+            pieces.add(figure(sinceLaunch(frame.beginNanos())));
         }
-        header.append(caption("CPU"));
-        header.append(frame.hasCpu() ? figure(String.format("%.2f ms", frame.cpuMillis())) : absent("—"));
+        pieces.add(caption("CPU"));
+        pieces.add(frame.hasCpu() ? figure(String.format("%.2f ms", frame.cpuMillis())) : absent("—"));
         // ABSENT IS NOT ZERO. A GPU timer resolves one to three frames late, and printing 0.00 ms
         // would read as "the GPU did nothing".
-        header.append(caption("GPU"));
+        pieces.add(caption("GPU"));
         CgFrameRecord timed = model.withGpu(frame);
-        header.append(timed.hasGpu() ? figure(String.format("%.2f ms", timed.gpuMillis())) : absent(gpuAbsence()));
+        pieces.add(timed.hasGpu() ? figure(String.format("%.2f ms", timed.gpuMillis())) : absent(gpuAbsence()));
         // LIVE ALWAYS SHOWS THE NEWEST FRAME, whose figure is always still on its way — so beside it,
         // the latest one that has landed, or the header never shows a GPU number while following.
         CgFrameRecord landed = timed.hasGpu() ? null : latestWithGpu();
         if (landed != null) {
-            header.append(caption("last"));
-            header.append(figure(String.format("%.2f ms (#%d)", landed.gpuMillis(), landed.index())));
+            pieces.add(caption("last"));
+            pieces.add(figure(String.format("%.2f ms (#%d)", landed.gpuMillis(), landed.index())));
         }
         if (frame.hadGc()) {
-            header.append(caption("GC"));
-            header.append(figure(frame.gcSummary()));
+            pieces.add(caption("GC"));
+            pieces.add(figure(frame.gcSummary()));
         }
         // TIME NO ZONE RECORDED, said in the header rather than left to subtraction. A 144 ms frame whose
         // zones cover 5 ms opens with a chart fitted to those 5 ms and looks like any other frame; the
@@ -926,18 +960,18 @@ public class FrameProfilerPanel extends UIElement {
         // and that is exactly the thing a picture of the measured part cannot show.
         long outside = frame.wallNanos() - coveredNanos(frame);
         if (outside > 1_000_000L) {
-            header.append(caption("outside zones"));
+            pieces.add(caption("outside zones"));
             UIElement untracked = figure(ms(outside));
             if (outside * 2L > frame.wallNanos()) untracked.addClass(MOSTLY_CLASS);
-            header.append(untracked);
+            pieces.add(untracked);
         }
-        if (frame.leakedZones() > 0) header.append(absent(frame.leakedZones() + " zones left open"));
+        if (frame.leakedZones() > 0) pieces.add(absent(frame.leakedZones() + " zones left open"));
 
         UIElement spacer = new UIElement();
         spacer.addClass(SPACER_CLASS);
-        header.append(spacer);
+        pieces.add(spacer);
 
-        header.append(stateBadge());
+        pieces.add(stateBadge());
     }
 
     /** LIVE, PAUSED, or STOPPED when the engine stopped by itself — the toolbar says why. */
@@ -1007,20 +1041,20 @@ public class FrameProfilerPanel extends UIElement {
             if (wall > budget) over++;
         }
         int count = model.selectionFrameCount();
-        header.append(caption("Frames"));
-        header.append(figure("#" + frames.get(model.rangeFrom()).index() + " \u2013 #"
+        pieces.add(caption("Frames"));
+        pieces.add(figure("#" + frames.get(model.rangeFrom()).index() + " \u2013 #"
                 + frames.get(model.rangeTo()).index()));
-        header.append(caption("avg"));
-        header.append(headline(ms(total / Math.max(1, count))));
-        header.append(caption("worst"));
-        header.append(figure(ms(worst)));
-        header.append(caption("over budget"));
-        header.append(figure(over + " of " + count));
+        pieces.add(caption("avg"));
+        pieces.add(headline(ms(total / Math.max(1, count))));
+        pieces.add(caption("worst"));
+        pieces.add(figure(ms(worst)));
+        pieces.add(caption("over budget"));
+        pieces.add(figure(over + " of " + count));
 
         UIElement spacer = new UIElement();
         spacer.addClass(SPACER_CLASS);
-        header.append(spacer);
-        header.append(stateBadge());
+        pieces.add(spacer);
+        pieces.add(stateBadge());
     }
 
     private static String shortMs(long nanos) {
