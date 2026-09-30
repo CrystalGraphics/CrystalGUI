@@ -130,6 +130,11 @@ public final class CgUiScreen extends Screen {
     @Override
     protected void init() {
         HostSession.session().shown();
+        // SDL sends characters only while an owner has started text input, which Minecraft's own text
+        // boxes do on focus. The desktop is ours to type into while it is up. Owner-checked on release.
+        //? if >=26.3 {
+        /*minecraft.onTextInputFocusChange(this, true);
+        *///?}
         //? if >=1.21.6 {
         /*if (hudHiddenBefore == null) hudHiddenBefore = ClientGame.hudHidden(minecraft);
         ClientGame.setHudHidden(minecraft, true);
@@ -252,6 +257,9 @@ public final class CgUiScreen extends Screen {
     @Override
     public void removed() {
         HostSession.session().hidden();
+        //? if >=26.3 {
+        /*minecraft.onTextInputFocusChange(this, false);
+        *///?}
         //? if >=1.21.6 {
         /*if (hudHiddenBefore != null) ClientGame.setHudHidden(minecraft, hudHiddenBefore);
         hudHiddenBefore = null;
