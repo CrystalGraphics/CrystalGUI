@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -120,9 +121,17 @@ public final class ShaderGraphCostProbe {
         steps.add(new Step("closed again", BLOCK, true, () -> { }));
     }
 
-    /** True on one frame: the graph open and settled, for a picture to compare paint changes against. */
-    public boolean capturesNow() {
-        return stepIndex >= 0 && steps.get(stepIndex).name().equals("open, idle #1") && stepFrame == 60;
+    /**
+     * The name of a picture to take on this frame, or null: the graph open and settled, to compare paint changes
+     * against, and the desktop after it closed, to see that it did.
+     */
+    @Nullable
+    public String captureNow() {
+        if (stepIndex < 0 || stepFrame != 60) return null;
+        String step = steps.get(stepIndex).name();
+        if (step.equals("open, idle #1")) return "graph-open";
+        if (step.equals("closed again")) return "graph-closed";
+        return null;
     }
 
     /** Called once a frame, after paint. @return true once the report has been printed */
@@ -141,7 +150,9 @@ public final class ShaderGraphCostProbe {
             stepFrame = 0;
             steps.get(stepIndex).onEnter().run();
             blockFrom = CgTrace.currentFrameIndex() + 1;
-            System.out.println("[graph-cost] " + steps.get(stepIndex).name() + " from frame #" + blockFrom);
+            // The wall-clock instant too, so a JFR recording of the same run can be cut by block.
+            System.out.println("[graph-cost] " + steps.get(stepIndex).name() + " from frame #" + blockFrom
+                    + " at " + Instant.now());
         }
         steps.get(stepIndex).each().accept(stepFrame);
         return false;
@@ -273,16 +284,20 @@ public final class ShaderGraphCostProbe {
         List<Double> wall = new ArrayList<>();
         List<Double> cpu = new ArrayList<>();
         List<Double> gpu = new ArrayList<>();
+        int collections = 0;
+        long gcMillis = 0;
         for (CgFrameRecord record : CgTrace.frames()) {
             if (record.index() < block.from() || record.index() > block.to()) continue;
             wall.add(record.wallMillis());
             if (record.hasCpu()) cpu.add(record.cpuMillis());
             if (record.hasGpu()) gpu.add(record.gpuMillis());
+            collections += record.gcCollections();
+            gcMillis += record.gcMillis();
         }
         return String.format(Locale.ROOT,
-                "[graph-cost]   %-16s frames #%d-#%d (%d held)  wall %s  cpu %s  gpu %s  hooks %d  afterLayout %d",
+                "[graph-cost]   %-16s frames #%d-#%d (%d held)  wall %s  cpu %s  gpu %s  gc %d in %d ms  hooks %d  afterLayout %d",
                 block.name(), block.from(), block.to(), wall.size(), stat(wall), stat(cpu), stat(gpu),
-                block.hooks(), block.afterLayoutHooks());
+                collections, gcMillis, block.hooks(), block.afterLayoutHooks());
     }
 
     /** The GPU zones and the shader graph's own counters, which a zone table leaves out. */
@@ -290,7 +305,7 @@ public final class ShaderGraphCostProbe {
         return name.startsWith(CgGpuTrace.PREFIX) || name.startsWith("preview.") || name.startsWith("mainPreview.")
                 || name.startsWith("material.generated") || name.startsWith("sg-") || name.startsWith("graph-")
                 || name.startsWith("layer") || name.startsWith("retain-") || name.endsWith("switches")
-                || name.equals("drawcalls") || name.equals("scissors");
+                || name.equals("drawcalls") || name.equals("scissors") || name.equals("alloc-kb");
     }
 
     private static List<String> counterLines(CgTraceSnapshot snapshot, Block block) {

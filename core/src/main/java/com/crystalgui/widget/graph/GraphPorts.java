@@ -1,7 +1,9 @@
 package com.crystalgui.widget.graph;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,6 +32,9 @@ final class GraphPorts {
 
     private final Map<NodePort, PortDefaultEditor> editors = new LinkedHashMap<>();
 
+    /** {@link #editors}' values, kept in step, for the per-frame walk to index rather than iterate. */
+    private final List<PortDefaultEditor> editorList = new ArrayList<>();
+
     /** Ports already given an editor. What keeps {@link #watch} idempotent. */
     private final Set<NodePort> watched = new LinkedHashSet<>();
 
@@ -45,7 +50,8 @@ final class GraphPorts {
      * under me settled".</p>
      */
     void reposition() {
-        for (PortDefaultEditor editor : editors.values()) {
+        for (int i = 0; i < editorList.size(); i++) {
+            PortDefaultEditor editor = editorList.get(i);
             if (editor.isMounted()) editor.reposition();
         }
     }
@@ -71,6 +77,7 @@ final class GraphPorts {
         if (!watched.add(port)) return;
         PortDefaultEditor editor = new PortDefaultEditor(port, view);
         editors.put(port, editor);
+        editorList.add(editor);
         port.onBlankChanged.connect(() -> refresh(port));
         port.onDefaultEditorChanged.connect(() -> refresh(port));
         refresh(port);
@@ -112,7 +119,10 @@ final class GraphPorts {
      * removing the port's node cannot reach it. */
     void forget(NodePort port) {
         PortDefaultEditor editor = editors.remove(port);
-        if (editor != null) editor.setMounted(false);
+        if (editor != null) {
+            editorList.remove(editor);
+            editor.setMounted(false);
+        }
         watched.remove(port);
     }
 

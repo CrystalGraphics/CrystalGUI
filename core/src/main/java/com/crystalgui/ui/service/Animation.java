@@ -211,8 +211,15 @@ public final class Animation {
 
     /** Advances every timeline and runs every live hook. Called once per frame by the host. */
     public void tick(float deltaSeconds) {
-        for (Timeline timeline : new ArrayList<>(timelines)) timeline.advance(deltaSeconds);
-        for (OwnedHook owned : new ArrayList<>(hooks)) {
+        // Walked over a copy, since a hook may add or drop hooks; the copy is a held list, not a new one a frame.
+        timelineWalk.clear();
+        timelineWalk.addAll(timelines);
+        for (int i = 0; i < timelineWalk.size(); i++) timelineWalk.get(i).advance(deltaSeconds);
+        timelineWalk.clear();
+        hookWalk.clear();
+        hookWalk.addAll(hooks);
+        for (int i = 0; i < hookWalk.size(); i++) {
+            OwnedHook owned = hookWalk.get(i);
             // GONE is gone; FROZEN is coming back. @see #every
             if (!owned.owner().isConnected()) {
                 hooks.remove(owned);
@@ -221,7 +228,13 @@ public final class Animation {
             if (owned.owner().isFrozen()) continue;
             if (!owned.hook().frame(deltaSeconds)) hooks.remove(owned);
         }
+        hookWalk.clear();
     }
+
+    /** The copies {@link #tick} and {@link #tickAfterLayout} walk; empty between walks. */
+    private final List<Timeline> timelineWalk = new ArrayList<>();
+    private final List<OwnedHook> hookWalk = new ArrayList<>();
+    private final List<OwnedHook> afterLayoutWalk = new ArrayList<>();
 
     /** Runs the post-layout hooks. Called by the document once layout has settled. */
     /** How many post-layout hooks are live. The counterpart to {@link #hookCount}. */
@@ -231,7 +244,10 @@ public final class Animation {
 
     public boolean tickAfterLayout(float deltaSeconds) {
         boolean ran = false;
-        for (OwnedHook owned : new ArrayList<>(afterLayout)) {
+        afterLayoutWalk.clear();
+        afterLayoutWalk.addAll(afterLayout);
+        for (int i = 0; i < afterLayoutWalk.size(); i++) {
+            OwnedHook owned = afterLayoutWalk.get(i);
             // Same rule as `every`: gone is gone, frozen is coming back.
             if (!owned.owner().isConnected()) {
                 afterLayout.remove(owned);
@@ -241,6 +257,7 @@ public final class Animation {
             ran = true;
             if (!owned.hook().frame(deltaSeconds)) afterLayout.remove(owned);
         }
+        afterLayoutWalk.clear();
         // WHETHER ANY RAN, which is the only cheap signal that the frame may need settling. What a
         // post-layout hook writes goes into the CASCADE, and the cascade does not reach Taffy until the
         // next `refreshStyles` -- which happens inside layout. So there is nothing to test afterwards:

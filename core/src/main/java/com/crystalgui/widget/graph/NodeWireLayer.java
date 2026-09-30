@@ -219,9 +219,10 @@ public class NodeWireLayer extends UIElement {
         // An unattached layer picks nothing -- see the no-arg constructor.
         if (view == null) return null;
         float bestDistance = PICK_TOLERANCE / Math.max(1e-4f, view.getZoom());
-        for (GraphConnection connection : connections) {
-            Vector2f a = connection.from().dotCenterIn(this);
-            Vector2f b = connection.to().dotCenterIn(this);
+        for (int i = 0; i < connections.size(); i++) {
+            GraphConnection connection = connections.get(i);
+            Vector2f a = connection.from().dotCenterIn(this, endA);
+            Vector2f b = connection.to().dotCenterIn(this, endB);
             float distance = distanceToWire(worldX + originX, worldY + originY, a, b);
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -300,9 +301,11 @@ public class NodeWireLayer extends UIElement {
         if (view == null) return;
         WorldRect visible = view.visibleWorldRect().expand(CULL_MARGIN);
 
-        for (GraphConnection connection : connections) {
-            Vector2f a = connection.from().dotCenterIn(this);
-            Vector2f b = connection.to().dotCenterIn(this);
+        // Indexed, into two held vectors, testing edges rather than a built rect: this runs per wire per frame.
+        for (int i = 0; i < connections.size(); i++) {
+            GraphConnection connection = connections.get(i);
+            Vector2f a = connection.from().dotCenterIn(this, endA);
+            Vector2f b = connection.to().dotCenterIn(this, endB);
             if (!isVisible(a, b, ox, oy, visible)) continue;
             boolean selected = connection.equals(view.getSelection().wire());
             // Thicker for BOTH, recoloured for selection only — the two states have to stay tellable
@@ -320,7 +323,7 @@ public class NodeWireLayer extends UIElement {
         }
 
         if (pendingLive && pendingFrom != null) {
-            Vector2f a = pendingFrom.dotCenterIn(this);
+            Vector2f a = pendingFrom.dotCenterIn(this, endA);
             int color = pendingFrom.typeColor();
             // Drawn from the port toward the pointer regardless of which direction the port is, so a
             // drag started from an input still reads as a wire being pulled out of it. The pointer end
@@ -337,8 +340,12 @@ public class NodeWireLayer extends UIElement {
     private boolean isVisible(Vector2f a, Vector2f b, float originX, float originY, WorldRect visible) {
         float x0 = Math.min(a.x(), b.x()) - originX, x1 = Math.max(a.x(), b.x()) - originX;
         float y0 = Math.min(a.y(), b.y()) - originY, y1 = Math.max(a.y(), b.y()) - originY;
-        return visible.intersects(new WorldRect(x0, y0, x1 - x0, y1 - y0));
+        return visible.intersects(x0, y0, x1, y1);
     }
+
+    /** A wire's two ends, filled per wire: held so a paint of every wire allocates none. */
+    private final Vector2f endA = new Vector2f();
+    private final Vector2f endB = new Vector2f();
 
     /**
      * One wire: a cubic with horizontal tangents, split into quadratics by {@code CgVectorRenderer}.

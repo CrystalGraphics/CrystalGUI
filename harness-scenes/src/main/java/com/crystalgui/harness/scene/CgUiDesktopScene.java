@@ -456,7 +456,15 @@ public class CgUiDesktopScene
         document.paint(context);
         context.endFrame();
         if (traceCost != null && traceCost.frame(System.nanoTime() - workStart)) traceCostDone = true;
-        if (graphCost != null && graphCost.capturesNow()) ctx.getArtifactService().requestCapture("graph-open");
+        if (closeWhenClean) {
+            Document graph = graphDocument();
+            if (graph == null || !graph.isDirty()) {
+                closeWhenClean = false;
+                if (editor != null) editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE));
+            }
+        }
+        String graphShot = graphCost == null ? null : graphCost.captureNow();
+        if (graphShot != null) ctx.getArtifactService().requestCapture(graphShot);
         if (graphCost != null && graphCost.frame()) graphCostDone = true;
 
         // Late enough that the first window's placement, the entry animations and the editor's own
@@ -503,9 +511,20 @@ public class CgUiDesktopScene
                 if (editor != null) editor.workbench().openFile(GRAPH_COST_FILE);
             }
 
+            /**
+             * Closes the graph, discarding the probe's edits first: a dirty document asks before it closes, and the
+             * question would sit on screen through the block meant to measure the desktop without it.
+             */
             @Override
             public void close() {
-                if (editor != null) editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE));
+                if (editor == null) return;
+                Document graph = graphDocument();
+                if (graph != null && graph.isDirty()) {
+                    editor.workbench().documents().revert(graph);
+                    closeWhenClean = true;
+                    return;
+                }
+                editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE));
             }
 
             @Override
@@ -521,17 +540,28 @@ public class CgUiDesktopScene
             /** An unwired input's constant, the way a port editor writes it, and the recompile its binder asks for. */
             @Override
             public void edit(int n) {
-                if (editor == null) return;
-                for (Document open : editor.workbench().documents().all()) {
-                    if (!(open.model() instanceof ShaderGraphDocument graph)) continue;
-                    NodeData node = graph.graph().node(GRAPH_COST_NODE);
-                    if (node == null) continue;
-                    graph.graph().replaceNode(node.withProperty("B", String.valueOf(0.3f + 0.1f * n)));
-                    graph.shader().requestRecompile();
-                }
+                Document open = graphDocument();
+                if (open == null || !(open.model() instanceof ShaderGraphDocument graph)) return;
+                NodeData node = graph.graph().node(GRAPH_COST_NODE);
+                if (node == null) return;
+                graph.graph().replaceNode(node.withProperty("B", String.valueOf(0.3f + 0.1f * n)));
+                graph.shader().requestRecompile();
             }
         });
     }
+
+    /** The open shader graph's document, or null. */
+    @Nullable
+    private Document graphDocument() {
+        if (editor == null) return null;
+        for (Document open : editor.workbench().documents().all()) {
+            if (open.model() instanceof ShaderGraphDocument) return open;
+        }
+        return null;
+    }
+
+    /** Set by the probe's close while a revert is in flight; the panel closes once the document is clean. */
+    private boolean closeWhenClean;
 
     /** A Multiply in the scratch graph whose B is unwired, with four previews and the output downstream of it. */
     private static final String GRAPH_COST_NODE = "htsi617tga";

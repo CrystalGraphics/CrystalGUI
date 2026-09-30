@@ -371,6 +371,21 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     }
 
     /** The light children — what authors, the codec and the mirror see. Read-only. */
+    /**
+     * Changes whenever a light child is inserted, removed or moved here: a caller keeping something derived from
+     * {@link #children()} rebuilds it when this differs from the value it last saw, instead of every frame.
+     *
+     * <pre>{@code
+     * if (content.childRevision() != seen) { rebuild(content.children()); seen = content.childRevision(); }
+     * }</pre>
+     */
+    public final int childRevision() {
+        return childRevision;
+    }
+
+    /** @see #childRevision() */
+    int childRevision;
+
     public final List<UIElement> children() {
         return childrenView;
     }
@@ -451,6 +466,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
             int limit = child.local ? children.size() : firstLocalIndex();
             int at = clampIndex(index, limit);
             children.add(at, child);
+            childRevision++;
             child.parent = this;
             child.attachedTo(this);
             slotsChanged(this);
@@ -474,6 +490,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
             UIElement host = asElement();
             if (host != null) m.observe(() -> TreeObserver.Dispatch.removed(to, child, host));
             children.remove(child);
+            childRevision++;
             child.parent = null;
             child.detached();
             slotsChanged(this);

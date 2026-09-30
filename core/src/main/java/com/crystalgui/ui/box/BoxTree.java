@@ -578,7 +578,7 @@ public final class BoxTree {
             transformsDirty = true;
             box.reclassify();
         }
-        for (Box child : box.hosted) refreshStyles(child);
+        for (int ci = 0; ci < box.hosted.size(); ci++) refreshStyles(box.hosted.get(ci));
     }
 
     // ── Read + compose ───────────────────────────────────────────────────────
@@ -596,7 +596,7 @@ public final class BoxTree {
      */
     private void clampScrolls(Box box) {
         box.clampScroll();
-        for (Box child : box.hosted) clampScrolls(child);
+        for (int ci = 0; ci < box.hosted.size(); ci++) clampScrolls(box.hosted.get(ci));
     }
 
     private void read(Box box) {
@@ -610,7 +610,7 @@ public final class BoxTree {
         box.border = layout.border();
         box.padding = layout.padding();
         box.margin = layout.margin();
-        for (Box child : box.hosted) read(child);
+        for (int ci = 0; ci < box.hosted.size(); ci++) read(box.hosted.get(ci));
     }
 
     private void compose(Box box, Matrix4f hostWorld, float hostScrollLeft, float hostScrollTop) {
@@ -641,7 +641,7 @@ public final class BoxTree {
                 // -- and a pose scales about ITS origin, with `transform-origin` nowhere in it.
                 transform.applyTo(box.localToWorld, 0f, 0f, box.width, box.height, 0f, 0f);
                 box.localToWorld.invert(box.worldToLocal);
-                for (Box child : box.hosted) compose(child, box.localToWorld, box.scrollLeft(), box.scrollTop());
+                for (int ci = 0; ci < box.hosted.size(); ci++) compose(box.hosted.get(ci), box.localToWorld, box.scrollLeft(), box.scrollTop());
                 composeInk(box);
                 return;
             }
@@ -657,7 +657,7 @@ public final class BoxTree {
                     pinnedY != null ? pinnedY : originY == null ? 0f : originY.resolve(box.height));
         }
         box.localToWorld.invert(box.worldToLocal);
-        for (Box child : box.hosted) compose(child, box.localToWorld, box.scrollLeft(), box.scrollTop());
+        for (int ci = 0; ci < box.hosted.size(); ci++) compose(box.hosted.get(ci), box.localToWorld, box.scrollLeft(), box.scrollTop());
         composeInk(box);
     }
 
@@ -685,7 +685,8 @@ public final class BoxTree {
      */
     private void composeInk(Box box) {
         boolean changed = damageCheck(box);
-        for (Box child : box.hosted) {
+        for (int ci = 0; ci < box.hosted.size(); ci++) {
+            Box child = box.hosted.get(ci);
             if (child.subtreeChanged) {
                 changed = true;
                 break;
@@ -698,7 +699,8 @@ public final class BoxTree {
 
         long revision = box.paintRevision;
         boolean retainable = box.selfRetainable;
-        for (Box child : box.hosted) {
+        for (int ci = 0; ci < box.hosted.size(); ci++) {
+            Box child = box.hosted.get(ci);
             revision = Math.max(revision, child.subtreeRevision);
             retainable &= child.retainable;
         }
@@ -774,7 +776,8 @@ public final class BoxTree {
         if (box.hosted.isEmpty()) return;
 
         float x0 = Float.MAX_VALUE, y0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, y1 = -Float.MAX_VALUE;
-        for (Box child : box.hosted) {
+        for (int ci = 0; ci < box.hosted.size(); ci++) {
+            Box child = box.hosted.get(ci);
             if (!child.hasInk()) continue;
             x0 = Math.min(x0, child.inkX0);
             y0 = Math.min(y0, child.inkY0);

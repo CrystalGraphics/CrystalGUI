@@ -48,8 +48,12 @@ public record WorldRect(float x, float y, float width, float height) {
      * bug rather than as an off-by-one.</p>
      */
     public boolean intersects(WorldRect other) {
-        return x <= other.right() && other.x <= right()
-                && y <= other.bottom() && other.y <= bottom();
+        return intersects(other.x, other.y, other.right(), other.bottom());
+    }
+
+    /** As {@link #intersects(WorldRect)}, against edges: for a caller testing per item per frame. */
+    public boolean intersects(float left, float top, float right, float bottom) {
+        return x <= right && left <= right() && y <= bottom && top <= bottom();
     }
 
     public boolean contains(float px, float py) {

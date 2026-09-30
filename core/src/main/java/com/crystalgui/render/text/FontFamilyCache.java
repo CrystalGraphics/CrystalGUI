@@ -74,7 +74,22 @@ public final class FontFamilyCache {
         systemFonts = fonts;
         CACHE.clear();
         GROUP_CACHE.clear();
+        generation++;
     }
+
+    /**
+     * Changes whenever the cache is emptied, so a caller keeping what {@link #resolve} answered can keep it
+     * exactly as long as the cache would have.
+     *
+     * <pre>{@code
+     * if (stack != heldStack || px != heldPx || FontFamilyCache.generation() != heldGeneration) held = resolve(stack, px);
+     * }</pre>
+     */
+    public static int generation() {
+        return generation;
+    }
+
+    private static volatile int generation;
 
     /**
      * The language the player reads; {@code DesktopHost} pushes the game's here every frame. It decides
@@ -92,6 +107,7 @@ public final class FontFamilyCache {
         locale = newLocale;
         CACHE.clear();
         GROUP_CACHE.clear();
+        generation++;
     }
 
     /** The family for {@code stack} at {@code targetPx}; throws only when no font at all can be found. */

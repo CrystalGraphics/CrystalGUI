@@ -202,8 +202,10 @@ public class UIElement extends UINode implements EventTarget, Styleable {
             TreeObserver<UIElement> before = observer;
             UIDocument oldDocument = document;
             old.children.remove(this);
+            old.childRevision++;
             int at = clampIndex(index, newParent.children.size());
             newParent.children.add(at, this);
+            newParent.childRevision++;
             parent = newParent;
             UIDocument newDocument = newParent.document();
             if (oldDocument != newDocument) {

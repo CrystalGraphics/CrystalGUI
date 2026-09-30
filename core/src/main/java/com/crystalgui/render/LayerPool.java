@@ -4,6 +4,8 @@ import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -93,6 +95,11 @@ final class LayerPool {
     }
 
     private Surface surfaceFor(int width, int height) {
+        // THE SAME SURFACE AS LAST TIME is nearly every call, and answering it needs no map: the lookup below boxes
+        // its key twice and re-links an entry, per layer per frame. A switch still goes through it, so the order
+        // stays least-recently-used.
+        Surface last = lastSurface;
+        if (last != null && last.width == Math.max(1, width) && last.height == Math.max(1, height)) return last;
         long key = (long) Math.max(1, width) << 32 | (Math.max(1, height) & 0xFFFFFFFFL);
         Surface surface = surfaces.remove(key);
         if (surface == null) {
@@ -104,8 +111,13 @@ final class LayerPool {
         }
         // Re-inserted so iteration order is least-recently-used first.
         surfaces.put(key, surface);
+        lastSurface = surface;
         return surface;
     }
+
+    /** @see #surfaceFor */
+    @Nullable
+    private Surface lastSurface;
 
     /** Which power-of-two bucket a wanted size falls in. */
     private static int bucketIndex(int size) {
@@ -127,6 +139,7 @@ final class LayerPool {
     void deleteAll() {
         for (Surface surface : surfaces.values()) delete(surface);
         surfaces.clear();
+        lastSurface = null;
     }
 
     private static void delete(Surface surface) {
