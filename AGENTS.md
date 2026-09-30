@@ -68,6 +68,7 @@ questions too.
 | **[`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md)** | **First, for anything about the build**: layout, commands and flags, what each check can see, releasing, and adding a Minecraft version |
 | [`CrystalGraphics/docs/BUILD.md`](CrystalGraphics/docs/BUILD.md) | The node tree, the toolchain per node, the pin catalog, stub mode — and step one of adding a Minecraft version |
 | [`docs/CGUI_CROSS_VERSION.md`](docs/CGUI_CROSS_VERSION.md) · `/cross-version` skill | Code or a platform service that must run on every version |
+| **[`CrystalGraphics/docs/MINECRAFT_RENDERING_CONVENTIONS.md`](CrystalGraphics/docs/MINECRAFT_RENDERING_CONVENTIONS.md)** | **Anything drawn into Minecraft's frame, and every new Minecraft version**: how each version changed that frame — 26.2's reversed depth and float depth, the samplers and scissor Minecraft leaves bound — and what the engine does about each |
 | [`CrystalGraphics/singlejar-logic/README.md`](CrystalGraphics/singlejar-logic/README.md) | How one jar serves every loader. Before touching `singlejar-logic/`, relocation, remapping or the class-major ceiling |
 | [`CrystalGraphics/singlejar-logic/STUBS.md`](CrystalGraphics/singlejar-logic/STUBS.md) | Before adding a node, changing its pins, or touching a branch script's toolchain |
 | [`runtime/mc/modern/README.md`](runtime/mc/modern/README.md) | Before touching a modern node; each branch has its own `AGENTS.md` |
