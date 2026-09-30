@@ -40,6 +40,9 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.widget.canvas.CanvasView;
+import com.crystalgui.widget.graph.GraphNode;
+import com.crystalgui.widget.graph.GraphView;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.display.FrameStripTrack;
@@ -350,6 +353,8 @@ public class CgUiDesktopScene
         if (editor == null) return;
         editor.addClass("desktop-editor");
         if (GRAPH_COST) graphCost = graphCostProbe();
+        // The Frame Profiler open for the whole run, live: what its own refresh costs a frame being profiled.
+        if (GRAPH_COST && Boolean.getBoolean("crystalgui.harness.desktop.graphCost.viewer")) FrameProfiler.openOn(desktop);
         // A SIZE THIS SCENE CHOOSES, over whatever the arrangement record says: the whole exercise here
         // is watching the editor share a desktop, so it starts small enough to see the other windows.
         editor.mainWindow().moveTo(300, 55).resizeTo(600, 400);
@@ -546,6 +551,32 @@ public class CgUiDesktopScene
                 if (node == null) return;
                 graph.graph().replaceNode(node.withProperty("B", String.valueOf(0.3f + 0.1f * n)));
                 graph.shader().requestRecompile();
+            }
+
+            /** The probe's node, moved as one frame of a drag moves it: its widget and the document together. */
+            @Override
+            public void moveNode(float dx, float dy) {
+                for (UIElement each : document.composedSubtree()) {
+                    if (!(each instanceof GraphView graph)) continue;
+                    GraphNode node = graph.widgetFor(GRAPH_COST_NODE);
+                    NodeData data = graph.getDocument().node(GRAPH_COST_NODE);
+                    if (node != null && data != null) graph.moveNode(node, data.x() + dx, data.y() + dy);
+                    return;
+                }
+            }
+
+            /** The open graph's canvas, panned through the same setView a drag goes through. */
+            @Override
+            public void pan(float dx, float dy) {
+                for (UIElement each : document.composedSubtree()) {
+                    if (!(each instanceof GraphView graph)) continue;
+                    for (UIElement inner : graph.composedSubtree()) {
+                        if (inner instanceof CanvasView canvas) {
+                            canvas.panBy(dx, dy);
+                            return;
+                        }
+                    }
+                }
             }
         });
     }
