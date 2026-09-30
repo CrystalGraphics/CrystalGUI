@@ -17,6 +17,7 @@
 
 #type pos2_uv2_col4ub
 #pragma cg_use quad
+#pragma cg_use clip
 
 #pragma cg_feature WITH_BORDER
 #pragma cg_feature WITH_TEXTURE_FILL
@@ -154,6 +155,9 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // The rounded clip this draw is inside (CgClipTable); read before any discard, since it takes
+        // derivatives.
+        float boxClip = CG_CLIP_QUAD_COVERAGE;
         // Unclamped for the SDF, since past the box is exactly what it is there to cut; clamped for the
         // texture fills, so the pad never samples outside the rect.
         vec2 uvUnclamped = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
@@ -256,6 +260,6 @@ Pass {
 #endif
 
         color.a *= coverage * _LayerOpacity;
-        fragColor = color;
+        fragColor = vec4(color.rgb, color.a * boxClip);
     }
 }

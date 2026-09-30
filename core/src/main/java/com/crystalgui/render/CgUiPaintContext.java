@@ -17,6 +17,7 @@ import com.crystalgraphics.gl.texture.CgHostSamplers;
 import com.crystalgraphics.platform.gl.state.CgGlCensus;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgraphics.gl.render.CgClipTable;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
@@ -316,7 +317,7 @@ public final class CgUiPaintContext {
      */
     record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
                                int savedViewportW, int savedViewportH, int[] savedScissor,
-                               @Nullable LayerRegion region) {
+                               @Nullable LayerRegion region, int savedClip) {
     }
     
     static final CgFrameBufferFormat LAYER_FORMAT = CgFrameBufferFormat.builder("cgui_layer")
@@ -644,6 +645,7 @@ public final class CgUiPaintContext {
         CgGpuTrace.begin(GPU_UI);
         layerOriginX = 0;
         layerOriginY = 0;
+        setClip(0);
         clearPainted();
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
@@ -1648,6 +1650,64 @@ public final class CgUiPaintContext {
         }
     }
 
+    /** The {@link CgClipTable} entry every draw is stamped with; 0 when no rounded clip is active. */
+    private int clipEntry;
+
+    /**
+     * Clips everything drawn until {@link #popRoundedClip} to a rounded rectangle, antialiased like a rect's own
+     * edge, with no layer. The clip is a {@link CgClipTable} entry stamped on every quad, curve and glyph, so it
+     * costs no target, no clear and no flush; it is what a rounded {@code overflow: hidden} uses. Clips nest: a
+     * draw inside two is clipped by both.
+     *
+     * <pre>{@code
+     * if (ctx.pushRoundedClip(0, 0, w, h, rx, ry, border)) {
+     *     paintChildren();
+     *     ctx.popRoundedClip();
+     * } else {
+     *     // a mask layer
+     * }
+     * }</pre>
+     *
+     * <ul>
+     *   <li>Answers false, and pushes nothing, when {@link CgClipTable#MAX_DEPTH} clips are already open or the
+     *       pose collapses the rect. Any rotation, skew or scale is fine.</li>
+     *   <li>A layer begun inside it draws unclipped, and is clipped when composited back.</li>
+     *   <li>A material that does not read {@code CG_CLIP_*_COVERAGE} ignores it; every CrystalGUI material
+     *       reads it.</li>
+     * </ul>
+     *
+     * @param x      the rect in the current pose's space, as {@link #pushScissor} takes it
+     * @param rx     horizontal corner radii in the same units: top-left, top-right, bottom-right, bottom-left
+     * @param ry     vertical corner radii, same order
+     * @param border edge widths left, top, right, bottom, cut away as a mask's transparent border is; null
+     *               for none
+     */
+    public boolean pushRoundedClip(float x, float y, float w, float h, float[] rx, float[] ry,
+                                   @Nullable float[] border) {
+        int entry = CgClipTable.add(clipEntry, poseStack.last().pose(), targetHeight(), x, y, x + w, y + h,
+                rx, ry, border);
+        if (entry < 0) return false;
+        CgTrace.add(UiTrace.FRAME, "clips-rounded", 1);
+        setClip(entry);
+        return true;
+    }
+
+    /** Ends the innermost {@link #pushRoundedClip} that answered true. */
+    public void popRoundedClip() {
+        setClip(CgClipTable.parent(clipEntry));
+    }
+
+    /** The entry {@link CgUiRenderer} stamps on each instance. */
+    int clipEntry() {
+        return clipEntry;
+    }
+
+    /** Per instance, so a change needs no flush: what is queued keeps the entry it was stamped with. */
+    private void setClip(int entry) {
+        clipEntry = entry;
+        textRenderer.clip(entry);
+    }
+
     /** Nesting depth of the clip stack; 0 when nothing is clipped. Exposed so the top-layer paint
      * pass can assert the main tree left the stack balanced before it starts painting unclipped. */
     public int getScissorDepth() {
@@ -1793,6 +1853,14 @@ public final class CgUiPaintContext {
      * {@code -Dcrystalgui.paint.cull=false} paints everything, to rule the cull out.
      */
     public static final boolean CULL = !"false".equals(System.getProperty("crystalgui.paint.cull"));
+
+    /**
+     * Clips a rounded {@code overflow: hidden} with {@link #pushRoundedClip} where its mask is the box's own
+     * shape, instead of a children layer and a mask layer. {@code -Dcrystalgui.paint.roundedClip=false} takes
+     * the layers everywhere, to compare the two.
+     */
+    public static final boolean ROUNDED_CLIP = !"false".equals(System.getProperty("crystalgui.paint.roundedClip"))
+            && !LEGACY_LAYERS;
 
     /**
      * Whether the rectangle, in the current target's pixels, misses the live clip entirely: the scissor where one
@@ -2151,7 +2219,9 @@ public final class CgUiPaintContext {
             layerOriginY += region.y();
         }
         layerStack.push(new LayerFrame(fbo, CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT),
-                new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH, savedScissor, region));
+                new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH, savedScissor, region, clipEntry));
+        // A rounded clip is in the enclosing target's pixels; it applies when this layer is composited back.
+        setClip(0);
 
         fbo.bind();
         CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
@@ -2219,6 +2289,7 @@ public final class CgUiPaintContext {
         // The clip stack as the enclosing target expressed it -- a bounded layer shifted every rect
         // into its own origin on the way in. @see LayerFrame#savedScissor
         scissorStack.resume(frame.savedScissor());
+        setClip(frame.savedClip());
         frame.glScope().close();
         // And the clip, against the enclosing target's height -- the scope above restores the FBO and
         // the viewport but not the scissor rect, which was last applied for the layer just ended.

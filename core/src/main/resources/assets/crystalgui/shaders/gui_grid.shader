@@ -42,6 +42,7 @@
 
 #type pos2_uv2_col4ub
 #pragma cg_use quad
+#pragma cg_use clip
 #pragma cg_feature WITH_MASK
 
 #include "crystalgraphics:shaders/lib/sdf.glsl"
@@ -99,6 +100,9 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // The rounded clip this draw is inside (CgClipTable); read before any discard, since it takes
+        // derivatives.
+        float boxClip = CG_CLIP_QUAD_COVERAGE;
         vec2 cell = max(_Cell, vec2(0.5));
         // uv is 0..1 over the box, so this is the position in CELLS -- the space `fract` and the
         // derivatives below both want. lineWidth likewise becomes a fraction of a cell, which is what
@@ -159,6 +163,6 @@ Pass {
         shape *= CG_QUAD_EDGE_COVERAGE(i.param);
 #endif
 
-        fragColor = c * shape * _LayerOpacity;
+        fragColor = c * shape * _LayerOpacity * boxClip;
     }
 }

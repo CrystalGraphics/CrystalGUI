@@ -591,10 +591,11 @@ through to `CgUiCrossFade` now, since `background` holds a `CgUiRect` or one of 
 
 ## 8. Visual Layers (Opacity Isolation + Masking)
 
-`opacity < 1` and a rounded or masked `overflow: hidden` both route through an offscreen "visual
-layer" (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`,
+`opacity < 1` and a masked `overflow: hidden` route through an offscreen "visual layer"
+(`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`,
 `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`). Ordinary elements (opacity 1, no
-mask) skip this entirely — same direct-draw path as always, zero overhead.
+mask) skip this entirely — same direct-draw path as always, zero overhead — and so does most rounded
+`overflow: hidden`, which is a clip rather than a mask (below).
 
 **A layer is the size of what goes in it**, not the size of the display. `BoxPainter` takes the
 subtree's [ink bounds](#ink-bounds) through the pose, intersects them with the live clip, and opens a
@@ -622,12 +623,23 @@ containing a node whose `paintsDynamically()` is true (the default for anything 
 hook) or a `backdrop-filter`, whose subject is not in this tree at all. `UIElement.repaint()` is the
 door for a widget whose picture changes without moving a box.
 
-**A rounded clip over live content costs three layers every frame.** The subtree, the children and the
-mask each take a target, and a subtree holding a `paintsDynamically()` node is never retained — nor is
-one that moved, which a scrolled list's rows do every frame. Where the content cannot reach the rounded
-corners, clip with a square box inset inside the curve instead: square `overflow: hidden` is a scissor
-and opens no layer. The Library's cards do exactly that (`PreviewCard`'s `__preview-clip__`, 2px inside a
-5px radius); measured while scrolling, 103 layers a frame fell to 2 and the median frame from 12.5ms to 8.5.
+**A rounded `overflow: hidden` is a clip, not a layer.** It clips to the box's shape less its border,
+**whatever the background** — CSS's rule; a translucent panel does not fade its own children, and alpha
+masking is the `mask` property's job. `pushRoundedClip` adds a `CgClipTable` entry — the box's rect,
+radii and border's inner edge in the box's own space, and the inverse of the pose that put it on screen —
+and every quad, curve and glyph drawn until the pop carries its index; each material maps the pixel into
+the box's space and multiplies by the coverage there, from the SDF and ramp `gui_rect` draws its own edge
+with, so a rotated or skewed box clips exactly. An entry names the one it was pushed inside, and a draw
+is clipped by the whole chain, up to `CgClipTable.MAX_DEPTH` (4) deep. The children cost no target, no
+clear and no composite; an axis-aligned box still pushes its padding-box scissor, which culls what lies
+outside. Only a `mask` drawable, a fifth nested clip or a pose that collapses the box take the mask
+layers below, and a layer opened inside a clip draws unclipped and is clipped as it composites back.
+`-Dcrystalgui.paint.roundedClip=false` takes the layers everywhere, for comparison. The `edges` page
+of `cgui-gallery` ends with a rotated and a skewed rounded clip, each holding a second that straddles its
+edge.
+Measured on `cgui-desktop`: 18 layers a frame fell to none, and the UI's GPU time from 1.03 ms to 0.83;
+the picture differs only in corner fringes (at most 35 levels, a handful of pixels) and by one level
+where the 8-bit children layer used to round.
 
 **A subtree drawn wholly outside the clip is not walked.** `BoxPainter` carries each box's ink bounds
 through the pose and asks `CgUiPaintContext.outsideClip` before painting it — Blink's cull rect, against
@@ -655,9 +667,9 @@ subtree layer, multiplying the subtree's existing color+alpha by the mask's alph
 mask's alpha is 0, the subtree's output is zeroed too. This mirrors LDLib2's `VisualLayerPipRenderer`
 exactly (`renderMaskAndComposite`) — no `CgStencilState`/stencil buffer involved anywhere.
 
-**Default mask shape** (`UINode.buildDefaultMask`) is the element's own resolved `CgUiRect`
-shape (same radii/border-width resolution `paintRoundedBackground` already does) with the border
-band's *color* forced to `#00000000` instead of its real color — since the shader already computes
+**Default mask shape** (`BoxPainter.paintMask`, when no `mask` is set) is the element's own
+shape filled white — never its background, so the layer path clips exactly as the rounded clip does — with
+the border band's *color* forced to `#00000000` — since the shader already computes
 `color = mix(borderColor, fillColor, innerCoverage)` then multiplies the whole shape by the outer
 `coverage`, a transparent border color alone already zeroes alpha across the border band while
 staying opaque across the inner region. No shader changes needed for this — the exact "border color

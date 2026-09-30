@@ -916,7 +916,7 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 > element transform. It's re-applied per call because `CgQuadRenderer.quad()` resets the scratch
 > instance's pose to null. The returned object is that shared scratch — build and `submit()` in one
 > expression, never hold it.
-| Clip | `pushScissor` / `popScissor` |
+| Clip | `pushScissor` / `popScissor`, and `pushRoundedClip` / `popRoundedClip` — a rounded rect every draw is stamped with (`CgClipTable`), no layer and no flush |
 | Material | `withMaterial(material, body)` |
 | Layers | `withLayerOpacity(opacity, body)` and its lambda-free pair `pushLayerOpacity`/`popLayerOpacity`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `retain(key, region, revision)` |
 | Lifecycle | `hasInstance()`, `destroy()` |
@@ -952,6 +952,11 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 > for any subtree with a `backdrop-filter` or a node whose `paintsDynamically()` is true, which is the
 > default for anything overriding a paint hook. `UIElement.repaint()` is the door for a widget whose
 > picture changes without moving a box. Full account in `docs/CGUI_STYLE_RENDER_PIPELINE.md` §8.
+
+> **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,
+> so the background never masks the children; nested up to four deep and under any pose. Only a `mask`
+> drawable, deeper nesting or a collapsed pose take the mask layers. `-Dcrystalgui.paint.roundedClip=false`
+> takes them everywhere.
 
 > **Opacity isolation and masking go through an FBO layer pass, not a flat multiply.** The
 > tint-vs-layer-opacity distinction is the thing most likely to be got wrong here — read

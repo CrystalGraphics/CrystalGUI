@@ -2173,6 +2173,25 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         roundedSkew.addClass("tf-big-rounded");
         roundedSkew.addClass("tf-skew");
         pane.append(row(rounded, roundedSkew));
+        // Rounded overflow, rotated and skewed, one clip inside another: each fill overhangs its box, so the
+        // clips -- each box's shape less its border -- are all that shapes it.
+        pane.append(row(clippedDemo("tf-rotate"), clippedDemo("tf-skew")));
+    }
+
+    private UIElement clippedDemo(String transform) {
+        UIElement innerFill = new UIElement();
+        innerFill.addClass("tf-clip-inner-fill");
+        UIElement inner = new UIElement();
+        inner.addClass("tf-clip-inner");
+        inner.append(innerFill);
+        UIElement fill = new UIElement();
+        fill.addClass("tf-clip-fill");
+        fill.append(inner);
+        UIElement outer = new UIElement();
+        outer.addClass("tf-clip-outer");
+        outer.addClass(transform);
+        outer.append(fill);
+        return outer;
     }
 
     private UIElement bigTransformDemo(String cssClass, String label) {
