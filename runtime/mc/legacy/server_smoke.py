@@ -13,9 +13,22 @@ import json, os, shutil, subprocess, sys, urllib.request
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 FORGE = "https://maven.minecraftforge.net/net/minecraftforge/forge/"
 MIXINBOOTER = "https://cdn.modrinth.com/data/G1ckZuWK/versions/6jJK1B2d/%21mixinbooter-11.17.jar"
-JARS = ["build/libs/crystalgui-1.0.0.jar", "build/libs/crystalgui-language-1.0.0.jar",
-        "CrystalGraphics/build/libs/crystalgraphics-1.0.0.jar",
-        "CrystalGraphics/build/libs/crystalgraphics-joml-1.0.0.jar"]
+
+
+def mod_version(props):
+    """The jars are named for modVersion; a literal here went stale the day it changed."""
+    for line in open(props, encoding="utf-8"):
+        key, _, value = line.partition("=")
+        if key.strip() == "modVersion":
+            return value.strip()
+    raise SystemExit(props + " names no modVersion")
+
+
+GUI = mod_version(os.path.join(ROOT, "gradle.properties"))
+CG = mod_version(os.path.join(ROOT, "CrystalGraphics", "gradle.properties"))
+JARS = [f"build/libs/crystalgui-{GUI}.jar", f"build/libs/crystalgui-language-{GUI}.jar",
+        f"CrystalGraphics/build/libs/crystalgraphics-{CG}.jar",
+        f"CrystalGraphics/build/libs/crystalgraphics-joml-{CG}.jar"]
 sys.stdout.reconfigure(errors="replace")
 
 
