@@ -240,6 +240,21 @@ public final class StyleEngine {
         return reachable;
     }
 
+    /**
+     * What an element gaining or losing {@code cls} can reach below it -- the keys, {@link #EVERYTHING}, or
+     * null for nothing. {@link #stateDescendantKeysFrom}'s twin for a class change.
+     */
+    @Nullable
+    public Set<String> classDescendantKeysFrom(String cls) {
+        Set<String> reachable = null;
+        for (int i = 0; i < sheets.size(); i++) {
+            Set<String> keys = sheets.get(i).sheet().classDescendantsFrom(cls);
+            if (keys == null) return EVERYTHING;
+            reachable = addAll(reachable, keys);
+        }
+        return reachable;
+    }
+
     /** Allocates only when there is something to add — the common answer is "nothing". */
     @Nullable
     private static Set<String> addAll(@Nullable Set<String> into, Set<String> more) {
@@ -267,7 +282,11 @@ public final class StyleEngine {
     public void markDirty(Styleable element) {
         // BLAMED WHILE PROFILING. A count says three hundred elements were re-matched; only the caller
         // says why, and "why" is the whole question when nothing on screen is moving. @see UiTrace#blame
-        if (dirtyMatch.add(element)) UiTrace.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement");
+        // UINode too: a subtree joining the document marks each node from there, and the caller worth naming is
+        // whoever appended it.
+        if (dirtyMatch.add(element)) {
+            UiTrace.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement", "com.crystalgui.ui.dom.UINode");
+        }
     }
 
     /**

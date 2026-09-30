@@ -343,7 +343,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         Mutation m = beginMutation("adding a class");
         try {
             classes.add(className);
-            invalidateStyleMatch();
+            invalidateClassMatch(className);
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
             m.end();
@@ -356,7 +356,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         Mutation m = beginMutation("removing a class");
         try {
             classes.remove(className);
-            invalidateStyleMatch();
+            invalidateClassMatch(className);
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
             m.end();
@@ -764,7 +764,10 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      */
     @Override
     public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue, @Nullable Object newValue) {
-        if (property == StylePropertyRegistry.FONT_SIZE) {
+        // NOT ON THE FIRST RESOLUTION: nothing below was resolved against a size that did not exist yet, and a
+        // subtree joining the document is matched parents first in one pass anyway. Walking it here matched
+        // every joining subtree twice -- a tooltip or a popup, 600 elements, on a random hover.
+        if (property == StylePropertyRegistry.FONT_SIZE && oldValue != null) {
             for (UIElement node : composedSubtree()) node.invalidateStyleMatch();
         }
         // display: none is a structural fact -- a box exists or it does not.
@@ -882,6 +885,24 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         invalidateExposedParts(engine);
         // NULL IS NOTHING BELOW: no rule reaches through this node's state, so its subtree is not even walked.
         Set<String> reachable = engine.stateDescendantKeysFrom(this);
+        if (reachable == null) return;
+        for (UIElement child : children) {
+            if (!child.frozen) child.markReachable(engine, reachable);
+        }
+    }
+
+    /**
+     * {@code changed} went on or came off this node: it re-matches, and so does what a rule reaches THROUGH that
+     * class. The class twin of {@link #invalidateStateMatch} -- toggling {@code .active} on a window walked and
+     * re-matched all of its twelve hundred elements, where the sheets name a handful that can depend on it.
+     */
+    private void invalidateClassMatch(String changed) {
+        if (frozen) return;
+        StyleEngine engine = styleEngine();
+        if (engine == null) return;
+        if (document != null) engine.markDirty(this);
+        invalidateExposedParts(engine);
+        Set<String> reachable = engine.classDescendantKeysFrom(changed);
         if (reachable == null) return;
         for (UIElement child : children) {
             if (!child.frozen) child.markReachable(engine, reachable);

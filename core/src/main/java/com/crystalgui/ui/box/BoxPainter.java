@@ -160,6 +160,11 @@ public final class BoxPainter {
             CgTrace.add(UiTrace.FRAME, mask ? "layers-mask" : "layers-opacity", 1);
             LayerRegion region = regionOf(box, ctx, base);
             if (region.isEmpty()) return;
+            // WHO PAYS THE FILL, on the blame channel: `layer-clear-kpx` says how much, and this which element.
+            if (CgTrace.isEnabled(UiTrace.BLAME)) {
+                CgTrace.add(UiTrace.FRAME, "~layer-kpx " + (mask ? "mask " : "opacity ") + layerLabel(node),
+                        (long) region.width() * region.height() / 1000L);
+            }
 
             // AND IF NOTHING UNDER IT MOVED, THE PICTURE IS STILL THERE. The whole of what a frame owes
             // an unchanged subtree is one composited quad; the clear, the walk and every draw beneath
@@ -175,6 +180,14 @@ public final class BoxPainter {
                 ctx.notePainted(IDENTITY, region.x(), region.y(), region.x() + region.width(),
                         region.y() + region.height());
                 ctx.blitLayer(keep.fbo(), opacity, region);
+                return;
+            }
+
+            // A MASK AT FULL OPACITY needs no layer around the box: grouping at 1 is plain painter's order, so the
+            // box paints into the target and only its children go through the mask. A layer as large as a whole
+            // editor cleared and blitted once less a frame.
+            if (mask && opacity >= 1f && keep == null && !CgUiPaintContext.LEGACY_LAYERS) {
+                paintMaskedChildrenOnly(box, style, node, ctx, base, radii, region, asContext);
                 return;
             }
 
@@ -215,6 +228,41 @@ public final class BoxPainter {
             notePainted(box, ctx, PAINTED);
             pose.popPose();
         }
+    }
+
+    /**
+     * A masking box at opacity 1: itself straight into the target, its children through a layer multiplied by the
+     * mask, then its decoration over both. The pose on entry is the box's own, unshifted.
+     */
+    private static void paintMaskedChildrenOnly(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx,
+                                                Matrix4f base, Radii radii, LayerRegion region, boolean asContext) {
+        PoseStack pose = ctx.getPoseStack();
+        paintSelf(box, style, ctx, radii);
+        node.paintContent(ctx, box);
+
+        Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
+        pose.last().pose().set(inner).mul(box.localToWorld());
+        LayerRegion inside = region.atOrigin();
+        CgFrameBuffer childrenFbo = ctx.beginLayerFbo(region);
+        paintChildren(box, ctx, inner, false, asContext);
+        CgFrameBuffer maskFbo = ctx.beginLayerFbo(inside);
+        paintMask(box, style, ctx);
+        ctx.endLayerFbo();
+        ctx.compositeMask(childrenFbo, maskFbo, inside);
+        ctx.endLayerFbo();
+        ctx.blitLayer(childrenFbo, 1f, region);
+
+        pose.last().pose().set(base).mul(box.localToWorld());
+        node.paintDecoration(ctx, box);
+        paintOverlay(box, style, ctx);
+        paintOutline(box, style, ctx);
+    }
+
+    /** A layer's owner as a profile names it: its tag, then its first class. */
+    private static String layerLabel(UIElement node) {
+        String tag = node.tagName();
+        for (String cls : node.getClasses()) return tag + "." + cls;
+        return tag;
     }
 
     /** @see CgUiPaintContext#notePainted -- the box's own ink, as the tree composed it. */

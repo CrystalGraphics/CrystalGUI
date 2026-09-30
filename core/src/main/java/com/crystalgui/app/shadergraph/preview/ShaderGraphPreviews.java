@@ -109,25 +109,32 @@ public final class ShaderGraphPreviews  {
     /**
      * Gives every node a preview slot, and starts ticking.
      *
-     * <p>Call once, after the graph has nodes. Attaching a slot is what makes {@code __preview__} appear
-     * — {@link GraphNode#preview()} creates it lazily, so a node that never asks stays the height of its
-     * ports.</p>
+     * <p>Attaching a slot is what makes {@code __preview__} appear — {@link GraphNode#preview()} creates it
+     * lazily, so a node that never asks stays the height of its ports. A second call slots the nodes added
+     * since and registers nothing again: the extension attaches while the view is still empty, and the view
+     * attaches once it has nodes.</p>
      */
     public ShaderGraphPreviews attach() {
         for (GraphNode node : view.nodes()) attachTo(node);
-        // NOT `this`: ShaderGraphPreviews is a scheduler rather than a node, so the hook is OWNED
-        // by the surface it drives -- which is also what stops it outliving that surface.
-        view.everyFrame(this::tickFrame);
-        // Dynamic port widths, colours and inline-editor shapes. Installed from here rather than left to
-        // the caller because this class is what owns the "a field changed, recompile" hook a rebuilt
-        // editor has to write through — the same one NodeFieldBinder is given below.
-        ShaderPortArity.install(view, () -> {
-            invalidate();
-            requestRecompile();
-        });
+        if (!attached) {
+            // Once: each call registered another tick, and the previews drew twice their budget a frame.
+            attached = true;
+            // NOT `this`: ShaderGraphPreviews is a scheduler rather than a node, so the hook is OWNED
+            // by the surface it drives -- which is also what stops it outliving that surface.
+            view.everyFrame(this::tickFrame);
+            // Dynamic port widths, colours and inline-editor shapes. Installed from here rather than left to
+            // the caller because this class is what owns the "a field changed, recompile" hook a rebuilt
+            // editor has to write through — the same one NodeFieldBinder is given below.
+            ShaderPortArity.install(view, () -> {
+                invalidate();
+                requestRecompile();
+            });
+        }
         invalidate();
         return this;
     }
+
+    private boolean attached;
 
     /**
      * Gives one node a preview slot, if it has an id, can actually be previewed, and has none yet.
