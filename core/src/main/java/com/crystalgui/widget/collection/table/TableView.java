@@ -264,6 +264,22 @@ public class TableView<T> extends ListView<T> {
         return this;
     }
 
+    /**
+     * Re-binds the visible rows, for a cell whose text depends on something other than its item.
+     *
+     * <pre>{@code
+     * this.total = total;          // what a "share" column divides by
+     * table.refreshRows();
+     * }</pre>
+     *
+     * <p>Leaves the header alone: {@link #refreshColumns} rebuilds it, and a table refreshed on a clock
+     * would change the element tree every time.</p>
+     */
+    public TableView<T> refreshRows() {
+        invalidateWindow();
+        return this;
+    }
+
     public TableView<T> resizeColumnTo(TableColumn<T> column, float width) {
         if (column == null || !column.isResizable()) return this;
         column.applyDraggedWidth(Math.min(width, maxWidthFor(column)));
