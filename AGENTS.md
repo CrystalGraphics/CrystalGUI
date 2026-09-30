@@ -961,7 +961,7 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 
 - **`CgUiRenderer`** — thin wrapper over CrystalGraphics' `CgQuadRenderer` **and `CgVectorRenderer`**:
   instanced unit quads whose per-instance record (`origin` + `right`/`up` edge vectors, UVs, colour)
-  lives in a class-wide SSBO/TBO. The `PoseStack` matrix is baked in at `submit()` time by
+  lives in a class-wide SSBO/TBO on the frame ring (`CgBufferLifetime.FRAME`). The `PoseStack` matrix is baked in at `submit()` time by
   `Quad.pose(...)` — three transforms per quad rather than four corners, and affine-correct under
   `transform:`. **Material bind/unbind is owned by `CgQuadRenderer.useMaterial()`**, which must be
   called before any `submit()` and again every frame; never call `material.bind()` yourself. Text goes
