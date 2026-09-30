@@ -240,6 +240,21 @@ public final class StyleEngine {
         return reachable;
     }
 
+    /**
+     * What an element gaining or losing {@code cls} can reach below it -- the keys, {@link #EVERYTHING}, or
+     * null for nothing. {@link #stateDescendantKeysFrom}'s twin for a class change.
+     */
+    @Nullable
+    public Set<String> classDescendantKeysFrom(String cls) {
+        Set<String> reachable = null;
+        for (int i = 0; i < sheets.size(); i++) {
+            Set<String> keys = sheets.get(i).sheet().classDescendantsFrom(cls);
+            if (keys == null) return EVERYTHING;
+            reachable = addAll(reachable, keys);
+        }
+        return reachable;
+    }
+
     /** Allocates only when there is something to add — the common answer is "nothing". */
     @Nullable
     private static Set<String> addAll(@Nullable Set<String> into, Set<String> more) {

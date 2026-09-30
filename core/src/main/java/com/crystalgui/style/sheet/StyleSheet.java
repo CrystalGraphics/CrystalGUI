@@ -118,6 +118,22 @@ public final class StyleSheet {
         return stateDescendantsUnbounded;
     }
 
+    /** Descendant keys a rule reaches through an ancestor carrying the class. @see #indexClassDescendants */
+    private final Map<String, Set<String>> classDescendantsByClass = new HashMap<>();
+
+    /** Classes some rule reaches THROUGH to a subject nothing can be keyed on, so every descendant is assumed. */
+    private final Set<String> classDescendantsUnbounded = new HashSet<>();
+
+    /**
+     * What an element gaining or losing {@code cls} can change below it: the keys a descendant must carry, an
+     * empty set for nothing, or null when any descendant could be affected.
+     */
+    @Nullable
+    public Set<String> classDescendantsFrom(String cls) {
+        if (classDescendantsUnbounded.contains(cls)) return null;
+        return classDescendantsByClass.getOrDefault(cls, Collections.emptySet());
+    }
+
     /**
      * The CSS text this sheet was parsed from — retained so the sheet can be <b>re-substituted
      * in place</b> against a different external variable table ({@link #rebind}), which is what a
@@ -255,6 +271,47 @@ public final class StyleSheet {
         }
         if (!indexed) universal.add(rule);
         indexStateDescendants(rule);
+        indexClassDescendants(rule);
+    }
+
+    /**
+     * Records what a descendant needs re-matching for when an ANCESTOR gains or loses a class.
+     *
+     * <p>{@link #indexStateDescendants}'s twin for classes: Blink's class invalidation set. A class on a
+     * window, a panel or a foldout decides which rules apply below it only through rules that name that class
+     * in an ancestor or parent compound, so {@code .__collapsed__ > .__content__} makes {@code __content__}
+     * the one key a collapse re-matches.</p>
+     *
+     * <p>A subject is keyed by what precedes a pseudo-element: the walk marks light descendants, and a marked
+     * host re-matches its exposed parts. A subject with nothing to key on -- {@code .x *}, or a part rule
+     * with no host -- makes that class reach everything.</p>
+     */
+    private void indexClassDescendants(StyleRule rule) {
+        var compounds = rule.selector().compounds();
+        if (compounds.size() < 2) return;
+        Set<String> ancestorClasses = new HashSet<>();
+        for (int i = 0; i < compounds.size() - 1; i++) {
+            for (var part : compounds.get(i).parts()) {
+                if (part.type() == SelectorType.CLASS) ancestorClasses.add(part.identity());
+            }
+        }
+        if (ancestorClasses.isEmpty()) return;
+
+        Set<String> subjectKeys = new HashSet<>();
+        for (var part : compounds.get(compounds.size() - 1).parts()) {
+            if (part.type() == SelectorType.PSEUDO_ELEMENT) break;
+            switch (part.type()) {
+                case ID, CLASS, TYPE -> subjectKeys.add(part.identity());
+                default -> { /* not a key we can narrow on */ }
+            }
+        }
+        for (String cls : ancestorClasses) {
+            if (subjectKeys.isEmpty()) {
+                classDescendantsUnbounded.add(cls);
+            } else {
+                classDescendantsByClass.computeIfAbsent(cls, k -> new HashSet<>()).addAll(subjectKeys);
+            }
+        }
     }
 
     /**
@@ -435,6 +492,8 @@ public final class StyleSheet {
         stateDescendantsByAncestor.clear();
         stateDescendantsFromAnyAncestor.clear();
         stateDescendantsUnbounded = false;
+        classDescendantsByClass.clear();
+        classDescendantsUnbounded.clear();
         for (var rule : rules) index(rule);
     }
 
