@@ -282,7 +282,11 @@ public final class StyleEngine {
     public void markDirty(Styleable element) {
         // BLAMED WHILE PROFILING. A count says three hundred elements were re-matched; only the caller
         // says why, and "why" is the whole question when nothing on screen is moving. @see UiTrace#blame
-        if (dirtyMatch.add(element)) UiTrace.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement");
+        // UINode too: a subtree joining the document marks each node from there, and the caller worth naming is
+        // whoever appended it.
+        if (dirtyMatch.add(element)) {
+            UiTrace.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement", "com.crystalgui.ui.dom.UINode");
+        }
     }
 
     /**

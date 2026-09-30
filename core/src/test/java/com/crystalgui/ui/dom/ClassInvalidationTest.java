@@ -90,6 +90,37 @@ public class ClassInvalidationTest extends UiDocumentTestBase {
     }
 
     @Test
+    public void aJoiningSubtreeIsMatchedOnce() {
+        build();
+        document.styleEngine().addStylesheet(StyleSheet.parse("* { font-size: 10; }\n"));
+        frame();
+        UIElement popup = new UIElement();
+        for (int i = 0; i < 20; i++) popup.append(new UIElement().addClass("__row__"));
+        document.styleEngine().resetRematchCountForTesting();
+
+        document.append(popup);
+        frame();
+
+        // Its first font-size resolution re-matched the whole subtree a second time.
+        assertEquals("each joining element is matched once", 21,
+                document.styleEngine().rematchedForTesting().stream().filter(e -> e == popup || popup.children().contains(e)).count());
+    }
+
+    @Test
+    public void aFontSizeChangeStillReachesItsSubtree() {
+        build();
+        document.styleEngine().addStylesheet(StyleSheet.parse("* { font-size: 10; }\n.__big__ { font-size: 20; }\n"));
+        frame();
+        document.styleEngine().resetRematchCountForTesting();
+
+        window.addClass("__big__");
+        frame();
+
+        assertTrue("an em below the window was resolved against the old size",
+                document.styleEngine().rematchedForTesting().contains(label));
+    }
+
+    @Test
     public void aClassReachingAnUnkeyedSubjectReMatchesEverything() {
         build();
         document.styleEngine().resetRematchCountForTesting();
