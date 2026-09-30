@@ -3,12 +3,12 @@ package com.crystalgui.mc.modern.client;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.crystalgraphics.platform.input.CgKeyCodes;
+
 import net.minecraft.client.KeyMapping;
 //? if >=1.21.9 {
 /*import com.crystalgraphics.mc.modern.platform.ResourceIds;
 *///?}
-
-import org.lwjgl.glfw.GLFW;
 
 /**
  * The two keys that open the desktop. Vanilla {@code KeyMapping}s, so they live here; each loader only
@@ -29,10 +29,10 @@ public final class CgUiKeybinds {
     //?}
 
     public static final KeyMapping OPEN_EDITOR =
-            new KeyMapping("key.crystalgui.open", GLFW.GLFW_KEY_F6, CATEGORY);
+            new KeyMapping("key.crystalgui.open", CgUiInput.hostKey(CgKeyCodes.KEY_F6), CATEGORY);
 
     public static final KeyMapping OPEN_DESKTOP =
-            new KeyMapping("key.crystalgui.desktop", GLFW.GLFW_KEY_F7, CATEGORY);
+            new KeyMapping("key.crystalgui.desktop", CgUiInput.hostKey(CgKeyCodes.KEY_F7), CATEGORY);
 
     /**
      * Every mapping a loader must register. Content adds to it through {@link #add}; a loader only

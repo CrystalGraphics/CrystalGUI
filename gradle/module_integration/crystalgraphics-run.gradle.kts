@@ -49,6 +49,7 @@ dependencies {
     // Tier 1 for LWJGL3, which PlatformServiceModern assembles over. Same J9 move, same hole: it left
     // runtime/mc/modern/common -- which IS on the run -- for a module that was on no run at all.
     add(devRunLibraries, "com.crystalgraphics:lwjgl3:1.0.0")
+    add(devRunLibraries, "com.crystalgraphics:sdl:1.0.0")
     // Minecraft ships JOML from 1.19.3; below it the shipped jar's companion supplies it, and a dev run
     // takes it as a library.
     if (mcOrdinal < 1_019_003) add(devRunLibraries, "org.joml:joml-jdk8:1.10.1")
@@ -163,6 +164,7 @@ tasks.matching {
     dependsOn(crystalGraphics.task(":core:downgradedJar"))
     dependsOn(crystalGraphics.task(":platform:downgradedJar"))
     dependsOn(crystalGraphics.task(":runtime:lwjgl:3:downgradedJar"))
+    dependsOn(crystalGraphics.task(":runtime:lwjgl:sdl:downgradedJar"))
     dependsOn(crystalGraphics.task(":freetype-msdfgen-harfbuzz-bindings:jar"))
 }
 

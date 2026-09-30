@@ -99,13 +99,17 @@ public final class CgUiHud {
 
     // ── Input, offered to the compositor ────────────────────────────────────────────────────────
 
-    /** @return whether the desktop consumed it and the foreign screen must not see it */
+    /**
+     * @param button the host's numbering, or -1 for none
+     * @return whether the desktop consumed it and the foreign screen must not see it
+     */
     public static boolean offerMouse(int button, boolean pressed, float platformWheel) {
         // Signed here, not by the loaders: this path consumes a scroll over any window and cancels the
         // screen event, so it -- not CgUiScreen.mouseScrolled -- is what a scroll in our own screen
         // reaches.
         return HostSession.isInstalled() && HostSession.session().offerMouse(HOST, pointerGrabbed(),
-                pointerX(), pointerY(), button, pressed, CgUiInput.wheel(platformWheel));
+                pointerX(), pointerY(), CgPlatform.input().translateMouseCodes(button), pressed,
+                CgUiInput.wheel(platformWheel));
     }
 
     /** The pointer's position, delivered and never consumed. @see ScreenOverlay#offerMouse */
