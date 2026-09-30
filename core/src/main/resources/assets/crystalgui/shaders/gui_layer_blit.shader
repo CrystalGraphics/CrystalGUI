@@ -21,6 +21,7 @@
 
 #type pos2_uv2_col4ub
 #pragma cg_use quad
+#pragma cg_use clip
 
 Tags { "RenderType" = "Transparent" }
 Queue = "Overlay"
@@ -54,10 +55,13 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // The rounded clip this draw is inside (CgClipTable); read before any discard, since it takes
+        // derivatives.
+        float boxClip = CG_CLIP_QUAD_COVERAGE;
         // A layer is a screen-resolution picture, so no texel filter -- only the edge, for a snapshot
         // drawn rotated.
         fragColor = texture(_MainTex, CG_QUAD_EDGE_UV(i.param)) * i.color;
         fragColor *= CG_QUAD_EDGE_COVERAGE(i.param);
-        fragColor *= _LayerOpacity;
+        fragColor *= _LayerOpacity * boxClip;
     }
 }

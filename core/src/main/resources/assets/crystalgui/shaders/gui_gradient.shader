@@ -42,6 +42,7 @@
 
 #type pos2_uv2_col4ub
 #pragma cg_use quad
+#pragma cg_use clip
 #pragma cg_feature WITH_MASK
 
 #include "crystalgraphics:shaders/lib/noise.glsl"
@@ -101,6 +102,9 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // The rounded clip this draw is inside (CgClipTable); read before any discard, since it takes
+        // derivatives.
+        float boxClip = CG_CLIP_QUAD_COVERAGE;
         // The ramp reads a CLAMPED uv, so the half-pixel pad holds the end colours rather than falling
         // outside _Window.
         vec2 uv = CG_QUAD_EDGE_UV(i.param);
@@ -155,6 +159,6 @@ Pass {
         // which is the property the paragraph above is about; a fully transparent STOP still dithers,
         // and must, because a shallow alpha ramp is exactly what banded.
         c += vec4((hash12(gl_FragCoord.xy) - 0.5) / 255.0) * shape;
-        fragColor = c;
+        fragColor = c * boxClip;
     }
 }

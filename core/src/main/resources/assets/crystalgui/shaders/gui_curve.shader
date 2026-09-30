@@ -21,6 +21,7 @@
 
 #type pos2_uv2_col4ub
 #pragma cg_use curve
+#pragma cg_use clip
 
 // Shared with crystalgraphics:shaders/curve.shader -- see that file and lib/stroke.glsl. This
 // material owns render state and the final alpha; it owns NONE of the stroke maths.
@@ -81,6 +82,9 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // The rounded clip this draw is inside (CgClipTable); read before any discard, since it takes
+        // derivatives.
+        float boxClip = CG_CLIP_CURVE_COVERAGE;
         // curve_instance_coverage, not stroke_coverage directly -- it is the one place stroke vs.
         // filled-triangle is decided (lib/stroke.glsl), so ctx.triangle()'s instances render
         // correctly through this material too, not just through the engine's own curve.shader.
@@ -119,6 +123,6 @@ Pass {
 
         if (alpha <= (1.0 / 255.0)) discard;
 
-        fragColor = vec4(color.rgb, alpha);
+        fragColor = vec4(color.rgb, alpha * boxClip);
     }
 }

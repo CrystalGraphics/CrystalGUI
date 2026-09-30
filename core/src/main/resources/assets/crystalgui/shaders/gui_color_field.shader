@@ -23,6 +23,7 @@
 
 #type pos2_uv2_col4ub
 #pragma cg_use quad
+#pragma cg_use clip
 
 #include "crystalgraphics:shaders/lib/sdf.glsl"
 #include "crystalgraphics:shaders/lib/color.glsl"
@@ -87,6 +88,9 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // The rounded clip this draw is inside (CgClipTable); read before any discard, since it takes
+        // derivatives.
+        float boxClip = CG_CLIP_QUAD_COVERAGE;
         vec2 halfSize = _BoxSize * 0.5;
         vec2 uv = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
         float ramp = CG_QUAD_EDGE_ROTATED ? CG_QUAD_EDGE_FILTER : 1.0;
@@ -140,6 +144,6 @@ Pass {
         result *= i.color;
 
         result.a *= coverage * _LayerOpacity;
-        fragColor = result;
+        fragColor = vec4(result.rgb, result.a * boxClip);
     }
 }

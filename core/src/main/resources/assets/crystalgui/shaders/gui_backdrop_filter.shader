@@ -23,6 +23,7 @@
 
 #type pos2_uv2_col4ub
 #pragma cg_use quad
+#pragma cg_use clip
 
 #pragma cg_feature WITH_REFRACTION
 #pragma cg_feature WITH_CHROMATIC
@@ -186,6 +187,9 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
+        // The rounded clip this draw is inside (CgClipTable); read before any discard, since it takes
+        // derivatives.
+        float boxClip = CG_CLIP_QUAD_COVERAGE;
         // Unclamped: past the box is exactly what the SDF is there to cut, and the lens taps clamp
         // for themselves. Rotated, the ramp takes the wider reconstruction filter every other edge does.
         vec2 uv = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
@@ -338,6 +342,6 @@ Pass {
         // a second opinion about the backdrop's opacity.
         c.rgb *= i.color.rgb;
         c.a = coverage * _LayerOpacity * i.color.a;
-        fragColor = c;
+        fragColor = vec4(c.rgb, c.a * boxClip);
     }
 }

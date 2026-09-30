@@ -133,7 +133,7 @@ public final class CgUiRenderer {
     public CgQuadRenderer.Quad quad() {
         if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit quads outside beginFrame()/endFrame()");
 
-        return renderer.quad().pose(ctx.getPoseStack().last().pose());
+        return renderer.quad().pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry());
     }
 
     /**
@@ -159,7 +159,7 @@ public final class CgUiRenderer {
     public CgVectorRenderer.Curve curve() {
         if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit curves outside beginFrame()/endFrame()");
 
-        return vectorRenderer.curve().pose(ctx.getPoseStack().last().pose());
+        return vectorRenderer.curve().pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry());
     }
 
     /**
@@ -175,7 +175,7 @@ public final class CgUiRenderer {
     public CgVectorRenderer.Triangle triangle() {
         if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit triangles outside beginFrame()/endFrame()");
 
-        return vectorRenderer.triangle().pose(ctx.getPoseStack().last().pose());
+        return vectorRenderer.triangle().pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry());
     }
 
     /**
@@ -186,7 +186,7 @@ public final class CgUiRenderer {
     public CgVectorRenderer.Cell filledCell() {
         if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit quads outside beginFrame()/endFrame()");
 
-        return vectorRenderer.cell().pose(ctx.getPoseStack().last().pose());
+        return vectorRenderer.cell().pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry());
     }
 
     /**

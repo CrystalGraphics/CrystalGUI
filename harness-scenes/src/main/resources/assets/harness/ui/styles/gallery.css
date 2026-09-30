@@ -591,6 +591,13 @@
 .tf-big-flat     { width: 340px; height: 130px; margin: 16px 48px 16px 24px; background-color: #d0d4dc; }
 .tf-big-rounded  { width: 340px; height: 90px; margin: 16px 48px 16px 24px; border-radius: 12px;
                    border-width: 2px; border-color: #5b8dff; background-color: #2d4fa8; }
+/* Rounded overflow, transformed and nested: every fill overhangs its box, so the clip is what shapes it. */
+.tf-clip-outer      { width: 340px; height: 130px; margin: 16px 48px 16px 24px; border-radius: 30px;
+                      border-width: 3px; border-color: #ffb454; overflow: hidden; }
+.tf-clip-fill       { width: 420px; height: 200px; margin: -30px; background: linear-gradient(90deg, #ff5f6d, #6a5cff); }
+.tf-clip-inner      { width: 200px; height: 90px; margin: 120px 0 0 210px; border-radius: 24px;
+                      border-width: 2px; border-color: #ffffff; overflow: hidden; }
+.tf-clip-inner-fill { width: 260px; height: 140px; margin: -25px; background-color: #1b1f27; }
 
 
 /* Transitionable like any other interpolatable property, and this is the case CSS's
