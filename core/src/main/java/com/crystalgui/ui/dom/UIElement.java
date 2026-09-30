@@ -764,7 +764,10 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      */
     @Override
     public void computedChanged(StyleProperty<?> property, @Nullable Object oldValue, @Nullable Object newValue) {
-        if (property == StylePropertyRegistry.FONT_SIZE) {
+        // NOT ON THE FIRST RESOLUTION: nothing below was resolved against a size that did not exist yet, and a
+        // subtree joining the document is matched parents first in one pass anyway. Walking it here matched
+        // every joining subtree twice -- a tooltip or a popup, 600 elements, on a random hover.
+        if (property == StylePropertyRegistry.FONT_SIZE && oldValue != null) {
             for (UIElement node : composedSubtree()) node.invalidateStyleMatch();
         }
         // display: none is a structural fact -- a box exists or it does not.
