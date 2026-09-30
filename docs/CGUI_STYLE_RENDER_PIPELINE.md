@@ -572,9 +572,9 @@ outer edge, both masked by the same distance field so corners clip fill and bord
 
 **`CgUiPaintContext.withMaterial(material, drawBody)`** — used because an SDF rect needs its own
 shader/program, not the shared box-model batch. **`bind()` must run after `drawBody`, not before** —
-`applyProperties(...)` is CPU-only (marks a dirty flag; the GPU upload only happens inside `bind()`, which
-sends the block only if its packed bytes changed or it is the frame's first bind -- the block is
-`CgBufferLifetime.FRAME`), and `drawBody` is exactly where the caller sets its per-instance properties. Binding
+`applyProperties(...)` is CPU-only (it marks the block dirty only if a value actually moved; the GPU upload
+only happens inside `bind()`, which sends the block only if its packed bytes changed or it is the frame's
+first bind -- the block is `CgBufferLifetime.FRAME`), and `drawBody` is exactly where the caller sets its per-instance properties. Binding
 first uploads whatever was dirty from the *previous* draw call — one draw stale, invisible for a static
 shape re-drawing identical values every frame, badly broken for two different instances alternating
 every frame (a fixed bug from an earlier session).
