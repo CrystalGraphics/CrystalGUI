@@ -120,9 +120,9 @@ public final class CgUiHud {
     }
 
     /** @return whether the desktop consumed it */
-    public static boolean offerKey(int glfwKey, char typed, boolean pressed) {
+    public static boolean offerKey(int hostKey, char typed, boolean pressed) {
         return HostSession.isInstalled() && HostSession.session().offerKey(
-                CgPlatform.input().translateKeyboardCodes(glfwKey), typed, pressed);
+                CgPlatform.input().translateKeyboardCodes(hostKey), typed, pressed);
     }
 
     /** Whether the game holds the pointer; no mouse handler counts as held. */

@@ -33,7 +33,7 @@ public final class CgUiInput {
     private CgUiInput() {}
 
     /**
-     * A GLFW wheel delta in the engine's convention. GLFW already reports one unit per notch, so the
+     * A wheel delta in the engine's convention. GLFW and SDL both report one unit per notch, so the
      * sign is the whole conversion. @see HostPointer#scroll
      */
     public static float wheel(double platformDelta) {
@@ -106,13 +106,13 @@ public final class CgUiInput {
     }
 
     /**
-     * A key with no character. GLFW splits the two, so a press sends the key and {@code charTyped} sends
-     * the character; synthesising one here would be layout-dependent and GLFW has already done it.
+     * A key with no character. GLFW and SDL split the two, so a press sends the key and {@code charTyped}
+     * sends the character; synthesising one here would be layout-dependent and the toolkit has done it.
      *
      * @return whether the desktop consumed it
      */
-    public static boolean key(UIDocument window, int glfwKey, boolean pressed) {
-        int local = CgPlatform.input().translateKeyboardCodes(glfwKey);
+    public static boolean key(UIDocument window, int hostKey, boolean pressed) {
+        int local = CgPlatform.input().translateKeyboardCodes(hostKey);
         return window.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
                 (char) 0, local, pressed, false, System.currentTimeMillis()));
     }
