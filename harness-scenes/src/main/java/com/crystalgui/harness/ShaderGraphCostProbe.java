@@ -68,6 +68,10 @@ public final class ShaderGraphCostProbe {
 
     private static final int SETTLE = 120;
     private static final int OPEN_SETTLE = 240;
+    /** {@code -Dcrystalgui.harness.desktop.graphCost.stopAfterHitchMs}: stop recording after the first frame over it. */
+    private static final int HITCH_MS = Integer.getInteger("crystalgui.harness.desktop.graphCost.stopAfterHitchMs", 0);
+    private static final int HITCH_FRAMES_AFTER = 5;
+    private boolean hitchArmed;
     private static final int BLOCK = 240;
     private static final int OPEN_BLOCKS = 3;
     private static final int EDITS = 6;
@@ -126,7 +130,12 @@ public final class ShaderGraphCostProbe {
             CgTrace.marker(UiTrace.FRAME, "graph-cost:open");
             target.open();
         }));
-        for (int i = 1; i <= OPEN_BLOCKS; i++) steps.add(new Step("open, idle #" + i, BLOCK, true, () -> { }));
+        for (int i = 1; i <= OPEN_BLOCKS; i++) {
+            // ARMED ONCE THE GRAPH HAS SETTLED, so the first hitch it catches is not the open itself: recording
+            // stops a few frames after it, and the report keeps that frame's whole tree whatever it recorded.
+            Runnable arm = i > 1 || HITCH_MS <= 0 ? () -> { } : () -> hitchArmed = true;
+            steps.add(new Step("open, idle #" + i, BLOCK, true, arm));
+        }
         steps.add(new Step("editing", EDITS * EDIT_GAP, true, () -> { }, at -> {
             if (at % EDIT_GAP != 0) return;
             CgTrace.marker(UiTrace.FRAME, "graph-cost:edit");
@@ -177,6 +186,14 @@ public final class ShaderGraphCostProbe {
     public boolean frame() {
         if (done) return true;
         if (frame++ < startFrame) return false;
+        if (hitchArmed) {
+            // BY CPU, not wall: a wall hitch is usually the present waiting, and the question is the frame's work.
+            CgFrameRecord last = CgTrace.frame(CgTrace.currentFrameIndex() - 1);
+            if (last != null && last.hasCpu() && last.cpuNanos() > HITCH_MS * 1_000_000L) {
+                hitchArmed = false;
+                CgTrace.stopAfterHitch(1L, HITCH_FRAMES_AFTER);
+            }
+        }
         // The Frame Profiler's settings size the ring at autostart, over any -D; the ring must reach the first block.
         if (stepIndex < 0) CgTrace.configure(FIRST_FRAMES, NEWEST_FRAMES, ZONES_PER_FRAME);
         if (stepIndex < 0 || ++stepFrame >= steps.get(stepIndex).frames()) {
@@ -222,6 +239,14 @@ public final class ShaderGraphCostProbe {
         CgTraceReport report = CgTraceReport.of(snapshot).budget(1000d / 60d);
         Block none = blocks.get(0);
         Block first = blocks.get(1);
+        if (HITCH_MS > 0) {
+            // THE HITCH THE STOP CAUGHT: the slowest frame from the arm onwards, whole, since recording ended
+            // a few frames after it and nothing later can have overwritten its zones.
+            CgFrameRecord hitch = worstCpuAfter(first.from() - 1);
+            out.add("");
+            out.add("[graph-cost] the hitch recording stopped on (armed at #" + first.from() + ", over " + HITCH_MS + " ms)");
+            if (hitch != null) out.add(report.frame(hitch.index()));
+        }
         Block last = blocks.get(OPEN_BLOCKS);
         Block editing = blocks.get(OPEN_BLOCKS + 1);
         Block after = blocks.get(blocks.size() - 1);
@@ -319,6 +344,17 @@ public final class ShaderGraphCostProbe {
         parts.forEach((name, ms) -> line.append(String.format(Locale.ROOT, "%n[graph-cost]     %-28s %8.2f ms per event",
                 name, ms / count)));
         return line.toString();
+    }
+
+    /** The frame after {@code event} that worked longest. */
+    @Nullable
+    private static CgFrameRecord worstCpuAfter(long event) {
+        CgFrameRecord worst = null;
+        for (CgFrameRecord record : CgTrace.frames()) {
+            if (record.index() <= event || !record.hasCpu()) continue;
+            if (worst == null || record.cpuNanos() > worst.cpuNanos()) worst = record;
+        }
+        return worst;
     }
 
     @Nullable
