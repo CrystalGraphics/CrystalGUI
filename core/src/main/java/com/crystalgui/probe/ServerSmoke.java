@@ -1,7 +1,6 @@
 package com.crystalgui.probe;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -23,6 +22,7 @@ import java.util.zip.ZipFile;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.net.protocol.Protocols;
@@ -90,8 +90,8 @@ public final class ServerSmoke {
      * Subjects every host shares. Each is present on a dev server's merged classpath and absent from a
      * real one, so a load here is a hard {@code NoClassDefFoundError} there.
      *
-     * <p><b>LWJGL is deliberately absent</b>, and that is a finding rather than an omission — see
-     * {@link #reportGlDivergence}.</p>
+     * <p>LWJGL is not listed: a GL backend is what would load it, and {@link #checkNoGlBackend} asserts
+     * none was installed.</p>
      */
     private static final List<String> NEVER_LOADED_ANYWHERE = Collections.singletonList(
             // The entry point to every GL resource CrystalGUI owns; it registers CgUiLifecycle from a
@@ -200,7 +200,7 @@ public final class ServerSmoke {
 
         checkDescriptionRoundTrip(lines, failures);
         checkNothingClientSideLoaded(host, lines, failures);
-        reportGlDivergence(lines);
+        checkNoGlBackend(lines, failures);
 
         String report = render(host, lines, failures);
         print(report);
@@ -490,24 +490,13 @@ public final class ServerSmoke {
     }
 
     /**
-     * Whether a GL backend was installed, which on a server it should not have been. <b>A WARN, never a
-     * failure</b> — it reports a fact about the environment rather than a defect in the code.
+     * No GL backend was installed. {@code CgGL} takes one at the first host section or capability probe,
+     * so one here means server-side code asked for rendering: on a real server that is a
+     * {@code NoClassDefFoundError}, on a dev server's merged classpath it passes silently.
      */
-    private static void reportGlDivergence(List<String> lines) {
-        try {
-            Class<?> cgGl = Class.forName("com.crystalgraphics.platform.gl.CgGL");
-            Field backend = cgGl.getDeclaredField("backend");
-            backend.setAccessible(true);
-            boolean installed = backend.get(null) != null;
-            lines.add("WARN  GL backend " + (installed ? "IS" : "is not") + " installed on this server"
-                    + (installed
-                    ? " -- expected in a DEV run (merged classpath), and NOT what production does: there "
-                    + "CgPlatform.register catches NoClassDefFoundError and CgGL stays null. Server-side "
-                    + "code that touches CgGL therefore passes here and NPEs in production."
-                    : " -- matching production."));
-        } catch (Throwable cannotTell) {
-            lines.add("WARN  could not determine whether a GL backend is installed (" + cannotTell + ")");
-        }
+    private static void checkNoGlBackend(List<String> lines, List<String> failures) {
+        check(lines, failures, "no GL backend installed", !CgGL.isInstalled(),
+                "something opened CgGL.fromHost, probed CgCapabilities or called CgGL.init on a server");
     }
 
     // ── reporting and shutdown ──────────────────────────────────────────────────────────────────

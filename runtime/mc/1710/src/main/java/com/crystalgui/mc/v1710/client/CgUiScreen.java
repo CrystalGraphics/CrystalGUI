@@ -3,6 +3,7 @@ package com.crystalgui.mc.v1710.client;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.api.render.CgRenderPipeline;
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
@@ -104,10 +105,6 @@ public final class CgUiScreen extends GuiScreen {
     @Nullable
     public static Desktop desktop() {
         return HostSession.isInstalled() ? HostSession.session().desktop() : null;
-    }
-
-    static float frameDelta() {
-        return HostSession.session().frameDelta();
     }
 
     /** Whether the desktop has been built — read by the pump before it touches anything. */
@@ -231,11 +228,13 @@ public final class CgUiScreen extends GuiScreen {
 
         @Override
         public void enter() {
+            CgGL.fromHost();
             CgGlState.invalidateAllIfPresent();
         }
 
         @Override
         public void leave() {
+            CgGL.toHost();
             org.lwjgl.opengl.GL13.glActiveTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0);
             org.lwjgl.opengl.GL20.glUseProgram(0);
             org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_TEXTURE_2D);

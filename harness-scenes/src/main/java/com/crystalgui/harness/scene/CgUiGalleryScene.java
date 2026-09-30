@@ -2480,9 +2480,6 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
      */
     private static final class CurveCanvas extends UIElement {
 
-        /** Wall-clock origin for the animated rows. Static so every canvas shares one phase. */
-        private static final long START_NANOS = System.nanoTime();
-
         private enum Mode {
             BASICS("basics", ""),
             CAPS("caps", ""),
@@ -2530,7 +2527,8 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
             // place and reads as the strokes overflowing their canvas.
             float x = 0f;
             float y = 0f;
-            float t = (System.nanoTime() - START_NANOS) / 1_000_000_000f;
+            // The frame clock render() hands the pipeline, so a capture at frame N is one picture.
+            float t = CgRenderPipeline.getInstance().getFrameData().timeSecs;
 
             switch (mode) {
                 case BASICS -> paintBasics(ctx, x, y);

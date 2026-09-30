@@ -1,57 +1,54 @@
 # CrystalGUI
 
 A platform-agnostic UI engine shaped like a lightweight web browser: a DOM-like node tree with shadow
-roots, Taffy flexbox and grid layout, a real CSS cascade with selectors and transitions, and a full
-widget set up to a code editor and a node graph — all loader-blind, able to run headless on a dedicated
-server, and shipped as one jar for Forge 1.7.10 through 26.2, NeoForge and Fabric.
+roots, flexbox and grid layout through Taffy, a real CSS cascade with selectors and transitions, and a
+widget set that runs up to a code editor and a node graph. It ships for Minecraft:
 
-**Using CrystalGUI in your mod: [`docs/CGUI_SETUP.md`](docs/CGUI_SETUP.md)** — setting the project up,
-for one Minecraft version or many — then [`docs/CGUI_BUILDING_UIS.md`](docs/CGUI_BUILDING_UIS.md).
+- **One jar** for Forge 1.7.10–26.2, NeoForge 1.20.2–26.2 and Fabric 1.14.4–26.2, beside
+  [CrystalGraphics](https://github.com/CrystalGraphics/CrystalGraphics), which renders it.
+- **Loader-blind.** The engine names no Minecraft type; each loader only wires it in.
+- **Server-safe.** A dedicated server builds and sends UI trees with no GL and no fonts; the client
+  lays them out and draws them.
 
-**Working on CrystalGUI itself:** [`AGENTS.md`](AGENTS.md) — package map and the rules. Then, by task:
-[`docs/CGUI_STYLE_RENDER_PIPELINE.md`](docs/CGUI_STYLE_RENDER_PIPELINE.md) (cascade, stylesheets,
-painting) · [`docs/CGUI_WIDGETS.md`](docs/CGUI_WIDGETS.md) (the widgets) ·
-[`docs/CGUI_SERVER_AND_SERIALIZATION.md`](docs/CGUI_SERVER_AND_SERIALIZATION.md) (codecs, packets,
-sessions).
+## Using it
 
-## Build and run
+Start with [`docs/CGUI_SETUP.md`](docs/CGUI_SETUP.md) to add CrystalGUI to a mod, for one Minecraft
+version or many. Then [`docs/CGUI_BUILDING_UIS.md`](docs/CGUI_BUILDING_UIS.md) builds your first UI.
+
+## Working on it
 
 ```bash
+git clone --recursive https://github.com/CrystalGraphics/CrystalGUI.git   # CrystalGraphics, Taffy, the harness
+
 ./gradlew :core:compileJava
-./gradlew :core:test           # needs CrystalGraphics on the classpath
-./gradlew :core:headlessTest   # deliberately without it — the server-safety guard
+./gradlew :core:test --tests "<Class>"    # with CrystalGraphics
+./gradlew :core:headlessTest              # without it -- what a dedicated server has
+./gradlew checkAllTargets                 # every Minecraft version compiles
 ```
 
-Minecraft — every loader, one jar, real clients — is [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md). For
-rendering work the GL debug harness is faster:
+The fastest way to see the UI is the GL debug harness: no Minecraft, a window in seconds.
 
 ```bash
-./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"
+./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"   # every widget, a page each
+./gradlew :gl-debug-harness:runHarness --args="--list"                # every scene
 ```
 
-Harness scenes stay open until you close the window. Kill lingering `java.exe` processes matching
-`harness` after a run.
+| Read | For |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | The package map and the rules — first, before any change |
+| [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md) | The build, the shipped jars, running real Minecraft clients |
+| [`docs/CGUI_CROSS_VERSION.md`](docs/CGUI_CROSS_VERSION.md) | Code that must run on every Minecraft version and loader |
+| [`docs/CGUI_STYLE_RENDER_PIPELINE.md`](docs/CGUI_STYLE_RENDER_PIPELINE.md) | The cascade, stylesheets and painting |
+| [`docs/CGUI_WIDGETS.md`](docs/CGUI_WIDGETS.md) | Every widget, its parts and its states |
+| [`docs/CGUI_SERVER_AND_SERIALIZATION.md`](docs/CGUI_SERVER_AND_SERIALIZATION.md) | Codecs, packets and sessions |
 
-# VERY IMPORTANT
-During development, use the `Run Client (Java 25, hotswap)` task <br>
-<sub>(An IDE run configuration — not checked into this repository. `core/` is Java 25; every consumer
-below 25 gets its Java 8 copy — `docs/CGUI_BUILD.md`.)</sub>
+A library bundled into the shipped jars must run on Java 8: the jars are downgraded whole, and a JNI
+library's natives must be compiled against Java 8 too.
 
+## License
 
-## Bundled libraries
-The shipped jars are downgraded to Java 8 whole, bundled libraries included — the host jar carries none
-(Taffy is vendored), the language jar carries its grammars and engines.
-
-**DO NOT** bundle a library that relies on JNI *unless* its natives were compiled against Java 8.
-<br>Natives built against a higher Java API break on a Java 8 instance; recompile them if the project is
-open source.
-
-## Licence
-
-CrystalGUI is licensed under the **GNU Lesser General Public License, version 3 or later**
-(LGPL-3.0-or-later): [`COPYING.LESSER`](COPYING.LESSER), which builds on the GPL-3.0 in
-[`COPYING`](COPYING). Both texts ship inside each jar under `META-INF/`, beside the third-party notice
-(`notices/`, indexed by [`THIRD-PARTY.md`](THIRD-PARTY.md)).
+[LGPL-3.0-or-later](COPYING.LESSER), building on the [GPL-3.0](COPYING). Both texts ship in each jar
+under `META-INF/`, beside the third-party notices indexed by [`THIRD-PARTY.md`](THIRD-PARTY.md).
 
 ## Hosting
 

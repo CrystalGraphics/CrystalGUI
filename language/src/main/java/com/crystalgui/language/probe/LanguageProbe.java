@@ -1,6 +1,9 @@
 package com.crystalgui.language.probe;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -107,9 +110,23 @@ public final class LanguageProbe {
      * its {@code java} global, and Java by its simple name, since a script named {@code java.java} is a
      * class that obscures the package.
      */
-    private static final String SCRIPT_SOURCE = System.getProperty("crystalgui.autotest.scriptSource",
-            (SCRIPT != null && SCRIPT.endsWith(".js") ? "java.lang." : "")
-                    + "System.setProperty(\"crystalgui.autotest.scriptRan\", \"yes\");");
+    private static final String SCRIPT_SOURCE = scriptSource();
+
+    // A file's contents, from -Dcrystalgui.autotest.scriptSourceFile, win: a graph is too long and too full of
+    // quotes for a launcher's argument list.
+    private static String scriptSource() {
+        String file = emptyToNull(System.getProperty("crystalgui.autotest.scriptSourceFile"));
+        if (file != null) {
+            try {
+                return new String(Files.readAllBytes(Paths.get(file)), StandardCharsets.UTF_8);
+            } catch (IOException unreadable) {
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: cannot read {}: {}", file, unreadable.toString());
+            }
+        }
+        return System.getProperty("crystalgui.autotest.scriptSource",
+                (SCRIPT != null && SCRIPT.endsWith(".js") ? "java.lang." : "")
+                        + "System.setProperty(\"crystalgui.autotest.scriptRan\", \"yes\");");
+    }
 
     /** What the default script leaves behind, since its own output goes to the Run console, not the log. */
     private static final String SCRIPT_RAN = "crystalgui.autotest.scriptRan";

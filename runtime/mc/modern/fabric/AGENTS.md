@@ -2,7 +2,7 @@
 
 ## Target Versions
 
-MC 1.14.4–26.2 / Fabric, a node per `versions/<version>` (26.1.2 also claims 26.1 and 26.1.1); 1.14-1.14.3, 1.16 and 1.16.1 are refused, their
+MC 1.14.4–26.3 / Fabric, a node per `versions/<version>` (26.1.2 also claims 26.1 and 26.1.1); 1.14-1.14.3, 1.16 and 1.16.1 are refused, their
 only Fabric API builds lacking `lifecycle-events-v1` or `networking-api-v1`. Fabric API for 1.14 has no
 HUD callback either, so there the HUD is a node mixin on `Gui.render` (`mixin/HudHook`, gated by
 `CrystalGuiFabricMixins`). Below 1.16 Fabric API has no screen
@@ -44,6 +44,15 @@ consumes, Minecraft never sees. One path covers the HUD and a screen alike, so t
 > in front of it. Declining to forward then suppresses nothing, and the character lands in chat and in
 > the focused editor at the same time. Key, mouse-button and scroll are the slots Minecraft uses, which
 > is why only typing doubles and everything else looks correct.
+
+### From 26.3: SDL's event filter
+
+26.3 windows through SDL3 and ships no GLFW. The same chain is `SDL_SetEventFilter`, installed at
+`CLIENT_STARTED` after reading any filter already set with `SDL_GetEventFilter`: returning false drops
+an event before Minecraft polls it. Keys arrive as SDL scancodes and buttons count from 1; the host
+translates both. Characters are `SDL_EVENT_TEXT_INPUT`, which SDL sends only while text input is started
+-- `CgUiScreen` starts it while the desktop is up, as Minecraft's own text boxes do on focus. A filter can
+be called for an event pushed from another thread; it acts only on the render thread's.
 
 ## Toolchain, sources and checks
 

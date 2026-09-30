@@ -13,6 +13,8 @@ import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.framebuffer.CgPixelReadback;
+import com.crystalgraphics.gl.texture.CgHostSamplers;
+import com.crystalgraphics.platform.gl.state.CgGlCensus;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
@@ -166,13 +168,42 @@ public final class CgUiPaintContext {
         try {
             beginFrame(Math.max(1, width), Math.max(1, height));
             endFrame();
-        } catch (RuntimeException | LinkageError ignored) {
-            // As above.
+        } catch (RuntimeException | LinkageError e) {
+            // Not silent like the materials: a beginFrame that threw after marking the frame active left
+            // it active, and every later frame then refused to begin -- a warm-up that broke the context.
+            abortFrame();
+            CrystalGuiCore.LOGGER.warn("[cgui] paint warm-up failed; the first real frame builds it instead", e);
         }
     }
 
+    /** Leaves a frame that threw part-way: its batches closed, its GL state back, and no frame open. */
+    private void abortFrame() {
+        unparkSamplers();
+        endTextPath();
+        renderer.end();   // safe unbegun: begin() may be what never ran
+        if (glScope != null) {
+            glScope.close();
+            glScope = null;
+        }
+        frameActive = false;
+    }
+
+    private boolean samplersParked;
+
+    private void unparkSamplers() {
+        if (!samplersParked) return;
+        samplersParked = false;
+        CgHostSamplers.unpark();
+    }
+
     public static CgUiPaintContext getInstance() {
-        if (instance == null) instance = new CgUiPaintContext();
+        if (instance == null) {
+            // Built on first paint, before any frame's scope: its targets, renderers and first material
+            // binds would otherwise stay bound for the host.
+            try (CgGlScope ignored = CgGlState.saveAll()) {
+                instance = new CgUiPaintContext();
+            }
+        }
         return instance;
     }
 
@@ -603,6 +634,8 @@ public final class CgUiPaintContext {
     public void beginFrame(int screenWidth, int screenHeight) {
         frameId++;
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
+        // What the host handed us, off unless -Dcrystalgraphics.host.census. Before the scope reads anything.
+        CgGlCensus.at("gui");
         // Everything the UI asks of the GPU this frame, the composite included. @see #endFrame
         CgGpuTrace.begin(GPU_UI);
         layerOriginX = 0;
@@ -636,6 +669,11 @@ public final class CgUiPaintContext {
         // disables the test once the stack empties, and the host may have wanted it on.
         scissorStack.reset();
         CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
+
+        // The host's sampler objects override our textures' filtering and wrapping on the units they hold
+        // (Minecraft 1.21.5+ leaves three bound). Off until endFrame's composite, which samples too.
+        CgHostSamplers.park();
+        samplersParked = true;
 
         // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
         backdrop.captureSceneTarget();
@@ -843,6 +881,7 @@ public final class CgUiPaintContext {
             // fill on screen means the presenting broke, not the drawing — which is the reading the
             // comment above has described for two loaders without anything ever measuring it.
         }
+        unparkSamplers();
 
         currentMaterial = null;
         currentTexture = null;

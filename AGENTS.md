@@ -3,7 +3,7 @@
 **Project type**: Platform-agnostic retained-mode UI engine, shaped like a lightweight web browser
 (DOM + CSS cascade + Taffy layout + immediate-mode painting).
 **Authored in**: Java 25, with a Java 8 copy of every engine module for consumers below it · **Layout**: Taffy · **Backend**: CrystalGraphics
-**Ships**: one jar for Forge 1.7.10–26.2, NeoForge 1.20.2–26.2 and Fabric 1.14.4–26.2, plus an optional language jar — see [Build and run](#build-and-run)
+**Ships**: one jar for Forge 1.7.10–26.3, NeoForge 1.20.2–26.3 and Fabric 1.14.4–26.3, plus an optional language jar — see [Build and run](#build-and-run)
 
 ---
 
@@ -53,7 +53,7 @@ for the rest. What the goal leaves behind is the standard: every widget here was
 node editor, which is why the box tree lays out once, why `transform` never reflows, and why a canvas
 can hold ten thousand nodes.
 
-📄 **[CrystalShader Manifesto](CrystalGraphics/docs/CRYSTALSHADER_MANIFESTO.md)** — the rendering
+📄 **CrystalShader Manifesto** (`plan/crystalgraphics/archive/CRYSTALSHADER_MANIFESTO.md`, in the private plan repository) — the rendering
 philosophy, which outlives the milestone.
 
 # Build and run
@@ -69,6 +69,7 @@ questions too.
 | [`CrystalGraphics/docs/BUILD.md`](CrystalGraphics/docs/BUILD.md) | The node tree, the toolchain per node, the pin catalog, stub mode — and step one of adding a Minecraft version |
 | [`docs/CGUI_CROSS_VERSION.md`](docs/CGUI_CROSS_VERSION.md) · `/cross-version` skill | Code or a platform service that must run on every version |
 | [`docs/CGUI_PROFILING.md`](docs/CGUI_PROFILING.md) · `/profiling` skill | Measuring anything — a slow frame, a hitch, an action, a before/after. After [`CrystalGraphics/docs/PROFILING.md`](CrystalGraphics/docs/PROFILING.md) |
+| **[`CrystalGraphics/docs/MINECRAFT_RENDERING_CONVENTIONS.md`](CrystalGraphics/docs/MINECRAFT_RENDERING_CONVENTIONS.md)** | **Anything drawn into Minecraft's frame, and every new Minecraft version**: how each version changed that frame — 26.2's reversed depth and float depth, the samplers and scissor Minecraft leaves bound — and what the engine does about each |
 | [`CrystalGraphics/singlejar-logic/README.md`](CrystalGraphics/singlejar-logic/README.md) | How one jar serves every loader. Before touching `singlejar-logic/`, relocation, remapping or the class-major ceiling |
 | [`CrystalGraphics/singlejar-logic/STUBS.md`](CrystalGraphics/singlejar-logic/STUBS.md) | Before adding a node, changing its pins, or touching a branch script's toolchain |
 | [`runtime/mc/modern/README.md`](runtime/mc/modern/README.md) | Before touching a modern node; each branch has its own `AGENTS.md` |
@@ -84,6 +85,7 @@ questions too.
 ./gradlew :core:test --tests "<Class>"           # CrystalGraphics ON the classpath; name classes --
                                                  # a `com.crystalgui.ui.*` wildcard never reports
 ./gradlew :core:headlessTest                     # server-side tests, CrystalGraphics core deliberately absent
+./gradlew :core:trackedTest                      # every shipped shader and keyword variant, linked as on Vulkan
 ./gradlew :runtime:mc:1710:compileJava           # not in :core:check -- what a deletion from core/ breaks silently
 ```
 
@@ -151,15 +153,20 @@ in the pin catalog).
 
 | Loader | Versions | Not supported, and why |
 |---|---|---|
-| Forge | 1.7.10 · 1.8.8–1.12.2 (legacy tree) · 1.13.2–1.21.11 · 26.1.1–26.2 | 1.8 (no MixinBooter boots it) · 1.21 (Forge 51 has no HUD event) · 26.1 (Forge 62 fails in Minecraft's own bootstrap, before any mod loads) · never published: 1.14, 1.14.1, 1.16, 1.17, 1.20.5, 1.21.2 |
-| NeoForge | 1.20.2–1.21.11 · 26.1–26.2 | nothing for 1.20.1; 1.21.2, 1.21.6, 1.21.7, 1.21.9, 26.1 and 26.1.1 run its only builds, betas |
-| Fabric | 1.14.4–1.21.11 · 26.1–26.2 | 1.14–1.14.3, 1.16, 1.16.1, 1.21.9 — their only Fabric APIs lack a module the hosts use |
+| Forge | 1.7.10 · 1.8.8–1.12.2 (legacy tree) · 1.13.2–1.21.11 · 26.1.1–26.3 | 1.8 (no MixinBooter boots it) · 1.21 (Forge 51 has no HUD event) · 26.1 (Forge 62 fails in Minecraft's own bootstrap, before any mod loads) · never published: 1.14, 1.14.1, 1.16, 1.17, 1.20.5, 1.21.2 |
+| NeoForge | 1.20.2–1.21.11 · 26.1–26.3 | nothing for 1.20.1; 1.21.2, 1.21.6, 1.21.7, 1.21.9, 26.1, 26.1.1 and 26.3 run its only builds, betas |
+| Fabric | 1.14.4–1.21.11 · 26.1–26.3 | 1.14–1.14.3, 1.16, 1.16.1, 1.21.9 — their only Fabric APIs lack a module the hosts use |
 
 - **Java 8** runs Forge 1.13–1.16, legacy Forge and 1.7.10, dev runs included (`uniminedDevRun` swaps in
   the Java 8 copies). Below 1.17 the nodes are built by Loom and Unimined, above by ModDevGradle.
 - **26.x is Java 25 and unobfuscated**: every loader runs Mojang's names, so a Fabric node from 26.1 ships
-  as compiled, with no intermediary. On 26.2 Blaze3D may run on Vulkan, and CrystalGraphics then stands
-  down (`CgGraphicsLifecycle.standDown`).
+  as compiled, with no intermediary. On 26.2 Blaze3D may run on Vulkan, and CrystalGraphics then draws
+  through its own Vulkan device hosted on Minecraft's (`Blaze3dVulkanHost`); a dev client picks the API
+  with `-PcgGraphics=vulkan|opengl`. 26.3 under Vulkan still stands down (`CgGraphicsLifecycle.standDown`).
+- **26.3 windows through SDL3, and ships no GLFW**: its keys are SDL scancodes and its mouse buttons SDL's.
+  A 26.3 node registers CrystalGraphics' `runtime/lwjgl/sdl` services instead of the GLFW ones, a host
+  names a key through `CgUiInput.hostKey`, and Fabric's input chain is SDL's event filter. Blaze3D's GPU
+  layer moved to `com.mojang.renderpearl`, a `replacements.string` in both Stonecutter scripts.
 - **Below 1.19.3 Minecraft ships no JOML**, and those instances take CrystalGraphics' `crystalgraphics-joml`
   companion (`prismInstanceJoml` in `local.properties`).
 - **Forge 1.13.2 and 1.14.2–1.14.3 compile against Mojang names carried back from 1.14.4**, since Mojang
@@ -223,9 +230,13 @@ For anything visual, **prefer the harness over Minecraft**: it boots in seconds,
 context, and gives you a real GL surface. What it cannot see is anything that crosses the loader seam.
 
 ```bash
-./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"   # start here
-./gradlew :gl-debug-harness:runHarness --args="--list"                # all scenes
+./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"                   # start here
+./gradlew :gl-debug-harness:runHarness --args="--list"                                # all scenes
+./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery --device=vulkan"   # on CrystalGraphics' Vulkan device
 ```
+
+The harness is LWJGL 3 and GLFW; `--device=gl|tracked|vulkan` picks what `CgGL` runs on, `gl` by default —
+`gl-debug-harness/AGENTS.md` § *`--device`*.
 
 | Mode | Scene class | Covers |
 |---|---|---|
@@ -284,7 +295,7 @@ common — to local source (`gradle/module_integration/composite.settings.gradle
 | `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
 | `runtime/mc/1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :runtime:mc:1710:compileJava`). The real 1.7.10 host, and since W3 a HOST rather than a product — and since `plan_host` a host that decides nothing: `CgUiScreen` is Minecraft's screen lifecycle mapped onto `HostSession`'s, `Host1710` answers `HostServices`, `CgUiHud` answers `HostSession.PaintHost`, `CgUiInput` converts LWJGL2's origin and notch size and leaves the conventions to `HostPointer`, and `com.crystalgui.mc.v1710.probe` holds every probe adapter, of which `CgUiServerSmoke` is five facts over `probe.ServerSmoke`. `Mc1710Workspace` and `CgUiWindowMount` were **deleted**; anything still naming them is describing history. **It stays a module of its own on RetroFuturaGradle, deliberately** (legacy D3): it is aligned with the legacy host rather than folded into it — what the two share is in `runtime/mc/launchwrapper` and `core`, and the rest is how each version spells it. **Verified by `serverSmoke` and by running the client**; a green compile was never the claim. |
 | `runtime/mc/modern/` | ✅ | **Forge 1.13.2+, NeoForge 1.20.2+, Fabric 1.14.4+**, a Stonecutter tree — one source tree, a node per Minecraft version, `:runtime:mc:modern:<branch>:<version>`; **read `runtime/mc/modern/README.md` before touching it**. `common` holds the host — `CgUiScreen`, `HostModern`, `CgUiInput`, `CgUiHud`, `Connections`, `WorkspaceHostModern` and `LifecycleCrystalGUI`, **the one class a loader talks to**; `forge`/`neoforge`/`fabric` are registration only. Every one of those is wiring: what opens, when it is raised, which arm paints and who may write are `core`'s. Each loader node compiles against the `common` node of its own version, and against CrystalGraphics' node of that version, and builds a **thin** jar — its own classes plus `common` relocated under `com.crystalgui.mc.<loader>.common` — which is what the root merge consumes. |
-| `runtime/mc/shared/` | ✅ | **Java 8, merged once and never relocated**, for anything every loader variant must share without naming Minecraft. It holds one class: `CrystalGuiForgeMixins`, the plugin that gates the Forge 1.21.6 node's HUD mixin (a node mixin's plugin must load on every loader, 1.7.10 included). `LoaderProbe`, `CrashVariant` and (since J11.0) the whole **variant selector** are CrystalGraphics': CrystalGUI requires CrystalGraphics on every loader, so a second copy bought nothing. The hosts register under their own heading, `CrashVariant.label(NAME)`, and `checkSingleJar` forbids `com/crystalgraphics/` so a copy cannot creep back in as a split package. |
+| `runtime/mc/shared/` | ✅ | **Java 8, merged once and never relocated**, for anything every loader variant must share without naming Minecraft. It holds the node mixin plugins: `CrystalGuiForgeMixins` and `CrystalGuiFabricMixins`, which gate the HUD mixins of the Forge 1.21.6 and Fabric 1.14.4 nodes (a node mixin's plugin must load on every loader, 1.7.10 included). A dev run takes it as a library, not a mod. `LoaderProbe`, `CrashVariant` and (since J11.0) the whole **variant selector** are CrystalGraphics': CrystalGUI requires CrystalGraphics on every loader, so a second copy bought nothing. The hosts register under their own heading, `CrashVariant.label(NAME)`, and `checkSingleJar` forbids `com/crystalgraphics/` so a copy cannot creep back in as a split package. |
 | `runtime/mc/legacy/` | ✅ | **Forge 1.8–1.12.2**, a second Stonecutter tree: one branch, `forge`, a node per SRG plateau (`1.8.9`, `1.10.2`, `1.12.2`), MCP names through Unimined, each shipping in `com.crystalgui.mc.v<digits>`. The host is 1.7.10's ported: `CrystalGUILegacy` (both sides) and `CrystalGUILegacyClient` stand in for the `@Mod` and its proxies, and `Game`/`client.ClientGame` spell every member Minecraft renamed between plateaus, so nothing else carries a directive. **No mixin**: Forge 1.8 added the cancellable screen input events 1.7.10 lacked. It claims every Forge version from 1.8.8 to 1.12.2 — not 1.8, which no MixinBooter boots — and prodSmoke has drawn on all eleven (`188forge` … `1122forge` in `local.properties`). The language host is `src/lang`'s `com.crystalgui.mc.legacy.lang`: MCP stable names per Minecraft version, fetched through `forge/mcp-stable/{version}`. The player needs MixinBooter. **There is no legacy dev `serverSmoke`**: `runtime/mc/legacy/server_smoke.py` boots the shipped jars on a real installed Forge server per version instead, which is what caught the production-only defects dev servers hide (client classes absent, a `jar:` code source, FML trapping every exit). `CrystalGraphics/singlejar-logic/README.md` § *the legacy tree*. |
 | `runtime/mc/launchwrapper/` | ✅ | **What the two LaunchWrapper hosts share** — 1.7.10 and Forge 1.8–1.12.2 — where the code would otherwise be one copy per host: `LaunchWrapperBytes` (live and pre-transform class bytes, and Notch → SRG names, through LaunchWrapper's own renamer) and `LaunchWrapperLanguageProbe`. The language half only, so far: on both hosts' `lang` compile path and merged once into the language jar. Java 8 out, compiled by a 21 javac so it can read `:language`. |
 | `runtime/mc/modern-shared/` | ✅ | **`launchwrapper`'s modern counterpart**: what every ModLauncher and Knot node shares and names no Minecraft and no per-node class — `MinecraftBytes`, `MojangMappings`, `LanguageProbeModern`, `LanguageLifecycle` — merged once into the language jar instead of once per node. Package `com.crystalgui.mc.shared.modern`, clear of `com.crystalgui.mc.modern`, which the node relocation matches as a string prefix. A class whose only per-node reference is a service takes it as an argument (`LanguageLifecycle.bootstrapClient(ScriptServiceModern::forThisClient)`). Java 8 out. |
@@ -303,12 +314,13 @@ common — to local source (`gradle/module_integration/composite.settings.gradle
 importing `net.minecraft.*`, `cpw.mods.fml.*`, `net.minecraftforge.*`, or `org.lwjgl.*` fails the
 build. There are currently **no exemptions** — the guard is clean.
 
-## Three test source sets, and they are not interchangeable
+## Four test source sets, and they are not interchangeable
 
 | Source set | CrystalGraphics on classpath? | What belongs there |
 |---|---|---|
 | `core/src/test/` | ✅ `testImplementation` | Anything needing `CgIO`, fonts, `StyleSheet`, sprites, drawables |
 | `core/src/headlessTest/` | ❌ **core deliberately absent**, `platform` present | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic, and **`text.lang` — the language SPIs, which run here precisely because no engine and no grammar is on this classpath** |
+| `core/src/trackedTest/` | ✅ `core`, `platform` and `vulkan`, with LWJGL 3 | CrystalGUI's shaders on CrystalGraphics' tracked backend over shaderc: every `.shader`, pass and keyword variant, linked as a Vulkan device will link them. Its own task, `:core:trackedTest` — the backend it installs is process-wide |
 | `language/src/test/` | ✅ (plus the tree-sitter natives) | Grammars, queries, the tokenizer. Skips cleanly when a native will not load on the running platform |
 | harness scenes | ✅ full GL | Anything visual |
 
@@ -979,8 +991,8 @@ issue exactly one GPU draw call, or zero for a fully transparent tint.
 
 | Class | Role |
 |---|---|
-| `CgUiRect` | **The one drawable behind every `background`** — a rectangle with a `Fill` (flat colour, one stretched texture, or a 9-slice sprite), optional per-corner elliptical radii and an optional border. `CgUiDrawable.EMPTY` is one, filled with colour 0. **Two draw paths, and which runs is not a style choice**: a plain rect (no radius, no border, no 9-slice) goes through the frame's own batch — `fillRect` for a colour, one quad for a texture — and only a rect the batch cannot express takes the SDF material (`gui_rect.shader`), which carries sixteen per-draw uniforms. That split is why merging `CgUiQuad` and `CgUiSprite` into it cost nothing: measured on `cgui-gallery`, the material binds, draw calls, flushes and buffer maps per frame are all unchanged (192/76/76/37), and `cgui-ore-theme` is byte-identical. **Equality is by value for a flat fill and by identity otherwise**, which is what the two merged classes each did: the cascade discards a pushed candidate equal to the one present (so a repeated `background` write cannot retarget a live transition), while `TextureValue.sourceOf` is a weak map keyed by equality, where a value-equal drawable that cannot describe itself loses its CSS |
-| `CgUiSprite` | **A FILL, not a drawable** — `sprite.toRect()` is what a caller owing a `CgUiDrawable` wants. Full 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`, lazy UV cache). **It draws as ONE quad, not nine** — through `gui_rect.shader`'s `WITH_9SLICE_FILL`, the same nine-region remap done per pixel. Nine quads shared eight interior seams, and a seam is either hard (a staircase, once the sprite is off-axis) or softened from both sides (three-quarter coverage, a hairline); neither is fixable per quad, because each would have to know what its neighbour drew. It is also **2.5-3x cheaper**, measured on `cgui-sprite-stress`: the nine-quad path held material binds to 6 a frame against 1506 and still lost, because nine instances per sprite against one is what dominates (`quadRenderer.flush` drops tenfold) — the same shape as `SvgRasterCache`. Verified equal: `cgui-ore-theme` is byte-identical either way, and `cgui-nineslice`'s two columns now agree in all four tiling modes where `round` used to disagree by a pixel. A borderless sprite goes down the same sliced path, where zero borders degenerate to one region stretching the sprite's own sub-rect — the old wrap handed the raw texture to a plain fill and dropped the sub-rect, so an atlas sprite with a `border-radius` sampled the whole sheet. In that shader the seams are **supersampled**, not texel-filtered: a seam is a line in box-local pixels, and the texel filter reconstructs from `fwidth` in TEXEL space, which is meaningless where a stretched centre meets a 1:1 border. **There is no nine-quad path left** — a missing texture draws one stretched copy of the fallback checkerboard, which is what it always effectively was (`submit` drops the UV crop, so the nine pieces were nine copies of the whole checkerboard) and is the one case the sliced path cannot serve: it would sample the sprite's atlas UVs into an 8x8 fallback and read as a flat colour |
+| `CgUiRect` | **The one drawable behind every `background`** — a rectangle with a `Fill` (flat colour, one stretched texture, or a 9-slice sprite), optional per-corner elliptical radii and an optional border. `CgUiDrawable.EMPTY` is one, filled with colour 0. **Two draw paths, and which runs is not a style choice**: a plain rect (no radius, no border, no 9-slice) goes through the frame's own batch — `fillRect` for a colour, one quad for a texture — and only a rect the batch cannot express takes the SDF material (`gui_rect.shader`), which carries sixteen per-draw uniforms. That split is why merging `CgUiQuad` and `CgUiSprite` into it cost nothing: measured on `cgui-gallery`, the material binds, draw calls, flushes and buffer maps per frame are all unchanged (192/76/76/37), and `cgui-ore-theme` (since folded into `cgui-gallery`) was byte-identical. **Equality is by value for a flat fill and by identity otherwise**, which is what the two merged classes each did: the cascade discards a pushed candidate equal to the one present (so a repeated `background` write cannot retarget a live transition), while `TextureValue.sourceOf` is a weak map keyed by equality, where a value-equal drawable that cannot describe itself loses its CSS |
+| `CgUiSprite` | **A FILL, not a drawable** — `sprite.toRect()` is what a caller owing a `CgUiDrawable` wants. Full 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`, lazy UV cache). **It draws as ONE quad, not nine** — through `gui_rect.shader`'s `WITH_9SLICE_FILL`, the same nine-region remap done per pixel. Nine quads shared eight interior seams, and a seam is either hard (a staircase, once the sprite is off-axis) or softened from both sides (three-quarter coverage, a hairline); neither is fixable per quad, because each would have to know what its neighbour drew. It is also **2.5-3x cheaper**, measured on `cgui-sprite-stress`: the nine-quad path held material binds to 6 a frame against 1506 and still lost, because nine instances per sprite against one is what dominates (`quadRenderer.flush` drops tenfold) — the same shape as `SvgRasterCache`. Verified equal, on scenes since folded into `cgui-gallery`: `cgui-ore-theme` was byte-identical either way, and `cgui-nineslice`'s two columns agreed in all four tiling modes where `round` used to disagree by a pixel. A borderless sprite goes down the same sliced path, where zero borders degenerate to one region stretching the sprite's own sub-rect — the old wrap handed the raw texture to a plain fill and dropped the sub-rect, so an atlas sprite with a `border-radius` sampled the whole sheet. In that shader the seams are **supersampled**, not texel-filtered: a seam is a line in box-local pixels, and the texel filter reconstructs from `fwidth` in TEXEL space, which is meaningless where a stretched centre meets a 1:1 border. **There is no nine-quad path left** — a missing texture draws one stretched copy of the fallback checkerboard, which is what it always effectively was (`submit` drops the UV crop, so the nine pieces were nine copies of the whole checkerboard) and is the one case the sliced path cannot serve: it would sample the sprite's atlas UVs into an 8x8 fallback and read as a flat colour |
 | `CgUiCrossFade` | Blends two drawables, for `background` transitions |
 | `CgUiLayerBox` | Composites a stack; resolves `overlay-size` via `intrinsicWidth()` |
 | `CgUiRepeat` | Tiling modes |

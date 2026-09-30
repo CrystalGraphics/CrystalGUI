@@ -220,23 +220,33 @@ public final class UiTrace {
     }
 
     private static boolean closesOnExit;
+    private static boolean exitFilesWritten;
 
-    /**
-     * On exit, writes {@code meta.json} and — when anything was recorded — {@code report.txt}, at the tier
-     * {@code -Dcrystalgraphics.trace.report} names or the breakdown otherwise, then closes the log.
-     */
+    /** Writes the exit files at JVM exit, for a host that never stops the engine. @see #writeExitFiles */
     private static synchronized void closeOnExit() {
         if (closesOnExit || CgTraceLog.dir() == null) return;
         closesOnExit = true;
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            writeMeta();
-            if (CgTrace.frameCount() > 0) {
-                String asked = System.getProperty("crystalgraphics.trace.report");
-                if (asked == null || asked.isEmpty()) writeReport(CgTraceReport.Tier.BREAKDOWN);
-                else writeReportIfAsked();
-            }
-            CgTraceLog.stop();
-        }, "crystalgui-trace-exit"));
+        Runtime.getRuntime().addShutdownHook(new Thread(UiTrace::writeExitFiles, "crystalgui-trace-exit"));
+    }
+
+    /**
+     * Writes {@code meta.json} and — when anything was recorded — {@code report.txt}, at the tier
+     * {@code -Dcrystalgraphics.trace.report} names or the breakdown otherwise, then closes the log. Once.
+     *
+     * <p>{@code CgUiLifecycle.onShutdown} calls it when the game closes, and the JVM exit is the fallback. On
+     * a mod loader that fallback comes too late: the loader's class loader has closed, and the report cannot
+     * load the classes it needs.</p>
+     */
+    public static synchronized void writeExitFiles() {
+        if (exitFilesWritten || CgTraceLog.dir() == null) return;
+        exitFilesWritten = true;
+        writeMeta();
+        if (CgTrace.frameCount() > 0) {
+            String asked = System.getProperty("crystalgraphics.trace.report");
+            if (asked == null || asked.isEmpty()) writeReport(CgTraceReport.Tier.BREAKDOWN);
+            else writeReportIfAsked();
+        }
+        CgTraceLog.stop();
     }
 
     /**

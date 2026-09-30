@@ -7,13 +7,13 @@ import com.crystalgraphics.mc.CgAssetReloader;
 import com.crystalgraphics.mc.CgReloadListener;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
-import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
@@ -159,8 +159,9 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
 
-        // Warmup the paint context, around 1000ms on first init done before world frame time.
-        try (CgGlScope ignored = CgGlState.save(CgGlSlot.DEPTH, CgGlSlot.PROGRAM)) {
+        // Warmup the paint context, around 1000ms on first init done before world frame time. Every domain:
+        // a material bind applies its pass's whole render state, and this runs inside the host's world pass.
+        try (CgGlScope ignored = CgGlState.saveAll()) {
             CgUiPaintContext.getInstance().warm(width, height);
         }
     }
@@ -246,6 +247,12 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
      * already isolates this listener as a whole, but keeping it local means the log names CrystalGUI
      * as the culprit.</p>
      */
+    /** The game is closing: this run's trace files, while the classes they need can still load. */
+    @Override
+    public void onShutdown() {
+        UiTrace.writeExitFiles();
+    }
+
     @Override
     public void onDestroy() {
         // NO DOCUMENT TEARDOWN HERE, and that is not an omission. `UIWindow.shutdownAll()` detached

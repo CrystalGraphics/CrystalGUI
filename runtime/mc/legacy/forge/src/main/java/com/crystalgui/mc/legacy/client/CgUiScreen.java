@@ -3,6 +3,7 @@ package com.crystalgui.mc.legacy.client;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.api.render.CgRenderPipeline;
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
@@ -106,10 +107,6 @@ public final class CgUiScreen extends GuiScreen {
     @Nullable
     public static Desktop desktop() {
         return HostSession.isInstalled() ? HostSession.session().desktop() : null;
-    }
-
-    static float frameDelta() {
-        return HostSession.session().frameDelta();
     }
 
     /** Whether the desktop has been built — read by the pump before it touches anything. */
@@ -233,11 +230,13 @@ public final class CgUiScreen extends GuiScreen {
 
         @Override
         public void enter() {
+            CgGL.fromHost();
             CgGlState.invalidateAllIfPresent();
         }
 
         @Override
         public void leave() {
+            CgGL.toHost();
             // Through GlStateManager, so Minecraft's own cache agrees with the driver it presents on.
             GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
             OpenGlHelper.glUseProgram(0);
