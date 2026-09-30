@@ -224,9 +224,13 @@ For anything visual, **prefer the harness over Minecraft**: it boots in seconds,
 context, and gives you a real GL surface. What it cannot see is anything that crosses the loader seam.
 
 ```bash
-./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"   # start here
-./gradlew :gl-debug-harness:runHarness --args="--list"                # all scenes
+./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"                   # start here
+./gradlew :gl-debug-harness:runHarness --args="--list"                                # all scenes
+./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery --device=vulkan"   # on CrystalGraphics' Vulkan device
 ```
+
+The harness is LWJGL 3 and GLFW; `--device=gl|tracked|vulkan` picks what `CgGL` runs on, `gl` by default —
+`gl-debug-harness/AGENTS.md` § *`--device`*.
 
 | Mode | Scene class | Covers |
 |---|---|---|
