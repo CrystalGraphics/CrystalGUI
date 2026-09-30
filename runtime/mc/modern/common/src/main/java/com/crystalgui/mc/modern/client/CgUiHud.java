@@ -94,9 +94,7 @@ public final class CgUiHud {
         // session is: the engine initialises on the first WORLD render, and these hooks also fire over a
         // title screen where there has never been one.
         if (!HostSession.isInstalled() || !CgUiHostGl.contextIsLive()) return;
-        HostSession session = HostSession.session();
-        // The delta read ONCE and passed in -- reading it again inside would advance the clock twice.
-        session.paint(arm, session.frameDelta(), HOST);
+        HostSession.session().paint(arm, HOST);
     }
 
     // ── Input, offered to the compositor ────────────────────────────────────────────────────────

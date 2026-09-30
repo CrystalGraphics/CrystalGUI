@@ -112,10 +112,6 @@ public final class CgUiScreen extends Screen {
         return app instanceof WorkbenchApplication ? ((WorkbenchApplication) app).workbench() : null;
     }
 
-    static float frameDelta() {
-        return HostSession.session().frameDelta();
-    }
-
     static float uiScale() {
         return HostSession.session().services().uiScale();
     }
