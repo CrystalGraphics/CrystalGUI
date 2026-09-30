@@ -119,6 +119,10 @@ guarantees only that a superseded job's result never lands; comparing the stamp 
 
 - **`drain()` on the UI thread, once per frame.** It returns whether anything is outstanding, so a
   ticker can stop when idle.
+- **Off the UI thread, own a scheduler over the shared pool** and drain it on your own thread:
+  `new JobScheduler(JobScheduler.sharedPool(), System::currentTimeMillis, 1)`. `shared()` is drained by
+  the UI frame, which a dedicated server has none of, and its `onDone` would land on the render thread.
+  `WatchHub` is the reference.
 - **Never touch UI or document state from a job body.** Return an immutable value; the `onDone` handler
   runs on the UI thread.
 - **Snapshot what the job needs before submitting**, and stamp it with `buffer.version()`.
@@ -941,6 +945,21 @@ keep separate ones.
 - **`read()` must answer when the origin is gone** — empty bytes, never a throw. A derived tab outlives
   what it was derived from, and a pane can render a banner over empty but not over an exception.
 - **Registration answers a `Disposable`**, so a mod that unloads takes its schemes with it.
+
+### The server's watcher — `WatchHub.update`
+
+A host carries the watcher's answers and decides nothing about it: one call a tick.
+
+```java
+fanOut(hub.update(serverActor, deltaSeconds));   // events, what the server did, the reconcile
+```
+
+`update` drains the filesystem's events itself, so nothing else may. Every `WatchHub.RECONCILE_SECONDS`
+it re-stats every watched file as a job on its own `JobScheduler`: authorised on the calling thread (a
+permission may read host state), stat-ed on the shared pool, and judged on a later `update`, merged ahead
+of that tick's events so a deletion it finds can still pair into a rename. A path whose etag moved since
+the sweep began is skipped, so a late stat never undoes a save. `WorkspaceService.statsFor` is the split
+that makes it possible; a `CgFileSystem.stat` may be called from the worker.
 
 ### The document is the identity; the resource is a property of it
 

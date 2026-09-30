@@ -3,6 +3,7 @@ package com.crystalgui.app.frameprofiler;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
+import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
@@ -14,6 +15,7 @@ import com.crystalgui.core.trace.UiTrace;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -165,9 +167,31 @@ public final class ProfilerSettings {
         SettingsModel loaded = SettingsCodec.fromJson(appStorage.read(FILE));
         SETTINGS.replaceLayer(SettingsLayer.USER, loaded.asMap());
         listen();
-        applyCapacity();
+        applyCapacityAtLaunch();
         applyHitch();
         applyImages();
+    }
+
+    /** The ring flags a launch may pass; any one of them sizes the ring instead of {@code settings.json}. */
+    private static final String[] RING_FLAGS = {
+            "crystalgraphics.trace.frames", "crystalgraphics.trace.firstFrames", "crystalgraphics.trace.zones"};
+
+    /**
+     * The settings' ring, unless the launch sized it with a {@code -D} flag: CgTrace read those at class
+     * init, and the flag is the more deliberate choice. An edit on the settings page still applies.
+     */
+    private static void applyCapacityAtLaunch() {
+        String line;
+        if (Arrays.stream(RING_FLAGS).anyMatch(flag -> System.getProperty(flag) != null)) {
+            line = String.format("[cgui] trace ring from -D flags, not settings.json: first %d, newest %d, zones %d",
+                    CgTrace.firstFrames(), CgTrace.newestFrames(), CgTrace.zoneCapacity());
+        } else {
+            applyCapacity();
+            line = String.format("[cgui] trace ring from settings.json: first %d, newest %d, zones per frame %d",
+                    firstFrames(), frames(), zonesPerFrame());
+        }
+        CgTraceLog.line(line);
+        CrystalGuiCore.LOGGER.info(line);
     }
 
     /** The profiler's autostart: load, apply, and start recording if asked to. */

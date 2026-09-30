@@ -67,6 +67,12 @@ public interface GraphContext extends SurfaceContext {
      */
     int nodesRevision();
 
+    /** Whether nothing {@code node} paints is in view, so per-node work for it may stop. */
+    boolean isCulled(UIElement node);
+
+    /** Changes whenever a node is culled or comes back into view. @see #nodesRevision */
+    int cullRevision();
+
     /** The widget projecting {@code nodeId}, or null. */
     @Nullable
     GraphNode widgetFor(String nodeId);

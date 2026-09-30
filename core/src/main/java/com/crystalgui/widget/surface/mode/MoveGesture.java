@@ -3,6 +3,8 @@ package com.crystalgui.widget.surface.mode;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.widget.canvas.WorldRect;
@@ -73,9 +75,12 @@ public final class MoveGesture {
                 // detach the very element the drag is anchored to.
                 delta[0] = dx / surface.zoom();
                 delta[1] = dy / surface.zoom();
-                for (int i = 0; i < items.size(); i++) {
-                    float[] origin = origins.get(i);
-                    surface.move(items.get(i), origin[0] + delta[0], origin[1] + delta[1]);
+                CgTrace.add(UiTrace.FRAME, "surface-moved-items", items.size());
+                try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "surface:move")) {
+                    for (int i = 0; i < items.size(); i++) {
+                        float[] origin = origins.get(i);
+                        surface.move(items.get(i), origin[0] + delta[0], origin[1] + delta[1]);
+                    }
                 }
             }
 

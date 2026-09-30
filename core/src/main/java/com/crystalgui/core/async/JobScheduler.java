@@ -97,9 +97,27 @@ public final class JobScheduler implements Disposable {
 
     private boolean disposed;
 
-    /** A scheduler on a small shared daemon pool and the system clock — what the application uses. */
+    /** A scheduler on the shared daemon pool and the system clock — what the application uses. */
     public JobScheduler() {
-        this(defaultExecutor(), System::currentTimeMillis, defaultConcurrency());
+        this(sharedPool(), System::currentTimeMillis, defaultConcurrency());
+    }
+
+    /**
+     * The one worker pool, for a scheduler drained somewhere other than the UI frame — a server
+     * component's own, drained on the server thread.
+     *
+     * <pre>{@code
+     * JobScheduler mine = new JobScheduler(JobScheduler.sharedPool(), System::currentTimeMillis, 1);
+     * mine.drain();   // on the thread that owns `mine`, once a tick
+     * }</pre>
+     */
+    public static Executor sharedPool() {
+        return SharedPool.EXECUTOR;
+    }
+
+    /** Created on first use, from whichever thread asks first. */
+    private static final class SharedPool {
+        static final Executor EXECUTOR = defaultExecutor();
     }
 
     /**
@@ -297,7 +315,8 @@ public final class JobScheduler implements Disposable {
     // ── The heartbeat ───────────────────────────────────────────────────────────────────────────
 
     /**
-     * Delivers finished results and starts due work. <b>Call once per frame, on the UI thread.</b>
+     * Delivers finished results and starts due work. <b>Call once per frame or tick, on the thread that
+     * owns this scheduler</b> — the UI thread for {@link #shared()}, a server's for its own.
      *
      * <p><b>Deliver, promote, deliver.</b> The first pass hands back what finished since the last frame.
      * The second exists because a job may complete <em>during</em> promotion — always, on a same-thread

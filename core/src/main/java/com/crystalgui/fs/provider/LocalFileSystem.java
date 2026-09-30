@@ -1,5 +1,7 @@
 package com.crystalgui.fs.provider;
 
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
@@ -17,6 +19,7 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -24,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -149,10 +153,11 @@ public final class LocalFileSystem implements CgFileSystem {
     @Override
     public CgFileEntry stat(CgPath path) {
         Path target = resolve(path);
-        try {
-            boolean directory = Files.isDirectory(target);
-            long size = directory ? 0L : Files.size(target);
-            long mtime = Files.getLastModifiedTime(target).toMillis();
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FS, "fs:stat.attributes")) {
+            BasicFileAttributes attributes = Files.readAttributes(target, BasicFileAttributes.class);
+            boolean directory = attributes.isDirectory();
+            long size = directory ? 0L : attributes.size();
+            long mtime = attributes.lastModifiedTime().toMillis();
             return directory
                     ? CgFileEntry.directory(nameOf(path, target), mtime)
                     : CgFileEntry.file(nameOf(path, target), size, mtime);
@@ -321,24 +326,6 @@ public final class LocalFileSystem implements CgFileSystem {
     // ── Resolution: the one security boundary this class owns ───────────────────────────────────
 
     /**
-     * A {@link CgPath} as a real location, proven to be inside its project.
-     *
-     * <p>Two checks, and the second is the one that matters:</p>
-     * <ol>
-     *   <li><b>Lexical.</b> Belt and braces — {@code CgPath} already refuses an escaping path at
-     *       construction, so this can only fire if that guarantee is ever broken. Cheap enough to keep as
-     *       a tripwire.</li>
-     *   <li><b>Real.</b> The deepest <em>existing</em> ancestor is resolved with
-     *       {@link Path#toRealPath}, which follows every symlink, and must still lie under the project's
-     *       own real root. This is what lexical analysis cannot do: {@code project:link/secret} contains
-     *       no {@code ..} at all and may still point at {@code /etc}.</li>
-     * </ol>
-     *
-     * <p>The <em>deepest existing</em> ancestor, rather than the target, because a path being written for
-     * the first time does not exist yet — {@code toRealPath} would simply throw. Whatever does not exist
-     * cannot be a symlink, so checking the part that does is sufficient and complete.</p>
-     */
-    /**
      * Reads a window of a file without loading the rest of it.
      *
      * <p>A {@link java.nio.channels.SeekableByteChannel} rather than {@code Files.readAllBytes} plus a
@@ -374,6 +361,25 @@ public final class LocalFileSystem implements CgFileSystem {
         }
     }
 
+    /**
+     * A {@link CgPath} as a real location, proven to be inside its project.
+     *
+     * <p>Two checks, and the second is the one that matters:</p>
+     * <ol>
+     *   <li><b>Lexical.</b> Belt and braces — {@code CgPath} already refuses an escaping path at
+     *       construction, so this can only fire if that guarantee is ever broken. Cheap enough to keep as
+     *       a tripwire.</li>
+     *   <li><b>Real.</b> The path must not leave the project through a link: {@code project:link/secret}
+     *       contains no {@code ..} at all and may still point at {@code /etc}. Walked from the root down
+     *       without following links: while no step is a link (or a Windows junction, which reads as
+     *       {@code isOther}), the written path is the real one. At the first link, the deepest existing
+     *       ancestor is resolved with {@link Path#toRealPath} and must lie under the project's real
+     *       root.</li>
+     * </ol>
+     *
+     * <p>The walk stops at the first step that does not exist: a path being written for the first time
+     * has no real form yet, and whatever does not exist cannot be a link.</p>
+     */
     private Path resolve(CgPath path) {
         WorkspaceProject project = projects.require(path);
         Path root = project.root().toAbsolutePath().normalize();
@@ -387,22 +393,55 @@ public final class LocalFileSystem implements CgFileSystem {
                     "path escapes its project root: " + path);
         }
 
-        Path realRoot;
+        Path realRoot = realRootOf(root, path);
+        if (target.equals(root)) return target;
+
+        // Measured at 0.4 ms a call on Windows: toRealPath opens a handle per path, and a watcher poll
+        // stats every watched file twice a second.
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FS, "fs:resolve.walk")) {
+            Path at = root;
+            for (Path name : root.relativize(target)) {
+                at = at.resolve(name);
+                BasicFileAttributes step;
+                try {
+                    step = Files.readAttributes(at, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                } catch (IOException missing) {
+                    return target;
+                }
+                if (step.isSymbolicLink() || step.isOther()) {
+                    requireInside(target, realRoot, path);
+                    return target;
+                }
+            }
+        }
+        return target;
+    }
+
+    /** The project root's real path, resolved once: a root that later became a link fails the per-path check against it. */
+    private Path realRootOf(Path root, CgPath path) {
+        Path known = realRoots.get(root);
+        if (known != null) return known;
         try {
-            realRoot = root.toRealPath();
+            Path real = root.toRealPath();
+            realRoots.put(root, real);
+            return real;
         } catch (IOException e) {
             // The project's own directory is missing or unreadable. Reported as the path not being
             // found rather than as a configuration error, because a client must not learn the difference.
             throw CgFileSystemException.notFound(path);
         }
+    }
 
+    private final Map<Path, Path> realRoots = new ConcurrentHashMap<>();
+
+    /** The deepest existing ancestor of {@code target}, followed through every link, must stay under {@code realRoot}. */
+    private static void requireInside(Path target, Path realRoot, CgPath path) {
         Path existing = target;
         while (existing != null && !Files.exists(existing, LinkOption.NOFOLLOW_LINKS)) {
             existing = existing.getParent();
         }
         if (existing == null) throw CgFileSystemException.notFound(path);
-
-        try {
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FS, "fs:resolve.realPath")) {
             if (!existing.toRealPath().startsWith(realRoot)) {
                 throw new CgFileSystemException(CgFileError.INVALID_PATH,
                         "path leaves its project through a link: " + path);
@@ -410,7 +449,6 @@ public final class LocalFileSystem implements CgFileSystem {
         } catch (IOException e) {
             throw CgFileSystemException.notFound(path);
         }
-        return target;
     }
 
     private static String nameOf(CgPath path, Path target) {

@@ -8,6 +8,9 @@ import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceHints;
 import com.crystalgraphics.trace.CgTraceSnapshot;
+import com.crystalgui.core.async.JobKey;
+import com.crystalgui.core.async.JobLane;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.trace.TraceFiles;
 import com.crystalgui.core.trace.UiHints;
@@ -90,35 +93,151 @@ public final class ProfilerModel {
     }
 
     private static final int REFRESH_ZONE = CgTrace.name("viewer:refresh");
+    private static final int SNAPSHOT_ZONE = CgTrace.name("viewer:snapshot");
 
     private void refreshNow() {
-        long was = selected >= 0 && selected < snapshot.frames().size()
-                ? snapshot.frames().get(selected).index() : -1L;
+        CgTraceSnapshot next;
         // FRAMES AND COUNTERS ONLY. A full snapshot copies every zone held, which at ten thousand frames
-        // is millions of objects four times a second; zones are fetched for the selection alone.
-        snapshot = CgTrace.frameSnapshot();
+        // is millions of objects four times a second; zones are fetched for the selection alone. And the
+        // counters carried forward from the last refresh, for the same reason -- unless a background
+        // refresh is advancing that chain right now, which two callers may not do at once.
+        try (CgTrace.Zone ignored = CgTrace.zone(VIEWER, SNAPSHOT_ZONE)) {
+            next = refreshing() ? CgTrace.frameSnapshot() : CgTrace.frameSnapshot(snapshot);
+        }
+        generation++;
+        adopt(next, null);
+    }
+
+    /** Makes {@code next} the snapshot, moving the selection as {@link #refresh} describes, then announces it. */
+    private void adopt(CgTraceSnapshot next, @Nullable Prepared prepared) {
+        long was = selectedFrameIndex();
+        snapshot = next;
         cachedZonesKey = null;
         images.clear();
         landImages();
         List<CgFrameRecord> frames = snapshot.frames();
-        if (following || was < 0L) {
-            selected = frames.size() - 1;
+        int at = positionAfter(frames, following, was);
+        selected = at;
+        if (following || was < 0L || at < 0 || frames.get(at).index() != was) {
             rangeFrom = rangeTo = -1;
-            selectedZone = null;
-        } else {
-            int found = -1;
-            for (int i = 0; i < frames.size(); i++) {
-                if (frames.get(i).index() == was) {
-                    found = i;
-                    break;
-                }
-            }
-            // The paused frame fell off the end of the ring: there is nothing to hold, so show the
-            // oldest that is left rather than jumping somewhere unrelated.
-            selected = found >= 0 ? found : frames.isEmpty() ? -1 : 0;
-            if (found < 0) rangeFrom = rangeTo = -1;
+            if (following || was < 0L) selectedZone = null;
         }
+        if (prepared != null) seed(prepared);
         onChanged.emit();
+    }
+
+    /** The selected frame's absolute index, or -1. */
+    private long selectedFrameIndex() {
+        return selected >= 0 && selected < snapshot.frames().size() ? snapshot.frames().get(selected).index() : -1L;
+    }
+
+    /**
+     * Where the selection lands in {@code frames}: the newest while following, else frame {@code was} again.
+     * A paused frame that fell off the end of the ring lands on the oldest left rather than somewhere unrelated.
+     */
+    private static int positionAfter(List<CgFrameRecord> frames, boolean following, long was) {
+        if (following || was < 0L) return frames.size() - 1;
+        for (int i = 0; i < frames.size(); i++) {
+            if (frames.get(i).index() == was) return i;
+        }
+        return frames.isEmpty() ? -1 : 0;
+    }
+
+    // ── Refreshing off the frame thread ─────────────────────────────────────────────────────
+
+    /**
+     * {@link #refresh()} with the work on a worker: the snapshot and, for one selected frame, its zones,
+     * tables and hints. What was showing stays until the answer lands in {@link #drainJobs()}. Skipped while
+     * one is still running, since two may not advance the snapshot chain at once.
+     *
+     * <pre>{@code
+     * // once a frame, on the thread that owns the panel:
+     * model.drainJobs();
+     * if (clockSaysRefresh) model.refreshInBackground();
+     * }</pre>
+     */
+    public void refreshInBackground() {
+        if (refreshing()) {
+            CgTrace.add(VIEWER, "viewer-refresh-busy", 1);
+            return;
+        }
+        CgTraceSnapshot previous = snapshot;
+        long was = selectedFrameIndex();
+        boolean follow = following;
+        boolean single = !hasRange() || follow;
+        boolean viewer = showViewer;
+        int submitted = generation;
+        jobs.job(refreshKey, JobLane.BACKGROUND, context -> prepare(previous, follow, was, single, viewer))
+                .onDone(result -> {
+                    // A refresh taken on this thread meanwhile is newer than this one.
+                    if (submitted == generation) adopt(result.snapshot(), result.prepared());
+                })
+                .submit();
+        jobs.drain();
+    }
+
+    /** Lands a finished {@link #refreshInBackground}. Call it once a frame from the thread that owns the model. */
+    public void drainJobs() {
+        jobs.drain();
+    }
+
+    private boolean refreshing() {
+        return jobs.runningCount() + jobs.waitingCount() > 0;
+    }
+
+    private final JobScheduler jobs = new JobScheduler(JobScheduler.sharedPool(), System::currentTimeMillis, 1);
+    private final JobKey refreshKey = JobKey.of(this, "profiler-refresh");
+    /** Bumped by every refresh taken on the owning thread, so a background answer older than it is dropped. */
+    private int generation;
+
+    /** A background refresh's answer. */
+    private record Refreshed(CgTraceSnapshot snapshot, @Nullable Prepared prepared) {
+    }
+
+    /** One frame's selection, worked out ahead: used only if the selection is still that frame when it lands. */
+    private record Prepared(String zonesKey, FetchedZones zones, List<CgTraceAggregate.Node> tree,
+                            List<CgTraceAggregate.Stat> stats, String hintsKey, List<HintRow> hints) {
+    }
+
+    /** The worker's half: reads the ring and the snapshot it makes, and nothing of the model's. */
+    private static Refreshed prepare(CgTraceSnapshot previous, boolean following, long was, boolean single,
+                                     boolean showViewer) {
+        CgTraceSnapshot next;
+        try (CgTrace.Zone ignored = CgTrace.zone(VIEWER, SNAPSHOT_ZONE)) {
+            next = CgTrace.frameSnapshot(previous);
+        }
+        List<CgFrameRecord> frames = next.frames();
+        int at = positionAfter(frames, following, was);
+        if (at < 0 || !single) return new Refreshed(next, null);
+        try (CgTrace.Zone ignored = CgTrace.zone(VIEWER, PREPARE_ZONE)) {
+            CgFrameRecord frame = frames.get(at);
+            FetchedZones zones = fetchZones(frame, frame, showViewer);
+            List<CgTraceAggregate.Node> tree = CgTraceAggregate.tree(zones.shown());
+            List<CgTraceAggregate.Stat> stats = CgTraceAggregate.byCost(zones.shown());
+            List<HintRow> hints = hintsOver(next, at, at, tree, showViewer);
+            return new Refreshed(next, new Prepared(zonesKey(frame, frame, showViewer), zones, tree, stats,
+                    hintsKey(frame, frame), hints));
+        }
+    }
+
+    private static final int PREPARE_ZONE = CgTrace.name("viewer:prepare");
+
+    /** Installs {@code prepared} as the selection's caches, if the selection is still the frame it was made for. */
+    private void seed(Prepared prepared) {
+        List<CgFrameRecord> frames = snapshot.frames();
+        if (hasRange() || selected < 0 || selected >= frames.size()) return;
+        CgFrameRecord frame = frames.get(selected);
+        if (!prepared.zonesKey().equals(zonesKey(frame, frame, showViewer))) return;
+        cachedZones = prepared.zones().shown();
+        cachedAllZones = prepared.zones().all();
+        cachedViewerNanos = prepared.zones().viewerNanos();
+        cachedZonesKey = prepared.zonesKey();
+        tree = prepared.tree();
+        treeZones = cachedZones;
+        stats = prepared.stats();
+        statsZones = cachedZones;
+        cachedHints = prepared.hints();
+        cachedHintsKey = prepared.hintsKey();
     }
 
     // ── Live or paused ──────────────────────────────────────────────────────────────────────
@@ -383,6 +502,10 @@ public final class ProfilerModel {
      * every frame it held that was still pending stayed pending however long it was looked at.</p>
      */
     public CgFrameRecord withGpu(CgFrameRecord frame) {
+        return gpuOf(frame);
+    }
+
+    private static CgFrameRecord gpuOf(CgFrameRecord frame) {
         if (frame.hasGpu()) return frame;
         CgFrameRecord now = CgTrace.frame(frame.index());
         return now != null && now.hasGpu() ? now : frame;
@@ -486,13 +609,19 @@ public final class ProfilerModel {
         }
         if (anyGpu) series.put(GPU_SERIES, gpu);
 
-        Map<Long, Integer> positionOf = new LinkedHashMap<>();
-        for (int i = 0; i < frames.size(); i++) positionOf.put(frames.get(i).index(), i);
-
-        for (CgTraceSnapshot.CounterView counter : snapshot.counters()) {
-            Integer at = positionOf.get(counter.frameIndex());
-            if (at == null) continue;
-            long[] values = series.computeIfAbsent(counter.name(), name -> absentSeries(frames.size()));
+        // BY BINARY SEARCH over the frames' indices, which are ascending: a boxed map lookup per counter was a
+        // Long allocated for every counter in the ring, every refresh.
+        long[] indices = frameIndices();
+        List<CgTraceSnapshot.CounterView> counters = snapshot.counters();
+        for (int c = 0; c < counters.size(); c++) {
+            CgTraceSnapshot.CounterView counter = counters.get(c);
+            int at = Arrays.binarySearch(indices, counter.frameIndex());
+            if (at < 0) continue;
+            long[] values = series.get(counter.name());
+            if (values == null) {
+                values = absentSeries(frames.size());
+                series.put(counter.name(), values);
+            }
             values[at] = counter.value();
         }
         return series;
@@ -616,31 +745,44 @@ public final class ProfilerModel {
         if (frames.isEmpty() || selected < 0 || selected >= frames.size()) return List.of();
         CgFrameRecord first = frames.get(hasRange() ? rangeFrom : selected);
         CgFrameRecord last = frames.get(hasRange() ? Math.min(rangeTo, frames.size() - 1) : selected);
-        String key = first.index() + ":" + last.index();
         // ONE FETCH PER SELECTION, not per reader: the chart, both tables and the header each ask.
-        String wanted = key + ":" + showViewer;
+        String wanted = zonesKey(first, last, showViewer);
         if (!wanted.equals(cachedZonesKey)) {
-            List<CgTraceSnapshot.ZoneView> all = CgTrace.zonesBetween(first.beginNanos(), last.endNanos());
-            List<CgTraceSnapshot.ZoneView> shown = new ArrayList<>(all.size());
-            long viewer = 0L;
-            long reach = Long.MIN_VALUE;
-            for (CgTraceSnapshot.ZoneView zone : all) {
-                boolean own = VIEWER.name().equals(zone.channel());
-                // THE UNION, not the sum: the viewer's zones nest inside each other and inside the
-                // frame's, so their recorded depth says nothing; ordered by start, overlap is one pass.
-                if (own && !zone.isOpen()) {
-                    long from = Math.max(zone.startNanos(), reach);
-                    if (zone.endNanos() > from) viewer += zone.endNanos() - from;
-                    reach = Math.max(reach, zone.endNanos());
-                }
-                if (!own || showViewer) shown.add(zone);
-            }
-            cachedZones = shown;
-            cachedAllZones = all.size();
-            cachedViewerNanos = viewer;
+            FetchedZones fetched = fetchZones(first, last, showViewer);
+            cachedZones = fetched.shown();
+            cachedAllZones = fetched.all();
+            cachedViewerNanos = fetched.viewerNanos();
             cachedZonesKey = wanted;
         }
         return cachedZones;
+    }
+
+    /** {@link #zonesOfSelection}'s cache key: the frames it spans, and whether the viewer's own are shown. */
+    private static String zonesKey(CgFrameRecord first, CgFrameRecord last, boolean showViewer) {
+        return first.index() + ":" + last.index() + ":" + showViewer;
+    }
+
+    /** The zones of {@code [first, last]}, the count of every zone, and the viewer's own time among them. */
+    private record FetchedZones(List<CgTraceSnapshot.ZoneView> shown, int all, long viewerNanos) {
+    }
+
+    private static FetchedZones fetchZones(CgFrameRecord first, CgFrameRecord last, boolean showViewer) {
+        List<CgTraceSnapshot.ZoneView> all = CgTrace.zonesBetween(first.beginNanos(), last.endNanos());
+        List<CgTraceSnapshot.ZoneView> shown = new ArrayList<>(all.size());
+        long viewer = 0L;
+        long reach = Long.MIN_VALUE;
+        for (CgTraceSnapshot.ZoneView zone : all) {
+            boolean own = VIEWER.name().equals(zone.channel());
+            // THE UNION, not the sum: the viewer's zones nest inside each other and inside the
+            // frame's, so their recorded depth says nothing; ordered by start, overlap is one pass.
+            if (own && !zone.isOpen()) {
+                long from = Math.max(zone.startNanos(), reach);
+                if (zone.endNanos() > from) viewer += zone.endNanos() - from;
+                reach = Math.max(reach, zone.endNanos());
+            }
+            if (!own || showViewer) shown.add(zone);
+        }
+        return new FetchedZones(shown, all.size(), viewer);
     }
 
     /**
@@ -691,13 +833,31 @@ public final class ProfilerModel {
         return all;
     }
 
+    /** The selection's call tree, built once per selection however many readers ask. */
     public List<CgTraceAggregate.Node> treeOfSelection() {
-        return CgTraceAggregate.tree(zonesOfSelection());
+        List<CgTraceSnapshot.ZoneView> zones = zonesOfSelection();
+        if (zones != treeZones) {
+            tree = CgTraceAggregate.tree(zones);
+            treeZones = zones;
+        }
+        return tree;
     }
 
+    /** The selection's zones by cost, built once per selection. */
     public List<CgTraceAggregate.Stat> statsOfSelection() {
-        return CgTraceAggregate.byCost(zonesOfSelection());
+        List<CgTraceSnapshot.ZoneView> zones = zonesOfSelection();
+        if (zones != statsZones) {
+            stats = CgTraceAggregate.byCost(zones);
+            statsZones = zones;
+        }
+        return stats;
     }
+
+    /** What {@link #tree} and {@link #stats} were built from, compared by identity with {@link #cachedZones}. */
+    @Nullable
+    private List<CgTraceSnapshot.ZoneView> treeZones, statsZones;
+    private List<CgTraceAggregate.Node> tree = List.of();
+    private List<CgTraceAggregate.Stat> stats = List.of();
 
     /** How many frames the tables below are speaking for. */
     public int selectionFrameCount() {
@@ -736,26 +896,44 @@ public final class ProfilerModel {
         if (frames.isEmpty() || selected < 0 || selected >= frames.size()) return List.of();
         int from = hasRange() ? rangeFrom : selected;
         int to = hasRange() ? Math.min(rangeTo, frames.size() - 1) : selected;
-        String key = frames.get(from).index() + ":" + frames.get(to).index();
+        String key = hintsKey(frames.get(from), frames.get(to));
         if (key.equals(cachedHintsKey)) return cachedHints;
 
+        // One frame selected is the selection's own tree, already built for the tables.
+        cachedHints = hintsOver(snapshot, from, to, from == to ? treeOfSelection() : null, showViewer);
+        cachedHintsKey = key;
+        return cachedHints;
+    }
+
+    /** {@link #hintsOfSelection}'s cache key: the frames it spans. */
+    private static String hintsKey(CgFrameRecord first, CgFrameRecord last) {
+        return first.index() + ":" + last.index();
+    }
+
+    /**
+     * The hints of {@code snapshot}'s frames {@code [from, to]}, each rule once.
+     *
+     * @param singleTree the call tree of frame {@code from} when {@code from == to} and one is already built
+     */
+    private static List<HintRow> hintsOver(CgTraceSnapshot snapshot, int from, int to,
+                                           @Nullable List<CgTraceAggregate.Node> singleTree, boolean showViewer) {
+        List<CgFrameRecord> frames = snapshot.frames();
         Map<String, HintRow> byCode = new LinkedHashMap<>();
         for (int i = from; i <= to && i < from + MAX_HINT_FRAMES; i++) {
             CgFrameRecord frame = frames.get(i);
-            List<CgTraceAggregate.Node> tree = CgTraceAggregate.tree(withoutViewer(CgTrace.zonesIn(frame)));
-            for (CgTraceHints.Hint hint : CgTraceHints.forFrame(withGpu(frame), tree, summed(snapshot.countersIn(frame)))) {
+            List<CgTraceAggregate.Node> tree = singleTree != null ? singleTree
+                    : CgTraceAggregate.tree(withoutViewer(CgTrace.zonesIn(frame), showViewer));
+            for (CgTraceHints.Hint hint : CgTraceHints.forFrame(gpuOf(frame), tree, summed(snapshot.countersIn(frame)))) {
                 HintRow was = byCode.get(hint.code());
                 byCode.put(hint.code(), was == null ? new HintRow(hint, 1, i)
                         : new HintRow(was.hint(), was.frames() + 1, was.firstPosition()));
             }
         }
-        cachedHints = List.copyOf(byCode.values());
-        cachedHintsKey = key;
-        return cachedHints;
+        return List.copyOf(byCode.values());
     }
 
     /** {@code zones} less the viewer's own, unless they are being shown. */
-    private List<CgTraceSnapshot.ZoneView> withoutViewer(List<CgTraceSnapshot.ZoneView> zones) {
+    private static List<CgTraceSnapshot.ZoneView> withoutViewer(List<CgTraceSnapshot.ZoneView> zones, boolean showViewer) {
         if (showViewer) return zones;
         List<CgTraceSnapshot.ZoneView> out = new ArrayList<>(zones.size());
         for (CgTraceSnapshot.ZoneView zone : zones) {

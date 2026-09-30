@@ -69,7 +69,7 @@ public final class InMemoryFileSystem implements CgFileSystem {
     }
 
     @Override
-    public CgFileEntry stat(CgPath path) {
+    public synchronized CgFileEntry stat(CgPath path) {
         Node node = lookup(path, false);
         return node.directory
                 ? CgFileEntry.directory(nameOf(path), node.mtime)
@@ -77,7 +77,7 @@ public final class InMemoryFileSystem implements CgFileSystem {
     }
 
     @Override
-    public List<CgFileEntry> list(CgPath directory) {
+    public synchronized List<CgFileEntry> list(CgPath directory) {
         Node node = lookupAsDirectory(directory, false);
         List<CgFileEntry> out = new ArrayList<>(node.children.size());
         for (Map.Entry<String, Node> child : node.children.entrySet()) {
@@ -90,12 +90,12 @@ public final class InMemoryFileSystem implements CgFileSystem {
     }
 
     @Override
-    public byte[] read(CgPath path) {
+    public synchronized byte[] read(CgPath path) {
         return lookupAsFile(path, false).content.clone();
     }
 
     @Override
-    public void write(CgPath path, byte[] content, boolean create, boolean overwrite) {
+    public synchronized void write(CgPath path, byte[] content, boolean create, boolean overwrite) {
         if (path.isProjectRoot()) throw CgFileSystemException.isADirectory(path);
         Node parent = lookupParentDirectory(path);
         String name = nameOf(path);
@@ -115,7 +115,7 @@ public final class InMemoryFileSystem implements CgFileSystem {
     }
 
     @Override
-    public void mkdir(CgPath path) {
+    public synchronized void mkdir(CgPath path) {
         if (path.isProjectRoot()) {
             roots.computeIfAbsent(path.project(), key -> new Node(true, tick()));
             return;
@@ -127,7 +127,7 @@ public final class InMemoryFileSystem implements CgFileSystem {
     }
 
     @Override
-    public void delete(CgPath path, boolean recursive) {
+    public synchronized void delete(CgPath path, boolean recursive) {
         if (path.isProjectRoot()) {
             if (roots.remove(path.project()) == null) throw CgFileSystemException.notFound(path);
             return;
@@ -145,7 +145,7 @@ public final class InMemoryFileSystem implements CgFileSystem {
     }
 
     @Override
-    public void rename(CgPath from, CgPath to, boolean overwrite) {
+    public synchronized void rename(CgPath from, CgPath to, boolean overwrite) {
         Node source = lookup(from, false);
         Node targetParent = lookupParentDirectory(to);
         String targetName = nameOf(to);
@@ -176,7 +176,7 @@ public final class InMemoryFileSystem implements CgFileSystem {
     }
 
     /** Writes a file, creating every directory above it. The fixture shorthand. */
-    public InMemoryFileSystem seed(String path, byte[] content) {
+    public synchronized InMemoryFileSystem seed(String path, byte[] content) {
         CgPath target = CgPath.parse(path);
         addProject(target.project());
         List<String> segments = target.segments();
@@ -195,7 +195,7 @@ public final class InMemoryFileSystem implements CgFileSystem {
         return this;
     }
 
-    public InMemoryFileSystem seed(String path, String content) {
+    public synchronized InMemoryFileSystem seed(String path, String content) {
         return seed(path, content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 

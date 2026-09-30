@@ -21,7 +21,6 @@ import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
-import com.crystalgui.fs.provider.CgFileEvent;
 import com.crystalgui.fs.provider.LocalFileSystem;
 import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.Protocols;
@@ -115,8 +114,8 @@ public final class WorkspaceHost {
             ".git", ".gradle", ".crystalgui", "build", "out", "node_modules", "*.class",
             "*~", "*.swp", "*.swo", ".#*", ".DS_Store", "Thumbs.db");
 
-    /** Seconds between watcher polls. */
-    private static final float POLL_SECONDS = 0.5f;
+    /** Seconds between sweeps of peers whose connection has gone. */
+    private static final float CLEANUP_SECONDS = 0.5f;
 
     private final String projectId;
     private final String displayName;
@@ -128,7 +127,7 @@ public final class WorkspaceHost {
 
     private volatile WorkspaceService service;
     private WatchHub hub;
-    private float untilPoll = POLL_SECONDS;
+    private float untilCleanup = CLEANUP_SECONDS;
 
     /**
      * The id for a host that serves <b>one</b> workspace project, which is every host today.
@@ -205,57 +204,33 @@ public final class WorkspaceHost {
     }
 
     /**
-     * One tick: deliver what changed, say who is here, and re-stat when the poll is due.
+     * One tick: deliver what changed, and say who is here.
      *
-     * <p>Called from whatever the host's tick is. Everything in it is free when nothing has happened —
-     * one non-blocking poll of the event source, a version counter for presence, and a countdown.</p>
+     * <p>Called from whatever the host's tick is. The hub decides everything about the watcher -- the
+     * events, the reconcile cadence, the worker the stats run on -- once for every peer: it coalesces per
+     * path and pairs a deletion and a creation carrying one etag into a RENAME, none of which can be done
+     * per peer without doing it N times.</p>
      */
     public void tick(float deltaSeconds) {
-        // EVERY TICK, which is the point: an external save reaches the client on the next tick rather
-        // than at the next half-second reconcile. Drained ONCE and handed to every peer, because
-        // draining is destructive and a second caller would steal the first's events.
-        WorkspaceService live = service;
+        WatchHub live = hub;
         if (live != null) {
-            List<CgFileEvent> events = live.drainFileEvents();
-            // OR SOMETHING THE SERVER DID. A tick carries both now, and gating it on the watcher alone
-            // left an operation queued until an unrelated file happened to move.
-            if (!events.isEmpty() || (hub != null && hub.hasStated())) fanOut(events);
+            try {
+                fanOut(live.update(serverActor(), deltaSeconds));
+            } catch (RuntimeException failed) {
+                CrystalGuiCore.LOGGER.error("[cgui-fs] watcher update failed: {}", failed.getMessage());
+            }
         }
 
         // AND WHO IS HERE, on the same tick and for the same reason: presence is what stops two people
         // finding out they were both editing when the second one saves and is refused.
         fanOutPresence();
 
-        untilPoll -= deltaSeconds;
-        if (untilPoll > 0f) return;
-        untilPoll = POLL_SECONDS;
-
-        // ONE RESCAN FOR THE SERVER, then a message each. It was one poll per peer, which stat-ed every
-        // watched file once per player twice a second.
-        if (service == null || hub == null) return;
-        try {
-            fanOut(hub.poll(serverActor()));
-        } catch (RuntimeException failed) {
-            CrystalGuiCore.LOGGER.error("[cgui-fs] watcher poll failed: {}", failed.getMessage());
-        }
+        untilCleanup -= deltaSeconds;
+        if (untilCleanup > 0f) return;
+        untilCleanup = CLEANUP_SECONDS;
         for (Object key : new ArrayList<>(boundPeers.keySet())) {
             if (connections.get(key) == null) boundPeers.remove(key);
         }
-    }
-
-    /**
-     * Hands one drained batch to every peer.
-     *
-     * <p>Each watch list keeps only the paths its own client has open, so an event about a file nobody
-     * here has open costs a map lookup and is dropped: an event is real and still none of that peer's
-     * business, and telling it would leak which files exist to somebody who never asked.</p>
-     */
-    private void fanOut(List<CgFileEvent> events) {
-        if (hub == null) return;
-        // THE HUB DECIDES WHO HEARS WHAT, once for the batch: it coalesces per path, pairs a deletion
-        // and a creation carrying one etag into a RENAME, and rescans wholesale on an overflow. None of
-        // that can be done per peer without doing it N times.
-        fanOut(hub.tick(serverActor(), events));
     }
 
     /** Sends each peer its own list. A peer with nothing to hear about is absent from the map. */
@@ -402,6 +377,6 @@ public final class WorkspaceHost {
         if (service != null) service.close();
         service = null;
         hub = null;
-        untilPoll = POLL_SECONDS;
+        untilCleanup = CLEANUP_SECONDS;
     }
 }

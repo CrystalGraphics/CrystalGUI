@@ -1,5 +1,7 @@
 package com.crystalgui.fs.server;
 
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.project.ProjectRegistry;
@@ -16,6 +18,9 @@ import com.crystalgui.fs.provider.InMemoryFileSystem;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
+
+import javax.annotation.Nullable;
 
 /**
  * <b>The workspace as a server offers it</b> - projects, authorisation, etags and the trash.
@@ -264,8 +269,57 @@ public final class WorkspaceService {
      * lets the cap be enforced before an allocation rather than after one.</p>
      */
     public CgFileEntry stat(WorkspaceActor actor, CgPath path) {
-        authorise(actor, path, WorkspaceOperation.READ);
-        return files.stat(path);
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FS, "fs:stat")) {
+            try (CgTrace.Zone authorised = CgTrace.zone(UiTrace.FS, "fs:authorise")) {
+                authorise(actor, path, WorkspaceOperation.READ);
+            }
+            return files.stat(path);
+        }
+    }
+
+    /** One path's metadata, or why there is none: exactly one of {@code entry} and {@code failure} is set. */
+    public record Stat(CgPath path, @Nullable CgFileEntry entry, @Nullable CgFileSystemException failure) {
+    }
+
+    /**
+     * Stats for many paths, authorised now and read later, on any thread.
+     *
+     * <pre>{@code
+     * Supplier<List<Stat>> reads = service.statsFor(actor, paths);   // on the thread that owns the actor
+     * executor.execute(() -> deliver(reads.get()));                   // the filesystem, anywhere
+     * }</pre>
+     *
+     * <p>Authorisation runs in this call because a permission may read host state that is only safe on
+     * its own thread (a server's operator list). The supplier touches the filesystem alone, whose
+     * {@code stat} may run on any thread. A refused path comes back as a {@link Stat} carrying the refusal.</p>
+     */
+    public Supplier<List<Stat>> statsFor(WorkspaceActor actor, List<CgPath> paths) {
+        List<CgPath> allowed = new ArrayList<>(paths.size());
+        List<Stat> refused = new ArrayList<>();
+        for (CgPath path : paths) {
+            try {
+                authorise(actor, path, WorkspaceOperation.READ);
+                allowed.add(path);
+            } catch (CgFileSystemException denied) {
+                refused.add(new Stat(path, null, denied));
+            }
+        }
+        CgFileSystem reader = files;
+        return () -> {
+            List<Stat> out = new ArrayList<>(refused);
+            for (CgPath path : allowed) {
+                try {
+                    out.add(new Stat(path, reader.stat(path), null));
+                } catch (CgFileSystemException failed) {
+                    out.add(new Stat(path, null, failed));
+                } catch (RuntimeException failed) {
+                    // Per path, so one bad path costs only its own answer rather than every other one's.
+                    out.add(new Stat(path, null,
+                            new CgFileSystemException(CgFileError.UNKNOWN, "cannot stat " + path, failed)));
+                }
+            }
+            return out;
+        };
     }
 
     /** A file, with the etag a later write must quote back. */
@@ -387,7 +441,7 @@ public final class WorkspaceService {
      *
      * @return the trash id, or {@code null} when nothing was kept
      */
-    @javax.annotation.Nullable
+    @Nullable
     public String deleteToTrash(WorkspaceActor actor, CgPath path, boolean recursive,
                                 String expectedEtag) {
         authorise(actor, path, WorkspaceOperation.WRITE);
