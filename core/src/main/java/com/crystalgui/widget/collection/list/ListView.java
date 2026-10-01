@@ -1075,7 +1075,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     }
 
     @Nullable
-    private static Consumer<ListView<?>> defaultContextMenuInstaller;
+    private static volatile Consumer<ListView<?>> defaultContextMenuInstaller;
 
     private boolean defaultContextMenuInstalled;
 

@@ -51,7 +51,7 @@ public final class StyleLabs {
     private static final String SAMPLE_STROKE = "18%";
 
     /** Gives the six their labs. Idempotent — a second builder does not register them twice. */
-    public static void register() {
+    public static synchronized void register() {
         if (registered) return;
         registered = true;
 

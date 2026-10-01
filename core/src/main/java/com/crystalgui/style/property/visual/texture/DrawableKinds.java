@@ -69,7 +69,9 @@ public final class DrawableKinds {
         }
     }
 
-    private static final Map<String, Kind> BY_ID = new LinkedHashMap<>();
+    // COPY ON WRITE: every document's cascade parses drawables, possibly each on its own thread, while a
+    // consumer may register at any time. Registrations are rare; reads take no lock.
+    private static volatile Map<String, Kind> byId = Collections.emptyMap();
 
     static {
         // THE BUILT-INS, in the order they were tried before — order is only visible where two kinds
@@ -92,18 +94,23 @@ public final class DrawableKinds {
     }
 
     /** Adds a kind, or replaces one with the same id. */
-    public static void register(Kind kind) {
-        BY_ID.put(kind.id(), kind);
+    public static synchronized void register(Kind kind) {
+        Map<String, Kind> next = new LinkedHashMap<>(byId);
+        next.put(kind.id(), kind);
+        byId = Collections.unmodifiableMap(next);
     }
 
     /** Removes a kind by id. For a consumer withdrawing one, and for a test not leaving its own behind. */
-    public static void unregister(String id) {
-        BY_ID.remove(id);
+    public static synchronized void unregister(String id) {
+        if (!byId.containsKey(id)) return;
+        Map<String, Kind> next = new LinkedHashMap<>(byId);
+        next.remove(id);
+        byId = Collections.unmodifiableMap(next);
     }
 
-    /** Every kind, in registration order. */
+    /** Every kind, in registration order: a snapshot, not a live view. */
     public static Collection<Kind> all() {
-        return Collections.unmodifiableCollection(BY_ID.values());
+        return byId.values();
     }
 
     /** Which kind {@code css} is, or null when nothing claims it. */
@@ -111,7 +118,7 @@ public final class DrawableKinds {
     public static Kind matching(@Nullable String css) {
         if (css == null) return null;
         String lower = css.trim().toLowerCase(Locale.ROOT);
-        for (Kind kind : BY_ID.values()) {
+        for (Kind kind : byId.values()) {
             if (kind.matches().test(lower)) return kind;
         }
         return null;
