@@ -1,8 +1,8 @@
 // crystalgui:shaders/gui_color_field.shader
 //
 // The continuously-varying surfaces a colour picker is made of. Every one is a per-pixel function of
-// position, so none can be a texture or a batched quad -- the same reason gui_rect.shader
-// exists and is drawn through CgUiPaintContext.withMaterial(...).
+// position, so none can be a texture or a shape of gui_box.shader's, and it is drawn through
+// CgUiPaintContext.withMaterial(...).
 //
 //   HUE_RING (0)   an annulus, hue taken from the angle
 //   SV_SQUARE (1)  saturation across x, value up y, at a fixed hue
@@ -73,7 +73,7 @@ Pass {
     // DECLARED BEFORE vertex(), and that is not style. The pass body is split at the stage functions,
     // so a helper written below vertex() lands outside the fragment scope: it reports as an undefined
     // variable, and every Property in the block reports the same way right after it, because the
-    // mis-split takes the uniform declarations with it. gui_rect.shader puts its own helper
+    // mis-split takes the uniform declarations with it. gui_box.shader puts its own helpers
     // here for the same reason.
     vec3 cg_checker(vec2 px) {
         vec2 cell = floor(px / max(_CheckerSize, 1.0));

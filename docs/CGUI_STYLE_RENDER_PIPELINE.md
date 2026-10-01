@@ -239,7 +239,7 @@ UIDocument.paintFrame()
     animation().tick(deltaSeconds)               // smooth scrolls + every registered UIFrameTicker
     calculateLayout()                          // Taffy computeLayout(), while dirty
   document.paintContext()                          // the document's own CgUiPaintContext
-  paintContext.beginFrame(actualScreenW, actualScreenH)  // GL save, ortho, bind gui_quad, reset scissor
+  paintContext.beginFrame(actualScreenW, actualScreenH)  // GL save, ortho, bind gui_box, reset scissor
     pose.pushPose(); pose.mulPoseMatrix(rootTransform)   // rootTransform = the ONE definition of uiScale
       ui.rootElement.the paint walk(paintContext) // paintContent → children (z-sorted) → paintDecoration → paintOutline
     pose.popPose()
@@ -476,7 +476,7 @@ value type of its own.
 ## 7. Universal Border-Radius/Border-Width/Border-Color Layer
 
 `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl`,
-`core/src/main/resources/assets/crystalgui/shaders/gui_rect.shader`,
+`core/src/main/resources/assets/crystalgui/shaders/gui_box.shader`,
 `core/src/main/java/com/crystalgui/render/texture/CgUiRect.java`,
 `core/src/main/java/com/crystalgui/style/property/visual/border/`, `UINode.paintContent`
 
@@ -554,7 +554,7 @@ never disagree about the element's shape. `sdf_coverage` turns a signed distance
 0–1 mask via `fwidth`.
 
 > **`sdf_coverage` is wrapped in `#ifndef CG_VERTEX_STAGE`, and that guard is load-bearing.**
-> `gui_rect.shader` includes `sdf.glsl` at *material* scope, and CrystalGraphics' compiler
+> `gui_box.shader` includes `sdf.glsl` at *material* scope, and CrystalGraphics' compiler
 > hoists every material-scope `#`-line into **both** generated stages — so without the guard,
 > `fwidth`, a fragment-only derivative builtin, lands in the vertex shader. NVIDIA compiles that
 > anyway. AMD refuses, and the whole material fails to compile: an AMD tester could not launch
@@ -628,7 +628,7 @@ door for a widget whose picture changes without moving a box.
 masking is the `mask` property's job. `pushRoundedClip` adds a `CgClipTable` entry — the box's rect,
 radii and border's inner edge in the box's own space, and the inverse of the pose that put it on screen —
 and every quad, curve and glyph drawn until the pop carries its index; each material maps the pixel into
-the box's space and multiplies by the coverage there, from the SDF and ramp `gui_rect` draws its own edge
+the box's space and multiplies by the coverage there, from the SDF and ramp a `gui_box` shape draws its own edge
 with, so a rotated or skewed box clips exactly. An entry names the one it was pushed inside, and a draw
 is clipped by the whole chain, up to `CgClipTable.MAX_DEPTH` (4) deep. The children cost no target, no
 clear and no composite; an axis-aligned box still pushes its padding-box scissor, which culls what lies
@@ -1019,6 +1019,6 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
 | Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
 | `background:` parsing | `core/src/main/java/com/crystalgui/style/property/visual/texture/TextureValue.java` |
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |
-| SDF material | `core/src/main/resources/assets/crystalgui/shaders/gui_rect.shader` |
+| SDF material | `core/src/main/resources/assets/crystalgui/shaders/gui_box.shader`, a shape in `CgShapeTable` |
 | Named 9-slice assets | `core/src/main/java/com/crystalgui/render/texture/asset/CgUiSpriteRegistry.java` |
 | Demo scenes | `harness-scenes/src/main/java/com/crystalgui/harness/scene/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiGalleryScene` (every widget, a page each, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |

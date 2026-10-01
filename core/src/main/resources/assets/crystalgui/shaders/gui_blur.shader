@@ -138,9 +138,8 @@ Pass {
 
         // ALPHA IS AVERAGED WITH THE COLOUR, and that is the whole correctness of this pass.
         //
-        // Every UI target in this engine holds PREMULTIPLIED colour -- gui_quad.shader blends
-        // `SRC_ALPHA ONE_MINUS_SRC_ALPHA, ONE ONE_MINUS_SRC_ALPHA`, so drawing into a target cleared to
-        // transparent leaves `rgb * a` behind. Premultiplied is exactly the representation that is
+        // Every UI target in this engine holds PREMULTIPLIED colour -- gui_box.shader writes `rgb * a` under
+        // `ONE ONE_MINUS_SRC_ALPHA`, so drawing into a target cleared to transparent leaves `rgb * a` behind. Premultiplied is exactly the representation that is
         // LINEAR under filtering, which is why it can be blurred at all.
         //
         // The earlier version averaged rgb alone and wrote `a = 1`, on the reasoning that a backdrop
