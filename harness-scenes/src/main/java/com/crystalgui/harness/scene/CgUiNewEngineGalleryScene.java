@@ -18,13 +18,13 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.graph.port.BasicPortType;
 import com.crystalgui.graph.port.PortType;
-import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.canvas.CanvasView;
@@ -73,7 +73,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import javax.annotation.Nullable;
-import org.joml.Matrix4f;
 
 /**
  * <b>Every widget the M6 port has moved, on the NEW engine, in one scrolling column.</b>
@@ -126,27 +125,35 @@ public class CgUiNewEngineGalleryScene
     private ProgressBar determinate;
     private float elapsed;
 
+    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
+    private DocumentDriver<Void> driver;
+    private DocumentDriver.Painter<Void> painter;
+
     @Override
     public void init(HarnessContext ctx) {
-        document = new UIDocument().markFrameThread();
-        // THE USER-AGENT SHEET, which is not installed for you -- a scene that asserts on default.css
-        // behaviour without this exercises no CSS at all and looks like a styling regression.
-        document.styles().addStylesheet(StyleSheet.DEFAULT);
-        // THE GRAPH THEME, which the UA sheet deliberately does not contain. The split is the same
-        // one `ore.css` sits on: `ua/config-kit.css` gives a graphnode its GEOMETRY -- width, min and
-        // max width, the title bar's row and height, the port columns -- and `crystalgui:graph` gives
-        // it the Unity look, every background and border and the per-type port palette a wire reads
-        // its colour from. Measured: the UA half is 93% geometry declarations, the theme 39% colour
-        // and the rest radii and outlines.
-        //
-        // Without this the nodes lay out perfectly and paint nothing -- no background, no border, no
-        // port colour -- which reads as a broken port rather than as an unthemed widget. The old
-        // gallery loads it on the line below its own DEFAULT and hardcodes not one graph rule in its
-        // scene sheet; this scene simply never did.
-        document.styles().addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
-        document.styles().addStylesheet(StyleSheet.parse(SCENE_CSS));
-        document.boxes().setRootTransform(new Matrix4f().scale(SCALE, SCALE, 1f));
-        document.append(buildRoot());
+        document = new UIDocument();
+        driver = DocumentDriver.attach(document);
+        painter = DocumentDriver.whole(document);
+        driver.run(() -> {
+            // THE USER-AGENT SHEET, which is not installed for you -- a scene that asserts on default.css
+            // behaviour without this exercises no CSS at all and looks like a styling regression.
+            document.styles().addStylesheet(StyleSheet.DEFAULT);
+            // THE GRAPH THEME, which the UA sheet deliberately does not contain. The split is the same
+            // one `ore.css` sits on: `ua/config-kit.css` gives a graphnode its GEOMETRY -- width, min and
+            // max width, the title bar's row and height, the port columns -- and `crystalgui:graph` gives
+            // it the Unity look, every background and border and the per-type port palette a wire reads
+            // its colour from. Measured: the UA half is 93% geometry declarations, the theme 39% colour
+            // and the rest radii and outlines.
+            //
+            // Without this the nodes lay out perfectly and paint nothing -- no background, no border, no
+            // port colour -- which reads as a broken port rather than as an unthemed widget. The old
+            // gallery loads it on the line below its own DEFAULT and hardcodes not one graph rule in its
+            // scene sheet; this scene simply never did.
+            document.styles().addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
+            document.styles().addStylesheet(StyleSheet.parse(SCENE_CSS));
+            document.boxes().setUiScale(SCALE);
+            document.append(buildRoot());
+        });
     }
 
     /**
@@ -935,23 +942,19 @@ public class CgUiNewEngineGalleryScene
         // -- a frozen bar at its first value is what the old ProgressBar's non-idempotent setter
         // looked like from the other side.
         elapsed += delta;
-        determinate.setFraction((elapsed % 4f) / 4f);
-
-        document.frame(delta, w / SCALE, h / SCALE);
-
-        CgUiPaintContext context = document.paintContext();
-        context.beginFrame(w, h);
-        document.paint(context);
-        context.endFrame();
+        float fraction = (elapsed % 4f) / 4f;
+        driver.post(() -> determinate.setFraction(fraction));
+        driver.frame(delta, w, h, painter);
 
         // A startup capture, so this scene contributes to the pixel-regression set. Without it the
         // scene runs and writes no artifact, and a "scenes diff to zero" check silently covers
         // nothing here.
-        if (frame.getFrameNumber() == 5) ctx.getArtifactService().requestCapture("startup");
+        if (driver.presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
     }
 
     @Override
     public void dispose() {
+        driver.close();
         document = null;
         determinate = null;
     }
@@ -973,11 +976,19 @@ public class CgUiNewEngineGalleryScene
 
     @Override
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+        return driver.offerKey(event, () -> handleKey(event));
+    }
+
+    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
         return document.input().consumeKeyboardEvent(event);
     }
 
     @Override
     public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
+        return driver.offerMouse(event, () -> handleMouse(event));
+    }
+
+    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
         return document.input().consumeMouseEvent(event);
     }
 }

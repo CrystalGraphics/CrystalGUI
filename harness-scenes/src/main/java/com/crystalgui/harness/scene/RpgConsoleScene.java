@@ -1,12 +1,12 @@
 package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ColorSelector;
@@ -40,7 +40,6 @@ import java.util.ArrayList;
 import java.util.Locale;
 import java.util.List;
 import java.util.Set;
-import org.joml.Matrix4f;
 
 /**
  * <b>RPG-Core's menu, as a stylesheet fixture.</b> {@code --mode=rpg-console}.
@@ -126,46 +125,54 @@ public class RpgConsoleScene implements InteractiveSceneLifecycle,
     private ProgressBar walking;
     private float elapsed;
 
+    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
+    private DocumentDriver<Void> driver;
+    private DocumentDriver.Painter<Void> painter;
+
     @Override
     public void init(HarnessContext ctx) {
-        document = new UIDocument().markFrameThread();
+        document = new UIDocument();
+        driver = DocumentDriver.attach(document);
+        painter = DocumentDriver.whole(document);
+        driver.run(() -> {
 
-        // THE WHOLE STACK, and not `addStylesheet(StyleSheet.DEFAULT)` by hand. A theme's TOKENS reach
-        // the screen through variable substitution and would work either way; its override RULES live
-        // in a sheet UiThemeManager owns, which only installInto adds. Adding DEFAULT by hand gives a
-        // three-quarters-themed scene that reports nothing about the missing quarter.
-        HarnessThemes.install(document.styles(), "rpgcore:console");
+            // THE WHOLE STACK, and not `addStylesheet(StyleSheet.DEFAULT)` by hand. A theme's TOKENS reach
+            // the screen through variable substitution and would work either way; its override RULES live
+            // in a sheet UiThemeManager owns, which only installInto adds. Adding DEFAULT by hand gives a
+            // three-quarters-themed scene that reports nothing about the missing quarter.
+            HarnessThemes.install(document.styles(), "rpgcore:console");
 
-        document.boxes().setRootTransform(new Matrix4f().scale(SCALE, SCALE, 1f));
+            document.boxes().setUiScale(SCALE);
 
-        shell = RpgShell.load();
-        if (shell == null) {
-            document.append(new UIText("RPG-Core is not on the classpath. Run ./gradlew runHarness "
-                    + "from RPG-Core-NeoForge, which puts its classes there and this scene builds "
-                    + "the mod's own MenuShell."));
-            return;
-        }
+            shell = RpgShell.load();
+            if (shell == null) {
+                document.append(new UIText("RPG-Core is not on the classpath. Run ./gradlew runHarness "
+                        + "from RPG-Core-NeoForge, which puts its classes there and this scene builds "
+                        + "the mod's own MenuShell."));
+                return;
+            }
 
-        // Whatever the mod puts here in game is the player's name. The fixture needs SOMETHING, or the
-        // ribbon reads as a bar with one word in it and the separator never gets looked at.
-        shell.setSubject("Dev");
+            // Whatever the mod puts here in game is the player's name. The fixture needs SOMETHING, or the
+            // ribbon reads as a bar with one word in it and the separator never gets looked at.
+            shell.setSubject("Dev");
 
-        UIElement backdrop = shell.element();
-        document.append(backdrop);
+            UIElement backdrop = shell.element();
+            document.append(backdrop);
 
-        // menu.css is NOT added here: MenuShell scopes it to itself when it joins a document, which is
-        // exactly what the mod does in game. Adding it again would append a second copy at the highest
-        // priority -- correct-looking, and the first rule anyone edited afterwards would appear to
-        // have no effect.
-        document.styles().addStylesheet(StyleSheet.parse(SCENE_CSS), backdrop);
+            // menu.css is NOT added here: MenuShell scopes it to itself when it joins a document, which is
+            // exactly what the mod does in game. Adding it again would append a second copy at the highest
+            // priority -- correct-looking, and the first rule anyone edited afterwards would appear to
+            // have no effect.
+            document.styles().addStylesheet(StyleSheet.parse(SCENE_CSS), backdrop);
 
-        // Straight to the page being styled: -Dcrystalgui.rpg.tab=options. runHarness forwards every
-        // -Dcrystalgui.*, so this needs no Gradle plumbing.
-        String start = System.getProperty("crystalgui.rpg.tab", STATUS).toUpperCase(Locale.ROOT);
-        shell.select(start);
-        show(start);
-        // LAST, so the two calls above do not build the first page twice.
-        shell.onSelect(this::show);
+            // Straight to the page being styled: -Dcrystalgui.rpg.tab=options. runHarness forwards every
+            // -Dcrystalgui.*, so this needs no Gradle plumbing.
+            String start = System.getProperty("crystalgui.rpg.tab", STATUS).toUpperCase(Locale.ROOT);
+            shell.select(start);
+            show(start);
+            // LAST, so the two calls above do not build the first page twice.
+            shell.onSelect(this::show);
+        });
     }
 
     /**
@@ -542,22 +549,18 @@ public class RpgConsoleScene implements InteractiveSceneLifecycle,
         // A walking bar, so one glance says the accent reaches a fill that is written every frame --
         // a frozen bar and a correct one look identical at rest. Null on every page but the gallery.
         elapsed += delta;
-        if (walking != null && walking.document() != null) {
-            walking.setFraction((elapsed % 4f) / 4f);
-        }
+        float fraction = (elapsed % 4f) / 4f;
+        driver.post(() -> {
+            if (walking != null && walking.document() != null) walking.setFraction(fraction);
+        });
+        driver.frame(delta, w, h, painter);
 
-        document.frame(delta, w / SCALE, h / SCALE);
-
-        CgUiPaintContext context = document.paintContext();
-        context.beginFrame(w, h);
-        document.paint(context);
-        context.endFrame();
-
-        if (frame.getFrameNumber() == 5) ctx.getArtifactService().requestCapture("startup");
+        if (driver.presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
     }
 
     @Override
     public void dispose() {
+        driver.close();
         document = null;
         shell = null;
         walking = null;
@@ -580,11 +583,19 @@ public class RpgConsoleScene implements InteractiveSceneLifecycle,
 
     @Override
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+        return driver.offerKey(event, () -> handleKey(event));
+    }
+
+    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
         return document.input().consumeKeyboardEvent(event);
     }
 
     @Override
     public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
+        return driver.offerMouse(event, () -> handleMouse(event));
+    }
+
+    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
         return document.input().consumeMouseEvent(event);
     }
 }
