@@ -3,7 +3,6 @@ package com.crystalgui.desktop.host;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -13,6 +12,7 @@ import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.window.WindowMount;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
@@ -116,45 +116,23 @@ public final class HostSession {
     @Nullable
     private DesktopHost host;
 
-    /**
-     * Whether the desktop's document runs on a sequence of its own (plan engine-threaded-ui T1). Today in lockstep:
-     * every host entry that reads or writes the tree runs on the render thread AS the sequence
-     * ({@link UiSequence#runNow}), so the tree refuses everything else while the GL context stays where it is.
-     */
-    private static final String SEQUENCED = "crystalgui.ui.sequence";
-
+    /** Runs the desktop's document: inline, in lockstep or recording on its own. Null until built. */
     @Nullable
-    private UiSequence sequence;
+    private DocumentDriver<DesktopFacts> driver;
 
-    /**
-     * Whether the sequence records on its own, with the render thread presenting what it committed
-     * ({@code -Dcrystalgui.ui.async=true}, which implies the sequence). Off until recording text off the render thread
-     * is safe (plan engine-threaded-ui §5.1).
-     */
-    private static final String ASYNC = HostInput.ASYNC;
-
-    /** The render thread's side of an asynchronous document; null otherwise. */
-    @Nullable
-    private SurfaceCompositor compositor;
-
-    /** Delta the host has passed since the frame in flight was asked for. Render thread. */
-    private float pendingDelta;
-
-    /** Commits built so far. The sequence's. */
-    private long commits;
+    /** What a host asks about a frame of a document that records on its own, read from the frame on screen. */
+    private record DesktopFacts(boolean attached, boolean pinned, @Nullable float[] textInputArea) {
+    }
 
     /** What the document is told about the host: the render thread's answers, copied at each entry. */
     @Nullable
     private HostSnapshot snapshot;
 
-    /**
-     * Posts {@code work} to the document's sequence when it records on its own, or runs it in lockstep, or here when
-     * there is no sequence. For an entry whose result the host does not wait for.
-     */
+    /** Runs {@code work} on the document, without waiting when it records on its own. */
     private void post(Runnable work) {
-        UiSequence owner = sequence;
-        if (compositor != null && owner != null) owner.execute(work);
-        else onDocument(work);
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (owner == null) work.run();
+        else owner.post(work);
     }
 
     /** Copies the host's answers for the document. Render thread, at every host entry. */
@@ -176,11 +154,11 @@ public final class HostSession {
         onDocument(work);
     }
 
-    /** Runs {@code work} on the document's sequence in lockstep, or here when it has none. */
+    /** Runs {@code work} on the document and waits for it. */
     private void onDocument(Runnable work) {
-        UiSequence owner = sequence;
+        DocumentDriver<DesktopFacts> owner = driver;
         if (owner == null) work.run();
-        else owner.runNow(work);
+        else owner.run(work);
     }
     @Nullable
     private volatile Application primary;
@@ -308,9 +286,8 @@ public final class HostSession {
             if (primary != null) primary.dispose();
             if (host != null) host.dispose();
         });
-        if (sequence != null) sequence.close();
-        sequence = null;
-        compositor = null;
+        if (driver != null) driver.close();
+        driver = null;
         primary = null;
         primaryWindow = null;
         host = null;
@@ -377,15 +354,13 @@ public final class HostSession {
     @Nullable
     public float[] textInputArea() {
         UIDocument document = document();
-        if (document == null) return null;
-        if (compositor != null) {
-            UiCommit shown = compositor.active();
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (document == null || owner == null) return null;
+        if (owner.isAsync()) {
+            DesktopFacts shown = owner.shownFacts();
             return shown == null ? null : shown.textInputArea();
         }
-        if (sequence == null) return document.input().textInputArea();
-        float[][] area = new float[1][];
-        sequence.runNow(() -> area[0] = document.input().textInputArea());
-        return area[0];
+        return owner.ask(() -> document.input().textInputArea());
     }
 
     // ── Painting over the game ──────────────────────────────────────────────────────────────────
@@ -436,11 +411,10 @@ public final class HostSession {
      * fires no such event, so the close is never seen and ownership survives into the next screen.</p>
      */
     public DesktopPresentation presentation(PaintHost host) {
-        if (compositor != null) return presentationFromCommit(host);
-        if (sequence == null) return presentationOnDocument(host);
-        DesktopPresentation[] answer = new DesktopPresentation[1];
-        sequence.runNow(() -> answer[0] = presentationOnDocument(host));
-        return answer[0];
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (owner == null) return DesktopPresentation.NONE;
+        if (owner.isAsync()) return presentationFromCommit(host);
+        return owner.ask(() -> presentationOnDocument(host));
     }
 
     /** {@link #presentationOnDocument}, from what the document last committed rather than from its tree. */
@@ -450,7 +424,7 @@ public final class HostSession {
         boolean ours = host.ownScreenUp();
         boolean any = host.anyScreenUp();
         noteForeignScreen(desktop, any && !ours);
-        UiCommit shown = compositor.active();
+        DesktopFacts shown = driver.shownFacts();
         // Before the first commit the desktop is attached and holds nothing pinned, as it was built.
         return Desktop.presentation(ours, any, shown == null || shown.attached(), shown != null && shown.pinned());
     }
@@ -505,10 +479,9 @@ public final class HostSession {
         ScreenOverlay overlay = screenOverlay();
         if (overlay == null) return false;
         // Asynchronously the overlay answers from its committed regions and posts what it delivers.
-        if (sequence == null || compositor != null) return overlay.offerMouse(xPx, yPx, button, pressed, wheel);
-        boolean[] taken = new boolean[1];
-        sequence.runNow(() -> taken[0] = overlay.offerMouse(xPx, yPx, button, pressed, wheel));
-        return taken[0];
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (owner == null || owner.isAsync()) return overlay.offerMouse(xPx, yPx, button, pressed, wheel);
+        return owner.ask(() -> overlay.offerMouse(xPx, yPx, button, pressed, wheel));
     }
 
     /**
@@ -561,43 +534,31 @@ public final class HostSession {
     }
 
     private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
-        if (compositor != null) {
-            paintFromCommit(arm, host, deltaRead, deltaSeconds);
-            return;
-        }
-        if (sequence == null) {
-            paintOnDocument(arm, host, deltaRead, deltaSeconds);
-            return;
-        }
-        sequence.runNow(() -> paintOnDocument(arm, host, deltaRead, deltaSeconds));
-    }
-
-    /**
-     * The asynchronous paint: draws what the document last committed, hands the game the keys it left, and asks for the
-     * next frame, recorded on the sequence while this one shows.
-     */
-    private void paintFromCommit(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
         Desktop desktop = desktop();
         UIDocument document = document();
-        if (desktop == null || document == null) return;
-        DesktopPresentation now = presentationFromCommit(host);
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (desktop == null || document == null || owner == null) return;
+
+        DesktopPresentation now;
+        try {
+            now = presentation(host);
+        } catch (RuntimeException | LinkageError failed) {
+            CrystalGuiCore.LOGGER.error("[cgui] could not decide a presentation; leaving HUD mode", failed);
+            post(desktop::exitHudMode);
+            return;
+        }
+        // NONE paints nothing, and the other arm's hook owns the rest.
         if (now != arm) return;
         if (!deltaRead) deltaSeconds = frameDelta();
-        pendingDelta += deltaSeconds;
         refreshHost();
-        returnUnhandledKeys(desktop);
-        int width = services.surfaceWidth();
-        int height = services.surfaceHeight();
-        // Built here, on the render thread, before the sequence first records: fonts and the text renderer.
-        document.paintContext();
+        returnUnhandledKeys();
 
         host.beforePaint();
         host.enter();
         try {
-            if (compositor.present(width, height) != null) painted = true;
-            float delta = pendingDelta;
-            if (compositor.requestFrame(() -> recordCommit(desktop, document, now, delta, width, height))) {
-                pendingDelta = 0f;
+            if (owner.frame(deltaSeconds, services.surfaceWidth(), services.surfaceHeight(),
+                    new DesktopPainter(desktop, document, now))) {
+                painted = true;
             }
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
@@ -607,58 +568,38 @@ public final class HostSession {
         }
     }
 
-    /** One frame on the sequence: the document's frame, recorded, with the facts the host will ask about. */
-    private UiCommit recordCommit(Desktop desktop, UIDocument document, DesktopPresentation presentation,
-                                  float deltaSeconds, int width, int height) {
-        UiFrame frame = null;
-        try {
-            frame = desktop.record(presentation, deltaSeconds, width, height);
-        } catch (RuntimeException | LinkageError failed) {
-            CrystalGuiCore.LOGGER.error("[cgui] recording the desktop failed; leaving HUD mode", failed);
-            desktop.exitHudMode();
+    /** The desktop in one presentation, and what the host reads back about each recorded frame. */
+    private record DesktopPainter(Desktop desktop, UIDocument document, DesktopPresentation presentation)
+            implements DocumentDriver.Painter<DesktopFacts> {
+
+        @Override
+        public void paint(float deltaSeconds, int width, int height) {
+            desktop.paint(presentation, deltaSeconds, width, height);
         }
-        return new UiCommit(frame, desktop.parent() != null, desktop.hasPinnedWindows(),
-                document.input().textInputArea(), ++commits);
+
+        @Override
+        @Nullable
+        public UiFrame record(float deltaSeconds, int width, int height) {
+            try {
+                return desktop.record(presentation, deltaSeconds, width, height);
+            } catch (RuntimeException | LinkageError failed) {
+                CrystalGuiCore.LOGGER.error("[cgui] recording the desktop failed; leaving HUD mode", failed);
+                desktop.exitHudMode();
+                return null;
+            }
+        }
+
+        @Override
+        public DesktopFacts facts() {
+            return new DesktopFacts(desktop.parent() != null, desktop.hasPinnedWindows(),
+                    document.input().textInputArea());
+        }
     }
 
     /** Every key the document dispatched and left since the last frame, to the game, in order. Render thread. */
-    private void returnUnhandledKeys(Desktop desktop) {
+    private void returnUnhandledKeys() {
         for (CgSystemInput.Keyboard.Event key; (key = input.pollUnhandledKey()) != null; ) {
             services.reinjectKey(key);
-        }
-        ScreenOverlay overlay = desktop.screenOverlay();
-        if (overlay == null) return;
-        for (CgSystemInput.Keyboard.Event key; (key = overlay.input().pollUnhandledKey()) != null; ) {
-            services.reinjectKey(key);
-        }
-    }
-
-    private void paintOnDocument(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
-        Desktop desktop = desktop();
-        if (desktop == null) return;
-
-        DesktopPresentation now;
-        try {
-            now = presentation(host);
-        } catch (RuntimeException | LinkageError failed) {
-            CrystalGuiCore.LOGGER.error("[cgui] could not decide a presentation; leaving HUD mode", failed);
-            desktop.exitHudMode();
-            return;
-        }
-        // NONE paints nothing, and the other arm's hook owns the rest.
-        if (now != arm) return;
-        if (!deltaRead) deltaSeconds = frameDelta();
-
-        host.beforePaint();
-        host.enter();
-        try {
-            desktop.paint(now, deltaSeconds, services.surfaceWidth(), services.surfaceHeight());
-            painted = true;
-        } catch (RuntimeException | LinkageError failed) {
-            CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
-            desktop.exitHudMode();
-        } finally {
-            host.leave();
         }
     }
 
@@ -679,15 +620,7 @@ public final class HostSession {
         });
         built.document().addClass(ROOT_CLASS);
         host = built;
-        boolean async = Boolean.getBoolean(ASYNC);
-        if (async || Boolean.getBoolean(SEQUENCED)) {
-            // Its paint context is made by the first paint, on the render thread either way.
-            sequence = UiSequence.create("desktop");
-            built.document().runOn(sequence);
-            if (async) compositor = new SurfaceCompositor(sequence);
-            CrystalGuiCore.LOGGER.info("[cgui] the desktop's document runs on sequence '{}', {}", sequence.name(),
-                    async ? "recording on its own" : "in lockstep");
-        }
+        driver = DocumentDriver.attach(built.document(), DocumentDriver.Mode.fromFlags(), "desktop");
         trace("DesktopHost");
     }
 

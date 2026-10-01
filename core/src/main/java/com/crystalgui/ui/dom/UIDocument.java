@@ -170,6 +170,19 @@ public final class UIDocument extends UIElement {
     @Nullable
     private volatile UiSequence sequence;
 
+    @Nullable
+    private volatile DocumentDriver<?> driver;
+
+    /** What runs this document for its host, or null when nothing was attached. @see DocumentDriver#attach */
+    @Nullable
+    public DocumentDriver<?> driver() {
+        return driver;
+    }
+
+    void useDriver(DocumentDriver<?> driver) {
+        this.driver = driver;
+    }
+
     /** The first frame claims its thread, as does a frame after the claiming thread died. */
     private void claimFrameThread() {
         if (sequence != null) {

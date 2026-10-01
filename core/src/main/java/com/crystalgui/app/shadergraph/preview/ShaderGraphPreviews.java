@@ -1,6 +1,7 @@
 package com.crystalgui.app.shadergraph.preview;
 
 import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.widget.graph.node.NodeFieldBinder;
 import com.crystalgui.ui.box.Box;
@@ -238,6 +239,9 @@ public final class ShaderGraphPreviews  {
         // and this ticker runs on the frame the graph is built.
         Box box = view.viewportBox();
         if (box == null || box.width() <= 0f || box.height() <= 0f) return true;
+        // OFF THE GL THREAD -- a document recording on its own sequence -- the thumbnails keep their last picture
+        // until previews are recorded with the frame (plan render-graph G3.5).
+        if (!CgGL.ownedByCurrentThread()) return true;
 
         // Newly added nodes get their slot here rather than through a second signal, and only when the plane's
         // nodes changed -- a node rebuilt under its old id is a removal and an insertion, so it counts.
