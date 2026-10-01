@@ -32,7 +32,6 @@ import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgui.render.UiGpu;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -444,9 +443,6 @@ public class CgUiDesktopScene
 
     @Override
     public void render(HarnessContext ctx, FrameInfo frame) {
-        // THE CLOCK EVERY NODE PREVIEW READS -- the shader graph's thumbnails animate off whatever clock
-        // the application drives, and without this CG_TIME is permanently zero.
-        CgRenderPipeline.getInstance().getFrameData().timeSecs = (float) frame.getElapsedTime();
         long workStart = System.nanoTime();
 
         // ONE NETWORK TICK, before anything reads the workspace.

@@ -1,11 +1,11 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgRenderPassVariant;
-import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
@@ -27,6 +27,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.render.draw.CgPassConstants;
+import com.crystalgraphics.render.graph.CgUpload;
 import com.crystalgraphics.render.graph.CgFrame;
 import com.crystalgraphics.render.graph.CgFrameBuilder;
 import com.crystalgraphics.render.graph.CgFrameGraph;
@@ -716,7 +717,7 @@ public final class CgUiPaintContext {
         // Every flush from here is a chunk in the frame's recording, starting with the frame target's clear; nothing
         // executes until endFrame.
         // The frame's clock, which a material reading CG_TIME animates by -- a shader graph's Time node.
-        passConstants.time(CgRenderPipeline.getInstance().frameTime());
+        passConstants.time(CgFrameClock.seconds());
         targetConstants(screenWidth, screenHeight);
         recordFlushes(true);
         for (CgGraphTexture released : pendingReleases) recording.release(released);
@@ -799,7 +800,7 @@ public final class CgUiPaintContext {
     }
 
     /** Textured draw with an explicit UV sub-rect (atlas support), tint already includes opacity. */
-    public void drawImage(CgTexture2D texture, float x, float y, float width, float height,
+    public void drawImage(CgTexture texture, float x, float y, float width, float height,
                            float u0, float v0, float u1, float v1, int argb) {
         bindTexture(texture);
         // A failed load resolves to the fallback checkerboard, which has no meaningful sub-rect — a
@@ -2088,6 +2089,21 @@ public final class CgUiPaintContext {
      */
     public CgGraphTexture requestLayer(String name, int width, int height) {
         return requestTexture(name, width, height, LAYER_FORMAT);
+    }
+
+    /**
+     * Records {@code upload} into {@code target} — a {@link #requestLayer requested} texture — run on the render thread
+     * before anything recorded after it reads the texture. Inside a frame.
+     *
+     * <pre>{@code
+     * ctx.upload(picture, fbo -> ((CgTexture2D) fbo.getColorTexture(0)).upload(w, h, rgba, GL_RGBA, GL_UNSIGNED_BYTE));
+     * ctx.drawImage(picture, x, y, w, h, 0f, 0f, 1f, 1f, 0xFFFFFFFF);
+     * }</pre>
+     */
+    public void upload(CgGraphTexture target, CgUpload upload) {
+        if (!frameActive) throw new IllegalStateException("upload() outside a frame");
+        drain();
+        recording.upload(target, upload);
     }
 
     /**

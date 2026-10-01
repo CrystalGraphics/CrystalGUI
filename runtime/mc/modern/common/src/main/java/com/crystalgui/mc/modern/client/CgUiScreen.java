@@ -2,7 +2,6 @@ package com.crystalgui.mc.modern.client;
 
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -197,11 +196,6 @@ public final class CgUiScreen extends Screen {
         if (!CgUiHostGl.contextIsLive()) return;
 
         float delta = session.frameDelta();
-
-        // The clock every node preview reads. Nothing else drives it here, so without this CG_TIME is
-        // permanently zero and a Time node's thumbnail renders black.
-        CgRenderPipeline.getInstance().getFrameData().timeSecs =
-                (float) (System.nanoTime() / 1_000_000_000.0);
 
         session.frame(delta);
         session.paint(DesktopPresentation.DESKTOP, delta, PAINT_HOST);

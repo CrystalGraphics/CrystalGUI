@@ -1,8 +1,8 @@
 package com.crystalgui.app.frameprofiler;
 
-import com.crystalgraphics.api.texture.CgTextureSpec;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.platform.gl.CgGL;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.box.Box;
@@ -21,8 +21,7 @@ import java.nio.ByteOrder;
  * view.show(CgFrameImages.atOrBefore(frame.index()));   // null shows nothing
  * }</pre>
  *
- * <p>Call {@link #show} outside a paint — from a refresh or an event — since it uploads the picture,
- * and an upload while painting would leave the paint context's texture binding stale.</p>
+ * <p>{@link #show} only keeps the picture; the next paint records its upload, so neither touches GL.</p>
  */
 public class FrameImageView extends UIElement {
 
@@ -30,8 +29,14 @@ public class FrameImageView extends UIElement {
 
     @Nullable
     private CgFrameImages.Image shown;
+    /** {@link #shown} as RGBA, until a paint records its upload. */
     @Nullable
-    private CgTexture2D texture;
+    private ByteBuffer pending;
+    /** The picture's texture, requested from {@link #owner}, which releases it. */
+    @Nullable
+    private CgGraphTexture texture;
+    @Nullable
+    private CgUiPaintContext owner;
 
     public FrameImageView() {
         super(NAME);
@@ -42,18 +47,20 @@ public class FrameImageView extends UIElement {
         return shown;
     }
 
-    /** Shows {@code image}, or nothing. Uploads only when the picture changed. */
+    /** Shows {@code image}, or nothing. The picture is uploaded only when it changed. */
     public void show(@Nullable CgFrameImages.Image image) {
         if (image == shown) return;
         shown = image;
-        if (image != null) upload(image);
+        pending = image == null ? null : rgba(image);
         repaint();
     }
 
-    private void upload(CgFrameImages.Image image) {
-        // RGBA, not the RGB it is stored as: GL unpacks rows on four-byte boundaries by default, and a
-        // row of an odd width in RGB is not one. TOP ROW FIRST, as the picture is stored: the paint
-        // context draws in a top-left space, where UV row 0 is the top. Reversed, it drew upside down.
+    /**
+     * RGBA, not the RGB it is stored as: GL unpacks rows on four-byte boundaries by default, and a row of an odd width
+     * in RGB is not one. TOP ROW FIRST, as the picture is stored: the paint context draws in a top-left space, where
+     * UV row 0 is the top. Reversed, it drew upside down.
+     */
+    private static ByteBuffer rgba(CgFrameImages.Image image) {
         int w = image.width();
         int h = image.height();
         ByteBuffer rgba = ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder());
@@ -64,20 +71,29 @@ public class FrameImageView extends UIElement {
             }
         }
         rgba.flip();
-        if (texture == null) {
-            texture = CgTexture2D.createFromPixels(image.width(), image.height(), rgba, CgTextureSpec.RGBA8_LINEAR);
-        } else {
-            texture.upload(image.width(), image.height(), rgba, CgGL.GL_RGBA, CgGL.GL_UNSIGNED_BYTE);
-        }
+        return rgba;
     }
 
     @Override
     public void paintContent(CgUiPaintContext ctx, Box box) {
         CgFrameImages.Image image = shown;
-        if (image == null || texture == null || box.width() <= 0f || box.height() <= 0f) return;
-        float scale = Math.min(box.width() / image.width(), box.height() / image.height());
-        float w = image.width() * scale;
-        float h = image.height() * scale;
+        if (image == null || box.width() <= 0f || box.height() <= 0f) return;
+        int iw = image.width(), ih = image.height();
+        if (texture == null || owner != ctx || texture.getWidth() != iw || texture.getHeight() != ih) {
+            release();
+            texture = ctx.requestLayer("cgui_frame_image", iw, ih);
+            owner = ctx;
+            if (pending == null) pending = rgba(image);
+        }
+        if (pending != null) {
+            ByteBuffer pixels = pending;
+            pending = null;
+            ctx.upload(texture, target -> ((CgTexture2D) target.getColorTexture(0))
+                    .upload(iw, ih, pixels, CgGL.GL_RGBA, CgGL.GL_UNSIGNED_BYTE));
+        }
+        float scale = Math.min(box.width() / iw, box.height() / ih);
+        float w = iw * scale;
+        float h = ih * scale;
         ctx.drawImage(texture, (box.width() - w) * 0.5f, (box.height() - h) * 0.5f, w, h, 0f, 0f, 1f, 1f, 0xFFFFFFFF);
     }
 
@@ -85,15 +101,12 @@ public class FrameImageView extends UIElement {
     @Override
     protected void disconnected() {
         super.disconnected();
-        if (texture != null) {
-            texture.delete();
-            texture = null;
-        }
+        release();
     }
 
-    @Override
-    protected void connected() {
-        super.connected();
-        if (shown != null && texture == null) upload(shown);
+    private void release() {
+        if (texture != null && owner != null) owner.releaseTexture(texture);
+        texture = null;
+        owner = null;
     }
 }
