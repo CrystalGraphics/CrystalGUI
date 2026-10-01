@@ -1,7 +1,7 @@
 package com.crystalgui.widget.display;
 
 import com.crystalgraphics.api.font.CgFontFamily;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -139,7 +139,7 @@ public class CounterTrack extends FrameSeriesTrack {
     }
 
     @Override
-    protected void paintSeries(UiRecorder ctx, Box box) {
+    protected void paintSeries(CgUiPaintContext ctx, Box box) {
         // THE LABEL HAS A BAND OF ITS OWN, above the bars rather than over them: drawn over the series
         // it collided with the first spike on every row that had one near the start, which is most.
         float bottom = box.height() - 1f;

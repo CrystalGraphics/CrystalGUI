@@ -4,7 +4,7 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowIcon;
 import com.crystalgui.desktop.window.WindowSnapshot;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
@@ -29,7 +29,7 @@ import javax.annotation.Nullable;
  * <p><b>On this engine that is a real second BOX, and the mirroring flag is gone.</b> The old engine
  * drew the subtree twice against one cached {@code localToWorld} per element, so the copy overwrote the
  * original's idea of where it lived and the real window stopped being clickable where it was drawn —
- * which is why {@code UiRecorder.mirrored} existed and why it had to be a counter rather than a
+ * which is why {@code CgUiPaintContext.mirrored} existed and why it had to be a counter rather than a
  * boolean. {@link com.crystalgui.ui.box.BoxTree#mirror} lays the subtree out a second time under this
  * element, so each copy has its own matrices and its own place in the hit order, and the node is never
  * told it is drawn twice. Nothing here paints: the painter walks the mirror like any other box.</p>
@@ -395,7 +395,7 @@ public class WindowThumbnail extends UIElement {
      * a symptom somewhere else.</p>
      */
     @Override
-    public void paintDecoration(UiRecorder ctx, Box box) {
+    public void paintDecoration(CgUiPaintContext ctx, Box box) {
         super.paintDecoration(ctx, box);
         if (frame == null || hasLive()) return;
         if (box.width() <= 0f || box.height() <= 0f) return;

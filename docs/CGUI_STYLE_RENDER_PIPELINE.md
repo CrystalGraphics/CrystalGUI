@@ -238,7 +238,7 @@ UIDocument.paintFrame()
     styleEngine.calculateStyle(deltaSeconds)   // drainDirtyMatch() (selector rematch) + transitionEngine.tick()
     animation().tick(deltaSeconds)               // smooth scrolls + every registered UIFrameTicker
     calculateLayout()                          // Taffy computeLayout(), while dirty
-  document.recorder()                          // the document's own UiRecorder
+  document.paintContext()                          // the document's own CgUiPaintContext
   paintContext.beginFrame(actualScreenW, actualScreenH)  // GL save, ortho, bind gui_quad, reset scissor
     pose.pushPose(); pose.mulPoseMatrix(rootTransform)   // rootTransform = the ONE definition of uiScale
       ui.rootElement.the paint walk(paintContext) // paintContent → children (z-sorted) → paintDecoration → paintOutline
@@ -265,7 +265,7 @@ cost, since per-element material binds at draw time can dwarf everything else.
 
 ## 5. Drawable System & Compositing Channels
 
-`core/src/main/java/com/crystalgui/render/texture/`, `core/src/main/java/com/crystalgui/render/UiRecorder.java`
+`core/src/main/java/com/crystalgui/render/texture/`, `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`
 
 `CgUiDrawable` is the "paint yourself into a rect" interface — `CgUiRect` (a fill plus radii and border, which is what every `background` resolves to), `CgUiSprite`
 (textured, optional 9-slice border), `CgUiRect` (SDF), `CgUiCrossFade` (generic two-drawable
@@ -309,7 +309,7 @@ two identically-named rows, which is the one thing that arrangement cannot yet t
 They're separate because conflating them was an earlier bug: an initial `CgUiCrossFade` draft scaled
 the ambient tint's alpha channel to blend `from`/`to`, which corrupted the RGB tint channel used for
 things like `background-color`. Layer opacity was added specifically so cross-fades (and any future
-whole-subtree opacity feature) have a dedicated, tint-independent channel — see `UiRecorder.withLayerOpacity`.
+whole-subtree opacity feature) have a dedicated, tint-independent channel — see `CgUiPaintContext.withLayerOpacity`.
 
 **`background` vs `background-color` vs `color`** — three separate, independently-cascading
 properties, matching real CSS's separation:
@@ -570,7 +570,7 @@ The shader is a genuine "canvas": interior filled by `_FillColor` or a sampled `
 (`WITH_TEXTURE_FILL` keyword), an optional `_BorderColor` stroke band (`WITH_BORDER` keyword) along the
 outer edge, both masked by the same distance field so corners clip fill and border consistently.
 
-**`UiRecorder.withMaterial(material, drawBody)`** — used because an SDF rect needs its own
+**`CgUiPaintContext.withMaterial(material, drawBody)`** — used because an SDF rect needs its own
 shader/program, not the shared box-model batch. **`bind()` must run after `drawBody`, not before** —
 `applyProperties(...)` is CPU-only (it marks the block dirty only if a value actually moved; the GPU upload
 only happens inside `bind()`, which sends the block only if its packed bytes changed or it is the frame's
@@ -593,7 +593,7 @@ through to `CgUiCrossFade` now, since `background` holds a `CgUiRect` or one of 
 
 `opacity < 1` and a masked `overflow: hidden` route through an offscreen "visual layer"
 (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`,
-`core/src/main/java/com/crystalgui/render/UiRecorder.java`). Ordinary elements (opacity 1, no
+`core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`). Ordinary elements (opacity 1, no
 mask) skip this entirely — same direct-draw path as always, zero overhead — and so does most rounded
 `overflow: hidden`, which is a clip rather than a mask (below).
 
@@ -617,7 +617,7 @@ that overrides a paint hook, because CrystalGraphics' text material carries no `
 folded label would ignore the fade.
 
 **And a layer whose subtree did not change is not painted again.** `Box.subtreeRevision` is composed
-in the same walk as the ink bounds; `UiRecorder.retain` keeps the texture, and a layer still
+in the same walk as the ink bounds; `CgUiPaintContext.retain` keeps the texture, and a layer still
 holding the revision it was drawn at is composited straight back. Retention is refused for any subtree
 containing a node whose `paintsDynamically()` is true (the default for anything overriding a paint
 hook) or a `backdrop-filter`, whose subject is not in this tree at all. `UIElement.repaint()` is the
@@ -642,7 +642,7 @@ the picture differs only in corner fringes (at most 35 levels, a handful of pixe
 where the 8-bit children layer used to round.
 
 **A subtree drawn wholly outside the clip is not walked.** `BoxPainter` carries each box's ink bounds
-through the pose and asks `UiRecorder.outsideClip` before painting it — Blink's cull rect, against
+through the pose and asks `CgUiPaintContext.outsideClip` before painting it — Blink's cull rect, against
 the live scissor or the enclosing layer's region. It is what lets a list keep rows realised past its
 viewport for free. `-Dcrystalgui.paint.cull=false` paints everything, to rule it out. The same undeclared
 paint outside a box's ink that a layer clips is, here, not drawn at all once the box leaves the clip.
@@ -1014,8 +1014,8 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
 | Shared CSS parsing helpers | `core/src/main/java/com/crystalgui/style/CssParsingUtil.java` (`splitTopLevelCommas`, `splitFunctionList`), `.../style/CssAngle.java` |
 | Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIDocument.java` |
 | Paint entry points | `core/src/main/java/com/crystalgui/ui/UINode.java` (`paintContent`/`paintDecoration`/`paintOutline`/`the paint walk`) |
-| Paint context | `core/src/main/java/com/crystalgui/render/UiRecorder.java` |
-| Visual layers (opacity isolation + masking) | `UiRecorder` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UINode.the paint walk`/`buildDefaultMask`, `CrystalGraphics/.../gl/framebuffer/CgFrameBuffer.java` (`createOwned`), `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
+| Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |
+| Visual layers (opacity isolation + masking) | `CgUiPaintContext` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UINode.the paint walk`/`buildDefaultMask`, `CrystalGraphics/.../gl/framebuffer/CgFrameBuffer.java` (`createOwned`), `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
 | Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
 | `background:` parsing | `core/src/main/java/com/crystalgui/style/property/visual/texture/TextureValue.java` |
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |

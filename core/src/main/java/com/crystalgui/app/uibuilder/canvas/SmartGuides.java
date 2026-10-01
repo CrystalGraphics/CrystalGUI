@@ -5,7 +5,7 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.transform.Transform;
@@ -144,7 +144,7 @@ public final class SmartGuides extends UIElement {
     }
 
     @Override
-    public void paintContent(UiRecorder paint, Box box) {
+    public void paintContent(CgUiPaintContext paint, Box box) {
         if (box == null || indicators.isEmpty()) return;
         float[] area = area();
         if (area == null) return;

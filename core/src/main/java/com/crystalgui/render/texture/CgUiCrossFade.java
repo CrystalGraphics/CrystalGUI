@@ -1,6 +1,6 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 /**
  * Generic, type-agnostic cross-fade between two {@link CgUiDrawable}s — used by
@@ -10,7 +10,7 @@ import com.crystalgui.render.UiRecorder;
  * <p>Mirrors how browsers actually cross-fade images: not by touching either drawable's own
  * tint/alpha, but by stacking two layers and animating <i>both</i> simultaneously — outgoing
  * {@code from} fades {@code 1 → 0}, incoming {@code to} fades {@code 0 → 1} — via
- * {@link UiRecorder#withLayerOpacity(float, Runnable)}, the standard technique behind web
+ * {@link CgUiPaintContext#withLayerOpacity(float, Runnable)}, the standard technique behind web
  * carousels/image hover-swaps. (This does inherit that technique's well-known artifact: a slight
  * extra-transparency dip around the 50% mark, since two half-opaque layers stacked don't sum to
  * full opacity — real browsers have the same limitation with the plain two-layer trick; avoiding
@@ -52,7 +52,7 @@ public final class CgUiCrossFade implements CgUiDrawable {
     }
 
     @Override
-    public void draw(UiRecorder ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
+    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         // Push/pop rather than the lambda form: a cross-fade is on the per-element paint path for as
         // long as a `background` transition runs, and each lambda captures six arguments.
         float previous = ctx.pushLayerOpacity(1f - t);

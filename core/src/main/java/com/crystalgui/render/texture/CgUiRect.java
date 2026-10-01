@@ -4,7 +4,7 @@ import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -202,7 +202,7 @@ public final class CgUiRect implements CgUiDrawable {
      * rect in the engine is actually drawn.
      */
     @Override
-    public void draw(UiRecorder ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
+    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         ctx.rect()
                 .at(x, y).size(width, height)
                 .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
@@ -252,7 +252,7 @@ public final class CgUiRect implements CgUiDrawable {
          * null, which draws nothing rather than drawing white. */
         private enum Kind { COLOR, TEXTURE, SPRITE }
 
-        private UiRecorder ctx;
+        private CgUiPaintContext ctx;
         private float x, y, width, height;
         private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
         /** Per side, CSS order for a box: left, top, right, bottom. */
@@ -267,9 +267,9 @@ public final class CgUiRect implements CgUiDrawable {
          * callbacks take no arguments, so what they draw with lives here. */
         private int quadTint, shaderFillArgb;
 
-        /** Resets to a bare rect and binds the context. {@code UiRecorder.rect()} is the way in;
+        /** Resets to a bare rect and binds the context. {@code CgUiPaintContext.rect()} is the way in;
          * nothing else should call this. */
-        public Draw begin(UiRecorder ctx) {
+        public Draw begin(CgUiPaintContext ctx) {
             this.ctx = ctx;
             x = 0f; y = 0f; width = 0f; height = 0f;
             rxTL = 0f; ryTL = 0f; rxTR = 0f; ryTR = 0f;
@@ -420,7 +420,7 @@ public final class CgUiRect implements CgUiDrawable {
             // checkerboard has no meaningful sub-rect, so cropping into it samples an arbitrary corner and a
             // broken sprite reads as a solid colour instead of as missing -- which is also the one case the
             // sliced path cannot serve, since that samples the sprite's own atlas UVs. One stretched copy of
-            // the whole checkerboard says "missing" at any size. UiRecorder.drawImage is the only
+            // the whole checkerboard says "missing" at any size. CgUiPaintContext.drawImage is the only
             // other site that can be handed a fallback.
             if (missing || (!sprite.hasBorder() && isPlain())) {
                 ctx.bindTexture(resolved);

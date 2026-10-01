@@ -2,7 +2,7 @@ package com.crystalgui.app.uibuilder.inspect;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
@@ -150,7 +150,7 @@ public final class BoxModelOverlay extends UIElement {
      * overlay's own origin on the way out — the one conversion, in the one place that needs it.</p>
      */
     @Override
-    public void paintContent(UiRecorder ctx, Box box) {
+    public void paintContent(CgUiPaintContext ctx, Box box) {
         if (border == null || box == null) return;
         fill(ctx, margin, MARGIN, box);
         fill(ctx, border, BORDER, box);
@@ -158,7 +158,7 @@ public final class BoxModelOverlay extends UIElement {
         fill(ctx, content, CONTENT, box);
     }
 
-    private static void fill(UiRecorder ctx, @Nullable WorldRect rect, int argb, Box own) {
+    private static void fill(CgUiPaintContext ctx, @Nullable WorldRect rect, int argb, Box own) {
         if (rect == null || rect.width() <= 0f || rect.height() <= 0f) return;
         ctx.fillRect(rect.x() - own.x(), rect.y() - own.y(), rect.width(), rect.height(), argb);
     }

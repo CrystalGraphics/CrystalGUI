@@ -13,7 +13,7 @@ import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.text.TextShadowStyle;
 import com.crystalgui.render.text.TextStrokeStyle;
 import com.crystalgui.render.text.FontFamilyCache;
@@ -699,7 +699,7 @@ public final class UIText extends UIElement implements Measurable {
     // ── Painting ─────────────────────────────────────────────────────────────
 
     @Override
-    public void paintContent(UiRecorder ctx, Box box) {
+    public void paintContent(CgUiPaintContext ctx, Box box) {
         var general = getStyle().getGeneralGroup();
         float contentWidth = box.contentBoxWidth();
         float contentX = box.border().left + box.padding().left
@@ -722,7 +722,7 @@ public final class UIText extends UIElement implements Measurable {
         if (layout.lines().isEmpty() || text.get().isEmpty()) return;
 
         // WHAT THE GLYPHS ACTUALLY GOT decides whether this paint was final -- see
-        // UiRecorder#textDegradedDrawCount. A shadow cell a worker has not built yet counts too.
+        // CgUiPaintContext#textDegradedDrawCount. A shadow cell a worker has not built yet counts too.
         long degradedBefore = ctx.textDegradedDrawCount();
 
         int color = general.color();
@@ -842,7 +842,7 @@ public final class UIText extends UIElement implements Measurable {
      * boundary, so one phrase draws as several pills. Shaping breaks a run for reasons of its own (a
      * font fallback, a script change), so "one highlight" and "one run" were never the same thing.</p>
      */
-    private void paintHighlightBands(UiRecorder ctx, CgTextLayout layout,
+    private void paintHighlightBands(CgUiPaintContext ctx, CgTextLayout layout,
                                      float contentX, float contentY) {
         HighlightStyle[] perChar = highlightPerChar;
         if (perChar == null || perChar.length == 0) return;
@@ -875,7 +875,7 @@ public final class UIText extends UIElement implements Measurable {
         }
     }
 
-    private void paintBand(UiRecorder ctx, @Nullable HighlightStyle style,
+    private void paintBand(CgUiPaintContext ctx, @Nullable HighlightStyle style,
                            float x, float y, float width, float height) {
         if (style == null || width <= 0f) return;
         int background = style.backgroundColor();

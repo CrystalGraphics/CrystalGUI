@@ -23,11 +23,11 @@ import java.util.List;
 
 /**
  * The GL half of a UI frame, on the render thread: the GL state a host hands over and gets back, the frame's own
- * target, executing what a {@link UiRecorder} recorded, and compositing it onto the host's target. One per
+ * target, executing what a {@link CgUiPaintContext} recorded, and compositing it onto the host's target. One per
  * process; a paint context calls it from {@code beginFrame}/{@code endFrame}.
  *
  * <pre>{@code
- * UiFrame frame = recorder.seal();   // recorded and built, on the document's thread
+ * UiFrame frame = ctx.seal();          // recorded and built, on the document's thread
  * UiGpu.present(frame);              // render thread: the host's state saved, executed, composited, restored
  * }</pre>
  *
@@ -53,7 +53,7 @@ public final class UiGpu {
      * than the world behind it, and its format is the same on every loader. Not multisampled: every UI material
      * antialiases its own edges. Starts 1x1 and follows the surface.
      */
-    final CgFrameBuffer frameFbo = CgFrameBuffer.createOwned("cgui_frame", 1, 1, UiRecorder.LAYER_FORMAT);
+    final CgFrameBuffer frameFbo = CgFrameBuffer.createOwned("cgui_frame", 1, 1, CgUiPaintContext.LAYER_FORMAT);
     /** {@link #frameFbo}, as a recording names it. */
     final CgGraphTexture frameTarget = CgGraphTexture.imported("cgui_frame", frameFbo);
 
@@ -66,7 +66,7 @@ public final class UiGpu {
     @Nullable
     private CgPixelReadback frameImages;
     /** Every paint context made, for {@link #destroy()} to free what each made. */
-    private final List<WeakReference<UiRecorder>> contexts = new ArrayList<>();
+    private final List<WeakReference<CgUiPaintContext>> contexts = new ArrayList<>();
 
     private UiGpu() {
     }
@@ -82,7 +82,7 @@ public final class UiGpu {
         return instance;
     }
 
-    void track(UiRecorder context) {
+    void track(CgUiPaintContext context) {
         contexts.removeIf(ref -> ref.get() == null);
         contexts.add(new WeakReference<>(context));
     }
@@ -236,8 +236,8 @@ public final class UiGpu {
     public static void destroy() {
         UiGpu gpu = instance;
         if (gpu == null) return;
-        for (WeakReference<UiRecorder> ref : gpu.contexts) {
-            UiRecorder context = ref.get();
+        for (WeakReference<CgUiPaintContext> ref : gpu.contexts) {
+            CgUiPaintContext context = ref.get();
             if (context != null) context.release();
         }
         gpu.contexts.clear();

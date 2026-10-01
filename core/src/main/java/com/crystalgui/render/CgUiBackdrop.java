@@ -26,7 +26,7 @@ import java.util.Map;
 /**
  * The BACKDROP PRIMITIVE: what is behind an element, captured and blurred, once per frame.
  *
- * <p>This is the whole of what {@code backdrop-filter} stands on, and it sits beside {@link UiRecorder}
+ * <p>This is the whole of what {@code backdrop-filter} stands on, and it sits beside {@link CgUiPaintContext}
  * rather than inside it for the reason {@code TextEditor}'s view parts do: it is a piece of the paint
  * context rather than a client of it, so it reaches back through package-private members instead of
  * through a public API. Keeping it here also keeps the context's own job legible — the context draws
@@ -51,9 +51,9 @@ import java.util.Map;
  */
 final class CgUiBackdrop {
 
-    private final UiRecorder ctx;
+    private final CgUiPaintContext ctx;
 
-    CgUiBackdrop(UiRecorder ctx) {
+    CgUiBackdrop(CgUiPaintContext ctx) {
         this.ctx = ctx;
     }
 
@@ -82,7 +82,7 @@ final class CgUiBackdrop {
             ctx.releaseTexture(capture);
             capture = null;
         }
-        if (capture == null) capture = ctx.requestTexture("cgui_backdrop_filter", w, h, UiRecorder.LAYER_FORMAT);
+        if (capture == null) capture = ctx.requestTexture("cgui_backdrop_filter", w, h, CgUiPaintContext.LAYER_FORMAT);
         return capture;
     }
 
@@ -162,8 +162,8 @@ final class CgUiBackdrop {
         }
         if (pair == null) {
             pair = new CgGraphTexture[] {
-                    ctx.requestTexture("cgui_blur_a" + scale, w, h, UiRecorder.LAYER_FORMAT),
-                    ctx.requestTexture("cgui_blur_b" + scale, w, h, UiRecorder.LAYER_FORMAT),
+                    ctx.requestTexture("cgui_blur_a" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
+                    ctx.requestTexture("cgui_blur_b" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
             };
             blurTargets.put(scale, pair);
             for (CgGraphTexture target : pair) ctx.warmUpLayer(target);
@@ -229,7 +229,7 @@ final class CgUiBackdrop {
      * flat no.</p>
      *
      * <p><b>Retaken only when something was painted over what a consumer samples</b> since the last grab
-     * ({@link UiRecorder#notePainted}): a consumer then sees everything drawn before it, another glass
+     * ({@link CgUiPaintContext#notePainted}): a consumer then sees everything drawn before it, another glass
      * surface included, and glass over ground nothing touched still shares the frame's one grab.</p>
      *
      * @param blurRadiusPx how far the blur reaches, in surface pixels. Zero hands back the capture
@@ -238,7 +238,7 @@ final class CgUiBackdrop {
      *         back to a solid colour rather than draw nothing
      */
     @Nullable
-    UiRecorder.Backdrop forRect(float x, float y, float width, float height, float blurRadiusPx, float reach) {
+    CgUiPaintContext.Backdrop forRect(float x, float y, float width, float height, float blurRadiusPx, float reach) {
         if (!ctx.frameActive || width <= 0f || height <= 0f) return null;
 
         // SURFACE PIXELS, so from the TRANSFORM chain — the opposite of the rule for placing a popup
@@ -316,7 +316,7 @@ final class CgUiBackdrop {
         // WHAT THIS ELEMENT MAY SAMPLE, as the same normalised rect: its padded, clipped rect, inset half a texel
         // so a tap at the boundary never filters in the texels beyond it.
         float halfU = 0.5f / w, halfV = 0.5f / h;
-        return new UiRecorder.Backdrop(sharp, blurred, u0, v0, ux, vx, uy, vy,
+        return new CgUiPaintContext.Backdrop(sharp, blurred, u0, v0, ux, vx, uy, vy,
                 (wantX0 - capX0) / (float) w + halfU, 1f - (wantY1 - capY0) / (float) h + halfV,
                 (wantX1 - capX0) / (float) w - halfU, 1f - (wantY0 - capY0) / (float) h - halfV);
     }
@@ -380,7 +380,7 @@ final class CgUiBackdrop {
      */
     private int[] targetOrigin() {
         int x = 0, y = 0;
-        for (Iterator<UiRecorder.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
+        for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
             LayerRegion region = it.next().region();
             if (region != null) {
                 x += region.x();
@@ -400,7 +400,7 @@ final class CgUiBackdrop {
         int x0 = clip[0] + origin[0], y0 = clip[1] + origin[1];
         int x1 = clip[2] + origin[0], y1 = clip[3] + origin[1];
         int ox = 0, oy = 0;
-        for (Iterator<UiRecorder.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
+        for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
             LayerRegion region = it.next().region();
             if (region == null) continue;
             ox += region.x();
@@ -500,8 +500,8 @@ final class CgUiBackdrop {
         List<CgGraphTexture> enclosing = new ArrayList<>();
         List<int[]> placed = new ArrayList<>();
         int originX = 0, originY = 0;
-        for (Iterator<UiRecorder.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
-            UiRecorder.LayerFrame frame = it.next();
+        for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
+            CgUiPaintContext.LayerFrame frame = it.next();
             LayerRegion region = frame.region();
             if (region != null) {
                 originX += region.x();
@@ -553,7 +553,7 @@ final class CgUiBackdrop {
      *
      * <p><b>A SCISSOR RECT IS IN SCREEN PIXELS, AND A BACKDROP TARGET IS NOT IN SCREEN PIXELS.</b>
      * That is the whole of it. Every ordinary layer FBO is screen-sized, so the ambient clip rect means
-     * the same thing there and {@link UiRecorder#beginLayerFbo} is right not to touch it -- an element inside an
+     * the same thing there and {@link CgUiPaintContext#beginLayerFbo} is right not to touch it -- an element inside an
      * {@code overflow: hidden} subtree must stay clipped when it is promoted to a layer. The backdrop
      * capture and the blur targets are the first things in this engine to render into a target with its
      * OWN coordinate space, and for them the inherited rect is not a clip, it is a coordinate error.</p>
@@ -590,7 +590,7 @@ final class CgUiBackdrop {
         float tw = tex.getWidth(), th = tex.getHeight();
         float u0 = (x0 - ox) / tw, u1 = (x1 - ox) / tw;
         float vTop = 1f - (y0 - oy) / th, vBottom = 1f - (y1 - oy) / th;
-        // Declared, not bound by hand. @see UiRecorder#blitLayer
+        // Declared, not bound by hand. @see CgUiPaintContext#blitLayer
         ctx.layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, tex));
         ctx.withMaterial(ctx.layerBlitMaterial, () -> {
             ctx.poseStack.pushPose();

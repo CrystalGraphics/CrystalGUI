@@ -1,7 +1,7 @@
 package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
@@ -548,7 +548,7 @@ public class RpgConsoleScene implements InteractiveSceneLifecycle,
 
         document.frame(delta, w / SCALE, h / SCALE);
 
-        UiRecorder context = document.recorder();
+        CgUiPaintContext context = document.paintContext();
         context.beginFrame(w, h);
         document.paint(context);
         context.endFrame();

@@ -2,7 +2,7 @@ package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
@@ -211,7 +211,7 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
 
         document.frame(frame.getDeltaTime(), ctx.getScreenWidth() / SCALE, ctx.getScreenHeight() / SCALE);
 
-        UiRecorder paint = document.recorder();
+        CgUiPaintContext paint = document.paintContext();
         paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
         document.paint(paint);
         paint.endFrame();

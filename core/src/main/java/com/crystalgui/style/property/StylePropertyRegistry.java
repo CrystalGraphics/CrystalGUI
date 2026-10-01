@@ -111,7 +111,7 @@ public class StylePropertyRegistry {
     // clip, and everything in LayoutProperties) do not — none of them are inherited in real CSS either.
     public static final StyleProperty<Integer> COLOR = create(new ColorProperty("color", -1)).setInheritable(true);
     // Matches real CSS: font-size/font-family both inherit by default. Default font-family points
-    // at the same default font UiRecorder already loads, so an element with no font-family
+    // at the same default font CgUiPaintContext already loads, so an element with no font-family
     // anywhere in its ancestor chain still resolves to something that works.
     /**
      * The size every {@code em} on this element is a multiple of.

@@ -2,7 +2,7 @@
 //
 // The continuously-varying surfaces a colour picker is made of. Every one is a per-pixel function of
 // position, so none can be a texture or a batched quad -- the same reason gui_rect.shader
-// exists and is drawn through UiRecorder.withMaterial(...).
+// exists and is drawn through CgUiPaintContext.withMaterial(...).
 //
 //   HUE_RING (0)   an annulus, hue taken from the angle
 //   SV_SQUARE (1)  saturation across x, value up y, at a fixed hue

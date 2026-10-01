@@ -2,7 +2,7 @@ package com.crystalgui.render.texture;
 
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.shader.CgShaderBindings;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 /**
  * A ruled grid — {@code grid(<cell>, <colour>[, <line-width>])} as a drawable.
@@ -62,7 +62,7 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
      * frame. A method reference stored once costs nothing after the first draw. These fields are not
      * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
      */
-    private UiRecorder drawCtx;
+    private CgUiPaintContext drawCtx;
     private float drawX, drawY, drawWidth, drawHeight;
     private int drawTint;
     private final Runnable quadBody = this::quadBody;
@@ -134,7 +134,7 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
     }
 
     @Override
-    public void draw(UiRecorder ctx, float mouseX, float mouseY,
+    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
         if (width <= 0f || height <= 0f) return;
         if (lineWidth <= 0f) return;

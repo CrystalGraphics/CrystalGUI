@@ -7,7 +7,7 @@ import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.box.BoxPainter;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
@@ -1686,7 +1686,7 @@ public class Desktop extends UIElement implements DataProvider {
         float scale = document.boxes().uiScale();
         document.frame(deltaSeconds, surfaceWidth / scale, surfaceHeight / scale);
 
-        UiRecorder ctx = document.recorder();
+        CgUiPaintContext ctx = document.paintContext();
         ctx.beginFrame(surfaceWidth, surfaceHeight);
         if (presentation.paintsWholeDesktop()) {
             document.paint(ctx);

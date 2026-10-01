@@ -2,7 +2,7 @@ package com.crystalgui.widget.display;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -51,7 +51,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
     protected abstract long rankOf(int index);
 
     /** Paint, in box-local pixels, knowing the columns from {@link #columnCount} and {@link #xOf}. */
-    protected abstract void paintSeries(UiRecorder ctx, Box box);
+    protected abstract void paintSeries(CgUiPaintContext ctx, Box box);
 
     private int selected = -1;
     private int hovered = -1;
@@ -509,7 +509,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
     // ── Painting ────────────────────────────────────────────────────────────────────────────
 
     @Override
-    protected final void paintTrack(UiRecorder ctx, Box box) {
+    protected final void paintTrack(CgUiPaintContext ctx, Box box) {
         if (frameCount() == 0) return;
         int accent = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
         float height = box.height();
@@ -552,7 +552,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
     }
 
     /** A full-height band from {@code left} to {@code right}, clipped to the row; nothing if outside it. */
-    private void fillClipped(UiRecorder ctx, float left, float right, float height, int argb) {
+    private void fillClipped(CgUiPaintContext ctx, float left, float right, float height, int argb) {
         float from = Math.max(0f, left);
         float to = Math.min(Math.max(1f, width()), right);
         if (to > from) ctx.rect().at(from, 0f).size(to - from, height).fillColor(argb).submit();

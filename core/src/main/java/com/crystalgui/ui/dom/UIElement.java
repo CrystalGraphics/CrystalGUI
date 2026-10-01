@@ -3,7 +3,7 @@ package com.crystalgui.ui.dom;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Resize;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.LayoutGroup;
 import com.crystalgui.style.ComputedStyle;
@@ -642,11 +642,11 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      * override; geometry comes from {@code box}, in the box's own space (the origin is this box's
      * top-left corner).
      */
-    public void paintContent(UiRecorder ctx, Box box) {
+    public void paintContent(CgUiPaintContext ctx, Box box) {
     }
 
     /** As {@link #paintContent}, after the children and before {@code overlay}/{@code outline}. */
-    public void paintDecoration(UiRecorder ctx, Box box) {
+    public void paintDecoration(CgUiPaintContext ctx, Box box) {
     }
 
     /**
@@ -719,7 +719,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     /** Which class in {@code type}'s ancestry actually declares one of the two paint hooks. */
     private static Class<?> declarerOf(Class<?> type, String hook) {
         try {
-            return type.getMethod(hook, UiRecorder.class, Box.class).getDeclaringClass();
+            return type.getMethod(hook, CgUiPaintContext.class, Box.class).getDeclaringClass();
         } catch (NoSuchMethodException never) {
             throw new AssertionError(hook + " is public on UIElement", never);
         }

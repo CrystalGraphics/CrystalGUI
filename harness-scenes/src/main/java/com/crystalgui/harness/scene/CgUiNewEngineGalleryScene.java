@@ -18,7 +18,7 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.graph.port.BasicPortType;
 import com.crystalgui.graph.port.PortType;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
@@ -939,7 +939,7 @@ public class CgUiNewEngineGalleryScene
 
         document.frame(delta, w / SCALE, h / SCALE);
 
-        UiRecorder context = document.recorder();
+        CgUiPaintContext context = document.paintContext();
         context.beginFrame(w, h);
         document.paint(context);
         context.endFrame();

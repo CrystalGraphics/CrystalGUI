@@ -24,7 +24,7 @@ import com.crystalgui.ui.input.keymap.KeyEventType;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 import com.crystalgui.ui.input.keymap.KeymapResolver;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -494,7 +494,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * outside every scissor and outside layer retention — art follows the pointer, and no box moved to
      * say so.</p>
      */
-    public void paintCursorDecoration(UiRecorder ctx) {
+    public void paintCursorDecoration(CgUiPaintContext ctx) {
         CursorDecoration held = pointerArt();
         if (held != null) held.paint(ctx, position.x, position.y);
     }
