@@ -118,6 +118,8 @@ texteditor .__line__ {
     white-space: nowrap;
     justify-content: center;
     z-index: 0;
+    /* At least the viewport, whatever its text: resolved by layout, so a resize rewrites no row. */
+    min-width: 100%;
 }
 
 /* THE Z-INDICES ARE LOAD-BEARING, not decoration. Equal-z siblings paint in insertion order, and the
