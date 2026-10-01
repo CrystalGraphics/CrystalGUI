@@ -2092,6 +2092,34 @@ public final class CgUiPaintContext {
     }
 
     /**
+     * Lends the frame's recording for passes of the caller's own — into requested textures, as a shader preview
+     * renders its picture — until {@link #endPasses()}, which goes on drawing where paint was. Inside a frame.
+     *
+     * <pre>{@code
+     * CgRecording recording = ctx.beginPasses();
+     * renderer.renderPending(graph, recording);
+     * ctx.endPasses();
+     * ctx.drawImage(renderer.textureOf(nodeId), x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+     * }</pre>
+     *
+     * <ul>
+     *   <li>Every pass recorded in between must have ended by {@link #endPasses()}.</li>
+     *   <li>A texture a pass writes may be drawn by anything recorded after it, in this frame or a later one.</li>
+     * </ul>
+     */
+    public CgRecording beginPasses() {
+        if (!frameActive) throw new IllegalStateException("beginPasses() outside a frame");
+        drain();
+        return recording;
+    }
+
+    /** Ends what {@link #beginPasses()} lent: paint continues on the target it was drawing into. */
+    public void endPasses() {
+        recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
+        currentTexture = null;
+    }
+
+    /**
      * Records {@code upload} into {@code target} — a {@link #requestLayer requested} texture — run on the render thread
      * before anything recorded after it reads the texture. Inside a frame.
      *
