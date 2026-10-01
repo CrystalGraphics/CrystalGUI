@@ -479,7 +479,9 @@ public final class WindowAnimator {
         // somebody has just re-shown"). What a drop leaves behind is the ANIMATION-origin slots,
         // which `cancelCurrent()` clears on the next gesture; `show()` and every other entry point
         // here begin with it, so there is no route back on screen that skips the cleanup.
-        window.animation().afterLayout(frame, animation);
+        // BEFORE layout, unlike a transform flight: it writes a rect and reads no geometry, so the frame lays
+        // out once with it. After layout, every step laid the window out again, and again for the hover it moved.
+        window.animation().every(frame, animation);
         return true;
     }
 
@@ -500,7 +502,9 @@ public final class WindowAnimator {
                     settle.run();
                 });
         current = animation;
-        window.animation().afterLayout(frame, animation);
+        // BEFORE layout, unlike a transform flight: it writes a rect and reads no geometry, so the frame lays
+        // out once with it. After layout, every step laid the window out again, and again for the hover it moved.
+        window.animation().every(frame, animation);
         return true;
     }
 
