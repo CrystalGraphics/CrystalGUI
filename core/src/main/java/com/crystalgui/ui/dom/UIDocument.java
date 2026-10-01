@@ -130,10 +130,26 @@ public final class UIDocument extends UIElement {
 
     // ── The frame thread ─────────────────────────────────────────────────────
 
-    /** Claims the current thread as the one that runs frames for this tree. */
+    /**
+     * Claims the current thread as the one that runs frames for this tree. {@link #frame} claims it on
+     * the first frame, so a host need not; a test that mutates before any frame calls this to arm the
+     * check.
+     */
     public UIDocument markFrameThread() {
         frameThread = Thread.currentThread();
+        UiThread.markCurrent();
         return this;
+    }
+
+    /** The first frame claims its thread, as does a frame after the claiming thread died. */
+    private void claimFrameThread() {
+        Thread owner = frameThread;
+        if (owner == Thread.currentThread()) return;
+        if (owner == null || !owner.isAlive()) {
+            markFrameThread();
+            return;
+        }
+        require("A frame");
     }
 
     @Nullable
@@ -461,6 +477,7 @@ public final class UIDocument extends UIElement {
         // A FRAME STARTS HERE AND ENDS IN THE PAINT CONTEXT, because the host drives the two halves
         // separately: this is animation, style and layout, and the paint that follows is a call the
         // host makes itself. @see CgUiPaintContext#endFrame
+        claimFrameThread();
         UiTrace.frameBegin();
         if (JobScheduler.hasShared()) {
             CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
