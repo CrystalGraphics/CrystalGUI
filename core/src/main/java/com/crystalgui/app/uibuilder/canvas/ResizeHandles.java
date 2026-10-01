@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas;
 
+import com.crystalgui.ui.service.PlatformPort;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.List;
@@ -25,7 +26,6 @@ import com.crystalgui.ui.box.Measurable;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 
 import com.crystalgui.ui.event.MouseEvent;
@@ -503,8 +503,8 @@ public final class ResizeHandles extends UIElement {
      * engine's own Select tool asks the same way.</p>
      */
     private static int modifiersNow() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
+        PlatformPort input = PlatformPort.current();
+        return input == null ? 0 : input.modifiers();
     }
 
     private void hideBadge() {

@@ -53,7 +53,7 @@ public final class ResizeHandles {
     }
 
     @Nullable
-    private static Installer installer;
+    private static volatile Installer installer;
 
     private ResizeHandles() {
     }

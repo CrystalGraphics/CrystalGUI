@@ -4,6 +4,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
@@ -212,8 +213,8 @@ public final class CgUiScreen extends Screen {
         // NULL ENDS THE COMPOSITION: Minecraft passes no event rather than an empty one.
         if (window == null) return false;
         return event == null
-                ? window.input().consumeComposition("", 0)
-                : window.input().consumeComposition(event.fullText(), event.caretPosition());
+                ? HostSession.session().input().consumeComposition("", 0)
+                : HostSession.session().input().consumeComposition(event.fullText(), event.caretPosition());
     }
 
     private static int[] placedTextInputArea;
@@ -222,7 +223,7 @@ public final class CgUiScreen extends Screen {
     // two CORNERS, as EditBox passes them, not a size. Sent only on a change: SDL passes it to the OS each time.
     private static void placeTextInputArea() {
         UIDocument window = window();
-        float[] area = window == null ? null : window.input().textInputArea();
+        float[] area = window == null ? null : HostSession.session().textInputArea();
         if (area == null) return;
         Minecraft mc = Minecraft.getInstance();
         float scale = Math.max(1, mc.getWindow().getGuiScale());
@@ -262,7 +263,7 @@ public final class CgUiScreen extends Screen {
         /*@Override
         public void beforePaint() {
             UIDocument window = window();
-            if (window != null) CgUiInput.mouseMoved(window);
+            if (window != null) CgUiInput.mouseMoved(HostSession.session().input());
         }
         *///?}
 
@@ -331,24 +332,24 @@ public final class CgUiScreen extends Screen {
     //? if >=1.21.9 {
     /*public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         UIDocument window = window();
-        return window != null && CgUiInput.mouseButton(window, event.button(), true);
+        return window != null && CgUiInput.mouseButton(HostSession.session().input(), event.button(), true);
     }
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
         UIDocument window = window();
-        return window != null && CgUiInput.mouseButton(window, event.button(), false);
+        return window != null && CgUiInput.mouseButton(HostSession.session().input(), event.button(), false);
     }
     *///?} else {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         UIDocument window = window();
-        return window != null && CgUiInput.mouseButton(window, button, true);
+        return window != null && CgUiInput.mouseButton(HostSession.session().input(), button, true);
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         UIDocument window = window();
-        return window != null && CgUiInput.mouseButton(window, button, false);
+        return window != null && CgUiInput.mouseButton(HostSession.session().input(), button, false);
     }
     //?}
 
@@ -356,7 +357,7 @@ public final class CgUiScreen extends Screen {
     @Override
     public void mouseMoved(double mouseX, double mouseY) {
         UIDocument window = window();
-        if (window != null) CgUiInput.mouseMoved(window);
+        if (window != null) CgUiInput.mouseMoved(HostSession.session().input());
     }
     //?}
 
@@ -372,7 +373,7 @@ public final class CgUiScreen extends Screen {
     //?}
         UIDocument window = window();
         if (window == null) return false;
-        CgUiInput.mouseMoved(window);
+        CgUiInput.mouseMoved(HostSession.session().input());
         return true;
     }
 
@@ -387,7 +388,7 @@ public final class CgUiScreen extends Screen {
     /*public boolean mouseScrolled(double delta) {
     *///?}
         UIDocument window = window();
-        return window != null && CgUiInput.scrolled(window, delta);
+        return window != null && CgUiInput.scrolled(HostSession.session().input(), delta);
     }
 
     @Override
@@ -399,7 +400,7 @@ public final class CgUiScreen extends Screen {
     //?}
         UIDocument window = window();
         if (window == null) return false;
-        if (CgUiInput.key(window, keyCode, true)) return true;
+        if (CgUiInput.key(HostSession.session().input(), keyCode, true)) return true;
 
         // Escape is a cascade -- a live drag eats it, then a popover, then a modal -- so the screen
         // closes only on one nothing wanted. shouldCloseOnEsc() is false for the same reason.
@@ -414,27 +415,35 @@ public final class CgUiScreen extends Screen {
     /*@Override
     public boolean keyReleased(KeyEvent event) {
         UIDocument window = window();
-        return window != null && CgUiInput.key(window, event.key(), false);
+        return window != null && CgUiInput.key(HostSession.session().input(), event.key(), false);
     }
 
     @Override
     public boolean charTyped(CharacterEvent event) {
         UIDocument window = window();
-        return window != null && CgUiInput.character(window, (char) event.codepoint());
+        return window != null && CgUiInput.character(HostSession.session().input(), (char) event.codepoint());
     }
     *///?} else {
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         UIDocument window = window();
-        return window != null && CgUiInput.key(window, keyCode, false);
+        return window != null && CgUiInput.key(HostSession.session().input(), keyCode, false);
     }
 
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         UIDocument window = window();
-        return window != null && CgUiInput.character(window, codePoint);
+        return window != null && CgUiInput.character(HostSession.session().input(), codePoint);
     }
     //?}
+
+    /**
+     * A key the desktop dispatched on its own thread and left, handed back a frame late: what this screen does with
+     * one nothing wanted. @see #keyPressed
+     */
+    void keyLeftByDesktop(CgSystemInput.Keyboard.Event key) {
+        if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) onClose();
+    }
 
     /** @see #keyPressed */
     @Override

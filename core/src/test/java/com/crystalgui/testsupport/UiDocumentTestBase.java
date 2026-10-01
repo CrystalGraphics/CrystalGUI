@@ -94,6 +94,16 @@ public abstract class UiDocumentTestBase extends UiTestBase {
         Desktop.setAnimationsEnabled(true);
     }
 
+    /**
+     * Detaches what the test built, as closing a window does. A widget subscribed to a process-wide signal
+     * ({@code Notifications.onDidChange}, {@code UiTemplates.onDidReload}) lets go on detach, so a document
+     * dropped still attached stayed reachable from that signal: hundreds of classes in one JVM ran out of heap.
+     */
+    @After
+    public void detachWhatTheTestBuilt() {
+        if (document != null) document.removeAll();
+    }
+
     /** The surface, in logical units. The same 800x600 the service fixtures use. */
     public static final float W = 800f;
     public static final float H = 600f;

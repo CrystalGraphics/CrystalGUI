@@ -149,6 +149,8 @@ public class ContextToolbar extends UIElement {
         // keep focus, and its Escape keeps focus too.
         events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> fieldKey(event), true, false);
         panel.events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> fieldKey(event), true, false);
+        claimKeys(this::claimsFieldKey);
+        panel.claimKeys(this::claimsFieldKey);
         setBase(base);
         whileConnected(() -> document().focus().onDidChangeFocus.connect(this::focusMoved));
     }
@@ -260,16 +262,19 @@ public class ContextToolbar extends UIElement {
 
     /** Enter lands the focused field and Escape drops what was typed in it; either hands the keyboard back. */
     private void fieldKey(KeyboardEvent.Down event) {
-        int key = event.getKeyCode();
-        boolean enter = key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_NUMPADENTER;
-        if (!enter && key != CgKeyCodes.KEY_ESCAPE) return;
+        if (!claimsFieldKey(event.getKeyCode(), event.getCharacter(), event.getModifiers())) return;
+        boolean enter = event.getKeyCode() != CgKeyCodes.KEY_ESCAPE;
         TextField field = focusedField();
-        if (field == null) return;
         if (enter) field.commit();
         else field.setText(field.getValue());
         if (panel.isOpen()) panel.hide();
         giveFocusBack();
         event.stopPropagation();
+    }
+
+    private boolean claimsFieldKey(int key, char typed, int modifiers) {
+        boolean enter = key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_NUMPADENTER;
+        return (enter || key == CgKeyCodes.KEY_ESCAPE) && focusedField() != null;
     }
 
     /** The text field holding focus, when it is one of this bar's — on the row or lent to the popover. */

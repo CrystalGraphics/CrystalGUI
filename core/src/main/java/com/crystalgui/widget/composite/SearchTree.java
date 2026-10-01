@@ -211,6 +211,7 @@ public class SearchTree<N, T> extends UIElement {
         // Moving focus into the tree would be the obvious implementation and is wrong twice over: it
         // would stop you typing, and it would silently do nothing anyway — a list takes no focus policy
         // of its own, and requestFocus refuses a FocusPolicy.NONE element without reporting it.
+        search.field().claimKeys((key, typed, modifiers) -> claimsListKey(key));
         search.field().onKeyDown.attachListener((element, event) -> {
             if (!handleListKey(event.getKeyCode())) return;
             event.stopPropagation();
@@ -311,6 +312,16 @@ public class SearchTree<N, T> extends UIElement {
     }
 
     /** @return whether the key was ours, so the caller knows whether to consume it */
+    /** The keys {@link #handleListKey} takes from the search box. */
+    private boolean claimsListKey(int key) {
+        if (tree.getModel().size() == 0) return false;
+        return switch (key) {
+            case CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_UP -> true;
+            case CgKeyCodes.KEY_RETURN, CgKeyCodes.KEY_NUMPADENTER -> highlighted != NONE_HIGHLIGHTED;
+            default -> false;
+        };
+    }
+
     private boolean handleListKey(int keyCode) {
         int count = tree.getModel().size();
         if (count == 0) return false;

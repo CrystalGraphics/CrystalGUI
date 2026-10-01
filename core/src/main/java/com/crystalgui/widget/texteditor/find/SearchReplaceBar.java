@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor.find;
 
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 import java.util.Map;
@@ -166,6 +167,11 @@ public class SearchReplaceBar extends UIElement {
         findBox.setPlaceholder("Search");
         findBox.field().attachListener(text -> {
             if (!writingBack) runSearch();
+        });
+        findBox.field().claimKeys((key, typed, modifiers) -> switch (key) {
+            case CgKeyCodes.KEY_RETURN, CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_UP -> true;
+            case CgKeyCodes.KEY_ESCAPE -> !findBox.getText().isEmpty() || isOpen();
+            default -> false;
         });
         findBox.field().onKeyDown.attachListener((element, event) -> {
             boolean handled = switch (event.getKeyCode()) {
@@ -474,6 +480,8 @@ public class SearchReplaceBar extends UIElement {
 
     /** Tab and Shift+Tab, on everything the ring contains. */
     private void bindTab(UIElement element) {
+        element.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_TAB && !CgModifiers.hasCtrl(modifiers)
+                && !CgModifiers.hasSuper(modifiers) && !CgModifiers.hasAlt(modifiers));
         element.onKeyDown.attachListener((el, event) -> {
             if (event.getKeyCode() != CgKeyCodes.KEY_TAB) return;
             // THE RING IS Tab AND Shift+Tab, so a Ctrl-held Tab belongs to somebody else -- the desktop's
@@ -628,26 +636,26 @@ public class SearchReplaceBar extends UIElement {
     @Override
     protected void connected() {
         super.connected();
-        if (ticking || document() == null) return;
-        ticking = true;
+        if (document() == null) return;
         // AN AFTER-LAYOUT HOOK, standing, where the old engine armed a one-shot ticker from
         // `onLayoutChanged`. The note below is why it was a ticker at all -- a structural write inside
         // the layout pass is the one thing that hook must not do -- and `afterLayout` answers it
         // directly: it runs once layout has settled, so the write lands on the next pass rather than
-        // re-entering this one. Owned by the bar, so closing it drops the hook.
-        document().animation().afterLayout(this, delta -> {
-            syncEditorInset();
-            syncTrailingWidths();
-            // FROM HERE TOO, and not from the constructor: `Keymap.acceleratorFor` walks up from this
-            // element, so it can only answer once the bar is in a tree whose editor has installed its
-            // keymap. Cheap to re-ask -- `refreshTooltips` compares the text it last wrote and does
-            // nothing when it has not moved.
-            refreshTooltips();
-            return true;
-        });
+        // re-entering this one. Owned by the bar, so closing it drops the hook and opening it registers it again.
+        document().animation().afterLayoutIfAbsent(this, layoutHook);
     }
 
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#afterLayoutIfAbsent */
+    private final Animation.Hook layoutHook = delta -> {
+        syncEditorInset();
+        syncTrailingWidths();
+        // FROM HERE TOO, and not from the constructor: `Keymap.acceleratorFor` walks up from this
+        // element, so it can only answer once the bar is in a tree whose editor has installed its
+        // keymap. Cheap to re-ask -- `refreshTooltips` compares the text it last wrote and does
+        // nothing when it has not moved.
+        refreshTooltips();
+        return true;
+    };
 
     private void focus(TextField field) {
         UIDocument window = document();

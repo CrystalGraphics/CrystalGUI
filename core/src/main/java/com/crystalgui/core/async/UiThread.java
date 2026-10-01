@@ -33,37 +33,48 @@ import javax.annotation.Nullable;
  * <p><b>Not known until the first frame</b>, and that is deliberate rather than a gap: before one has
  * run there is no tree to own, so a headless test, a server and a background load are all correctly
  * "not the UI thread" and pay nothing.</p>
+ *
+ * <p><b>Per thread, not per process.</b> Several documents may run frames, each on its own thread
+ * (plan engine-threaded-ui), so this answers "does this thread run frames for some tree", and
+ * {@link #require(String, Thread)} answers "for THIS tree".</p>
  */
 public final class UiThread {
 
     private UiThread() {
     }
 
-    /** Volatile rather than synchronized: written once per process, read on every provider call. */
-    @Nullable
-    private static volatile Thread owner;
+    /** A thread marked by hand as running frames. */
+    private static final ThreadLocal<Boolean> MARKED = new ThreadLocal<>();
+
+    /** How deep this thread is inside documents' frames, input events or tasks, from {@link #enter}. */
+    private static final ThreadLocal<int[]> DEPTH = ThreadLocal.withInitial(() -> new int[1]);
+
+    /** Marks the calling thread as running frames until {@link #forgetForTesting}: for tests and hosts with no document. */
+    public static void markCurrent() {
+        MARKED.set(Boolean.TRUE);
+    }
 
     /**
-     * Records the calling thread as the one that runs frames.
-     *
-     * <p>Called from the frame itself, so it is right whatever drives it — a real window, the harness,
-     * or a test stepping frames by hand. Re-marking is free and keeps it correct if a host ever moves
-     * its loop.</p>
+     * This thread is now running a document. {@code UIDocument.makeCurrent} calls it; pair with
+     * {@link #exit}. A pool thread running a document's task is a UI thread for that task only.
      */
-    public static void markCurrent() {
-        Thread current = Thread.currentThread();
-        if (owner != current) owner = current;
+    public static void enter() {
+        DEPTH.get()[0]++;
     }
 
-    /** Whether this is the thread that runs frames. False before the first frame — see the class note. */
+    public static void exit() {
+        DEPTH.get()[0]--;
+    }
+
+    /** Whether this thread is running a document now, or was marked. False before any frame — see the class note. */
     public static boolean isCurrent() {
-        Thread known = owner;
-        return known != null && known == Thread.currentThread();
+        return DEPTH.get()[0] > 0 || MARKED.get() != null;
     }
 
-    /** Forgets the marked thread, so a test can assert what happens before any frame has run. */
+    /** Forgets this thread's mark, so a test can assert what happens before any frame has run. */
     public static void forgetForTesting() {
-        owner = null;
+        MARKED.remove();
+        DEPTH.remove();
     }
 
     // ── The assertion ────────────────────────────────────────────────────────────
@@ -89,7 +100,8 @@ public final class UiThread {
     private static volatile boolean enforcing = true;
 
     /**
-     * Throws unless this is the thread that runs frames.
+     * Throws unless this is {@code treeOwner}, the thread that runs frames <b>for the tree being
+     * touched</b>.
      *
      * <h3>Why an exception and not a log line</h3>
      *
@@ -110,16 +122,6 @@ public final class UiThread {
      * added to hot paths now and tightened later: it costs one volatile read until a host marks a
      * thread, and one reference comparison after.</p>
      *
-     * @param what what was being attempted, for the message. Name the OPERATION, not the class.
-     */
-    public static void require(String what) {
-        require(what, owner);
-    }
-
-    /**
-     * Throws unless this is {@code treeOwner}, the thread that runs frames <b>for the tree being
-     * touched</b>.
-     *
      * <h3>Ownership is per-TREE, not per-process, and the difference is the whole usability of this</h3>
      *
      * <p>A process-wide owner refuses any thread that is not the one that most recently drew -- which is
@@ -135,8 +137,19 @@ public final class UiThread {
      * that IS being painted refuses everyone but its own painter, which is the case worth catching and
      * the only one that can corrupt anything.</p>
      *
+     * @param what      what was being attempted, for the message. Name the OPERATION, not the class.
      * @param treeOwner the thread that runs frames for this tree, or null if none ever has
      */
+    public static void require(String what, UiSequence treeOwner) {
+        if (!enforcing || treeOwner.isCurrent()) return;
+        UiSequence running = UiSequence.current();
+        throw new IllegalStateException(
+                what + " must happen on the tree's sequence (" + treeOwner.name() + "), not on "
+                        + (running == null ? "thread " + Thread.currentThread().getName() : running.name())
+                        + ". Post it there: sequence.execute(...).");
+    }
+
+    /** As {@link #require(String, UiSequence)}, for a tree a thread owns. */
     public static void require(String what, @Nullable Thread treeOwner) {
         if (!enforcing) return;
         Thread known = treeOwner;

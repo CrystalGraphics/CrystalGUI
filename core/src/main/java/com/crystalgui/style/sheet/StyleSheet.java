@@ -1,11 +1,15 @@
 package com.crystalgui.style.sheet;
 
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.selector.Selector;
 import com.crystalgui.style.selector.SelectorType;
 import com.crystalgui.style.Styleable;
+import com.crystalgui.style.property.StyleValue;
 import javax.annotation.Nullable;
 
 import lombok.Getter;
@@ -14,11 +18,11 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 
 /**
@@ -232,7 +236,9 @@ public final class StyleSheet {
     private void index(StyleRule rule) {
         var compounds = rule.selector().compounds();
         var rightmost = compounds.get(compounds.size() - 1);
-        boolean indexed = false;
+        String id = null;
+        String cls = null;
+        String type = null;
         for (var part : rightmost.parts()) {
             // STOP AT THE PSEUDO-ELEMENT: what follows describes the PART, and the lookup is done with
             // the HOST.
@@ -254,22 +260,18 @@ public final class StyleSheet {
             // while a tab whose symbol had not resolved kept its file-type glyph and looked correct.
             if (part.type() == SelectorType.PSEUDO_ELEMENT) break;
             switch (part.type()) {
-                case ID -> {
-                    byId.computeIfAbsent(part.identity(), k -> new ArrayList<>()).add(rule);
-                    indexed = true;
-                }
-                case CLASS -> {
-                    byClass.computeIfAbsent(part.identity(), k -> new ArrayList<>()).add(rule);
-                    indexed = true;
-                }
-                case TYPE -> {
-                    byType.computeIfAbsent(part.identity(), k -> new ArrayList<>()).add(rule);
-                    indexed = true;
-                }
+                case ID -> id = part.identity();
+                case CLASS -> { if (cls == null) cls = part.identity(); }
+                case TYPE -> type = part.identity();
                 default -> { /* UNIVERSAL / PSEUDO_CLASS alone can't narrow the bucket */ }
             }
         }
-        if (!indexed) universal.add(rule);
+        // ONE BUCKET PER RULE, Blink's: an element the rule matches carries every key of its compound, so any one of
+        // them finds it, and a rule in one bucket needs no de-duplication per lookup.
+        if (id != null) byId.computeIfAbsent(id, k -> new ArrayList<>()).add(rule);
+        else if (cls != null) byClass.computeIfAbsent(cls, k -> new ArrayList<>()).add(rule);
+        else if (type != null) byType.computeIfAbsent(type, k -> new ArrayList<>()).add(rule);
+        else universal.add(rule);
         indexStateDescendants(rule);
         indexClassDescendants(rule);
     }
@@ -419,23 +421,16 @@ public final class StyleSheet {
      * the candidate set, callers must still verify with {@link Selector#matches}.
      */
     public List<StyleRule> candidatesFor(Styleable element) {
-        // BY IDENTITY, in the order found. A rule is a record, so a hashed set hashed its selector and every
-        // declaration's value on each re-match -- a sixth of a selection frame, measured -- to tell apart
-        // objects that were already distinct: two rules of one sheet always differ in sourceOrder.
+        // NO DE-DUPLICATION: a rule is in exactly one bucket, and an element asks each of its buckets once.
         List<StyleRule> candidates = new ArrayList<>(universal);
-        Set<StyleRule> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        seen.addAll(universal);
-        if (!element.getId().isEmpty()) addUnseen(candidates, seen, byId.get(element.getId()));
-        for (String cls : element.getClasses()) addUnseen(candidates, seen, byClass.get(cls));
-        for (String type : element.typeKeys()) addUnseen(candidates, seen, byType.get(type));
+        if (!element.getId().isEmpty()) addAll(candidates, byId.get(element.getId()));
+        for (String cls : element.getClasses()) addAll(candidates, byClass.get(cls));
+        for (String type : element.typeKeys()) addAll(candidates, byType.get(type));
         return candidates;
     }
 
-    private static void addUnseen(List<StyleRule> into, Set<StyleRule> seen, @Nullable List<StyleRule> bucket) {
-        if (bucket == null) return;
-        for (StyleRule rule : bucket) {
-            if (seen.add(rule)) into.add(rule);
-        }
+    private static void addAll(List<StyleRule> into, @Nullable List<StyleRule> bucket) {
+        if (bucket != null) into.addAll(bucket);
     }
 
     /** Re-reads the {@code ua/} parts at {@link StyleOrigin#USER_AGENT}.
@@ -453,6 +448,35 @@ public final class StyleSheet {
                             + "out at zero size.");
         }
         return new StyleSheet(sheet.getRules(), StyleOrigin.USER_AGENT);
+    }
+
+    /** Values a worker computes ahead of the first style pass, in chunks of this many. */
+    private static final int WARM_CHUNK = 256;
+
+    private final AtomicBoolean warming = new AtomicBoolean();
+
+    /** {@code -Dcrystalgui.style.warm=false} leaves every value to be parsed by the first pass that needs it. */
+    private static final boolean WARM = !"false".equals(System.getProperty("crystalgui.style.warm"));
+
+    /**
+     * Parses every declared value on the shared worker pool, once, so the first style pass to match a rule finds its
+     * values ready: on a window's first frame half of matching was parsing values (a sprite decoded, an icon read).
+     * Returns at once; a value a pass needs before its worker reaches it is computed by the pass, and only once.
+     */
+    public void warmValues() {
+        if (!WARM || !warming.compareAndSet(false, true)) return;
+        List<StyleValue<?>> values = new ArrayList<>();
+        for (StyleRule rule : rules) {
+            for (StyleRule.Declaration declaration : rule.declarations()) values.add(declaration.value());
+        }
+        for (int from = 0; from < values.size(); from += WARM_CHUNK) {
+            List<StyleValue<?>> chunk = values.subList(from, Math.min(values.size(), from + WARM_CHUNK));
+            JobScheduler.sharedPool().execute(() -> {
+                try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "style:warmValues")) {
+                    for (StyleValue<?> value : chunk) value.compute();
+                }
+            });
+        }
     }
 
     public List<StyleRule> getRules() {

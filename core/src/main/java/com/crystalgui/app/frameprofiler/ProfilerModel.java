@@ -65,7 +65,8 @@ public final class ProfilerModel {
     /** Fired whenever the snapshot or the selection moved — one signal, because a redraw is one job. */
     public final Signal.Action onChanged = new Signal.Action();
 
-    private CgTraceSnapshot snapshot = CgTrace.snapshot();
+    // Frames and counters only, as every refresh: a full snapshot here copied every zone in the ring on open.
+    private CgTraceSnapshot snapshot = CgTrace.frameSnapshot();
 
     private int selected = -1;
     private int rangeFrom = -1;

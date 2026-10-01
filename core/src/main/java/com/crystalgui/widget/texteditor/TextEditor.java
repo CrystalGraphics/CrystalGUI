@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.ui.dom.UIElement;
 import org.joml.Vector3f;
 import org.joml.Vector2f;
@@ -7,7 +8,6 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgTextLayout;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.CrystalGuiCore;
@@ -1472,9 +1472,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // Click count drives GRANULARITY, and the granularity is remembered for the whole drag --
             // see dragGranularity. 1 = character, 2 = word, 3 = line, as in VS Code's mouse handler.
             int clicks = Math.min(3, Math.max(1, event.getDetail()));
-            boolean extend = CgModifiers.hasShift(CgPlatform.input().getCurrentModifiers());
-            boolean addCaret = CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers());
-            int mods = CgPlatform.input().getCurrentModifiers();
+            boolean extend = CgModifiers.hasShift(PlatformPort.current().modifiers());
+            boolean addCaret = CgModifiers.hasAlt(PlatformPort.current().modifiers());
+            int mods = PlatformPort.current().modifiers();
 
             // CTRL+CLICK IS GO-TO-DEFINITION, which the Alt branch below has named as the reason it leaves
             // Ctrl alone since multi-caret went in. It moves the caret FIRST and resolves from there: the
@@ -1570,11 +1570,44 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** @return true when the key was a command rather than a character */
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return isEnabled() && (suggest.claimsKey(key) || editingKey(key, modifiers)) || super.claimsKey(key, typed, modifiers);
+    }
+
+    /** The keys {@link #handleKey} takes; everything else is typed or left to the keymap. */
+    private boolean editingKey(int key, int modifiers) {
+        boolean ctrl = CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers);
+        if (ctrl && (key == CgKeyCodes.KEY_HOME || key == CgKeyCodes.KEY_END)) return true;
+        // THE NATIVE KEYS MUST YIELD TO A MODIFIED CHORD. The resolver runs only on an UNCONSUMED event,
+        // so a `case KEY_UP: ... return true` below would eat Alt+Up before `editor.moveLineUp` could ever
+        // see it -- and remapping would silently do nothing. Alt is never part of native movement, so an
+        // Alt-held arrow is always somebody's binding; Ctrl+Enter likewise, while Ctrl+Arrow and
+        // Ctrl+Home/End genuinely ARE native movement and stay here.
+        if (CgModifiers.hasAlt(modifiers)) return false;
+        if (ctrl && key == CgKeyCodes.KEY_RETURN) return false;
+        // AND Ctrl+TAB, which is never native editing. A tab character is inserted by a BARE Tab and
+        // Shift+Tab outdents; Ctrl+Tab has no meaning in a document at all, so eating it could only ever
+        // deny it to somebody else -- and it did. It is the desktop's window switcher, so with an editor
+        // focused the chord silently indented the current line instead, which reads as the switcher being
+        // broken rather than as the editor being greedy. Exactly the shape TextField's Alt bug had: the
+        // key was consumed AND acted on, and the keymap only ever sees what is left over.
+        if (ctrl && key == CgKeyCodes.KEY_TAB) return false;
+        return switch (key) {
+            case CgKeyCodes.KEY_LEFT, CgKeyCodes.KEY_RIGHT, CgKeyCodes.KEY_UP, CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_PRIOR,
+                 CgKeyCodes.KEY_NEXT, CgKeyCodes.KEY_HOME, CgKeyCodes.KEY_END, CgKeyCodes.KEY_BACK,
+                 CgKeyCodes.KEY_DELETE, CgKeyCodes.KEY_RETURN, CgKeyCodes.KEY_TAB -> true;
+            // Only when there is something to collapse, so Escape still reaches a dialog or a popover above
+            // the editor when there is only one caret.
+            case CgKeyCodes.KEY_ESCAPE -> selections.isMultiple();
+            default -> false;
+        };
+    }
+
     private boolean handleKey(int key, int modifiers) {
+        if (!editingKey(key, modifiers)) return false;
         boolean shift = CgModifiers.hasShift(modifiers);
         boolean ctrl = CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers);
-
-        boolean alt = CgModifiers.hasAlt(modifiers);
 
         // THE NAMED ACTIONS ARE NOT HERE ANY MORE. Every modified chord -- Mod+D, Alt+Up, Mod+Shift+K,
         // Mod+Slash, Mod+C/X/V, F3 and the rest -- is an EditorCommands command bound on this element's
@@ -1604,21 +1637,6 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
                 return true;
             }
         }
-
-        // THE NATIVE KEYS MUST YIELD TO A MODIFIED CHORD. The resolver runs only on an UNCONSUMED event,
-        // so a `case KEY_UP: ... return true` below would eat Alt+Up before `editor.moveLineUp` could ever
-        // see it -- and remapping would silently do nothing. Alt is never part of native movement, so an
-        // Alt-held arrow is always somebody's binding; Ctrl+Enter likewise, while Ctrl+Arrow and
-        // Ctrl+Home/End genuinely ARE native movement and stay here.
-        if (alt) return false;
-        if (ctrl && key == CgKeyCodes.KEY_RETURN) return false;
-        // AND Ctrl+TAB, which is never native editing. A tab character is inserted by a BARE Tab and
-        // Shift+Tab outdents; Ctrl+Tab has no meaning in a document at all, so eating it could only ever
-        // deny it to somebody else -- and it did. It is the desktop's window switcher, so with an editor
-        // focused the chord silently indented the current line instead, which reads as the switcher being
-        // broken rather than as the editor being greedy. Exactly the shape TextField's Alt bug had: the
-        // key was consumed AND acted on, and the keymap only ever sees what is left over.
-        if (ctrl && key == CgKeyCodes.KEY_TAB) return false;
 
         switch (key) {
             case CgKeyCodes.KEY_LEFT:
@@ -1652,9 +1670,6 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
                         : MoveOperations.lineEnd(buffer.document(), head), shift);
                 return true;
             case CgKeyCodes.KEY_ESCAPE:
-                // Only claims the key when there is something to collapse, so Escape still reaches a
-                // dialog or a popover above the editor when there is only one caret.
-                if (!selections.isMultiple()) return false;
                 collapseCarets();
                 return true;
             case CgKeyCodes.KEY_BACK:
@@ -5839,7 +5854,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * realise a window against a viewport of zero.</p>
      */
     private boolean afterLayout(float deltaSeconds) {
-        updateWindow();
+        // NO BOX, NOTHING ON SCREEN: a hidden tab's pane is display: none. The hook stays, and the frame the tab shows
+        // lays the editor out before this runs, so the window is realised on that frame.
+        if (box() != null) updateWindow();
         return true;
     }
 
@@ -5874,6 +5891,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * on an unchanged range, and the font push no-ops on an unchanged value.</p>
      */
     public boolean tickFrame(float deltaSeconds) {
+        if (box() == null) return true;
         // THE JUMP THAT CAME IN TOO EARLY, now that there is a viewport to centre in. @see #pendingReveal
         if (pendingReveal && canCentre()) {
             pendingReveal = false;
@@ -6508,7 +6526,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
         @Override
         public void cut() {
-            CgPlatform.input().setClipboard(getSelectedText());
+            PlatformPort.current().setClipboard(getSelectedText());
             deleteSelections();
         }
 
@@ -6519,20 +6537,20 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
         @Override
         public void copy() {
-            CgPlatform.input().setClipboard(getSelectedText());
+            PlatformPort.current().setClipboard(getSelectedText());
         }
 
         @Override
         public boolean canPaste() {
             // The SYSTEM clipboard, because that is the one an editor pastes from -- and it is why this
             // question belongs to the provider rather than to the command.
-            String pending = CgPlatform.input().getClipboard();
+            String pending = PlatformPort.current().clipboard();
             return !isReadOnly() && pending != null && !pending.isEmpty();
         }
 
         @Override
         public void paste() {
-            String pending = CgPlatform.input().getClipboard();
+            String pending = PlatformPort.current().clipboard();
             if (pending == null || pending.isEmpty()) return;
             // RE-INDENTED TO WHERE IT LANDS, so a method copied out of one class arrives at the new
             // one's depth. A shift and not a reformat -- see TypeOperations.reindentForPaste.

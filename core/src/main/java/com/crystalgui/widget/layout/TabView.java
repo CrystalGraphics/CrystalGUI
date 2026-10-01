@@ -283,13 +283,10 @@ public class TabView extends UIElement {
             // open file. SplitView is the same shape and has always had its half -- it returns unless a
             // divider is focused.
             if (!keyboardIsInStrip()) return;
-            boolean vertical = tabSide.isVertical();
             int step;
             switch (event.getKeyCode()) {
-                case CgKeyCodes.KEY_LEFT -> step = vertical ? 0 : -1;
-                case CgKeyCodes.KEY_RIGHT -> step = vertical ? 0 : 1;
-                case CgKeyCodes.KEY_UP -> step = vertical ? -1 : 0;
-                case CgKeyCodes.KEY_DOWN -> step = vertical ? 1 : 0;
+                case CgKeyCodes.KEY_LEFT, CgKeyCodes.KEY_RIGHT, CgKeyCodes.KEY_UP, CgKeyCodes.KEY_DOWN ->
+                        step = stripStep(event.getKeyCode());
                 case CgKeyCodes.KEY_HOME -> {
                     focusAndSelect(tabs.get(0));
                     event.stopPropagation();
@@ -311,6 +308,25 @@ public class TabView extends UIElement {
             // Consume, so Tab-traversal/activation doesn't also act on a key we handled.
             event.stopPropagation();
         }, false, true);
+    }
+
+    /** Which way an arrow moves along the strip: -1, 1, or 0 for the cross axis. */
+    private int stripStep(int key) {
+        boolean vertical = tabSide.isVertical();
+        return switch (key) {
+            case CgKeyCodes.KEY_LEFT -> vertical ? 0 : -1;
+            case CgKeyCodes.KEY_RIGHT -> vertical ? 0 : 1;
+            case CgKeyCodes.KEY_UP -> vertical ? -1 : 0;
+            case CgKeyCodes.KEY_DOWN -> vertical ? 1 : 0;
+            default -> 0;
+        };
+    }
+
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        boolean ours = isEnabled() && !tabs.isEmpty() && keyboardIsInStrip()
+                && (key == CgKeyCodes.KEY_HOME || key == CgKeyCodes.KEY_END || stripStep(key) != 0);
+        return ours || super.claimsKey(key, typed, modifiers);
     }
 
     /**

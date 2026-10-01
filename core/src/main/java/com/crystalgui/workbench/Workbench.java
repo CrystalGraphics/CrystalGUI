@@ -1,6 +1,7 @@
 package com.crystalgui.workbench;
 
 
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.workbench.explorer.ExplorerCommands;
 import com.crystalgui.workbench.chrome.menu.ChromeCommands;
 import com.crystalgui.workbench.extension.ProjectExtension;
@@ -568,14 +569,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     @Override
     protected void connected() {
         super.connected();
-        // THE PER-FRAME HOOK, and the guard is not the old one's: `registerTicker` was
-        // HashSet-backed and idempotent, and `Animation.every` is a plain add, so a second attach
-        // without this is a second hook. `disconnected()` clears it, or a panel that is hidden and
-        // reshown -- which is every tool window -- comes back with the flag set and no hook behind it.
-        if (!ticking && document() != null) {
-            ticking = true;
-            document().animation().every(this, this::tick);
-        }
+        if (document() != null) document().animation().everyIfAbsent(this, tickHook);
         UIDocument current = document();
         // JOINING A WINDOW IS WHAT LETS A WINDOWED TOOL WINDOW FINALLY OPEN. A session restore can run
         // before the tree is attached -- a host that restores on its first frame does so before anything
@@ -2094,25 +2088,20 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Stops ticking, so a workbench that is off screen does nothing.
-     *
-     * <p><b>It does not withdraw its own {@code DataProvider}</b>, and the missing line is deliberate:
+     * <b>It does not withdraw its own {@code DataProvider}</b>, and the missing line is deliberate:
      * {@code document()} answers null in here — the callback is queued and the field cleared before the
      * queue drains — so the {@code if (leaving != null)} that used to sit on this line was dead code on
      * every node in the engine, and every workbench ever attached stayed in {@code scopeProviders} with
      * its whole tree behind it. The engine drops a document-level provider at detach now, which is what
-     * {@code removeDataProvider}'s own javadoc always said the rule was.</p>
+     * {@code removeDataProvider}'s own javadoc always said the rule was.
      */
     @Override
     protected void disconnected() {
         super.disconnected();
-        // CLEARED, or the panel never ticks again. `Animation` drops a hook on the first tick after
-        // its owner disconnects, so a tool window -- which is hidden and reshown rather than rebuilt
-        // -- would come back with the flag still set and no hook behind it.
-        ticking = false;
     }
 
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tick;
 
     @Nullable
     private DiagnosticSet boundTo;
@@ -2124,10 +2113,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // instance), and the context menu is wired at construction. Nothing is left to do per frame.
 
     private boolean tick(float deltaSeconds) {
-        if (document() == null) {
-            ticking = false;
-            return false;
-        }
+        if (document() == null) return false;
         // A VIEW BUILT THIS FRAME SAYS SO ON THE NEXT ONE, once the dock has it in the tree.
         editors.flushPendingActivation();
         // A few directories a frame, until the workspace is walked. Go to File searches what this has

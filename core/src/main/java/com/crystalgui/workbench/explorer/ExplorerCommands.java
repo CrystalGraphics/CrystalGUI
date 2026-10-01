@@ -1,12 +1,12 @@
 package com.crystalgui.workbench.explorer;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -634,7 +634,7 @@ public final class ExplorerCommands {
     public static void copyPath(@Nullable CgPath path, boolean relative) {
         if (path == null) return;
         String text = relative ? path.path() : path.toString();
-        CgPlatform.input().setClipboard(text);
+        PlatformPort.current().setClipboard(text);
         Notifications.show(Notification.info("Copied").withDetail(text));
     }
 

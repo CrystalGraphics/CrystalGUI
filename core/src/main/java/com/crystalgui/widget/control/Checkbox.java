@@ -1,6 +1,6 @@
 package com.crystalgui.widget.control;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.serialization.StateMap;
@@ -137,7 +137,7 @@ public class Checkbox extends UIElement {
             // shipped defect for as long as nothing put a second gesture on one.
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             if (event.isWasPressTarget() && isEnabled()) {
-                CgPlatform.sound().play("button_click");
+                PlatformPort.current().playSound("button_click");
                 setChecked(!checked);
             }
         });

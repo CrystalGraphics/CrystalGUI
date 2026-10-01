@@ -318,7 +318,7 @@ public final class UiThemeManager {
      * UNDER every theme in the merge, which is what makes a theme a delta rather than a
      * restatement. Missing (a stripped-down consumer) degrades to empty: every engine sheet
      * carries fallbacks, so nothing breaks — themes just lose the derived defaults. */
-    private static Map<String, String> baseTable;
+    private static volatile Map<String, String> baseTable;
 
     private static Map<String, String> baseTable() {
         if (baseTable == null) {

@@ -1,5 +1,6 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
@@ -143,7 +144,7 @@ public class Dialog extends UIElement {
         if (window == null || pulsing) return;
         pulsing = true;
         addClass(PULSE_CLASS);
-        CgPlatform.sound().play("dialog_blocked");
+        PlatformPort.current().playSound("dialog_blocked");
         window.animation().every(this, delta -> {
             removeClass(PULSE_CLASS);
             pulsing = false;
@@ -271,23 +272,35 @@ public class Dialog extends UIElement {
      */
     private void installArrowsBetweenButtons() {
         onKeyDown.attachListener((element, event) -> {
-            int code = event.getKeyCode();
-            if (!open || (code != CgKeyCodes.KEY_LEFT && code != CgKeyCodes.KEY_RIGHT)) return;
-            UIDocument document = document();
-            if (document == null) return;
-            if (!(document.focus().focused() instanceof Button focused) || focused == closeButton) return;
-            UINode row = focused.parent();
-            if (row == null) return;
-            List<Button> answers = new ArrayList<>();
-            for (UINode candidate : row.children()) {
-                if (candidate instanceof Button button && document.focus().focusable(button)) answers.add(button);
-            }
-            int at = answers.indexOf(focused);
-            if (at < 0 || answers.size() < 2) return;
-            int step = code == CgKeyCodes.KEY_RIGHT ? 1 : -1;
-            document.focus().requestFocus(answers.get((at + step + answers.size()) % answers.size()));
+            Button next = arrowTarget(event.getKeyCode());
+            if (next == null) return;
+            next.document().focus().requestFocus(next);
             event.stopPropagation();
         }, false, true);
+    }
+
+    /** The button an arrow moves focus to among the focused button's siblings, or null when it moves nothing. */
+    @Nullable
+    private Button arrowTarget(int code) {
+        if (!open || (code != CgKeyCodes.KEY_LEFT && code != CgKeyCodes.KEY_RIGHT)) return null;
+        UIDocument document = document();
+        if (document == null) return null;
+        if (!(document.focus().focused() instanceof Button focused) || focused == closeButton) return null;
+        UINode row = focused.parent();
+        if (row == null) return null;
+        List<Button> answers = new ArrayList<>();
+        for (UINode candidate : row.children()) {
+            if (candidate instanceof Button button && document.focus().focusable(button)) answers.add(button);
+        }
+        int at = answers.indexOf(focused);
+        if (at < 0 || answers.size() < 2) return null;
+        int step = code == CgKeyCodes.KEY_RIGHT ? 1 : -1;
+        return answers.get((at + step + answers.size()) % answers.size());
+    }
+
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return open && key == CgKeyCodes.KEY_ESCAPE || arrowTarget(key) != null || super.claimsKey(key, typed, modifiers);
     }
 
     /** A dialog owns its structure; put content in {@link #getContent()}. */

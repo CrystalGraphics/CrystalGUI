@@ -281,19 +281,25 @@ public final class ElementStyle {
 
         var oldRealValues = new HashMap<StyleProperty<?>, Object>();
         var wasResolved = new HashSet<StyleProperty<?>>();
+        boolean shownMoved = false;
         for (var p : touched) {
             if (realSlots.containsKey(p)) wasResolved.add(p);
             var oldRealSlot = realSlots.get(p);
             oldRealValues.put(p, oldRealSlot == null ? null : oldRealSlot.value());
+            var oldShown = computedSlots.get(p);
 
             realSlots.put(p, computeCandidateSlot(p, true));
-            computedSlots.put(p, computeCandidateSlot(p, false));
+            var shown = computeCandidateSlot(p, false);
+            computedSlots.put(p, shown);
+            shownMoved |= !Objects.equals(oldShown == null ? null : oldShown.value(), shown == null ? null : shown.value());
         }
 
         for (var p : touched) {
             resolveOne(p, oldRealValues.get(p), wasResolved.contains(p));
         }
-        computedCache = null;
+        // KEPT when no displayed value moved: a re-match landing on the same values (a live label's class
+        // toggled back, :blank re-asked) must not hand the box tree a new style to apply and relayout.
+        if (shownMoved) dropComputed();
         host.onStyleChanged();
     }
 
@@ -332,13 +338,13 @@ public final class ElementStyle {
     // report fake diffs or re-enter transition-eligibility checks on their own writes.
 
     public <T> void startAnimationSlot(StyleProperty<T> p, T startValue, int sourceOrder) {
-        computedCache = null;
+        dropComputed();
         replaceAnimationSlot(p, startValue, sourceOrder);
         computedSlots.put(p, StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, startValue));
     }
 
     public <T> void tickAnimationSlot(StyleProperty<T> p, T interpolatedValue, int sourceOrder) {
-        computedCache = null;
+        dropComputed();
         replaceAnimationSlot(p, interpolatedValue, sourceOrder);
         computedSlots.put(p, StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, interpolatedValue));
     }
@@ -351,7 +357,7 @@ public final class ElementStyle {
             if (slots.isEmpty()) candidates.remove(p);
         }
         computedSlots.put(p, computeCandidateSlot(p));
-        computedCache = null;
+        dropComputed();
         host.onStyleChanged();
     }
 
@@ -462,11 +468,25 @@ public final class ElementStyle {
      * or an ancestor's changes: the parent's own snapshot is part of the key, so an inherited value
      * that moved above is seen below without anything walking down to say so.
      */
+    /** Drops the frozen answer, and tells the document something will read differently. */
+    private void dropComputed() {
+        computedCache = null;
+        StyleEngine engine = host.styleEngine();
+        if (engine != null) engine.computedChanged(host);
+    }
+
     public ComputedStyle computed() {
         var parent = host.inheritsFrom();
         ComputedStyle parentNow = parent == null ? null : parent.getStyle().computed();
-        if (computedCache == null || computedCacheParent != parentNow) {
+        if (computedCache == null) {
             computedCache = ComputedStyle.of(this, parentNow);
+            computedCacheParent = parentNow;
+        } else if (computedCacheParent != parentNow) {
+            // KEPT when nothing inherited moved: a new parent instance from a hover or a class change on a
+            // container must not rebuild, reapply and relayout everything under it.
+            if (!ComputedStyle.sameInherited(computedCacheParent, parentNow)) {
+                computedCache = ComputedStyle.of(this, parentNow);
+            }
             computedCacheParent = parentNow;
         }
         return computedCache;

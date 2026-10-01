@@ -1,6 +1,6 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
@@ -88,7 +88,7 @@ final class DiagnosticActions {
                 }
                 text = joined.toString();
             }
-            CgPlatform.input().setClipboard(text);
+            PlatformPort.current().setClipboard(text);
             return true;
         }
         return false;

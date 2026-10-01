@@ -1,8 +1,7 @@
 package com.crystalgui.ui.input;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgraphics.platform.service.CgInputService;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -259,8 +258,8 @@ public final class DragScrub {
 
     /** What is held down now, and nothing when there is no platform to ask — a headless tree still drags. */
     public static int modifiersNow() {
-        CgInputService input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
+        PlatformPort input = PlatformPort.current();
+        return input == null ? 0 : input.modifiers();
     }
 
     /**

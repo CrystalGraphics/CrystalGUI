@@ -7,6 +7,7 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -121,7 +122,7 @@ public final class JobScheduler implements Disposable {
     }
 
     /**
-     * The application-wide scheduler, created on first use.
+     * The calling sequence's scheduler, or on the render thread the application-wide one, created on first use.
      *
      * <p>One pool, not one per feature — three pools compete for the same cores and none of them knows
      * it. Tests construct their own instead, which is what the injecting constructor is for; this is the
@@ -132,16 +133,52 @@ public final class JobScheduler implements Disposable {
      * thread pool. A headless process that never schedules anything never creates one.</p>
      */
     public static JobScheduler shared() {
-        if (shared == null) shared = new JobScheduler();
-        return shared;
+        // A DOCUMENT ON ITS OWN SEQUENCE drains its own: this class's maps are its owner's alone, and an answer
+        // must come back to the sequence that asked. @see UiSequence
+        UiSequence sequence = UiSequence.current();
+        if (sequence != null) return sequence.jobs();
+        return processWide();
     }
 
     /** Whether {@link #shared()} has been created — checked before draining, so asking never constructs. */
     public static boolean hasShared() {
+        UiSequence sequence = UiSequence.current();
+        if (sequence != null) return sequence.hasJobs();
         return shared != null;
     }
 
-    private static JobScheduler shared;
+    private static synchronized JobScheduler processWide() {
+        if (shared == null) shared = new JobScheduler();
+        return shared;
+    }
+
+    @Nullable
+    private static volatile JobScheduler shared;
+    private static volatile boolean undrainedReported;
+    private static final AtomicInteger asynchronousDocuments = new AtomicInteger();
+
+    /**
+     * A document now records on its own sequence, so nothing drains the process-wide scheduler for it: work posted
+     * there is reported. Paired with {@link #asynchronousDocumentClosed()}; the document's driver calls both.
+     */
+    public static void asynchronousDocumentOpened() {
+        asynchronousDocuments.incrementAndGet();
+    }
+
+    public static void asynchronousDocumentClosed() {
+        asynchronousDocuments.decrementAndGet();
+    }
+
+    /**
+     * Where a call on this scheduler belongs: a document's sequence when the process-wide one is asked from inside
+     * it. A service that kept {@link #shared()} from registration then still answers on the sequence that drains
+     * it, not on a scheduler that sequence never drains.
+     */
+    private JobScheduler route() {
+        if (this != shared) return this;
+        UiSequence sequence = UiSequence.current();
+        return sequence == null ? this : sequence.jobs();
+    }
 
     /**
      * @param executor      where work runs. A same-thread executor makes every test deterministic
@@ -188,7 +225,7 @@ public final class JobScheduler implements Disposable {
      * @param work the actual computation, run off the UI thread, handed a {@link JobContext} to poll
      */
     public <T> Job<T> job(JobKey key, JobLane lane, Function<JobContext, T> work) {
-        return new Job<>(this, key, lane, work);
+        return new Job<>(route(), key, lane, work);
     }
 
     /**
@@ -268,6 +305,11 @@ public final class JobScheduler implements Disposable {
                              Function<JobContext, T> work, Consumer<T> onDone,
                              Consumer<Throwable> onFailure) {
         if (disposed) return;
+        if (this == shared && asynchronousDocuments.get() > 0 && !undrainedReported) {
+            undrainedReported = true;
+            CrystalGuiCore.LOGGER.warn("[cgui] job {} was posted to the process-wide scheduler from {}, which no "
+                    + "asynchronous document drains: post it from the document's sequence", key, Thread.currentThread().getName());
+        }
 
         int generation = generations.merge(key, 1, Integer::sum);
 
@@ -288,6 +330,11 @@ public final class JobScheduler implements Disposable {
      * <p>Bumps the generation, so a result already in flight is discarded when it lands.</p>
      */
     public void cancel(JobKey key) {
+        JobScheduler owner = route();
+        if (owner != this) {
+            owner.cancel(key);
+            return;
+        }
         // MARKED, not removed. Cancellation is cooperative, so there is a real gap between asking and the
         // worker noticing -- and a row that vanished on the click would claim the work had stopped when it
         // had not. @see ActiveJob#cancelRequested()
@@ -306,6 +353,11 @@ public final class JobScheduler implements Disposable {
      * nobody is looking at, and their results arrive for an editor that no longer exists.</p>
      */
     public void cancelAll(Object owner) {
+        JobScheduler routed = route();
+        if (routed != this) {
+            routed.cancelAll(owner);
+            return;
+        }
         List<JobKey> victims = new ArrayList<>();
         for (JobKey key : waiting.keySet()) if (key.owner() == owner) victims.add(key);
         for (JobKey key : running.keySet()) if (key.owner() == owner) victims.add(key);
@@ -558,6 +610,8 @@ public final class JobScheduler implements Disposable {
      * were all made in {@link #drain()}.</p>
      */
     public List<ActiveJob> active() {
+        JobScheduler owner = route();
+        if (owner != this) return owner.active();
         if (tracked.isEmpty()) return List.of();
         List<ActiveJob> shown = new ArrayList<>(tracked.size());
         for (Map.Entry<JobKey, Tracked> entry : tracked.entrySet()) {

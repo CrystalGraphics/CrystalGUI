@@ -967,4 +967,13 @@ public class SplitView extends UIElement implements MinimumSize {
         return false;
     }
 
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        boolean ours = isEnabled() && focusedDividerIndex() >= 0 && switch (key) {
+            case CgKeyCodes.KEY_LEFT, CgKeyCodes.KEY_UP, CgKeyCodes.KEY_RIGHT, CgKeyCodes.KEY_DOWN,
+                 CgKeyCodes.KEY_HOME, CgKeyCodes.KEY_END -> true;
+            default -> false;
+        };
+        return ours || super.claimsKey(key, typed, modifiers);
+    }
 }

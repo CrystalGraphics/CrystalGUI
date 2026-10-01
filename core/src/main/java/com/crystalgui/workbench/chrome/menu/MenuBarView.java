@@ -1,11 +1,11 @@
 package com.crystalgui.workbench.chrome.menu;
 
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.data.DataKey;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -335,6 +335,7 @@ public class MenuBarView extends UIElement {
         // the anchor: a tooltip is a child of the DOCUMENT, so no selector describing where its anchor
         // lives can reach it -- which is what ua/overlays.css records after both its siblings tried.
         Tooltip.attach(burger, BURGER_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
+        burger.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_SPACE);
         burger.onKeyDown.attachListener((element, event) -> {
             int key = event.getKeyCode();
             if (key != CgKeyCodes.KEY_RETURN && key != CgKeyCodes.KEY_SPACE) return;
@@ -623,6 +624,9 @@ public class MenuBarView extends UIElement {
                 .attachListener((element, event) -> {
                     if (document() == current) onKeyDown(event);
                 }, true, false);
+        current.claimKeys((key, typed, modifiers) -> document() == current
+                && (mnemonicTitle(typed, modifiers) != null
+                    || openTitle != null && (key == CgKeyCodes.KEY_LEFT || key == CgKeyCodes.KEY_RIGHT)));
         // THE FOCUS OWNER, REMEMBERED. @see #contextSource for why reading it at open time cannot work.
         // Capture on the root for the same reason as the keys: the bar is never focused, so it has to
         // watch the whole tree rather than wait to be told.
@@ -675,25 +679,33 @@ public class MenuBarView extends UIElement {
         // An open Menu is focused and sees the key FIRST, and its own bare-letter type-ahead matches its
         // rows; a letter it does not want falls through to here and switches menus. That is the split
         // every native bar makes, and it needs no arbitration because focus already made it.
-        if (!revealed && !CgModifiers.hasAlt(event.getModifiers())) return;
+        Title title = mnemonicTitle(event.getCharacter(), event.getModifiers());
+        if (title == null) return;
+        // TOGGLES, so Alt+F twice closes again rather than rebuilding the same menu -- and rebuilding
+        // is not harmless: it would discard the chain the second Alt+F is being dispatched through.
+        if (openTitle == title) close();
+        else show(title);
+        event.stopPropagation();
+        event.preventDefault();
+    }
+
+    /** The title a press opens by its mnemonic, or null. */
+    @Nullable
+    private Title mnemonicTitle(char character, int modifiers) {
+        if (!revealed && !CgModifiers.hasAlt(modifiers)) return null;
         // NOT WHILE SOMEBODY IS TYPING. A mnemonic is a global affordance and a focused text field is a
         // local one, and the local one wins -- otherwise Alt+E in the editor's find bar opens the Edit menu
         // instead of toggling Preserve Case, and no per-field workaround can fix it because this listener
         // sees the key first. The same predicate `allowWhileTyping` already uses.
         UIDocument window = document();
         UIElement focused = window == null ? null : window.focus().focused();
-        if (focused != null && focused.consumesTextInput()) return;
-        char typed = Character.toUpperCase(event.getCharacter());
+        if (focused != null && focused.consumesTextInput()) return null;
+        char typed = Character.toUpperCase(character);
+        if (typed == 0) return null;
         for (Title title : titles) {
-            if (title.mnemonic != typed || typed == 0) continue;
-            // TOGGLES, so Alt+F twice closes again rather than rebuilding the same menu -- and rebuilding
-            // is not harmless: it would discard the chain the second Alt+F is being dispatched through.
-            if (openTitle == title) close();
-            else show(title);
-            event.stopPropagation();
-            event.preventDefault();
-            return;
+            if (title.mnemonic == typed) return title;
         }
+        return null;
     }
 
     /**
@@ -712,7 +724,7 @@ public class MenuBarView extends UIElement {
      * two cannot disagree about what is currently drawn.</p>
      */
     public boolean tickFrame(float deltaSeconds) {
-        boolean want = revealed || CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers());
+        boolean want = revealed || CgModifiers.hasAlt(PlatformPort.current().modifiers());
         if (want == mnemonicsShown) return true;
         mnemonicsShown = want;
         for (Title title : titles) title.showMnemonic(want);

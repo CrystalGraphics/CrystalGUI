@@ -5,6 +5,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -73,19 +74,26 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
 
     private long seed = 20260921L;
 
+    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
+    private DocumentDriver<Void> driver;
+
     @Override
     public void init(HarnessContext ctx) {
-        document = new UIDocument().markFrameThread();
-        document.boxes().setUiScale(SCALE);
+        document = new UIDocument();
+        // INLINE: its gate is this scene's own frame time, which asynchronously is not the frame it times.
+        driver = DocumentDriver.attach(document, DocumentDriver.Mode.INLINE, "CgUiTimelineScene");
+        driver.run(() -> {
+            document.boxes().setUiScale(SCALE);
 
-        UIElement root = build();
-        StyleGroup.defaultPipeline(root.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).heightPercent(100f));
-        document.append(root);
-        document.styles().addStylesheet(StyleSheet.DEFAULT);
-        document.styles().addStylesheet(StyleSheet.parse(STYLES));
+            UIElement root = build();
+            StyleGroup.defaultPipeline(root.getStyle().getLayoutGroup(),
+                    l -> l.widthPercent(100f).heightPercent(100f));
+            document.append(root);
+            document.styles().addStylesheet(StyleSheet.DEFAULT);
+            document.styles().addStylesheet(StyleSheet.parse(STYLES));
 
-        generate();
+            generate();
+        });
     }
 
     private static final String STYLES = """
@@ -241,6 +249,10 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
 
     @Override
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+        return driver.offerKey(event, () -> handleKey(event));
+    }
+
+    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
         if (event.pressed()) {
             switch (event.key()) {
                 case CgKeyCodes.KEY_LEFT -> {
@@ -269,6 +281,10 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
 
     @Override
     public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
+        return driver.offerMouse(event, () -> handleMouse(event));
+    }
+
+    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
         return document.input().consumeMouseEvent(event);
     }
 

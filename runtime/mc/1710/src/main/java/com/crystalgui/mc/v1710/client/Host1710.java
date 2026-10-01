@@ -6,11 +6,13 @@ import java.util.Locale;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.mc.v1710.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.WorldServer;
 
@@ -85,5 +87,13 @@ final class Host1710 implements HostServices {
         Minecraft mc = Minecraft.getMinecraft();
         return HostServices.gameLocale(
                 mc == null || mc.gameSettings == null ? null : mc.gameSettings.language);
+    }
+
+    @Override
+    public void reinjectKey(CgSystemInput.Keyboard.Event key) {
+        GuiScreen screen = Minecraft.getMinecraft().currentScreen;
+        if (screen instanceof CgUiScreen) ((CgUiScreen) screen).keyLeftByDesktop(key);
+        // keyTyped is a press, with its character beside its key; a release has no handler to reach.
+        else if (screen != null && key.pressed()) ScreenKeys.type(screen, key.character(), key.key());
     }
 }

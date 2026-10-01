@@ -1,9 +1,9 @@
 package com.crystalgui.widget.collection.tree;
 
+import com.crystalgui.ui.service.PlatformPort;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.crystalgraphics.platform.CgPlatform;
 
 /**
  * What a tree's Cut and Copy put down and Paste picks up: the items, and whether they are to move or be copied.
@@ -33,7 +33,7 @@ public final class TreeClipboard<T> {
         items.clear();
         items.addAll(held);
         mode = intent;
-        if (!items.isEmpty()) CgPlatform.input().setClipboard(text);
+        if (!items.isEmpty()) PlatformPort.current().setClipboard(text);
     }
 
     public boolean isEmpty() {

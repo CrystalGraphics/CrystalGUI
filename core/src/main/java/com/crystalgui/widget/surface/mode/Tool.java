@@ -144,4 +144,9 @@ public interface Tool {
     default boolean keyPressed(int key, int modifiers, boolean repeat) {
         return false;
     }
+
+    /** Whether {@link #keyPressed} would take this press, answered without acting, as {@code InputMode.claimsKey}. */
+    default boolean claimsKey(int key, int modifiers) {
+        return false;
+    }
 }

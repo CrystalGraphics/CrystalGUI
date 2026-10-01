@@ -1035,7 +1035,9 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     }
 
     void detachedKeepingParent() {
-        for (UIElement child : children) child.detachedKeepingParent();
+        // A COPY: what a departure does synchronously (Dismiss.forget hiding a popover, which removes itself) can
+        // take a sibling out of this list mid-walk. One already gone has no document left and walks as a no-op.
+        for (UIElement child : children.toArray(new UIElement[0])) child.detachedKeepingParent();
         if (shadowRoot != null) shadowRoot.detachedKeepingParent();
         UIDocument doc = document;
         if (doc != null) {

@@ -1,6 +1,8 @@
 package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
@@ -33,6 +35,7 @@ import com.crystalgui.ui.dom.UIDocument;
 public final class ScreenOverlay {
 
     private final UIDocument window;
+    private final HostInput input;
 
     /**
      * Whether a press has landed inside a pinned window more recently than outside one.
@@ -48,10 +51,27 @@ public final class ScreenOverlay {
      * moment one lands outside. It is what every OS-level overlay does and the only rule that is stable
      * under a stationary pointer.</p>
      */
-    private boolean keyboardIsOurs;
+    private volatile boolean keyboardIsOurs;
+
+    /** Answer presses from the frame's {@link HitRegions} rather than the live tree: T1's router, inline. */
+    private static final boolean USE_REGIONS = Boolean.getBoolean("crystalgui.ui.hitRegions");
+
+    /**
+     * Whether the document records on its own thread: then the tree is never read here, presses are answered from the
+     * committed regions, and what a press outside does to the tree is posted to the document.
+     */
+    private boolean async() {
+        DocumentDriver<?> driver = window.driver();
+        return driver != null && driver.isAsync();
+    }
+    /** Compare the two answers on every press and say where they differ. */
+    private static final boolean CHECK_REGIONS = Boolean.getBoolean("crystalgui.input.regionsCheck");
+
+    private volatile HitRegions regions = HitRegions.NONE;
 
     public ScreenOverlay(UIDocument window) {
         this.window = window;
+        this.input = new HostInput(() -> window);
     }
 
     /**
@@ -65,6 +85,16 @@ public final class ScreenOverlay {
      */
     public void onForeignScreenChanged(boolean open) {
         if (!open) keyboardIsOurs = false;
+    }
+
+    /** Freezes this frame's regions for the router. On the document's thread, after its frame. */
+    public void commit() {
+        regions = HitRegions.capture(window);
+    }
+
+    /** The regions the last {@link #commit} froze. */
+    public HitRegions regions() {
+        return regions;
     }
 
     /** Whether a pinned window currently owns the keyboard. @see #keyboardIsOurs */
@@ -93,9 +123,12 @@ public final class ScreenOverlay {
         // the pointer has left it -- which is exactly what capture is for, and exactly what a per-event
         // hit test destroys. The common case, not the edge case: every window move ends outside the
         // caption it started on.
-        boolean captured = window.input().pointerCaptureTarget() != null;
+        HitRegions frozen = regions;
+        boolean fromRegions = USE_REGIONS || async();
+        boolean captured = fromRegions ? frozen.pointerCaptured() : window.input().pointerCaptureTarget() != null;
+        boolean inside = isMove || captured || takes(frozen, xPx, yPx);
 
-        if (!isMove && !captured && overlayHitTest(xPx, yPx) == null) {
+        if (!inside) {
             // OUTSIDE. Two things have to happen here, and the first version did neither because it
             // returned before reaching them -- its own comment said "the outside case never reaches
             // here", which was true of the code and wrong about what the code needed to do.
@@ -105,16 +138,16 @@ public final class ScreenOverlay {
                 // session went there. On screen that is a chat box you can click, that shows a caret,
                 // and that will not accept a single character -- which reads as chat being broken.
                 keyboardIsOurs = false;
+                if (async()) {
+                    window.driver().post(this::pressedOutside);
+                    return false;
+                }
                 // AND THE FOCUS RING GOES WITH IT, or the editor keeps drawing itself focused while
                 // somebody else has the keyboard. "Looks focused, is cold" is the exact state
                 // WindowFrame.restoreFocus exists to prevent one level down. The window remembers where
                 // its focus was, so clicking back in restores it.
-                UIElement focused = window.focus().focused();
-                if (focused != null) window.focus().blurIfFocused(focused);
-                // A MENU IS DISMISSED BY A PRESS ANYWHERE, including one that is not ours. Otherwise a
-                // dropdown opened in a pinned window survives a click on the chat box and floats there
-                // with nothing able to close it: light dismiss only ever sees presses we consumed.
-                if (!window.dismiss().autoPopovers().isEmpty()) window.dismiss().lightDismiss(null);
+                pressedOutside();
+                return false;
             }
             return false;
         }
@@ -126,6 +159,30 @@ public final class ScreenOverlay {
         // A PRESS INSIDE TAKES THE KEYBOARD.
         if (pressed) keyboardIsOurs = true;
         return true;
+    }
+
+    /** What a press outside every pinned window does to the tree: focus and any open menu go. On the document's thread. */
+    private void pressedOutside() {
+        UIElement focused = window.focus().focused();
+        if (focused != null) window.focus().blurIfFocused(focused);
+        // A MENU IS DISMISSED BY A PRESS ANYWHERE, including one that is not ours. Otherwise a
+        // dropdown opened in a pinned window survives a click on the chat box and floats there
+        // with nothing able to close it: light dismiss only ever sees presses we consumed.
+        if (!window.dismiss().autoPopovers().isEmpty()) window.dismiss().lightDismiss(null);
+    }
+
+    private boolean takes(HitRegions frozen, int xPx, int yPx) {
+        if (async() || (USE_REGIONS && !CHECK_REGIONS)) return frozen.takes(xPx, yPx);
+        boolean live = overlayHitTest(xPx, yPx) != null;
+        if (CHECK_REGIONS) {
+            boolean fromRegions = frozen.takes(xPx, yPx);
+            if (fromRegions != live) {
+                CrystalGuiCore.LOGGER.warn("[cgui] hit regions say {} at {},{} where the live test says {} ({} regions)",
+                        fromRegions ? "ours" : "the game's", xPx, yPx, live ? "ours" : "the game's", frozen.size());
+            }
+            if (USE_REGIONS) return fromRegions;
+        }
+        return live;
     }
 
     /**
@@ -189,7 +246,7 @@ public final class ScreenOverlay {
      */
     public boolean offerKey(int keyCode, char typed, boolean pressed) {
         if (!keyboardIsOurs) return false;
-        return window.input().consumeKeyboardEvent(
+        return input.consumeKeyboardEvent(
                 new CgSystemInput.Keyboard.Event(typed, keyCode, pressed, false, System.currentTimeMillis()));
     }
 
@@ -209,7 +266,6 @@ public final class ScreenOverlay {
      */
     private void deliver(int xPx, int yPx, int button, boolean pressed, float wheel) {
         long millis = button < 0 ? -1L : System.currentTimeMillis();
-        window.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                xPx, yPx, 0, 0, button, pressed, wheel, millis));
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(xPx, yPx, 0, 0, button, pressed, wheel, millis));
     }
 }

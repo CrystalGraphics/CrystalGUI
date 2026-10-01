@@ -1,5 +1,6 @@
 package com.crystalgui.widget.display;
 
+import com.crystalgui.ui.service.Animation;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -113,7 +114,8 @@ public class FrameStatsOverlay extends UIElement {
     private FrameStats.Detail detail = FrameStats.Detail.SUMMARY;
 
     private float sinceRefresh;
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tickFrame;
     private boolean holding;
     private boolean showing = true;
 
@@ -262,17 +264,13 @@ public class FrameStatsOverlay extends UIElement {
         super.connected();
         applyCollection();
         UIDocument window = document();
-        // `every` is a plain add and `disconnected` clears the flag, or a HUD hidden and reshown comes
-        // back with the flag set and no hook behind it.
-        if (ticking || window == null) return;
-        ticking = true;
-        window.animation().every(this, this::tickFrame);
+        if (window == null) return;
+        window.animation().everyIfAbsent(this, tickHook);
     }
 
     @Override
     protected void disconnected() {
         super.disconnected();
-        ticking = false;
         applyCollection();
     }
 

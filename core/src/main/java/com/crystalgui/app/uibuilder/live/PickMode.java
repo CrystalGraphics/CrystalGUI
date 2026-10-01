@@ -95,6 +95,11 @@ public final class PickMode implements InputMode {
     }
 
     @Override
+    public boolean claimsKey(int key, int modifiers) {
+        return key == CgKeyCodes.KEY_ESCAPE;
+    }
+
+    @Override
     public boolean keyPressed(int key, int modifiers, boolean repeat) {
         if (key != CgKeyCodes.KEY_ESCAPE) return false;
         // ENDS THE MODE AND CONSUMES, but only while it is up. An Escape that arrives once the picker has

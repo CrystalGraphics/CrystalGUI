@@ -1,8 +1,7 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
-import com.crystalgraphics.platform.service.CgInputService;
 
 import com.crystalgui.core.window.WindowState;
 import javax.annotation.Nullable;
@@ -158,7 +157,7 @@ public final class WindowKeyboardMove {
 
     /** Whether {@code key} is down right now. False when no platform is registered. */
     private static boolean held(int key) {
-        CgInputService input = CgPlatform.input();
+        PlatformPort input = PlatformPort.current();
         return input != null && input.isKeyDown(key);
     }
 

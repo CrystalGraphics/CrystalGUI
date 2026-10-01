@@ -1,5 +1,6 @@
 package com.crystalgui.widget.scroll;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
@@ -9,7 +10,6 @@ import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.MouseEvent;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.service.Drag;
 
 /**
@@ -313,7 +313,7 @@ public class Scroller extends UIElement {
         // Poll the real button state rather than waiting for a mouse-up event: a release outside the
         // button (or outside the window entirely) would never be delivered here, and the repeat would
         // run forever.
-        var adapter = CgPlatform.input();
+        PlatformPort adapter = PlatformPort.current();
         if (adapter == null || !adapter.isMouseDown(CgMouseCodes.LEFT_BUTTON)) {
             heldDirection = 0f;
             return false;

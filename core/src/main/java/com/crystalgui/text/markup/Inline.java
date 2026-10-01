@@ -1,5 +1,7 @@
 package com.crystalgui.text.markup;
 
+import javax.annotation.Nullable;
+
 /**
  * Markdown's inline syntax — the part inside a paragraph, a heading or a table cell.
  *
@@ -90,14 +92,14 @@ final class Inline {
                 }
             }
 
-            String wrapped = span(text, at, "~~", "<i>", "</i>");
+            Span wrapped = span(text, at, "~~", "<i>", "</i>");
             if (wrapped == null) wrapped = span(text, at, "**", "<b>", "</b>");
             if (wrapped == null) wrapped = span(text, at, "__", "<b>", "</b>");
             if (wrapped == null) wrapped = span(text, at, "*", "<i>", "</i>");
             if (wrapped == null && flanking(text, at)) wrapped = span(text, at, "_", "<i>", "</i>");
             if (wrapped != null) {
-                out.append(wrapped);
-                at += consumed;
+                out.append(wrapped.html());
+                at += wrapped.length();
                 continue;
             }
 
@@ -107,8 +109,9 @@ final class Inline {
         return out.toString();
     }
 
-    /** How much of the input the last successful {@link #span} took. */
-    private static int consumed;
+    /** A rendered run and how much of the input it took. Returned, not stored: the run's own content recurses. */
+    private record Span(String html, int length) {
+    }
 
     /**
      * One delimited run, rendered — or null when this position does not open one.
@@ -118,14 +121,14 @@ final class Inline {
      * and losing the marker entirely would say the opposite of what the author wrote. Italic at least
      * keeps "this is set apart".</p>
      */
-    private static String span(String text, int at, String marker, String open, String close) {
+    @Nullable
+    private static Span span(String text, int at, String marker, String open, String close) {
         if (!text.startsWith(marker, at)) return null;
         int from = at + marker.length();
         if (from >= text.length() || text.charAt(from) == ' ') return null;
         int end = text.indexOf(marker, from);
         if (end < 0) return null;
-        consumed = end + marker.length() - at;
-        return open + render(text.substring(from, end)) + close;
+        return new Span(open + render(text.substring(from, end)) + close, end + marker.length() - at);
     }
 
     /**

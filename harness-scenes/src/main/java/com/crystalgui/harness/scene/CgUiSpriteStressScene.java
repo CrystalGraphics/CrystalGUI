@@ -1,9 +1,9 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -56,6 +56,10 @@ public class CgUiSpriteStressScene implements InteractiveSceneLifecycle {
 
     private UIDocument document;
 
+    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
+    private DocumentDriver<Void> driver;
+    private DocumentDriver.Painter<Void> painter;
+
     @Override
     public void init(HarnessContext ctx) {
         UIElement root = new UIElement();
@@ -76,31 +80,35 @@ public class CgUiSpriteStressScene implements InteractiveSceneLifecycle {
             root.append(cell);
         }
 
-        this.document = new UIDocument().markFrameThread();
-        this.document.boxes().setUiScale(SCALE);
-        this.document.append(root);
-        this.document.styles().addStylesheet(StyleSheet.DEFAULT);
-        this.document.styles().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
-        // The window is sized so every cell RASTERISES at the default count and size: laid out past the
-        // viewport a cell still costs its submission and produces no fragments, which measures half the
-        // question and reads as a clean win for whichever path submits less.
-        this.document.styles().addStylesheet(StyleSheet.parse(
-                ".cell { width: " + CELL + "px; height: " + (CELL * 2 / 3) + "px; margin: 1px;"
-                        + "        background: asset(\"crystalgui:ore\", \"button\"); }"
-                        + ".spun { transform: rotate(7deg); }"));
+        document = new UIDocument();
+
+        driver = DocumentDriver.attach(document);
+        painter = DocumentDriver.whole(document);
+
+        driver.run(() -> {
+            this.document.boxes().setUiScale(SCALE);
+            this.document.append(root);
+            this.document.styles().addStylesheet(StyleSheet.DEFAULT);
+            this.document.styles().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+            // The window is sized so every cell RASTERISES at the default count and size: laid out past the
+            // viewport a cell still costs its submission and produces no fragments, which measures half the
+            // question and reads as a clean win for whichever path submits less.
+            this.document.styles().addStylesheet(StyleSheet.parse(
+                    ".cell { width: " + CELL + "px; height: " + (CELL * 2 / 3) + "px; margin: 1px;"
+                            + "        background: asset(\"crystalgui:ore\", \"button\"); }"
+                            + ".spun { transform: rotate(7deg); }"));
+
+        });
     }
 
     @Override
     public void render(HarnessContext ctx, FrameInfo frame) {
-        document.frame(frame.getDeltaTime(), ctx.getScreenWidth() / SCALE, ctx.getScreenHeight() / SCALE);
-        CgUiPaintContext paint = document.paintContext();
-        paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
-        document.paint(paint);
-        paint.endFrame();
+        driver.frame(frame.getDeltaTime(), ctx.getScreenWidth(), ctx.getScreenHeight(), painter);
     }
 
     @Override
     public void dispose() {
+        driver.close();
         document = null;
     }
 

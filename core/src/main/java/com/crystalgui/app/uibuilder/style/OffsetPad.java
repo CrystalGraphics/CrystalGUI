@@ -1,8 +1,8 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.ui.service.PlatformPort;
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
@@ -204,7 +204,7 @@ public final class OffsetPad extends ValueControl<double[]> {
      */
     public static double onBox(double fraction) {
         double held = Math.max(BOX_RANGE[0], Math.min(BOX_RANGE[1], fraction));
-        if (!CgModifiers.hasCtrl(CgPlatform.input().getCurrentModifiers())) {
+        if (!CgModifiers.hasCtrl(PlatformPort.current().modifiers())) {
             for (double ninth : new double[] {0d, 0.5d, 1d}) {
                 if (Math.abs(held - ninth) < SNAP) return ninth;
             }

@@ -136,7 +136,7 @@ public final class ProfilerSettings {
 
     private static final Settings SETTINGS = new Settings();
     @Nullable
-    private static ConfigStorage storage;
+    private static volatile ConfigStorage storage;
     private static boolean listening;
 
     private ProfilerSettings() {

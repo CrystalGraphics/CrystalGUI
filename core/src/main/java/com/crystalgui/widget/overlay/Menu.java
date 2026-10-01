@@ -380,6 +380,45 @@ public class Menu extends Popover {
      *
      * @return whether there was one to open
      */
+    /** The enabled rows whose label starts with {@code typed}: what type-ahead lands on. */
+    private List<Integer> rowsStartingWith(char typed, int modifiers) {
+        List<Integer> matches = new ArrayList<>();
+        if (CgModifiers.hasCtrl(modifiers) || CgModifiers.hasAlt(modifiers) || CgModifiers.hasSuper(modifiers)) {
+            return matches;
+        }
+        char lower = Character.toLowerCase(typed);
+        if (!Character.isLetterOrDigit(lower)) return matches;
+        for (int i = 0; i < itemList.size(); i++) {
+            MenuItem item = itemList.get(i);
+            if (!item.isEnabled()) continue;
+            String label = item.getText();
+            if (!label.isEmpty() && Character.toLowerCase(label.charAt(0)) == lower) matches.add(i);
+        }
+        return matches;
+    }
+
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        if (isOpen() && !itemList.isEmpty()) {
+            switch (key) {
+                case CgKeyCodes.KEY_UP, CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_HOME, CgKeyCodes.KEY_END -> {
+                    return true;
+                }
+                case CgKeyCodes.KEY_RIGHT -> {
+                    int index = focusedIndex();
+                    if (index >= 0 && itemList.get(index).getSubmenu() != null) return true;
+                }
+                case CgKeyCodes.KEY_LEFT -> {
+                    if (parentPopover() != null) return true;
+                }
+                default -> {
+                    if (!rowsStartingWith(typed, modifiers).isEmpty()) return true;
+                }
+            }
+        }
+        return super.claimsKey(key, typed, modifiers);
+    }
+
     private boolean openFocusedSubmenu() {
         int index = focusedIndex();
         if (index < 0) return false;
@@ -543,20 +582,7 @@ public class Menu extends Popover {
      * because some row starts with "S" would make an open menu eat the application's shortcuts.</p>
      */
     private boolean focusByTypedLetter(KeyboardEvent event) {
-        if (CgModifiers.hasCtrl(event.getModifiers()) || CgModifiers.hasAlt(event.getModifiers())
-                || CgModifiers.hasSuper(event.getModifiers())) {
-            return false;
-        }
-        char typed = Character.toLowerCase(event.getCharacter());
-        if (!Character.isLetterOrDigit(typed)) return false;
-
-        List<Integer> matches = new ArrayList<>();
-        for (int i = 0; i < itemList.size(); i++) {
-            MenuItem item = itemList.get(i);
-            if (!item.isEnabled()) continue;
-            String label = item.getText();
-            if (!label.isEmpty() && Character.toLowerCase(label.charAt(0)) == typed) matches.add(i);
-        }
+        List<Integer> matches = rowsStartingWith(event.getCharacter(), event.getModifiers());
         if (matches.isEmpty()) return false;
 
         if (matches.size() == 1) {

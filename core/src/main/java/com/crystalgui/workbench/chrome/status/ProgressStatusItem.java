@@ -55,7 +55,9 @@ public class ProgressStatusItem extends UIElement {
     private String shownWhat = "";
     private float shownFraction = Float.NaN;
     private int shownCount = -1;
-    private boolean ticking;
+
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook ticker = this::tick;
 
     public ProgressStatusItem() {
         super(NAME);
@@ -125,9 +127,8 @@ public class ProgressStatusItem extends UIElement {
 
     private void startTicking() {
         UIDocument window = document();
-        if (window == null || ticking) return;
-        ticking = true;
-        window.animation().every(this, this::tick);
+        if (window == null) return;
+        window.animation().everyIfAbsent(this, ticker);
     }
 
     /**
@@ -138,10 +139,7 @@ public class ProgressStatusItem extends UIElement {
      * {@code private} already does.</p>
      */
     private boolean tick(float deltaSeconds) {
-        if (document() == null) {
-            ticking = false;
-            return false;
-        }
+        if (document() == null) return false;
         refresh();
         return true;
     }

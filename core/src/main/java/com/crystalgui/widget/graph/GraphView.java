@@ -1,5 +1,6 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.widget.overlay.ContextMenu;
@@ -11,7 +12,6 @@ import com.crystalgui.ui.input.keymap.KeymapScope;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.data.ClipboardActions;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
@@ -987,13 +987,13 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     }
 
     private static boolean isShiftHeld() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasShift(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasShift(input.modifiers());
     }
 
     private static boolean isAltHeld() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasAlt(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasAlt(input.modifiers());
     }
 
     // ── Framing ─────────────────────────────────────────────────────────────
@@ -1113,22 +1113,14 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         super.connected();
         // Once per attach: `Animation.every` is a plain add. Registered from a post-layout hook, this was
         // one more hook every frame for as long as the graph stayed open.
-        if (!ticking) {
-            ticking = true;
-            document().animation().every(this, this::tickPorts);
-        }
+        document().animation().everyIfAbsent(this, tickHook);
         // @see #everyFrame. Drained rather than replayed: `every` is owned by this node, so a re-attach
         // would otherwise register each hook a second time.
         for (Animation.Hook hook : pendingFrameHooks) document().animation().every(this, hook);
         pendingFrameHooks.clear();
     }
 
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        ticking = false;
-    }
-
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tickPorts;
 
 }

@@ -1,5 +1,7 @@
 package com.crystalgui.widget.canvas;
 
+import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
@@ -7,7 +9,6 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
@@ -133,8 +134,6 @@ public class CanvasView extends UIElement {
 
     /** @see #setCullExempt(UIElement, boolean) */
     private final Set<UIElement> cullExempt = new HashSet<>();
-
-    private boolean ticking;
 
     /** Fires after any change to pan or zoom, from any source. Zero-arg because a listener that cares
      * reads {@link #getZoom()}/{@link #getPanX()} — passing three floats would just be them. */
@@ -727,7 +726,7 @@ public class CanvasView extends UIElement {
     }
 
     private static boolean isSpaceHeld() {
-        var input = CgPlatform.input();
+        PlatformPort input = PlatformPort.current();
         return input != null && input.isKeyDown(CgKeyCodes.KEY_SPACE);
     }
 
@@ -830,28 +829,29 @@ public class CanvasView extends UIElement {
     }
 
     private void ensureTicking() {
-        if (ticking || !cullingEnabled) return;
+        if (!cullingEnabled) return;
         UIDocument window = document();
         if (window == null) return;
-        document().animation().every(this, this::tickFrame);
-        ticking = true;
+        window.animation().everyIfAbsent(this, cullHook);
     }
 
-        public boolean tickFrame(float deltaSeconds) {
-        if (!cullingEnabled) {
-            ticking = false;
-            return false;
-        }
+    public boolean tickFrame(float deltaSeconds) {
+        if (!cullingEnabled) return false;
         updateCulling();
         return true;
     }
+
+    /** Held, so the service can tell each is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook cullHook = this::tickFrame;
+    private final Animation.Hook settledHook = delta -> {
+        onLayoutSettled();
+        return true;
+    };
+
     @Override
     protected void connected() {
         super.connected();
-        document().animation().afterLayout(this, delta -> {
-            onLayoutSettled();
-            return true;
-        });
+        document().animation().afterLayoutIfAbsent(this, settledHook);
     }
 
 }

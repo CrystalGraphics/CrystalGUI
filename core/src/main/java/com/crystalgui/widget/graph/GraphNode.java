@@ -1,5 +1,6 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
@@ -8,7 +9,6 @@ import com.crystalgui.render.InkOverflow;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.graph.port.PortType;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
@@ -274,8 +274,8 @@ public class GraphNode extends UIElement {
     }
 
     private static boolean isShiftHeld() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasShift(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasShift(input.modifiers());
     }
 
     /**

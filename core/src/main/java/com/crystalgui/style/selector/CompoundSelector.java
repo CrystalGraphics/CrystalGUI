@@ -16,7 +16,20 @@ import java.util.regex.Pattern;
  * <p>Pseudo-classes are matched by delegating directly to {@link PseudoClasses#applies(Styleable)} —
  * no synthetic {@code __hovered__}-style classes are added to the element.
  */
-public record CompoundSelector(List<Part> parts) {
+public record CompoundSelector(List<Part> parts, @Nullable Part pseudoElement) {
+
+    /** {@code parts}, with its pseudo-element found once: every candidate rule asks for it on every match. */
+    public CompoundSelector(List<Part> parts) {
+        this(parts, findPseudoElement(parts));
+    }
+
+    @Nullable
+    private static Part findPseudoElement(List<Part> parts) {
+        for (var part : parts) {
+            if (part.type() == SelectorType.PSEUDO_ELEMENT) return part;
+        }
+        return null;
+    }
 
     /**
      * @param argument the parenthesised argument of a functional part — the highlight name in
@@ -70,13 +83,6 @@ public record CompoundSelector(List<Part> parts) {
         return pseudo != null && pseudo.identity().equals("part");
     }
 
-    @Nullable
-    public Part pseudoElement() {
-        for (var part : parts) {
-            if (part.type() == SelectorType.PSEUDO_ELEMENT) return part;
-        }
-        return null;
-    }
 
     /**
      * Whether this compound matches {@code element} <b>as an element</b>.

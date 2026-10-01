@@ -29,6 +29,7 @@ import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.KeyClaim;
 
 import java.util.Collection;
 import java.util.ArrayDeque;
@@ -401,7 +402,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
             if (key == Attribute.HIDDEN) structureChanged();
             // SCROLL_EXEMPT is read while world matrices are composed, and changes none of the
             // geometry -- so it is a transform invalidation and not a relayout.
-            if (key == Attribute.SCROLL_EXEMPT && box != null) box.tree().transformsChanged();
+            if (key == Attribute.SCROLL_EXEMPT && box != null) box.tree().transformsChanged(box);
             invalidateStyleMatch();
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
@@ -1024,6 +1025,46 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         return false;
     }
 
+    /**
+     * Whether this node takes a key press for itself, so the host must not see it: the declared twin of a
+     * key-down listener that stops propagation. Asked of the focused node and its ancestors when the host
+     * asks whether a key is ours ({@code KeyClaims}), which cannot run listeners once documents run on
+     * their own threads.
+     *
+     * <pre>{@code
+     * @Override
+     * public boolean claimsKey(int key, char typed, int modifiers) {
+     *     return key == CgKeyCodes.KEY_HOME || key == CgKeyCodes.KEY_END   // what onKeyDown handles
+     *             || super.claimsKey(key, typed, modifiers);
+     * }
+     * }</pre>
+     *
+     * <p>A class whose listener sits on an element it does not own declares through {@link #claimKeys}
+     * instead. An override that drops {@code super} loses those.</p>
+     */
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return keyClaims != null && keyClaims.claims(key, typed, modifiers);
+    }
+
+    /** Claims made from outside, added to by {@link #claimKeys}. */
+    @Nullable
+    private KeyClaim keyClaims;
+
+    /**
+     * Declares keys a listener attached to this element takes, beside the listener.
+     *
+     * <pre>{@code
+     * field.events.getGroup(KeyboardEvent.Down.class).attachListener(this::fieldKey);
+     * field.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_ESCAPE);
+     * }</pre>
+     */
+    public UIElement claimKeys(KeyClaim claim) {
+        KeyClaim before = keyClaims;
+        keyClaims = before == null ? claim
+                : (key, typed, modifiers) -> before.claims(key, typed, modifiers) || claim.claims(key, typed, modifiers);
+        return this;
+    }
+
     // ── The attribute-backed state, under the names the widget layer already uses ──
     //
     // Each is one line over `set`, and each keeps a family of call sites mechanical for M6: 171 for
@@ -1206,8 +1247,13 @@ public class UIElement extends UINode implements EventTarget, Styleable {
 
     /** The box's, once it has clamped against the content it laid out. */
     public final void setScrollOffsets(float left, float top) {
+        if (left == scrollLeft && top == scrollTop) return;
         this.scrollLeft = left;
         this.scrollTop = top;
+        // What the box hosts moves, which only a recompose of this box shows. Widgets write offsets
+        // directly during a thumb drag, so the box's own setter is not the only way in.
+        Box box = box();
+        if (box != null) box.tree().transformsChanged(box);
     }
 
     /**

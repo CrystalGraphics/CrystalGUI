@@ -182,13 +182,14 @@ spells something; it decides nothing. The seams it answers, all in `core/`:
 
 | Seam | A loader answers |
 |---|---|
-| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection |
+| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection, and how to give the current screen a key the desktop left (`reinjectKey`) |
 | `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, and whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides) |
 | `desktop.host.HostSession.PaintHost` | whether a screen is up and whose, and how to bracket a draw |
 | `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |
 | `fs.server.WorkspaceRoles` | is this actor the single-player owner, and is it a connected operator |
 | `probe.ServerSmoke.Host` | is this a dedicated server, which package is client-only, how to stop |
 | `ui.input.HostPointer` | *(nothing — it OWNS)* the scroll sign, and that a move carries no click time |
+| `desktop.host.HostInput` | *(nothing — it OWNS)* where its screen's input enters: a host calls `HostSession.session().input()`, never `document.input()`, so the document's `DocumentDriver` can post events to a document on its own thread |
 
 **A decision made in one loader is a decision the other loader got wrong.** Nothing can see it: each
 copy is internally consistent, so no test fails and no guard fires. Four such decisions had already
@@ -245,7 +246,7 @@ The harness is LWJGL 3 and GLFW; `--device=gl|tracked|vulkan` picks what `CgGL` 
 | `cgui-text-stress` | `CgUiTextStressScene` | Many text nodes — shaping/layout cost |
 | `cgui-styling` | `CgUiStylingScene` | Cascade, selectors, transitions |
 | `cgui-visual-layers` | `CgUiVisualLayersScene` | FBO layer opacity + masking |
-| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area) **the frame readout** (F7, F8 to expand its phases) and **the Frame Profiler** — from the taskbar's **start button**, or F9 -- `profiler.open`, a command on every surface with a desktop, so the scene's key is the game's -- or a press on a bar of the F7 readout's sparkline, which opens that frame. **`-Dcrystalgui.harness.desktop.profiler=true` drives the profiler by itself**: opens it, records, then clicks the strip, a zone, wheels, pans, drags ranges (paused and live), steps with the arrow keys, presses Worst frame twice, toggles Record, ticks a channel, drags the split, opens the settings gear, sets 300 frames kept-first and waits for the ring to fill and stop, wheels the strip in and presses Home to reach frame #0, then Restore defaults, opens Hints and follows a link, pins two ranges and reads Compare, shows and hides the viewer's own work from the footer, opens Chains, presses a readout bar and checks the frame it opens, toggles the window with F9, presses Export and loads the file back as Compare's B, then ticks `images`, reads what the captures cost a frame, hovers the strip for a frame's picture and opens the Screen tab -- all through the real `Input` path -- printing what the model says each gesture did (`[profiler-shot]` lines) and writing `cgui-desktop-profiler-*.png` after each. ~15s, exits on its own. **`-Dcrystalgui.harness.desktop.traceCost=true`** instead measures what the trace engine costs a frame with every channel off (`TraceCostProbe`: blocks of 300 frames alternating off and on, `[trace-cost]` lines, ~40s). Run it after any change to the window; a gesture that stopped working shows as a wrong number, not a subtle picture **`-Dcrystalgui.harness.desktop.minimise=true`** minimises the active window and restores it, photographing each flight halfway (`minimise-mid`, `restore-mid`): what flies is the window's snapshot. **`-Dcrystalgui.harness.desktop.presentAgain=true`** paints only even frames from 61 and re-presents the odd ones (`UiGpu.presentAgain`); `present-again` must match `presented`. *Grows with `plan/shell-windowing.md`: every W with something visible adds its demonstration here in the same commit* |
+| `cgui-desktop` | `CgUiDesktopScene` | **CrystalOS** — stacking windows, drag, resize, clamp, cascade, taskbar, per-window modality, maximise, **the editor running as a window**, **a tool window torn out into an owned float** (F3, or drag a rail button into the editor area) **the frame readout** (F7, F8 to expand its phases) and **the Frame Profiler** — from the taskbar's **start button**, or F9 -- `profiler.open`, a command on every surface with a desktop, so the scene's key is the game's -- or a press on a bar of the F7 readout's sparkline, which opens that frame. **`-Dcrystalgui.harness.desktop.profiler=true` drives the profiler by itself**: opens it, records, then clicks the strip, a zone, wheels, pans, drags ranges (paused and live), steps with the arrow keys, presses Worst frame twice, toggles Record, ticks a channel, drags the split, opens the settings gear, sets 300 frames kept-first and waits for the ring to fill and stop, wheels the strip in and presses Home to reach frame #0, then Restore defaults, opens Hints and follows a link, pins two ranges and reads Compare, shows and hides the viewer's own work from the footer, opens Chains, presses a readout bar and checks the frame it opens, toggles the window with F9, presses Export and loads the file back as Compare's B, then ticks `images`, reads what the captures cost a frame, hovers the strip for a frame's picture and opens the Screen tab -- all through the real `Input` path -- printing what the model says each gesture did (`[profiler-shot]` lines) and writing `cgui-desktop-profiler-*.png` after each. ~15s, exits on its own. **`-Dcrystalgui.harness.desktop.traceCost=true`** instead measures what the trace engine costs a frame with every channel off (`TraceCostProbe`: blocks of 300 frames alternating off and on, `[trace-cost]` lines, ~40s). Its document records on its own sequence, presented by the render thread, like every harness scene's (`-Dcrystalgui.ui.async=false` on the render thread, `-Dcrystalgui.ui.sequence=true` in lockstep). **`-Dcrystalgui.harness.desktop.hoverSweep=true`** measures moving the pointer: parked, then swept across the editor every frame (`HoverSweepProbe`, `[hover-sweep]` lines). Run it after any change to the window; a gesture that stopped working shows as a wrong number, not a subtle picture **`-Dcrystalgui.harness.desktop.minimise=true`** minimises the active window and restores it, photographing each flight halfway (`minimise-mid`, `restore-mid`): what flies is the window's snapshot. **`-Dcrystalgui.harness.desktop.presentAgain=true`** paints only even frames from 61 and re-presents the odd ones (`UiGpu.presentAgain`); `present-again` must match `presented`. *Grows with `plan/shell-windowing.md`: every W with something visible adds its demonstration here in the same commit* |
 | `gpu-trace-probe` | `CgGpuTraceProbeScene` | **DIAGNOSTIC, exits on its own** — T7's gate for `CgGpuTrace`: light frames painted without waiting, each fenced, where a `gpuNanos` must land within one boundary of the GPU finishing its frame; then frames bracketed by a spun fence wait, cycling heavy/light/empty, where heavy-minus-empty GPU time must be within 5% of heavy-minus-empty waited time. **Compare by difference**: a bracket costs a fixed 5-9 ms round trip on its own, which compared whole reads as a query missing a quarter of the work. Prints `[gpu-trace-probe]` lines ending PASS or FAIL, ~20 s |
 | `cgui-timeline` | `CgUiTimelineScene` | **The profiler's navigation surfaces under load** — 10,000 nested spans on one shared axis, 600 frame bars, and two counter rows on the strip's own columns (one deliberate gap per row, since an unrecorded frame must not read as a measured zero). Wheel zooms about the pointer, drag pans, a click selects a span, a drag across the strip selects a range, ←/→ step frames, R refits, G reseeds. The status line prints THIS SCENE's own frame time, p50 and p99, so the gate is read off the screen it gates |
 
@@ -426,6 +427,17 @@ tree observer, and document-level `DataProvider`s.
   rebuilt whenever its subtree is hidden or restructured, so a flag written onto one is lost.
 - `addDataProvider` — document-level, because the consumer of a key is often not an ancestor of the
   thing that asks.
+
+**`DocumentDriver` is how a host runs one** — on its own thread, on a sequence in lockstep
+(`-Dcrystalgui.ui.sequence=true`), or recording on a sequence while the render thread presents
+(`-Dcrystalgui.ui.async=true`). Threading is the engine's: a host attaches the driver to an empty
+document, builds the tree through `driver.run`, and sends its frame (`driver.frame(delta, w, h, painter)`),
+its input and anything else that touches the tree through it, running the same code in every mode.
+`HostSession` and the harness scenes are its hosts, and **the harness runs async by default**
+(`-Dcrystalgui.ui.async=false` for the old path). Four scenes pin `Mode.INLINE` because they measure or
+photograph exact frames: `cgui-text-stress`, `cgui-timeline`, `cgui-text-gamma`, `cgui-visual-layers`. A
+capture or script counts `driver.presentedFrames()`, not frame numbers: async presents nothing until the
+first frame is recorded.
 
 ## `ShadowRoot` and `UISlot`
 
@@ -665,7 +677,7 @@ ranges without wrapping them in elements. It never matches the originating eleme
 `matchesOriginating` is for), and `StyleEngine` cascades it into a `HighlightStyle` kept apart from
 `ElementStyle`. `::before`/`::after` are rejected at parse time — shadow parts are the substitute.
 
-**Not supported:** `:nth-child`, attribute selectors, `~`/`+` sibling combinators, `@media`, `@import`.
+**Not supported:** `:nth-child`, attribute selectors, `~`/`+` sibling combinators, `@media`, `@import`. Adding any of the first three means extending `StyleEngine.ChainKey`, which style sharing reads to decide that two elements match alike.
 
 `PseudoClasses` — `ENABLED`, `DISABLED`, `CHECKED`, `BLANK`, `INVALID`, `HOVER`, `ACTIVE`, `FOCUS` —
 each bound to a real `UINode` getter. **A widget gets a pseudo-class for free by overriding the
@@ -1124,7 +1136,8 @@ int value types.
 - **Per-frame work is an `Animation` hook OWNED by a node**, not a ticker a widget registers and can
   never unregister. It stops when the node leaves the tree, which is what the old one-way registration
   could not guarantee — a hidden window's ticker carried on invisibly. Anything that reads GEOMETRY
-  uses `afterLayout` instead: an ordinary hook runs BEFORE this frame's layout.
+  uses `afterLayout` instead: an ordinary hook runs BEFORE this frame's layout. A hook started on demand
+  is held in a field and registered with `everyIfAbsent`/`afterLayoutIfAbsent`, never behind a `ticking` flag.
 - **New pseudo-class = override a getter.** See `PseudoClasses` above.
 
 ## `UIText` — asked, not told
@@ -1316,8 +1329,9 @@ each carrying its own absent-value):
 
 | Need | Reached via | Lives in |
 |---|---|---|
-| Key/mouse codes, modifier state, **and the clipboard** | `CgPlatform.input()` | `platform/service/CgInputService` |
-| UI sounds | `CgPlatform.sound()` | `platform/service/CgSoundService` |
+| Modifier, key and button state, the clipboard, UI sounds, the cursor — **from UI code** | `PlatformPort.current()` | `ui/service/PlatformPort`: the running document's port, which a document on its own thread routes to the render thread (plan engine-threaded-ui). Calling the services below directly from a widget bypasses that |
+| Key/mouse codes, modifier state, **and the clipboard** | `CgPlatform.input()` — hosts and `PlatformPort.INLINE` only | `platform/service/CgInputService` |
+| UI sounds | `CgPlatform.sound()` — hosts and `PlatformPort.INLINE` only | `platform/service/CgSoundService` |
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
 | Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
 | **Presenting a cursor** | `CursorService.setCursor(...)` | **`core.cursor`, ours** — see below |
