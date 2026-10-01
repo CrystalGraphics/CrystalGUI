@@ -163,6 +163,19 @@ public final class HostSession {
         if (copy != null) copy.refresh();
     }
 
+    /**
+     * Runs {@code work} where the desktop's tree may be touched, and returns when it has run: on the document's sequence
+     * in lockstep whatever the mode, or here when it has none. For a tool driving the desktop from the host's thread, a
+     * probe or a script; the host's own entries never need it.
+     *
+     * <pre>{@code
+     * HostSession.session().inDocument(() -> desktop.minimise(window));
+     * }</pre>
+     */
+    public void inDocument(Runnable work) {
+        onDocument(work);
+    }
+
     /** Runs {@code work} on the document's sequence in lockstep, or here when it has none. */
     private void onDocument(Runnable work) {
         UiSequence owner = sequence;
