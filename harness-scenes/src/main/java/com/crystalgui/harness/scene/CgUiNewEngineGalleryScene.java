@@ -715,7 +715,7 @@ public class CgUiNewEngineGalleryScene
      */
     private UIElement tableView() {
         ObservableList<String> model = new ObservableList<>();
-        for (String name : new String[] {"gui_quad.shader", "gui_backdrop_filter.shader", "gui_blur.shader",
+        for (String name : new String[] {"gui_box.shader", "gui_backdrop_filter.shader", "gui_blur.shader",
                                          "gui_gradient.shader", "gui_curve.shader"}) {
             model.add(name);
         }
@@ -791,7 +791,7 @@ public class CgUiNewEngineGalleryScene
             QuickPick pick = new QuickPick();
             pick.setPlaceholder("Type to filter...");
             pick.setSource(QuickPickSource.of(List.of(
-                    QuickPickItem.of("quad", "gui_quad.shader")
+                    QuickPickItem.of("box", "gui_box.shader")
                             .withDescription("the default material"),
                     QuickPickItem.of("glass", "gui_backdrop_filter.shader")
                             .withDescription("liquid glass"),

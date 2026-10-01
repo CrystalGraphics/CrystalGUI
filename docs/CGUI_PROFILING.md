@@ -186,7 +186,7 @@ opens that frame in the profiler.
 | Markup, syntax | flow | `widget/text/MarkupView`, `SyntaxHighlighting` |
 | Workbench actions | flow | `workbench/DocumentTabs`, `dock/DockArea`, `dock/WorkbenchOpener`, `search/GoToFile`, `chrome/palette/QuickPick`, `explorer/ExplorerCommands` |
 | Language stack | frame, flow | `language/…/grammar`, `engine/AnalysedLanguageServices`, `java/*`, `js/JsLanguageServices` |
-| Node graph, shader graph | frame | `canvas:cull`, `graph:tick`, `graph:paintNode`, `graph:paintWires`, `blackboard:tick`, `sg:previews`, `sg:mainPreview`, `sg:toShaderGraph`, `sg:compile`, `sg:paintPreview`; counters `graph-*`, `sg-*`. `widget/canvas`, `widget/graph`, `app/shadergraph`; the renderers under them are CrystalGraphics' `shadergraph` channel |
+| Node graph, shader graph | frame | `canvas:cull`, `graph:tick`, `graph:paintNode`, `graph:paintWires`, `blackboard:tick`, `sg:previews`, `sg:mainPreview`, `sg:toShaderGraph`, `sg:compile`, `sg:paintPreview`; counters `graph-*`, `sg-*` -- `sg-preview-lost` is a preview that had a picture painting none, a blink on screen. `widget/canvas`, `widget/graph`, `app/shadergraph`; the renderers under them are CrystalGraphics' `shadergraph` channel |
 | Hooks | frame | `anim-hooks`, `anim-after-layout-hooks`: live per-frame and post-layout hooks, a count that climbs while nothing happens being a leak (`UIDocument`) |
 
 **Not instrumented** — zone these before any question that touches them:

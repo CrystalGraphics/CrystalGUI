@@ -263,7 +263,7 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
 
         // SDF rounded-rect smoke-test: border-radius/border-width/border-color as a universal
         // wrapping layer over a flat-color background, exercised at runtime so
-        // gui_rect.shader actually compiles under real GL, not just javac. border-width
+        // gui_box.shader's shapes actually compile under real GL, not just javac. border-width
         // (set via .borderAll below) now grows the layout box for real — it's the same
         // border-width-* longhand Taffy resolves, not a bespoke SDF-only number.
         UIElement roundedButton = new UIElement()

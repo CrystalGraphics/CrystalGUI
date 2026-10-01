@@ -1,19 +1,19 @@
 // crystalgui:shaders/gui_curve.shader
 //
-// Shared material for all CrystalGUI Bezier strokes -- the curve counterpart to gui_quad.shader.
+// Shared material for all CrystalGUI Bezier strokes -- the curve counterpart to gui_box.shader.
 // Geometry, colour, width, feather and cap style all come from CgVectorRenderer's per-instance
 // SSBO/TBO record via the CG_CURVE_* macros in cg_env.glsl; there is nothing per-draw here except
 // _LayerOpacity.
 //
 // This is a SEPARATE material from crystalgraphics:shaders/curve.shader on purpose, exactly as
-// gui_quad.shader is separate from the engine's own quad consumers. Two UI-specific things differ
+// gui_box.shader is separate from the engine's own quad consumers. Two UI-specific things differ
 // and neither belongs in the backend's reference material:
 //
 //   * DepthTest ALWAYS / DepthWrite OFF -- the UI is painter's-order 2D. The engine's curve.shader
 //     uses LEQUAL because a stroke in a 3D scene should respect the depth already there.
 //   * _LayerOpacity -- the whole-draw compositing opacity CgUiPaintContext.withLayerOpacity() drives
 //     (one side of a cross-fade, an FBO layer). Distinct from the per-instance colour alpha, which
-//     rides on the instance record; see gui_quad.shader's note on the same split.
+//     rides on the instance record; see gui_box.shader's note on the same split.
 //
 // Pure screen-space 2D: deliberately does NOT reference CG_OBJECT_TO_WORLD / CG_MATRIX_MVP, so no
 // per-instance object-buffer record is needed. gl_Position comes straight from cg_ProjMatrix, set

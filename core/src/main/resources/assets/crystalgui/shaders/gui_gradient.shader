@@ -36,7 +36,7 @@
 // stipple the eye averages back to the ramp (Skia dithers its gradients by default; Chrome banded for
 // years because it compiled that out). Alpha too: the bands in a translucent wash are alpha bands.
 //
-// MASKED by the same rounded-box SDF gui_rect uses, under WITH_MASK, so a gradient on an
+// MASKED by the same rounded-box SDF gui_box's shapes use, under WITH_MASK, so a gradient on an
 // element with a border-radius clips to it instead of squaring the corners; off for square boxes,
 // which is the taskbar's glow and costs the fragment nothing.
 
@@ -87,7 +87,7 @@ Pass {
     Tags { "LightMode" = "Forward" }
 
     RenderState {
-        // PREMULTIPLIED source over a premultiplied target -- the layer blit's blend, not gui_quad's.
+        // PREMULTIPLIED source over a premultiplied target -- gui_box's blend.
         // Everything above the blend is premultiplied, so the source factor is ONE for both.
         Blend ONE ONE_MINUS_SRC_ALPHA
         DepthTest ALWAYS
