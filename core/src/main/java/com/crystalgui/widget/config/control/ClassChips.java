@@ -97,6 +97,7 @@ public class ClassChips extends ValueControl<List<String>> implements Refillable
         prompt.setPlaceholder("Add class");
         prompt.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
         prompt.attachListener(text -> refreshSuggestions());
+        prompt.claimKeys((key, typed, modifiers) -> claimsPromptKey(key));
         prompt.onKeyDown.attachListener((element, event) -> {
             if (handleKey(event)) {
                 event.stopPropagation();
@@ -172,6 +173,19 @@ public class ClassChips extends ValueControl<List<String>> implements Refillable
     private void change(List<String> next) {
         commit(List.copyOf(next));
         writeToWidgets(getValue());
+    }
+
+    /** The keys {@link #handleKey} takes from the prompt. */
+    private boolean claimsPromptKey(int key) {
+        boolean open = suggestions.isOpen() && !listed.isEmpty();
+        return switch (key) {
+            case CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_UP -> open;
+            case CgKeyCodes.KEY_ESCAPE -> suggestions.isOpen();
+            case CgKeyCodes.KEY_RETURN -> open && active >= 0 || !prompt.getText().isBlank();
+            case CgKeyCodes.KEY_TAB -> open && active >= 0;
+            case CgKeyCodes.KEY_BACK -> prompt.getText().isEmpty() && !current().isEmpty();
+            default -> false;
+        };
     }
 
     private boolean handleKey(KeyboardEvent event) {

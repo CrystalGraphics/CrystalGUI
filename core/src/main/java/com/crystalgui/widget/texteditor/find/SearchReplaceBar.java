@@ -167,6 +167,11 @@ public class SearchReplaceBar extends UIElement {
         findBox.field().attachListener(text -> {
             if (!writingBack) runSearch();
         });
+        findBox.field().claimKeys((key, typed, modifiers) -> switch (key) {
+            case CgKeyCodes.KEY_RETURN, CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_UP -> true;
+            case CgKeyCodes.KEY_ESCAPE -> !findBox.getText().isEmpty() || isOpen();
+            default -> false;
+        });
         findBox.field().onKeyDown.attachListener((element, event) -> {
             boolean handled = switch (event.getKeyCode()) {
                 case CgKeyCodes.KEY_RETURN -> CgModifiers.hasShift(event.getModifiers())
@@ -474,6 +479,8 @@ public class SearchReplaceBar extends UIElement {
 
     /** Tab and Shift+Tab, on everything the ring contains. */
     private void bindTab(UIElement element) {
+        element.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_TAB && !CgModifiers.hasCtrl(modifiers)
+                && !CgModifiers.hasSuper(modifiers) && !CgModifiers.hasAlt(modifiers));
         element.onKeyDown.attachListener((el, event) -> {
             if (event.getKeyCode() != CgKeyCodes.KEY_TAB) return;
             // THE RING IS Tab AND Shift+Tab, so a Ctrl-held Tab belongs to somebody else -- the desktop's

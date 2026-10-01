@@ -229,6 +229,9 @@ val headlessTestTask = tasks.register<Test>("headlessTest") {
     systemProperty("cgui.test.repoRoot", rootProject.projectDir.absolutePath)
     // Never master's copy of download/locations.json: a test answers from the bundled file alone.
     systemProperty("crystalgui.download.remote", "false")
+    // -Dcrystalgui.input.claimsCheck=true reaches the tests too (plan engine-threaded-ui, T0d), with -Dlog4j2.level=WARN to see it.
+    System.getProperties().stringPropertyNames().filter { it.startsWith("crystalgui.input.") || it.startsWith("log4j2.") }
+        .forEach { systemProperty(it, System.getProperty(it)) }
 }
 
 tasks.named("check") { dependsOn(headlessTestTask) }
@@ -348,6 +351,9 @@ tasks.withType<Test>().configureEach {
     // Installed fonts differ per machine, so font-family resolves resource paths only here: no family
     // names, no generic families, no implicit fallback. A test that wants them hands FontFamilyCache its own.
     systemProperty("crystalgui.font.systemFonts", "false")
+    // -Dcrystalgui.input.claimsCheck=true reaches the tests too (plan engine-threaded-ui, T0d), with -Dlog4j2.level=WARN to see it.
+    System.getProperties().stringPropertyNames().filter { it.startsWith("crystalgui.input.") || it.startsWith("log4j2.") }
+        .forEach { systemProperty(it, System.getProperty(it)) }
 }
 
 tasks.withType<JavaCompile>().configureEach {

@@ -29,6 +29,7 @@ import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.KeyClaim;
 
 import java.util.Collection;
 import java.util.ArrayDeque;
@@ -1022,6 +1023,46 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      */
     public boolean claimsChord(int key, int modifiers) {
         return false;
+    }
+
+    /**
+     * Whether this node takes a key press for itself, so the host must not see it: the declared twin of a
+     * key-down listener that stops propagation. Asked of the focused node and its ancestors when the host
+     * asks whether a key is ours ({@code KeyClaims}), which cannot run listeners once documents run on
+     * their own threads.
+     *
+     * <pre>{@code
+     * @Override
+     * public boolean claimsKey(int key, char typed, int modifiers) {
+     *     return key == CgKeyCodes.KEY_HOME || key == CgKeyCodes.KEY_END   // what onKeyDown handles
+     *             || super.claimsKey(key, typed, modifiers);
+     * }
+     * }</pre>
+     *
+     * <p>A class whose listener sits on an element it does not own declares through {@link #claimKeys}
+     * instead. An override that drops {@code super} loses those.</p>
+     */
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return keyClaims != null && keyClaims.claims(key, typed, modifiers);
+    }
+
+    /** Claims made from outside, added to by {@link #claimKeys}. */
+    @Nullable
+    private KeyClaim keyClaims;
+
+    /**
+     * Declares keys a listener attached to this element takes, beside the listener.
+     *
+     * <pre>{@code
+     * field.events.getGroup(KeyboardEvent.Down.class).attachListener(this::fieldKey);
+     * field.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_ESCAPE);
+     * }</pre>
+     */
+    public UIElement claimKeys(KeyClaim claim) {
+        KeyClaim before = keyClaims;
+        keyClaims = before == null ? claim
+                : (key, typed, modifiers) -> before.claims(key, typed, modifiers) || claim.claims(key, typed, modifiers);
+        return this;
     }
 
     // ── The attribute-backed state, under the names the widget layer already uses ──

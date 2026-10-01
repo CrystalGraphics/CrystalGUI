@@ -358,6 +358,8 @@ public class NavigatorView<T> extends UIElement {
         // empty. Filtering already narrows the rows, which makes "arrow through what is left" the same
         // gesture with a better answer.
         search.setArrowNavigation(false);
+        search.input().claimKeys((key, typed, modifiers) ->
+                tree != null && (key == CgKeyCodes.KEY_UP || key == CgKeyCodes.KEY_DOWN));
         search.input().events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> {
             if (tree == null) return;
             int key = event.getKeyCode();

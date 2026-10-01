@@ -145,6 +145,8 @@ public final class NewDocumentPrompt {
         // THE NAME KEEPS FOCUS AND THE ARROWS STILL REACH THE LIST, which is the whole interaction: you
         // type a name and pick a kind without ever leaving the field. Captured on the popover so it runs
         // before the field's own caret handling, exactly as QuickPick does it.
+        popup.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_DOWN || key == CgKeyCodes.KEY_UP
+                || key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_ESCAPE);
         popup.events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> {
             int code = event.getKeyCode();
             if (code == CgKeyCodes.KEY_DOWN) {

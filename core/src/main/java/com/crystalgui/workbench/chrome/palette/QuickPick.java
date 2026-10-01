@@ -560,6 +560,12 @@ public class QuickPick extends Popover {
                 l -> l.height(height).flexGrow(0f));
     }
 
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return key == CgKeyCodes.KEY_DOWN || key == CgKeyCodes.KEY_UP || key == CgKeyCodes.KEY_RETURN
+                || super.claimsKey(key, typed, modifiers);
+    }
+
     private boolean handleKey(int keyCode) {
         if (keyCode == CgKeyCodes.KEY_DOWN) return moveFocus(1);
         if (keyCode == CgKeyCodes.KEY_UP) return moveFocus(-1);

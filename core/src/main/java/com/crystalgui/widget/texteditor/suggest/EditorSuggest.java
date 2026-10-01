@@ -159,6 +159,16 @@ public final class EditorSuggest {
     }
 
     /** The keys a live list owns, and no others. @see EditorSuggest */
+    /** Whether {@link #handleKey} takes this key while the list is open. */
+    public boolean claimsKey(int key) {
+        if (completion == null || completion.isClosed()) return false;
+        if (key == CgKeyCodes.KEY_DOWN || key == CgKeyCodes.KEY_UP || key == CgKeyCodes.KEY_ESCAPE) return true;
+        for (CompletionPopup.AcceptKey accept : CompletionPopup.ACCEPT_KEYS) {
+            if (key == accept.keyCode()) return true;
+        }
+        return false;
+    }
+
     public boolean handleKey(int key, int modifiers) {
         if (completion == null || completion.isClosed()) {
             if (key == CgKeyCodes.KEY_ESCAPE) {

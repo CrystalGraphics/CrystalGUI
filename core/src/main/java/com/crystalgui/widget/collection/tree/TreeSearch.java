@@ -422,6 +422,12 @@ public final class TreeSearch<T> {
         // IMMEDIATE, because a search that waits for Enter is a filter you cannot feel. ON_COMMIT is the
         // right default for a form field and the wrong one for this.
         input.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
+        input.claimKeys((key, typed, modifiers) -> switch (key) {
+            case CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_UP -> arrowNavigation;
+            case CgKeyCodes.KEY_RETURN -> true;
+            case CgKeyCodes.KEY_ESCAPE -> escapeHasWork();
+            default -> false;
+        });
         input.onKeyDown.attachListener((element, event) -> {
             // THE FIELD OWNS EVERY CARET KEY. Left, Right, Home and End all move a caret in a real text
             // field, so navigation takes only the pair that means nothing in a single line -- Up and
@@ -445,8 +451,7 @@ public final class TreeSearch<T> {
                     //
                     // The same rule the engine already applies at the top: a drag eats Escape before a
                     // close watcher, and a nested popover before the modal behind it.
-                    boolean anythingToDo = !query.isEmpty()
-                            || (open && presentation != Presentation.PERMANENT);
+                    boolean anythingToDo = escapeHasWork();
                     if (anythingToDo) close();
                     yield anythingToDo;
                 }
@@ -709,11 +714,17 @@ public final class TreeSearch<T> {
         // ALT+C / ALT+W / ALT+X, on the box rather than in the keymap. The same reasoning that put Ctrl+F
         // on the tree: these must not be taken from the rest of the application, and they only mean
         // anything while there is a query to apply them to.
+        input.claimKeys((pressed, typed, modifiers) -> pressed == key && CgModifiers.hasAlt(modifiers));
         input.onKeyDown.attachListener((element, event) -> {
             if (!CgModifiers.hasAlt(event.getModifiers()) || event.getKeyCode() != key) return;
             option.onPressed.emit();
             event.stopPropagation();
         }, false, true);
+    }
+
+    /** Whether Escape in the box has something to close or clear, rather than belonging to what is outside. */
+    private boolean escapeHasWork() {
+        return !query.isEmpty() || (open && presentation != Presentation.PERMANENT);
     }
 
     /** The search box, for a host that wants to style or focus it. */
@@ -1099,6 +1110,13 @@ public final class TreeSearch<T> {
      * the panel.</p>
      */
     private void installTypeAhead() {
+        tree.claimKeys((key, typed, modifiers) -> {
+            if (CgModifiers.hasCtrl(modifiers) && key == CgKeyCodes.KEY_F) return true;
+            if (modifiers != 0) return false;
+            if (key == CgKeyCodes.KEY_ESCAPE) return open || !query.isEmpty();
+            if (key == CgKeyCodes.KEY_BACK) return !query.isEmpty();
+            return typed >= ' ' && typed != 127;
+        });
         tree.onKeyDown.attachListener((element, event) -> {
             // CTRL+F BELONGS TO THE COMPONENT, not to each host. It was bound once, on the explorer's own
             // command, so every other tree that installed this had a search box reachable only by typing

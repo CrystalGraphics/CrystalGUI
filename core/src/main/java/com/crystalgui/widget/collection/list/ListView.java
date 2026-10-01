@@ -1324,6 +1324,21 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         return true;
     }
 
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return isEnabled() && !model.isEmpty() && navigationKey(key, modifiers) || super.claimsKey(key, typed, modifiers);
+    }
+
+    /** The keys {@link #handleNavigationKey} takes. */
+    protected boolean navigationKey(int key, int modifiers) {
+        return switch (key) {
+            case CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_UP, CgKeyCodes.KEY_HOME, CgKeyCodes.KEY_END, CgKeyCodes.KEY_NEXT,
+                 CgKeyCodes.KEY_PRIOR, CgKeyCodes.KEY_SPACE, CgKeyCodes.KEY_RETURN, CgKeyCodes.KEY_NUMPADENTER -> true;
+            case CgKeyCodes.KEY_A -> CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers);
+            default -> false;
+        };
+    }
+
     /** Set while this view is moving focus itself, so the row's focus listener knows the gesture was not
      * the user's and leaves the selection alone. */
     private boolean suppressFocusSelection;

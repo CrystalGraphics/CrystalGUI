@@ -95,6 +95,11 @@ public final class TextEditGesture extends UIElement {
         }, true, false);
     }
 
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return key == CgKeyCodes.KEY_ESCAPE && target != null || super.claimsKey(key, typed, modifiers);
+    }
+
     /** What is being edited, or null. */
     @Nullable
     public UIElement target() {

@@ -1570,11 +1570,44 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
     }
 
     /** @return true when the key was a command rather than a character */
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return isEnabled() && (suggest.claimsKey(key) || editingKey(key, modifiers)) || super.claimsKey(key, typed, modifiers);
+    }
+
+    /** The keys {@link #handleKey} takes; everything else is typed or left to the keymap. */
+    private boolean editingKey(int key, int modifiers) {
+        boolean ctrl = CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers);
+        if (ctrl && (key == CgKeyCodes.KEY_HOME || key == CgKeyCodes.KEY_END)) return true;
+        // THE NATIVE KEYS MUST YIELD TO A MODIFIED CHORD. The resolver runs only on an UNCONSUMED event,
+        // so a `case KEY_UP: ... return true` below would eat Alt+Up before `editor.moveLineUp` could ever
+        // see it -- and remapping would silently do nothing. Alt is never part of native movement, so an
+        // Alt-held arrow is always somebody's binding; Ctrl+Enter likewise, while Ctrl+Arrow and
+        // Ctrl+Home/End genuinely ARE native movement and stay here.
+        if (CgModifiers.hasAlt(modifiers)) return false;
+        if (ctrl && key == CgKeyCodes.KEY_RETURN) return false;
+        // AND Ctrl+TAB, which is never native editing. A tab character is inserted by a BARE Tab and
+        // Shift+Tab outdents; Ctrl+Tab has no meaning in a document at all, so eating it could only ever
+        // deny it to somebody else -- and it did. It is the desktop's window switcher, so with an editor
+        // focused the chord silently indented the current line instead, which reads as the switcher being
+        // broken rather than as the editor being greedy. Exactly the shape TextField's Alt bug had: the
+        // key was consumed AND acted on, and the keymap only ever sees what is left over.
+        if (ctrl && key == CgKeyCodes.KEY_TAB) return false;
+        return switch (key) {
+            case CgKeyCodes.KEY_LEFT, CgKeyCodes.KEY_RIGHT, CgKeyCodes.KEY_UP, CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_PRIOR,
+                 CgKeyCodes.KEY_NEXT, CgKeyCodes.KEY_HOME, CgKeyCodes.KEY_END, CgKeyCodes.KEY_BACK,
+                 CgKeyCodes.KEY_DELETE, CgKeyCodes.KEY_RETURN, CgKeyCodes.KEY_TAB -> true;
+            // Only when there is something to collapse, so Escape still reaches a dialog or a popover above
+            // the editor when there is only one caret.
+            case CgKeyCodes.KEY_ESCAPE -> selections.isMultiple();
+            default -> false;
+        };
+    }
+
     private boolean handleKey(int key, int modifiers) {
+        if (!editingKey(key, modifiers)) return false;
         boolean shift = CgModifiers.hasShift(modifiers);
         boolean ctrl = CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers);
-
-        boolean alt = CgModifiers.hasAlt(modifiers);
 
         // THE NAMED ACTIONS ARE NOT HERE ANY MORE. Every modified chord -- Mod+D, Alt+Up, Mod+Shift+K,
         // Mod+Slash, Mod+C/X/V, F3 and the rest -- is an EditorCommands command bound on this element's
@@ -1604,21 +1637,6 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
                 return true;
             }
         }
-
-        // THE NATIVE KEYS MUST YIELD TO A MODIFIED CHORD. The resolver runs only on an UNCONSUMED event,
-        // so a `case KEY_UP: ... return true` below would eat Alt+Up before `editor.moveLineUp` could ever
-        // see it -- and remapping would silently do nothing. Alt is never part of native movement, so an
-        // Alt-held arrow is always somebody's binding; Ctrl+Enter likewise, while Ctrl+Arrow and
-        // Ctrl+Home/End genuinely ARE native movement and stay here.
-        if (alt) return false;
-        if (ctrl && key == CgKeyCodes.KEY_RETURN) return false;
-        // AND Ctrl+TAB, which is never native editing. A tab character is inserted by a BARE Tab and
-        // Shift+Tab outdents; Ctrl+Tab has no meaning in a document at all, so eating it could only ever
-        // deny it to somebody else -- and it did. It is the desktop's window switcher, so with an editor
-        // focused the chord silently indented the current line instead, which reads as the switcher being
-        // broken rather than as the editor being greedy. Exactly the shape TextField's Alt bug had: the
-        // key was consumed AND acted on, and the keymap only ever sees what is left over.
-        if (ctrl && key == CgKeyCodes.KEY_TAB) return false;
 
         switch (key) {
             case CgKeyCodes.KEY_LEFT:
@@ -1652,9 +1670,6 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
                         : MoveOperations.lineEnd(buffer.document(), head), shift);
                 return true;
             case CgKeyCodes.KEY_ESCAPE:
-                // Only claims the key when there is something to collapse, so Escape still reaches a
-                // dialog or a popover above the editor when there is only one caret.
-                if (!selections.isMultiple()) return false;
                 collapseCarets();
                 return true;
             case CgKeyCodes.KEY_BACK:

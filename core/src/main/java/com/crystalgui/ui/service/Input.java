@@ -1,5 +1,6 @@
 package com.crystalgui.ui.service;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -27,6 +28,8 @@ import com.crystalgui.render.CgUiPaintContext;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 import javax.annotation.Nullable;
 import org.joml.Vector2f;
@@ -77,6 +80,11 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
          */
         default boolean wheel(@Nullable UIElement from, float notches, int modifiers) {
             return false;
+        }
+
+        /** The presses {@link #resolve} would consume from {@code from} now, without firing any. */
+        default Set<KeyStroke> claimedStrokes(@Nullable UIElement from) {
+            return Set.of();
         }
     }
 
@@ -232,6 +240,11 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
                     return resolver.resolve(from, KeyStroke.ofWheel(notches, modifiers),
                             KeyEventType.PRESS, System.currentTimeMillis());
                 }
+
+                @Override
+                public Set<KeyStroke> claimedStrokes(@Nullable UIElement from) {
+                    return resolver.claimedStrokes(from);
+                }
             };
         }
         return defaultChords;
@@ -299,6 +312,12 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     }
 
     // ── Seams a host installs ────────────────────────────────────────────────
+
+    /** The presses the keymap would take from the focused element now. @see KeyClaims */
+    public Set<KeyStroke> claimedStrokes() {
+        Chords keymap = chords();
+        return keymap == null ? Set.of() : keymap.claimedStrokes(scopeFor(document.focus().focused()));
+    }
 
     public Input setChords(@Nullable Chords chords) {
         this.chords = chords;
@@ -683,6 +702,20 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      */
     public void send(@Nullable UIElement target, UIEvent event) {
         if (target == null) return;
+        if (!CLAIMS_CHECK || checkingKey || !(event instanceof KeyboardEvent.Down down)
+                || target != document.focus().focused()) {
+            dispatch(target, event);
+            return;
+        }
+        // A press sent straight to the focus skips the keymap, so only an undeclared consumption is a finding.
+        boolean declared = KeyClaims.of(document).claims(down.getKeyCode(), down.getCharacter(), down.getModifiers());
+        dispatch(target, event);
+        if (!declared && (down.isPropagationStopped() || down.isDefaultPrevented())) {
+            reportClaim(down.getKeyCode(), down.getModifiers(), target, false, true);
+        }
+    }
+
+    private void dispatch(UIElement target, UIEvent event) {
         List<UIElement> path = composedPath(target);   // root first, path.get(last) == target
 
         event.setPhase(PropagationPhase.CAPTURE);
@@ -911,7 +944,50 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         }
     }
 
+    /** {@code -Dcrystalgui.input.claimsCheck=true}: report presses where {@link KeyClaims} and dispatch disagree. */
+    private static final boolean CLAIMS_CHECK = Boolean.getBoolean("crystalgui.input.claimsCheck");
+
+    /** Each disagreement once: key, modifiers, the focused class and both answers. */
+    private static final Set<String> CLAIMS_REPORTED = ConcurrentHashMap.newKeySet();
+
+    /** Set while {@link #keyboardEvent} checks a press, so {@link #send} does not check it again. */
+    private boolean checkingKey;
+
     private boolean keyboardEvent(Keyboard.Event event) {
+        if (!CLAIMS_CHECK || !event.pressed()) return decideKey(event);
+        // Asked before dispatch: a claim reads live state, which the press itself changes.
+        boolean claimed = KeyClaims.of(document).claims(event.key(), event.character(), modifiers());
+        UIElement focused = document.focus().focused();
+        checkingKey = true;
+        boolean consumed;
+        try {
+            consumed = decideKey(event);
+        } finally {
+            checkingKey = false;
+        }
+        if (claimed != consumed) reportClaim(event.key(), modifiers(), focused, claimed, consumed);
+        return consumed;
+    }
+
+    /** {@code focused} is the focus the declaration was taken against; the report adds where dispatch left it. */
+    private void reportClaim(int key, int modifiers, @Nullable UIElement focused, boolean declared, boolean consumed) {
+        UIElement after = document.focus().focused();
+        String report = "key " + key + " mods " + modifiers + " on " + path(focused)
+                + (after != focused ? " (then " + path(after) + ")" : "")
+                + ": declared " + declared + ", dispatch " + consumed;
+        if (CLAIMS_REPORTED.add(report)) CrystalGuiCore.LOGGER.warn("[key-claims] {}", report);
+    }
+
+    private static String path(@Nullable UIElement element) {
+        if (element == null) return "nothing";
+        StringBuilder out = new StringBuilder();
+        for (int depth = 0; element != null && depth < 4; element = element.composedParent(), depth++) {
+            out.append(depth == 0 ? "" : " < ").append(element.getClass().getSimpleName());
+        }
+        return out.toString();
+    }
+
+    private boolean decideKey(Keyboard.Event event) {
         int modifiers = modifiers();
         for (InputMode mode : modes()) {
             boolean taken = event.pressed()

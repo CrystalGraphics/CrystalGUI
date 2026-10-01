@@ -257,6 +257,7 @@ public final class RowEditing<T> {
             Edit<T> current = editing;
             if (current != null && Objects.equals(itemForRow.apply(row), current.item())) commit(field.getText());
         }, false, true);
+        field.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_ESCAPE && editing != null);
         field.onKeyDown.attachListener((element, event) -> {
             if (event.getKeyCode() == CgKeyCodes.KEY_ESCAPE && editing != null) {
                 cancel();

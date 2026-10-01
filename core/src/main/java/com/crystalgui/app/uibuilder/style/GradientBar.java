@@ -129,6 +129,12 @@ public final class GradientBar extends ValueControl<Gradient> {
     }
 
     @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return key == CgKeyCodes.KEY_LEFT || key == CgKeyCodes.KEY_RIGHT || key == CgKeyCodes.KEY_DELETE
+                || key == CgKeyCodes.KEY_BACK || super.claimsKey(key, typed, modifiers);
+    }
+
+    @Override
     public boolean selfLabelling() {
         return true;
     }

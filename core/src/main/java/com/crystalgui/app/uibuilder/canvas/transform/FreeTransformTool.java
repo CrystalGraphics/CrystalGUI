@@ -263,6 +263,12 @@ public final class FreeTransformTool implements Tool {
         return true;
     }
 
+    @Override
+    public boolean claimsKey(int key, int modifiers) {
+        return box.isActive() && fieldBeingTypedInto() == null && !isHistoryChord(key, modifiers)
+                && !(isNumberKey(key) && !CgModifiers.hasCtrl(modifiers));
+    }
+
     /** The chords {@code UndoCommands} binds, which a mode swallowing keys must let through to the keymap. */
     private static boolean isHistoryChord(int key, int modifiers) {
         return CgModifiers.hasCtrl(modifiers) && (key == CgKeyCodes.KEY_Z || key == CgKeyCodes.KEY_Y);
