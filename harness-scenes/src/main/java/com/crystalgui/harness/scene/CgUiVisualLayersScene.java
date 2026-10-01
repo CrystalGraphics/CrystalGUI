@@ -544,7 +544,7 @@ public class CgUiVisualLayersScene implements InteractiveSceneLifecycle, CgSyste
         // tree's root transform, so this is the only place the two spaces meet.
         document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
 
-        CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
+        CgUiPaintContext paintContext = document.recorder();
         paintContext.beginFrame(w, h);
         document.paint(paintContext);
         paintContext.endFrame();

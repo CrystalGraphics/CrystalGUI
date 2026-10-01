@@ -1686,7 +1686,7 @@ public class Desktop extends UIElement implements DataProvider {
         float scale = document.boxes().uiScale();
         document.frame(deltaSeconds, surfaceWidth / scale, surfaceHeight / scale);
 
-        CgUiPaintContext ctx = CgUiPaintContext.getInstance();
+        CgUiPaintContext ctx = document.recorder();
         ctx.beginFrame(surfaceWidth, surfaceHeight);
         if (presentation.paintsWholeDesktop()) {
             document.paint(ctx);

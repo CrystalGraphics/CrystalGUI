@@ -27,6 +27,9 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.render.draw.CgPassConstants;
+import com.crystalgraphics.render.graph.CgFrame;
+import com.crystalgraphics.render.graph.CgFrameBuilder;
+import com.crystalgraphics.render.graph.CgFrameGraph;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.graph.CgPassRecorder;
@@ -37,7 +40,6 @@ import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.trace.CgFrameImages;
-import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
@@ -72,25 +74,24 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * The 2D paint context for CrystalGUI's box-model layer: it records a frame, and executes it once.
+ * A document's paint context: it records a frame of the document into passes, touching no GL, and hands back a
+ * sealed {@link UiFrame} that {@link UiGpu} executes. One per document, from
+ * {@link com.crystalgui.ui.dom.UIDocument#recorder()}.
  *
- * <p><b>A true process-wide singleton</b> — one paint context for the whole client, accessed via
- * {@link #getInstance()}, lazily constructed on first use. This reflects reality, not an
- * aspiration: nothing in this codebase ever constructs more than one {@link com.crystalgui.ui.UIWindow}
- * at a time (no split-screen/multi-window support exists anywhere), and {@link #beginFrame} is not
- * reentrant (throws if called without a matching {@link #endFrame}) — a second concurrent
- * {@code UIWindow} painting at the "same time" could not actually be served by a shared instance.
- * Lazy construction matters beyond avoiding needless work: it means simply constructing/using a
- * {@code UIWindow} for pure layout/tree logic (no {@link #beginFrame}/paint call) never eagerly
- * triggers GL material/font loads — a real, if small, step toward running CrystalGUI's tree/layout
- * logic headlessly (e.g. server-side) without a GL context.</p>
+ * <pre>{@code
+ * CgUiPaintContext recorder = document.recorder();
  *
- * <p>Being static, the instance does <em>not</em> die with the GL context that built it, so whoever
- * owns that lifecycle must call {@link #destroy()} on context destruction — see that method for what
- * is and isn't freed, and why the distinction matters.</p>
+ * recorder.beginFrame(w, h);         // inline: the host's state saved, then recording
+ * document.paint(recorder);
+ * recorder.endFrame();               // sealed, executed, composited
  *
- * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation. Global frame state is neither read nor
- * written: each pass carries its own constants — the frame's time, the target's ortho.</p>
+ * recorder.recordFrame(w, h);        // or split: record on the document's thread...
+ * document.paint(recorder);
+ * UiGpu.present(recorder.seal());    // ...execute on the render thread
+ * }</pre>
+ *
+ * <p>Each pass carries its own constants — the frame's time, the target's ortho; no global frame state is read or
+ * written.</p>
  *
  * <p>Integrates {@link ScissorStack} for nested clip regions: a push sets the scissor the chunks recorded after
  * it draw under.</p>
@@ -114,7 +115,6 @@ public final class CgUiPaintContext {
      */
     private static final float WARM_UI_SCALE = 2f;
 
-    private static final int GPU_UI = CgGpuTrace.name("ui");
     /** {@code namespace:path} resolved through {@link CgIO}'s waterfall (filesystem override →
      * MC resource manager → classpath) — works identically in-game and in the harness/tests,
      * unlike the hardcoded absolute Windows path this replaced ({@code C:\WINDOWS\Fonts\arial.ttf},
@@ -136,90 +136,70 @@ public final class CgUiPaintContext {
             DEFAULT_FONT_ASSET,
     };
 
-    private static CgUiPaintContext instance;
-
-    /** Lazily constructs the singleton on first use. See the class doc for why this must stay lazy. */
     /**
-     * <b>Compiles the shipped materials now, so the first frame that draws does not.</b>
+     * Compiles the shipped materials and builds everything a first frame would, so the first real frame does not.
      *
-     * <p>{@code CgMaterial.load} in the constructor <em>parses</em> a {@code .shader}; the GLSL is
-     * compiled and linked on the first {@code bind}. So constructing this class early bought nothing —
-     * measured, twice: warming by construction alone left the first frame's material bind at 300 ms
-     * against 286 before. Binding each material once is what actually pays the cost.</p>
-     *
-     * <p>Called from {@link com.crystalgui.lifecycle.CgUiLifecycle#onInit}, which is on the GL thread with
-     * a live context by definition. Never call it from anywhere else: a bind outside a frame is only safe
-     * because nothing is mid-draw, and {@code CgGlScope} is not held here.</p>
-     *
-     * <p>Failures are swallowed. A shader that will not compile is a real problem and the first real
-     * frame will report it in the ordinary way; a warm-up must not be the thing that fails a context.</p>
+     * <p>{@code CgMaterial.load} only parses; binding each material once is what pays for the GLSL — measured, a
+     * first-frame material bind fell from 300 ms to 286 by construction alone and to nothing once bound. An empty
+     * frame then builds the executor's buffers, the ring and the GL state save, which were most of a first frame.
+     * Called from {@link com.crystalgui.lifecycle.CgUiLifecycle#onInit}, on the GL thread with a live context.
+     * Failures are swallowed: a warm-up must not be what fails a context, and the first real frame reports them.</p>
      */
-    public void warm(int width, int height) {
-        // Leaks the Pass RenderState of every material below — doBind applies it, unbind() restores
-        // none of it. Scoped by CgUiLifecycle.onInit, which wraps the construction too; no scope here.
-        for (CgMaterial material : new CgMaterial[] { boxModelMaterial, curveMaterial, layerBlitMaterial }) {
-            try {
-                material.bind();
-                material.unbind();
-            } catch (RuntimeException | LinkageError ignored) {
-                // See the note above: an optimisation that fails is silent.
-            }
-        }
-        // AND THE TWO ASSET CACHES, both off the render thread. Neither needs GL, which is what makes
-        // them a removal rather than a move -- see each method.
-        preloadIcons();
-        warmGlyphs(WARM_UI_SCALE);
-
-        // AND ONE EMPTY FRAME, which is the larger half. Compiling the shaders left the first real
-        // beginFrame at 252 ms against 285 -- so most of that cost was never the GLSL: it is the quad
-        // renderer's VAO and instance buffer, the text renderer, the scissor stack and the GL state
-        // save, all built on first use inside this call. A frame that draws nothing pays for all of
-        // them and leaves nothing on screen.
+    public static void warm(int width, int height) {
+        CgUiPaintContext context = create();
         try {
-            beginFrame(Math.max(1, width), Math.max(1, height));
-            endFrame();
-        } catch (RuntimeException | LinkageError e) {
-            // Not silent like the materials: a beginFrame that threw after marking the frame active left
-            // it active, and every later frame then refused to begin -- a warm-up that broke the context.
-            abortFrame();
-            CrystalGuiCore.LOGGER.warn("[cgui] paint warm-up failed; the first real frame builds it instead", e);
+            // Leaks the Pass RenderState of every material below — doBind applies it, unbind() restores none of
+            // it. Scoped by CgUiLifecycle.onInit; no scope here.
+            for (CgMaterial material : new CgMaterial[] {
+                    context.boxModelMaterial, context.curveMaterial, context.layerBlitMaterial }) {
+                try {
+                    material.bind();
+                    material.unbind();
+                } catch (RuntimeException | LinkageError ignored) {
+                    // An optimisation that fails is silent.
+                }
+            }
+            // AND THE TWO ASSET CACHES, both off the render thread and neither needing GL.
+            preloadIcons();
+            warmGlyphs(WARM_UI_SCALE);
+            try {
+                context.beginFrame(Math.max(1, width), Math.max(1, height));
+                context.endFrame();
+            } catch (RuntimeException | LinkageError e) {
+                // Not silent: a frame left open would refuse every later one.
+                context.abortFrame();
+                CrystalGuiCore.LOGGER.warn("[cgui] paint warm-up failed; the first real frame builds it instead", e);
+            }
+        } finally {
+            context.release();
         }
     }
 
     /** Leaves a frame that threw part-way: its batches closed, its GL state back, and no frame open. */
     private void abortFrame() {
-        unparkSamplers();
         endTextPath();
         renderer.end();   // safe unbegun: begin() may be what never ran; what it flushes goes with the recording
         recordFlushes(false);
         recorder.abandon();
         recording.reset();
+        present.reset();
         imported.clear();
         layerStack.clear();
-        if (glScope != null) {
-            glScope.close();
-            glScope = null;
-        }
+        gpu.abortFrame();
         frameActive = false;
     }
 
-    private boolean samplersParked;
-
-    private void unparkSamplers() {
-        if (!samplersParked) return;
-        samplersParked = false;
-        CgHostSamplers.unpark();
-    }
-
-    public static CgUiPaintContext getInstance() {
-        if (instance == null) {
-            // Built on first paint, before any frame's scope: its targets, renderers and first material
-            // binds would otherwise stay bound for the host.
-            try (CgGlScope ignored = CgGlState.saveAll()) {
-                instance = new CgUiPaintContext();
-            }
+    /**
+     * A paint context for one document — {@link com.crystalgui.ui.dom.UIDocument#recorder()} makes it. On the render
+     * thread: its font and text renderer are set up there.
+     */
+    public static CgUiPaintContext create() {
+        // Before any frame's scope: what construction binds would otherwise stay bound for the host.
+        try (CgGlScope ignored = CgGlState.saveAll()) {
+            CgUiPaintContext context = new CgUiPaintContext();
+            context.gpu.track(context);
+            return context;
         }
-        return instance;
     }
 
     private final CgMaterial boxModelMaterial;
@@ -307,8 +287,8 @@ public final class CgUiPaintContext {
     @Getter
     private final CgTextRenderer textRenderer;
 
-    // ── GL state isolation ──────────────────────────────────────────────────
-    private CgGlScope glScope;
+    /** The GL half: the frame target, the host's state, execution. */
+    private final UiGpu gpu;
 
     // ── Visual layers ────────────────────────────────────────────────────────
     int screenWidth, screenHeight;
@@ -333,25 +313,6 @@ public final class CgUiPaintContext {
                          .color(0, CgTextureType.RGBA8).build();
 
 
-    // ── The frame's own target ────────────────────────────────
-    //
-    // The whole tree paints into a buffer of ours and is composited onto the host's target once, so the
-    // finished picture is a texture this engine owns: the backdrop samples it, a readback sees the UI
-    // rather than the world behind it, and its format is the same on every loader. One screen-sized
-    // RGBA8 and one full-screen quad per frame.
-    //
-    // NOT MULTISAMPLED, and it was until the quad materials learned to antialias themselves
-    // (CG_QUAD_EDGE_* in cg_env.glsl; everything else here is analytic coverage already). Four samples
-    // bought a 33MB renderbuffer at 1920x1080 that had to be RESOLVED before anything could read it:
-    // once in endFrame, and again on every backdrop capture, which is what made the capture expensive.
-    // A colour TEXTURE is sampleable as it stands, so one buffer does what the multisampled pair did.
-    // What it gives up is the case analytic coverage cannot reach — geometry finer than one sample, a
-    // graph wire zoomed far out. Measured against the pair: no visible difference, 0.1-0.4 ms/frame.
-    /** Built once, in the constructor — real dimensions aren't known that early (no frame has run
-     * yet), so this starts 1x1 and {@link #beginFrame} resizes it in place, the same way every other
-     * screen-sized FBO in this file already tracks the window. */
-    final CgFrameBuffer frameFbo = CgFrameBuffer.createOwned("cgui_frame", 1, 1, LAYER_FORMAT);
-
     // ── The frame as recorded ────────────────────────────────────────────────
     //
     // Every target's draws are chunks in passes of ONE recording, executed in endFrame. A layer is a pass on a
@@ -365,14 +326,17 @@ public final class CgUiPaintContext {
     private final CgRecording present = new CgRecording();
     /** The pass block of the target being drawn into: the frame's time, the target's ortho and size. */
     private final CgPassConstants passConstants = new CgPassConstants();
-    /** {@link #frameFbo}, as the recording names it. */
-    final CgGraphTexture frameTarget = CgGraphTexture.imported("cgui_frame", frameFbo);
+    /** The frame's own target, as the recording names it: {@link UiGpu}'s. */
+    final CgGraphTexture frameTarget;
+    /** Builds a sealed frame's two recordings; the frames come back to it when presented. */
+    private final CgFrameBuilder builder = new CgFrameBuilder();
+    private final CgFrameGraph graph = new CgFrameGraph();
     /** A caller's framebuffer as the recording names it: one per framebuffer a frame, so a read finds its write. */
     private final Map<CgFrameBuffer, CgGraphTexture> imported = new IdentityHashMap<>();
 
     /** {@code fbo} as this frame's recording names it. */
     CgGraphTexture imported(CgFrameBuffer fbo) {
-        if (fbo == frameFbo) return frameTarget;
+        if (fbo == gpu.frameFbo) return frameTarget;
         CgGraphTexture target = imported.get(fbo);
         if (target == null) imported.put(fbo, target = CgGraphTexture.imported("cgui_target", fbo));
         return target;
@@ -463,6 +427,8 @@ public final class CgUiPaintContext {
     private int color = 0xFFFFFFFF;
 
     private CgUiPaintContext() {
+        this.gpu = UiGpu.get();
+        this.frameTarget = gpu.frameTarget;
         this.poseStack = new PoseStack();
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
@@ -700,57 +666,32 @@ public final class CgUiPaintContext {
         return mirrorDepth > 0;
     }
 
+    /**
+     * Starts a frame inline: saves the host's GL state, then {@link #recordFrame}. Pair with {@link #endFrame}. GL a
+     * paint hook still issues while recording is inside the saved state.
+     */
     public void beginFrame(int screenWidth, int screenHeight) {
-        frameId++;
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
-        // What the host handed us, off unless -Dcrystalgraphics.host.census. Before the scope reads anything.
-        CgGlCensus.at("gui");
-        // Everything the UI asks of the GPU this frame, the composite included. @see #endFrame
-        CgGpuTrace.begin(GPU_UI);
+        gpu.beginFrame(screenWidth, screenHeight);
+        recordFrame(screenWidth, screenHeight);
+    }
+
+    /**
+     * Starts recording a frame of {@code screenWidth x screenHeight} into the frame's own target. Touches no GL. Pair
+     * with {@link #seal}, which hands back what {@link UiGpu#present} executes.
+     */
+    public void recordFrame(int screenWidth, int screenHeight) {
+        frameId++;
+        if (frameActive) throw new IllegalStateException("recordFrame() called without matching seal()");
         layerOriginX = 0;
         layerOriginY = 0;
         setClip(0);
         clearPainted();
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
-
-        // Save GL state before UI rendering — FBO included specifically so the frame's own
-        // redirect below has something to restore back to. No raw glGetInteger query: CgGlState
-        // already shadows the current binding for exactly this purpose, and endFrame's early
-        // glScope.close() (see its own note) is what puts the real target back before compositing.
-        glScope = CgGlState.save(
-                CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
-                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.SCISSOR, CgGlSlot.COLOR_MASK,
-                // The host's VAO back: Minecraft 1.17+ skips its own bind while it believes its VAO is
-                // still current, so leaving ours bound failed its next GUI draw ("Array object is not active").
-                CgGlSlot.VERTEX_INPUT);
-        // ALPHA_TEST is saved above only so the host gets it back; this is what turns it off, before
-        // anything of ours draws. @see #disableFixedFunctionAlphaTest
-        disableFixedFunctionAlphaTest();
-
-        // Every channel, alpha included. A host that leaves alpha writes off (1.21.6+ does) leaves the
-        // frame's alpha at 0 through the clear and every draw, and the premultiplied composite then
-        // ADDS the UI to the scene -- a pale desktop with the world showing through it.
-        CgGL.glColorMask(true, true, true, true);
-
-        // A frame owns the whole surface, so a clip the host left enabled would clip the clear below and
-        // every draw after it. SCISSOR is in the save list above for the other direction: popScissor
-        // disables the test once the stack empties, and the host may have wanted it on.
         scissorStack.reset();
-        CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
-
-        // The host's sampler objects override our textures' filtering and wrapping on the units they hold
-        // (Minecraft 1.21.5+ leaves three bound). Off until endFrame's composite, which samples too.
-        CgHostSamplers.park();
-        samplersParked = true;
-
-        // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
-        backdrop.captureSceneTarget();
-
-        // The frame's own target — see the note above frameFbo for what owning it buys.
-        int w = Math.max(1, screenWidth), h = Math.max(1, screenHeight);
-        if (frameFbo.getWidth() != w || frameFbo.getHeight() != h) frameFbo.resize(w, h);
+        recorder.noScissor();
+        backdrop.beginFrame();
 
         // EACH STEP OF beginFrame TIMED SEPARATELY: `gl:begin` was measured at 19.9ms on the frame after a tab
         // closes, and the steps below have nothing in common.
@@ -785,172 +726,56 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Turns off the host's fixed-function alpha test for the duration of a UI pass.
-     *
-     * <p><b>Minecraft 1.7.10 enables {@code GL_ALPHA_TEST} with {@code glAlphaFunc(GL_GREATER, 0.1)} in
-     * {@code Minecraft.startGame()} and leaves it on through GUI rendering</b>, and a compatibility
-     * profile applies that test to programmable-pipeline draws exactly as it does to fixed-function
-     * ones. Nothing on our side models alpha testing — {@code CgRenderState} carries blend, depth, cull
-     * and stencil and no alpha — so a material's {@code RenderState} neither sets it nor clears it, and
-     * whatever the host left on is what every quad, glyph, gradient and glass surface is drawn under.
-     * The result is that <b>every fragment the UI draws at 10% alpha or less is discarded</b>: not
-     * dimmed, not faded — cut, with a hard edge exactly where the alpha crosses the reference.</p>
-     *
-     * <p>Measured on the taskbar's accent glow, which is
-     * {@code linear-gradient(90deg, transparent 18%, #3574F033 50%, transparent 82%)} across a
-     * 1999px bar. It should be a wash covering the middle two thirds; in a client it was a hard-edged
-     * band from x=642 to x=1347 — the ramp <em>inside</em> the band exactly the right one, both ends
-     * cut where the gradient's alpha passed 0.105. So the geometry, the axis, the stop positions and
-     * the premultiplied interpolation were all correct and the picture was still wrong, which is why
-     * six of the seven things one would check first are the gradient's.</p>
-     *
-     * <p><b>The harness cannot see any of this, by construction.</b> It runs an LWJGL3 context with no
-     * fixed-function alpha test to leave on, so the identical CSS is correct there and there is no
-     * scene, no probe and no readback that can be written to reproduce it. It is the loader-seam class
-     * of defect, one layer below the ones {@code serverSmoke} exists for.</p>
-     *
-     * <p><b>What it reaches is decided by a fragment's OUTPUT alpha, not by any alpha in the CSS.</b>
-     * A {@code backdrop-filter} tint at 7.5% is an input to a mix inside the shader and the surface still
-     * writes its coverage, so the acrylic panels were never affected — the ones that are: a
-     * {@code background-color} at or under 10% (Fluent's subtle fills, 6% and 3.5%, were discarded
-     * whole), the transparent shoulder of any gradient, the outermost sliver of every anti-aliased SDF
-     * edge, and the opening frames of any layer composited at a low opacity. All of those read as "the
-     * translucent parts are missing" or "the soft edges are hard", never as one GL flag.</p>
-     *
-     * <p><b>Called twice per frame</b>, because {@link #endFrame} closes the frame's own scope early —
-     * before the composite that puts the finished picture on the host's target — so the host's alpha
-     * test is live again for that one draw. That draw clips by the picture's <em>accumulated</em>
-     * alpha, which would take a 7% panel away whole rather than merely cutting its shoulders.</p>
-     *
-     * <p>Guarded on the profile rather than left to the state manager's deduplication: on a core
-     * profile {@code glDisable(GL_ALPHA_TEST)} is {@code GL_INVALID_ENUM}, and while
-     * {@code CgGlGetProvider.readAlpha} already reports the slot as disabled there — so the call would
-     * be eliminated today — that is a property of when the shadow was last trusted, not a guarantee.</p>
-     */
-    private static void disableFixedFunctionAlphaTest() {
-        if (CgCapabilities.detect().isCoreProfile()) return;
-        CgGL.glDisable(CgGL.GL_ALPHA_TEST);
-    }
-
-    /**
      * Unbinds the box-model material and restores GL state via the saved {@link CgGlScope}. Call once
      * after the whole UI tree has painted.
      */
     public void endFrame() {
         if (!frameActive) return;
-        sweepRetained();
+        gpu.endFrame(seal());
+    }
 
-        // No explicit unbind: CgQuadRenderer owns bind/unbind (see CgUiRenderer#useMaterial), and the
-        // PROGRAM slot saved by beginFrame's CgGlScope restores whatever program was bound before the
-        // UI painted anyway — which is the restoration that actually matters to the 3D pipeline.
-        // Flush BEFORE end(): both renderers' flush() early-returns once begun is false, so anything
-        // still queued at this point would be dropped without a word. Nothing hit that while every
-        // draw path flushed eagerly (fillRect/drawImage both do), but ctx.quad()/ctx.curve() are
-        // public and explicitly documented as "submit() queues, flush() draws" — so a caller batching
-        // a few strokes and letting the frame end is using the API exactly as described. Drawing them
-        // is the only defensible reading; the pose stack is still intact here and flush() reads none
-        // of it anyway, since the pose was baked at submit() time.
-        // Text first: it owns a separate renderer whose batch, if a caller left one open, would otherwise
-        // flush after the frame's GL scope is torn down. Lenient when no batch is active.
-        // SPLIT, because gl:end is two unrelated things and one of them was measured at 48ms in a
-        // client while every CPU phase in that frame was under 2ms. Draining our own queued draws and
-        // compositing the frame onto the real target fail for different reasons -- and a composite that
-        // blocks is the GPU being behind, which no amount of tuning our traversal would ever touch.
+    /**
+     * Ends the frame {@link #recordFrame} started and builds it: ordered, batched and packed, with nothing left that
+     * refers to this context, which may record its next frame at once. Touches no GL.
+     */
+    public UiFrame seal() {
+        if (!frameActive) throw new IllegalStateException("seal() without recordFrame()");
+        sweepRetained();
         long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.endBatch();
         renderer.flush();
         recorder.stop();
+        recordPresent();
         CgTrace.zoneDone(UiTrace.FRAME, "glend:flush", timed);
 
-        // THE FRAME, EXECUTED: every target's passes, in the order their reads and writes ask for.
         timed = CgTrace.stamp(UiTrace.FRAME);
+        UiFrame frame;
         try {
-            CgImmediate.execute(recording);
+            frame = new UiFrame(build(recording), build(present), builder, screenWidth, screenHeight);
         } finally {
             recording.reset();
+            present.reset();
             imported.clear();
+            recordFlushes(false);
         }
-        CgTrace.zoneDone(UiTrace.FRAME, "glend:execute", timed);
-
-        // The finished picture, before it goes anywhere: frameFbo holds exactly what this frame drew.
-        timed = CgTrace.stamp(UiTrace.FRAME);
-        captureFrameImage();
-        CgTrace.zoneDone(UiTrace.FRAME, "glend:captureImage", timed);
-
-        // Composite the frame's own target (see beginFrame/frameFbo) back onto whatever the real
-        // target was. Closing glScope HERE — early, not at this method's usual end — is what puts
-        // that target back (it saved CgGlSlot.FBO in beginFrame): blitLayer() right after draws a real
-        // quad through the normal quad() path, which needs the real target actually bound, and needs an
-        // active frame the same as any other draw call in this class, which is why this whole block
-        // still runs before frameActive is cleared.
-        if (glScope != null) {
-            // Timed: the first GL call after a long frame's submission is where a driver whose queue is
-            // full makes the CPU wait for the GPU.
-            timed = CgTrace.stamp(UiTrace.FRAME);
-            glScope.close();
-            glScope = null;
-            CgTrace.zoneDone(UiTrace.FRAME, "glend:restoreState", timed);
-        }
-        // Full opacity — the frame texture already carries whatever per-element opacity the UI tree
-        // itself applied while painting into it; this composite is the "put the finished picture
-        // on screen" step, not another opacity multiply.
-        //
-        // SCOPED, because this draw happens AFTER glScope.close() above and would otherwise be the one
-        // piece of UI state nothing restores. blitLayer binds a material — so on return from endFrame a
-        // shader program of ours is still current, with the frame's own restore already spent.
-        //
-        // In the harness that is invisible: nothing else in that process draws, so a stale program is
-        // never observed. Minecraft observes it immediately. Its final present is
-        // Framebuffer.framebufferRender, which is pure fixed-function — GL_TEXTURE_2D, GL_COLOR_MATERIAL
-        // and a Tessellator quad — and it never calls glUseProgram(0). So Minecraft's blit of its own
-        // framebuffer to the window runs through OUR vertex shader, which expects instanced quad data
-        // out of an SSBO and gets immediate-mode vertices instead.
-        //
-        // The symptom is genuinely bewildering: the UI renders CORRECTLY into Minecraft's framebuffer —
-        // a glReadPixels there shows the whole editor — while the window shows a flat fill, because the
-        // step between the two is broken rather than the drawing. Anything that reads the framebuffer
-        // (a screenshot tool, a capture) therefore disagrees with the screen.
-        //
-        // THE SLOTS ARE EVERYTHING A MATERIAL BIND CAN WRITE, not just the PROGRAM + TEXTURES the bug
-        // above names: blitLayer applies gui_layer_blit's whole RenderState (Blend, DepthTest ALWAYS,
-        // DepthWrite OFF, Cull OFF) and the frame's own scope closed six lines up. Measured leaving MC
-        // with depthTest on, depthWriteMask false and blend on — a world drawn with no depth
-        // arbitration, so terrain stops occluding its own caves. Listed as the full set CgRenderState
-        // can write, so the next material to declare Stencil or ColorMask does not start it again.
-        //
-        // ALPHA_TEST IS IN THE LIST AND IS DISABLED AGAIN INSIDE, because glScope.close() six lines up
-        // has just handed the host's alpha test back and this is a real draw of the whole finished
-        // picture. Where the frame's own disable protects each element's fragments, this one protects
-        // the COMPOSITE, which is clipped by the accumulated alpha instead — so a panel drawn correctly
-        // at 7% would arrive complete in the layer and then be discarded whole on the way to the
-        // screen. @see #disableFixedFunctionAlphaTest
-        try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
-                CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
-                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.VERTEX_INPUT)) {   // the host's VAO, as in beginFrame
-            disableFixedFunctionAlphaTest();
-            presentFrame();
-            // THE HOST'S OWN TARGET, and the last thing this class can observe. Content here with a flat
-            // fill on screen means the presenting broke, not the drawing — which is the reading the
-            // comment above has described for two loaders without anything ever measuring it.
-        }
-        unparkSamplers();
+        CgTrace.zoneDone(UiTrace.FRAME, "glend:build", timed);
 
         currentMaterial = null;
         currentTexture = null;
         frameActive = false;
         renderer.end();
-
         poseStack.popPose();
-
         if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
+        return frame;
+    }
 
-        CgGpuTrace.end();
-
-        // THE OTHER HALF OF THE FRAME THE DOCUMENT OPENED, and last of all so the composite above is
-        // in it. Reports and clears; a no-op when nothing opened one, which is
-        // every headless document. @see UIDocument#frame
-        UiTrace.frameEnd();
+    private CgFrame build(CgRecording what) {
+        try {
+            graph.add(what.seal());
+            return builder.build(graph);
+        } finally {
+            graph.clear();
+        }
     }
 
     // ── Public draw API ─────────────────────────────────────────────────────
@@ -2315,21 +2140,14 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * The finished frame onto the host's target, which the frame's GL scope has just bound again: one recording of
-     * one draw, executed at once.
+     * The finished frame onto the host's target — whatever is bound when it executes, which is the host's once
+     * {@link UiGpu} has restored its state. A recording of one draw, of its own.
      */
-    private void presentFrame() {
+    private void recordPresent() {
         targetConstants(screenWidth, screenHeight);
         recorder.recordInto(present, CgGraphTexture.current(), CgLoad.load(), passConstants);
-        try {
-            blitLayer(frameTarget, 1f, new LayerRegion(0, 0, frameFbo.getWidth(), frameFbo.getHeight()));
-            recorder.stop();
-            CgImmediate.execute(present);
-        } finally {
-            recorder.abandon();
-            present.reset();
-            recordFlushes(false);
-        }
+        blitLayer(frameTarget, 1f, new LayerRegion(0, 0, screenWidth, screenHeight));
+        recorder.stop();
     }
 
     /**
@@ -2513,67 +2331,13 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Releases everything this context owns outright and drops the singleton, so the next
-     * {@link #getInstance()} builds a fresh one.
-     *
-     * <p>Called on GL-context destruction via {@code CgUiLifecycle}. Note that in this engine that
-     * means <b>game shutdown only</b> — there is no destroy-then-init cycle in a running process — so
-     * this is not protecting a subsequent context. It is explicit, complete teardown of what this
-     * class owns, matching the engine's own convention, and it is the only thing that frees the layer
-     * FBO pool: those are built with {@link CgFrameBuffer#createOwned}, which bypasses
-     * {@code CgFrameBufferRegistry}, so {@code deleteAll()} never reaches them.</p>
-     *
-     * <p><b>Only genuinely-owned resources are freed here</b>, and the distinction matters because
-     * double-freeing is as bad as leaking:</p>
-     * <ul>
-     *   <li><b>Freed</b> — the retained layers and {@link #frameFbo} (both built via
-     *       {@link CgFrameBuffer#createOwned}, so all ours), the {@link CgUiRenderer}'s batch renderer,
-     *       and the {@link CgTextRenderer} (CrystalGraphics' registry treats {@code deleteAll()} as a
-     *       backstop and expects owners to delete their own).</li>
-     *   <li><b>Not freed</b> — {@code boxModelMaterial}/{@code layerBlitMaterial} come from the
-     *       cache in {@code CgMaterialRegistry}, {@code whitePixel} is a
-     *       {@code CgFallbackTextures} constant, and the atlases behind {@code font} belong to
-     *       {@code CgFontRegistry}. All three are swept by
-     *       {@code CgGraphicsLifecycle.destroyContext()} itself; deleting them here would be a
-     *       double free of objects this context merely borrows.</li>
-     * </ul>
-     *
-     * <p>Idempotent, and safe to call when the singleton was never constructed.</p>
+     * Frees what this context made — its retained layers, the backdrop's and the icon raster's textures — and its
+     * renderers. {@link UiGpu#destroy} calls it at GL context destruction. Only what is genuinely its own: materials,
+     * the fallback texture and the font atlases are swept by {@code CgGraphicsLifecycle.destroyContext()}, and freeing
+     * them here would be a double free.
      */
-    /** Built on the first frame a picture is asked for; three in flight covers a GPU two frames behind. */
-    @Nullable
-    private CgPixelReadback frameImages;
-
-    /**
-     * Photographs the finished frame for the trace when one is due, and files whatever earlier requests
-     * have read back. Never waits on the GPU. @see CgFrameImages
-     */
-    private void captureFrameImage() {
-        long frame = CgTrace.currentFrameIndex();
-        boolean due = CgFrameImages.isDue(frame);
-        if (!due && (frameImages == null || !frameImages.isPending())) return;
-        long timed = CgTrace.stamp(UiTrace.FRAME);
-        if (frameImages == null) frameImages = new CgPixelReadback(3);
-        frameImages.poll(pixels -> CgFrameImages.put(pixels.tag(), pixels.width(), pixels.height(), pixels.rgb()));
-        CgTrace.zoneDone(UiTrace.FRAME, "glend:image:poll", timed);
-        if (due) {
-            timed = CgTrace.stamp(UiTrace.FRAME);
-            frameImages.request(frameFbo.getId(), frameFbo.getWidth(), frameFbo.getHeight(),
-                    CgFrameImages.width(), frame);
-            CgTrace.zoneDone(UiTrace.FRAME, "glend:image:request", timed);
-        }
-    }
-
-    public static void destroy() {
-        if (instance == null) return;
-        instance.releaseOwnedResources();
-        instance = null;
-    }
-
-    private void releaseOwnedResources() {
-        // Any still-open layer frame belongs to a frame that will never finish. Drop the saved GL
-        // scopes without close()-ing them: their saved state refers to the dying context, so
-        // restoring it is meaningless at best.
+    void release() {
+        // Any still-open layer belongs to a frame that will never finish.
         layerStack.clear();
 
         recording.reset();
@@ -2583,13 +2347,6 @@ public final class CgUiPaintContext {
         candidates.clear();
         retainedBytes = 0L;
 
-        // Same reasoning as the layer pool above — createOwned bypasses CgFrameBufferRegistry, so
-        // nothing else ever frees it. Not nulled out afterward (it's final, built once in the
-        // constructor) — destroy() drops the whole singleton right after this, so a fresh instance
-        // with a fresh FBO is what the next getInstance() builds anyway.
-        frameFbo.delete();
-        if (frameImages != null) frameImages.delete();
-
         // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
         backdrop.delete();
         svgRaster.delete();
@@ -2597,7 +2354,6 @@ public final class CgUiPaintContext {
         renderer.delete();
         textRenderer.delete();
 
-        glScope = null;
         currentTexture = null;
         currentMaterial = null;
         frameActive = false;
