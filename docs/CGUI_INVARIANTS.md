@@ -439,6 +439,7 @@ because nobody re-reads it when the mechanism moves.
 | A `CompositeEdit` undoes in **reverse** | Each edit assumed the state the previous one left. The disconnect-then-connect pair is the smallest example: unwinding forwards restores an edge into an input that is still occupied |
 | Truncation changes no geometry — `UIText.displayedText()` is the only way to observe it | An ellipsis that never fires looks identical to one that does, in every test and every layout dump |
 | A closed `Dialog` is `display: none`, so every box in it measures 0 | Any "does it fit?" assertion passes against `0 <= 0` — call `show()` first |
+| **A test detaches what it built** (`UiDocumentTestBase` does at `@After`); a fixture with its own document calls `removeAll()` when done | A widget lets go of a process-wide signal on detach, so a document dropped still attached stays reachable from `Notifications.onDidChange` and its kin: three hundred classes in one JVM ran out of a 2 GB heap. `DetachedDocumentsAreCollectedTest` holds every registered kind to it |
 
 ## Everything else
 
