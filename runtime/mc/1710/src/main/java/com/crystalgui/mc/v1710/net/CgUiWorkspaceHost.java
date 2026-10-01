@@ -1,5 +1,6 @@
 package com.crystalgui.mc.v1710.net;
 
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.protocol.ScriptingMode;
@@ -38,6 +39,9 @@ import net.minecraft.world.WorldServer;
  * which is also what makes single-player a real test of the protocol rather than a bypass of it.</p>
  */
 public final class CgUiWorkspaceHost {
+
+    /** Work UI code sends the server thread, which 1.7.10 has no queue for: drained on the server tick. */
+    public static final HostThread.Queue SERVER_TASKS = new HostThread.Queue();
 
     /**
      * Matches the client's handle on the project — and is {@code core}'s constant, not this host's.
@@ -186,6 +190,7 @@ public final class CgUiWorkspaceHost {
         @SubscribeEvent
         public void onServerTick(TickEvent.ServerTickEvent event) {
             if (event.phase != TickEvent.Phase.END) return;
+            SERVER_TASKS.drain();
             if (host != null) host.tick(1f / 20f);
         }
     }

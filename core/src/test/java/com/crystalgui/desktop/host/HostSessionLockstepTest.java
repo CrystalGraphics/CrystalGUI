@@ -2,6 +2,7 @@ package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.net.protocol.ProtocolConnection;
@@ -76,6 +77,8 @@ public class HostSessionLockstepTest {
             @Override public ProtocolConnection<Object> connection() { return null; }
             @Override public Locale locale() { return Locale.getDefault(); }
             @Override public void reinjectKey(CgSystemInput.Keyboard.Event key) { }
+            @Override public HostThread.Binding clientThread() { return null; }
+            @Override public HostThread.Binding serverThread() { return null; }
         }, ApplicationKind.of("test.lockstep", "Lockstep"));
     }
 

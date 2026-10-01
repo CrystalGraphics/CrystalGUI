@@ -6,6 +6,7 @@ import java.util.Locale;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 /**
@@ -152,6 +153,33 @@ public interface HostServices {
      * </ul>
      */
     void reinjectKey(CgSystemInput.Keyboard.Event key);
+
+    /**
+     * The game's client thread, or null where it is the thread this host frames its desktop on: every Minecraft whose
+     * client is not an event loop of its own. What {@link HostThread#CLIENT} runs work on.
+     *
+     * <pre>{@code
+     * public HostThread.Binding clientThread() {
+     *     return new HostThread.Binding() {
+     *         public void execute(Runnable work) { minecraft.execute(work); }
+     *         public boolean isCurrent() { return minecraft.isSameThread(); }
+     *     };
+     * }
+     * }</pre>
+     */
+    @Nullable
+    HostThread.Binding clientThread();
+
+    /**
+     * The integrated server's thread in single player, or null where this host never runs one. What
+     * {@link HostThread#SERVER} runs work on; its {@code isAvailable} answers whether a server is running now.
+     *
+     * <pre>{@code
+     * public boolean isAvailable() { return minecraft.getSingleplayerServer() != null; }
+     * }</pre>
+     */
+    @Nullable
+    HostThread.Binding serverThread();
 
     /**
      * A game's language code as a {@link Locale}: Minecraft's {@code "ja_jp"} is {@code ja-JP}. A code

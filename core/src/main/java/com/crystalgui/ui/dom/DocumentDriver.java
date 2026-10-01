@@ -2,6 +2,7 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
@@ -311,8 +312,14 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
      * @return whether anything was drawn: asynchronously, false until the first frame has been recorded
      */
     public boolean frame(float deltaSeconds, int width, int height, Painter<F> painter) {
+        // This thread is where documents are framed: work and answers queued for it run first.
+        HostThread.drainFrames();
         if (compositor == null) {
-            run(() -> painter.paint(deltaSeconds, width, height));
+            Runnable delivery = document.readExtracts();
+            run(() -> {
+                if (delivery != null) delivery.run();
+                painter.paint(deltaSeconds, width, height);
+            });
             presented++;
             return true;
         }
@@ -322,7 +329,16 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         pendingDelta += deltaSeconds;
         boolean shown = compositor.present(width, height) != null;
         float delta = pendingDelta;
-        if (compositor.requestFrame(() -> commit(painter, delta, width, height))) pendingDelta = 0f;
+        // READ ONLY FOR A FRAME THAT WILL BE TAKEN: the readings belong to the frame they are delivered in.
+        if (compositor.accepting()) {
+            Runnable delivery = document.readExtracts();
+            if (compositor.requestFrame(() -> {
+                if (delivery != null) delivery.run();
+                return commit(painter, delta, width, height);
+            })) {
+                pendingDelta = 0f;
+            }
+        }
         if (shown) presented++;
         return shown;
     }
