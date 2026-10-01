@@ -1758,7 +1758,7 @@ public class CgUiDesktopScene
         // reported position is wherever the player last had a menu open -- delivering a move against it
         // would enter and leave elements under a pointer that is not there. Refusing here is the
         // harness standing in for a grab it has no way to perform.
-        return driver.offer(() -> desktop.isHudMode() || document.input().consumeMouseEvent(event));
+        return driver.offerMouse(event, () -> desktop.isHudMode() || document.input().consumeMouseEvent(event));
     }
 
     @Override

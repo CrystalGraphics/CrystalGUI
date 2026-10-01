@@ -1,6 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.UiSequence;
 import org.junit.After;
@@ -49,6 +50,17 @@ public class DocumentDriverTest {
         for (CgSystemInput.Keyboard.Event key; (key = driver.pollUnhandledKey()) != null; ) back.add(key.key());
         assertEquals(List.of(CgKeyCodes.KEY_E, CgKeyCodes.KEY_F, CgKeyCodes.KEY_G), back);
         assertNull(driver.pollUnhandledKey());
+    }
+
+    @Test
+    public void thePlatformAnswersHeldKeysFromTheEventsPosted() throws Exception {
+        driver.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_LCONTROL, true, false, 0L));
+        flush();
+        assertTrue(CgModifiers.hasCtrl(driver.ask(() -> document.platform().modifiers())));
+
+        driver.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_LCONTROL, false, false, 0L));
+        flush();
+        assertEquals(CgModifiers.NONE, (int) driver.ask(() -> document.platform().modifiers()));
     }
 
     @Test
