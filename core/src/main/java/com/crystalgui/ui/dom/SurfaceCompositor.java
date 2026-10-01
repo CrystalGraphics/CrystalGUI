@@ -6,6 +6,7 @@ import com.crystalgui.render.UiGpu;
 
 import javax.annotation.Nullable;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -47,12 +48,25 @@ final class SurfaceCompositor<F> {
      */
     @Nullable
     UiCommit<F> present(int width, int height) {
+        return present(width, height, commit -> false);
+    }
+
+    /**
+     * {@link #present(int, int)}, letting {@code move} write a commit's property values first: given the commit about to
+     * be drawn, it answers whether it changed them. A fresh commit is presented with them; an older one is executed again
+     * ({@link UiGpu#redraw}) when they changed, and shown again as it was otherwise.
+     */
+    UiCommit<F> present(int width, int height, Predicate<UiCommit<F>> move) {
         UiCommit<F> fresh = pending.getAndSet(null);
         if (fresh != null) {
             active = fresh;
-            if (fresh.frame() != null) UiGpu.present(fresh.frame());
+            if (fresh.frame() != null) {
+                move.test(fresh);
+                UiGpu.present(fresh.frame());
+            }
         } else if (active != null && active.frame() != null) {
-            UiGpu.presentAgain(width, height);
+            if (move.test(active)) UiGpu.redraw(width, height);
+            else UiGpu.presentAgain(width, height);
         }
         return active;
     }

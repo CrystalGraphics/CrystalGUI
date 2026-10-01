@@ -523,6 +523,35 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return pointer;
     }
 
+    @Nullable
+    private UIElement pointerFollower;
+
+    /**
+     * Declares that {@code element} moves one for one with the pointer until {@link #stopFollowingPointer}: what a
+     * compositor may move ahead of this document, by the pointer's travel since a frame was recorded, while the
+     * document is busy. A window drag declares its window; a gesture that does not move its element exactly with the
+     * pointer -- a resize, a drag that eases or snaps as it goes -- declares nothing.
+     *
+     * <pre>{@code
+     * document.input().followPointer(window);        // the drag begins
+     * document.input().stopFollowingPointer(window); // it ends, either way
+     * }</pre>
+     */
+    public void followPointer(UIElement element) {
+        pointerFollower = element;
+    }
+
+    /** Ends what {@link #followPointer} began, if {@code element} is still what follows. */
+    public void stopFollowingPointer(UIElement element) {
+        if (pointerFollower == element) pointerFollower = null;
+    }
+
+    /** What follows the pointer one for one now, or null. @see #followPointer */
+    @Nullable
+    public UIElement pointerFollower() {
+        return pointerFollower;
+    }
+
     /**
      * Whether the pointer has moved since the last button press.
      *
