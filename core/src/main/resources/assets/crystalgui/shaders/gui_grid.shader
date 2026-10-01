@@ -37,8 +37,8 @@
 // itself. A UI grid never gets there, and it is kept because removing it would leave a shader that
 // is silently wrong for a value a caller may legitimately pass.
 //
-// PREMULTIPLIED out, under ONE / ONE_MINUS_SRC_ALPHA -- the layer blit's blend and gui_gradient's,
-// not gui_quad's. A grid is nearly always drawn translucent over something.
+// PREMULTIPLIED out, under ONE / ONE_MINUS_SRC_ALPHA -- gui_box's blend and gui_gradient's. A grid is nearly
+// always drawn translucent over something.
 
 #type pos2_uv2_col4ub
 #pragma cg_use quad

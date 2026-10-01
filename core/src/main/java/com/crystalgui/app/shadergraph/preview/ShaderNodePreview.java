@@ -54,6 +54,8 @@ public class ShaderNodePreview extends UIElement {
         }
     }
 
+    private boolean hadPicture;
+
     private void paintContentTraced(CgUiPaintContext ctx, Box box) {
         super.paintContent(ctx, box);
 
@@ -61,6 +63,9 @@ public class ShaderNodePreview extends UIElement {
         previews.recordPending(ctx);
         CgPreviewRenderer renderer = previews.renderer();
         CgGraphTexture texture = renderer.textureOf(nodeId);
+        // A PICTURE THAT WENT AWAY is a blink on screen, counted where it can be found in the Frame Profiler.
+        if (texture == null && hadPicture) CgTrace.add(UiTrace.FRAME, "sg-preview-lost", 1);
+        hadPicture = texture != null;
         // Nothing yet: the node is new, or its turn in the budget has not come round. Painting nothing
         // is right — the slot keeps its background, so an unrendered preview reads as "not yet" rather
         // than as a hole in the node.

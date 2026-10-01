@@ -135,8 +135,8 @@ Pass {
     /**
      * A backdrop sample, UN-PREMULTIPLIED.
      *
-     * <p>Every UI target holds premultiplied colour (gui_quad.shader blends `SRC_ALPHA ...` for rgb and
-     * `ONE ...` for alpha, so a draw into a transparent target leaves `rgb * a`). Reading one straight
+     * <p>Every UI target holds premultiplied colour (gui_box.shader writes `rgb * a` and blends `ONE ...`, so a
+     * draw into a transparent target leaves `rgb * a`). Reading one straight
      * and treating it as opaque darkens every partly-covered pixel toward black -- invisible on a fully
      * covered backdrop, and the whole of the "why does the blur grey everything out" bug once a blur
      * started averaging covered and uncovered pixels together.</p>

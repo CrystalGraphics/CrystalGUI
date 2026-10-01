@@ -9,8 +9,8 @@ package com.crystalgui.render.texture;
  * sprite-pack JSON.</p>
  *
  * <p>The same {@link #tileCount} drives both renderers — {@link CgUiSprite}'s CPU quad loop and the
- * {@code WITH_9SLICE_FILL} branch of {@code gui_rect.shader}, which receives the count as a
- * uniform rather than recomputing it. Agreement is by construction: the two paths cannot round
+ * nine-slice shape of {@code gui_box.shader}, which receives the count in its shape entry rather than recomputing
+ * it. Agreement is by construction: the two paths cannot round
  * differently.</p>
  */
 public enum CgUiRepeat {

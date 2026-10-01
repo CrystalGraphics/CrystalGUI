@@ -65,7 +65,8 @@ final class SurfaceCompositor<F> {
                 UiGpu.present(fresh.frame());
             }
         } else if (active != null && active.frame() != null) {
-            if (move.test(active)) UiGpu.redraw(width, height);
+            // What moves is a window's node or a drag's: what the layers under it drew holds still, so not again.
+            if (move.test(active)) UiGpu.redraw(width, height, true);
             else UiGpu.presentAgain(width, height);
         }
         return active;
