@@ -1,7 +1,7 @@
 package com.crystalgui.ui.box;
 
 import com.crystalgui.render.InkOverflow;
-import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
@@ -52,11 +52,12 @@ public final class BoxPainter {
 
     private static final int WHITE = 0xFFFFFFFF;
 
-    private BoxPainter() {
+    /** One per {@link BoxTree}: the scratch below is the tree's, so two documents can paint at once. */
+    BoxPainter() {
     }
 
     /** Paints the whole tree with the pose on the stack as the surface transform. */
-    public static void paint(BoxTree tree, CgUiPaintContext ctx) {
+    void paint(BoxTree tree, CgUiPaintContext ctx) {
         Box root = tree.root();
         if (root == null) return;
         Matrix4f base = new Matrix4f(ctx.getPoseStack().last().pose());
@@ -77,24 +78,25 @@ public final class BoxPainter {
      * gives the copy boxes of its own; this is for a one-shot into a target the caller owns.</p>
      */
     public static void paintSubtree(Box box, CgUiPaintContext ctx) {
+        BoxPainter painter = box.tree().painter;
         Matrix4f base = new Matrix4f(ctx.getPoseStack().last().pose());
         // @see CgUiPaintContext#withoutRetention -- a copy drawn at other coordinates must not become
         // what the live tree thinks it last painted.
         // AS A CONTEXT whether or not it is one: a subtree drawn on its own paints everything under it.
-        ctx.withoutRetention(() -> paintBox(box, ctx, base, true));
+        ctx.withoutRetention(() -> painter.paintBox(box, ctx, base, true));
     }
 
     /**
      * One box and what it paints. {@code asContext}: its stacking context's lists as well as its normal flow — true
      * for a stacking context and for the root of a paint.
      */
-    private static void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext) {
+    private void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext) {
         float opacity = box.opacity();
         if (opacity <= 0f) return;
         // NOTHING OF IT CAN LAND: a row scrolled past its list's edge draws nothing the scissor would keep.
         if (CgUiPaintContext.CULL) {
             inkThrough(box, base);
-            if (ctx.outsideClip(INK[0], INK[1], INK[2], INK[3])) {
+            if (ctx.outsideClip(ink[0], ink[1], ink[2], ink[3])) {
                 CgTrace.add(UiTrace.FRAME, "culled", 1);
                 return;
             }
@@ -180,7 +182,7 @@ public final class BoxPainter {
                 // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
                 ctx.notePainted(IDENTITY, region.x(), region.y(), region.x() + region.width(),
                         region.y() + region.height());
-                ctx.blitLayer(keep.fbo(), opacity, region);
+                ctx.blitLayer(keep.target(), opacity, region);
                 return;
             }
 
@@ -200,8 +202,8 @@ public final class BoxPainter {
 
             // The subtree blends as one unit before opacity applies, and a mask multiplies only the
             // CHILDREN -- the box's own background is composited unmasked underneath.
-            CgFrameBuffer subtreeFbo = keep != null
-                    ? ctx.beginLayerFbo(keep.fbo(), region)
+            CgGraphTexture subtreeFbo = keep != null
+                    ? ctx.beginLayerFbo(keep.target(), region)
                     : ctx.beginLayerFbo(region);
             paintSelf(box, style, ctx, radii);
             node.paintContent(ctx, box);
@@ -213,9 +215,9 @@ public final class BoxPainter {
                 }
             } else if (mask) {
                 CgTrace.add(UiTrace.FRAME, "layers-mask", 1);
-                CgFrameBuffer childrenFbo = ctx.beginLayerFbo(inside);
+                CgGraphTexture childrenFbo = ctx.beginLayerFbo(inside);
                 paintChildren(box, ctx, inner, false, asContext);
-                CgFrameBuffer maskFbo = ctx.beginLayerFbo(inside);
+                CgGraphTexture maskFbo = ctx.beginLayerFbo(inside);
                 paintMask(box, style, ctx);
                 ctx.endLayerFbo();
                 ctx.compositeMask(childrenFbo, maskFbo, inside);
@@ -232,8 +234,8 @@ public final class BoxPainter {
             if (keep != null) keep.painted();
             ctx.blitLayer(subtreeFbo, opacity, region);
         } finally {
-            PAINTED.set(base).mul(box.localToWorld());
-            notePainted(box, ctx, PAINTED);
+            painted.set(base).mul(box.localToWorld());
+            notePainted(box, ctx, painted);
             pose.popPose();
         }
     }
@@ -243,7 +245,7 @@ public final class BoxPainter {
      * rounded clip when the mask is the box's own shape, else through a layer multiplied by the mask -- then its
      * decoration over both. The pose on entry is the box's own, unshifted.
      */
-    private static void paintMaskedChildrenOnly(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx,
+    private void paintMaskedChildrenOnly(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx,
                                                 Matrix4f base, Radii radii, LayerRegion region, boolean asContext) {
         PoseStack pose = ctx.getPoseStack();
         paintSelf(box, style, ctx, radii);
@@ -260,9 +262,9 @@ public final class BoxPainter {
             Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
             pose.last().pose().set(inner).mul(box.localToWorld());
             LayerRegion inside = region.atOrigin();
-            CgFrameBuffer childrenFbo = ctx.beginLayerFbo(region);
+            CgGraphTexture childrenFbo = ctx.beginLayerFbo(region);
             paintChildren(box, ctx, inner, false, asContext);
-            CgFrameBuffer maskFbo = ctx.beginLayerFbo(inside);
+            CgGraphTexture maskFbo = ctx.beginLayerFbo(inside);
             paintMask(box, style, ctx);
             ctx.endLayerFbo();
             ctx.compositeMask(childrenFbo, maskFbo, inside);
@@ -287,8 +289,8 @@ public final class BoxPainter {
         ctx.notePainted(pose, box.localInkL, box.localInkT, box.localInkR, box.localInkB);
     }
 
-    /** {@link #notePainted}'s scratch. Read immediately: the frame thread paints one box at a time. */
-    private static final Matrix4f PAINTED = new Matrix4f();
+    /** {@link #notePainted}'s scratch. Read immediately: a tree paints one box at a time. */
+    private final Matrix4f painted = new Matrix4f();
     /** A region already in the target's pixels. */
     private static final Matrix4f IDENTITY = new Matrix4f();
 
@@ -336,16 +338,16 @@ public final class BoxPainter {
      * bound the rectangle exactly; under a rotation they bound it conservatively, which is the right
      * answer for an allocation.</p>
      */
-    private static LayerRegion regionOf(Box box, CgUiPaintContext ctx, Matrix4f base) {
+    private LayerRegion regionOf(Box box, CgUiPaintContext ctx, Matrix4f base) {
         inkThrough(box, base);
-        return ctx.layerRegion(INK[0], INK[1], INK[2], INK[3]);
+        return ctx.layerRegion(ink[0], ink[1], ink[2], ink[3]);
     }
 
     /**
-     * The box's subtree ink bounds carried through {@code base} into the target's pixels, written to {@link #INK} as
+     * The box's subtree ink bounds carried through {@code base} into the target's pixels, written to {@link #ink} as
      * {@code x0, y0, x1, y1}. Asked per box by the cull, so into scratch rather than a new rectangle.
      */
-    private static void inkThrough(Box box, Matrix4f base) {
+    private void inkThrough(Box box, Matrix4f base) {
         float x0 = box.inkX0(), y0 = box.inkY0(), x1 = box.inkX1(), y1 = box.inkY1();
         float m00 = base.m00(), m10 = base.m10(), m30 = base.m30();
         float m01 = base.m01(), m11 = base.m11(), m31 = base.m31();
@@ -353,20 +355,20 @@ public final class BoxPainter {
         float bx = m00 * x1 + m10 * y0 + m30, by = m01 * x1 + m11 * y0 + m31;
         float cx = m00 * x1 + m10 * y1 + m30, cy = m01 * x1 + m11 * y1 + m31;
         float dx = m00 * x0 + m10 * y1 + m30, dy = m01 * x0 + m11 * y1 + m31;
-        INK[0] = Math.min(Math.min(ax, bx), Math.min(cx, dx));
-        INK[1] = Math.min(Math.min(ay, by), Math.min(cy, dy));
-        INK[2] = Math.max(Math.max(ax, bx), Math.max(cx, dx));
-        INK[3] = Math.max(Math.max(ay, by), Math.max(cy, dy));
+        ink[0] = Math.min(Math.min(ax, bx), Math.min(cx, dx));
+        ink[1] = Math.min(Math.min(ay, by), Math.min(cy, dy));
+        ink[2] = Math.max(Math.max(ax, bx), Math.max(cx, dx));
+        ink[3] = Math.max(Math.max(ay, by), Math.max(cy, dy));
     }
 
-    /** {@link #inkThrough}'s answer. Read immediately: the frame thread paints one box at a time. */
-    private static final float[] INK = new float[4];
+    /** {@link #inkThrough}'s answer. Read immediately: a tree paints one box at a time. */
+    private final float[] ink = new float[4];
 
     /**
      * What {@code box} hosts, inside its clip: its negative {@code z-index} boxes, its normal flow and its other
      * z-ordered boxes when it paints as a context, and its normal flow alone otherwise.
      */
-    private static void paintChildren(Box box, CgUiPaintContext ctx, Matrix4f base, boolean scissor,
+    private void paintChildren(Box box, CgUiPaintContext ctx, Matrix4f base, boolean scissor,
                                       boolean asContext) {
         if (box.children().isEmpty()) return;
         if (scissor) {
@@ -400,13 +402,13 @@ public final class BoxPainter {
     }
 
     /** A context's list, each box painted through the clips of every box between it and {@code context}. */
-    private static void paintLifted(List<Box> lifted, Box context, CgUiPaintContext ctx, Matrix4f base) {
+    private void paintLifted(List<Box> lifted, Box context, CgUiPaintContext ctx, Matrix4f base) {
         for (int i = 0; i < lifted.size(); i++) {
             Box box = lifted.get(i);
             // CULLED BEFORE THE WALK UP: a context lists every realised row of every virtualised list under it.
             if (CgUiPaintContext.CULL) {
                 inkThrough(box, base);
-                if (ctx.outsideClip(INK[0], INK[1], INK[2], INK[3])) continue;
+                if (ctx.outsideClip(ink[0], ink[1], ink[2], ink[3])) continue;
             }
             List<Box> clips = clipsBetween(box, context);
             try {
@@ -422,9 +424,9 @@ public final class BoxPainter {
      * nesting depth: a lifted box's paint can reach another context's lifted boxes before it is done with its
      * own. The caller releases it by decrementing {@link #clipDepth}.
      */
-    private static List<Box> clipsBetween(Box lifted, Box context) {
-        if (clipDepth == CLIP_LISTS.size()) CLIP_LISTS.add(new ArrayList<>(4));
-        List<Box> clips = CLIP_LISTS.get(clipDepth++);
+    private List<Box> clipsBetween(Box lifted, Box context) {
+        if (clipDepth == clipLists.size()) clipLists.add(new ArrayList<>(4));
+        List<Box> clips = clipLists.get(clipDepth++);
         clips.clear();
         for (Box between = lifted.host(); between != null && between != context; between = between.host()) {
             if (between.clips()) clips.add(between);
@@ -433,14 +435,14 @@ public final class BoxPainter {
     }
 
     /** @see #clipsBetween */
-    private static final List<List<Box>> CLIP_LISTS = new ArrayList<>();
-    private static int clipDepth;
+    private final List<List<Box>> clipLists = new ArrayList<>();
+    private int clipDepth;
 
     /**
      * {@code lifted} under {@code clips[0..at]}, outermost applied first: a square clip as a scissor in its own
      * space, a rounded one as a mask layer, as the box would have masked it had the lifted box stayed in its flow.
      */
-    private static void paintClipped(Box lifted, List<Box> clips, int at, CgUiPaintContext ctx, Matrix4f base) {
+    private void paintClipped(Box lifted, List<Box> clips, int at, CgUiPaintContext ctx, Matrix4f base) {
         if (at < 0) {
             paintBox(lifted, ctx, base, lifted.isStackingContext());
             return;
@@ -487,9 +489,9 @@ public final class BoxPainter {
         CgTrace.add(UiTrace.FRAME, "layers-mask", 1);
         Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
         LayerRegion inside = region.atOrigin();
-        CgFrameBuffer content = ctx.beginLayerFbo(region);
+        CgGraphTexture content = ctx.beginLayerFbo(region);
         paintClipped(lifted, clips, at - 1, ctx, inner);
-        CgFrameBuffer mask = ctx.beginLayerFbo(inside);
+        CgGraphTexture mask = ctx.beginLayerFbo(inside);
         pose.pushPose();
         pose.last().pose().set(inner).mul(clip.localToWorld());
         paintMask(clip, style, ctx);
@@ -502,7 +504,7 @@ public final class BoxPainter {
 
     // ── Background ───────────────────────────────────────────────────────────
 
-    private static void paintSelf(Box box, ComputedStyle style, CgUiPaintContext ctx, Radii radii) {
+    private void paintSelf(Box box, ComputedStyle style, CgUiPaintContext ctx, Radii radii) {
         float width = box.width(), height = box.height();
 
         // THE BACKDROP FIRST, and it is not the background: `backdrop-filter` acts on what is BEHIND the
@@ -551,7 +553,7 @@ public final class BoxPainter {
     }
 
     /** @return whether it painted; false when the background is a kind the rounded wrap cannot clip. */
-    private static boolean paintRounded(ComputedStyle style, CgUiPaintContext ctx, float width, float height,
+    private boolean paintRounded(ComputedStyle style, CgUiPaintContext ctx, float width, float height,
                                         Radii radii, float borderWidth, CgUiDrawable background,
                                         int backgroundColor, boolean explicitBackgroundColor) {
         int borderColor = style.get(StylePropertyRegistry.BORDER_COLOR);
@@ -571,7 +573,7 @@ public final class BoxPainter {
             ctx.setColor(WHITE);
             shaped(ctx, radii).size(width, height)
                     .border(borderWidth, borderColor, borderTop, borderBottom)
-                    .borderSides(SIDES[0], SIDES[1], SIDES[2], SIDES[3])
+                    .borderSides(sides[0], sides[1], sides[2], sides[3])
                     .fillColor(fillArgb)
                     .submit();
             return true;
@@ -582,7 +584,7 @@ public final class BoxPainter {
         return true;
     }
 
-    private static void paintRoundedLayer(CgUiPaintContext ctx, CgUiDrawable d, float width, float height,
+    private void paintRoundedLayer(CgUiPaintContext ctx, CgUiDrawable d, float width, float height,
                                           Radii radii, float borderWidth, int borderColor, int borderTop, int borderBottom) {
         if (d instanceof CgUiCrossFade cf) {
             float previous = ctx.pushLayerOpacity(1f - cf.getT());
@@ -601,26 +603,26 @@ public final class BoxPainter {
         }
         shaped(ctx, radii).size(width, height)
                 .border(borderWidth, borderColor, borderTop, borderBottom)
-                .borderSides(SIDES[0], SIDES[1], SIDES[2], SIDES[3])
+                .borderSides(sides[0], sides[1], sides[2], sides[3])
                 .fill(((CgUiRect) d).getFill())
                 .submit();
     }
 
     /**
-     * The box's four border widths into {@link #SIDES}, answering the widest: a border is drawn when any side has one.
+     * The box's four border widths into {@link #sides}, answering the widest: a border is drawn when any side has one.
      * Each side at its own width -- the stroke took the left width for all four, so a box with only a top border drew
      * none, and one with a thick top drew it thin.
      */
-    private static float borderSides(Box box) {
-        SIDES[0] = box.border().left;
-        SIDES[1] = box.border().top;
-        SIDES[2] = box.border().right;
-        SIDES[3] = box.border().bottom;
-        return Math.max(Math.max(SIDES[0], SIDES[1]), Math.max(SIDES[2], SIDES[3]));
+    private float borderSides(Box box) {
+        sides[0] = box.border().left;
+        sides[1] = box.border().top;
+        sides[2] = box.border().right;
+        sides[3] = box.border().bottom;
+        return Math.max(Math.max(sides[0], sides[1]), Math.max(sides[2], sides[3]));
     }
 
-    /** {@link #borderSides}' answer, L,T,R,B. Read immediately: the frame thread paints one box at a time. */
-    private static final float[] SIDES = new float[4];
+    /** {@link #borderSides}' answer, L,T,R,B. Read immediately: a tree paints one box at a time. */
+    private final float[] sides = new float[4];
 
     private static int edgeColor(int edge, int fallback) {
         return (edge >>> 24) == 0 ? fallback : edge;
@@ -632,7 +634,7 @@ public final class BoxPainter {
      * The mask of a clip that is not a rounded clip: the box's own shape with its border band at alpha 0, whatever its
      * background, or the {@code mask} drawable laid out on the box and cut to that shape.
      */
-    private static void paintMask(Box box, ComputedStyle style, CgUiPaintContext ctx) {
+    private void paintMask(Box box, ComputedStyle style, CgUiPaintContext ctx) {
         float borderWidth = borderSides(box);
         ctx.setColor(WHITE);
         CgUiDrawable source = style.get(StylePropertyRegistry.MASK);
@@ -642,21 +644,21 @@ public final class BoxPainter {
             return;
         }
         layMask(box, style, source);
-        Radii radii = radiiOf(style, LAID[2], LAID[3]);
-        paintMaskShape(ctx, source, LAID[0], LAID[1], LAID[2], LAID[3], radii, borderWidth);
+        Radii radii = radiiOf(style, laid[2], laid[3]);
+        paintMaskShape(ctx, source, laid[0], laid[1], laid[2], laid[3], radii, borderWidth);
     }
 
-    /** Lays the {@code mask} drawable's rectangle out into {@link #LAID}. */
-    private static void layMask(Box box, ComputedStyle style, CgUiDrawable source) {
-        originBox(box, style.get(StylePropertyRegistry.MASK_ORIGIN), ORIGIN_BOX);
+    /** Lays the {@code mask} drawable's rectangle out into {@link #laid}. */
+    private void layMask(Box box, ComputedStyle style, CgUiDrawable source) {
+        originBox(box, style.get(StylePropertyRegistry.MASK_ORIGIN), originBox);
         LengthPercent offset = style.get(StylePropertyRegistry.MASK_OFFSET);
-        float offsetX = offset == null ? 0f : offset.resolve(ORIGIN_BOX[2]);
-        float offsetY = offset == null ? 0f : offset.resolve(ORIGIN_BOX[3]);
+        float offsetX = offset == null ? 0f : offset.resolve(originBox[2]);
+        float offsetY = offset == null ? 0f : offset.resolve(originBox[3]);
         CgUiLayerBox.resolveInto(source,
-                ORIGIN_BOX[0] - offsetX, ORIGIN_BOX[1] - offsetY,
-                Math.max(0f, ORIGIN_BOX[2] + 2f * offsetX),
-                Math.max(0f, ORIGIN_BOX[3] + 2f * offsetY),
-                style.get(StylePropertyRegistry.MASK_SIZE), style.get(StylePropertyRegistry.MASK_POSITION), LAID);
+                originBox[0] - offsetX, originBox[1] - offsetY,
+                Math.max(0f, originBox[2] + 2f * offsetX),
+                Math.max(0f, originBox[3] + 2f * offsetY),
+                style.get(StylePropertyRegistry.MASK_SIZE), style.get(StylePropertyRegistry.MASK_POSITION), laid);
     }
 
     /**
@@ -664,8 +666,8 @@ public final class BoxPainter {
      * {@code mask} drawable, the box axis-aligned in the target, and the region missing all four rounded corners.
      * A node deep inside a rounded window is the common case.
      */
-    private static boolean missesRoundedCorners(Box clip, ComputedStyle style, LayerRegion region, Matrix4f base) {
-        Matrix4f space = CLIP_SPACE.set(base).mul(clip.localToWorld());
+    private boolean missesRoundedCorners(Box clip, ComputedStyle style, LayerRegion region, Matrix4f base) {
+        Matrix4f space = clipSpace.set(base).mul(clip.localToWorld());
         if (space.m10() != 0f || space.m01() != 0f || space.m00() <= 0f || space.m11() <= 0f) return false;
         if (style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY) return false;
         float w = clip.width(), h = clip.height();
@@ -699,25 +701,25 @@ public final class BoxPainter {
      * {@code box}'s shape less its border, as a rounded clip in the current pose's space; false when the clips are
      * already nested as deep as a draw can carry.
      */
-    private static boolean pushShapeClip(Box box, ComputedStyle style, CgUiPaintContext ctx) {
+    private boolean pushShapeClip(Box box, ComputedStyle style, CgUiPaintContext ctx) {
         Radii r = radiiOf(style, box.width(), box.height());
-        CLIP_RX[0] = r.rxTL; CLIP_RX[1] = r.rxTR; CLIP_RX[2] = r.rxBR; CLIP_RX[3] = r.rxBL;
-        CLIP_RY[0] = r.ryTL; CLIP_RY[1] = r.ryTR; CLIP_RY[2] = r.ryBR; CLIP_RY[3] = r.ryBL;
+        clipRx[0] = r.rxTL; clipRx[1] = r.rxTR; clipRx[2] = r.rxBR; clipRx[3] = r.rxBL;
+        clipRy[0] = r.ryTL; clipRy[1] = r.ryTR; clipRy[2] = r.ryBR; clipRy[3] = r.ryBL;
         borderSides(box);
-        return ctx.pushRoundedClip(0f, 0f, box.width(), box.height(), CLIP_RX, CLIP_RY, SIDES);
+        return ctx.pushRoundedClip(0f, 0f, box.width(), box.height(), clipRx, clipRy, sides);
     }
 
     /** @see #pushShapeClip -- TL, TR, BR, BL, as the clip table takes them. */
-    private static final float[] CLIP_RX = new float[4], CLIP_RY = new float[4];
+    private final float[] clipRx = new float[4], clipRy = new float[4];
 
     private static boolean overlaps(float ax0, float ay0, float ax1, float ay1, float bx0, float by0, float bx1, float by1) {
         return ax0 < bx1 && bx0 < ax1 && ay0 < by1 && by0 < ay1;
     }
 
     /** @see #missesRoundedCorners */
-    private static final Matrix4f CLIP_SPACE = new Matrix4f();
+    private final Matrix4f clipSpace = new Matrix4f();
 
-    private static void paintMaskShape(CgUiPaintContext ctx, CgUiDrawable d, float x, float y, float width, float height,
+    private void paintMaskShape(CgUiPaintContext ctx, CgUiDrawable d, float x, float y, float width, float height,
                                        Radii radii, float borderWidth) {
         if (d instanceof CgUiCrossFade cf) {
             float previous = ctx.pushLayerOpacity(1f - cf.getT());
@@ -739,25 +741,25 @@ public final class BoxPainter {
         // `background: #00000000` must clip the same way.
         if (revealsNothing(d)) mask.fillColor(WHITE);
         else mask.fill(((CgUiRect) d).getFill());
-        if (borderWidth > 0f) mask.border(borderWidth, 0x00000000).borderSides(SIDES[0], SIDES[1], SIDES[2], SIDES[3]);
+        if (borderWidth > 0f) mask.border(borderWidth, 0x00000000).borderSides(sides[0], sides[1], sides[2], sides[3]);
         mask.submit();
     }
 
     // ── Overlay and outline ──────────────────────────────────────────────────
 
-    private static void paintOverlay(Box box, ComputedStyle style, CgUiPaintContext ctx) {
+    private void paintOverlay(Box box, ComputedStyle style, CgUiPaintContext ctx) {
         ctx.setColor(WHITE);
         CgUiDrawable overlay = style.get(StylePropertyRegistry.OVERLAY);
         if (overlay == CgUiDrawable.EMPTY) return;
         // A mark takes the box's `color`; a picture keeps its own palette.
         if (overlay.followsTextColor()) ctx.setColor(style.get(StylePropertyRegistry.COLOR));
-        originBox(box, style.get(StylePropertyRegistry.OVERLAY_ORIGIN), ORIGIN_BOX);
-        CgUiLayerBox.resolveInto(overlay, ORIGIN_BOX[0], ORIGIN_BOX[1], ORIGIN_BOX[2], ORIGIN_BOX[3],
-                style.get(StylePropertyRegistry.OVERLAY_SIZE), style.get(StylePropertyRegistry.OVERLAY_POSITION), LAID);
-        overlay.draw(ctx, LAID[0], LAID[1], LAID[2], LAID[3]);
+        originBox(box, style.get(StylePropertyRegistry.OVERLAY_ORIGIN), originBox);
+        CgUiLayerBox.resolveInto(overlay, originBox[0], originBox[1], originBox[2], originBox[3],
+                style.get(StylePropertyRegistry.OVERLAY_SIZE), style.get(StylePropertyRegistry.OVERLAY_POSITION), laid);
+        overlay.draw(ctx, laid[0], laid[1], laid[2], laid[3]);
     }
 
-    private static void paintOutline(Box box, ComputedStyle style, CgUiPaintContext ctx) {
+    private void paintOutline(Box box, ComputedStyle style, CgUiPaintContext ctx) {
         float width = box.width(), height = box.height();
         CgUiDrawable outline = style.get(StylePropertyRegistry.OUTLINE);
         LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
@@ -777,7 +779,7 @@ public final class BoxPainter {
         // the offset edge -- so inflate by offset + width and let the inward stroke land in the band.
         float insetTop = top + stroke, insetBottom = bottom + stroke, insetLeft = left + stroke, insetRight = right + stroke;
         // RESOLVED AGAIN rather than carried from paintBox: the children painted in between share the
-        // one scratch. @see #RADII
+        // one scratch. @see #radii
         Radii ring = radiiOf(style, width, height)
                 .expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
         int color = style.get(StylePropertyRegistry.OUTLINE_COLOR);
@@ -887,7 +889,7 @@ public final class BoxPainter {
         return rect.getFill() instanceof CgUiRect.Fill.Color(int argb) && (argb >>> 24) == 0;
     }
 
-    /** The eight resolved corner radii of a box. Filled by {@link #radiiOf}; see {@link #RADII}. */
+    /** The eight resolved corner radii of a box. Filled by {@link #radiiOf}. */
     static final class Radii {
         float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
@@ -910,48 +912,45 @@ public final class BoxPainter {
     }
 
     /**
-     * <b>The one radii scratch, and the rule that makes it safe: it is filled immediately before it is
-     * read, and never read across anything that can paint another box.</b>
-     *
-     * <p>So {@link #paintSelf} takes it (it runs before this box's children) while
-     * {@link #paintOutline} resolves it again (it runs after them), and {@link #paintMask} fills it
-     * with its own. A record here was eight floats per box per frame — every box, not only the ones
-     * carrying a radius, since the value is what answers {@code isZero()}.</p>
-     *
-     * <p>Static, like {@link #ORIGIN_BOX} and {@link #LAID}, because painting is already serialised:
-     * it all goes through the {@code CgUiPaintContext} singleton, which holds one bound material, one
-     * pose stack and one rect scratch of its own.</p>
+     * <b>The radii scratch, and the rule that makes it safe: it is filled immediately before it is read, and never
+     * read across anything that can paint another box.</b> So {@link #paintSelf} takes it (it runs before this box's
+     * children) while {@link #paintOutline} resolves it again (it runs after them).
      */
-    private static final Radii RADII = new Radii();
+    private final Radii radii = new Radii();
 
-    /** @see #RADII */
-    private static final float[] ORIGIN_BOX = new float[4];
+    /** @see #radii */
+    private final float[] originBox = new float[4];
 
-    /** @see #RADII */
-    private static final float[] LAID = new float[4];
+    /** @see #radii */
+    private final float[] laid = new float[4];
 
-    /** Resolves this box's radii into {@link #RADII} and answers it. */
-    static Radii radiiOf(ComputedStyle style, float width, float height) {
-        RADII.rxTL = resolve(style.get(BorderRadiusProperties.TOP_LEFT_X), width);
-        RADII.ryTL = resolve(style.get(BorderRadiusProperties.TOP_LEFT_Y), height);
-        RADII.rxTR = resolve(style.get(BorderRadiusProperties.TOP_RIGHT_X), width);
-        RADII.ryTR = resolve(style.get(BorderRadiusProperties.TOP_RIGHT_Y), height);
-        RADII.rxBR = resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_X), width);
-        RADII.ryBR = resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_Y), height);
-        RADII.rxBL = resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_X), width);
-        RADII.ryBL = resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_Y), height);
+    /** Resolves a box's radii into this painter's scratch and answers it. */
+    private Radii radiiOf(ComputedStyle style, float width, float height) {
+        return radiiOf(style, width, height, radii);
+    }
+
+    /** Resolves a box's radii into {@code into} and answers it. */
+    static Radii radiiOf(ComputedStyle style, float width, float height, Radii into) {
+        into.rxTL = resolve(style.get(BorderRadiusProperties.TOP_LEFT_X), width);
+        into.ryTL = resolve(style.get(BorderRadiusProperties.TOP_LEFT_Y), height);
+        into.rxTR = resolve(style.get(BorderRadiusProperties.TOP_RIGHT_X), width);
+        into.ryTR = resolve(style.get(BorderRadiusProperties.TOP_RIGHT_Y), height);
+        into.rxBR = resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_X), width);
+        into.ryBR = resolve(style.get(BorderRadiusProperties.BOTTOM_RIGHT_Y), height);
+        into.rxBL = resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_X), width);
+        into.ryBL = resolve(style.get(BorderRadiusProperties.BOTTOM_LEFT_Y), height);
         // OVERLAPPING CURVES, CSS Backgrounds 3 section 5.5: where two radii on one side add up past it, EVERY radius
         // is scaled by the one factor that makes them fit. The shader capped each axis at half the box on its own,
         // which drew `border-radius: 999px` on a wide box as an ellipse where CSS draws a pill.
-        float f = fit(1f, width, RADII.rxTL + RADII.rxTR);
-        f = fit(f, width, RADII.rxBL + RADII.rxBR);
-        f = fit(f, height, RADII.ryTL + RADII.ryBL);
-        f = fit(f, height, RADII.ryTR + RADII.ryBR);
+        float f = fit(1f, width, into.rxTL + into.rxTR);
+        f = fit(f, width, into.rxBL + into.rxBR);
+        f = fit(f, height, into.ryTL + into.ryBL);
+        f = fit(f, height, into.ryTR + into.ryBR);
         if (f < 1f) {
-            RADII.rxTL *= f; RADII.ryTL *= f; RADII.rxTR *= f; RADII.ryTR *= f;
-            RADII.rxBR *= f; RADII.ryBR *= f; RADII.rxBL *= f; RADII.ryBL *= f;
+            into.rxTL *= f; into.ryTL *= f; into.rxTR *= f; into.ryTR *= f;
+            into.rxBR *= f; into.ryBR *= f; into.rxBL *= f; into.ryBL *= f;
         }
-        return RADII;
+        return into;
     }
 
     /** {@code f} lowered to what fits radii summing to {@code sum} on a side of {@code length}. */

@@ -1,6 +1,6 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 
 /**
  * A flattened subtree kept between frames — Flutter's {@code RepaintBoundary}, Qt Quick's batch root.
@@ -13,10 +13,10 @@ import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
  * <pre>{@code
  * RetainedLayer layer = ctx.retain(box, region, box.subtreeRevision());
  * if (layer != null && layer.isFresh()) {
- *     ctx.blitLayer(layer.fbo(), opacity, region);      // nothing under it changed
+ *     ctx.blitLayer(layer.target(), opacity, region);   // nothing under it changed
  *     return;
  * }
- * CgFrameBuffer target = layer != null ? ctx.beginLayerFbo(layer.fbo(), region) : ctx.beginLayerFbo(region);
+ * CgGraphTexture target = layer != null ? ctx.beginLayerFbo(layer.target(), region) : ctx.beginLayerFbo(region);
  * // ...paint the subtree...
  * ctx.endLayerFbo();
  * if (layer != null) layer.painted();
@@ -24,21 +24,21 @@ import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
  * }</pre>
  *
  * <p><b>Null is the ordinary answer</b>, not a failure: a subtree that paints by hand, or one the
- * retention budget will not stretch to, is painted straight into a pooled target as before.</p>
+ * retention budget will not stretch to, is painted into a texture the executor lends for the frame.</p>
  */
 public final class RetainedLayer {
 
-    private final CgFrameBuffer fbo;
+    private final CgGraphTexture target;
 
-    /** The texture this subtree was last flattened into. Owned by {@link CgUiPaintContext}. */
-    public CgFrameBuffer fbo() {
-        return fbo;
+    /** The texture this subtree was last flattened into: made when a frame executes, owned by the paint context. */
+    public CgGraphTexture target() {
+        return target;
     }
 
     /** Where it sat when it was drawn — a layer that moved is redrawn, not slid. */
     LayerRegion region;
 
-    /** The subtree revision {@link #fbo} holds. */
+    /** The subtree revision {@link #target} holds. */
     long revision;
 
     /** The frame it was last asked for, for eviction. */
@@ -47,13 +47,13 @@ public final class RetainedLayer {
     private boolean fresh;
     private long paintedRevision;
 
-    RetainedLayer(CgFrameBuffer fbo, LayerRegion region, long revision) {
-        this.fbo = fbo;
+    RetainedLayer(CgGraphTexture target, LayerRegion region, long revision) {
+        this.target = target;
         this.region = region;
         this.revision = revision;
     }
 
-    /** Whether {@link #fbo} already holds this frame's picture and can simply be composited. */
+    /** Whether {@link #target} already holds this frame's picture and can simply be composited. */
     public boolean isFresh() {
         return fresh;
     }
@@ -63,7 +63,7 @@ public final class RetainedLayer {
         this.paintedRevision = revision;
     }
 
-    /** Records that the caller has just drawn this subtree into {@link #fbo}. */
+    /** Records that the caller has just drawn this subtree into {@link #target}. */
     public void painted() {
         this.revision = paintedRevision;
         this.fresh = true;

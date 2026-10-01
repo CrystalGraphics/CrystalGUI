@@ -4,11 +4,13 @@ import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.api.render.CgFrameData;
+import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
+import com.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
@@ -23,12 +25,21 @@ import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
+import com.crystalgraphics.render.CgImmediate;
+import com.crystalgraphics.render.draw.CgPassConstants;
+import com.crystalgraphics.render.graph.CgFrame;
+import com.crystalgraphics.render.graph.CgFrameBuilder;
+import com.crystalgraphics.render.graph.CgFrameGraph;
+import com.crystalgraphics.render.graph.CgGraphTexture;
+import com.crystalgraphics.render.graph.CgLoad;
+import com.crystalgraphics.render.graph.CgPassRecorder;
+import com.crystalgraphics.render.graph.CgRecording;
+import com.crystalgraphics.render.graph.CgTextureDesc;
 import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.trace.CgFrameImages;
-import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
@@ -53,6 +64,7 @@ import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.function.Consumer;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -62,33 +74,31 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * True immediate-mode 2D paint context for CrystalGUI's box-model layer.
+ * A document's paint context: it records a frame of the document into passes, touching no GL, and hands back a
+ * sealed {@link UiFrame} that {@link UiGpu} executes. One per document, from
+ * {@link com.crystalgui.ui.dom.UIDocument#paintContext()}.
  *
- * <p><b>A true process-wide singleton</b> — one paint context for the whole client, accessed via
- * {@link #getInstance()}, lazily constructed on first use. This reflects reality, not an
- * aspiration: nothing in this codebase ever constructs more than one {@link com.crystalgui.ui.UIWindow}
- * at a time (no split-screen/multi-window support exists anywhere), and {@link #beginFrame} is not
- * reentrant (throws if called without a matching {@link #endFrame}) — a second concurrent
- * {@code UIWindow} painting at the "same time" could not actually be served by a shared instance.
- * Lazy construction matters beyond avoiding needless work: it means simply constructing/using a
- * {@code UIWindow} for pure layout/tree logic (no {@link #beginFrame}/paint call) never eagerly
- * triggers GL material/font loads — a real, if small, step toward running CrystalGUI's tree/layout
- * logic headlessly (e.g. server-side) without a GL context.</p>
+ * <pre>{@code
+ * CgUiPaintContext ctx = document.paintContext();
  *
- * <p>Being static, the instance does <em>not</em> die with the GL context that built it, so whoever
- * owns that lifecycle must call {@link #destroy()} on context destruction — see that method for what
- * is and isn't freed, and why the distinction matters.</p>
+ * ctx.beginFrame(w, h);              // inline: the host's state saved, then recording
+ * document.paint(ctx);
+ * ctx.endFrame();                    // sealed, executed, composited
  *
- * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation. It does <em>not</em> restore
- * {@link CgFrameData}, which it overwrites with a screen-space camera — see {@link #beginFrame} for
- * why that needs no restore and what does.</p>
+ * ctx.recordFrame(w, h);             // or split: record on the document's thread...
+ * document.paint(ctx);
+ * UiGpu.present(ctx.seal());         // ...execute on the render thread
+ * }</pre>
  *
- * <p>Integrates {@link ScissorStack} for nested clip regions — GL scissor is applied
- * at draw time when a scissor rect is active.</p>
+ * <p>Each pass carries its own constants — the frame's time, the target's ortho; no global frame state is read or
+ * written.</p>
  *
- * <p><b>Frame lifecycle</b> — call {@link #beginFrame} once before walking the UI tree,
- * then {@link #endFrame} once after. Every {@code fillRect}/{@code drawImage} call in between draws immediately;
- * there is no recording phase and nothing to flush. This is intentional for now, not merely unoptimized. </p>
+ * <p>Integrates {@link ScissorStack} for nested clip regions: a push sets the scissor the chunks recorded after
+ * it draw under.</p>
+ *
+ * <p><b>Frame lifecycle</b> — call {@link #beginFrame} once before walking the UI tree, then {@link #endFrame} once
+ * after. A draw in between is a chunk in the frame's one recording, which {@link #endFrame} executes; {@link #flush}
+ * ends the open chunks and executes nothing.</p>
  */
 public final class CgUiPaintContext {
 
@@ -105,11 +115,6 @@ public final class CgUiPaintContext {
      */
     private static final float WARM_UI_SCALE = 2f;
 
-    private static final int GPU_UI = CgGpuTrace.name("ui");
-    /** Inside {@link #GPU_UI}, which they pause, so "ui" is what is left: the batched quads, text and icons. */
-    private static final int GPU_LAYER_CLEAR = CgGpuTrace.name("ui.layerClear");
-    private static final int GPU_LAYER_BLIT = CgGpuTrace.name("ui.layerBlit");
-    private static final int GPU_LAYER_MASK = CgGpuTrace.name("ui.layerMask");
     /** {@code namespace:path} resolved through {@link CgIO}'s waterfall (filesystem override →
      * MC resource manager → classpath) — works identically in-game and in the harness/tests,
      * unlike the hardcoded absolute Windows path this replaced ({@code C:\WINDOWS\Fonts\arial.ttf},
@@ -131,85 +136,70 @@ public final class CgUiPaintContext {
             DEFAULT_FONT_ASSET,
     };
 
-    private static CgUiPaintContext instance;
-
-    /** Lazily constructs the singleton on first use. See the class doc for why this must stay lazy. */
     /**
-     * <b>Compiles the shipped materials now, so the first frame that draws does not.</b>
+     * Compiles the shipped materials and builds everything a first frame would, so the first real frame does not.
      *
-     * <p>{@code CgMaterial.load} in the constructor <em>parses</em> a {@code .shader}; the GLSL is
-     * compiled and linked on the first {@code bind}. So constructing this class early bought nothing —
-     * measured, twice: warming by construction alone left the first frame's material bind at 300 ms
-     * against 286 before. Binding each material once is what actually pays the cost.</p>
-     *
-     * <p>Called from {@link com.crystalgui.lifecycle.CgUiLifecycle#onInit}, which is on the GL thread with
-     * a live context by definition. Never call it from anywhere else: a bind outside a frame is only safe
-     * because nothing is mid-draw, and {@code CgGlScope} is not held here.</p>
-     *
-     * <p>Failures are swallowed. A shader that will not compile is a real problem and the first real
-     * frame will report it in the ordinary way; a warm-up must not be the thing that fails a context.</p>
+     * <p>{@code CgMaterial.load} only parses; binding each material once is what pays for the GLSL — measured, a
+     * first-frame material bind fell from 300 ms to 286 by construction alone and to nothing once bound. An empty
+     * frame then builds the executor's buffers, the ring and the GL state save, which were most of a first frame.
+     * Called from {@link com.crystalgui.lifecycle.CgUiLifecycle#onInit}, on the GL thread with a live context.
+     * Failures are swallowed: a warm-up must not be what fails a context, and the first real frame reports them.</p>
      */
-    public void warm(int width, int height) {
-        // Leaks the Pass RenderState of every material below — doBind applies it, unbind() restores
-        // none of it. Scoped by CgUiLifecycle.onInit, which wraps the construction too; no scope here.
-        for (CgMaterial material : new CgMaterial[] { boxModelMaterial, curveMaterial, layerBlitMaterial }) {
-            try {
-                material.bind();
-                material.unbind();
-            } catch (RuntimeException | LinkageError ignored) {
-                // See the note above: an optimisation that fails is silent.
-            }
-        }
-        // AND THE TWO ASSET CACHES, both off the render thread. Neither needs GL, which is what makes
-        // them a removal rather than a move -- see each method.
-        preloadIcons();
-        warmGlyphs(WARM_UI_SCALE);
-
-        // AND ONE EMPTY FRAME, which is the larger half. Compiling the shaders left the first real
-        // beginFrame at 252 ms against 285 -- so most of that cost was never the GLSL: it is the quad
-        // renderer's VAO and instance buffer, the text renderer, the scissor stack and the GL state
-        // save, all built on first use inside this call. A frame that draws nothing pays for all of
-        // them and leaves nothing on screen.
+    public static void warm(int width, int height) {
+        CgUiPaintContext context = create();
         try {
-            beginFrame(Math.max(1, width), Math.max(1, height));
-            endFrame();
-        } catch (RuntimeException | LinkageError e) {
-            // Not silent like the materials: a beginFrame that threw after marking the frame active left
-            // it active, and every later frame then refused to begin -- a warm-up that broke the context.
-            abortFrame();
-            CrystalGuiCore.LOGGER.warn("[cgui] paint warm-up failed; the first real frame builds it instead", e);
+            // Leaks the Pass RenderState of every material below — doBind applies it, unbind() restores none of
+            // it. Scoped by CgUiLifecycle.onInit; no scope here.
+            for (CgMaterial material : new CgMaterial[] {
+                    context.boxModelMaterial, context.curveMaterial, context.layerBlitMaterial }) {
+                try {
+                    material.bind();
+                    material.unbind();
+                } catch (RuntimeException | LinkageError ignored) {
+                    // An optimisation that fails is silent.
+                }
+            }
+            // AND THE TWO ASSET CACHES, both off the render thread and neither needing GL.
+            preloadIcons();
+            warmGlyphs(WARM_UI_SCALE);
+            try {
+                context.beginFrame(Math.max(1, width), Math.max(1, height));
+                context.endFrame();
+            } catch (RuntimeException | LinkageError e) {
+                // Not silent: a frame left open would refuse every later one.
+                context.abortFrame();
+                CrystalGuiCore.LOGGER.warn("[cgui] paint warm-up failed; the first real frame builds it instead", e);
+            }
+        } finally {
+            context.release();
         }
     }
 
     /** Leaves a frame that threw part-way: its batches closed, its GL state back, and no frame open. */
     private void abortFrame() {
-        unparkSamplers();
         endTextPath();
-        renderer.end();   // safe unbegun: begin() may be what never ran
-        if (glScope != null) {
-            glScope.close();
-            glScope = null;
-        }
+        renderer.end();   // safe unbegun: begin() may be what never ran; what it flushes goes with the recording
+        recordFlushes(false);
+        recorder.abandon();
+        recording.reset();
+        present.reset();
+        imported.clear();
+        layerStack.clear();
+        gpu.abortFrame();
         frameActive = false;
     }
 
-    private boolean samplersParked;
-
-    private void unparkSamplers() {
-        if (!samplersParked) return;
-        samplersParked = false;
-        CgHostSamplers.unpark();
-    }
-
-    public static CgUiPaintContext getInstance() {
-        if (instance == null) {
-            // Built on first paint, before any frame's scope: its targets, renderers and first material
-            // binds would otherwise stay bound for the host.
-            try (CgGlScope ignored = CgGlState.saveAll()) {
-                instance = new CgUiPaintContext();
-            }
+    /**
+     * A paint context for one document — {@link com.crystalgui.ui.dom.UIDocument#paintContext()} makes it. On the render
+     * thread: its font and text renderer are set up there.
+     */
+    public static CgUiPaintContext create() {
+        // Before any frame's scope: what construction binds would otherwise stay bound for the host.
+        try (CgGlScope ignored = CgGlState.saveAll()) {
+            CgUiPaintContext context = new CgUiPaintContext();
+            context.gpu.track(context);
+            return context;
         }
-        return instance;
     }
 
     private final CgMaterial boxModelMaterial;
@@ -233,6 +223,8 @@ public final class CgUiPaintContext {
      * hand-back. Neither reads as a mask bug.</p>
      */
     private final CgMaterial maskMaterial;
+    /** {@link #maskMaterial}'s pass state with the alpha-multiply blend a mask composite draws under, and its base. */
+    private CgRenderState maskState, maskStateBase;
 
     /**
      * Dedicated material for {@link #blitLayer}, distinct from {@link #boxModelMaterial}.
@@ -295,61 +287,86 @@ public final class CgUiPaintContext {
     @Getter
     private final CgTextRenderer textRenderer;
 
-    // ── GL state isolation ──────────────────────────────────────────────────
-    private CgGlScope glScope;
+    /** The GL half: the frame target, the host's state, execution. */
+    private final UiGpu gpu;
 
-    // ── Visual layers (offscreen FBO compositing) ───────────────────────────
-    // Screen-sized, not element-sized: draws inside a layer use the same absolute screen
-    // coordinates (runtimeCache.getX()/getY()) as the normal path, so nothing needs translating —
-    // matches LDLib2's own "off-target spans the full window" approach for the same reason.
+    // ── Visual layers ────────────────────────────────────────────────────────
     int screenWidth, screenHeight;
     long frameId;
-    private final LayerPool layerFboPool = new LayerPool(this::warmUpLayer);
     /** One saved frame per nested {@link #beginLayerFbo}/{@link #endLayerFbo} pair. */
     final Deque<LayerFrame> layerStack = new ArrayDeque<>();
 
     /**
+     * @param target       what the layer is drawn into, as the frame's recording names it
+     * @param enclosingWidth the size of the target around it, whose ortho comes back at the end
      * @param savedScissor the clip stack as the ENCLOSING target expressed it. A bounded layer has its
      *                     own origin, so every rect on the stack is shifted into its space on the way
-     *                     in and this is what puts them back â€” the stack always describes whatever is
-     *                     bound right now, which is what lets {@code applyScissorIfNeeded} stay a
+     *                     in and this is what puts them back — the stack always describes the target
+     *                     being drawn into, which is what lets {@code applyScissorIfNeeded} stay a
      *                     one-argument flip.
      */
-    record LayerFrame(CgFrameBuffer fbo, CgGlScope glScope, Matrix4f savedProjMatrix,
-                               int savedViewportW, int savedViewportH, int[] savedScissor,
-                               @Nullable LayerRegion region, int savedClip) {
+    record LayerFrame(CgGraphTexture target, int enclosingWidth, int enclosingHeight, int[] savedScissor,
+                      @Nullable LayerRegion region, int savedClip) {
     }
     
     static final CgFrameBufferFormat LAYER_FORMAT = CgFrameBufferFormat.builder("cgui_layer")
                          .color(0, CgTextureType.RGBA8).build();
 
 
-    // ── The frame's own target ────────────────────────────────
+    // ── The frame as recorded ────────────────────────────────────────────────
     //
-    // The whole tree paints into a buffer of ours and is composited onto the host's target once, so the
-    // finished picture is a texture this engine owns: the backdrop samples it, a readback sees the UI
-    // rather than the world behind it, and its format is the same on every loader. One screen-sized
-    // RGBA8 and one full-screen quad per frame.
-    //
-    // NOT MULTISAMPLED, and it was until the quad materials learned to antialias themselves
-    // (CG_QUAD_EDGE_* in cg_env.glsl; everything else here is analytic coverage already). Four samples
-    // bought a 33MB renderbuffer at 1920x1080 that had to be RESOLVED before anything could read it:
-    // once in endFrame, and again on every backdrop capture, which is what made the capture expensive.
-    // A colour TEXTURE is sampleable as it stands, so one buffer does what the multisampled pair did.
-    // What it gives up is the case analytic coverage cannot reach — geometry finer than one sample, a
-    // graph wire zoomed far out. Measured against the pair: no visible difference, 0.1-0.4 ms/frame.
-    /** Built once, in the constructor — real dimensions aren't known that early (no frame has run
-     * yet), so this starts 1x1 and {@link #beginFrame} resizes it in place, the same way every other
-     * screen-sized FBO in this file already tracks the window. */
-    final CgFrameBuffer frameFbo = CgFrameBuffer.createOwned("cgui_frame", 1, 1, LAYER_FORMAT);
+    // Every target's draws are chunks in passes of ONE recording, executed in endFrame. A layer is a pass on a
+    // transient texture the executor pools; the target around it ends its pass at the layer and continues in
+    // another after, so passes are created in the order they must run and every read follows the write it sees.
+
+    private final CgRecording recording = new CgRecording();
+    /** What every renderer of this context flushes into: the passes of {@link #recording} or {@link #present}. */
+    private final CgPassRecorder recorder = new CgPassRecorder();
+    /** The finished frame onto the host's target, recorded and executed once the host's target is bound again. */
+    private final CgRecording present = new CgRecording();
+    /** The pass block of the target being drawn into: the frame's time, the target's ortho and size. */
+    private final CgPassConstants passConstants = new CgPassConstants();
+    /** The frame's own target, as the recording names it: {@link UiGpu}'s. */
+    final CgGraphTexture frameTarget;
+    /** Builds a sealed frame's two recordings; the frames come back to it when presented. */
+    private final CgFrameBuilder builder = new CgFrameBuilder();
+    private final CgFrameGraph graph = new CgFrameGraph();
+    /** A caller's framebuffer as the recording names it: one per framebuffer a frame, so a read finds its write. */
+    private final Map<CgFrameBuffer, CgGraphTexture> imported = new IdentityHashMap<>();
+
+    /** {@code fbo} as this frame's recording names it. */
+    CgGraphTexture imported(CgFrameBuffer fbo) {
+        if (fbo == gpu.frameFbo) return frameTarget;
+        CgGraphTexture target = imported.get(fbo);
+        if (target == null) imported.put(fbo, target = CgGraphTexture.imported("cgui_target", fbo));
+        return target;
+    }
+
+    /**
+     * Runs {@code body} with GL when the frame executes, after everything recorded before this call, with
+     * {@code target} bound: for drawing that is not recorded, such as a blit of a framebuffer this engine did not
+     * write.
+     */
+    void recordCallback(String name, CgGraphTexture target, Runnable body) {
+        drain();
+        recording.callback(name, target, body);
+    }
+
+    /** Points the pass constants at a {@code width x height} target, top-left origin; chunks from now take them. */
+    private void targetConstants(int width, int height) {
+        passConstants.view.identity();
+        passConstants.projection.identity().ortho(0, width, height, 0, -1, 1);
+        passConstants.resolution(width, height);
+        recorder.constants(passConstants);
+    }
 
     // ── Scissor ─────────────────────────────────────────────────────────────
     @Getter
-    private final ScissorStack scissorStack = new ScissorStack();
+    private final ScissorStack scissorStack = new ScissorStack(recorder);
 
     // ── State elision ───────────────────────────────────────────────────────
     @Getter
-    private CgTexture2D currentTexture;
+    private CgTexture currentTexture;
     @Getter
     boolean frameActive;
 
@@ -410,6 +427,8 @@ public final class CgUiPaintContext {
     private int color = 0xFFFFFFFF;
 
     private CgUiPaintContext() {
+        this.gpu = UiGpu.get();
+        this.frameTarget = gpu.frameTarget;
         this.poseStack = new PoseStack();
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
@@ -430,6 +449,15 @@ public final class CgUiPaintContext {
                 bindQuadPath(boxModelMaterial);
                 currentTexture = null;
             });
+    }
+
+    /**
+     * Inside a frame everything this context's renderers flush is recorded; outside one they draw at once, as any
+     * renderer does — a scene drawing a label over the finished frame uses them that way.
+     */
+    private void recordFlushes(boolean recorded) {
+        renderer.sink(recorded ? recorder : null);
+        textRenderer.sink(recorded ? recorder : null);
     }
 
     /**
@@ -585,11 +613,6 @@ public final class CgUiPaintContext {
     // ── Frame lifecycle ─────────────────────────────────────────────────────
 
     /**
-     * Saves GL state via {@link CgGlScope}, overwrites {@link CgFrameData} with an orthographic
-     * screen-space projection, and binds the shared box-model material. Call once per frame before
-     * {@code rootElement.drawSubtree(ctx)}.
-     */
-    /**
      * Monotonic frame counter, for work a drawable wants to rate-limit to once per frame.
      *
      * <p>Exposed as a plain token rather than a callback so the dependency points the right way: a
@@ -597,6 +620,13 @@ public final class CgUiPaintContext {
      */
     public long frameId() {
         return frameId;
+    }
+
+    private final SvgDocument.LodBudget svgLodBudget = new SvgDocument.LodBudget();
+
+    /** What this paint has spent building icon mesh tiers this frame. */
+    public SvgDocument.LodBudget svgLodBudget() {
+        return svgLodBudget;
     }
 
     /**
@@ -636,95 +666,38 @@ public final class CgUiPaintContext {
         return mirrorDepth > 0;
     }
 
+    /**
+     * Starts a frame inline: saves the host's GL state, then {@link #recordFrame}. Pair with {@link #endFrame}. GL a
+     * paint hook still issues while recording is inside the saved state.
+     */
     public void beginFrame(int screenWidth, int screenHeight) {
-        frameId++;
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
-        // What the host handed us, off unless -Dcrystalgraphics.host.census. Before the scope reads anything.
-        CgGlCensus.at("gui");
-        // Everything the UI asks of the GPU this frame, the composite included. @see #endFrame
-        CgGpuTrace.begin(GPU_UI);
+        gpu.beginFrame(screenWidth, screenHeight);
+        recordFrame(screenWidth, screenHeight);
+    }
+
+    /**
+     * Starts recording a frame of {@code screenWidth x screenHeight} into the frame's own target. Touches no GL. Pair
+     * with {@link #seal}, which hands back what {@link UiGpu#present} executes.
+     */
+    public void recordFrame(int screenWidth, int screenHeight) {
+        frameId++;
+        if (frameActive) throw new IllegalStateException("recordFrame() called without matching seal()");
         layerOriginX = 0;
         layerOriginY = 0;
         setClip(0);
         clearPainted();
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
-
-        // Save GL state before UI rendering — FBO included specifically so the frame's own
-        // redirect below has something to restore back to. No raw glGetInteger query: CgGlState
-        // already shadows the current binding for exactly this purpose, and endFrame's early
-        // glScope.close() (see its own note) is what puts the real target back before compositing.
-        glScope = CgGlState.save(
-                CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
-                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.SCISSOR, CgGlSlot.COLOR_MASK,
-                // The host's VAO back: Minecraft 1.17+ skips its own bind while it believes its VAO is
-                // still current, so leaving ours bound failed its next GUI draw ("Array object is not active").
-                CgGlSlot.VERTEX_INPUT);
-        // ALPHA_TEST is saved above only so the host gets it back; this is what turns it off, before
-        // anything of ours draws. @see #disableFixedFunctionAlphaTest
-        disableFixedFunctionAlphaTest();
-
-        // Every channel, alpha included. A host that leaves alpha writes off (1.21.6+ does) leaves the
-        // frame's alpha at 0 through the clear and every draw, and the premultiplied composite then
-        // ADDS the UI to the scene -- a pale desktop with the world showing through it.
-        CgGL.glColorMask(true, true, true, true);
-
-        // A frame owns the whole surface, so a clip the host left enabled would clip the clear below and
-        // every draw after it. SCISSOR is in the save list above for the other direction: popScissor
-        // disables the test once the stack empties, and the host may have wanted it on.
         scissorStack.reset();
-        CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
+        recorder.noScissor();
+        backdrop.beginFrame();
 
-        // The host's sampler objects override our textures' filtering and wrapping on the units they hold
-        // (Minecraft 1.21.5+ leaves three bound). Off until endFrame's composite, which samples too.
-        CgHostSamplers.park();
-        samplersParked = true;
-
-        // BEFORE the redirect, because the redirect is what hides it. @see #sceneFboId
-        backdrop.captureSceneTarget();
-
-        // The frame's own target — see the note above frameFbo for what owning it buys.
-        int w = Math.max(1, screenWidth), h = Math.max(1, screenHeight);
-        if (frameFbo.getWidth() != w || frameFbo.getHeight() != h) frameFbo.resize(w, h);
-        // The clearColor below outlives this frame — CgFrameBuffer.clear scopes FBO alone and no
-        // CgGlSlot models a clear value. Not ours to fix here (every caller of it leaks the same way)
-        // and harmless against MC, which sets glClearColor immediately before each of its own clears.
-        // Clear DEPTH is never touched: clearColor() passes GL_COLOR_BUFFER_BIT alone, and that one
-        // WOULD matter — MC writes glClearDepth once at startup, like the glDepthFunc it sets there.
-        // THE FULL-SCREEN CLEAR, timed apart from the rest of beginFrame. gl:begin was measured at 33ms
-        // in a client, and this is the only thing in it that touches every pixel of the surface.
-        long cleared = CgTrace.stamp(UiTrace.FRAME);
-        frameFbo.bind();
-        frameFbo.clearColor(0f, 0f, 0f, 0f);
-        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:frameClear", cleared);
-
-        // Overwritten and deliberately NOT restored — the javadoc used to claim otherwise and was
-        // corrected rather than implemented. CgFrameData is per-frame scratch that every consumer
-        // repopulates before executing a pass, so at frame level nothing reads what we leave. NESTED
-        // draws are the case that does need it, and already have it: CgPreviewRenderer copies the
-        // camera out and back, because its caller is this frame. Restoring here also costs more than
-        // it saves — prepareFrame() moves the active texture unit, so it needs a TEXTURES scope of its
-        // own or MC's fixed-function present samples the wrong unit and the window goes white.
-        CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
-        CgFrameData fd = pipeline.getFrameData();
-        // Set ortho projection for UI
-        fd.viewMatrix.identity();
-        fd.projMatrix.identity().ortho(0, screenWidth, screenHeight, 0, -1, 1);
-        fd.viewportW = screenWidth;
-        fd.viewportH = screenHeight;
-        // EACH STEP OF beginFrame TIMED SEPARATELY. `gl:begin` was measured at 19.9ms on the frame after
-        // a tab closes, with `glbegin:frameClear` -- the only thing in here that touches every pixel --
-        // never even reaching the report threshold. So the cost is one of the four below, and they have
-        // nothing in common: a UBO upload, a projection write plus an atlas tick, a buffer rewind, and a
-        // material bind that compiles on its first use.
-        long timed = CgTrace.stamp(UiTrace.FRAME);
-        pipeline.prepareFrame();
-        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:prepareFrame", timed);
-
+        // EACH STEP OF beginFrame TIMED SEPARATELY: `gl:begin` was measured at 19.9ms on the frame after a tab
+        // closes, and the steps below have nothing in common.
         // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
         // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
-        timed = CgTrace.stamp(UiTrace.FRAME);
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.context().updateOrtho(screenWidth, screenHeight);
         CgTrace.zoneDone(UiTrace.FRAME, "glbegin:textOrtho", timed);
 
@@ -737,6 +710,13 @@ public final class CgUiPaintContext {
         CgTrace.zoneDone(UiTrace.FRAME, "glbegin:bindQuadPath", timed);
         currentMaterial = boxModelMaterial;
         currentTexture = null;
+        // Every flush from here is a chunk in the frame's recording, starting with the frame target's clear; nothing
+        // executes until endFrame.
+        // The frame's clock, which a material reading CG_TIME animates by -- a shader graph's Time node.
+        passConstants.time(CgRenderPipeline.getInstance().frameTime());
+        targetConstants(screenWidth, screenHeight);
+        recordFlushes(true);
+        recorder.recordInto(recording, frameTarget, CgLoad.clear(0f, 0f, 0f, 0f), passConstants);
         frameActive = true; // must be set before the pool warms a slot — quad() requires an active frame
 
         // AFTER frameActive, with the pool's own warm-up, because warming a target SUBMITS A QUAD and
@@ -746,170 +726,56 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Turns off the host's fixed-function alpha test for the duration of a UI pass.
-     *
-     * <p><b>Minecraft 1.7.10 enables {@code GL_ALPHA_TEST} with {@code glAlphaFunc(GL_GREATER, 0.1)} in
-     * {@code Minecraft.startGame()} and leaves it on through GUI rendering</b>, and a compatibility
-     * profile applies that test to programmable-pipeline draws exactly as it does to fixed-function
-     * ones. Nothing on our side models alpha testing — {@code CgRenderState} carries blend, depth, cull
-     * and stencil and no alpha — so a material's {@code RenderState} neither sets it nor clears it, and
-     * whatever the host left on is what every quad, glyph, gradient and glass surface is drawn under.
-     * The result is that <b>every fragment the UI draws at 10% alpha or less is discarded</b>: not
-     * dimmed, not faded — cut, with a hard edge exactly where the alpha crosses the reference.</p>
-     *
-     * <p>Measured on the taskbar's accent glow, which is
-     * {@code linear-gradient(90deg, transparent 18%, #3574F033 50%, transparent 82%)} across a
-     * 1999px bar. It should be a wash covering the middle two thirds; in a client it was a hard-edged
-     * band from x=642 to x=1347 — the ramp <em>inside</em> the band exactly the right one, both ends
-     * cut where the gradient's alpha passed 0.105. So the geometry, the axis, the stop positions and
-     * the premultiplied interpolation were all correct and the picture was still wrong, which is why
-     * six of the seven things one would check first are the gradient's.</p>
-     *
-     * <p><b>The harness cannot see any of this, by construction.</b> It runs an LWJGL3 context with no
-     * fixed-function alpha test to leave on, so the identical CSS is correct there and there is no
-     * scene, no probe and no readback that can be written to reproduce it. It is the loader-seam class
-     * of defect, one layer below the ones {@code serverSmoke} exists for.</p>
-     *
-     * <p><b>What it reaches is decided by a fragment's OUTPUT alpha, not by any alpha in the CSS.</b>
-     * A {@code backdrop-filter} tint at 7.5% is an input to a mix inside the shader and the surface still
-     * writes its coverage, so the acrylic panels were never affected — the ones that are: a
-     * {@code background-color} at or under 10% (Fluent's subtle fills, 6% and 3.5%, were discarded
-     * whole), the transparent shoulder of any gradient, the outermost sliver of every anti-aliased SDF
-     * edge, and the opening frames of any layer composited at a low opacity. All of those read as "the
-     * translucent parts are missing" or "the soft edges are hard", never as one GL flag.</p>
-     *
-     * <p><b>Called twice per frame</b>, because {@link #endFrame} closes the frame's own scope early —
-     * before the composite that puts the finished picture on the host's target — so the host's alpha
-     * test is live again for that one draw. That draw clips by the picture's <em>accumulated</em>
-     * alpha, which would take a 7% panel away whole rather than merely cutting its shoulders.</p>
-     *
-     * <p>Guarded on the profile rather than left to the state manager's deduplication: on a core
-     * profile {@code glDisable(GL_ALPHA_TEST)} is {@code GL_INVALID_ENUM}, and while
-     * {@code CgGlGetProvider.readAlpha} already reports the slot as disabled there — so the call would
-     * be eliminated today — that is a property of when the shadow was last trusted, not a guarantee.</p>
-     */
-    private static void disableFixedFunctionAlphaTest() {
-        if (CgCapabilities.detect().isCoreProfile()) return;
-        CgGL.glDisable(CgGL.GL_ALPHA_TEST);
-    }
-
-    /*
-     * THE EAGER POOL WARM-UP IS GONE, and the reason is the whole point of bucketing. It created three
-     * screen-sized targets on the first frame so a masked element with children would not meet a cold
-     * FBO -- but a layer is now sized to its element, so which slot the first real one takes is not
-     * knowable in advance, and priming the full-screen bucket only guessed wrong at 8MB a go. Every
-     * slot LayerPool creates is warmed as it is created, which the note below always called the
-     * load-bearing part of the fix. @see #warmUpLayer
-     */
-
-    /**
      * Unbinds the box-model material and restores GL state via the saved {@link CgGlScope}. Call once
      * after the whole UI tree has painted.
      */
     public void endFrame() {
         if (!frameActive) return;
-        sweepRetained();
+        gpu.endFrame(seal());
+    }
 
-        // No explicit unbind: CgQuadRenderer owns bind/unbind (see CgUiRenderer#useMaterial), and the
-        // PROGRAM slot saved by beginFrame's CgGlScope restores whatever program was bound before the
-        // UI painted anyway — which is the restoration that actually matters to the 3D pipeline.
-        // Flush BEFORE end(): both renderers' flush() early-returns once begun is false, so anything
-        // still queued at this point would be dropped without a word. Nothing hit that while every
-        // draw path flushed eagerly (fillRect/drawImage both do), but ctx.quad()/ctx.curve() are
-        // public and explicitly documented as "submit() queues, flush() draws" — so a caller batching
-        // a few strokes and letting the frame end is using the API exactly as described. Drawing them
-        // is the only defensible reading; the pose stack is still intact here and flush() reads none
-        // of it anyway, since the pose was baked at submit() time.
-        // Text first: it owns a separate renderer whose batch, if a caller left one open, would otherwise
-        // flush after the frame's GL scope is torn down. Lenient when no batch is active.
-        // SPLIT, because gl:end is two unrelated things and one of them was measured at 48ms in a
-        // client while every CPU phase in that frame was under 2ms. Draining our own queued draws and
-        // compositing the frame onto the real target fail for different reasons -- and a composite that
-        // blocks is the GPU being behind, which no amount of tuning our traversal would ever touch.
+    /**
+     * Ends the frame {@link #recordFrame} started and builds it: ordered, batched and packed, with nothing left that
+     * refers to this context, which may record its next frame at once. Touches no GL.
+     */
+    public UiFrame seal() {
+        if (!frameActive) throw new IllegalStateException("seal() without recordFrame()");
+        sweepRetained();
         long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.endBatch();
         renderer.flush();
+        recorder.stop();
+        recordPresent();
         CgTrace.zoneDone(UiTrace.FRAME, "glend:flush", timed);
 
-        // The finished picture, before it goes anywhere: frameFbo holds exactly what this frame drew.
         timed = CgTrace.stamp(UiTrace.FRAME);
-        captureFrameImage();
-        CgTrace.zoneDone(UiTrace.FRAME, "glend:captureImage", timed);
-
-        // Composite the frame's own target (see beginFrame/frameFbo) back onto whatever the real
-        // target was. Closing glScope HERE — early, not at this method's usual end — is what puts
-        // that target back (it saved CgGlSlot.FBO in beginFrame): blitLayer() right after draws a real
-        // quad through the normal quad() path, which needs the real target actually bound, and needs an
-        // active frame the same as any other draw call in this class, which is why this whole block
-        // still runs before frameActive is cleared.
-        if (glScope != null) {
-            // Timed: the first GL call after a long frame's submission is where a driver whose queue is
-            // full makes the CPU wait for the GPU.
-            timed = CgTrace.stamp(UiTrace.FRAME);
-            glScope.close();
-            glScope = null;
-            CgTrace.zoneDone(UiTrace.FRAME, "glend:restoreState", timed);
+        UiFrame frame;
+        try {
+            frame = new UiFrame(build(recording), build(present), builder, screenWidth, screenHeight);
+        } finally {
+            recording.reset();
+            present.reset();
+            imported.clear();
+            recordFlushes(false);
         }
-        // Full opacity — the frame texture already carries whatever per-element opacity the UI tree
-        // itself applied while painting into it; this composite is the "put the finished picture
-        // on screen" step, not another opacity multiply.
-        //
-        // SCOPED, because this draw happens AFTER glScope.close() above and would otherwise be the one
-        // piece of UI state nothing restores. blitLayer binds a material — so on return from endFrame a
-        // shader program of ours is still current, with the frame's own restore already spent.
-        //
-        // In the harness that is invisible: nothing else in that process draws, so a stale program is
-        // never observed. Minecraft observes it immediately. Its final present is
-        // Framebuffer.framebufferRender, which is pure fixed-function — GL_TEXTURE_2D, GL_COLOR_MATERIAL
-        // and a Tessellator quad — and it never calls glUseProgram(0). So Minecraft's blit of its own
-        // framebuffer to the window runs through OUR vertex shader, which expects instanced quad data
-        // out of an SSBO and gets immediate-mode vertices instead.
-        //
-        // The symptom is genuinely bewildering: the UI renders CORRECTLY into Minecraft's framebuffer —
-        // a glReadPixels there shows the whole editor — while the window shows a flat fill, because the
-        // step between the two is broken rather than the drawing. Anything that reads the framebuffer
-        // (a screenshot tool, a capture) therefore disagrees with the screen.
-        //
-        // THE SLOTS ARE EVERYTHING A MATERIAL BIND CAN WRITE, not just the PROGRAM + TEXTURES the bug
-        // above names: blitLayer applies gui_layer_blit's whole RenderState (Blend, DepthTest ALWAYS,
-        // DepthWrite OFF, Cull OFF) and the frame's own scope closed six lines up. Measured leaving MC
-        // with depthTest on, depthWriteMask false and blend on — a world drawn with no depth
-        // arbitration, so terrain stops occluding its own caves. Listed as the full set CgRenderState
-        // can write, so the next material to declare Stencil or ColorMask does not start it again.
-        //
-        // ALPHA_TEST IS IN THE LIST AND IS DISABLED AGAIN INSIDE, because glScope.close() six lines up
-        // has just handed the host's alpha test back and this is a real draw of the whole finished
-        // picture. Where the frame's own disable protects each element's fragments, this one protects
-        // the COMPOSITE, which is clipped by the accumulated alpha instead — so a panel drawn correctly
-        // at 7% would arrive complete in the layer and then be discarded whole on the way to the
-        // screen. @see #disableFixedFunctionAlphaTest
-        try (CgGlScope blitScope = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
-                CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
-                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.VERTEX_INPUT)) {   // the host's VAO, as in beginFrame
-            disableFixedFunctionAlphaTest();
-            blitLayer(frameFbo, 1f);
-            // THE HOST'S OWN TARGET, and the last thing this class can observe. Content here with a flat
-            // fill on screen means the presenting broke, not the drawing — which is the reading the
-            // comment above has described for two loaders without anything ever measuring it.
-        }
-        unparkSamplers();
+        CgTrace.zoneDone(UiTrace.FRAME, "glend:build", timed);
 
         currentMaterial = null;
         currentTexture = null;
         frameActive = false;
         renderer.end();
-
         poseStack.popPose();
-
         if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
+        return frame;
+    }
 
-        CgGpuTrace.end();
-
-        // THE OTHER HALF OF THE FRAME THE DOCUMENT OPENED, and last of all so the composite above is
-        // in it. Reports and clears; a no-op when nothing opened one, which is
-        // every headless document. @see UIDocument#frame
-        UiTrace.frameEnd();
+    private CgFrame build(CgRecording what) {
+        try {
+            graph.add(what.seal());
+            return builder.build(graph);
+        } finally {
+            graph.clear();
+        }
     }
 
     // ── Public draw API ─────────────────────────────────────────────────────
@@ -1139,18 +1005,17 @@ public final class CgUiPaintContext {
      * off screen while sliders and icons still drew.
      */
     public void bindCompositeTexture(CgTexture2D texture) {
-        CgGlState.manager().invalidate(CgGlSlot.TEXTURES);
         currentTexture = null;
         bindTexture(texture);
     }
 
-    public void bindTexture(CgTexture2D texture) {
+    public void bindTexture(CgTexture texture) {
         if (texture == currentTexture) return;
         // Whatever is queued was submitted against the texture bound NOW: switching first would draw it
         // with this one. A cached icon relies on this -- it submits its quad and leaves the flush to
         // whoever changes the texture next, so a run of icons from the atlas is one draw.
         renderer.flushQuads();
-        texture.bind(0);
+        renderer.bindTexture(0, texture);   // recorded: the draw binds it when it executes
         currentTexture = texture;
     }
 
@@ -1429,6 +1294,15 @@ public final class CgUiPaintContext {
     }
 
     /**
+     * {@link #flush}, then ends the target's open pass, so what it holds so far is what a pass recorded next reads:
+     * for a caller about to read the target. Drawing goes on in a pass of its own.
+     */
+    void drain() {
+        flush();
+        recorder.endPass();
+    }
+
+    /**
      * Whether a logical-space box could put anything on screen — a cheap reject before building geometry.
      *
      * <h3>Why this lives here and not on the drawable</h3>
@@ -1560,12 +1434,12 @@ public final class CgUiPaintContext {
      * the rect pushed during the render, which has to be flipped against the buffer it lands in.</p>
      */
     private int targetWidth() {
-        return layerStack.isEmpty() ? screenWidth : layerStack.peek().fbo().getWidth();
+        return layerStack.isEmpty() ? screenWidth : layerStack.peek().target().getWidth();
     }
 
     /** @see #targetWidth() */
     private int targetHeight() {
-        return layerStack.isEmpty() ? screenHeight : layerStack.peek().fbo().getHeight();
+        return layerStack.isEmpty() ? screenHeight : layerStack.peek().target().getHeight();
     }
 
     /**
@@ -1684,7 +1558,7 @@ public final class CgUiPaintContext {
      */
     public boolean pushRoundedClip(float x, float y, float w, float h, float[] rx, float[] ry,
                                    @Nullable float[] border) {
-        int entry = CgClipTable.add(clipEntry, poseStack.last().pose(), targetHeight(), x, y, x + w, y + h,
+        int entry = recording.clips().add(clipEntry, poseStack.last().pose(), targetHeight(), x, y, x + w, y + h,
                 rx, ry, border);
         if (entry < 0) return false;
         CgTrace.add(UiTrace.FRAME, "clips-rounded", 1);
@@ -1694,7 +1568,7 @@ public final class CgUiPaintContext {
 
     /** Ends the innermost {@link #pushRoundedClip} that answered true. */
     public void popRoundedClip() {
-        setClip(CgClipTable.parent(clipEntry));
+        setClip(recording.clips().parent(clipEntry));
     }
 
     /** The entry {@link CgUiRenderer} stamps on each instance. */
@@ -1918,9 +1792,18 @@ public final class CgUiPaintContext {
         clipY1 = region != null ? region.height() : targetHeight();
     }
 
-    /** Acquires (creating on first use) the pooled layer FBO for a nesting depth and a wanted size. */
-    private CgFrameBuffer acquireLayerFbo(int depth, int width, int height) {
-        return layerFboPool.acquire(depth, width, height, Math.max(1, screenWidth), Math.max(1, screenHeight));
+    /**
+     * A layer's texture: each side a power of two from 32 up, never past the screen, so a layer that resizes by a
+     * pixel keeps its size class and the executor's pool hands back the same texture next frame.
+     */
+    private CgTextureDesc layerDesc(int width, int height) {
+        return new CgTextureDesc(sizeClass(width, screenWidth), sizeClass(height, screenHeight), LAYER_FORMAT);
+    }
+
+    private static int sizeClass(int size, int screen) {
+        int bucket = 32;
+        while (bucket < size && bucket < 32 << 8) bucket <<= 1;
+        return Math.max(1, Math.min(Math.max(1, screen), bucket));
     }
 
     // ── Retained layers ──────────────────────────────────────────────────────
@@ -1981,7 +1864,7 @@ public final class CgUiPaintContext {
             layer.lastFrame = frameId;
             // Too small is a miss; MUCH too big is one as well. An element that was 800px and is now 40
             // would otherwise keep its 832px texture for as long as it stayed on screen.
-            int held = layer.fbo().getWidth(), tall = layer.fbo().getHeight();
+            int held = layer.target().getWidth(), tall = layer.target().getHeight();
             boolean fits = held >= region.width() && tall >= region.height()
                     && held <= Math.max(64, region.width() * 2) && tall <= Math.max(64, region.height() * 2);
             if (fits) {
@@ -2025,10 +1908,10 @@ public final class CgUiPaintContext {
         candidates.remove(key);
 
         long timed = CgTrace.stamp(UiTrace.FRAME);
-        CgFrameBuffer fbo = CgFrameBuffer.createOwned("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);
-        warmUpLayer(fbo);
+        CgGraphTexture target = requestTexture("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);
+        warmUpLayer(target);
         CgTrace.zoneDone(UiTrace.FRAME, "retain:createFbo", timed);
-        layer = new RetainedLayer(fbo, region, revision);
+        layer = new RetainedLayer(target, region, revision);
         layer.lastFrame = frameId;
         layer.setFresh(false, revision);
         retained.put(key, layer);
@@ -2077,69 +1960,49 @@ public final class CgUiPaintContext {
     }
 
     private void release(RetainedLayer layer) {
-        retainedBytes -= (long) layer.fbo().getWidth() * layer.fbo().getHeight() * 4L;
-        layer.fbo().delete();
+        retainedBytes -= (long) layer.target().getWidth() * layer.target().getHeight() * 4L;
+        releaseTexture(layer.target());
     }
 
     /**
-     * Cold-draws a fully transparent, immediately-discarded quad into a freshly-created layer FBO
-     * via {@link #layerBlitMaterial}, once, right when that FBO is created.
+     * Draws a fully transparent quad into a framebuffer this context will draw into later, as its first draw.
      *
-     * <p>Root cause this works around: the very first masked/opacity element painted anywhere in
-     * the process's life is also the first point {@link #layerBlitMaterial} (compiled lazily, on
-     * its own first {@code bind()}) ever draws into a brand-new, never-drawn-to FBO — on at least
-     * one NVIDIA driver, that specific "cold program's first draw into a cold FBO, same frame"
-     * coincidence has been observed to silently produce nothing (verified via frame-by-frame
-     * capture: the masked content is simply missing on frame 1, then permanently correct from frame
-     * 2 onward). Forcing that same coincidence to happen here — right when the slot is created,
-     * against throwaway content nobody reads — means whatever real content later reuses this exact
-     * pool slot never hits a truly first-ever draw again, on any frame.</p>
-     *
-     * <p>Self-scaling by construction: {@link LayerPool} runs this as it creates a slot, so it covers
-     * every nesting depth and every size bucket the UI tree actually reaches.</p>
-     *
-     * <p><b>Public, because the pool is no longer the only thing that creates one.</b> Anything holding
-     * its own render target through {@link #beginLayerFbo(CgFrameBuffer)} — a window snapshot, say —
-     * inherits this hazard exactly, and inherits it in its most confusing form: the first capture comes
-     * out missing content and every one after it is perfect, so it reads as a race in whatever was being
-     * captured rather than in the target it was drawn onto.</p>
+     * <p>On at least one NVIDIA driver a lazily compiled program's first draw into a never-drawn framebuffer, in the
+     * same frame, produced nothing: the masked content was missing on frame 1 and correct from frame 2. Warming a
+     * target as it is made moves that first draw onto throwaway content. Call it for a framebuffer you own and hand
+     * to {@link #beginLayerFbo(CgFrameBuffer)}; a layer's own texture comes from the executor's pool.</p>
      */
     public void warmUpLayer(CgFrameBuffer fbo) {
-        flush();
+        warmUpLayer(imported(fbo));
+    }
+
+    /** {@link #warmUpLayer(CgFrameBuffer)} for a texture the recording makes: a requested one, warmed as it is made. */
+    void warmUpLayer(CgGraphTexture target) {
         CgMaterial previousMaterial = currentMaterial;
-        CgTexture2D previousTexture = currentTexture;
-        try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND)) {
-            fbo.bind();
-            CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
-            fbo.clearColor(0f, 0f, 0f, 0f);
-            // Rest the material on a texture that is never deleted: a sampler property is retained and
-            // re-bound later, so a pooled layer left named here outlives its slot.
-            layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
-            withMaterial(layerBlitMaterial, () -> {
-                bindTexture(whitePixel);
-                quad().at(0, 0).size(fbo.getWidth(), fbo.getHeight()).color(0x0).submit();
-                flush();
-            });
-        }
-        // Re-bound through the renderer rather than by assigning the field: CgQuadRenderer owns the quad
-        // path's material and the scope above restores only the GL program. Setting currentMaterial alone
-        // left the renderer holding layerBlitMaterial while GL held the caller's, so every quad submitted
-        // afterwards that frame was computed against one and issued against the other -- the whole surface
-        // until the next beginFrame rebinds. @see #bindQuadPath
-        currentTexture = previousTexture;
+        beginLayer(target, true, null);
+        // Rest the material on a texture that is never deleted: a sampler property is retained and re-bound later.
+        layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
+        withMaterial(layerBlitMaterial, () -> {
+            bindTexture(whitePixel);
+            quad().at(0, 0).size(target.getWidth(), target.getHeight()).color(0x0).submit();
+            flush();
+        });
+        endLayerFbo();
+        // The caller's material back on the quad path: withMaterial restored the box model, not what was current.
         currentMaterial = previousMaterial;
         if (previousMaterial != null) bindQuadPath(previousMaterial);
+        currentTexture = null;
     }
 
     /**
      * Pushes an offscreen target the size of {@code region} and redirects drawing into it, cleared
      * fully transparent. Nests. Pair with {@link #endLayerFbo}, then composite with
-     * {@link #blitLayer(CgFrameBuffer, float, LayerRegion)} <b>giving the same region</b>.
+     * {@link #blitLayer(CgGraphTexture, float, LayerRegion)} <b>giving the same region</b>.
      *
      * <pre>{@code
      * LayerRegion region = ctx.layerRegion(x0, y0, x1, y1);
      * if (region.isEmpty()) return;                    // wholly clipped: nothing to draw
-     * CgFrameBuffer layer = ctx.beginLayerFbo(region);
+     * CgGraphTexture layer = ctx.beginLayerFbo(region);
      * // ...draw, with the caller's own transform pre-translated by (-region.x(), -region.y())
      * ctx.endLayerFbo();
      * ctx.blitLayer(layer, opacity, region);
@@ -2151,202 +2014,154 @@ public final class CgUiPaintContext {
      * do that for it: the pose is rebuilt per element from a base matrix this class never sees. The clip
      * stack IS shifted here, because this class owns it.</p>
      *
-     * @return the acquired FBO, which may be LARGER than the region -- it comes from a size-bucketed
-     *         pool, and only the region's own corner of it is cleared, drawn or composited
+     * @return the layer: a texture the executor lends for the frame, which may be LARGER than the region — its
+     *         size is a size class, and only the region's own corner of it is drawn or composited
      */
-    public CgFrameBuffer beginLayerFbo(LayerRegion region) {
+    public CgGraphTexture beginLayerFbo(LayerRegion region) {
         int width = Math.max(1, region.width()), height = Math.max(1, region.height());
         CgTrace.add(UiTrace.FRAME, "layers", 1);
         CgTrace.add(UiTrace.FRAME, "layers-d" + layerStack.size(), 1);
-        return beginLayerFbo(acquireLayerFbo(layerStack.size(), width, height), true, region);
+        return beginLayer(CgGraphTexture.transientTexture("cgui_layer", layerDesc(width, height)), true, region);
     }
 
     /**
-     * As {@link #beginLayerFbo()}, but rendering into a target the CALLER owns and keeps.
-     *
-     * <p>The no-argument version hands out a screen-sized FBO from a per-depth pool, which is right for
-     * an opacity or mask layer: those are composited and finished within the same frame, so the pool can
-     * hand the same buffer to the next element that needs one. A SNAPSHOT is the opposite — the whole
-     * point is that it outlives the frame it was drawn in, so it cannot come from a pool that will reuse
-     * it, and it is sized to the thing it captures rather than to the screen.</p>
-     *
-     * <p>Everything else is identical, including the projection: the viewport and ortho are set from
-     * {@code target}'s own dimensions, so a caller drawing at ordinary coordinates fills it. Pair with
-     * {@link #endLayerFbo}.</p>
-     *
-     * <p>Ownership stays entirely with the caller — this neither allocates nor frees. A
-     * {@code createOwned} framebuffer bypasses {@code CgFrameBufferRegistry}, so nothing sweeps it and
-     * whoever made it has to say when it dies.</p>
+     * As {@link #beginLayerFbo(LayerRegion)}, but rendering into a target the CALLER owns and keeps — a window's
+     * photograph, which outlives the frame and is the size of what it captures. The viewport and ortho are set from
+     * {@code fbo}'s own dimensions, so a caller drawing at ordinary coordinates fills it. Neither allocates nor
+     * frees: a {@code createOwned} framebuffer is its maker's to delete.
      */
-    public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo) {
-        return beginLayerFbo(fbo, true);
+    public CgGraphTexture beginLayerFbo(CgFrameBuffer fbo) {
+        return beginLayer(imported(fbo), true, null);
     }
 
     /**
-     * As {@link #beginLayerFbo(CgFrameBuffer)}, but able to KEEP what the target already holds.
-     *
-     * <p>Every other caller wants the clear: a layer starts empty and the initial transparent clear is
-     * what makes {@link #blitLayer} safe to run full-screen. The backdrop capture is the one that does
-     * not, because it seeds its target with a framebuffer blit of the scene BEFORE drawing the UI over
-     * it -- and the clear silently threw that blit away. In game that meant the world never reached the
-     * backdrop at all, so a pane of glass over terrain was compositing against transparent black; the
-     * capture then looked plausible everywhere the UI happened to be opaque, which is everywhere anyone
-     * had been testing it.</p>
+     * As {@link #beginLayerFbo(CgFrameBuffer)}, but able to KEEP what the target already holds: the backdrop's
+     * capture seeds its target with the scene before drawing the UI over it, and a clear would throw that away.
      */
-    public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, boolean clear) {
-        return beginLayerFbo(fbo, clear, null);
+    public CgGraphTexture beginLayerFbo(CgFrameBuffer fbo, boolean clear) {
+        return beginLayer(imported(fbo), clear, null);
+    }
+
+    /** As {@link #beginLayerFbo(LayerRegion)}, into a target the caller keeps. */
+    public CgGraphTexture beginLayerFbo(CgFrameBuffer fbo, LayerRegion region) {
+        return beginLayer(imported(fbo), true, region);
+    }
+
+    /** As {@link #beginLayerFbo(LayerRegion)}, into a texture that outlives the frame — a {@link RetainedLayer}'s. */
+    public CgGraphTexture beginLayerFbo(CgGraphTexture target, LayerRegion region) {
+        return beginLayer(target, true, region);
+    }
+
+    /** As {@link #beginLayerFbo(CgFrameBuffer, boolean)}, into a texture the recording makes and keeps. */
+    CgGraphTexture beginLayerFbo(CgGraphTexture target, boolean clear) {
+        return beginLayer(target, clear, null);
     }
 
     /**
-     * As {@link #beginLayerFbo(LayerRegion)}, into a target the caller keeps — a
-     * {@link RetainedLayer}'s.
+     * A texture made when the frame executes and kept across frames until {@link #releaseTexture}: the GL object a
+     * recording may not make itself.
      */
-    public CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, LayerRegion region) {
-        return beginLayerFbo(fbo, true, region);
+    CgGraphTexture requestTexture(String name, int width, int height, CgFrameBufferFormat format) {
+        return CgGraphTexture.requested(name, new CgTextureDesc(Math.max(1, width), Math.max(1, height), format));
+    }
+
+    /** Frees a {@link #requestTexture}'s storage once the frame has executed what was recorded before this. */
+    void releaseTexture(CgGraphTexture requested) {
+        drain();
+        recording.release(requested);
+    }
+
+    /** Frees a requested texture's storage now: teardown, with no frame to record a release into. */
+    private static void deleteNow(CgGraphTexture requested) {
+        CgFrameBuffer storage = requested.framebuffer();
+        if (storage != null) storage.delete();
     }
 
     /**
-     * @param region what of {@code fbo} is in use, and where it goes back, or null when the caller owns
-     *               the target and its whole extent is the layer -- a snapshot, a backdrop capture.
-     *               A region shifts the clip stack into the layer's own origin; null leaves it alone.
+     * @param region what of the target is in use, and where it goes back, or null when its whole extent is the
+     *               layer — a snapshot, a backdrop capture. A region shifts the clip stack into the layer's own
+     *               origin; null leaves it alone.
      */
-    private CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, boolean clear, @Nullable LayerRegion region) {
-        flush();
-        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
+    private CgGraphTexture beginLayer(CgGraphTexture target, boolean clear, @Nullable LayerRegion region) {
+        // The enclosing target's pass ends here and continues in another after the layer, so the pass that
+        // composites the layer runs after the layer's own.
+        drain();
+        int enclosingWidth = targetWidth(), enclosingHeight = targetHeight();
         int[] savedScissor = scissorStack.suspend();
         if (region != null) {
             layerOriginX += region.x();
             layerOriginY += region.y();
         }
-        layerStack.push(new LayerFrame(fbo, CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT),
-                new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH, savedScissor, region, clipEntry));
+        layerStack.push(new LayerFrame(target, enclosingWidth, enclosingHeight, savedScissor, region, clipEntry));
         // A rounded clip is in the enclosing target's pixels; it applies when this layer is composited back.
         setClip(0);
+        int width = target.getWidth(), height = target.getHeight();
 
-        fbo.bind();
-        CgGL.glViewport(0, 0, fbo.getWidth(), fbo.getHeight());
-        if (clear) {
-            // ONLY THE REGION. A pooled target is bucketed, so it is usually bigger than what is about
-            // to be drawn into it and it still holds whatever the last element to take this slot left
-            // behind. Nothing ever samples that: the composite reads the region and no more, which is
-            // the same argument that made the full-screen clear correct when every layer was a screen.
-            long timed = CgTrace.stamp(UiTrace.FRAME);
-            CgGpuTrace.begin(GPU_LAYER_CLEAR);
-            int width = region == null ? fbo.getWidth() : Math.min(fbo.getWidth(), region.width());
-            int height = region == null ? fbo.getHeight() : Math.min(fbo.getHeight(), region.height());
-            scissorStack.pushScissor(0, 0, width, height);
-            scissorStack.applyScissorIfNeeded(fbo.getHeight());
-            fbo.clearColor(0f, 0f, 0f, 0f);
-            scissorStack.popScissor();
-            CgGpuTrace.end();
-            CgTrace.zoneDone(UiTrace.FRAME, "layer:clear", timed);
-            CgTrace.add(UiTrace.FRAME, "layer-clear-kpx", width * height / 1000);
-        }
-        // THE INHERITED CLIP, RE-EXPRESSED FOR THIS BUFFER. A GL scissor rect is bottom-left pixels of
-        // one particular target; the stack keeps rects top-left and flips them here, so a layer of
-        // another height than its parent clips the same region rather than a band at its bottom. A
-        // BOUNDED layer moves the origin as well, so every inherited rect shifts with it.
+        // THE INHERITED CLIP, RE-EXPRESSED FOR THIS TARGET. The stack keeps rects top-left and flips them against
+        // the target's height, so a layer of another height than its parent clips the same region rather than a
+        // band at its bottom. A BOUNDED layer moves the origin as well, so every inherited rect shifts with it.
         scissorStack.resume(region == null ? savedScissor : shifted(savedScissor, -region.x(), -region.y()));
-        reapplyScissorFor(fbo.getHeight());
+        reapplyScissorFor(height);
 
-        fd.projMatrix.identity().ortho(0, fbo.getWidth(), fbo.getHeight(), 0, -1, 1);
-        fd.viewportW = fbo.getWidth();
-        fd.viewportH = fbo.getHeight();
-        CgRenderPipeline.getInstance().prepareFrame();
-        // TEXT HAS ITS OWN PROJECTION, and it has to follow the target too. CgTextRenderer does not
-        // read cg_ProjMatrix; it carries a matrix of its own that beginFrame sets for the screen. Pooled
-        // layers were all screen-sized once, so the two agreed for as long as those were the only layers
-        // -- and inside a window's snapshot, sized to the window, glyphs were placed through a screen
-        // ortho into a window-sized viewport: every string in a photograph drawn at a third of its size
-        // in the top-left corner. updateOrtho is a no-op when the size is unchanged, so this costs a
-        // pool layer nothing.
-        textRenderer.context().updateOrtho(fbo.getWidth(), fbo.getHeight());
+        targetConstants(width, height);
+        // TEXT HAS ITS OWN PROJECTION, and it has to follow the target too: CgTextRenderer does not read
+        // cg_ProjMatrix. Inside a window's snapshot, sized to the window, a screen ortho drew every string at a
+        // third of its size in the corner. updateOrtho is a no-op when the size is unchanged.
+        textRenderer.context().updateOrtho(width, height);
+        if (clear) {
+            CgTrace.add(UiTrace.FRAME, "layer-clear-kpx",
+                    (region == null ? width * height : region.width() * region.height()) / 1000);
+        }
+        recorder.recordInto(recording, target, clear ? CgLoad.clear(0f, 0f, 0f, 0f) : CgLoad.load(), passConstants);
         currentTexture = null;
-        return fbo;
+        return target;
     }
 
-    /** Pops the innermost {@link #beginLayerFbo}, restoring the saved GL state and projection so
-     * subsequent draws land back on whatever was active before it (the parent target, or an
-     * enclosing layer). Does not composite/draw anything itself — see {@link #blitLayer} and
-     * {@link #compositeMask} for what to do with the finished FBO. */
+    /**
+     * Pops the innermost {@link #beginLayerFbo}: what it drew is complete, and drawing goes on in the target around
+     * it, with its projection and clip. Composites nothing — see {@link #blitLayer} and {@link #compositeMask}.
+     */
     public void endLayerFbo() {
-        flush();
-        // AFTER the flush and BEFORE the target is swapped back — the only moment the layer holds its
-        // finished content and is still bound. A zero here is a draw fault and nothing downstream can
-        // be blamed for it.
+        drain();
         LayerFrame frame = layerStack.pop();
         if (frame.region() != null) {
             layerOriginX -= frame.region().x();
             layerOriginY -= frame.region().y();
         }
-        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
-        fd.projMatrix.set(frame.savedProjMatrix());
-        fd.viewportW = frame.savedViewportW();
-        fd.viewportH = frame.savedViewportH();
-        CgRenderPipeline.getInstance().prepareFrame();
-        // Back to the enclosing target's size for text as well -- @see beginLayerFbo.
-        textRenderer.context().updateOrtho(frame.savedViewportW(), frame.savedViewportH());
+        targetConstants(frame.enclosingWidth(), frame.enclosingHeight());
+        textRenderer.context().updateOrtho(frame.enclosingWidth(), frame.enclosingHeight());
         // The clip stack as the enclosing target expressed it -- a bounded layer shifted every rect
         // into its own origin on the way in. @see LayerFrame#savedScissor
         scissorStack.resume(frame.savedScissor());
         setClip(frame.savedClip());
-        frame.glScope().close();
-        // And the clip, against the enclosing target's height -- the scope above restores the FBO and
-        // the viewport but not the scissor rect, which was last applied for the layer just ended.
         reapplyScissor();
+        recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
         currentTexture = null;
     }
 
-    /** Blits a finished layer FBO (from {@link #beginLayerFbo}/{@link #endLayerFbo}) back into
-     * whatever's currently bound, full-screen, tinted by {@code opacity} via {@link #withLayerOpacity}
-     * — everywhere the layer's own content didn't draw stayed transparent from the initial clear,
-     * so this is safe to blit full-screen regardless of the originating element's own bounds.
-     *
-     * <p>Uses {@link #layerBlitMaterial}, not {@link #boxModelMaterial} — {@code fbo}'s contents are
-     * premultiplied alpha (every partially-covered pixel was painted starting from a transparent
-     * clear), so compositing it back needs premultiplied blend, not {@code boxModelMaterial}'s
-     * straight-alpha blend. See {@code gui_layer_blit.shader}'s own doc comment for the full
-     * derivation — using the wrong one reproduces exactly the "AA edges/translucent content look
-     * different once behind a mask or fractional opacity" symptom this material fixes.</p>
-     *
-     * <p>V is sampled flipped ({@code v0=1, v1=0}): content drawn at screen-space y=0 (our top-left
-     * origin convention) lands at NDC y=+1, which is texture row/{@code v=1} under OpenGL's own
-     * bottom-left-origin texture convention — the opposite of a normal loaded-from-disk texture
-     * (pre-flipped at decode time). Same correction {@code PictureInPictureRenderer.blitTexture}
-     * applies in vanilla Minecraft/LDLib2 for the identical reason.</p>
-     *
-     * <p>{@code fbo}'s dimensions are real physical screen pixels (that's what it was allocated
-     * with), but every quad submitted through {@link #quad} is run through the active
-     * {@link PoseStack} transform — which, mid-frame, still carries {@code UIWindow}'s own
-     * {@code uiScale} scale meant for logical-space element coordinates. Submitting an
-     * already-physical-sized quad through that same scale would double-apply it. Temporarily
-     * resetting the pose to identity for just this quad avoids that.</p> */
     /**
-     * Draws a finished layer FBO into an arbitrary rect, through the active {@link PoseStack}.
-     *
-     * <p>{@link #blitLayer} composites a layer back over the whole screen at identity, which is what an
-     * opacity group needs. This is for the other case: a captured layer being drawn somewhere else and
-     * at another size — a window's snapshot in a taskbar preview. So the pose is <b>kept</b> rather than
-     * reset, the rect is in ordinary logical coordinates, and the caller places it like any other quad.</p>
-     *
-     * <p>Same material and the same flipped V as {@code blitLayer}, and for the same reasons: an FBO's
-     * contents are premultiplied alpha, because every partially-covered pixel was painted starting from
-     * a transparent clear, so compositing it needs premultiplied blend rather than the box model's
-     * straight-alpha one. Using the wrong material reproduces exactly the "AA edges look different once
-     * they have been through a layer" symptom.</p>
+     * The finished frame onto the host's target — whatever is bound when it executes, which is the host's once
+     * {@link UiGpu} has restored its state. A recording of one draw, of its own.
      */
+    private void recordPresent() {
+        targetConstants(screenWidth, screenHeight);
+        recorder.recordInto(present, CgGraphTexture.current(), CgLoad.load(), passConstants);
+        blitLayer(frameTarget, 1f, new LayerRegion(0, 0, screenWidth, screenHeight));
+        recorder.stop();
+    }
+
     /**
-     * {@link #drawLayer(CgFrameBuffer, float, float, float, float)} at a given alpha.
+     * Draws a finished target into an arbitrary rect, through the active {@link PoseStack}: a captured layer drawn
+     * somewhere else and at another size — a window's snapshot in a taskbar preview. Tinted by {@link #getColor()},
+     * which for one texture is exactly group opacity, since a photograph has already resolved every overlap.
      *
-     * <p>A flat tint, and for a single texture that is exactly right: group opacity only needs a layer
-     * pass because a subtree's own overlapping content would be double-darkened by a per-draw multiply,
-     * and a photograph of that subtree has already resolved every overlap. So a surface can be faded for
-     * the cost of one quad — which is the whole point of animating one. @see UIElement#paintAsSurface</p>
+     * <p>Same material and flipped V as {@link #blitLayer}, for the same reasons.</p>
      */
     public void drawLayer(CgFrameBuffer fbo, float x, float y, float width, float height) {
-        CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
+        CgGraphTexture layer = imported(fbo);
+        // Declared rather than bound by hand. @see #blitLayer
+        layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
         withMaterial(layerBlitMaterial, () -> {
-            bindTexture(colorTex);
             quad().at(x, y).size(width, height)
                   .uv(0f, 1f, 1f, 0f)   // V flipped — see blitLayer's javadoc
                   .color(getColor()).submit();
@@ -2377,7 +2192,7 @@ public final class CgUiPaintContext {
      * <p>{@code cu0..cv1} is the axis-aligned rect it may sample at all — its bounds padded by the blur's
      * and the lens's reach, cut to its clip — which stays a rect because the capture is one.</p>
      */
-    public record Backdrop(CgTexture2D sharp, CgTexture2D blurred,
+    public record Backdrop(CgTexture sharp, CgTexture blurred,
                            float u0, float v0, float ux, float vx, float uy, float vy,
                            float cu0, float cv0, float cu1, float cv1) {}
 
@@ -2408,226 +2223,129 @@ public final class CgUiPaintContext {
         return backdrop.forRect(x, y, width, height, blurRadiusPx, reach);
     }
 
+    /** {@link #blitLayer(CgGraphTexture, float, LayerRegion)} for a framebuffer the caller owns, whole. */
     public void blitLayer(CgFrameBuffer fbo, float opacity) {
-        blitLayer(fbo, opacity, new LayerRegion(0, 0, fbo.getWidth(), fbo.getHeight()));
+        blitLayer(imported(fbo), opacity, new LayerRegion(0, 0, fbo.getWidth(), fbo.getHeight()));
+    }
+
+    /** {@link #blitLayer(CgGraphTexture, float, LayerRegion)} for a framebuffer the caller owns. */
+    public void blitLayer(CgFrameBuffer fbo, float opacity, LayerRegion region) {
+        blitLayer(imported(fbo), opacity, region);
     }
 
     /**
-     * As {@link #blitLayer(CgFrameBuffer, float)}, for a layer that occupies only part of its target:
-     * composites {@code region}'s corner of {@code fbo} back at {@code region}'s own position.
+     * Composites {@code region}'s corner of a finished layer back at {@code region}'s own position in the target
+     * being drawn into, at {@code opacity}. Give it the region {@link #beginLayerFbo(LayerRegion)} was opened with:
+     * past it, a texture lent by the pool holds whatever its last user left.
      *
-     * <p>Give it the region {@link #beginLayerFbo(LayerRegion)} was opened with. The pool hands out
-     * size buckets, so the FBO is usually larger than the layer and everything outside the region is
-     * stale -- blitting the whole buffer would composite the previous user of the slot.</p>
+     * <ul>
+     *   <li>Premultiplied, through {@link #layerBlitMaterial}: everything in a layer was drawn over a transparent
+     *       clear, so its partially covered pixels carry their alpha in their colour.</li>
+     *   <li>V is flipped: a target's row 0 is its bottom, and the UI's is its top.</li>
+     *   <li>At an identity pose: the region is already in the target's pixels.</li>
+     * </ul>
      */
-    public void blitLayer(CgFrameBuffer fbo, float opacity, LayerRegion region) {
+    public void blitLayer(CgGraphTexture layer, float opacity, LayerRegion region) {
         if (region.isEmpty()) return;
         long timed = CgTrace.stamp(UiTrace.FRAME);
-        // Queued draws go first, so the GPU timer below holds the composite alone.
-        flush();
-        CgGpuTrace.begin(GPU_LAYER_BLIT);
         CgTrace.add(UiTrace.FRAME, "layer-blit-kpx", region.width() * region.height() / 1000);
-        CgTexture2D colorTex = (CgTexture2D) fbo.getColorTexture(0);
-        float u1 = Math.min(1f, (float) region.width() / fbo.getWidth());
-        float v1 = Math.max(0f, 1f - (float) region.height() / fbo.getHeight());
-        // Declared rather than bound by hand: _MainTex has a "white" default, so a raw bindTexture() is
-        // ignored -- the material binds the fallback and points the uniform at it. Composited
-        // premultiplied, that floods the destination rather than missing an image.
-        layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, colorTex));
+        float u1 = Math.min(1f, (float) region.width() / layer.getWidth());
+        float v1 = Math.max(0f, 1f - (float) region.height() / layer.getHeight());
+        // Declared rather than bound by hand: _MainTex has a "white" default, so an undeclared texture composites
+        // the white fallback, premultiplied -- a destination flooded white rather than a missing image.
+        layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
         withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
             poseStack.pushPose();
             poseStack.setIdentity();
             quad().at(region.x(), region.y()).size(region.width(), region.height())
-                  .uv(0f, 1f, u1, v1)   // V flipped — see the javadoc above
+                  .uv(0f, 1f, u1, v1)
                   .color(getColor()).submit();
             flush();
-            // WHICH UNIT THE LAYER TEXTURE LANDED ON, read after the draw. gui_layer_blit declares
-            // `_MainTex ... = "white"`, so a sampler that misses its texture does not draw nothing --
-            // it draws the WHITE FALLBACK, and premultiplied `over` turns that into dst = white*k +
-            // dst*(1-k). At k=1 the destination becomes white; at a rising k it washes out. Those are
-            // the two symptoms this composite is blamed for, and neither looks like a binding fault.
             poseStack.popPose();
         }));
-        CgGpuTrace.end();
         CgTrace.zoneDone(UiTrace.FRAME, "layer:blit", timed);
     }
 
-    /**
-     * The target {@link #blitLayer} just drew into — the innermost live layer, or the frame's own
-     * target when none is open. Probe-only: nothing in the paint path needs to ask this.
-     */
-    private CgFrameBuffer currentTarget() {
-        return layerStack.isEmpty() ? frameFbo : layerStack.peek().fbo();
+    /** The target being drawn into: the innermost layer, or the frame's own target when none is open. */
+    CgGraphTexture currentTarget() {
+        return layerStack.isEmpty() ? frameTarget : layerStack.peek().target();
     }
 
     /**
-     * Composites a mask onto an already-rendered subtree layer: multiplies {@code subtreeFbo}'s
-     * existing color+alpha by {@code maskFbo}'s alpha channel via {@link CgBlendState#MASK_ALPHA_MULTIPLY}
-     * — wherever the mask's alpha is 0, the subtree's output is zeroed out too. Both FBOs are the
-     * pool's screen-sized instances, so they're always the same size. Leaves GL FBO/viewport/blend
-     * state restored to whatever it was before this call (caller is responsible for re-binding
-     * {@code subtreeFbo} itself if it needs to keep drawing into it afterward).
-     */
-    public void compositeMask(CgFrameBuffer subtreeFbo, CgFrameBuffer maskFbo) {
-        compositeMask(subtreeFbo, maskFbo, new LayerRegion(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight()));
-    }
-
-    /**
-     * As {@link #compositeMask(CgFrameBuffer, CgFrameBuffer)}, over the part of the two targets a
-     * bounded layer actually used.
+     * Multiplies {@code subtree}'s colour and alpha by {@code mask}'s alpha over {@code region}, through
+     * {@link CgBlendState#MASK_ALPHA_MULTIPLY}: wherever the mask is transparent the subtree is zeroed. Both are
+     * layers of one size class, so the region means the same thing in each.
      *
-     * <p>Both come from the same size bucket, so the region means the same thing in each. Multiplying
-     * the whole buffer would be correct but pays for the bucket's slack, and the slack is where the
-     * previous user of the slot still is.</p>
+     * <p>The subtree is normally the layer still open around the mask; the multiply is then simply its next draw.
+     * The clip does not apply — its job is to zero the subtree everywhere the mask does not cover.</p>
      */
-    public void compositeMask(CgFrameBuffer subtreeFbo, CgFrameBuffer maskFbo, LayerRegion region) {
+    public void compositeMask(CgGraphTexture subtree, CgGraphTexture mask, LayerRegion region) {
         if (region.isEmpty()) return;
         long timed = CgTrace.stamp(UiTrace.FRAME);
         flush();
-        CgGpuTrace.begin(GPU_LAYER_MASK);
-        try (CgGlScope scope = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT, CgGlSlot.BLEND)) {
-            subtreeFbo.bind();
-            CgGL.glViewport(0, 0, subtreeFbo.getWidth(), subtreeFbo.getHeight());
-            // The multiply must reach the whole buffer too: its job is to zero the subtree everywhere the
-            // mask does not cover, so clipped it leaves what lies outside the clip unmasked.
-            int[] suspendedMask = scissorStack.suspend();
-            scissorStack.clearScissorIfNeeded();
-            // AND THE PROJECTION, which the viewport alone does not cover. This runs after the
-            // subtree's layer has been ended, so the frame's ortho is the ENCLOSING target's -- and
-            // that is only the same size as the layer when the enclosing target is the screen. Inside a
-            // window's snapshot it is the window's size, so a mask quad the size of the (screen-sized)
-            // layer was drawn into a window-sized ortho: stretched by screen/window on each axis and
-            // shifted with it. The multiply then zeroed the subtree everywhere the DISPLACED mask did
-            // not reach, and the window's lighter base surface showed through the hole -- a minimised
-            // editor's photograph with a pale block across its islands and a strip of content
-            // surviving inside it. Same shape as the scissor flip, found from the same picture.
-            // Captured before the try, so the finally can hand its sampler back. @see the note there.
-            CgMaterial masked = currentMaterial;
-            CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
-            Matrix4f enclosingProj = new Matrix4f(fd.projMatrix);
-            int enclosingW = fd.viewportW, enclosingH = fd.viewportH;
-            fd.projMatrix.identity().ortho(0, subtreeFbo.getWidth(), subtreeFbo.getHeight(), 0, -1, 1);
-            fd.viewportW = subtreeFbo.getWidth();
-            fd.viewportH = subtreeFbo.getHeight();
-            CgRenderPipeline.getInstance().prepareFrame();
-            try {
-                CgTexture2D maskTex = (CgTexture2D) maskFbo.getColorTexture(0);
-                // Declared, or the "white" default is multiplied in and every alpha is 1 -- no mask at
-                // all. @see blitLayer. On a material of ours rather than the caller's: a sampler property
-                // is retained, so setting it on the enclosing material rewrites what every later draw
-                // through it samples. gui_quad like boxModelMaterial, so MASK_ALPHA_MULTIPLY survives.
-                maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, maskTex));
-                bindQuadPath(maskMaterial);
-                currentTexture = null;
-                CgBlendState.MASK_ALPHA_MULTIPLY.apply();
-                // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
-                // bottom-left-origin storage vs. our top-left screen-space convention. Same
-                // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
-                poseStack.pushPose();
-                poseStack.setIdentity();
-                quad().at(0, 0).size(region.width(), region.height())
-                      .uv(0f, 1f,
-                          Math.min(1f, (float) region.width() / maskFbo.getWidth()),
-                          Math.max(0f, 1f - (float) region.height() / maskFbo.getHeight()))   // V flipped, same reason as blitLayer
-                      .color(0xFFFFFFFF).submit();
-                flush();
-                poseStack.popPose();
-            } finally {
-                // Parked: the mask attachment is pooled, so a resize deletes it and the next bind of a
-                // material still naming it throws. Safe here because nothing else binds this material.
-                maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
-                bindQuadPath(masked != null ? masked : boxModelMaterial);
-                currentTexture = null;
-                scissorStack.resume(suspendedMask);
-                fd.projMatrix.set(enclosingProj);
-                fd.viewportW = enclosingW;
-                fd.viewportH = enclosingH;
-                CgRenderPipeline.getInstance().prepareFrame();
+        boolean elsewhere = subtree != currentTarget();
+        if (elsewhere) recorder.recordInto(recording, subtree, CgLoad.load(), passConstants);
+        int[] suspendedMask = scissorStack.suspend();
+        scissorStack.clearScissorIfNeeded();
+        // AND THE PROJECTION, which must be the subtree's own: a mask quad the size of the layer drawn through another
+        // target's ortho is stretched and shifted, and the multiply then zeroes everything it no longer reaches.
+        CgMaterial masked = currentMaterial;
+        int enclosingW = targetWidth(), enclosingH = targetHeight();
+        targetConstants(subtree.getWidth(), subtree.getHeight());
+        try {
+            // On a material of ours rather than the caller's: a sampler property is retained, so setting it on the
+            // enclosing material would rewrite what every later draw through it samples.
+            maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, mask));
+            // The multiply rides on the draw's own pipeline: a blend applied after binding would be overwritten
+            // when the recorded draw binds gui_quad's declared blend.
+            if (activePath == InstancePath.TEXT) textRenderer.endBatch();
+            CgRenderState quadState = maskMaterial.getPassRenderState(CgRenderPassVariant.FORWARD);
+            if (quadState != maskStateBase) {
+                maskStateBase = quadState;
+                maskState = quadState.withBlend(CgBlendState.MASK_ALPHA_MULTIPLY);
             }
+            renderer.useMaterial(maskMaterial, maskState);
+            activePath = InstancePath.QUAD;
+            currentTexture = null;
+            poseStack.pushPose();
+            poseStack.setIdentity();
+            quad().at(0, 0).size(region.width(), region.height())
+                  .uv(0f, 1f,
+                      Math.min(1f, (float) region.width() / mask.getWidth()),
+                      Math.max(0f, 1f - (float) region.height() / mask.getHeight()))   // V flipped, as blitLayer
+                  .color(0xFFFFFFFF).submit();
+            flush();
+            poseStack.popPose();
+        } finally {
+            // The recorded draw keeps the mask it was captured with; the material goes back to a texture that lives.
+            maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
+            bindQuadPath(masked != null ? masked : boxModelMaterial);
+            currentTexture = null;
+            scissorStack.resume(suspendedMask);
+            targetConstants(enclosingW, enclosingH);
         }
-        CgGpuTrace.end();
-        // The scope put the enclosing target back; the clip has to follow it.
+        if (elsewhere) recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
         reapplyScissor();
         currentTexture = null;
         CgTrace.zoneDone(UiTrace.FRAME, "layer:mask", timed);
     }
 
     /**
-     * Releases everything this context owns outright and drops the singleton, so the next
-     * {@link #getInstance()} builds a fresh one.
-     *
-     * <p>Called on GL-context destruction via {@code CgUiLifecycle}. Note that in this engine that
-     * means <b>game shutdown only</b> — there is no destroy-then-init cycle in a running process — so
-     * this is not protecting a subsequent context. It is explicit, complete teardown of what this
-     * class owns, matching the engine's own convention, and it is the only thing that frees the layer
-     * FBO pool: those are built with {@link CgFrameBuffer#createOwned}, which bypasses
-     * {@code CgFrameBufferRegistry}, so {@code deleteAll()} never reaches them.</p>
-     *
-     * <p><b>Only genuinely-owned resources are freed here</b>, and the distinction matters because
-     * double-freeing is as bad as leaking:</p>
-     * <ul>
-     *   <li><b>Freed</b> — the layer FBO pool and {@link #frameFbo} (both built via
-     *       {@link CgFrameBuffer#createOwned}, so all ours), the {@link CgUiRenderer}'s batch renderer,
-     *       and the {@link CgTextRenderer} (CrystalGraphics' registry treats {@code deleteAll()} as a
-     *       backstop and expects owners to delete their own).</li>
-     *   <li><b>Not freed</b> — {@code boxModelMaterial}/{@code layerBlitMaterial} come from the
-     *       cache in {@code CgMaterialRegistry}, {@code whitePixel} is a
-     *       {@code CgFallbackTextures} constant, and the atlases behind {@code font} belong to
-     *       {@code CgFontRegistry}. All three are swept by
-     *       {@code CgGraphicsLifecycle.destroyContext()} itself; deleting them here would be a
-     *       double free of objects this context merely borrows.</li>
-     * </ul>
-     *
-     * <p>Idempotent, and safe to call when the singleton was never constructed.</p>
+     * Frees what this context made — its retained layers, the backdrop's and the icon raster's textures — and its
+     * renderers. {@link UiGpu#destroy} calls it at GL context destruction. Only what is genuinely its own: materials,
+     * the fallback texture and the font atlases are swept by {@code CgGraphicsLifecycle.destroyContext()}, and freeing
+     * them here would be a double free.
      */
-    /** Built on the first frame a picture is asked for; three in flight covers a GPU two frames behind. */
-    @Nullable
-    private CgPixelReadback frameImages;
-
-    /**
-     * Photographs the finished frame for the trace when one is due, and files whatever earlier requests
-     * have read back. Never waits on the GPU. @see CgFrameImages
-     */
-    private void captureFrameImage() {
-        long frame = CgTrace.currentFrameIndex();
-        boolean due = CgFrameImages.isDue(frame);
-        if (!due && (frameImages == null || !frameImages.isPending())) return;
-        long timed = CgTrace.stamp(UiTrace.FRAME);
-        if (frameImages == null) frameImages = new CgPixelReadback(3);
-        frameImages.poll(pixels -> CgFrameImages.put(pixels.tag(), pixels.width(), pixels.height(), pixels.rgb()));
-        CgTrace.zoneDone(UiTrace.FRAME, "glend:image:poll", timed);
-        if (due) {
-            timed = CgTrace.stamp(UiTrace.FRAME);
-            frameImages.request(frameFbo.getId(), frameFbo.getWidth(), frameFbo.getHeight(),
-                    CgFrameImages.width(), frame);
-            CgTrace.zoneDone(UiTrace.FRAME, "glend:image:request", timed);
-        }
-    }
-
-    public static void destroy() {
-        if (instance == null) return;
-        instance.releaseOwnedResources();
-        instance = null;
-    }
-
-    private void releaseOwnedResources() {
-        // Any still-open layer frame belongs to a frame that will never finish. Drop the saved GL
-        // scopes without close()-ing them: their saved state refers to the dying context, so
-        // restoring it is meaningless at best.
+    void release() {
+        // Any still-open layer belongs to a frame that will never finish.
         layerStack.clear();
 
-        layerFboPool.deleteAll();
-        for (RetainedLayer layer : retained.values()) layer.fbo().delete();
+        recording.reset();
+        imported.clear();
+        for (RetainedLayer layer : retained.values()) deleteNow(layer.target());
         retained.clear();
         candidates.clear();
         retainedBytes = 0L;
-
-        // Same reasoning as the layer pool above — createOwned bypasses CgFrameBufferRegistry, so
-        // nothing else ever frees it. Not nulled out afterward (it's final, built once in the
-        // constructor) — destroy() drops the whole singleton right after this, so a fresh instance
-        // with a fresh FBO is what the next getInstance() builds anyway.
-        frameFbo.delete();
-        if (frameImages != null) frameImages.delete();
 
         // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
         backdrop.delete();
@@ -2636,7 +2354,6 @@ public final class CgUiPaintContext {
         renderer.delete();
         textRenderer.delete();
 
-        glScope = null;
         currentTexture = null;
         currentMaterial = null;
         frameActive = false;

@@ -447,7 +447,7 @@ public class CgUiDesktopScene
             refreshReadout();
         }
 
-        CgUiPaintContext context = CgUiPaintContext.getInstance();
+        CgUiPaintContext context = document.paintContext();
         context.beginFrame(w, h);
         // SIMULATED GAME MODE -- W14, and the closest a GL harness gets to Minecraft without being it.
         // F6 flips the scene to input-off and leaves ONLY pinned frames on screen. What it is really

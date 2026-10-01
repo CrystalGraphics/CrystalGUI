@@ -17,6 +17,7 @@ import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiGpu;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -162,7 +163,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         // Warmup the paint context, around 1000ms on first init done before world frame time. Every domain:
         // a material bind applies its pass's whole render state, and this runs inside the host's world pass.
         try (CgGlScope ignored = CgGlState.saveAll()) {
-            CgUiPaintContext.getInstance().warm(width, height);
+            CgUiPaintContext.warm(width, height);
         }
     }
     
@@ -264,7 +265,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         //
         // What stays below is the one thing nobody else frees.
         try {
-            CgUiPaintContext.destroy();
+            UiGpu.destroy();
         } catch (Throwable t) {
             CrystalGuiCore.LOGGER.warn("CgUiLifecycle: failed to tear down the paint context", t);
         }

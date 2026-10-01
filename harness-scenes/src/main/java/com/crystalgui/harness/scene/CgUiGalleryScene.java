@@ -2924,12 +2924,12 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
 
         // AND THE PAINT. `paintFrame()` did both; `frame()` only advances, so a scene that
         // lost this half advanced perfectly and drew nothing.
-        CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
+        CgUiPaintContext paintContext = document.paintContext();
         paintContext.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
         document.paint(paintContext);
         paintContext.endFrame();
 
-        var context = CgUiPaintContext.getInstance();
+        var context = document.paintContext();
         Tab selected = pages.getSelectedTab();
         context.text().draw().at(0, 0)
                 .text(String.format("Gallery — page=%s   theme=%s   uiScale=%.2f ([ ])   clicks=%d   slider=%.0f",

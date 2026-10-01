@@ -110,6 +110,8 @@ public final class UIDocument extends UIElement {
     @Nullable
     private BoxTree boxes;
     @Nullable
+    private CgUiPaintContext paintContext;
+    @Nullable
     private Input input;
     @Nullable
     private Focus focus;
@@ -254,6 +256,22 @@ public final class UIDocument extends UIElement {
     public BoxTree boxes() {
         if (boxes == null) boxes = new BoxTree(this);
         return boxes;
+    }
+
+    /**
+     * This document's paint context: what {@link #paint} records a frame into, built on first use. Ask for it on the
+     * render thread the first time — its font and text renderer are set up there.
+     *
+     * <pre>{@code
+     * CgUiPaintContext ctx = document.paintContext();
+     * ctx.beginFrame(width, height);
+     * document.paint(ctx);
+     * ctx.endFrame();
+     * }</pre>
+     */
+    public CgUiPaintContext paintContext() {
+        if (paintContext == null) paintContext = CgUiPaintContext.create();
+        return paintContext;
     }
 
     // ── Services (5.5) ───────────────────────────────────────────────────────

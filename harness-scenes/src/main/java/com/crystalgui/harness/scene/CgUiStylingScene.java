@@ -318,7 +318,7 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
         // tree's root transform, so this is the only place the two spaces meet.
         document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
 
-        CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
+        CgUiPaintContext paintContext = document.paintContext();
         paintContext.beginFrame(w, h);
         document.paint(paintContext);
         paintContext.endFrame();
