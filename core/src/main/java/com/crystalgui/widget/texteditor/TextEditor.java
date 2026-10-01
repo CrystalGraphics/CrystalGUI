@@ -5854,7 +5854,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * realise a window against a viewport of zero.</p>
      */
     private boolean afterLayout(float deltaSeconds) {
-        updateWindow();
+        // NO BOX, NOTHING ON SCREEN: a hidden tab's pane is display: none. The hook stays, and the frame the tab shows
+        // lays the editor out before this runs, so the window is realised on that frame.
+        if (box() != null) updateWindow();
         return true;
     }
 
@@ -5889,6 +5891,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * on an unchanged range, and the font push no-ops on an unchanged value.</p>
      */
     public boolean tickFrame(float deltaSeconds) {
+        if (box() == null) return true;
         // THE JUMP THAT CAME IN TOO EARLY, now that there is a viewport to centre in. @see #pendingReveal
         if (pendingReveal && canCentre()) {
             pendingReveal = false;
