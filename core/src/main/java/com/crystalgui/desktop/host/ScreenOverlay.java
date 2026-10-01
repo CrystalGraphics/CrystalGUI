@@ -33,6 +33,7 @@ import com.crystalgui.ui.dom.UIDocument;
 public final class ScreenOverlay {
 
     private final UIDocument window;
+    private final HostInput input;
 
     /**
      * Whether a press has landed inside a pinned window more recently than outside one.
@@ -52,6 +53,7 @@ public final class ScreenOverlay {
 
     public ScreenOverlay(UIDocument window) {
         this.window = window;
+        this.input = new HostInput(() -> window);
     }
 
     /**
@@ -189,7 +191,7 @@ public final class ScreenOverlay {
      */
     public boolean offerKey(int keyCode, char typed, boolean pressed) {
         if (!keyboardIsOurs) return false;
-        return window.input().consumeKeyboardEvent(
+        return input.consumeKeyboardEvent(
                 new CgSystemInput.Keyboard.Event(typed, keyCode, pressed, false, System.currentTimeMillis()));
     }
 
@@ -209,7 +211,6 @@ public final class ScreenOverlay {
      */
     private void deliver(int xPx, int yPx, int button, boolean pressed, float wheel) {
         long millis = button < 0 ? -1L : System.currentTimeMillis();
-        window.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
-                xPx, yPx, 0, 0, button, pressed, wheel, millis));
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(xPx, yPx, 0, 0, button, pressed, wheel, millis));
     }
 }
