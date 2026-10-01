@@ -399,7 +399,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
             // `display: none` is -- and the box tree only walks the composed tree on frames the node
             // tree reported a change, so without this a hidden node keeps its box until something
             // unrelated dirties the structure.
-            if (key == Attribute.HIDDEN) structureChanged();
+            if (key == Attribute.HIDDEN) displayChanged();
             // SCROLL_EXEMPT is read while world matrices are composed, and changes none of the
             // geometry -- so it is a transform invalidation and not a relayout.
             if (key == Attribute.SCROLL_EXEMPT && box != null) box.tree().transformsChanged(box);
@@ -772,7 +772,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
             for (UIElement node : composedSubtree()) node.invalidateStyleMatch();
         }
         // display: none is a structural fact -- a box exists or it does not.
-        if (property == LayoutProperties.DISPLAY) structureChanged();
+        if (property == LayoutProperties.DISPLAY) displayChanged();
         // RESIZE IS AMBIENT, like overflow making any element a scroll container. The engine says WHEN
         // the handles should exist; the widget layer supplies them. @see ResizeHandles
         if (property == StylePropertyRegistry.RESIZE) {
@@ -1107,6 +1107,12 @@ public class UIElement extends UINode implements EventTarget, Styleable {
 
     public final boolean isInertAttribute() {
         return get(Attribute.INERT);
+    }
+
+    /** Says only this node's box may appear or go: the box tree re-syncs this subtree rather than the document. */
+    private void displayChanged() {
+        UIDocument doc = document();
+        if (doc != null) doc.fireStructureChanged(this);
     }
 
     /**
