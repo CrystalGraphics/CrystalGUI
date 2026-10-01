@@ -1,8 +1,10 @@
 package com.crystalgui.harness;
 
+import com.crystalgraphics.harness.runtime.RenderDoc;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
+import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceReport;
 import com.crystalgraphics.trace.CgTraceSnapshot;
 import com.crystalgui.core.trace.UiTrace;
@@ -12,9 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -71,9 +75,25 @@ public final class ShaderGraphCostProbe {
     /** {@code -Dcrystalgui.harness.desktop.graphCost.stopAfterHitchMs}: stop recording after the first frame over it. */
     private static final int HITCH_MS = Integer.getInteger("crystalgui.harness.desktop.graphCost.stopAfterHitchMs", 0);
     private static final int HITCH_FRAMES_AFTER = 5;
+    /**
+     * {@code -Dcrystalgui.harness.desktop.graphCost.logSlowMs}: print each frame over it with the local time, to line up
+     * with an outside log such as {@code nvidia-smi -lms}.
+     */
+    private static final int SLOW_LOG_MS = Integer.getInteger("crystalgui.harness.desktop.graphCost.logSlowMs", 0);
     private boolean hitchArmed;
+    /**
+     * {@code -Dcrystalgui.harness.desktop.graphCost.renderDoc=true}, with {@code --renderdoc}: capture one frame once the
+     * graph has settled, for its per-draw GPU cost on replay. Not a hitch: attached, every frame runs 2-4x slower.
+     */
+    private static final boolean RENDERDOC = Boolean.getBoolean("crystalgui.harness.desktop.graphCost.renderDoc");
+    /** What each capture is, in capture order. */
+    private final List<String> renderDocCaptures = new ArrayList<>();
     private static final int BLOCK = 240;
-    private static final int OPEN_BLOCKS = 3;
+    /**
+     * {@code -Dcrystalgui.harness.desktop.graphCost.idleBlocks}: blocks of the graph open and idle, 3 by default. More
+     * for a stall that takes minutes to show; the census then reads only the newest frames the ring holds.
+     */
+    private static final int OPEN_BLOCKS = Math.max(1, Integer.getInteger("crystalgui.harness.desktop.graphCost.idleBlocks", 3));
     private static final int EDITS = 6;
     /** Frames between edits: long enough for every recompile an edit causes to land before the next. */
     private static final int EDIT_GAP = 90;
@@ -133,8 +153,7 @@ public final class ShaderGraphCostProbe {
         for (int i = 1; i <= OPEN_BLOCKS; i++) {
             // ARMED ONCE THE GRAPH HAS SETTLED, so the first hitch it catches is not the open itself: recording
             // stops a few frames after it, and the report keeps that frame's whole tree whatever it recorded.
-            Runnable arm = i > 1 || HITCH_MS <= 0 ? () -> { } : () -> hitchArmed = true;
-            steps.add(new Step("open, idle #" + i, BLOCK, true, arm));
+            steps.add(new Step("open, idle #" + i, BLOCK, true, i > 1 ? () -> { } : this::armHitches));
         }
         steps.add(new Step("editing", EDITS * EDIT_GAP, true, () -> { }, at -> {
             if (at % EDIT_GAP != 0) return;
@@ -177,10 +196,14 @@ public final class ShaderGraphCostProbe {
     public String captureNow() {
         if (stepIndex < 0 || stepFrame != 60) return null;
         String step = steps.get(stepIndex).name();
-        if (step.equals("open, idle #1")) return "graph-open";
-        if (step.equals("closed again")) return "graph-closed";
-        return null;
+        String name = step.equals("open, idle #1") ? "graph-open" : step.equals("closed again") ? "graph-closed" : null;
+        // The readback and the encode land in this frame's idle: not the product's time.
+        if (name != null) photographed.add(CgTrace.currentFrameIndex());
+        return name;
     }
+
+    /** Frames the harness photographed or RenderDoc captured, left out of the big-frame census. */
+    private final Set<Long> photographed = new HashSet<>();
 
     /** Called once a frame, after paint. @return true once the report has been printed */
     public boolean frame() {
@@ -192,6 +215,13 @@ public final class ShaderGraphCostProbe {
             if (last != null && last.hasCpu() && last.cpuNanos() > HITCH_MS * 1_000_000L) {
                 hitchArmed = false;
                 CgTrace.stopAfterHitch(1L, HITCH_FRAMES_AFTER);
+            }
+        }
+        if (SLOW_LOG_MS > 0) {
+            CgFrameRecord last = CgTrace.frame(CgTrace.currentFrameIndex() - 1);
+            if (last != null && last.wallMillis() > SLOW_LOG_MS) {
+                System.out.printf(Locale.ROOT, "[graph-cost] slow #%d wall %.1f cpu %.1f at %s%n", last.index(),
+                        last.wallMillis(), last.hasCpu() ? last.cpuNanos() / 1e6 : -1d, LocalTime.now());
             }
         }
         // The Frame Profiler's settings size the ring at autostart, over any -D; the ring must reach the first block.
@@ -212,6 +242,22 @@ public final class ShaderGraphCostProbe {
         }
         steps.get(stepIndex).each().accept(stepFrame);
         return false;
+    }
+
+    private void armHitches() {
+        hitchArmed = HITCH_MS > 0;
+        if (RENDERDOC && RenderDoc.isAttached()) renderDocCapture("steady, graph open and idle", 1);
+    }
+
+    /** RenderDoc starts at this frame's swap, so it captures the frames after this one. */
+    private void renderDocCapture(String what, int frames) {
+        long now = CgTrace.currentFrameIndex();
+        RenderDoc.captureNextFrames(frames);
+        for (int i = 1; i <= frames; i++) {
+            photographed.add(now + i);
+            renderDocCaptures.add("#" + (now + i) + " " + what);
+        }
+        System.out.println("[graph-cost] renderdoc: capturing " + frames + " frame(s) after #" + now + ", " + what);
     }
 
     /** The frame each edit was made in; its cost lands in the frames after. */
@@ -239,6 +285,8 @@ public final class ShaderGraphCostProbe {
         CgTraceReport report = CgTraceReport.of(snapshot).budget(1000d / 60d);
         Block none = blocks.get(0);
         Block first = blocks.get(1);
+        // From the open: opening the graph is a frame the user waits on too.
+        out.addAll(bigFrames(none.to() + 1, photographed, report));
         if (HITCH_MS > 0) {
             // THE HITCH THE STOP CAUGHT: the slowest frame from the arm onwards, whole, since recording ended
             // a few frames after it and nothing later can have overwritten its zones.
@@ -246,6 +294,14 @@ public final class ShaderGraphCostProbe {
             out.add("");
             out.add("[graph-cost] the hitch recording stopped on (armed at #" + first.from() + ", over " + HITCH_MS + " ms)");
             if (hitch != null) out.add(report.frame(hitch.index()));
+        }
+        if (!renderDocCaptures.isEmpty()) {
+            out.add("");
+            out.add("[graph-cost] renderdoc captures:");
+            List<Path> files = RenderDoc.captures();
+            for (int i = 0; i < renderDocCaptures.size(); i++) {
+                out.add("  " + renderDocCaptures.get(i) + "  " + (i < files.size() ? files.get(i) : "(not written)"));
+            }
         }
         Block last = blocks.get(OPEN_BLOCKS);
         Block editing = blocks.get(OPEN_BLOCKS + 1);
@@ -345,6 +401,47 @@ public final class ShaderGraphCostProbe {
                 name, ms / count)));
         return line.toString();
     }
+
+    /** Over this a frame is a big one, whatever it spent the time on. */
+    private static final double BIG_FRAME_MS = 20d;
+    private static final int BIG_FRAMES_SHOWN = 40;
+
+    /**
+     * Every frame from {@code from} over {@link #BIG_FRAME_MS} of wall, slowest first: its cpu, gpu and gc, and the four
+     * zones with the most self time -- where the time went, rather than which parent held it.
+     */
+    private static List<String> bigFrames(long from, Set<Long> photographed, CgTraceReport report) {
+        List<CgFrameRecord> big = new ArrayList<>();
+        for (CgFrameRecord record : CgTrace.frames()) {
+            if (record.index() >= from && record.wallMillis() > BIG_FRAME_MS && !photographed.contains(record.index())) {
+                big.add(record);
+            }
+        }
+        big.sort((a, b) -> Double.compare(b.wallMillis(), a.wallMillis()));
+        List<String> out = new ArrayList<>();
+        out.add("");
+        out.add("[graph-cost] frames over " + (int) BIG_FRAME_MS + " ms from #" + from + ", slowest first: "
+                + big.size() + " of them; the zones with the most self time in each");
+        for (int i = 0; i < big.size() && i < BIG_FRAMES_SHOWN; i++) {
+            CgFrameRecord record = big.get(i);
+            List<CgTraceAggregate.Stat> stats = CgTraceAggregate.byCost(CgTrace.zonesIn(record));
+            List<CgTraceAggregate.Stat> bySelf = new ArrayList<>(stats);
+            bySelf.sort((a, b) -> Long.compare(b.selfNanos(), a.selfNanos()));
+            StringBuilder line = new StringBuilder(String.format(Locale.ROOT,
+                    "[graph-cost]   #%-6d wall %6.1f  cpu %6.1f  gpu %s  gc %3d ms |", record.index(), record.wallMillis(),
+                    record.hasCpu() ? record.cpuMillis() : -1d,
+                    record.hasGpu() ? String.format(Locale.ROOT, "%6.1f", record.gpuMillis()) : "absent",
+                    record.gcMillis()));
+            for (int s = 0; s < bySelf.size() && s < 4; s++) {
+                line.append(String.format(Locale.ROOT, "  %s %.1f", bySelf.get(s).name(), bySelf.get(s).selfMillis()));
+            }
+            out.add(line.toString());
+        }
+        for (int i = 0; i < big.size() && i < BIG_FRAME_TREES; i++) out.add(report.frame(big.get(i).index()));
+        return out;
+    }
+
+    private static final int BIG_FRAME_TREES = 6;
 
     /** The frame after {@code event} that worked longest. */
     @Nullable
