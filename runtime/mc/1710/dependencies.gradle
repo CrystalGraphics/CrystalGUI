@@ -85,7 +85,7 @@ dependencies {
     // `shadowImplementation` RELOCATES -- dependencies.gradle's own header says "included in your jar
     // under a renamed package name" -- and the relocation rewrites every reference in the bundled
     // classes, including references to CrystalGraphics API whose signatures mention JOML types. So
-    // UiRecorder went looking for:
+    // CgUiPaintContext went looking for:
     //
     //     CgFrameData.viewMatrix : Lcom/crystalgui/shadow/org/joml/Matrix4f;
     //

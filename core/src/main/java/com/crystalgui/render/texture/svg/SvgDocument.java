@@ -6,7 +6,7 @@ import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -201,7 +201,7 @@ public final class SvgDocument {
      * different number of real pixels at {@code uiScale} 1 and 2, and picking a level from the logical
      * size alone would facet on a HiDPI display and nowhere else.</p>
      */
-    private SvgDocument lodFor(UiRecorder ctx, float scale) {
+    private SvgDocument lodFor(CgUiPaintContext ctx, float scale) {
         if (tags == null) return this;
         float devicePx = Math.max(width, height) * scale * ctx.deviceScale();
         for (int i = 0; i < LOD_MAX_DEVICE_PX.length; i++) {
@@ -297,7 +297,7 @@ public final class SvgDocument {
         return coarsest;
     }
 
-    private boolean cullable(UiRecorder ctx, float x, float y, float scale, float extra) {
+    private boolean cullable(CgUiPaintContext ctx, float x, float y, float scale, float extra) {
         if (scene.isEmpty()) return true;
         float x0 = x + bounds[0] * scale - extra;
         float y0 = y + bounds[1] * scale - extra;
@@ -676,7 +676,7 @@ public final class SvgDocument {
     // ── Drawing ─────────────────────────────────────────────────────────────────────────────────────
 
     /** Draws the icon at {@code (x, y)} in its own colours, with {@code currentColor} left black. */
-    public void render(UiRecorder ctx, float x, float y, float scale) {
+    public void render(CgUiPaintContext ctx, float x, float y, float scale) {
         render(ctx, x, y, scale, 0xFF000000);
     }
 
@@ -693,12 +693,12 @@ public final class SvgDocument {
      * cost, since it is what appends the instance record the GPU reads. Retained mode saves rebuilding one
      * descriptor object, not the N submits, so the only thing it would buy is the chance to set
      * {@code pose()} instead of transformed coordinates — and {@code AGENTS.md} is explicit that
-     * {@code UiRecorder} is the single place the {@code PoseStack} is applied, so writing a pose
+     * {@code CgUiPaintContext} is the single place the {@code PoseStack} is applied, so writing a pose
      * ourselves would silently drop {@code uiScale} and any element transform.</p>
      *
      * @param tint what {@code currentColor} resolves to — the hook a monochrome icon set is themed through
      */
-    public void render(UiRecorder ctx, float x, float y, float scale, int tint) {
+    public void render(CgUiPaintContext ctx, float x, float y, float scale, int tint) {
         if (cullable(ctx, x, y, scale, 0f)) return;
         if (ctx.svgRaster().accepts(this, x, y, scale)) {
             renderCached(ctx, x, y, scale, tint, false, 0f);
@@ -729,7 +729,7 @@ public final class SvgDocument {
      * @param halfWidth stroke half-width in <em>screen</em> pixels; pass {@code <= 0} to keep the file's
      *                  own widths scaled with the icon
      */
-    public void renderMonochrome(UiRecorder ctx, float x, float y, float scale,
+    public void renderMonochrome(CgUiPaintContext ctx, float x, float y, float scale,
                                  int argb, float halfWidth) {
         // The override can be WIDER than the stroke the bounds were measured from, so it has to expand
         // the box -- otherwise a thick monochrome stroke gets culled at the viewport edge while still
@@ -760,7 +760,7 @@ public final class SvgDocument {
      * <p>Rasterised from the tier a draw this size would have used, built now rather than under the
      * frame budget: the raster is kept, so an interim coarse tier would be kept with it.</p>
      */
-    private void renderCached(UiRecorder ctx, float x, float y, float scale, int argb,
+    private void renderCached(CgUiPaintContext ctx, float x, float y, float scale, int argb,
                               boolean flat, float halfWidth) {
         SvgDocument tier = rasterTier(Math.max(width, height) * scale * ctx.deviceScale());
         List<DrawOp> ops = tier.ops();
@@ -796,7 +796,7 @@ public final class SvgDocument {
      * @param flat every cell white; otherwise a fill with colours of its own keeps them and a plain
      *             one is white either way, since a flat colour is applied when the raster is drawn
      */
-    public void accumulateFill(UiRecorder ctx, int op, float x, float y, float scale, boolean flat) {
+    public void accumulateFill(CgUiPaintContext ctx, int op, float x, float y, float scale, boolean flat) {
         DrawOp fill = ops().get(op);
         drawFill(ctx, fill, x, y, scale, 0xFFFFFFFF, flat || fill.colours() == null, true);
     }
@@ -807,7 +807,7 @@ public final class SvgDocument {
      *
      * @param halfWidth in device pixels; {@code <= 0} for the file's own, scaled
      */
-    public void accumulateStroke(UiRecorder ctx, int op, float x, float y, float scale, float halfWidth) {
+    public void accumulateStroke(CgUiPaintContext ctx, int op, float x, float y, float scale, float halfWidth) {
         DrawOp stroke = ops().get(op);
         drawStroke(ctx, stroke, x, y, scale, 0xFFFFFFFF,
                 halfWidth > 0f ? halfWidth : stroke.halfWidth() * scale);
@@ -823,7 +823,7 @@ public final class SvgDocument {
      *             {@link #renderMonochrome} means, and the reason the choice is a parameter rather than the
      *             presence of the array
      */
-    private static void drawFill(UiRecorder ctx, DrawOp op,
+    private static void drawFill(CgUiPaintContext ctx, DrawOp op,
                                  float x, float y, float scale, int argb, boolean flat) {
         drawFill(ctx, op, x, y, scale, argb, flat, false);
     }
@@ -832,7 +832,7 @@ public final class SvgDocument {
      * @param accumulate every edge is an exact area rather than only the outline ones, for cells that
      *                   are being summed into a coverage target instead of composited one by one
      */
-    private static void drawFill(UiRecorder ctx, DrawOp op,
+    private static void drawFill(CgUiPaintContext ctx, DrawOp op,
                                  float x, float y, float scale, int argb, boolean flat, boolean accumulate) {
         // Scoped per OP, never per cell: a scope costs a nanoTime pair, and a fill is hundreds of cells,
         // so per-cell instrumentation would measure itself. The cell count rides along as a counter
@@ -876,7 +876,7 @@ public final class SvgDocument {
         }
     }
 
-    private static void drawStroke(UiRecorder ctx, DrawOp op,
+    private static void drawStroke(CgUiPaintContext ctx, DrawOp op,
                                    float x, float y, float scale, int argb, float halfWidth) {
         CgTrace.add(UiTrace.FRAME, "svg.strokeSegments", op.data().length / 4);
         try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "svg.drawStroke")) {

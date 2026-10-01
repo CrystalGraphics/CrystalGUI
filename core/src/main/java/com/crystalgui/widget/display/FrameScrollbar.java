@@ -1,7 +1,7 @@
 package com.crystalgui.widget.display;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.box.Measurable;
@@ -177,7 +177,7 @@ public class FrameScrollbar extends UIElement implements Measurable {
      * SDF material, which does not keep painter's order with the batched plain rects around it.
      */
     @Override
-    public void paintContent(UiRecorder ctx, Box box) {
+    public void paintContent(CgUiPaintContext ctx, Box box) {
         if (target.frames() == 0) return;
         int thumbColor = computedStyle().get(StylePropertyRegistry.COLOR);
         int accent = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
@@ -192,7 +192,7 @@ public class FrameScrollbar extends UIElement implements Measurable {
         ctx.flush();
     }
 
-    private static void paintGrip(UiRecorder ctx, float x, float height, int argb) {
+    private static void paintGrip(CgUiPaintContext ctx, float x, float height, int argb) {
         int color = (argb & 0x00FFFFFF) | 0x90000000;
         ctx.rect().at(x, 4f).size(1f, height - 8f).fillColor(color).submit();
         ctx.rect().at(x + 2f, 4f).size(1f, height - 8f).fillColor(color).submit();

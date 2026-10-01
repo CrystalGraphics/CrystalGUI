@@ -1,6 +1,6 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
@@ -93,7 +93,7 @@ public class CgUiSpriteStressScene implements InteractiveSceneLifecycle {
     @Override
     public void render(HarnessContext ctx, FrameInfo frame) {
         document.frame(frame.getDeltaTime(), ctx.getScreenWidth() / SCALE, ctx.getScreenHeight() / SCALE);
-        UiRecorder paint = document.recorder();
+        CgUiPaintContext paint = document.paintContext();
         paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
         document.paint(paint);
         paint.endFrame();

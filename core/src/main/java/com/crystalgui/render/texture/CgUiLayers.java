@@ -2,7 +2,7 @@ package com.crystalgui.render.texture;
 
 import java.util.List;
 
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 /**
  * Several drawables in one property — <b>CSS's comma-separated background layers</b>.
@@ -63,7 +63,7 @@ public final class CgUiLayers implements CgUiDrawable, CornerRadiusAware {
     }
 
     @Override
-    public void draw(UiRecorder ctx, float mouseX, float mouseY,
+    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
         // BACKWARDS, because the first layer is the top one. @see the class note
         for (int i = layers.size() - 1; i >= 0; i--) {

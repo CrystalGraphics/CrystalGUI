@@ -11,8 +11,8 @@
 // UIElement's rounded-corner hit-test uses the same per-corner (rx,ry) values and the same
 // approximate elliptical SDF technique, so rendering and hit-testing stay consistent.
 //
-// Not part of UiRecorder's shared box-model batch (see gui_quad.shader) -- drawn via
-// UiRecorder.withMaterial(...) since it needs its own per-instance uniforms (corner
+// Not part of CgUiPaintContext's shared box-model batch (see gui_quad.shader) -- drawn via
+// CgUiPaintContext.withMaterial(...) since it needs its own per-instance uniforms (corner
 // radius, border, box size) that don't fit the shared quad batch's per-vertex-only tint.
 
 #type pos2_uv2_col4ub

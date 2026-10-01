@@ -2,7 +2,7 @@ package com.crystalgui.widget.display;
 
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.render.text.TextShadowStyle;
@@ -219,7 +219,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
     // ── What a subclass answers ─────────────────────────────────────────────────────────────
 
     /** Paint the row, in box-local pixels. The axis has already been given this track's width. */
-    protected abstract void paintTrack(UiRecorder ctx, Box box);
+    protected abstract void paintTrack(CgUiPaintContext ctx, Box box);
 
     /** How tall this row wants to be. */
     protected abstract float trackHeight();
@@ -252,7 +252,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
     }
 
     @Override
-    public void paintContent(UiRecorder ctx, Box box) {
+    public void paintContent(CgUiPaintContext ctx, Box box) {
         // THE AXIS LEARNS THE WIDTH HERE, which is the only place it is known: layout has run, and a
         // width set at construction is a guess that every later mapping inherits.
         axis.setPixels(box.width());
@@ -297,7 +297,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
      * of the line and the baseline sits an ascender below it, so a label placed at the band's middle
      * minus a guessed constant hangs below its bar at any size the constant was not tuned for.</p>
      */
-    protected void label(UiRecorder ctx, @Nullable CgFontFamily font, String text,
+    protected void label(CgUiPaintContext ctx, @Nullable CgFontFamily font, String text,
                          float x, float top, float height, float maxWidth, int argb) {
         if (font == null || text == null || text.isEmpty() || maxWidth < MIN_LABEL_WIDTH) return;
         float size = getStyle().getGeneralGroup().fontSize();

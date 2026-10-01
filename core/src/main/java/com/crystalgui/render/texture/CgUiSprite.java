@@ -5,7 +5,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgui.render.texture.geometry.Position;
 import com.crystalgui.render.texture.geometry.Size;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import lombok.Getter;
 
 /**

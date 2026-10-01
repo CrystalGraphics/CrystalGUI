@@ -11,13 +11,13 @@
 //
 //   * DepthTest ALWAYS / DepthWrite OFF -- the UI is painter's-order 2D. The engine's curve.shader
 //     uses LEQUAL because a stroke in a 3D scene should respect the depth already there.
-//   * _LayerOpacity -- the whole-draw compositing opacity UiRecorder.withLayerOpacity() drives
+//   * _LayerOpacity -- the whole-draw compositing opacity CgUiPaintContext.withLayerOpacity() drives
 //     (one side of a cross-fade, an FBO layer). Distinct from the per-instance colour alpha, which
 //     rides on the instance record; see gui_quad.shader's note on the same split.
 //
 // Pure screen-space 2D: deliberately does NOT reference CG_OBJECT_TO_WORLD / CG_MATRIX_MVP, so no
 // per-instance object-buffer record is needed. gl_Position comes straight from cg_ProjMatrix, set
-// once per frame by UiRecorder.beginFrame().
+// once per frame by CgUiPaintContext.beginFrame().
 
 #type pos2_uv2_col4ub
 #pragma cg_use curve

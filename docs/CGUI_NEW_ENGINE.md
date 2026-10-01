@@ -61,7 +61,7 @@ The frame is **`animation → style → layout → paint → input`**, driven by
 | `element.hide()` (detach) | `document.lifecycle().freeze(node)` | tree intact, boxes dropped, hooks dormant |
 | `Disposer` as a tree | `document.lifecycle().destroy(node)` | |
 | `UiThread.markCurrent()` | `document.markFrameThread()` | **per document**, so headless trees are free |
-| `UiRecorder.mirrored` | `document.boxes().mirror(subtree, host)` | a second box with its own matrices |
+| `CgUiPaintContext.mirrored` | `document.boxes().mirror(subtree, host)` | a second box with its own matrices |
 
 ---
 

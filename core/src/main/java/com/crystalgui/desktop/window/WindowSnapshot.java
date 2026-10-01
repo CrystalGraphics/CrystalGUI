@@ -4,7 +4,7 @@ import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgui.desktop.motion.WindowAnimation;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.box.BoxPainter;
 import com.crystalgui.ui.box.Box;
 import org.joml.Matrix4f;
@@ -37,7 +37,7 @@ import javax.annotation.Nullable;
  * <h3>Owned, and therefore this class's problem to free</h3>
  *
  * <p>{@code createOwned} deliberately bypasses {@code CgFrameBufferRegistry}, so nothing sweeps this: the
- * same arrangement {@code UiRecorder}'s layer pool has, and the same obligation. A window disposes
+ * same arrangement {@code CgUiPaintContext}'s layer pool has, and the same obligation. A window disposes
  * its snapshot with itself. The one case not covered is GL context loss, which in this engine happens
  * only at process shutdown — there is no destroy-then-init cycle to survive.</p>
  */
@@ -100,7 +100,7 @@ public final class WindowSnapshot {
      *              {@code uiScale} times whatever any ancestor has scaled, and a snapshot allocated
      *              against the wrong one is either blurry or four times too large.
      */
-    void capture(UiRecorder ctx, WindowFrame frame, float scale) {
+    void capture(CgUiPaintContext ctx, WindowFrame frame, float scale) {
         Box box = frame.box();
         if (box == null || box.width() <= 0f || box.height() <= 0f || scale <= 0f) return;
 
@@ -153,7 +153,7 @@ public final class WindowSnapshot {
     }
 
     /** One pass of the window into {@link #fbo}. @see #capture */
-    private void renderInto(UiRecorder ctx, Box box, float scale) {
+    private void renderInto(CgUiPaintContext ctx, Box box, float scale) {
         // THE SCISSOR IS SCREEN-SPACE and this target is not the screen. An enclosing clip -- the
         // desktop's, a scroller's -- would be applied in coordinates that mean nothing here, and would
         // cut the photograph along whatever line happened to be active.
@@ -164,7 +164,7 @@ public final class WindowSnapshot {
         // that rect, in screen pixels, against a buffer that is the window's size. The photograph then
         // comes out cut along the ancestor's edge. Resumed below so the caller's clip is exactly what it
         // was. (The push itself also has to flip against THIS buffer's height rather than the screen's,
-        // which UiRecorder.pushScissor now does; the two halves were found from the same picture,
+        // which CgUiPaintContext.pushScissor now does; the two halves were found from the same picture,
         // a minimised editor's preview showing its top half over flat panel colour.)
         // Flushed first: what is queued was drawn under the caller's clip, and is recorded with the clip at its flush.
         ctx.flush();
@@ -210,7 +210,7 @@ public final class WindowSnapshot {
     }
 
     /** Draws the photograph into a rect. Does nothing when there is none. */
-    public void draw(UiRecorder ctx, float x, float y, float width, float height) {
+    public void draw(CgUiPaintContext ctx, float x, float y, float width, float height) {
         if (fbo == null) return;
         ctx.drawLayer(fbo, x, y, width, height);
     }

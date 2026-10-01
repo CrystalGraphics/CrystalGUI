@@ -2,7 +2,7 @@ package com.crystalgui.widget.surface.snap;
 
 import java.util.List;
 
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 /**
  * <b>Draws what a snap landed on</b> — the one place a guide's look is decided, for every gesture that
@@ -35,7 +35,7 @@ public final class SnapIndicators {
      * @param ownerColour what an {@link SnapIndicator.Owner} is outlined in — fainter than {@code colour}
      * @param strokeWidth handed to {@code curve().width(...)}
      */
-    public static void paint(UiRecorder paint, List<SnapIndicator> indicators, float originX,
+    public static void paint(CgUiPaintContext paint, List<SnapIndicator> indicators, float originX,
                              float originY, float scale, int colour, int ownerColour, float strokeWidth) {
         // Owners first, so the lines and their marks are drawn over them.
         for (int i = 0; i < indicators.size(); i++) {
@@ -53,7 +53,7 @@ public final class SnapIndicators {
         }
     }
 
-    private static void points(UiRecorder paint, SnapIndicator.Points points,
+    private static void points(CgUiPaintContext paint, SnapIndicator.Points points,
                                float ox, float oy, float scale, int colour, float width) {
         float[] crosses = points.crosses();
         if (crosses.length == 0) return;
@@ -71,7 +71,7 @@ public final class SnapIndicators {
         }
     }
 
-    private static void owner(UiRecorder paint, SnapIndicator.Owner owner,
+    private static void owner(CgUiPaintContext paint, SnapIndicator.Owner owner,
                               float ox, float oy, float scale, int colour, float width) {
         float[] xs = owner.xs();
         float[] ys = owner.ys();
@@ -82,7 +82,7 @@ public final class SnapIndicators {
         }
     }
 
-    private static void gap(UiRecorder paint, SnapIndicator.Gap gap,
+    private static void gap(CgUiPaintContext paint, SnapIndicator.Gap gap,
                             float ox, float oy, float scale, int colour, float width) {
         float from = gap.from() * scale;
         float to = gap.to() * scale;
@@ -98,7 +98,7 @@ public final class SnapIndicators {
         }
     }
 
-    private static void line(UiRecorder paint, float x0, float y0, float x1, float y1,
+    private static void line(CgUiPaintContext paint, float x0, float y0, float x1, float y1,
                              int colour, float width) {
         if (Math.abs(x1 - x0) < 0.01f && Math.abs(y1 - y0) < 0.01f) return;
         paint.curve().line(x0, y0, x1, y1).width(width).color(colour).submit();

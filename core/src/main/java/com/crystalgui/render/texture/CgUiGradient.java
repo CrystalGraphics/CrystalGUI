@@ -2,7 +2,7 @@ package com.crystalgui.render.texture;
 
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.shader.CgShaderBindings;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +15,7 @@ import java.util.List;
  * <p>The whole gradient is one quad through {@code gui_gradient.shader}: the stops travel as material
  * properties and every fragment evaluates the ramp at its own position along CSS's gradient line.
  * That is Skia's shape (an unrolled shader for up to eight stops) and it replaced a quad per pair of
- * stops, which was more material switches for the same pixels and — because {@link UiRecorder}
+ * stops, which was more material switches for the same pixels and — because {@link CgUiPaintContext}
  * uploads a material's properties on the bind <em>after</em> the draw body — drew every segment with the
  * previous segment's colours. Eight stops per draw; a longer gradient is several draws, each owning a
  * half-open window of {@code t}, so no fragment is written twice and nothing is silently dropped.</p>
@@ -79,7 +79,7 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
      * frame. A method reference stored once costs nothing after the first draw. These fields are not
      * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
      */
-    private UiRecorder drawCtx;
+    private CgUiPaintContext drawCtx;
     private float drawX, drawY, drawWidth, drawHeight;
     private int drawTint, drawFirst, drawEnd;
     private float drawWindowFrom, drawWindowTo;
@@ -219,7 +219,7 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
     }
 
     @Override
-    public void draw(UiRecorder ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
+    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         if (width <= 0f || height <= 0f) return;
         int tint = ctx.getColor();
         if ((tint >>> 24) == 0) return;
@@ -251,7 +251,7 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
      * them on its second bind and flushes after it, which is the ordering {@link CgUiRect}
      * follows and the one that drew every segment with stale colours when it was broken here.</p>
      */
-    private void drawWindow(UiRecorder ctx, float x, float y, float width, float height, int tint,
+    private void drawWindow(CgUiPaintContext ctx, float x, float y, float width, float height, int tint,
                             int first, int end, float windowFrom, float windowTo) {
         drawCtx = ctx;
         drawX = x; drawY = y; drawWidth = width; drawHeight = height;

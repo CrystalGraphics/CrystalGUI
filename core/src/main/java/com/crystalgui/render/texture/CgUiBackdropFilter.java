@@ -6,7 +6,7 @@ import lombok.experimental.Accessors;
 
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.shader.CgShaderBindings;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 
 /**
  * What {@code backdrop-filter} paints: <b>the backdrop behind this rect, blurred, refracted, tinted
@@ -57,8 +57,8 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
      * frame. A method reference stored once costs nothing after the first draw. These fields are not
      * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
      */
-    private UiRecorder drawCtx;
-    private UiRecorder.Backdrop drawBackdrop;
+    private CgUiPaintContext drawCtx;
+    private CgUiPaintContext.Backdrop drawBackdrop;
     private float drawX, drawY, drawWidth, drawHeight;
     private final Runnable quadBody = this::quadBody;
     // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
@@ -170,7 +170,7 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     }
 
     @Override
-    public void draw(UiRecorder ctx, float mouseX, float mouseY,
+    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
         // THE RADIUS IS PASSED THROUGH, IN PIXELS. It used to be translated here into a dual-Kawase
         // iteration count plus a within-level tap offset, and that translation is worth recording as a
@@ -181,7 +181,7 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         // allows, plus chromatic's spread. What is out there has to have been captured to be bent in.
         boolean refracts = ior > 1.001f && bezel > 0f;
         float reach = refracts ? bezel * 2.2f * (1f + 0.2f * chromatic) : 0f;
-        UiRecorder.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius, reach);
+        CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius, reach);
         if (backdrop == null || backdrop.sharp() == null || backdrop.blurred() == null) {
             // The context's scratch, so a glass panel with nothing behind it does not allocate a rect
             // per frame to say so. @see #setFallbackColor

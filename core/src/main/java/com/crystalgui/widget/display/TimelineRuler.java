@@ -1,7 +1,7 @@
 package com.crystalgui.widget.display;
 
 import com.crystalgraphics.api.font.CgFontFamily;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -47,7 +47,7 @@ public class TimelineRuler extends TimelineTrack {
     }
 
     @Override
-    protected void paintTrack(UiRecorder ctx, Box box) {
+    protected void paintTrack(CgUiPaintContext ctx, Box box) {
         TimelineAxis axis = axis();
         int color = computedStyle().get(StylePropertyRegistry.COLOR);
         int tick = (color & 0x00FFFFFF) | 0x55000000;

@@ -157,7 +157,7 @@ It exists for the two things a registry structurally cannot do:
 1. **Release on close rather than on exit.** A registry knows what exists, never what is still
    *wanted*. Closing a shader graph frees nothing unless somebody says so.
 2. **Reach what no registry can see.** `CgPreviewRenderer.delete()` states it: *"the pool's targets
-   are `createOwned`, so no registry sweeps them."* `UiRecorder`'s layer FBO pool is the same.
+   are `createOwned`, so no registry sweeps them."* `CgUiPaintContext`'s layer FBO pool is the same.
    For that class, release depends on somebody remembering — which is the thing an ownership tree
    exists to stop depending on.
 

@@ -2,7 +2,7 @@ package com.crystalgui.app.uibuilder.canvas;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
@@ -126,7 +126,7 @@ public final class HoverHighlight extends UIElement {
     }
 
     @Override
-    public void paintContent(UiRecorder paint, Box box) {
+    public void paintContent(CgUiPaintContext paint, Box box) {
         if (box == null) return;
         CanvasRects.outlineQuad(paint, CanvasRects.quadOf(target, this), THICKNESS,
                 getStyle().computed().get(StylePropertyRegistry.COLOR));

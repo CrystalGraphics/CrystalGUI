@@ -16,7 +16,7 @@ package com.crystalgui.core.dispose;
  *       Closing that gap needs the dock to announce a close — see {@code plan/shell-architecture-audit.md} step 3.</li>
  *   <li><b>Reach what no registry can see.</b> {@code CgPreviewRenderer.delete()} says it outright —
  *       <i>"the pool's targets are {@code createOwned}, so no registry sweeps them"</i> — and
- *       {@code UiRecorder}'s layer pool is the same. For that class, release depends on somebody
+ *       {@code CgUiPaintContext}'s layer pool is the same. For that class, release depends on somebody
  *       remembering, which is the thing an ownership tree exists to stop depending on.</li>
  * </ol>
  *

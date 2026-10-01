@@ -179,7 +179,7 @@ public final class CgUiHud {
          * {@code drawScreen} is already painting the whole compositor; painting again here would draw
          * every window twice, and the second pass would win the {@code localToWorld} reconciliation the
          * hit test walks — so clicks would land somewhere other than what is on screen. That is the
-         * mirror rule {@code UiRecorder.mirrored} exists for, met from the wrong side.</p>
+         * mirror rule {@code CgUiPaintContext.mirrored} exists for, met from the wrong side.</p>
          */
         @SubscribeEvent
         public void onDrawScreen(GuiScreenEvent.DrawScreenEvent.Post event) {

@@ -2,7 +2,7 @@ package com.crystalgui.ui.box;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -352,7 +352,7 @@ public final class BoxTree {
      * Paints the tree through the shared paint context, with whatever pose is on the stack as the
      * surface transform. Layout first -- the painter draws what {@link #layout} composed.
      */
-    public void paint(UiRecorder ctx) {
+    public void paint(CgUiPaintContext ctx) {
         long timed = CgTrace.stamp(UiTrace.FRAME);
         painter.paint(this, ctx);
         CgTrace.zoneDone(UiTrace.FRAME, "paint:tree", timed);

@@ -834,7 +834,7 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 
 | Moment | What CrystalGUI does |
 |---|---|
-| `onInit` | Nothing — every GL resource is lazily built on first paint, and forcing them here would defeat `UiRecorder`'s deliberate laziness. It *does* fire though (see below), so work added here will run |
+| `onInit` | Nothing — every GL resource is lazily built on first paint, and forcing them here would defeat `CgUiPaintContext`'s deliberate laziness. It *does* fire though (see below), so work added here will run |
 | `onFrame` | Nothing — per-frame work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
 | `onDestroy` | `UiGpu.destroy()`, and nothing else |
 
@@ -851,7 +851,7 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 > materials all die with the process. Do not add cache-clearing or material-invalidation to
 > `onDestroy`; it is ceremony, not correctness.
 
-What `onDestroy` legitimately does is release the one thing nobody else frees: `UiRecorder`'s
+What `onDestroy` legitimately does is release the one thing nobody else frees: `CgUiPaintContext`'s
 layer FBO pool is built with `CgFrameBuffer.createOwned`, which bypasses `CgFrameBufferRegistry`, so
 `deleteAll()` never reaches it.
 
@@ -859,7 +859,7 @@ layer FBO pool is built with `CgFrameBuffer.createOwned`, which bypasses `CgFram
 release its own FBOs/renderers while the context is whole. Listeners dispatch in *reverse*
 registration order.
 
-> **Registration is automatic** — a `static` initializer in `UiRecorder` calls
+> **Registration is automatic** — a `static` initializer in `CgUiPaintContext` calls
 > `CgUiLifecycle.register()`, so CrystalGUI wires itself as soon as that class comes into play. Class
 > init runs once per classloader, so registration cannot repeat across a destroy/recreate cycle. A
 > process that never paints never touches the class, which keeps a dedicated server free of
@@ -872,9 +872,9 @@ registration order.
 **The V3.1 draw-list design is gone.** `CgUiDrawList`, `CgUiDrawListExecutor`, `CgUiDrawState`,
 `CgUiBatchSlots`, and `CgScissorRect` do not exist. Do not reference them.
 
-## `UiRecorder` — one per document, and `UiGpu`
+## `CgUiPaintContext` — one per document, and `UiGpu`
 
-`document.recorder()` gives a document its own. **It records** (`render-graph` G4): every draw of a frame is a
+`document.paintContext()` gives a document its own. **It records** (`render-graph` G4): every draw of a frame is a
 chunk in one `CgRecording`, touching no GL; `seal()` builds it into a `UiFrame` that refers back to nothing, and
 `UiGpu` — the render thread's half, one per process — executes it and composites it onto the host's target. A layer
 is a pass on a texture the executor lends for the frame; the target around it ends its pass at the layer and
@@ -883,15 +883,15 @@ continues in another after, so passes run in the order they were made and a read
 (`recordCallback`), never inline.
 
 ```java
-UiRecorder recorder = document.recorder();     // first call on the render thread
-recorder.beginFrame(w, h);                     // inline: the host's GL state saved, recording starts
-document.paint(recorder);
-recorder.endFrame();                           // sealed, executed, composited, the host's state back
+CgUiPaintContext ctx = document.paintContext();   // first call on the render thread
+ctx.beginFrame(w, h);                             // inline: the host's GL state saved, recording starts
+document.paint(ctx);
+ctx.endFrame();                                   // sealed, executed, composited, the host's state back
 
-recorder.recordFrame(w, h);                    // split: no GL from here...
-document.paint(recorder);
-UiFrame frame = recorder.seal();               // ...to here
-UiGpu.present(frame);                          // render thread
+ctx.recordFrame(w, h);                            // split: no GL from here...
+document.paint(ctx);
+UiFrame frame = ctx.seal();                       // ...to here
+UiGpu.present(frame);                             // render thread
 ```
 
 | Group | Methods |
@@ -938,8 +938,8 @@ UiGpu.present(frame);                          // render thread
 | Lifecycle | `UiGpu.destroy()`, `UiGpu.hasInstance()` |
 
 > **`UiGpu.destroy()` must be called on GL-context destruction** (`CgUiLifecycle.onDestroy` does). It frees
-> what nothing else sweeps: the frame target, the readback, and each recorder's retained layers, backdrop and
-> icon-raster textures — all made outside any registry — and the recorders' renderers. Not what is borrowed from
+> what nothing else sweeps: the frame target, the readback, and each paint context's retained layers, backdrop and
+> icon-raster textures — all made outside any registry — and the contexts' renderers. Not what is borrowed from
 > CrystalGraphics' registries (materials, the fallback white pixel, font atlases): `destroyContext()` sweeps those,
 > and freeing them here would be a double free.
 
@@ -961,7 +961,7 @@ UiGpu.present(frame);                          // render thread
 > bottom-up in `BoxTree` — Blink's visual overflow, with `UIElement.inkOverflow()` for a widget that
 > paints past its own box), clipped to the live scissor; the allocation, the clear and the composite all
 > address that `LayerRegion`, and **the layer's pixel (0,0) is the region's corner**. `Box.subtreeRevision`
-> is composed in the same walk, and `UiRecorder.retain` keeps the texture across frames — refused
+> is composed in the same walk, and `CgUiPaintContext.retain` keeps the texture across frames — refused
 > for any subtree with a `backdrop-filter` or a node whose `paintsDynamically()` is true, which is the
 > default for anything overriding a paint hook. `UIElement.repaint()` is the door for a widget whose
 > picture changes without moving a box. Full account in `docs/CGUI_STYLE_RENDER_PIPELINE.md` §8.
@@ -985,7 +985,7 @@ UiGpu.present(frame);                          // render thread
   called before any `submit()` and again every frame; never call `material.bind()` yourself. Text goes
   through the same renderer (CrystalGraphics' `CgTextRenderer` owns its own `CgQuadRenderer` instance).
   The curve half mirrors all of it — `curve()` applies the pose, `useCurveMaterial()` binds, and
-  `flushQuads()`/`flushCurves()` exist so `UiRecorder` can flush one path without the other when
+  `flushQuads()`/`flushCurves()` exist so `CgUiPaintContext` can flush one path without the other when
   it switches between them.
 - **`ScissorStack`** — allocation-free nested clip stack (`int[64]`, 16 levels × 4 ints), applied via
   CrystalGraphics' `CgGL` facade. **No LWJGL imports** — the old "V3.x legacy, raw GL11, scheduled for
@@ -1569,7 +1569,7 @@ com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platfo
 com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener CrystalGUI registers with
                                CrystalGraphics; drives paint-context teardown + cache invalidation
 
-com.crystalgui.render          UiRecorder (one per document: records), UiGpu (one per process: executes), UiFrame
+com.crystalgui.render          CgUiPaintContext (one per document: records), UiGpu (one per process: executes), UiFrame
                                (a sealed frame), CgUiRenderer, ScissorStack,
                                SvgRasterCache — icon fills rasterised once by additive accumulation into an
                                RGBA16F atlas and drawn as a tinted quad; sits beside the paint context and

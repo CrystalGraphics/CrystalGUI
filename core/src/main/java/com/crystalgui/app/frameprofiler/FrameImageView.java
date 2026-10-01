@@ -4,7 +4,7 @@ import com.crystalgraphics.api.texture.CgTextureSpec;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.trace.CgFrameImages;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -72,7 +72,7 @@ public class FrameImageView extends UIElement {
     }
 
     @Override
-    public void paintContent(UiRecorder ctx, Box box) {
+    public void paintContent(CgUiPaintContext ctx, Box box) {
         CgFrameImages.Image image = shown;
         if (image == null || texture == null || box.width() <= 0f || box.height() <= 0f) return;
         float scale = Math.min(box.width() / image.width(), box.height() / image.height());

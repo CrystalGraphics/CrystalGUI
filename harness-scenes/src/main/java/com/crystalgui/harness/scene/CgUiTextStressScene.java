@@ -5,7 +5,7 @@ import com.crystalgraphics.util.trace.CgChannels;
 import com.crystalgraphics.harness.trace.TraceReport;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
@@ -235,7 +235,7 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
 
                 // AND THE PAINT. `paintFrame()` did both; `frame()` only advances, so a scene that
                 // lost this half advanced perfectly and drew nothing.
-                UiRecorder paintContext = document.recorder();
+                CgUiPaintContext paintContext = document.paintContext();
                 paintContext.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
                 document.paint(paintContext);
                 paintContext.endFrame();
@@ -258,7 +258,7 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
         boolean lastFrameOfMode = inMode >= MODE_SECONDS;
         if (lastFrameOfMode) advanceMode(report);
 
-        var context = document.recorder();
+        var context = document.paintContext();
         context.text().draw().at(0, 0)
                 .text(mode.name() + (DRAW_LABELS ? " (painted) — " : " (layout only) — ") + mode.description
                         + String.format(Locale.ROOT, "  [%.1f/%.1fs]", now, TOTAL_SECONDS))

@@ -5,7 +5,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
@@ -162,11 +162,11 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
         // tree's root transform, so this is the only place the two spaces meet.
         document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
 
-        UiRecorder paintContext = document.recorder();
+        CgUiPaintContext paintContext = document.paintContext();
         paintContext.beginFrame(w, h);
         document.paint(paintContext);
         paintContext.endFrame();
-        var context = document.recorder();
+        var context = document.paintContext();
         context.text().draw().at(0, 0).text(document.boxes().uiScale() + "x").font(context.getFont().atSize(32)).submit();
     }
 

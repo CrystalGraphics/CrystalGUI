@@ -4,20 +4,20 @@ import com.crystalgraphics.render.graph.CgFrame;
 import com.crystalgraphics.render.graph.CgFrameBuilder;
 
 /**
- * One UI frame, recorded and built: what {@link UiGpu#present} executes. It refers to no recorder state — the
- * recorder records its next frame at once — so it may be built on one thread and presented on the render thread.
+ * One UI frame, recorded and built: what {@link UiGpu#present} executes. It refers to no paint-context state — the
+ * context records its next frame at once — so it may be built on one thread and presented on the render thread.
  *
  * <pre>{@code
- * recorder.recordFrame(width, height);       // the document's thread; no GL
- * document.paint(recorder);
- * UiFrame frame = recorder.seal();           // ordered, batched and packed here
+ * ctx.recordFrame(width, height);            // the document's thread; no GL
+ * document.paint(ctx);
+ * UiFrame frame = ctx.seal();                // ordered, batched and packed here
  *
  * UiGpu.present(frame);                      // render thread, inside the host's frame
  * }</pre>
  *
  * <ul>
- *   <li>Present each frame once: presenting hands its buffers back to the recorder's builder.</li>
- *   <li>Two frames of one recorder may be in flight at once; a recorder whose frames are never presented keeps
+ *   <li>Present each frame once: presenting hands its buffers back to the context's builder.</li>
+ *   <li>Two frames of one context may be in flight at once; a context whose frames are never presented keeps
  *       building new buffers.</li>
  * </ul>
  */

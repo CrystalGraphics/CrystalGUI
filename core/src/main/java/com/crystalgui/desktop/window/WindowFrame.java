@@ -19,7 +19,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
@@ -336,7 +336,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
      */
 
     @Override
-    public void paintDecoration(UiRecorder ctx, Box box) {
+    public void paintDecoration(CgUiPaintContext ctx, Box box) {
         super.paintDecoration(ctx, box);
         if (!snapshotPending) return;
         snapshotPending = false;
@@ -1864,7 +1864,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // destroyed with the window that borrowed it.
         releaseChrome();
         // OWNED, so nothing else frees it: createOwned bypasses CgFrameBufferRegistry by design, the
-        // same arrangement UiRecorder's layer pool has and the same obligation.
+        // same arrangement CgUiPaintContext's layer pool has and the same obligation.
         snapshot.dispose();
         // READ BEFORE hide() clears it, and this is the whole of the hide/destroy distinction. Hiding
         // hands activation to nobody -- putting a window away is not asking for another one, and

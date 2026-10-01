@@ -1,7 +1,7 @@
 package com.crystalgui.widget.composite;
 
 import com.crystalgraphics.gl.render.CgVectorRenderer;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -624,7 +624,7 @@ public class RadarChart extends UIElement {
     // ── Painting ────────────────────────────────────────────────────────────────────────────────
 
     @Override
-    public void paintContent(UiRecorder ctx, Box box) {
+    public void paintContent(CgUiPaintContext ctx, Box box) {
         if (axes.size() < MIN_AXES) return;
         float radius = radiusIn(box);
         if (radius <= 0f) return;
@@ -655,7 +655,7 @@ public class RadarChart extends UIElement {
         return ((argb >>> 24) & 0xFF) / 255f;
     }
 
-    private void paintWedges(UiRecorder ctx, float cx, float cy, float radius) {
+    private void paintWedges(CgUiPaintContext ctx, float cx, float cy, float radius) {
         int count = axes.size();
         float strength = fillStrength();
         for (int i = 0; i < count; i++) {
@@ -718,7 +718,7 @@ public class RadarChart extends UIElement {
      * fill agree exactly with the stroke drawn over it -- {@code Curve.colors} ramps along the segment,
      * so the chord is the parameter both of them read.</p>
      */
-    private void paintBlendedWedge(UiRecorder ctx, float cx, float cy,
+    private void paintBlendedWedge(CgUiPaintContext ctx, float cx, float cy,
                                    float ax, float ay, float bx, float by,
                                    int from, int to, boolean fade) {
         int slices = fade ? WEDGE_SLICES_FADED : WEDGE_SLICES;
@@ -771,7 +771,7 @@ public class RadarChart extends UIElement {
     }
 
     /** The rings and the spokes — Chart.js's {@code pathRadiusLine} with a polygon rather than a circle. */
-    private void paintWeb(UiRecorder ctx, float cx, float cy, float radius, int argb, float line) {
+    private void paintWeb(CgUiPaintContext ctx, float cx, float cy, float radius, int argb, float line) {
         if (rings <= 0 || (argb >>> 24) == 0) return;
         int count = axes.size();
 
@@ -825,7 +825,7 @@ public class RadarChart extends UIElement {
      * half alpha is not a lighter outline, it is a blurry one — so the contrast between a faint fill
      * and its own saturated rim is the whole effect.</p>
      */
-    private void paintRim(UiRecorder ctx, float cx, float cy, float radius, float line) {
+    private void paintRim(CgUiPaintContext ctx, float cx, float cy, float radius, float line) {
         int count = axes.size();
         for (int i = 0; i < count; i++) {
             int next = (i + 1) % count;

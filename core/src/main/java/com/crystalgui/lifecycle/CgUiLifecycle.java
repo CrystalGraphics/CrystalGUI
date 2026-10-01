@@ -16,7 +16,7 @@ import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiGpu;
 
 import java.util.LinkedHashMap;
@@ -32,14 +32,14 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * every CrystalGUI-side subsystem that has a lifecycle.</p>
  *
  * <h3>Why a coordinator rather than each subsystem registering itself</h3>
- * <p>Teardown order matters and is only knowable from here. {@link UiRecorder} must release
+ * <p>Teardown order matters and is only knowable from here. {@link CgUiPaintContext} must release
  * its framebuffers and renderer before the caches that feed it are dropped, and all of it must
  * happen before CrystalGraphics sweeps the registries those resources came from. Letting four
  * classes each register independently would make that order an accident of class-initialisation
  * timing. One listener, one explicit sequence.</p>
  *
  * <h3>Registration is automatic</h3>
- * <p>A static initializer in {@link UiRecorder} calls {@link #register()}, so CrystalGUI wires
+ * <p>A static initializer in {@link CgUiPaintContext} calls {@link #register()}, so CrystalGUI wires
  * itself up as soon as that class comes into play — which is exactly when it is about to own
  * something that needs releasing. There is no integration step for a loader or a harness scene to
  * remember, and no way for the two to fall out of step. A process that never paints (a dedicated
@@ -67,7 +67,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
      * ignores a duplicate registration, which matters because a double {@code onDestroy} would be a
      * double free.
      *
-     * <p>Called automatically from {@link UiRecorder}'s static initializer — see the class
+     * <p>Called automatically from {@link CgUiPaintContext}'s static initializer — see the class
      * javadoc. Calling it yourself is harmless, and only useful if you want CrystalGUI registered
      * before anything has touched the paint context.</p>
      *
@@ -133,7 +133,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
      * Nothing to eagerly build.
      *
      * <p>Deliberately empty rather than pre-warming: every CrystalGUI GL resource is created lazily
-     * on the first paint, and {@link UiRecorder}'s laziness is load-bearing — constructing it
+     * on the first paint, and {@link CgUiPaintContext}'s laziness is load-bearing — constructing it
      * here would trigger material compilation and font loading in every process that merely touches
      * this class, including a dedicated server that will never draw a frame. The hook is implemented
      * so the intent is on the record: this is "nothing to do", not "nobody wired it up".</p>
@@ -163,7 +163,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         // Warmup the paint context, around 1000ms on first init done before world frame time. Every domain:
         // a material bind applies its pass's whole render state, and this runs inside the host's world pass.
         try (CgGlScope ignored = CgGlState.saveAll()) {
-            UiRecorder.warm(width, height);
+            CgUiPaintContext.warm(width, height);
         }
     }
     
@@ -238,7 +238,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
      * stylesheets and sprites are all about to die with the process regardless. Clearing them here
      * would be ceremony, not correctness.</p>
      *
-     * <p>What remains is the one thing genuinely nobody else frees. {@link UiRecorder}'s layer
+     * <p>What remains is the one thing genuinely nobody else frees. {@link CgUiPaintContext}'s layer
      * FBO pool is built with {@code CgFrameBuffer.createOwned}, which bypasses
      * {@code CgFrameBufferRegistry} — so {@code CgFrameBufferRegistry.deleteAll()} does not reach it.
      * Releasing it here matches the engine's own convention of explicit, complete teardown rather

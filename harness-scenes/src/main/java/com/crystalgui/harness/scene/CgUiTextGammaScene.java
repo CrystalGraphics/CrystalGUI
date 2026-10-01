@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.text.render.CgTextGamma.Level;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
@@ -125,7 +125,7 @@ public class CgUiTextGammaScene implements InteractiveSceneLifecycle, CgSystemIn
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
         document.frame(frame.getDeltaTime(), w / scale, h / scale);
-        UiRecorder paint = document.recorder();
+        CgUiPaintContext paint = document.paintContext();
         paint.textGamma(PRESETS[preset]);
         paint.beginFrame(w, h);
         document.paint(paint);

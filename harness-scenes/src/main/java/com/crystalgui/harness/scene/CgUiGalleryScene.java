@@ -31,7 +31,7 @@ import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
-import com.crystalgui.render.UiRecorder;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.visual.Resize;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
@@ -2461,7 +2461,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
     };
 
     /**
-     * {@code UiRecorder.curve()} — Bézier strokes as an ordinary painting capability, available
+     * {@code CgUiPaintContext.curve()} — Bézier strokes as an ordinary painting capability, available
      * to any element's {@code paintSelf} exactly as {@code fillRect} is.
      *
      * <p>The renderer itself is covered against a raw GL surface by the harness's
@@ -2536,7 +2536,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         @Override
-        public void paintContent(UiRecorder ctx, Box box) {
+        public void paintContent(CgUiPaintContext ctx, Box box) {
             super.paintContent(ctx, box);
             // ZERO, not box.x()/box.y(). BoxPainter poses every box in its OWN space, so the origin
             // the strokes are offset from is already this canvas's top-left -- and it stays correct
@@ -2570,7 +2570,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Line, arc, taper, gradient — the four things one stroke can vary. */
-        private void paintBasics(UiRecorder ctx, float x, float y) {
+        private void paintBasics(CgUiPaintContext ctx, float x, float y) {
             ctx.curve().line(x + 12, y + 16, x + 96, y + 16).width(1.5f).color(0xFFE0E0E0).submit();
             ctx.curve().from(x + 12, y + 60).via(x + 54, y + 28).to(x + 96, y + 60)
                     .width(2.5f).color(0xFF6CC4FF).submit();
@@ -2587,7 +2587,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
          * endpoints — the diagonal group matters because a square cap's corner reaches
          * halfWidth*sqrt(2) along one axis only when the stroke is not axis-aligned.
          */
-        private void paintCaps(UiRecorder ctx, float x, float y) {
+        private void paintCaps(CgUiPaintContext ctx, float x, float y) {
             int[] caps = { CgVectorRenderer.CAP_BUTT, CgVectorRenderer.CAP_ROUND, CgVectorRenderer.CAP_SQUARE };
             for (int i = 0; i < caps.length; i++) {
                 float cy = y + 16 + i * 21;
@@ -2606,7 +2606,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Feather sweep: a hard edge at 0, a soft glow by 12. Same width and colour throughout. */
-        private void paintFeather(UiRecorder ctx, float x, float y) {
+        private void paintFeather(CgUiPaintContext ctx, float x, float y) {
             for (int i = 0; i < 8; i++) {
                 float cx = x + 26 + i * 50;
                 float feather = i * 1.7f;
@@ -2617,7 +2617,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Width sweep, hairline to slab — the range a graph editor actually spans. */
-        private void paintWidth(UiRecorder ctx, float x, float y) {
+        private void paintWidth(CgUiPaintContext ctx, float x, float y) {
             for (int i = 0; i < 9; i++) {
                 float cx = x + 10 + i * 46;
                 float w = 0.4f + i * 1.5f;
@@ -2627,7 +2627,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Gradients, including taper and gradient together — near-free once the record exists. */
-        private void paintGradient(UiRecorder ctx, float x, float y) {
+        private void paintGradient(CgUiPaintContext ctx, float x, float y) {
             for (int i = 0; i < 5; i++) {
                 float cy = y + 14 + i * 12;
                 float h0 = i / 5f;
@@ -2644,7 +2644,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
          * then a thin bright core. Feather is what makes this work at all; without a per-instance
          * softness the halo would be a hard-edged slab.
          */
-        private void paintNeon(UiRecorder ctx, float x, float y, float t) {
+        private void paintNeon(CgUiPaintContext ctx, float x, float y, float t) {
             float bow = 22f + 10f * (float) Math.sin(t * 1.3f);
             int tint = hue(t * 0.12f);
             float[] widths = { 13f, 6f, 2f };
@@ -2659,7 +2659,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Cubics — one submit() each, split CPU-side into 1-4 quadratics. Gradient must not band. */
-        private void paintCubic(UiRecorder ctx, float x, float y, float t) {
+        private void paintCubic(CgUiPaintContext ctx, float x, float y, float t) {
             for (int i = 0; i < 3; i++) {
                 float cx = x + 16 + i * 136;
                 float wob = 26f + 16f * (float) Math.sin(t * 0.9f + i * 1.1f);
@@ -2676,7 +2676,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** A travelling sine, built from a run of quadratics — the polyline case. */
-        private void paintWave(UiRecorder ctx, float x, float y, float t) {
+        private void paintWave(CgUiPaintContext ctx, float x, float y, float t) {
             final int segments = 34;
             float span = 396f;
             float midY = y + 37;
@@ -2704,7 +2704,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Stacked tapered arcs — taper plus gradient plus overlap, the "does it look good" row. */
-        private void paintRibbon(UiRecorder ctx, float x, float y, float t) {
+        private void paintRibbon(CgUiPaintContext ctx, float x, float y, float t) {
             final int strands = 14;
             for (int i = 0; i < strands; i++) {
                 float p = i / (float) (strands - 1);
@@ -2726,7 +2726,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
          * cubics tinted from source port to destination port, which is the standard idiom and the
          * reason gradient was worth having in the instance record at all.
          */
-        private void paintNodeGraph(UiRecorder ctx, float x, float y, float t) {
+        private void paintNodeGraph(CgUiPaintContext ctx, float x, float y, float t) {
             float[] srcY = { y + 26, y + 52, y + 78 };
             float[] dstY = { y + 34, y + 70 };
             int[] srcColor = { 0xFFFF6B6B, 0xFF6CC4FF, 0xFFFFC24D };
@@ -2761,7 +2761,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Rotating spokes, each a tapered gradient arc. The harness scene's crowd-pleaser. */
-        private void paintFan(UiRecorder ctx, float x, float y, float t) {
+        private void paintFan(CgUiPaintContext ctx, float x, float y, float t) {
             float cx = x + 210;
             float cy = y + 75;
             final int spokes = 18;
@@ -2781,7 +2781,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** An expanding spiral in quadratic segments — many strokes, one draw call. */
-        private void paintSpiral(UiRecorder ctx, float x, float y, float t) {
+        private void paintSpiral(CgUiPaintContext ctx, float x, float y, float t) {
             float cx = x + 210;
             float cy = y + 75;
             final int steps = 70;
@@ -2810,7 +2810,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** A Lissajous figure — long, self-crossing, and the best look at antialiasing quality. */
-        private void paintLissajous(UiRecorder ctx, float x, float y, float t) {
+        private void paintLissajous(CgUiPaintContext ctx, float x, float y, float t) {
             float cx = x + 210;
             float cy = y + 75;
             float rx = 180f, ry = 60f;
@@ -2850,7 +2850,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
          * correct result is a sandwich. Mirrored on the right so an ordering rule that only holds one
          * way round still fails visibly.
          */
-        private void paintInterleaved(UiRecorder ctx, float x, float y) {
+        private void paintInterleaved(CgUiPaintContext ctx, float x, float y) {
             // Both strokes must cross the panel's VERTICAL span, not just its horizontal one — a
             // stroke that merely grazes the panel's edge proves nothing about ordering, because
             // "hidden behind it" and "drawn over it" look identical when they barely touch.
@@ -2863,7 +2863,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** The lower stroke and the lower bar must fade by the same amount. */
-        private void paintOpacity(UiRecorder ctx, float x, float y) {
+        private void paintOpacity(CgUiPaintContext ctx, float x, float y) {
             ctx.curve().line(x + 12, y + 24, x + 180, y + 24).width(6f).color(0xFF6CC4FF).submit();
             ctx.flush();
             ctx.withLayerOpacity(0.35f, () -> {
@@ -2924,12 +2924,12 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
 
         // AND THE PAINT. `paintFrame()` did both; `frame()` only advances, so a scene that
         // lost this half advanced perfectly and drew nothing.
-        UiRecorder paintContext = document.recorder();
+        CgUiPaintContext paintContext = document.paintContext();
         paintContext.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
         document.paint(paintContext);
         paintContext.endFrame();
 
-        var context = document.recorder();
+        var context = document.paintContext();
         Tab selected = pages.getSelectedTab();
         context.text().draw().at(0, 0)
                 .text(String.format("Gallery — page=%s   theme=%s   uiScale=%.2f ([ ])   clicks=%d   slider=%.0f",
