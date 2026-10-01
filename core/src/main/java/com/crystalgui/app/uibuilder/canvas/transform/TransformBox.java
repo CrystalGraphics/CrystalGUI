@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas.transform;
 
+import com.crystalgui.ui.service.PlatformPort;
 import java.util.List;
 import java.util.Objects;
 
@@ -11,7 +12,6 @@ import org.joml.Vector3f;
 
 import com.google.gson.JsonElement;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.core.cursor.Cursor;
@@ -278,8 +278,8 @@ public final class TransformBox extends UIElement {
     }
 
     private static int modifiersNow() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
+        PlatformPort input = PlatformPort.current();
+        return input == null ? 0 : input.modifiers();
     }
 
     /**

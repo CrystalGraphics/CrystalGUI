@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
@@ -149,9 +149,9 @@ final class WindowMove {
             Desktop desktop = frame.desktop();
             if (desktop == null) return;
             int mask = desktop.moveModifier();
-            var input = CgPlatform.input();
+            PlatformPort input = PlatformPort.current();
             if (mask == 0 || input == null) return;
-            if ((input.getCurrentModifiers() & mask) != mask) return;
+            if ((input.modifiers() & mask) != mask) return;
             // UNLESS THE CONTENT SPENDS THAT MODIFIER TOO. This listener is on the capture phase so that
             // "anywhere in the window" is true, which means it reaches content before content does -- and
             // a design canvas uses Alt for resizing from the centre and for suspending snap. Holding Alt

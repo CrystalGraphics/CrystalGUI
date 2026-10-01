@@ -1,10 +1,10 @@
 package com.crystalgui.app.uibuilder.canvas.transform;
 
+import com.crystalgui.ui.service.PlatformPort;
 import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -211,8 +211,8 @@ public final class FreeTransformTool implements Tool {
      * <p>The engine's own Select tool and the out-of-flow move both ask the same way.</p>
      */
     private static int modifiersNow() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
+        PlatformPort input = PlatformPort.current();
+        return input == null ? 0 : input.modifiers();
     }
 
     @Override

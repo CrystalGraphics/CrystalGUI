@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.ui.dom.UIElement;
 import org.joml.Vector3f;
 import org.joml.Vector2f;
@@ -7,7 +8,6 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgShapedRun;
 import com.crystalgraphics.api.text.CgTextLayout;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.CrystalGuiCore;
@@ -1472,9 +1472,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // Click count drives GRANULARITY, and the granularity is remembered for the whole drag --
             // see dragGranularity. 1 = character, 2 = word, 3 = line, as in VS Code's mouse handler.
             int clicks = Math.min(3, Math.max(1, event.getDetail()));
-            boolean extend = CgModifiers.hasShift(CgPlatform.input().getCurrentModifiers());
-            boolean addCaret = CgModifiers.hasAlt(CgPlatform.input().getCurrentModifiers());
-            int mods = CgPlatform.input().getCurrentModifiers();
+            boolean extend = CgModifiers.hasShift(PlatformPort.current().modifiers());
+            boolean addCaret = CgModifiers.hasAlt(PlatformPort.current().modifiers());
+            int mods = PlatformPort.current().modifiers();
 
             // CTRL+CLICK IS GO-TO-DEFINITION, which the Alt branch below has named as the reason it leaves
             // Ctrl alone since multi-caret went in. It moves the caret FIRST and resolves from there: the
@@ -6508,7 +6508,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
         @Override
         public void cut() {
-            CgPlatform.input().setClipboard(getSelectedText());
+            PlatformPort.current().setClipboard(getSelectedText());
             deleteSelections();
         }
 
@@ -6519,20 +6519,20 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
         @Override
         public void copy() {
-            CgPlatform.input().setClipboard(getSelectedText());
+            PlatformPort.current().setClipboard(getSelectedText());
         }
 
         @Override
         public boolean canPaste() {
             // The SYSTEM clipboard, because that is the one an editor pastes from -- and it is why this
             // question belongs to the provider rather than to the command.
-            String pending = CgPlatform.input().getClipboard();
+            String pending = PlatformPort.current().clipboard();
             return !isReadOnly() && pending != null && !pending.isEmpty();
         }
 
         @Override
         public void paste() {
-            String pending = CgPlatform.input().getClipboard();
+            String pending = PlatformPort.current().clipboard();
             if (pending == null || pending.isEmpty()) return;
             // RE-INDENTED TO WHERE IT LANDS, so a method copied out of one class arrives at the new
             // one's depth. A shift and not a reformat -- see TypeOperations.reindentForPaste.

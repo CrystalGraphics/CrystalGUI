@@ -13,6 +13,7 @@ import com.crystalgui.ui.box.BoxTree;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Dismiss;
 import com.crystalgui.ui.service.Focus;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Lifecycle;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -137,7 +138,6 @@ public final class UIDocument extends UIElement {
      */
     public UIDocument markFrameThread() {
         frameThread = Thread.currentThread();
-        UiThread.markCurrent();
         return this;
     }
 
@@ -160,6 +160,55 @@ public final class UIDocument extends UIElement {
     /** Refuses a caller on any thread but the frame thread, once one has been claimed. */
     public void require(String what) {
         UiThread.require(what, frameThread);
+    }
+
+    // ── The running document ─────────────────────────────────────────────────
+
+    private static final ThreadLocal<UIDocument> RUNNING = new ThreadLocal<>();
+
+    /** The document whose frame, input event or task is running on this thread, or null. */
+    @Nullable
+    public static UIDocument current() {
+        return RUNNING.get();
+    }
+
+    /** A scope in which this document is {@link #current()}; closing restores the previous one. */
+    public interface Running extends AutoCloseable {
+        @Override
+        void close();
+    }
+
+    /**
+     * Makes this document {@link #current()} on this thread until the scope closes. Scopes nest.
+     *
+     * <pre>{@code
+     * try (UIDocument.Running ignored = document.makeCurrent()) {
+     *     document.input().consumeMouseEvent(event);
+     * }
+     * }</pre>
+     */
+    public Running makeCurrent() {
+        UIDocument previous = RUNNING.get();
+        RUNNING.set(this);
+        UiThread.enter();
+        return () -> {
+            UiThread.exit();
+            RUNNING.set(previous);
+        };
+    }
+
+    // ── The platform ─────────────────────────────────────────────────────────
+
+    private PlatformPort platform = PlatformPort.INLINE;
+
+    /** What this document asks of the platform: modifiers, keys, clipboard, sound, cursor. */
+    public PlatformPort platform() {
+        return platform;
+    }
+
+    /** Installs the port a host routes this document's platform calls through. */
+    public void usePlatform(PlatformPort port) {
+        this.platform = port == null ? PlatformPort.INLINE : port;
     }
 
     // ── Style ────────────────────────────────────────────────────────────────
@@ -474,6 +523,12 @@ public final class UIDocument extends UIElement {
      * paints {@code :hover} on the right element in the same frame. The host paints after this returns.</p>
      */
     public void frame(float deltaSeconds, float width, float height) {
+        try (Running ignored = makeCurrent()) {
+            runFrame(deltaSeconds, width, height);
+        }
+    }
+
+    private void runFrame(float deltaSeconds, float width, float height) {
         // A FRAME STARTS HERE AND ENDS IN THE PAINT CONTEXT, because the host drives the two halves
         // separately: this is animation, style and layout, and the paint that follows is a call the
         // host makes itself. @see CgUiPaintContext#endFrame

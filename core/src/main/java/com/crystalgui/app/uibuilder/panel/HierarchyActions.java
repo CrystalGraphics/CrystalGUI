@@ -1,10 +1,10 @@
 package com.crystalgui.app.uibuilder.panel;
 
+import com.crystalgui.ui.service.PlatformPort;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.document.NodeSelectors;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
@@ -116,7 +116,7 @@ public final class HierarchyActions {
                         selectors.add(NodeSelectors.cssPath(node, panel.documentRoot()));
                     }
                     String text = String.join("\n", selectors);
-                    CgPlatform.input().setClipboard(text);
+                    PlatformPort.current().setClipboard(text);
                     Notifications.show(Notification.info("Copied").withDetail(text));
                 }));
     }

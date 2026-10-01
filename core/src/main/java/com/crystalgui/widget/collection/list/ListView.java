@@ -1,6 +1,6 @@
 package com.crystalgui.widget.collection.list;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -941,14 +941,14 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     private int pendingSelectOnRelease = -1;
 
     private static boolean isShiftDown() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasShift(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasShift(input.modifiers());
     }
 
     /** Ctrl, or Command on a Mac — {@code CgModifiers} already resolves which one this platform means. */
     private static boolean isMultiSelectModifierDown() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasCtrl(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasCtrl(input.modifiers());
     }
 
     public ListView<T> selectAll() {
@@ -1226,7 +1226,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             if (out.length() > 0) out.append('\n');
             out.append(renderer.copyTextFor(model.get(index)));
         }
-        CgPlatform.input().setClipboard(out.toString());
+        PlatformPort.current().setClipboard(out.toString());
     }
 
     @Override
