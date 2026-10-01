@@ -553,7 +553,8 @@ public final class BoxPainter {
             boolean padded = !shaped || axisAligned(ctx);
             if (padded) pushPaddingScissor(clip, ctx);
             // The layer it replaces was also a clip to the region, and a box painting past its own ink relied on it.
-            boolean toRegion = elided || shaped;
+            // Not for a box a compositor moves: the region is in the target's pixels and would stay where it was recorded.
+            boolean toRegion = (elided || shaped) && !lifted.willChangeTransform();
             if (toRegion) {
                 if (elided) CgTrace.add(UiTrace.FRAME, "masks-elided", 1);
                 pose.last().pose().set(ctx.targetToDraw());
