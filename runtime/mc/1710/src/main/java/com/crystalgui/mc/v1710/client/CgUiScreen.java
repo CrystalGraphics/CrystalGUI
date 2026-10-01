@@ -305,7 +305,7 @@ public final class CgUiScreen extends GuiScreen {
         // consumeKeyboardEvent returns TRUE when the UI CONSUMED the key -- that return exists precisely
         // so a host can act on what is LEFT OVER. Read as "unconsumed" it closed the screen on an Escape
         // the window had already dealt with and stayed open on one nobody wanted.
-        boolean consumed = CgUiInput.pumpKeyboard(window);
+        boolean consumed = CgUiInput.pumpKeyboard(HostSession.session().input());
         if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
             closeRequested = true;
         }
@@ -317,7 +317,7 @@ public final class CgUiScreen extends GuiScreen {
         UIDocument window = window();
         if (window == null) return;
         // Raw device height, never GuiScreen.height -- see CgUiInput.pumpMouse.
-        CgUiInput.pumpMouse(window, mc.displayHeight);
+        CgUiInput.pumpMouse(HostSession.session().input(), mc.displayHeight);
     }
 
     /**

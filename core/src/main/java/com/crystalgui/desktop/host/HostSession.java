@@ -108,6 +108,7 @@ public final class HostSession {
 
     private final HostServices services;
     private final ApplicationKind primaryKind;
+    private final HostInput input = new HostInput(this::document);
 
     @Nullable
     private DesktopHost host;
@@ -242,6 +243,11 @@ public final class HostSession {
     @Nullable
     public UIDocument document() {
         return host == null ? null : host.document();
+    }
+
+    /** Where a host delivers every input event while its own screen is up. */
+    public HostInput input() {
+        return input;
     }
 
     /** This client's compositor, or null until the surface has been shown once. */

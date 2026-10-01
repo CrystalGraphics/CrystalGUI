@@ -1,7 +1,7 @@
 package com.crystalgui.mc.v1710.client;
 
+import com.crystalgui.desktop.host.HostInput;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.HostPointer;
 
 import cpw.mods.fml.client.registry.ClientRegistry;
@@ -96,8 +96,8 @@ public final class CgUiInput {
      * @param displayHeight raw device height — <b>not</b> {@code GuiScreen.height}, which is the scaled
      *                      GUI size and would put the pointer off by the scale factor
      */
-    public static void pumpMouse(UIDocument window, int displayHeight) {
-        window.input().consumeMouseEvent(HostPointer.of(
+    public static void pumpMouse(HostInput input, int displayHeight) {
+        input.consumeMouseEvent(HostPointer.of(
                 Mouse.getEventX(),
                 displayHeight - Mouse.getEventY(),
                 Mouse.getEventDX(),
@@ -115,8 +115,8 @@ public final class CgUiInput {
      *         what lets the screen close on an Escape nothing else wanted. This javadoc said the
      *         opposite, and its one caller believed it
      */
-    public static boolean pumpKeyboard(UIDocument window) {
-        return window.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+    public static boolean pumpKeyboard(HostInput input) {
+        return input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
                 Keyboard.getEventCharacter(),
                 Keyboard.getEventKey(),
                 Keyboard.getEventKeyState(),

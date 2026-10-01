@@ -189,6 +189,7 @@ spells something; it decides nothing. The seams it answers, all in `core/`:
 | `fs.server.WorkspaceRoles` | is this actor the single-player owner, and is it a connected operator |
 | `probe.ServerSmoke.Host` | is this a dedicated server, which package is client-only, how to stop |
 | `ui.input.HostPointer` | *(nothing — it OWNS)* the scroll sign, and that a move carries no click time |
+| `desktop.host.HostInput` | *(nothing — it OWNS)* where its screen's input enters: a host calls `HostSession.session().input()`, never `document.input()`, so events can be queued for a document on its own thread |
 
 **A decision made in one loader is a decision the other loader got wrong.** Nothing can see it: each
 copy is internally consistent, so no test fails and no guard fires. Four such decisions had already
