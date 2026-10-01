@@ -402,7 +402,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
             if (key == Attribute.HIDDEN) structureChanged();
             // SCROLL_EXEMPT is read while world matrices are composed, and changes none of the
             // geometry -- so it is a transform invalidation and not a relayout.
-            if (key == Attribute.SCROLL_EXEMPT && box != null) box.tree().transformsChanged();
+            if (key == Attribute.SCROLL_EXEMPT && box != null) box.tree().transformsChanged(box);
             invalidateStyleMatch();
             m.observe(() -> TreeObserver.Dispatch.attributeChanged(observer, this));
         } finally {
@@ -1247,8 +1247,13 @@ public class UIElement extends UINode implements EventTarget, Styleable {
 
     /** The box's, once it has clamped against the content it laid out. */
     public final void setScrollOffsets(float left, float top) {
+        if (left == scrollLeft && top == scrollTop) return;
         this.scrollLeft = left;
         this.scrollTop = top;
+        // What the box hosts moves, which only a recompose of this box shows. Widgets write offsets
+        // directly during a thumb drag, so the box's own setter is not the only way in.
+        Box box = box();
+        if (box != null) box.tree().transformsChanged(box);
     }
 
     /**

@@ -140,6 +140,12 @@ public final class Box {
     /** Whether anything in this subtree moved on the current compose pass. @see BoxTree#composeInk */
     boolean subtreeChanged;
 
+    /** This box's matrix inputs changed: the next compose recomputes it and everything it hosts. */
+    boolean composeDirty;
+
+    /** Something this box hosts, at any depth, is {@link #composeDirty}: the walk must come down here. */
+    boolean descendantComposeDirty;
+
     /** What this box paints in its OWN space, refreshed only when its signature moves. */
     float localInkL, localInkT, localInkR, localInkB;
 
@@ -492,9 +498,7 @@ public final class Box {
         if (!isScrollContainer()) return;
         left = clamp(left, 0f, maxScrollLeft());
         top = clamp(top, 0f, maxScrollTop());
-        if (left == node.scrollLeft() && top == node.scrollTop()) return;
         node.setScrollOffsets(left, top);
-        tree.transformsChanged();
     }
 
     // ── Scroll extents ───────────────────────────────────────────────────────
@@ -662,7 +666,7 @@ public final class Box {
     public void setTransform(@Nullable Transform transform) {
         transformOverride = transform;
         reclassify();
-        tree.transformsChanged();
+        tree.transformsChanged(this);
     }
 
     /**
@@ -681,7 +685,7 @@ public final class Box {
     public void setTransformOrigin(@Nullable Float x, @Nullable Float y) {
         transformOriginX = x;
         transformOriginY = y;
-        tree.transformsChanged();
+        tree.transformsChanged(this);
     }
 
     /** @see #setTransformOrigin */
