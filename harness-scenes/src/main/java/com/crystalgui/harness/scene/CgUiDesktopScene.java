@@ -2,6 +2,7 @@ package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 import com.crystalgui.core.window.WindowPolicy;
@@ -65,6 +66,7 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.app.shadergraph.ShaderGraphDocument;
 import com.crystalgui.document.Document;
 import com.crystalgui.graph.NodeData;
+import com.crystalgui.harness.HoverSweepProbe;
 import com.crystalgui.harness.ShaderGraphCostProbe;
 import com.crystalgui.harness.TraceCostProbe;
 
@@ -353,6 +355,7 @@ public class CgUiDesktopScene
         if (editor == null) return;
         editor.addClass("desktop-editor");
         if (GRAPH_COST) graphCost = graphCostProbe();
+        if (HOVER_SWEEP) hoverSweep = hoverSweepProbe();
         // The Frame Profiler open for the whole run, live: what its own refresh costs a frame being profiled.
         if (GRAPH_COST && Boolean.getBoolean("crystalgui.harness.desktop.graphCost.viewer")) FrameProfiler.openOn(desktop);
         // A SIZE THIS SCENE CHOOSES, over whatever the arrangement record says: the whole exercise here
@@ -381,14 +384,13 @@ public class CgUiDesktopScene
         UIText label = new UIText("ticks 0");
         frame.content().append(label);
         int[] ticks = {0};
-        frame.onShown.connect(persisted -> document.animation().every(frame, delta -> {
+        Animation.Hook tick = delta -> {
             label.setText("ticks " + (++ticks[0]));
             return true;
-        }));
-        document.animation().every(frame, delta -> {
-            label.setText("ticks " + (++ticks[0]));
-            return true;
-        });
+        };
+        // IF ABSENT: a hidden window's hook is frozen, not dropped, so a show would otherwise add a second.
+        frame.onShown.connect(persisted -> document.animation().everyIfAbsent(frame, tick));
+        document.animation().everyIfAbsent(frame, tick);
     }
 
     /**
@@ -461,6 +463,7 @@ public class CgUiDesktopScene
         document.paint(context);
         context.endFrame();
         if (traceCost != null && traceCost.frame(System.nanoTime() - workStart)) traceCostDone = true;
+        if (hoverSweep != null && hoverSweep.frame(System.nanoTime() - workStart)) hoverSweepDone = true;
         if (closeWhenClean) {
             Document graph = graphDocument();
             if (graph == null || !graph.isDirty()) {
@@ -487,6 +490,34 @@ public class CgUiDesktopScene
 
     private final TraceCostProbe traceCost = TRACE_COST ? new TraceCostProbe(240) : null;
     private boolean traceCostDone;
+
+    /**
+     * -Dcrystalgui.harness.desktop.hoverSweep=true: what moving the pointer across the editor costs a frame, against
+     * the pointer parked. Prints {@code [hover-sweep]} lines and exits. @see HoverSweepProbe
+     */
+    private static final boolean HOVER_SWEEP = Boolean.getBoolean("crystalgui.harness.desktop.hoverSweep");
+
+    @Nullable
+    private HoverSweepProbe hoverSweep;
+    private boolean hoverSweepDone;
+
+    private HoverSweepProbe hoverSweepProbe() {
+        return new HoverSweepProbe(GRAPH_COST_WARMUP, new HoverSweepProbe.Target() {
+            @Override
+            public void moveTo(float x, float y) {
+                document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                        (int) x, (int) y, 0, 0, CgMouseCodes.NONE, false, 0f, -1L));
+            }
+
+            @Override
+            public float[] region() {
+                UIElement window = editor == null ? null : editor.mainWindow();
+                float[] corner = at(window, 0f, 0f);
+                float[] far = at(window, 1f, 1f);
+                return new float[]{corner[0], corner[1], far[0] - corner[0], far[1] - corner[1]};
+            }
+        });
+    }
 
     /**
      * -Dcrystalgui.harness.desktop.graphCost=true: what the scratch shader graph costs a frame while open and
@@ -1671,7 +1702,7 @@ public class CgUiDesktopScene
 
     @Override
     public boolean isRunning() {
-        return !profilerShotDone && !traceCostDone && !graphCostDone;
+        return !profilerShotDone && !traceCostDone && !graphCostDone && !hoverSweepDone;
     }
 
     @Override
