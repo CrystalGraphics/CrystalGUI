@@ -1,7 +1,7 @@
 package com.crystalgui.widget.display;
 
 import com.crystalgraphics.api.font.CgFontFamily;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  *
  * <pre>{@code
  * SpanTrack track = new SpanTrack(axis);
- * track.add(new SpanTrack.Span("paint:tree", 0, start, end, "render/CgUiPaintContext.java:838"));
+ * track.add(new SpanTrack.Span("paint:tree", 0, start, end, "render/UiRecorder.java:838"));
  * track.onSelected(span -> showDetail(span));
  * }</pre>
  *
@@ -201,7 +201,7 @@ public class SpanTrack extends TimelineTrack {
     // ── Painting ────────────────────────────────────────────────────────────────────────────
 
     @Override
-    protected void paintTrack(CgUiPaintContext ctx, Box box) {
+    protected void paintTrack(UiRecorder ctx, Box box) {
         if (spans.isEmpty()) return;
         TimelineAxis axis = axis();
         CgFontFamily font = labelFont();

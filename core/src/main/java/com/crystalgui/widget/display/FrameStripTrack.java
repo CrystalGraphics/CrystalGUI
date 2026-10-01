@@ -1,7 +1,7 @@
 package com.crystalgui.widget.display;
 
 import com.crystalgraphics.api.font.CgFontFamily;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -115,7 +115,7 @@ public class FrameStripTrack extends FrameSeriesTrack {
     }
 
     @Override
-    protected void paintSeries(CgUiPaintContext ctx, Box box) {
+    protected void paintSeries(UiRecorder ctx, Box box) {
         float bottom = box.height() - BASELINE_INSET;
         float usable = bottom - TOP_INSET;
         long ceiling = budgetNanos * 2L;

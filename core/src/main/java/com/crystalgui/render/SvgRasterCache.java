@@ -147,7 +147,7 @@ public final class SvgRasterCache {
     /** {@code -Dcrystalgui.svg.raster=false} draws every icon through the direct path — for comparing the two. */
     private static final boolean ENABLED = !"false".equals(System.getProperty("crystalgui.svg.raster"));
 
-    private final CgUiPaintContext ctx;
+    private final UiRecorder ctx;
     private final Map<Key, Entry> entries = new HashMap<>();
     /** Made when the first frame that rasterises executes, and kept; cleared when it is full. */
     private CgGraphTexture atlas;
@@ -157,7 +157,7 @@ public final class SvgRasterCache {
     private int shelfX, shelfY, shelfHeight;
     private int generation;
 
-    SvgRasterCache(CgUiPaintContext ctx) {
+    SvgRasterCache(UiRecorder ctx) {
         this.ctx = ctx;
     }
 

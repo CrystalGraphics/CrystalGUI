@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas.transform;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 
 /**
  * The mark a transform's pivot is drawn as: a ring with four arms, each pass drawn over a wider halo.
@@ -38,13 +38,13 @@ public final class PivotMark {
      * @param mark the ring and its arms
      * @param halo the wider pass under them
      */
-    public static void paint(CgUiPaintContext paint, float x, float y, int mark, int halo) {
+    public static void paint(UiRecorder paint, float x, float y, int mark, int halo) {
         pass(paint, x, y, halo, HALO);
         pass(paint, x, y, mark, HAIRLINE);
     }
 
     /** One pass of the mark: the ring, then the four arms outside it. */
-    private static void pass(CgUiPaintContext paint, float x, float y, int colour, float width) {
+    private static void pass(UiRecorder paint, float x, float y, int colour, float width) {
         float arm = SIZE * 0.5f;
         float radius = SIZE * 0.28f;
         paint.rect()
@@ -60,7 +60,7 @@ public final class PivotMark {
         line(paint, x, y + radius, x, y + arm, colour, width);
     }
 
-    private static void line(CgUiPaintContext paint, float x0, float y0, float x1, float y1, int colour, float width) {
+    private static void line(UiRecorder paint, float x0, float y0, float x1, float y1, int colour, float width) {
         float dx = x1 - x0;
         float dy = y1 - y0;
         if (dx * dx + dy * dy < 0.0001f) return;

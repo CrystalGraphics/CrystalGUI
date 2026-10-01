@@ -89,7 +89,7 @@ public final class CgUiSpriteRegistry {
      * returns a raw {@link CgTexture2D}, not a {@link CgUiDrawable}. Deliberately a method, not a
      * cached static field: {@code getFallback()} lazily creates a real GPU texture on first use,
      * which needs a live GL context — evaluating it eagerly at class-load time would risk the same
-     * "forces GL work before it's safe" bug already fixed for {@code CgUiPaintContext}'s font
+     * "forces GL work before it's safe" bug already fixed for {@code UiRecorder}'s font
      * loading. {@code CgTextureManager.getFallback()} is already cached internally, so repeated
      * calls here are cheap; failures should be rare/dev-time-only anyway.
      *

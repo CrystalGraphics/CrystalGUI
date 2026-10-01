@@ -1,12 +1,12 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 
 /**
  * Pluggable "how do I paint myself into a rect" strategy.
  *
  * <p>Assigned to {@code UIElement.background}/{@code overlay}. Each implementation
- * routes to CgGui's Track A immediate-mode primitives (see {@link CgUiPaintContext})
+ * routes to CgGui's Track A immediate-mode primitives (see {@link UiRecorder})
  * — there is no batching or deferred submission anywhere in this call path. A call
  * to {@link #draw} is expected to issue exactly one GPU draw call (or zero, for a
  * fully-transparent tint) before returning.</p>
@@ -33,7 +33,7 @@ public interface CgUiDrawable {
      */
     CgUiDrawable EMPTY = new CgUiDrawable() {
         @Override
-        public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
+        public void draw(UiRecorder ctx, float mouseX, float mouseY,
                          float x, float y, float width, float height) {
         }
 
@@ -52,11 +52,11 @@ public interface CgUiDrawable {
      * @param width    rect width, in screen pixels
      * @param height   rect height, in screen pixels
      */
-    default void draw(CgUiPaintContext ctx, float x, float y, float width, float height) {
+    default void draw(UiRecorder ctx, float x, float y, float width, float height) {
         this.draw(ctx, ctx.mouseX, ctx.mouseY, x, y, width, height);
     }
 
-    void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height);
+    void draw(UiRecorder ctx, float mouseX, float mouseY, float x, float y, float width, float height);
 
     /**
      * Whether {@link #draw} covers any pixel at most once — the contract above, stated so the few

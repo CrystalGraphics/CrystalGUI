@@ -27,7 +27,7 @@ import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.widget.surface.edit.Clipboard;
 import com.crystalgui.widget.surface.edit.Edits;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.data.UiDataKeys;
@@ -473,7 +473,7 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     }
 
     /** Called by {@link GraphNode#paintDecoration}. @see GraphPorts#paintStub */
-    void paintPortEditorStub(CgUiPaintContext ctx, NodePort port, UIElement space) {
+    void paintPortEditorStub(UiRecorder ctx, NodePort port, UIElement space) {
         ports.paintStub(ctx, port, space);
     }
 

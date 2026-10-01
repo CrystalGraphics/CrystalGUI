@@ -6,7 +6,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Attribute;
@@ -48,7 +48,7 @@ public final class SelectionOutline extends UIElement {
     }
 
     @Override
-    public void paintContent(CgUiPaintContext paint, Box box) {
+    public void paintContent(UiRecorder paint, Box box) {
         if (box == null) return;
         // THE TRANSFORM BOX REPLACES THIS while it is up: it outlines the same element, through the
         // gesture, and two outlines on one node read as two selections.

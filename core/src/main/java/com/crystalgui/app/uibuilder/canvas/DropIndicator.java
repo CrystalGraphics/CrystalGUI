@@ -2,7 +2,7 @@ package com.crystalgui.app.uibuilder.canvas;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.box.Box;
@@ -105,7 +105,7 @@ public final class DropIndicator extends UIElement {
     }
 
     @Override
-    public void paintContent(CgUiPaintContext paint, Box box) {
+    public void paintContent(UiRecorder paint, Box box) {
         DropResolver.Drop shown = drop;
         float[] line = lineOf(shown);
         if (box == null || shown == null || line == null) return;

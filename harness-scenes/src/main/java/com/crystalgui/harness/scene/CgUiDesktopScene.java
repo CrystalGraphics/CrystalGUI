@@ -32,7 +32,7 @@ import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgraphics.api.render.CgRenderPipeline;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -445,7 +445,7 @@ public class CgUiDesktopScene
             refreshReadout();
         }
 
-        CgUiPaintContext context = document.recorder();
+        UiRecorder context = document.recorder();
         context.beginFrame(w, h);
         // SIMULATED GAME MODE -- W14, and the closest a GL harness gets to Minecraft without being it.
         // F6 flips the scene to input-off and leaves ONLY pinned frames on screen. What it is really

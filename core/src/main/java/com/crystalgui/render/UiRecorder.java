@@ -79,7 +79,7 @@ import java.util.Set;
  * {@link com.crystalgui.ui.dom.UIDocument#recorder()}.
  *
  * <pre>{@code
- * CgUiPaintContext recorder = document.recorder();
+ * UiRecorder recorder = document.recorder();
  *
  * recorder.beginFrame(w, h);         // inline: the host's state saved, then recording
  * document.paint(recorder);
@@ -100,7 +100,7 @@ import java.util.Set;
  * after. A draw in between is a chunk in the frame's one recording, which {@link #endFrame} executes; {@link #flush}
  * ends the open chunks and executes nothing.</p>
  */
-public final class CgUiPaintContext {
+public final class UiRecorder {
 
     /**
      * The {@code uiScale} glyphs are warmed at.
@@ -146,7 +146,7 @@ public final class CgUiPaintContext {
      * Failures are swallowed: a warm-up must not be what fails a context, and the first real frame reports them.</p>
      */
     public static void warm(int width, int height) {
-        CgUiPaintContext context = create();
+        UiRecorder context = create();
         try {
             // Leaks the Pass RenderState of every material below — doBind applies it, unbind() restores none of
             // it. Scoped by CgUiLifecycle.onInit; no scope here.
@@ -193,10 +193,10 @@ public final class CgUiPaintContext {
      * A paint context for one document — {@link com.crystalgui.ui.dom.UIDocument#recorder()} makes it. On the render
      * thread: its font and text renderer are set up there.
      */
-    public static CgUiPaintContext create() {
+    public static UiRecorder create() {
         // Before any frame's scope: what construction binds would otherwise stay bound for the host.
         try (CgGlScope ignored = CgGlState.saveAll()) {
-            CgUiPaintContext context = new CgUiPaintContext();
+            UiRecorder context = new UiRecorder();
             context.gpu.track(context);
             return context;
         }
@@ -426,7 +426,7 @@ public final class CgUiPaintContext {
     @Getter @Setter
     private int color = 0xFFFFFFFF;
 
-    private CgUiPaintContext() {
+    private UiRecorder() {
         this.gpu = UiGpu.get();
         this.frameTarget = gpu.frameTarget;
         this.poseStack = new PoseStack();
@@ -483,7 +483,7 @@ public final class CgUiPaintContext {
             }
             SvgDocument.preload(paths);
         } catch (RuntimeException | LinkageError broken) {
-            CrystalGuiCore.LOGGER.warn("CgUiPaintContext: icon preload failed; icons parse on demand",
+            CrystalGuiCore.LOGGER.warn("UiRecorder: icon preload failed; icons parse on demand",
                     broken);
         }
     }
@@ -560,7 +560,7 @@ public final class CgUiPaintContext {
                 CgFontRegistry.get().warmAscii(family.getPrimaryFont(), effective);
             }
         } catch (RuntimeException | LinkageError broken) {
-            CrystalGuiCore.LOGGER.warn("CgUiPaintContext: glyph warm failed; glyphs rasterise on demand",
+            CrystalGuiCore.LOGGER.warn("UiRecorder: glyph warm failed; glyphs rasterise on demand",
                     broken);
         }
     }
@@ -573,7 +573,7 @@ public final class CgUiPaintContext {
             CgFont loaded = tryLoadFont(candidate);
             if (loaded != null) return loaded;
         }
-        throw new IllegalStateException("CgUiPaintContext: no default font asset could be loaded: "
+        throw new IllegalStateException("UiRecorder: no default font asset could be loaded: "
                 + java.util.Arrays.toString(DEFAULT_FONT_STACK));
     }
 
@@ -587,7 +587,7 @@ public final class CgUiPaintContext {
             byte[] data = readAllBytes(in);
             return CgFont.load(data, asset, CgFontStyle.REGULAR, 16);
         } catch (IOException e) {
-            throw new IllegalStateException("CgUiPaintContext: failed to read default font asset: " + asset, e);
+            throw new IllegalStateException("UiRecorder: failed to read default font asset: " + asset, e);
         } finally {
             try {
                 in.close();

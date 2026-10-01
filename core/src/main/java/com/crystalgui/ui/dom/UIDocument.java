@@ -6,7 +6,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.box.BoxTree;
@@ -108,7 +108,7 @@ public final class UIDocument extends UIElement {
     @Nullable
     private BoxTree boxes;
     @Nullable
-    private CgUiPaintContext recorder;
+    private UiRecorder recorder;
     @Nullable
     private Input input;
     @Nullable
@@ -165,14 +165,14 @@ public final class UIDocument extends UIElement {
      * render thread the first time — its font and text renderer are set up there.
      *
      * <pre>{@code
-     * CgUiPaintContext recorder = document.recorder();
+     * UiRecorder recorder = document.recorder();
      * recorder.beginFrame(width, height);
      * document.paint(recorder);
      * recorder.endFrame();
      * }</pre>
      */
-    public CgUiPaintContext recorder() {
-        if (recorder == null) recorder = CgUiPaintContext.create();
+    public UiRecorder recorder() {
+        if (recorder == null) recorder = UiRecorder.create();
         return recorder;
     }
 
@@ -478,7 +478,7 @@ public final class UIDocument extends UIElement {
     public void frame(float deltaSeconds, float width, float height) {
         // A FRAME STARTS HERE AND ENDS IN THE PAINT CONTEXT, because the host drives the two halves
         // separately: this is animation, style and layout, and the paint that follows is a call the
-        // host makes itself. @see CgUiPaintContext#endFrame
+        // host makes itself. @see UiRecorder#endFrame
         UiTrace.frameBegin();
         if (JobScheduler.hasShared()) {
             CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
@@ -606,7 +606,7 @@ public final class UIDocument extends UIElement {
     }
 
     /** Paints the laid-out document through the shared paint context (5.4). */
-    public void paint(CgUiPaintContext ctx) {
+    public void paint(UiRecorder ctx) {
         boxes().paint(ctx);
         // AFTER the tree: cursor art belongs over everything and inside no scissor. @see CursorDecoration
         input().paintCursorDecoration(ctx);

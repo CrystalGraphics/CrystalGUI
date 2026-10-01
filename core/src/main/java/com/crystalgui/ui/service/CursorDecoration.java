@@ -1,6 +1,6 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 
 /**
  * <b>Cursor art this engine draws, over the top of everything, at the pointer.</b>
@@ -53,5 +53,5 @@ public interface CursorDecoration {
      * @param x the pointer's position in the document's own coordinates — the same space
      *          {@link Input#pointer()} reports, with no pose applied
      */
-    void paint(CgUiPaintContext ctx, float x, float y);
+    void paint(UiRecorder ctx, float x, float y);
 }

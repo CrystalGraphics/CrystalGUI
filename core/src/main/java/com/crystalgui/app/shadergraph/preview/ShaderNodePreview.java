@@ -6,7 +6,7 @@ import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.shadergraph.CgPreviewGeometry;
 import com.crystalgraphics.shadergraph.CgPreviewRenderer;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -48,14 +48,14 @@ public class ShaderNodePreview extends UIElement {
     }
 
     @Override
-    public void paintContent(CgUiPaintContext ctx, Box box) {
+    public void paintContent(UiRecorder ctx, Box box) {
         CgTrace.add(UiTrace.FRAME, "sg-preview-images", 1);
         try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:paintPreview")) {
             paintContentTraced(ctx, box);
         }
     }
 
-    private void paintContentTraced(CgUiPaintContext ctx, Box box) {
+    private void paintContentTraced(UiRecorder ctx, Box box) {
         super.paintContent(ctx, box);
 
         CgTexture texture = renderer.textureOf(nodeId);

@@ -3,7 +3,7 @@ package com.crystalgui.widget.graph;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
@@ -415,7 +415,7 @@ final class PortDefaultEditor {
      * #dot} and the real port's dot sit at the same Y (see {@link #reposition}), so the segment is
      * already purely horizontal and the trim is exact, not an approximation.</p>
      */
-    void paintStub(CgUiPaintContext ctx, UIElement space) {
+    void paintStub(UiRecorder ctx, UIElement space) {
         Box cache = dot.box();
         // The dot has not been laid out yet on the very first frame after mounting — see setMounted —
         // and a zero-size box would draw a stub from nowhere to itself. Invisible either way, but

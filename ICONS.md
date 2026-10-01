@@ -27,7 +27,7 @@ Surveyed rather than recalled; every claim below was read out of the source.
 `core/render/texture/CgUiDrawable.java`
 
 ```java
-void draw(CgUiPaintContext ctx, int mouseX, int mouseY, float x, float y, float w, float h);
+void draw(UiRecorder ctx, int mouseX, int mouseY, float x, float y, float w, float h);
 float intrinsicWidth();     // -1 when the drawable has no inherent size
 float intrinsicHeight();
 ```

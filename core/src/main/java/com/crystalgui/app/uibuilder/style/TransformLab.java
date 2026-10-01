@@ -7,7 +7,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.canvas.transform.PivotMark;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
@@ -302,7 +302,7 @@ public final class TransformLab {
      */
     private static final class Mark extends UIElement {
         @Override
-        public void paintContent(CgUiPaintContext paint, Box box) {
+        public void paintContent(UiRecorder paint, Box box) {
             PivotMark.paint(paint, box.width() / 2f, box.height() / 2f,
                     getStyle().computed().get(StylePropertyRegistry.OUTLINE_COLOR),
                     getStyle().computed().get(StylePropertyRegistry.TEXT_DECORATION_COLOR));

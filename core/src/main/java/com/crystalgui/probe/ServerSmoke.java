@@ -96,7 +96,7 @@ public final class ServerSmoke {
     private static final List<String> NEVER_LOADED_ANYWHERE = Collections.singletonList(
             // The entry point to every GL resource CrystalGUI owns; it registers CgUiLifecycle from a
             // static initialiser, so loading it means something asked a headless process to paint.
-            "com.crystalgui.render.CgUiPaintContext");
+            "com.crystalgui.render.UiRecorder");
 
     /** Where {@code -Xlog:class+load=info} puts the class name on each line. */
     private static final String LOG_MARKER = "[class,load] ";

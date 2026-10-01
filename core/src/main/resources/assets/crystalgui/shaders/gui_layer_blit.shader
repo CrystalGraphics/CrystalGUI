@@ -1,8 +1,8 @@
 // crystalgui:shaders/gui_layer_blit.shader
 //
-// Composites a finished CgUiPaintContext "visual layer" FBO (from beginLayerFbo/endLayerFbo)
+// Composites a finished UiRecorder "visual layer" FBO (from beginLayerFbo/endLayerFbo)
 // back onto whatever's currently bound (the real screen, or an enclosing layer) -- used by
-// CgUiPaintContext.blitLayer(). NOT the same material as gui_quad.shader, and deliberately so:
+// UiRecorder.blitLayer(). NOT the same material as gui_quad.shader, and deliberately so:
 // a layer FBO is always cleared fully transparent (clearColor(0,0,0,0)) before anything is
 // painted into it, so at every partially-covered pixel (AA edges, translucent content) its
 // stored color is PREMULTIPLIED by its own alpha (color = trueColor * coverage, alpha = coverage)

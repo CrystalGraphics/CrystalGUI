@@ -1,7 +1,7 @@
 // crystalgui:shaders/gui_backdrop_filter.shader
 //
 // LIQUID GLASS: the composite pass. Takes a blurred backdrop and a sharp one -- both already cropped
-// to this element's rect by CgUiPaintContext.backdropFor -- and turns them into a pane of glass.
+// to this element's rect by UiRecorder.backdropFor -- and turns them into a pane of glass.
 //
 // Layer order, which is Windows Acrylic's recipe with refraction inserted where a real lens puts it:
 //

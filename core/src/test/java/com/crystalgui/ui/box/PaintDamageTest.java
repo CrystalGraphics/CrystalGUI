@@ -7,7 +7,7 @@ import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
@@ -183,7 +183,7 @@ public class PaintDamageTest extends UiDocumentTestBase {
 
     private static final class HandPainted extends UIElement {
         @Override
-        public void paintContent(CgUiPaintContext ctx, Box box) {
+        public void paintContent(UiRecorder ctx, Box box) {
         }
     }
 }

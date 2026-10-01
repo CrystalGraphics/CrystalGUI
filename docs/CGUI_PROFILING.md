@@ -178,7 +178,7 @@ opens that frame in the profiler.
 | Area | Channel | Where |
 |---|---|---|
 | The frame's phases | frame | `ui/dom/UIDocument`, `style/StyleEngine`, `ui/box/BoxTree`, `BoxPainter` |
-| Paint, layers, backdrop, images | frame, gpu | `render/CgUiPaintContext`, `LayerPool`, `CgUiBackdrop` |
+| Paint, layers, backdrop, images | frame, gpu | `render/UiRecorder`, `LayerPool`, `CgUiBackdrop` |
 | SVG | frame | `render/texture/svg/SvgDocument`, `render/SvgRasterCache` |
 | Jobs | frame | `core/async/JobScheduler` (`done:<job>`) |
 | The editor | frame, flow | `widget/texteditor/TextEditor`, its `part/`, `fold/`, `lang/`, `doc/` |

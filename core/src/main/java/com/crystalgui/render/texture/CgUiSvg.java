@@ -1,6 +1,6 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 
@@ -241,7 +241,7 @@ public final class CgUiSvg implements CgUiDrawable {
     }
 
     @Override
-    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
+    public void draw(UiRecorder ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
         SvgDocument document = document();
         if (document == null || document.isEmpty()) return;
@@ -285,7 +285,7 @@ public final class CgUiSvg implements CgUiDrawable {
      * removes. Requiring the pose scale to sit on a half-integer restricts this to the states a UI
      * actually rests at ({@code uiScale} 1, 1.5, 2) and excludes the 1.37x of an in-flight zoom.</p>
      */
-    private static boolean snappable(CgUiPaintContext ctx, float logicalSize) {
+    private static boolean snappable(UiRecorder ctx, float logicalSize) {
         float device = ctx.deviceScale();
         if (logicalSize * device > SNAP_MAX_DEVICE_PX) return false;
         if (!ctx.isPoseAxisAligned()) return false;
