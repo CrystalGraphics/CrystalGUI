@@ -16,6 +16,7 @@ import java.util.Locale;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
@@ -37,11 +38,35 @@ public class HostSessionLockstepTest {
         @Override public void leave() { }
     };
 
+    /**
+     * Asynchronously no host entry reads the tree on the host's thread at all: each answers from the last commit or posts
+     * to the sequence, and this thread is one the tree refuses.
+     */
     @Test
-    public void everyHostEntryRunsOnTheSequenceAndNothingElseReachesTheTree() throws Exception {
-        System.setProperty("crystalgui.ui.sequence", "true");
-        Path root = Files.createTempDirectory("cgui-lockstep");
-        HostSession session = HostSession.install(new HostServices() {
+    public void asynchronouslyNoHostEntryReadsTheTree() throws Exception {
+        System.setProperty("crystalgui.ui.async", "true");
+        try {
+            HostSession session = install(Files.createTempDirectory("cgui-async"));
+            session.shown();
+            UiSequence sequence = session.document().sequence();
+            assertNotNull(sequence);
+
+            session.frame(0.016f);
+            assertNotNull(session.presentation(NO_SCREEN));
+            assertNull("no commit yet, so no caret to place", session.textInputArea());
+            assertTrue("a key to a document recording on its own is answered ours at once",
+                    session.input().consumeKeyboardEvent(
+                            new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_F12, true, false, 0L)));
+            session.hidden();
+            session.shown();
+            sequence.runNow(() -> { });
+        } finally {
+            System.clearProperty("crystalgui.ui.async");
+        }
+    }
+
+    private static HostSession install(Path root) {
+        return HostSession.install(new HostServices() {
             @Override public Path installationDirectory() { return root; }
             @Override public Path localWorldDirectory() { return null; }
             @Override public float uiScale() { return 1f; }
@@ -50,7 +75,14 @@ public class HostSessionLockstepTest {
             @Override public String desktopId() { return "lockstep"; }
             @Override public ProtocolConnection<Object> connection() { return null; }
             @Override public Locale locale() { return Locale.getDefault(); }
+            @Override public void reinjectKey(CgSystemInput.Keyboard.Event key) { }
         }, ApplicationKind.of("test.lockstep", "Lockstep"));
+    }
+
+    @Test
+    public void everyHostEntryRunsOnTheSequenceAndNothingElseReachesTheTree() throws Exception {
+        System.setProperty("crystalgui.ui.sequence", "true");
+        HostSession session = install(Files.createTempDirectory("cgui-lockstep"));
 
         session.shown();
         UiSequence sequence = session.document().sequence();

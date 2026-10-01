@@ -1,5 +1,7 @@
 package com.crystalgui.mc.v1710.client;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.api.render.CgRenderPipeline;
@@ -309,6 +311,14 @@ public final class CgUiScreen extends GuiScreen {
         if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
             closeRequested = true;
         }
+    }
+
+    /**
+     * A key the desktop dispatched on its own thread and left, handed back a frame late: what this screen does with
+     * one nothing wanted. @see #handleKeyboardInput
+     */
+    void keyLeftByDesktop(CgSystemInput.Keyboard.Event key) {
+        if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) closeRequested = true;
     }
 
     /** <b>The mouse pump.</b> Once per event, same contract as above. */

@@ -182,7 +182,7 @@ spells something; it decides nothing. The seams it answers, all in `core/`:
 
 | Seam | A loader answers |
 |---|---|
-| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection |
+| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection, and how to give the current screen a key the desktop left (`reinjectKey`) |
 | `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, and whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides) |
 | `desktop.host.HostSession.PaintHost` | whether a screen is up and whose, and how to bracket a draw |
 | `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |

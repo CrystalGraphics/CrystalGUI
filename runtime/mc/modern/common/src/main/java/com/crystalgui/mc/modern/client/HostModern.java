@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.client;
 
 import com.crystalgraphics.mc.modern.platform.Windows;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import java.io.File;
 import java.nio.file.Path;
 import java.util.Locale;
@@ -13,6 +14,7 @@ import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.server.IntegratedServer;
 
 /**
@@ -88,5 +90,13 @@ final class HostModern implements HostServices {
     public Locale locale() {
         Minecraft mc = Minecraft.getInstance();
         return HostServices.gameLocale(mc == null ? null : mc.options.languageCode);
+    }
+
+    @Override
+    public void reinjectKey(CgSystemInput.Keyboard.Event key) {
+        Minecraft mc = Minecraft.getInstance();
+        Screen screen = mc == null ? null : ClientGame.screen(mc);
+        if (screen instanceof CgUiScreen) ((CgUiScreen) screen).keyLeftByDesktop(key);
+        else if (screen != null) CgUiInput.giveToScreen(screen, key);
     }
 }

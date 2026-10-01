@@ -50,10 +50,18 @@ public final class ScreenOverlay {
      * moment one lands outside. It is what every OS-level overlay does and the only rule that is stable
      * under a stationary pointer.</p>
      */
-    private boolean keyboardIsOurs;
+    private volatile boolean keyboardIsOurs;
 
     /** Answer presses from the frame's {@link HitRegions} rather than the live tree: T1's router, inline. */
     private static final boolean USE_REGIONS = Boolean.getBoolean("crystalgui.ui.hitRegions");
+
+    /**
+     * Whether the document records on its own thread: then the tree is never read here, presses are answered from the
+     * committed regions, and what a press outside does to the tree is posted to the document.
+     */
+    private boolean async() {
+        return input.isAsync() && window.sequence() != null;
+    }
     /** Compare the two answers on every press and say where they differ. */
     private static final boolean CHECK_REGIONS = Boolean.getBoolean("crystalgui.input.regionsCheck");
 
@@ -87,6 +95,11 @@ public final class ScreenOverlay {
         return regions;
     }
 
+    /** Where this overlay delivers what it takes; asynchronously, the keys its document left wait here. */
+    HostInput input() {
+        return input;
+    }
+
     /** Whether a pinned window currently owns the keyboard. @see #keyboardIsOurs */
     public boolean ownsKeyboard() {
         return keyboardIsOurs;
@@ -114,7 +127,8 @@ public final class ScreenOverlay {
         // hit test destroys. The common case, not the edge case: every window move ends outside the
         // caption it started on.
         HitRegions frozen = regions;
-        boolean captured = USE_REGIONS ? frozen.pointerCaptured() : window.input().pointerCaptureTarget() != null;
+        boolean fromRegions = USE_REGIONS || async();
+        boolean captured = fromRegions ? frozen.pointerCaptured() : window.input().pointerCaptureTarget() != null;
         boolean inside = isMove || captured || takes(frozen, xPx, yPx);
 
         if (!inside) {
@@ -127,16 +141,16 @@ public final class ScreenOverlay {
                 // session went there. On screen that is a chat box you can click, that shows a caret,
                 // and that will not accept a single character -- which reads as chat being broken.
                 keyboardIsOurs = false;
+                if (async()) {
+                    window.sequence().execute(this::pressedOutside);
+                    return false;
+                }
                 // AND THE FOCUS RING GOES WITH IT, or the editor keeps drawing itself focused while
                 // somebody else has the keyboard. "Looks focused, is cold" is the exact state
                 // WindowFrame.restoreFocus exists to prevent one level down. The window remembers where
                 // its focus was, so clicking back in restores it.
-                UIElement focused = window.focus().focused();
-                if (focused != null) window.focus().blurIfFocused(focused);
-                // A MENU IS DISMISSED BY A PRESS ANYWHERE, including one that is not ours. Otherwise a
-                // dropdown opened in a pinned window survives a click on the chat box and floats there
-                // with nothing able to close it: light dismiss only ever sees presses we consumed.
-                if (!window.dismiss().autoPopovers().isEmpty()) window.dismiss().lightDismiss(null);
+                pressedOutside();
+                return false;
             }
             return false;
         }
@@ -150,8 +164,18 @@ public final class ScreenOverlay {
         return true;
     }
 
+    /** What a press outside every pinned window does to the tree: focus and any open menu go. On the document's thread. */
+    private void pressedOutside() {
+        UIElement focused = window.focus().focused();
+        if (focused != null) window.focus().blurIfFocused(focused);
+        // A MENU IS DISMISSED BY A PRESS ANYWHERE, including one that is not ours. Otherwise a
+        // dropdown opened in a pinned window survives a click on the chat box and floats there
+        // with nothing able to close it: light dismiss only ever sees presses we consumed.
+        if (!window.dismiss().autoPopovers().isEmpty()) window.dismiss().lightDismiss(null);
+    }
+
     private boolean takes(HitRegions frozen, int xPx, int yPx) {
-        if (USE_REGIONS && !CHECK_REGIONS) return frozen.takes(xPx, yPx);
+        if (async() || (USE_REGIONS && !CHECK_REGIONS)) return frozen.takes(xPx, yPx);
         boolean live = overlayHitTest(xPx, yPx) != null;
         if (CHECK_REGIONS) {
             boolean fromRegions = frozen.takes(xPx, yPx);

@@ -12,6 +12,11 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.input.HostPointer;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+//? if >=1.21.9 {
+/*import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+*///?}
 
 /**
  * One 1.20.x screen callback into one engine event.
@@ -115,6 +120,32 @@ public final class CgUiInput {
         int local = CgPlatform.input().translateKeyboardCodes(hostKey);
         return input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
                 (char) 0, local, pressed, false, System.currentTimeMillis()));
+    }
+
+    /**
+     * Gives {@code screen} a key through its own handlers, as if the desktop had never seen it: a key code to
+     * {@code keyPressed}/{@code keyReleased}, a character to {@code charTyped}. No modifiers ride along.
+     */
+    public static void giveToScreen(Screen screen, CgSystemInput.Keyboard.Event key) {
+        if (key.character() != 0) {
+            //? if >=26.1 {
+            /*screen.charTyped(new CharacterEvent(key.character()));
+            *///?} elif >=1.21.9 {
+            /*screen.charTyped(new CharacterEvent(key.character(), 0));
+            *///?} else {
+            screen.charTyped(key.character(), 0);
+            //?}
+            return;
+        }
+        int code = hostKey(key.key());
+        //? if >=1.21.9 {
+        /*KeyEvent event = new KeyEvent(code, 0, 0);
+        if (key.pressed()) screen.keyPressed(event);
+        else screen.keyReleased(event);
+        *///?} else {
+        if (key.pressed()) screen.keyPressed(code, 0, 0);
+        else screen.keyReleased(code, 0, 0);
+        //?}
     }
 
     /** A character with no key. @return whether the desktop consumed it */
