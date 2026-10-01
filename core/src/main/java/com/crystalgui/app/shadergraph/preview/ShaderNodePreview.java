@@ -2,8 +2,7 @@ package com.crystalgui.app.shadergraph.preview;
 
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
-import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.shadergraph.CgPreviewGeometry;
 import com.crystalgraphics.shadergraph.CgPreviewRenderer;
 import com.crystalgui.render.CgUiPaintContext;
@@ -14,10 +13,10 @@ import com.crystalgui.ui.dom.UIElement;
  * Paints one node's rendered thumbnail into its {@code __preview__} slot.
  *
  * <h3>Why this lives in {@code graph.shader} and not with the graph widgets</h3>
- * <p>It holds a {@link CgPreviewRenderer} in a <b>field</b>, and a field descriptor resolves at class
- * load rather than on first call. Putting it in {@code ui.elements.graph} would drag CrystalGraphics core
- * into a package a dedicated server loads, and the first headless test to touch a graph widget would fail
- * with {@code NoClassDefFoundError} naming a class it never asked for. This package is already the
+ * <p>It holds {@link ShaderGraphPreviews}, which holds a {@link CgPreviewRenderer} in a <b>field</b>, and a field
+ * descriptor resolves at class load rather than on first call. Putting it in {@code ui.elements.graph} would drag
+ * CrystalGraphics core into a package a dedicated server loads, and the first headless test to touch a graph widget
+ * would fail with {@code NoClassDefFoundError} naming a class it never asked for. This package is already the
  * documented exception — see {@link ShaderGraphBridge}.</p>
  *
  * <h3>The texture is upside down, and that is not a bug to work around silently</h3>
@@ -28,14 +27,14 @@ import com.crystalgui.ui.dom.UIElement;
  */
 public class ShaderNodePreview extends UIElement {
 
-    private final CgPreviewRenderer renderer;
+    private final ShaderGraphPreviews previews;
     private final String nodeId;
 
     /** The class {@code default.css} sizes this to its slot through. */
     public static final String PREVIEW_IMAGE_CLASS = "__preview-image__";
 
-    public ShaderNodePreview(CgPreviewRenderer renderer, String nodeId) {
-        this.renderer = renderer;
+    public ShaderNodePreview(ShaderGraphPreviews previews, String nodeId) {
+        this.previews = previews;
         this.nodeId = nodeId;
         addClass(PREVIEW_IMAGE_CLASS);
         // Nothing is ever clicked here, and letting it take hits would put a dead rectangle over the
@@ -58,11 +57,14 @@ public class ShaderNodePreview extends UIElement {
     private void paintContentTraced(CgUiPaintContext ctx, Box box) {
         super.paintContent(ctx, box);
 
-        CgTexture texture = renderer.textureOf(nodeId);
+        // The first preview painted this frame records every one due, so the texture below is this frame's.
+        previews.recordPending(ctx);
+        CgPreviewRenderer renderer = previews.renderer();
+        CgGraphTexture texture = renderer.textureOf(nodeId);
         // Nothing yet: the node is new, or its turn in the budget has not come round. Painting nothing
         // is right — the slot keeps its background, so an unrendered preview reads as "not yet" rather
         // than as a hole in the node.
-        if (!(texture instanceof CgTexture2D)) return;
+        if (texture == null) return;
 
         // THE ORIGIN -- a paint hook draws in its OWN box's space. @see MainPreviewPanel.Surface
         float x = 0f;
@@ -85,9 +87,9 @@ public class ShaderNodePreview extends UIElement {
             float ox = x + (w - side) * 0.5f;
             float oy = y + (h - side) * 0.5f;
             // v1 and v0 swapped: the flip described in the class docs.
-            ctx.drawImage((CgTexture2D) texture, ox, oy, side, side, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            ctx.drawImage(texture, ox, oy, side, side, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
         } else {
-            ctx.drawImage((CgTexture2D) texture, x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            ctx.drawImage(texture, x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
         }
     }
 }

@@ -1,7 +1,6 @@
 package com.crystalgui.app.shadergraph.preview;
 
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.widget.graph.node.NodeFieldBinder;
 import com.crystalgui.ui.box.Box;
@@ -11,6 +10,8 @@ import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgPreviewRenderer;
 import com.crystalgraphics.shadergraph.CgShaderGraph;
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
+import com.crystalgraphics.render.graph.CgRecording;
+import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.GraphContext;
@@ -186,7 +187,7 @@ public final class ShaderGraphPreviews  {
         for (var child : node.preview().children()) {
             if (child instanceof ShaderNodePreview) return;
         }
-        node.preview().append(new ShaderNodePreview(renderer, nodeId));
+        node.preview().append(new ShaderNodePreview(this, nodeId));
     }
 
     /** Whether the shader library says this node produces anything a thumbnail could show. */
@@ -239,9 +240,6 @@ public final class ShaderGraphPreviews  {
         // and this ticker runs on the frame the graph is built.
         Box box = view.viewportBox();
         if (box == null || box.width() <= 0f || box.height() <= 0f) return true;
-        // OFF THE GL THREAD -- a document recording on its own sequence -- the thumbnails keep their last picture
-        // until previews are recorded with the frame (plan render-graph G3.5).
-        if (!CgGL.ownedByCurrentThread()) return true;
 
         // Newly added nodes get their slot here rather than through a second signal, and only when the plane's
         // nodes changed -- a node rebuilt under its old id is a removal and an insertion, so it counts.
@@ -264,9 +262,29 @@ public final class ShaderGraphPreviews  {
             if (nodesMoved) renderer.retainNodes(present);
             renderer.setVisible(visible);
         }
-        renderer.renderPending(graph);
+        recordDue = true;
         // Always keeps ticking: a Time-driven preview has nothing else to wake it.
         return true;
+    }
+
+    /**
+     * Set by each tick, taken by the first preview painted after it, so the due thumbnails are recorded once a frame
+     * and before any of them is drawn. Nothing on screen paints nothing, and records nothing.
+     */
+    private boolean recordDue;
+
+    /** Records the thumbnails due this frame into {@code ctx}'s frame, once; what a preview calls before it draws. */
+    void recordPending(CgUiPaintContext ctx) {
+        if (!recordDue || deleted || graph == null) return;
+        recordDue = false;
+        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:recordPreviews")) {
+            CgRecording recording = ctx.beginPasses();
+            try {
+                renderer.renderPending(graph, recording);
+            } finally {
+                ctx.endPasses();
+            }
+        }
     }
 
     /** {@link GraphContext#nodesRevision} when the nodes were last attached; the first tick always attaches. */
@@ -280,7 +298,7 @@ public final class ShaderGraphPreviews  {
     private final Set<String> present = new HashSet<>();
 
     /**
-     * Frees every target and mesh. Must run before the GL context goes away.
+     * Gives the targets back to the pool and frees the meshes. Any thread.
      *
      * <p>Idempotent, and it sets the flag {@link #tickFrame} reads. Deleting the renderer without saying
      * so leaves a ticker calling into it every frame, which is a throw rather than a no-op — see the note
