@@ -8,6 +8,8 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.bridge.Analysis;
+import com.crystalgui.text.Change;
+import com.crystalgui.text.ChangeSet;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.decoration.DecorationSet;
@@ -191,7 +193,10 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         // window gets a half-built object -- and this is the one class whose whole purpose is to be found
         // from another thread. `start()` is the subclass's last line, by contract.
         if (file != null) ATTACHED.put(file, this);
-        bufferSubscription = buffer.onChanged.connect(change -> schedule());
+        bufferSubscription = buffer.onChanged.connect(change -> {
+            tokens.edited(change, buffer.version());
+            schedule();
+        });
         // SYNCHRONOUS FOR A DOCUMENT THAT HAS TEXT, SCHEDULED FOR ONE THAT DOES NOT.
         //
         // "A document is analysed when the services are created" is a contract with a test named for it
@@ -745,12 +750,37 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
      */
     private static final class SemanticTokens implements SemanticTokenProvider {
 
+        /** Past this many edits without an analysis the tokens are dropped rather than mapped. */
+        private static final int MAX_PENDING_EDITS = 4096;
+
         private List<SyntaxToken> all = Collections.emptyList();
+        /** The buffer version {@link #all}'s offsets are in. */
+        private long allVersion;
         private long version;
         private SyntaxTokenizer.InvalidationListener listener;
+        /**
+         * Every edit newer than the installed analysis, with the buffer version each produced, oldest first. Kept
+         * after mapping: an analysis that lands later may be older than what the tokens were mapped to.
+         */
+        private final List<PendingEdit> pending = new ArrayList<>();
+
+        private record PendingEdit(ChangeSet change, long version) {
+        }
+
+        /** The buffer changed: until an analysis of the new text lands, the tokens are mapped through it. */
+        void edited(ChangeSet change, long bufferVersion) {
+            if (pending.size() == MAX_PENDING_EDITS) {
+                pending.clear();
+                all = Collections.emptyList();
+                allVersion = bufferVersion;
+                return;
+            }
+            pending.add(new PendingEdit(change, bufferVersion));
+        }
 
         @Override
         public List<SyntaxToken> tokensIn(int fromOffset, int toOffset) {
+            catchUp();
             List<SyntaxToken> overlapping = new ArrayList<>();
             for (SyntaxToken token : all) {
                 if (token.start() < toOffset && fromOffset < token.end()) overlapping.add(token);
@@ -776,6 +806,10 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
             this.all = analysis == null ? Collections.<SyntaxToken>emptyList()
                     : materialised != null ? materialised : analysis.semanticTokens();
             this.version = analysis == null ? 0 : analysis.version();
+            this.allVersion = this.version;
+            // WHAT THE ANALYSIS SAW is behind it; what was typed while it ran is still to be mapped.
+            long seen = this.version;
+            pending.removeIf(edit -> edit.version() <= seen);
             // EVERYTHING, not a computed range. A compile can change any line's colours -- adding a
             // field renames nothing and yet re-colours every use of that name in the file -- so a
             // narrower claim would be a wrong one. The editor's per-row cache makes the re-query cheap
@@ -783,6 +817,38 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
             if (listener != null) {
                 listener.tokensChanged(0, SyntaxTokenizer.InvalidationListener.EVERYTHING);
             }
+        }
+
+        /**
+         * Moves every token through the edits made since its analysis, once, so an answer is in the buffer's
+         * coordinates. Offsets from an older text read against the current one paint every row below an edit
+         * a few characters off, and the editor keeps such a row's colours through a recovering parse.
+         *
+         * <p>A token an edit touches is dropped: it is the word being written, and has no colour until analysed.</p>
+         */
+        private void catchUp() {
+            if (pending.isEmpty() || pending.get(pending.size() - 1).version() <= allVersion) return;
+            List<SyntaxToken> mapped = all;
+            for (PendingEdit edit : pending) {
+                if (edit.version() <= allVersion) continue;
+                List<SyntaxToken> next = new ArrayList<>(mapped.size());
+                for (SyntaxToken token : mapped) {
+                    if (touches(edit.change(), token)) continue;
+                    int start = edit.change().mapPos(token.start(), 1);
+                    next.add(new SyntaxToken(start, start + (token.end() - token.start()), token.name()));
+                }
+                mapped = next;
+            }
+            all = mapped;
+            allVersion = pending.get(pending.size() - 1).version();
+        }
+
+        private static boolean touches(ChangeSet change, SyntaxToken token) {
+            for (Change edit : change.changes()) {
+                if (edit.from() > token.end()) return false;
+                if (edit.to() >= token.start()) return true;
+            }
+            return false;
         }
     }
 
