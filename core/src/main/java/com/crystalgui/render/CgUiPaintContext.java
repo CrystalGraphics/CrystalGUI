@@ -1630,6 +1630,42 @@ public final class CgUiPaintContext {
         return true;
     }
 
+    /** Off with {@code -Dcrystalgui.paint.segments=false}: a box's paint shares chunks with its neighbours'. */
+    private static final boolean SEGMENTS = !"false".equals(System.getProperty("crystalgui.paint.segments"));
+
+    /** Where each open segment started, in {@link CgPassRecorder#chunksTaken}: segments nest. */
+    private long[] segmentStarts = new long[8];
+    private int segments;
+
+    /**
+     * Starts a box's own paint: what the recorder takes until {@link #endSegment} is that box's and nothing else's.
+     * Everything queued before is flushed, so no draw of another box shares a chunk with it. Segments nest -- a
+     * widget may paint another subtree from its own content, as a window thumbnail does.
+     *
+     * <pre>{@code
+     * ctx.beginSegment();
+     * paintSelf(box);
+     * node.paintContent(ctx, box);
+     * ctx.endSegment();
+     * paintChildren(box);
+     * }</pre>
+     */
+    public void beginSegment() {
+        if (!SEGMENTS) return;
+        flush();
+        if (segments == segmentStarts.length) segmentStarts = Arrays.copyOf(segmentStarts, segments * 2);
+        segmentStarts[segments++] = recorder.chunksTaken();
+    }
+
+    /** Ends the innermost {@link #beginSegment}; its draws are flushed into chunks of their own. */
+    public void endSegment() {
+        if (!SEGMENTS) return;
+        flush();
+        long chunks = recorder.chunksTaken() - segmentStarts[--segments];
+        CgTrace.add(UiTrace.FRAME, "segments", 1);
+        CgTrace.add(UiTrace.FRAME, "segment-chunks", chunks);
+    }
+
     /** Ends the innermost {@link #pushRoundedClip} that answered true. */
     public void popRoundedClip() {
         setClip(recording.clips().parent(clipEntry));
