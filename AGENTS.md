@@ -874,8 +874,11 @@ registration order.
 
 ## `CgUiPaintContext` — a singleton
 
-Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. Every `fillRect`/
-`drawImage` call draws immediately; there is no recording phase and nothing to flush.
+Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. **It records** (`render-graph`
+G4): a draw lands in a chunk under its material's snapshot and the scissor current at its flush, and what the bound
+target holds executes at a **drain** — a layer opening or closing, a backdrop capture, the end of the frame. So
+`flush()` ends the open chunks and executes nothing; a caller about to read the target or draw into it with raw GL
+drains first. A flush into any other target still executes at once (`CgImmediate.deferInto`).
 
 | Group | Methods |
 |---|---|

@@ -25,6 +25,7 @@ import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
+import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextGamma;
@@ -64,7 +65,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * True immediate-mode 2D paint context for CrystalGUI's box-model layer.
+ * The 2D paint context for CrystalGUI's box-model layer: it records, and executes at a drain.
  *
  * <p><b>A true process-wide singleton</b> — one paint context for the whole client, accessed via
  * {@link #getInstance()}, lazily constructed on first use. This reflects reality, not an
@@ -85,12 +86,12 @@ import java.util.Set;
  * {@link CgFrameData}, which it overwrites with a screen-space camera — see {@link #beginFrame} for
  * why that needs no restore and what does.</p>
  *
- * <p>Integrates {@link ScissorStack} for nested clip regions — GL scissor is applied
- * at draw time when a scissor rect is active.</p>
+ * <p>Integrates {@link ScissorStack} for nested clip regions: the GL scissor it sets is recorded with each chunk
+ * at its flush.</p>
  *
- * <p><b>Frame lifecycle</b> — call {@link #beginFrame} once before walking the UI tree,
- * then {@link #endFrame} once after. Every {@code fillRect}/{@code drawImage} call in between draws immediately;
- * there is no recording phase and nothing to flush. This is intentional for now, not merely unoptimized. </p>
+ * <p><b>Frame lifecycle</b> — call {@link #beginFrame} once before walking the UI tree, then {@link #endFrame} once
+ * after. A draw in between is recorded; {@link #flush} ends the open chunks, and what the bound target holds executes
+ * when a layer opens or closes, a backdrop captures, or the frame ends.</p>
  */
 public final class CgUiPaintContext {
 
@@ -187,6 +188,7 @@ public final class CgUiPaintContext {
     private void abortFrame() {
         unparkSamplers();
         endTextPath();
+        CgImmediate.abandonDeferred();
         renderer.end();   // safe unbegun: begin() may be what never ran
         if (glScope != null) {
             glScope.close();
@@ -748,6 +750,9 @@ public final class CgUiPaintContext {
         CgTrace.zoneDone(UiTrace.FRAME, "glbegin:bindQuadPath", timed);
         currentMaterial = boxModelMaterial;
         currentTexture = null;
+        // Every flush into the frame target from here waits for a drain: a scissor, a material or a path switch
+        // ends a chunk and executes nothing. @see #drain
+        CgImmediate.deferInto(frameFbo);
         frameActive = true; // must be set before the pool warms a slot — quad() requires an active frame
 
         // AFTER frameActive, with the pool's own warm-up, because warming a target SUBMITS A QUAD and
@@ -840,6 +845,7 @@ public final class CgUiPaintContext {
         long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.endBatch();
         renderer.flush();
+        CgImmediate.stopDeferring();
         CgTrace.zoneDone(UiTrace.FRAME, "glend:flush", timed);
 
         // The finished picture, before it goes anywhere: frameFbo holds exactly what this frame drew.
@@ -1438,6 +1444,15 @@ public final class CgUiPaintContext {
     public void flush() {
         endTextPath();
         renderer.flush();
+    }
+
+    /**
+     * {@link #flush}, then executes what the bound target holds: for a caller about to read that target or to draw
+     * into it with raw GL. A flush alone only ends the open chunks, which wait for the next target switch.
+     */
+    void drain() {
+        flush();
+        CgImmediate.drain();
     }
 
     /**
@@ -2223,7 +2238,8 @@ public final class CgUiPaintContext {
      *               A region shifts the clip stack into the layer's own origin; null leaves it alone.
      */
     private CgFrameBuffer beginLayerFbo(CgFrameBuffer fbo, boolean clear, @Nullable LayerRegion region) {
-        flush();
+        // Drained before the clear: what the enclosing target holds may still read this pooled buffer.
+        drain();
         CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
         int[] savedScissor = scissorStack.suspend();
         if (region != null) {
@@ -2273,6 +2289,7 @@ public final class CgUiPaintContext {
         // in the top-left corner. updateOrtho is a no-op when the size is unchanged, so this costs a
         // pool layer nothing.
         textRenderer.context().updateOrtho(fbo.getWidth(), fbo.getHeight());
+        CgImmediate.deferInto(fbo);
         currentTexture = null;
         return fbo;
     }
@@ -2282,7 +2299,7 @@ public final class CgUiPaintContext {
      * enclosing layer). Does not composite/draw anything itself — see {@link #blitLayer} and
      * {@link #compositeMask} for what to do with the finished FBO. */
     public void endLayerFbo() {
-        flush();
+        drain();
         // AFTER the flush and BEFORE the target is swapped back — the only moment the layer holds its
         // finished content and is still bound. A zero here is a draw fault and nothing downstream can
         // be blamed for it.
@@ -2306,6 +2323,7 @@ public final class CgUiPaintContext {
         // And the clip, against the enclosing target's height -- the scope above restores the FBO and
         // the viewport but not the scissor rect, which was last applied for the layer just ended.
         reapplyScissor();
+        CgImmediate.deferInto(currentTarget());
         currentTexture = null;
     }
 
@@ -2464,10 +2482,7 @@ public final class CgUiPaintContext {
         CgTrace.zoneDone(UiTrace.FRAME, "layer:blit", timed);
     }
 
-    /**
-     * The target {@link #blitLayer} just drew into — the innermost live layer, or the frame's own
-     * target when none is open. Probe-only: nothing in the paint path needs to ask this.
-     */
+    /** The target being drawn into: the innermost live layer, or the frame's own target when none is open. */
     private CgFrameBuffer currentTarget() {
         return layerStack.isEmpty() ? frameFbo : layerStack.peek().fbo();
     }

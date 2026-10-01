@@ -439,8 +439,8 @@ final class CgUiBackdrop {
             return true;
         }
         long probeT0 = PROBE ? System.nanoTime() : CgTrace.stamp(UiTrace.FRAME);
-        // Queued draws go first, so the GPU timer holds the capture alone.
-        ctx.flush();
+        // Queued draws go first: the capture reads the target, and the GPU timer holds the capture alone.
+        ctx.drain();
         CgGpuTrace.begin(GPU_CAPTURE);
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
         if (captureFbo.getWidth() != w || captureFbo.getHeight() != h) captureFbo.resize(w, h);
