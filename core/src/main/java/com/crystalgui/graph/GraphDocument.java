@@ -447,6 +447,9 @@ public final class GraphDocument implements SettingsScope {
     public void restoreEdge(EdgeData edge) {
         edges.add(edge);
         changeset.edgeAdded(edge);
+        // A wire dragged by hand and an undone disconnect both arrive here, and the main preview hears of an edit
+        // only through this signal.
+        onChanged.emit();
     }
 
     public boolean disconnect(EdgeData edge) {
@@ -620,8 +623,8 @@ public final class GraphDocument implements SettingsScope {
         for (NodeData node : source.nodes()) addNode(node);
         for (EdgeData edge : source.edges()) restoreEdge(edge);
         changeset.reset();
-        // ONE emit at the end: `restoreEdge` only records, and `clear()` empties the properties after its last
-        // removeNode -- so a file with no nodes, or one ending in an edge, would otherwise tell nobody.
+        // After the reset: `clear()` empties the properties after its last removeNode, so a file with no nodes and
+        // no edges would otherwise tell nobody.
         onChanged.emit();
     }
 }
