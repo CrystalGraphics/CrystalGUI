@@ -182,7 +182,7 @@ spells something; it decides nothing. The seams it answers, all in `core/`:
 
 | Seam | A loader answers |
 |---|---|
-| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection, and how to give the current screen a key the desktop left (`reinjectKey`) |
+| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection, how to give the current screen a key the desktop left (`reinjectKey`), and the game's client and server threads (`clientThread`, `serverThread`: what `HostThread.CLIENT`/`SERVER` run work on; null where the client thread is the one the desktop is framed on, or there is no integrated server) |
 | `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, and whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides) |
 | `desktop.host.HostSession.PaintHost` | whether a screen is up and whose, and how to bracket a draw |
 | `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |
@@ -438,6 +438,12 @@ its input and anything else that touches the tree through it, running the same c
 photograph exact frames: `cgui-text-stress`, `cgui-timeline`, `cgui-text-gamma`, `cgui-visual-layers`. A
 capture or script counts `driver.presentedFrames()`, not frame numbers: async presents nothing until the
 first frame is recorded.
+
+**UI code reaches the game through `HostThread`** (`core.async`), never directly: `HostThread.CLIENT.run(...)`,
+`HostThread.SERVER.call(...)` answering a `Reply` on the UI's thread, and `UINode.extract(read, use)` for a value read
+every frame and used when it changes. Instant where the named thread is the one framing the document; otherwise one
+hop, the answer landing at the next frame. Each loader answers the threads through `HostServices`; the guide is
+`docs/CGUI_BUILDING_UIS.md` §7c.
 
 ## `ShadowRoot` and `UISlot`
 

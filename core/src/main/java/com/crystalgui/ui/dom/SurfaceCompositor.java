@@ -70,6 +70,15 @@ final class SurfaceCompositor<F> {
      * @return false, and nothing posted, while the previous frame is in flight or not yet presented: a frame dropped
      *         unpresented never gives its buffers back
      */
+    /** Whether {@link #requestFrame} would take a frame now. Render thread. */
+    boolean accepting() {
+        if (inFlight) {
+            reportIfHung();
+            return false;
+        }
+        return pending.get() == null;
+    }
+
     boolean requestFrame(Supplier<UiCommit<F>> work) {
         if (inFlight) {
             reportIfHung();

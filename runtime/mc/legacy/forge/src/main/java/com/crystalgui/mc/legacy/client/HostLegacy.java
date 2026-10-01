@@ -7,6 +7,7 @@ import java.util.Locale;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.mc.legacy.Game;
 import com.crystalgui.mc.legacy.net.CgUiConnections;
@@ -15,6 +16,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.integrated.IntegratedServer;
 
 /**
  * How Forge 1.8–1.12.2 answers the questions only a platform can. Nothing here decides anything.
@@ -94,4 +96,36 @@ final class HostLegacy implements HostServices {
         // keyTyped is a press, with its character beside its key; a release has no handler to reach.
         else if (screen != null && key.pressed()) ScreenKeys.type(screen, key.character(), key.key());
     }
+
+    /** Legacy Forge frames the desktop on the client thread itself. */
+    @Override
+    @Nullable
+    public HostThread.Binding clientThread() {
+        return null;
+    }
+
+    @Override
+    public HostThread.Binding serverThread() {
+        return SERVER_THREAD;
+    }
+
+    /** The integrated server's own task queue, {@code IThreadListener} since 1.8. */
+    private static final HostThread.Binding SERVER_THREAD = new HostThread.Binding() {
+        @Override
+        public void execute(Runnable work) {
+            IntegratedServer server = Minecraft.getMinecraft().getIntegratedServer();
+            if (server != null) server.addScheduledTask(work);
+        }
+
+        @Override
+        public boolean isCurrent() {
+            IntegratedServer server = Minecraft.getMinecraft().getIntegratedServer();
+            return server != null && server.isCallingFromMinecraftThread();
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return Minecraft.getMinecraft().getIntegratedServer() != null;
+        }
+    };
 }

@@ -8,6 +8,8 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.desktop.host.HostServices;
+import com.crystalgui.mc.v1710.net.CgUiWorkspaceHost;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.mc.v1710.net.CgUiConnections;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
@@ -96,4 +98,34 @@ final class Host1710 implements HostServices {
         // keyTyped is a press, with its character beside its key; a release has no handler to reach.
         else if (screen != null && key.pressed()) ScreenKeys.type(screen, key.character(), key.key());
     }
+
+    /** 1.7.10 frames the desktop on the client thread itself. */
+    @Override
+    @Nullable
+    public HostThread.Binding clientThread() {
+        return null;
+    }
+
+    /** 1.7.10's server has no task queue of its own: {@link CgUiWorkspaceHost} drains this one on its tick. */
+    @Override
+    public HostThread.Binding serverThread() {
+        return SERVER_THREAD;
+    }
+
+    private static final HostThread.Binding SERVER_THREAD = new HostThread.Binding() {
+        @Override
+        public void execute(Runnable work) {
+            CgUiWorkspaceHost.SERVER_TASKS.execute(work);
+        }
+
+        @Override
+        public boolean isCurrent() {
+            return CgUiWorkspaceHost.SERVER_TASKS.isCurrent();
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return Minecraft.getMinecraft().getIntegratedServer() != null;
+        }
+    };
 }

@@ -1,10 +1,12 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
@@ -29,6 +31,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Queue;
+import java.util.function.Supplier;
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import lombok.Getter;
 
@@ -181,6 +187,29 @@ public final class UIDocument extends UIElement {
 
     void useDriver(DocumentDriver<?> driver) {
         this.driver = driver;
+    }
+
+    // ── Reading the host ─────────────────────────────────────────────────────
+
+    private final Extracts extracts = new Extracts(this);
+    /** Answers from other threads, run on this document at the start of its next frame. */
+    private final Queue<Runnable> inbox = new ConcurrentLinkedQueue<>();
+
+    /** Registers an extract; the public form is {@link UINode#extract}, which ties it to a node's time in the tree. */
+    <T> Connection addExtract(HostThread thread, Supplier<T> read, Consumer<T> use) {
+        return extracts.add(Objects.requireNonNull(thread, "thread"), Objects.requireNonNull(read, "read"),
+                Objects.requireNonNull(use, "use"));
+    }
+
+    /** Runs {@code work} on this document at the start of its next frame. From any thread. */
+    void post(Runnable work) {
+        inbox.add(work);
+    }
+
+    /** The extracts' readings for this frame, taken on the calling thread; null when none is registered. */
+    @Nullable
+    Runnable readExtracts() {
+        return extracts.read();
     }
 
     /** The first frame claims its thread, as does a frame after the claiming thread died. */
@@ -606,6 +635,12 @@ public final class UIDocument extends UIElement {
         // separately: this is animation, style and layout, and the paint that follows is a call the
         // host makes itself. @see CgUiPaintContext#endFrame
         claimFrameThread();
+        for (Runnable arrived; (arrived = inbox.poll()) != null; ) arrived.run();
+        // With no driver the host calls this on its own thread, which is where an extract reads; a driver reads them itself.
+        if (driver == null) {
+            Runnable delivery = extracts.read();
+            if (delivery != null) delivery.run();
+        }
         if (JobScheduler.hasShared()) {
             CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
             long drained = CgTrace.stamp(UiTrace.FRAME);

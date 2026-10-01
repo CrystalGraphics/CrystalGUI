@@ -3,6 +3,7 @@ package com.crystalgui.desktop.host;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -181,6 +182,9 @@ public final class HostSession {
     private HostSession(HostServices services, ApplicationKind primaryKind) {
         this.services = services;
         this.primaryKind = primaryKind;
+        // The game's threads, as UI code reaches them. @see HostThread
+        HostThread.bind(HostThread.CLIENT, services.clientThread());
+        HostThread.bind(HostThread.SERVER, services.serverThread());
     }
 
     /**
@@ -292,7 +296,11 @@ public final class HostSession {
         primaryWindow = null;
         host = null;
         painted = false;
-        if (current == this) current = null;
+        if (current == this) {
+            current = null;
+            HostThread.bind(HostThread.CLIENT, null);
+            HostThread.bind(HostThread.SERVER, null);
+        }
     }
 
     // ── What a host reads ───────────────────────────────────────────────────────────────────────
@@ -534,6 +542,8 @@ public final class HostSession {
     }
 
     private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
+        // EVERY HOOK, painted or not: work and answers for the frame thread must not wait for a desktop to show.
+        HostThread.drainFrames();
         Desktop desktop = desktop();
         UIDocument document = document();
         DocumentDriver<DesktopFacts> owner = driver;

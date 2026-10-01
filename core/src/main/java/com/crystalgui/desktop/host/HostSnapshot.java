@@ -1,6 +1,7 @@
 package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 import javax.annotation.Nullable;
@@ -81,5 +82,17 @@ final class HostSnapshot implements HostServices {
     @Override
     public void reinjectKey(CgSystemInput.Keyboard.Event key) {
         host.reinjectKey(key);
+    }
+
+    @Override
+    @Nullable
+    public HostThread.Binding clientThread() {
+        return host.clientThread();
+    }
+
+    @Override
+    @Nullable
+    public HostThread.Binding serverThread() {
+        return host.serverThread();
     }
 }
