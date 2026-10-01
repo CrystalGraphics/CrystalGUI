@@ -486,7 +486,8 @@ public class Popover extends UIElement {
 
         open = false;
         applyOpenState();
-        document().demote(this);
+        // NULL WHEN HIDDEN FROM A DETACH, which already demoted it: closing a window with a menu open.
+        if (openWindow != null) openWindow.demote(this);
         setOpener(null);
 
         UIDocument window = document();
