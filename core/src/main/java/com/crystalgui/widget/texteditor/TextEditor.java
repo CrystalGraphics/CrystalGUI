@@ -6195,9 +6195,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         final float left = codeLeftPad() + carriedIndentPx(viewLine);
         // A DEFINITE WIDTH IS REQUIRED. An absolutely-positioned box with no width resolves to zero, and
         // a zero-width line lays its text out as though it had no extent -- which shaved the first
-        // character off every row on screen. Wide enough for the text, and at least the viewport, so a
-        // selection band on a short line still reads as a band and horizontal scrolling has something to
-        // scroll.
+        // character off every row on screen. Wide enough for the text; `min-width: 100%` in editor.css makes
+        // it at least the viewport. NOT the viewport here: a width written from it changed on every frame of a
+        // window resize, restyling every row and laying the editor out a second time each frame.
         //
         // THE VIEW LINE'S OWN EXTENT, not the row's. Sizing a wrapped continuation to the whole row makes
         // its box run off the viewport by everything above it -- invisible while the text fits inside,
@@ -6205,8 +6205,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // band both read it.
         LineProjection projection = projectionAt(viewLine);
         ProjectedLines.ModelPosition model = modelAt(viewLine);
-        final float width = Math.max(textViewportWidth(),
-                xOfView(viewLine, projection.maxColumn(model.viewLineInRow())) + 1f);
+        final float width = xOfView(viewLine, projection.maxColumn(model.viewLineInRow())) + 1f;
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .top(top).left(left).width(width).height(lineHeight()));
