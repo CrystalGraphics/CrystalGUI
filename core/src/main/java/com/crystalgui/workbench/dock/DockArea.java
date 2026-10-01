@@ -2,6 +2,7 @@ package com.crystalgui.workbench.dock;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -38,6 +39,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.function.Predicate;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.annotation.Nullable;
 import com.crystalgui.core.command.CommandRegistry;
@@ -119,7 +121,6 @@ public class DockArea extends UIElement implements MinimumSize {
 
     /** Set across buildNode, so a group's own announce waits for the tree to be re-attached. */
     private boolean rebuilding;
-    private boolean ticking;
     @Nullable
     private DockGroup activeGroup;
 
@@ -996,16 +997,19 @@ public class DockArea extends UIElement implements MinimumSize {
      */
     private static final boolean TRACE = Boolean.getBoolean("crystalgui.startup.trace");
 
-    private static boolean traced;
+    /** Claimed by the first rebuild in the process, which is the one traced. */
+    private static final AtomicBoolean TRACE_CLAIMED = new AtomicBoolean();
 
-    private static long phaseNanos;
+    /** Whether this rebuild is the traced one. */
+    private boolean tracing;
 
-    private static void phase(String what) {
-        if (!TRACE || traced) return;
+    private long phaseNanos;
+
+    private void phase(String what) {
+        if (!tracing) return;
         long now = System.nanoTime();
         if (phaseNanos != 0) {
-            com.crystalgui.core.CrystalGuiCore.LOGGER.info("[startup]       {} — {} ms", what,
-                    (now - phaseNanos) / 1_000_000);
+            CrystalGuiCore.LOGGER.info("[startup]       {} — {} ms", what, (now - phaseNanos) / 1_000_000);
         }
         phaseNanos = now;
     }
@@ -1019,6 +1023,7 @@ public class DockArea extends UIElement implements MinimumSize {
     }
 
     private void rebuild() {
+        tracing = TRACE && TRACE_CLAIMED.compareAndSet(false, true);
         phase("begin");
         // Weights are pulled BEFORE each mutation (see captureDividerPositions), not here: by now the
         // layout has already changed shape and a branch's child count may no longer match its split's
@@ -1058,7 +1063,7 @@ public class DockArea extends UIElement implements MinimumSize {
         announcePanels();
         announceLayoutChange();
         phase("announce");
-        traced = TRACE;
+        tracing = false;
     }
 
     /**
@@ -1109,7 +1114,7 @@ public class DockArea extends UIElement implements MinimumSize {
     private UIElement buildNode(DockNode node, int depth) {
         if (node.isLeaf()) {
             DockLeaf leaf = (DockLeaf) node;
-            long started = TRACE && !traced ? System.nanoTime() : 0L;
+            long started = tracing ? System.nanoTime() : 0L;
             DockGroup group = groups.computeIfAbsent(leaf, l -> new DockGroup(this, l));
             group.sync();
             if (started != 0L) {
@@ -1117,7 +1122,7 @@ public class DockArea extends UIElement implements MinimumSize {
                 // A leaf is a tab group, so this names the PANELS in it -- which is what a reader needs
                 // to know which tool window is expensive, rather than that "a leaf" was.
                 if (cost >= 5) {
-                    com.crystalgui.core.CrystalGuiCore.LOGGER.info("[startup]         leaf {} — {} ms",
+                    CrystalGuiCore.LOGGER.info("[startup]         leaf {} — {} ms",
                             leaf.panels(), cost);
                 }
             }

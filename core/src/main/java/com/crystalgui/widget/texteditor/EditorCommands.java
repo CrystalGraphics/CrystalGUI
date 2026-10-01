@@ -1,9 +1,9 @@
 package com.crystalgui.widget.texteditor;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.data.CommandTarget;
 import com.crystalgui.core.command.ClipboardCommands;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -306,10 +306,10 @@ public final class EditorCommands {
         // unselected line did nothing whatever, which reads as the editor ignoring the key rather than as
         // a disabled command. @see TextEditor#selectionOrTouchedLines
         registry.register(editorCommand(PREFIX + "copy", "Copy")
-                .run(on(editor -> CgPlatform.input().setClipboard(editor.selectionOrTouchedLines()))));
+                .run(on(editor -> PlatformPort.current().setClipboard(editor.selectionOrTouchedLines()))));
         registry.register(Command.of(PREFIX + "cut", "Cut")
                 .run(on(editor -> {
-                    CgPlatform.input().setClipboard(editor.selectionOrTouchedLines());
+                    PlatformPort.current().setClipboard(editor.selectionOrTouchedLines());
                     // The line, not a collapsed selection: deleteSelections would remove nothing at all
                     // when there is none, so the text would be on the clipboard and still on screen.
                     if (editor.hasSelection()) editor.deleteSelections();
@@ -320,7 +320,7 @@ public final class EditorCommands {
                 .enabledWhen(when(editor -> !editor.isReadOnly())));
         registry.register(Command.of(PREFIX + "paste", "Paste")
                 .run(on(editor -> {
-                    String pasted = CgPlatform.input().getClipboard();
+                    String pasted = PlatformPort.current().clipboard();
                     // A LINE COMES BACK AS A LINE. @see TextEditor#pasteAtCaret
                     if (pasted != null && !pasted.isEmpty()) editor.pasteAtCaret(pasted);
                 }))

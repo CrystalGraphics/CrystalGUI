@@ -101,6 +101,7 @@ public final class InlineRename {
         // The value listener WRITES; Enter and blur END the gesture regardless of whether anything
         // changed. Splitting the two is bug (1) in the class note -- they are not the same event.
         editor.attachListener(this::apply);
+        editor.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_ESCAPE);
         editor.events.getGroup(KeyboardEvent.Down.class).attachListener((element, event) -> {
             if (event.getKeyCode() == CgKeyCodes.KEY_RETURN) {
                 apply(editor == null ? null : editor.getText());

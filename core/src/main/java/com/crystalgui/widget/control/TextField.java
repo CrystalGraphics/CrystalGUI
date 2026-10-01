@@ -1,5 +1,6 @@
 package com.crystalgui.widget.control;
 
+import com.crystalgui.ui.service.PlatformPort;
 import javax.annotation.Nullable;
 import org.joml.Vector3f;
 import com.crystalgui.ui.contract.RatePolicy;
@@ -35,7 +36,6 @@ import com.crystalgui.ui.input.FocusPolicy;
 
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.InkOverflow;
 import com.crystalgui.ui.service.Drag;
@@ -1095,8 +1095,24 @@ public class TextField extends UIElement implements Measurable {
     }
 
     private int currentModifiers() {
-        var adapter = CgPlatform.input();
-        return adapter == null ? 0 : adapter.getCurrentModifiers();
+        PlatformPort adapter = PlatformPort.current();
+        return adapter == null ? 0 : adapter.modifiers();
+    }
+
+    /** The keys {@link #handleKey} consumes beyond typing and caret movement, which {@code KeyClaims} covers. */
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        if (CgModifiers.hasCtrl(modifiers)) {
+            switch (key) {
+                case CgKeyCodes.KEY_A, CgKeyCodes.KEY_C, CgKeyCodes.KEY_X, CgKeyCodes.KEY_V, CgKeyCodes.KEY_BACK,
+                     CgKeyCodes.KEY_DELETE, CgKeyCodes.KEY_LEFT, CgKeyCodes.KEY_RIGHT -> {
+                    return true;
+                }
+                default -> { }
+            }
+        }
+        if (key == CgKeyCodes.KEY_ESCAPE && !text.equals(value.get())) return true;
+        return super.claimsKey(key, typed, modifiers);
     }
 
     /** @return whether the key was consumed. */
@@ -1114,12 +1130,12 @@ public class TextField extends UIElement implements Measurable {
                     return true;
                 }
                 case CgKeyCodes.KEY_C -> {
-                    if (hasSelection()) CgPlatform.input().setClipboard(getSelectedText());
+                    if (hasSelection()) PlatformPort.current().setClipboard(getSelectedText());
                     return true;
                 }
                 case CgKeyCodes.KEY_X -> {
                     if (hasSelection()) {
-                        CgPlatform.input().setClipboard(getSelectedText());
+                        PlatformPort.current().setClipboard(getSelectedText());
                         deleteSelectionOr(0);
                     }
                     return true;
@@ -1127,7 +1143,7 @@ public class TextField extends UIElement implements Measurable {
                 case CgKeyCodes.KEY_V -> {
                     // Paste goes through the keystroke filters too, so a filtered field can't be
                     // bypassed by pasting what it refuses to accept typed.
-                    String pasted = CgPlatform.input().getClipboard();
+                    String pasted = PlatformPort.current().clipboard();
                     StringBuilder kept = new StringBuilder(pasted.length());
                     for (int i = 0; i < pasted.length(); i++) {
                         char c = pasted.charAt(i);

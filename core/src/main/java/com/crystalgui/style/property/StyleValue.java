@@ -23,31 +23,31 @@ public abstract class StyleValue<T> {
      *
      * @return the computed value of type {@code T}, or {@code null} if an exception occurs during computation
      */
+    /**
+     * The parsed value, computed on first use and shared after. Safe from any thread: a sheet warms its values on a
+     * worker while a style pass may ask for the same one, and both get the one instance -- a drawable compares by
+     * identity, so a second copy would read as a changed style.
+     */
     public T compute() {
-        if (!computed) {
-            try {
-                // A COMMENT IS WHITESPACE TO A TOKENIZER, and CSS drops them before a value is ever parsed, so a
-                // value may carry one. A sheet's own parser already stripped them; this is for a value set
-                // directly, where the text reaches the parser as written -- the UI builder switches one layer of
-                // a stack off by commenting it INSIDE the value, and inline there is no sheet to strip it.
-                computedValue = doCompute(CssComments.has(rawValue) ? CssComments.strip(rawValue) : rawValue);
-            } catch (Exception e) {
-                CrystalGuiCore.LOGGER.warn("Failed to parse style value '{}': {}", rawValue, e.getMessage());
-                computedValue = null;
-            }
-            computed = true;
-        }
+        if (!computed) computeOnce();
         return computedValue;
     }
 
-    /**
-     * Performs computation on the provided raw value to produce a result of type {@code T}.
-     * The implementation of this method should define the specific logic for converting
-     * the raw input string into a computed value.
-     *
-     * @param rawValue the raw input value as a string
-     * @return the computed value of type {@code T}
-     */
+    private synchronized void computeOnce() {
+        if (computed) return;
+        try {
+            // A COMMENT IS WHITESPACE TO A TOKENIZER, and CSS drops them before a value is ever parsed, so a
+            // value may carry one. A sheet's own parser already stripped them; this is for a value set
+            // directly, where the text reaches the parser as written -- the UI builder switches one layer of
+            // a stack off by commenting it INSIDE the value, and inline there is no sheet to strip it.
+            computedValue = doCompute(CssComments.has(rawValue) ? CssComments.strip(rawValue) : rawValue);
+        } catch (Exception e) {
+            CrystalGuiCore.LOGGER.warn("Failed to parse style value '{}': {}", rawValue, e.getMessage());
+            computedValue = null;
+        }
+        computed = true;
+    }
+
     protected abstract @Nullable T doCompute(String rawValue);
 
     @Override

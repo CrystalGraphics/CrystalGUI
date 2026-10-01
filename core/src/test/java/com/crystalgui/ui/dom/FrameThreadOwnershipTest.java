@@ -1,5 +1,6 @@
 package com.crystalgui.ui.dom;
 
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -110,6 +111,29 @@ public class FrameThreadOwnershipTest extends UiDocumentTestBase {
         if (raised[0] != null) {
             fail("a tree nobody is painting must be freely buildable from any thread, but: " + raised[0]);
         }
+    }
+
+    /** {@code DesktopHost} builds its document unclaimed; until its first frame claimed it, nothing was checked. */
+    @Test
+    public void aDocumentNobodyClaimedIsClaimedByItsFirstFrame() throws Exception {
+        UIDocument unclaimed = new UIDocument();
+        UIElement root = new UIElement();
+        unclaimed.append(root);
+        unclaimed.frame(0f, 100f, 100f);
+
+        assertSame(Thread.currentThread(), unclaimed.frameThread());
+
+        final Throwable[] raised = new Throwable[1];
+        Thread other = new Thread(() -> {
+            try {
+                root.append(new UIElement());
+            } catch (Throwable t) {
+                raised[0] = t;
+            }
+        }, "not-the-frame-thread");
+        other.start();
+        other.join();
+        assertTrue("the first frame armed the check", raised[0] instanceof IllegalStateException);
     }
 
     @Test

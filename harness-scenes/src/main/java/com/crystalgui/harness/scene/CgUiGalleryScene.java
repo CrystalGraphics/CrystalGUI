@@ -4,6 +4,7 @@ import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.api.text.CgTextStroke;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -37,6 +38,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.syntax.KeywordTokenizer;
 import com.crystalgui.ui.service.AnchoredPlacement;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
@@ -128,7 +130,17 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         this.oreSheet = StyleSheetRegistry.of("crystalgui:ore");
         this.sceneSheet = StyleSheetRegistry.of("harness:gallery");
 
-        this.document = new UIDocument().markFrameThread();
+        this.document = new UIDocument();
+        this.driver = DocumentDriver.attach(document);
+        this.painter = DocumentDriver.whole(document, null, this::paintHeader);
+        driver.run(this::build);
+    }
+
+    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. Everything that touches the tree goes through it. */
+    private DocumentDriver<Void> driver;
+    private DocumentDriver.Painter<Void> painter;
+
+    private void build() {
         this.document.boxes().setUiScale(SCALE);
         UIElement sceneRoot = createDemo();
         // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
@@ -2893,6 +2905,44 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public void render(HarnessContext ctx, FrameInfo frame) {
+        driver.post(this::attachPreviews);
+        driver.frame(frame.getDeltaTime(), ctx.getScreenWidth(), ctx.getScreenHeight(), painter);
+
+        // OPEN ON A NAMED PAGE, AND PHOTOGRAPH IT. `-Dcrystalgui.gallery.page=glass` with `--seconds=N`
+        // turns this scene into an unattended diagnostic: a run that leaves a PNG of ONE page on disk.
+        // The property prefix must be crystalgui. or crystalgraphics. -- the build forwards only those
+        // two, and a differently-named flag is accepted on the command line and reaches nothing.
+        //
+        // Frame 5 is too early for a page whose content is a captured backdrop: the capture is taken
+        // during paint, and anything animating behind it has barely moved. 90 is about a second and a
+        // half in, by which point the drift has travelled and a stale capture would be obvious.
+        String wanted = System.getProperty("crystalgui.gallery.page");
+        if (wanted != null && driver.presentedFrames() == 2) {
+            driver.post(() -> {
+                for (int i = 0; i < pages.getTabCount(); i++) {
+                    if (wanted.equalsIgnoreCase(pages.getTab(i).getText())) {
+                        pages.selectIndex(i);
+                        break;
+                    }
+                }
+            });
+        }
+        // 90 suits a page that is animating. A page whose GLYPHS stream in needs longer -- a fresh
+        // font family at a new size queues its whole ASCII warm ahead of the specimen, drained at a
+        // bounded rate, so a capture at 90 catches the word half-generated and reads as missing
+        // letters. -Dcrystalgui.gallery.captureFrame=N waits.
+        //
+        // -Dcrystalgui.gallery.textLabSize=N opens the text lab at a font size, which is the only way
+        // to photograph a size-dependent answer -- the stroke cap is a fraction of the em -- without a
+        // hand on the slider.
+        int captureFrame = wanted == null ? 5
+                : Integer.getInteger("crystalgui.gallery.captureFrame", 90);
+        if (driver.presentedFrames() == captureFrame) {
+            ctx.getArtifactService().requestCapture(wanted == null ? "startup" : wanted);
+        }
+    }
+
+    private void attachPreviews() {
         // Deferred to the first frame because attaching registers a frame ticker on the window, which
         // does not exist while the pages are being built.
         if (shaderPreviews != null && !shaderPreviewsAttached) {
@@ -2905,21 +2955,10 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         if (shaderMainPreview != null && !shaderMainPreviewAttached) {
             shaderMainPreviewAttached = shaderMainPreview.attach();
         }
+    }
 
-        // Drag the dialog's corner and the picker SCALES rather than being cropped. `resize` writes an
-        // explicit width/height — that is what CSS resize means — so turning that into a scale is the
-        // host's job: read the box the dialog now offers and hand the picker a multiple of its natural
-        // size. Done per frame because a resize is a drag; setScale ignores an unchanged value.
-        document.frame(frame.getDeltaTime(), ctx.getScreenWidth() / SCALE, ctx.getScreenHeight() / SCALE);
-
-        // AND THE PAINT. `paintFrame()` did both; `frame()` only advances, so a scene that
-        // lost this half advanced perfectly and drew nothing.
-        CgUiPaintContext paintContext = document.paintContext();
-        paintContext.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
-        document.paint(paintContext);
-        paintContext.endFrame();
-
-        var context = document.paintContext();
+    /** The status line, drawn over the document in its own frame. */
+    private void paintHeader(CgUiPaintContext context) {
         Tab selected = pages.getSelectedTab();
         context.text().draw().at(0, 0)
                 .text(String.format("Gallery — page=%s   theme=%s   uiScale=%.2f ([ ])   clicks=%d   slider=%.0f",
@@ -2929,51 +2968,20 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
                         buttonClicks,
                         continuous.getValue()))
                 .font(context.getFont().atSize(14)).submit();
-        // Between frames this draws at once, on top; left queued it would flush inside the next frame's recording.
-        context.flush();
-
-        // OPEN ON A NAMED PAGE, AND PHOTOGRAPH IT. `-Dcrystalgui.gallery.page=glass` with `--seconds=N`
-        // turns this scene into an unattended diagnostic: a run that leaves a PNG of ONE page on disk.
-        // The property prefix must be crystalgui. or crystalgraphics. -- the build forwards only those
-        // two, and a differently-named flag is accepted on the command line and reaches nothing.
-        //
-        // Frame 5 is too early for a page whose content is a captured backdrop: the capture is taken
-        // during paint, and anything animating behind it has barely moved. 90 is about a second and a
-        // half in, by which point the drift has travelled and a stale capture would be obvious.
-        String wanted = System.getProperty("crystalgui.gallery.page");
-        if (wanted != null && frame.getFrameNumber() == 2) {
-            for (int i = 0; i < pages.getTabCount(); i++) {
-                if (wanted.equalsIgnoreCase(pages.getTab(i).getText())) {
-                    pages.selectIndex(i);
-                    break;
-                }
-            }
-        }
-        // 90 suits a page that is animating. A page whose GLYPHS stream in needs longer -- a fresh
-        // font family at a new size queues its whole ASCII warm ahead of the specimen, drained at a
-        // bounded rate, so a capture at 90 catches the word half-generated and reads as missing
-        // letters. -Dcrystalgui.gallery.captureFrame=N waits.
-        //
-        // -Dcrystalgui.gallery.textLabSize=N opens the text lab at a font size, which is the only way
-        // to photograph a size-dependent answer -- the stroke cap is a fraction of the em -- without a
-        // hand on the slider.
-        int captureFrame = wanted == null ? 5
-                : Integer.getInteger("crystalgui.gallery.captureFrame", 90);
-        if (frame.getFrameNumber() == captureFrame) {
-            ctx.getArtifactService().requestCapture(wanted == null ? "startup" : wanted);
-        }
-
     }
 
     @Override
     public void dispose() {
         // The preview pool's targets are createOwned framebuffers, so no registry sweep reaches them —
         // this is the only thing that ever frees them.
-        if (shaderPreviews != null) {
-            shaderPreviews.delete();
-            shaderPreviews = null;
-            shaderPreviewsAttached = false;
-        }
+        driver.run(() -> {
+            if (shaderPreviews != null) {
+                shaderPreviews.delete();
+                shaderPreviews = null;
+                shaderPreviewsAttached = false;
+            }
+        });
+        driver.close();
         document = null;
     }
 
@@ -2994,15 +3002,17 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+        return driver.offerKey(event, () -> handleKey(event));
+    }
+
+    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
         // BARE brackets only. The keyboard Event carries no modifier state, so this reads the live mask --
         // without it, Ctrl+Shift+[ changes uiScale and returns true, and the editor's own fold binding
         // never sees the key at all. Any accelerator built on a bracket is invisible in this scene
         // otherwise, which is exactly how it presented: the binding was correct and untestable.
-        int mods = com.crystalgraphics.platform.CgPlatform.input().getCurrentModifiers();
-        boolean bare = !com.crystalgraphics.platform.input.CgModifiers.hasCtrl(mods)
-                && !com.crystalgraphics.platform.input.CgModifiers.hasShift(mods)
-                && !com.crystalgraphics.platform.input.CgModifiers.hasAlt(mods)
-                && !com.crystalgraphics.platform.input.CgModifiers.hasSuper(mods);
+        int mods = document.platform().modifiers();
+        boolean bare = !CgModifiers.hasCtrl(mods) && !CgModifiers.hasShift(mods)
+                && !CgModifiers.hasAlt(mods) && !CgModifiers.hasSuper(mods);
         if (event.pressed() && bare) {
             switch (event.key()) {
                 case CgKeyCodes.KEY_RBRACKET -> {
@@ -3625,6 +3635,6 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return document.input().consumeMouseEvent(event);
+        return driver.consumeMouseEvent(event);
     }
 }

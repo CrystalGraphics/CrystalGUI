@@ -8,7 +8,9 @@ import com.crystalgui.core.signal.Signal;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Matches a keystroke against the keymaps along the focus path, and holds pending-chord state.
@@ -148,19 +150,78 @@ public final class KeymapResolver {
         List<KeyStroke> attempt = new ArrayList<>(pending);
         attempt.add(stroke);
 
+        if (TRACE) trace(focused, stroke, focused.consumesTextInput());
+
+        int found = match(focused, attempt, true);
+        if (found == FIRED) {
+            cancelPending();
+            return true;
+        }
+        if (found == PREFIX) {
+            pending.clear();
+            pending.addAll(attempt);
+            pendingSinceMillis = nowMillis;
+            onPendingChanged.emit(new KeyChord(pending));
+            return true;
+        }
+        // Nothing matched. Any pending prefix is now dead — the user typed something that no chord
+        // continues, and silently keeping it would swallow their next keystroke too.
+        cancelPending();
+        return false;
+    }
+
+    /**
+     * The presses that {@link #resolve} would consume from {@code focused} now, without firing anything: every
+     * stroke that continues a bound chord whose command is enabled, or that extends one still in the running.
+     *
+     * <pre>{@code
+     * Set<KeyStroke> ours = resolver.claimedStrokes(focusedElement);   // what the host must not act on
+     * }</pre>
+     */
+    public Set<KeyStroke> claimedStrokes(@Nullable KeymapScope focused) {
+        Set<KeyStroke> out = new HashSet<>();
+        if (focused == null) return out;
+        int next = pending.size();
+        for (KeymapScope scope = focused; scope != null; scope = scope.commandParent()) {
+            Keymap keymap = scope.keymapOrNull();
+            if (keymap != null) collectNext(keymap.bindings(), next, out);
+        }
+        collectNext(commands.declaredBindings().bindings(), next, out);
+        out.removeIf(stroke -> {
+            List<KeyStroke> attempt = new ArrayList<>(pending);
+            attempt.add(stroke);
+            return match(focused, attempt, false) == NONE;
+        });
+        return out;
+    }
+
+    private void collectNext(List<KeyBinding> bindings, int next, Set<KeyStroke> out) {
+        for (KeyBinding binding : bindings) {
+            KeyChord chord = binding.getChord();
+            if (binding.getEventType() == KeyEventType.PRESS && chord.length() > next && chord.startsWith(pending)) {
+                out.add(chord.at(next));
+            }
+        }
+    }
+
+    private static final int NONE = 0, PREFIX = 1, FIRED = 2;
+
+    /**
+     * The one walk both {@link #resolve} and {@link #claimedStrokes} take: scopes innermost first, then the
+     * declared defaults. With {@code fire} false an enabled full match counts as {@link #FIRED} and nothing runs.
+     */
+    private int match(KeymapScope focused, List<KeyStroke> attempt, boolean fire) {
+        KeyStroke stroke = attempt.get(attempt.size() - 1);
         // Typing guard, evaluated once for the whole walk. Deliberately keyed on the FOCUSED element
         // rather than on each scope: what matters is whether this keystroke is currently being typed
         // into something, not which ancestor happens to own the binding.
         boolean typing = focused.consumesTextInput();
-
-        if (TRACE) trace(focused, stroke, typing);
-
         boolean prefixMatched = false;
         // Which commands some scope has bound EXPLICITLY. A command that anything in the chain has
         // deliberately bound does not also answer to the default it declared for itself -- otherwise
         // remapping is impossible: rebinding undo to Mod+U would leave Mod+Z working as well, and the
         // old chord could never be taken away. VS Code spells the same idea with a "-command" entry.
-        java.util.Set<String> userBound = new java.util.HashSet<>();
+        Set<String> userBound = new HashSet<>();
         for (KeymapScope scope = focused; scope != null; scope = scope.commandParent()) {
             Keymap keymap = scope.keymapOrNull();
             if (keymap == null) continue;
@@ -169,7 +230,7 @@ public final class KeymapResolver {
                 userBound.add(binding.getCommandId());
             }
             for (KeyBinding binding : keymap.bindings()) {
-                if (binding.getEventType() != type) continue;
+                if (binding.getEventType() != KeyEventType.PRESS) continue;
                 if (!binding.getChord().startsWith(attempt)) continue;
                 if (typing && !binding.isAllowedWhileTyping() && !escapesTypingGuard(stroke)) continue;
 
@@ -181,23 +242,13 @@ public final class KeymapResolver {
                     prefixMatched = true;
                     continue;
                 }
-                if (fire(binding, focused)) {
-                    cancelPending();
-                    return true;
-                }
+                if (fire ? fire(binding, focused) : applicable(binding, focused)) return FIRED;
                 // Bound but disabled. Keep walking: an outer scope may have its own binding for this
                 // chord that IS applicable, which is what lets a disabled editor command fall through to
                 // an application-wide one.
             }
         }
-
-        if (prefixMatched) {
-            pending.clear();
-            pending.addAll(attempt);
-            pendingSinceMillis = nowMillis;
-            onPendingChanged.emit(new KeyChord(pending));
-            return true;
-        }
+        if (prefixMatched) return PREFIX;
 
         // No SCOPE claimed it. Fall back to the defaults commands declared for themselves, which are
         // application-wide by construction -- see CommandRegistry.declaredBindings(). Last, so an
@@ -205,31 +256,16 @@ public final class KeymapResolver {
         // widgets.
         for (KeyBinding binding : commands.declaredBindings().bindings()) {
             if (userBound.contains(binding.getCommandId())) continue;
-            if (binding.getEventType() != type) continue;
+            if (binding.getEventType() != KeyEventType.PRESS) continue;
             if (!binding.getChord().startsWith(attempt)) continue;
             if (typing && !binding.isAllowedWhileTyping() && !escapesTypingGuard(stroke)) continue;
             if (binding.getChord().length() > attempt.size()) {
                 prefixMatched = true;
                 continue;
             }
-            if (fire(binding, focused)) {
-                cancelPending();
-                return true;
-            }
+            if (fire ? fire(binding, focused) : applicable(binding, focused)) return FIRED;
         }
-
-        if (prefixMatched) {
-            pending.clear();
-            pending.addAll(attempt);
-            pendingSinceMillis = nowMillis;
-            onPendingChanged.emit(new KeyChord(pending));
-            return true;
-        }
-
-        // Nothing matched. Any pending prefix is now dead — the user typed something that no chord
-        // continues, and silently keeping it would swallow their next keystroke too.
-        cancelPending();
-        return false;
+        return prefixMatched ? PREFIX : NONE;
     }
 
     /**
@@ -279,6 +315,11 @@ public final class KeymapResolver {
             }
         }
         return false;
+    }
+
+    private boolean applicable(KeyBinding binding, KeymapScope source) {
+        Command command = commands.get(binding.getCommandId());
+        return command != null && command.isEnabled(new CommandContext(source, binding.getArgs()));
     }
 
     private boolean fire(KeyBinding binding, KeymapScope source) {

@@ -142,7 +142,9 @@ public final class DesktopProbe {
             return;
         }
         try {
-            advance(host);
+            // ON THE DOCUMENT'S SEQUENCE when it has one: a step reads and writes the tree.
+            if (HostSession.isInstalled()) HostSession.session().inDocument(() -> advance(host));
+            else advance(host);
         } catch (RuntimeException | LinkageError failed) {
             // A probe that dies mid-routine must still end the run, or the task hangs on a client
             // nobody is driving.

@@ -1,6 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
@@ -13,6 +14,7 @@ import com.crystalgui.ui.box.BoxTree;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Dismiss;
 import com.crystalgui.ui.service.Focus;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Lifecycle;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -132,10 +134,68 @@ public final class UIDocument extends UIElement {
 
     // ── The frame thread ─────────────────────────────────────────────────────
 
-    /** Claims the current thread as the one that runs frames for this tree. */
+    /**
+     * Claims the current thread as the one that runs frames for this tree. {@link #frame} claims it on
+     * the first frame, so a host need not; a test that mutates before any frame calls this to arm the
+     * check.
+     */
     public UIDocument markFrameThread() {
         frameThread = Thread.currentThread();
         return this;
+    }
+
+    /**
+     * Gives this tree to {@code sequence}: from now on it is touched only from the sequence's tasks, on whichever pool
+     * thread runs them, and {@link #require} asks the sequence rather than a thread. Null hands it back to whichever
+     * thread next runs a frame.
+     *
+     * <pre>{@code
+     * UiSequence sequence = UiSequence.create("desktop");
+     * document.runOn(sequence);
+     * sequence.execute(() -> document.frame(delta, w, h));
+     * }</pre>
+     */
+    public UIDocument runOn(@Nullable UiSequence sequence) {
+        this.sequence = sequence;
+        frameThread = null;
+        return this;
+    }
+
+    /** The sequence this tree runs on, or null when a thread owns it. */
+    @Nullable
+    public UiSequence sequence() {
+        return sequence;
+    }
+
+    @Nullable
+    private volatile UiSequence sequence;
+
+    @Nullable
+    private volatile DocumentDriver<?> driver;
+
+    /** What runs this document for its host, or null when nothing was attached. @see DocumentDriver#attach */
+    @Nullable
+    public DocumentDriver<?> driver() {
+        return driver;
+    }
+
+    void useDriver(DocumentDriver<?> driver) {
+        this.driver = driver;
+    }
+
+    /** The first frame claims its thread, as does a frame after the claiming thread died. */
+    private void claimFrameThread() {
+        if (sequence != null) {
+            require("A frame");
+            return;
+        }
+        Thread owner = frameThread;
+        if (owner == Thread.currentThread()) return;
+        if (owner == null || !owner.isAlive()) {
+            markFrameThread();
+            return;
+        }
+        require("A frame");
     }
 
     @Nullable
@@ -145,7 +205,58 @@ public final class UIDocument extends UIElement {
 
     /** Refuses a caller on any thread but the frame thread, once one has been claimed. */
     public void require(String what) {
-        UiThread.require(what, frameThread);
+        UiSequence owner = sequence;
+        if (owner != null) UiThread.require(what, owner);
+        else UiThread.require(what, frameThread);
+    }
+
+    // ── The running document ─────────────────────────────────────────────────
+
+    private static final ThreadLocal<UIDocument> RUNNING = new ThreadLocal<>();
+
+    /** The document whose frame, input event or task is running on this thread, or null. */
+    @Nullable
+    public static UIDocument current() {
+        return RUNNING.get();
+    }
+
+    /** A scope in which this document is {@link #current()}; closing restores the previous one. */
+    public interface Running extends AutoCloseable {
+        @Override
+        void close();
+    }
+
+    /**
+     * Makes this document {@link #current()} on this thread until the scope closes. Scopes nest.
+     *
+     * <pre>{@code
+     * try (UIDocument.Running ignored = document.makeCurrent()) {
+     *     document.input().consumeMouseEvent(event);
+     * }
+     * }</pre>
+     */
+    public Running makeCurrent() {
+        UIDocument previous = RUNNING.get();
+        RUNNING.set(this);
+        UiThread.enter();
+        return () -> {
+            UiThread.exit();
+            RUNNING.set(previous);
+        };
+    }
+
+    // ── The platform ─────────────────────────────────────────────────────────
+
+    private PlatformPort platform = PlatformPort.INLINE;
+
+    /** What this document asks of the platform: modifiers, keys, clipboard, sound, cursor. */
+    public PlatformPort platform() {
+        return platform;
+    }
+
+    /** Installs the port a host routes this document's platform calls through. */
+    public void usePlatform(PlatformPort port) {
+        this.platform = port == null ? PlatformPort.INLINE : port;
     }
 
     // ── Style ────────────────────────────────────────────────────────────────
@@ -476,10 +587,25 @@ public final class UIDocument extends UIElement {
      * paints {@code :hover} on the right element in the same frame. The host paints after this returns.</p>
      */
     public void frame(float deltaSeconds, float width, float height) {
+        try (Running ignored = makeCurrent()) {
+            // ON A SEQUENCE THIS IS WORK INSIDE THE RENDER THREAD'S FRAME, not a frame of its own: the trace ring's
+            // unit is a presented frame, and only the host's frame opens one.
+            if (sequence == null) {
+                UiTrace.frameBegin();
+                runFrame(deltaSeconds, width, height);
+            } else {
+                long timed = CgTrace.stamp(UiTrace.FRAME);
+                runFrame(deltaSeconds, width, height);
+                CgTrace.zoneDone(UiTrace.FRAME, "doc:frame", timed);
+            }
+        }
+    }
+
+    private void runFrame(float deltaSeconds, float width, float height) {
         // A FRAME STARTS HERE AND ENDS IN THE PAINT CONTEXT, because the host drives the two halves
         // separately: this is animation, style and layout, and the paint that follows is a call the
         // host makes itself. @see CgUiPaintContext#endFrame
-        UiTrace.frameBegin();
+        claimFrameThread();
         if (JobScheduler.hasShared()) {
             CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
             long drained = CgTrace.stamp(UiTrace.FRAME);

@@ -5,6 +5,7 @@ import java.util.Locale;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.net.protocol.ProtocolConnection;
 
 /**
@@ -130,6 +131,27 @@ public interface HostServices {
      * }</pre>
      */
     Locale locale();
+
+    /**
+     * Gives the game a key the desktop dispatched and did not take, as though the desktop had never seen it. Only a
+     * desktop running on its own thread hands keys back, a frame late: it takes every key while it holds the keyboard,
+     * since it cannot answer in time, and returns the ones it left. Render thread.
+     *
+     * <pre>{@code
+     * public void reinjectKey(CgSystemInput.Keyboard.Event key) {
+     *     Screen screen = minecraft.screen;
+     *     if (screen instanceof CgUiScreen own) own.keyLeftByDesktop(key);   // Escape closes our own screen
+     *     else if (screen != null) deliver(screen, key);                      // chat, an inventory: its own handling
+     * }
+     * }</pre>
+     *
+     * <ul>
+     *   <li>A key carries either a key code ({@code character} 0) or a character ({@code key} {@code KEY_NONE}), as
+     *       {@code CgSystemInput.Keyboard.Event} does; give each to the matching handler.</li>
+     *   <li>Releases come back too, so a screen that tracks held keys sees both halves.</li>
+     * </ul>
+     */
+    void reinjectKey(CgSystemInput.Keyboard.Event key);
 
     /**
      * A game's language code as a {@link Locale}: Minecraft's {@code "ja_jp"} is {@code ja-JP}. A code

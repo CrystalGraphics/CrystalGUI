@@ -223,6 +223,7 @@ public class TextControl extends ValueControl<String> {
         field.setUpdateMode(TextField.UpdateMode.IMMEDIATE);
         field.onFocus.attachListener((element, event) -> refreshSuggestions(""), false, true);
         field.onBlur.attachListener((element, event) -> suggestions.hide(), false, true);
+        field.claimKeys(this::claimsSuggestionKey);
         field.onKeyDown.attachListener((element, event) -> {
             if (handleSuggestionKey(event)) {
                 event.stopPropagation();
@@ -243,26 +244,27 @@ public class TextControl extends ValueControl<String> {
     }
 
     private boolean handleSuggestionKey(KeyboardEvent event) {
-        if (suggestions == null) return false;
         int key = event.getKeyCode();
+        if (!claimsSuggestionKey(key, event.getCharacter(), event.getModifiers())) return false;
+        switch (key) {
+            case CgKeyCodes.KEY_DOWN -> setActive((active + 1) % listed.size());
+            case CgKeyCodes.KEY_UP -> setActive(active <= 0 ? listed.size() - 1 : active - 1);
+            case CgKeyCodes.KEY_ESCAPE -> suggestions.hide();
+            default -> accept(listed.get(active));
+        }
+        return true;
+    }
+
+    /** The keys the suggestion list takes from the field: arrows and Enter while it lists, Escape while open. */
+    private boolean claimsSuggestionKey(int key, char typed, int modifiers) {
+        if (suggestions == null) return false;
         boolean open = suggestions.isOpen() && !listed.isEmpty();
-        if (key == CgKeyCodes.KEY_DOWN && open) {
-            setActive((active + 1) % listed.size());
-            return true;
-        }
-        if (key == CgKeyCodes.KEY_UP && open) {
-            setActive(active <= 0 ? listed.size() - 1 : active - 1);
-            return true;
-        }
-        if (key == CgKeyCodes.KEY_ESCAPE && suggestions.isOpen()) {
-            suggestions.hide();
-            return true;
-        }
-        if (key == CgKeyCodes.KEY_RETURN && open && active >= 0) {
-            accept(listed.get(active));
-            return true;
-        }
-        return false;
+        return switch (key) {
+            case CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_UP -> open;
+            case CgKeyCodes.KEY_ESCAPE -> suggestions.isOpen();
+            case CgKeyCodes.KEY_RETURN -> open && active >= 0;
+            default -> false;
+        };
     }
 
     /** Takes a suggestion as the value, as typing it and pressing Enter would. */

@@ -62,29 +62,18 @@ public final class TextEditorView implements DocumentEditor {
     private static final int EOL_PRIORITY = 97;
 
     /**
-     * The active view's status entries — <b>static, because "active" is singular.</b>
-     *
-     * <p>Exactly one view is in front at a time, which is the same premise that makes {@code StatusBar}
-     * itself static. Held rather than looked up by id because an entry's lifetime is its accessor:
-     * withdrawing is {@code dispose()} on the handle, not a second call naming the string again. A
-     * missed deactivation can only replace these, never leak them.</p>
-     */
-    /**
-     * The entries THIS view published, so it withdraws its own.
-     *
-     * <p>Was static, which is the defect {@code StatusBar} being static made invisible: two editors
-     * shared one list, so activating the second withdrew the first's readouts and deactivating either
-     * cleared both. One tab, one list.</p>
+     * The entries THIS view published, so it withdraws its own. Held as accessors because withdrawing is
+     * {@code dispose()} on the handle. Per view, with the caret's two below: a static set let activating
+     * an editor in one workbench stop another workbench's caret readout.
      */
     private final List<StatusBarEntryAccessor> activeEntries = new ArrayList<>();
 
     /** The one entry that is rewritten while the view stays active. */
     @Nullable
-    private static StatusBarEntryAccessor caretEntry;
+    private StatusBarEntryAccessor caretEntry;
 
-    /** The active view's caret subscription. Static for the reason above; replaced, never accumulated. */
     @Nullable
-    private static Connection caretSubscription;
+    private Connection caretSubscription;
 
     private final TextEditor editor;
 

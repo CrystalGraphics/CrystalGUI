@@ -10,6 +10,7 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatSize;
 import dev.vfyjxf.taffy.geometry.TaffySize;
@@ -177,7 +178,7 @@ public final class BoxTree {
      */
     public void setRootTransform(Matrix4f transform) {
         rootTransform.set(transform);
-        transformsDirty = true;
+        transformsChanged();
     }
 
     /**
@@ -249,26 +250,44 @@ public final class BoxTree {
      */
     public void layout(float width, float height) {
         document.require("layout");
-        if (structureDirty || root == null) {
-            long synced = CgTrace.stamp(UiTrace.FRAME);
+        boolean synced = structureDirty || root == null;
+        if (synced) {
+            long syncing = CgTrace.stamp(UiTrace.FRAME);
             sync();
             structureDirty = false;
-            CgTrace.zoneDone(UiTrace.FRAME, "layout:sync", synced);
+            CgTrace.zoneDone(UiTrace.FRAME, "layout:sync", syncing);
+            // EVERYTHING after a sync: a removed box marks nothing, and its host still holds its ink.
+            transformsChanged();
         }
         Box root = this.root;
         if (root == null) throw new IllegalStateException("the document has no box");
         boolean viewportMoved = width != viewportWidth || height != viewportHeight;
         viewportWidth = width;
         viewportHeight = height;
-        long restyled = CgTrace.stamp(UiTrace.FRAME);
-        restyledBoxes = 0;
-        refreshStyles(root);
-        for (Mirror mirror : mirrors) {
-            refreshStyles(mirror.root);
-            pinMirrorSize(mirror);
+        // A SYNC WALKS EVERYTHING: hosting is the restyle's other input and new boxes have no applied style.
+        // Otherwise only what dropped its computed style, and below it only while an applied style moved.
+        Set<Styleable> dropped = document.styles().takeComputedDropped();
+        if (synced || !dropped.isEmpty()) {
+            long restyled = CgTrace.stamp(UiTrace.FRAME);
+            restyledBoxes = 0;
+            if (synced) {
+                refreshStyles(root, false);
+                for (Mirror mirror : mirrors) refreshStyles(mirror.root, false);
+            } else {
+                for (Styleable element : dropped) {
+                    if (!(element instanceof UIElement node)) continue;
+                    Box box = boxes.get(node);
+                    if (box != null) refreshStyles(box, true);
+                    for (Mirror mirror : mirrors) {
+                        Box copy = mirror.realm.get(node);
+                        if (copy != null) refreshStyles(copy, true);
+                    }
+                }
+            }
+            CgTrace.zoneDone(UiTrace.FRAME, "layout:restyle", restyled);
+            CgTrace.add(UiTrace.FRAME, "layout-restyled-boxes", restyledBoxes);
         }
-        CgTrace.zoneDone(UiTrace.FRAME, "layout:restyle", restyled);
-        CgTrace.add(UiTrace.FRAME, "layout-restyled-boxes", restyledBoxes);
+        for (Mirror mirror : mirrors) pinMirrorSize(mirror);
         // The document's box IS the viewport, whatever its style says -- written after the style
         // refresh, which would otherwise hand it back its sheet's `auto` on the next restyle. And it
         // is a BLOCK container unless a sheet says otherwise: CSS's root is one, so children stack
@@ -287,10 +306,10 @@ public final class BoxTree {
             CgTrace.add(UiTrace.FRAME, "layout-computes", 1);
             layoutPasses++;
             long readBack = CgTrace.stamp(UiTrace.FRAME);
+            readBoxes = 0;
             read(root);
-            clampScrolls(root);
+            CgTrace.add(UiTrace.FRAME, "layout-read-boxes", readBoxes);
             CgTrace.zoneDone(UiTrace.FRAME, "layout:read", readBack);
-            transformsDirty = true;
         }
         composeIfDirty();
     }
@@ -329,7 +348,13 @@ public final class BoxTree {
      * <p>Free when nothing moved — the flag is false and this returns.</p>
      */
     public void composeIfDirty() {
-        if (!transformsDirty) return;
+        if (!transformsDirty) {
+            if (!repaints.isEmpty()) {
+                paintEpoch++;
+                composeRepaints();
+            }
+            return;
+        }
         // NO ROOT IS A REAL STATE, not a broken one: a document whose content has been removed has
         // no root box until something is added back, and the dirty flag is set by the removal that
         // emptied it. It became reachable when `hitTest` started composing first -- a press arriving
@@ -342,10 +367,41 @@ public final class BoxTree {
         paintEpoch++;
         long composed = CgTrace.stamp(UiTrace.FRAME);
         composedBoxes = 0;
-        compose(root, rootTransform, 0f, 0f);
+        compose(root, rootTransform, 0f, 0f, false);
         CgTrace.zoneDone(UiTrace.FRAME, "layout:compose", composed);
         CgTrace.add(UiTrace.FRAME, "layout-composed-boxes", composedBoxes);
         transformsDirty = false;
+        // A repaint in a subtree the walk skipped still has its flag; it is checked on its own, in this epoch.
+        if (!repaints.isEmpty()) composeRepaints();
+    }
+
+    /** Boxes asked to repaint since the last pass. @see Box#requestRepaint */
+    private final List<Box> repaints = new ArrayList<>();
+
+    void repaintRequested(Box box) {
+        repaints.add(box);
+    }
+
+    /**
+     * A pass where only repaints were asked. Every matrix still holds, so each queued box is checked on its
+     * own and its ink, revision and retainability folded up its hosts: the box and its ancestors, not the tree.
+     */
+    private void composeRepaints() {
+        if (root == null) {
+            repaints.clear();
+            return;
+        }
+        long started = CgTrace.stamp(UiTrace.FRAME);
+        for (int i = 0; i < repaints.size(); i++) {
+            Box box = repaints.get(i);
+            // A second request for the same box finds its flag already taken; a destroyed box has no node here.
+            if (!box.repaintRequested || !taffy.containsNode(box.taffyId)) continue;
+            damageCheck(box);
+            for (Box at = box; at != null; at = at.host()) foldSubtree(at);
+        }
+        CgTrace.zoneDone(UiTrace.FRAME, "layout:repaint", started);
+        CgTrace.add(UiTrace.FRAME, "layout-repainted-boxes", repaints.size());
+        repaints.clear();
     }
 
     /**
@@ -575,7 +631,12 @@ public final class BoxTree {
         taffy.markDirty(root.taffyId);
     }
 
-    private void refreshStyles(Box box) {
+    /**
+     * Brings {@code box}'s applied style up to its computed one, then its children's. {@code changedOnly} stops at
+     * a box whose style did not move: its children's answers are keyed on its, so they hold too unless they
+     * dropped themselves, and then they are in the dropped set on their own.
+     */
+    private void refreshStyles(Box box, boolean changedOnly) {
         ComputedStyle computed = box.node.computedStyle();
         // The HOSTING is an input to the layout style as well as the computed style -- see
         // BoxStyle.apply(.., hosted). Promoting a node changes no style of its own, so comparing the
@@ -601,10 +662,12 @@ public final class BoxTree {
             box.appliedStyle = computed;
             restyledBoxes++;
             taffy.markDirty(box.taffyId);
-            transformsDirty = true;
+            transformsChanged(box);
             box.reclassify();
+        } else if (changedOnly) {
+            return;
         }
-        for (int ci = 0; ci < box.hosted.size(); ci++) refreshStyles(box.hosted.get(ci));
+        for (int ci = 0; ci < box.hosted.size(); ci++) refreshStyles(box.hosted.get(ci), changedOnly);
     }
 
     // ── Read + compose ───────────────────────────────────────────────────────
@@ -620,27 +683,70 @@ public final class BoxTree {
      *
      * <p>Free when nothing is out of range: {@link Box#clampScroll} compares before it writes.</p>
      */
-    private void clampScrolls(Box box) {
-        box.clampScroll();
-        for (int ci = 0; ci < box.hosted.size(); ci++) clampScrolls(box.hosted.get(ci));
+    /** Boxes the last read copied a layout into. A trace count. */
+    private int readBoxes;
+
+    /**
+     * Copies what the compute wrote into {@code box} and what it hosts, and clamps their scroll to it. Only where the
+     * layout engine wrote something: it writes a node's layout only from a parent that laid itself out again, so a
+     * subtree with no new layout anywhere (Yoga's {@code hasNewLayout}, carried up as a dirty descendant) is unchanged
+     * and is not visited. A box's scroll range is its own layout's, so the same boxes are the only ones to clamp.
+     */
+    private void read(Box box) {
+        NodeId id = box.taffyId;
+        boolean fresh = !box.read;
+        if (!fresh && !taffy.needsVisit(id)) return;
+        if (fresh || taffy.hasNewLayout(id)) {
+            readOwn(box);
+            box.clampScroll();
+            box.read = true;
+            readBoxes++;
+        }
+        for (int ci = 0; ci < box.hosted.size(); ci++) read(box.hosted.get(ci));
+        taffy.acknowledgeSubtree(id);
     }
 
-    private void read(Box box) {
+    private void readOwn(Box box) {
         Layout layout = taffy.getLayout(box.taffyId);
-        box.x = layout.location().x;
-        box.y = layout.location().y;
-        box.width = layout.size().width;
-        box.height = layout.size().height;
+        float x = layout.location().x, y = layout.location().y;
+        float width = layout.size().width, height = layout.size().height;
+        if (x != box.x || y != box.y || width != box.width || height != box.height) {
+            box.x = x;
+            box.y = y;
+            box.width = width;
+            box.height = height;
+            transformsChanged(box);
+        }
         box.contentWidth = layout.contentSize().width;
         box.contentHeight = layout.contentSize().height;
         box.border = layout.border();
         box.padding = layout.padding();
         box.margin = layout.margin();
-        for (int ci = 0; ci < box.hosted.size(); ci++) read(box.hosted.get(ci));
     }
 
-    private void compose(Box box, Matrix4f hostWorld, float hostScrollLeft, float hostScrollTop) {
+    /**
+     * Composes {@code box} and what it hosts. {@code force} when the host's matrix moved, so this one must too;
+     * a subtree with neither mark under an unmoved host keeps every answer it had and is not visited.
+     */
+    private void compose(Box box, Matrix4f hostWorld, float hostScrollLeft, float hostScrollTop, boolean force) {
+        force |= box.composeDirty;
+        if (!force && !box.descendantComposeDirty) {
+            // Its host's composeInk reads this per pass; a skipped subtree changed nothing.
+            box.subtreeChanged = false;
+            return;
+        }
+        box.composeDirty = false;
+        box.descendantComposeDirty = false;
         composedBoxes++;
+        if (force) composeMatrix(box, hostWorld, hostScrollLeft, hostScrollTop);
+        for (int ci = 0; ci < box.hosted.size(); ci++) {
+            compose(box.hosted.get(ci), box.localToWorld, box.scrollLeft(), box.scrollTop(), force);
+        }
+        composeInk(box);
+    }
+
+    /** {@code box}'s world matrix and its inverse, from its host's and its own position, scroll and transform. */
+    private void composeMatrix(Box box, Matrix4f hostWorld, float hostScrollLeft, float hostScrollTop) {
         // SCROLL-EXEMPT: this box does not move with what hosts it. A scroller's own bars, an
         // editor's gutter and its find bar are all children of the thing that scrolls, and without
         // this they scroll away with the content they are for. It is applied HERE because this is
@@ -668,8 +774,6 @@ public final class BoxTree {
                 // -- and a pose scales about ITS origin, with `transform-origin` nowhere in it.
                 transform.applyTo(box.localToWorld, 0f, 0f, box.width, box.height, 0f, 0f);
                 box.localToWorld.invert(box.worldToLocal);
-                for (int ci = 0; ci < box.hosted.size(); ci++) compose(box.hosted.get(ci), box.localToWorld, box.scrollLeft(), box.scrollTop());
-                composeInk(box);
                 return;
             }
             ComputedStyle style = box.node.computedStyle();
@@ -684,8 +788,6 @@ public final class BoxTree {
                     pinnedY != null ? pinnedY : originY == null ? 0f : originY.resolve(box.height));
         }
         box.localToWorld.invert(box.worldToLocal);
-        for (int ci = 0; ci < box.hosted.size(); ci++) compose(box.hosted.get(ci), box.localToWorld, box.scrollLeft(), box.scrollTop());
-        composeInk(box);
     }
 
     private final float[] inkLocal = new float[4];
@@ -720,8 +822,11 @@ public final class BoxTree {
             }
         }
         box.subtreeChanged = changed;
-        if (!changed) return;
+        if (changed) foldSubtree(box);
+    }
 
+    /** Ink bounds, revision and retainability of {@code box} from its own and its children's. */
+    private void foldSubtree(Box box) {
         composeInkBounds(box);
 
         long revision = box.paintRevision;
@@ -869,9 +974,24 @@ public final class BoxTree {
         stackingEpoch++;
     }
 
-    /** Public because a node's {@code scroll-exempt} changes composition without changing layout. */
-    public void transformsChanged() {
+    /** Every matrix recomposes on the next pass: a sync, a new root transform. */
+    void transformsChanged() {
+        Box root = this.root;
+        if (root != null) transformsChanged(root);
+        else transformsDirty = true;
+    }
+
+    /**
+     * {@code box} and what it hosts recompose on the next pass, and the walk comes down to it; nothing else
+     * is visited. Public because a node's scroll offset and {@code scroll-exempt} change composition
+     * without changing layout.
+     */
+    public void transformsChanged(Box box) {
         if (!transformsDirty && CgTrace.isEnabled(UiTrace.BLAME)) UiTrace.blame("recompose", "com.crystalgui.ui.box", "com.crystalgui.ui.dom.UIElement", "com.crystalgui.widget.text.UIText", "com.crystalgui.core.property", "com.crystalgui.core.signal", "com.crystalgui.ui.text");
+        box.composeDirty = true;
+        for (Box at = box.host(); at != null && !at.descendantComposeDirty; at = at.host()) {
+            at.descendantComposeDirty = true;
+        }
         transformsDirty = true;
     }
 

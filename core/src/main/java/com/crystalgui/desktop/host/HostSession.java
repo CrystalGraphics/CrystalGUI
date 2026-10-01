@@ -1,5 +1,7 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.render.UiFrame;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
@@ -10,6 +12,7 @@ import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.window.WindowMount;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
@@ -102,24 +105,71 @@ public final class HostSession {
 
     private static final boolean TRACE = Boolean.getBoolean("crystalgui.startup.trace");
 
+    /** One per client and the render thread's, not a document's; volatile so a document thread reads it whole. */
     @Nullable
-    private static HostSession current;
+    private static volatile HostSession current;
 
     private final HostServices services;
     private final ApplicationKind primaryKind;
+    private final HostInput input = new HostInput(this::document);
 
     @Nullable
     private DesktopHost host;
+
+    /** Runs the desktop's document: inline, in lockstep or recording on its own. Null until built. */
     @Nullable
-    private Application primary;
+    private DocumentDriver<DesktopFacts> driver;
+
+    /** What a host asks about a frame of a document that records on its own, read from the frame on screen. */
+    private record DesktopFacts(boolean attached, boolean pinned, @Nullable float[] textInputArea) {
+    }
+
+    /** What the document is told about the host: the render thread's answers, copied at each entry. */
+    @Nullable
+    private HostSnapshot snapshot;
+
+    /** Runs {@code work} on the document, without waiting when it records on its own. */
+    private void post(Runnable work) {
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (owner == null) work.run();
+        else owner.post(work);
+    }
+
+    /** Copies the host's answers for the document. Render thread, at every host entry. */
+    private void refreshHost() {
+        HostSnapshot copy = snapshot;
+        if (copy != null) copy.refresh();
+    }
+
+    /**
+     * Runs {@code work} where the desktop's tree may be touched, and returns when it has run: on the document's sequence
+     * in lockstep whatever the mode, or here when it has none. For a tool driving the desktop from the host's thread, a
+     * probe or a script; the host's own entries never need it.
+     *
+     * <pre>{@code
+     * HostSession.session().inDocument(() -> desktop.minimise(window));
+     * }</pre>
+     */
+    public void inDocument(Runnable work) {
+        onDocument(work);
+    }
+
+    /** Runs {@code work} on the document and waits for it. */
+    private void onDocument(Runnable work) {
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (owner == null) work.run();
+        else owner.run(work);
+    }
+    @Nullable
+    private volatile Application primary;
     @Nullable
     private WindowFrame primaryWindow;
 
     /** Consumed by {@link #shown()}, never merely read. @see #requestApplication() */
-    private boolean raiseOnShow;
+    private volatile boolean raiseOnShow;
 
     /** A launch was wanted and could not be done. Cleared once there is a window. @see #frame(float) */
-    private boolean launchPending;
+    private volatile boolean launchPending;
 
     /** What the last frame saw, so a screen opening or closing is noticed exactly once. */
     private boolean foreignScreenWasUp;
@@ -181,9 +231,10 @@ public final class HostSession {
      * <p>Safe to call on a resize, which is how a game re-initialises a screen.</p>
      */
     public void shown() {
+        refreshHost();
         if (host == null) build();
-        else host.shown();
-        bringForward();
+        else post(host::shown);
+        post(this::bringForward);
     }
 
     /**
@@ -195,7 +246,8 @@ public final class HostSession {
      */
     public void hidden() {
         launchPending = false;
-        if (host != null) host.hidden();
+        DesktopHost built = host;
+        if (built != null) post(built::hidden);
     }
 
     /**
@@ -205,9 +257,13 @@ public final class HostSession {
      * no connection to build against. Costs a boolean read once there is a window.</p>
      */
     public void frame(float deltaSeconds) {
-        if (host == null) return;
-        if (launchPending) bringForward();
-        host.frame(deltaSeconds);
+        DesktopHost built = host;
+        if (built == null) return;
+        refreshHost();
+        post(() -> {
+            if (launchPending) bringForward();
+            built.frame(deltaSeconds);
+        });
     }
 
     /**
@@ -226,8 +282,12 @@ public final class HostSession {
 
     /** Takes the desktop down. Game shutdown only — never a surface close. @see #hidden() */
     public void dispose() {
-        if (primary != null) primary.dispose();
-        if (host != null) host.dispose();
+        onDocument(() -> {
+            if (primary != null) primary.dispose();
+            if (host != null) host.dispose();
+        });
+        if (driver != null) driver.close();
+        driver = null;
         primary = null;
         primaryWindow = null;
         host = null;
@@ -241,6 +301,11 @@ public final class HostSession {
     @Nullable
     public UIDocument document() {
         return host == null ? null : host.document();
+    }
+
+    /** Where a host delivers every input event while its own screen is up. */
+    public HostInput input() {
+        return input;
     }
 
     /** This client's compositor, or null until the surface has been shown once. */
@@ -280,6 +345,22 @@ public final class HostSession {
      */
     public boolean hasPainted() {
         return painted;
+    }
+
+    /**
+     * The focus owner's caret area in surface pixels, {@code [x, y, width, height]}, or null when nothing takes text:
+     * where an input method opens its candidate list.
+     */
+    @Nullable
+    public float[] textInputArea() {
+        UIDocument document = document();
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (document == null || owner == null) return null;
+        if (owner.isAsync()) {
+            DesktopFacts shown = owner.shownFacts();
+            return shown == null ? null : shown.textInputArea();
+        }
+        return owner.ask(() -> document.input().textInputArea());
     }
 
     // ── Painting over the game ──────────────────────────────────────────────────────────────────
@@ -330,22 +411,43 @@ public final class HostSession {
      * fires no such event, so the close is never seen and ownership survives into the next screen.</p>
      */
     public DesktopPresentation presentation(PaintHost host) {
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (owner == null) return DesktopPresentation.NONE;
+        if (owner.isAsync()) return presentationFromCommit(host);
+        return owner.ask(() -> presentationOnDocument(host));
+    }
+
+    /** {@link #presentationOnDocument}, from what the document last committed rather than from its tree. */
+    private DesktopPresentation presentationFromCommit(PaintHost host) {
+        Desktop desktop = desktop();
+        if (desktop == null) return DesktopPresentation.NONE;
+        boolean ours = host.ownScreenUp();
+        boolean any = host.anyScreenUp();
+        noteForeignScreen(desktop, any && !ours);
+        DesktopFacts shown = driver.shownFacts();
+        // Before the first commit the desktop is attached and holds nothing pinned, as it was built.
+        return Desktop.presentation(ours, any, shown == null || shown.attached(), shown != null && shown.pinned());
+    }
+
+    private void noteForeignScreen(Desktop desktop, boolean foreignUp) {
+        if (foreignUp == foreignScreenWasUp) return;
+        foreignScreenWasUp = foreignUp;
+        // Nullable: screenOverlay() answers null while the compositor has no document, which is what
+        // a closed UI leaves behind -- desktop() still hands back the Desktop. Thrown from a render
+        // hook it takes the rest of the game's overlay chain with it. The missed transition is owed
+        // to nobody: a fresh overlay is built when a document appears.
+        ScreenOverlay overlay = desktop.screenOverlay();
+        if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
+    }
+
+    private DesktopPresentation presentationOnDocument(PaintHost host) {
         Desktop desktop = desktop();
         if (desktop == null) return DesktopPresentation.NONE;
 
         boolean ours = host.ownScreenUp();
         boolean any = host.anyScreenUp();
 
-        boolean foreignUp = any && !ours;
-        if (foreignUp != foreignScreenWasUp) {
-            foreignScreenWasUp = foreignUp;
-            // Nullable: screenOverlay() answers null while the compositor has no document, which is what
-            // a closed UI leaves behind -- desktop() still hands back the Desktop. Thrown from a render
-            // hook it takes the rest of the game's overlay chain with it. The missed transition is owed
-            // to nobody: a fresh overlay is built when a document appears.
-            ScreenOverlay overlay = desktop.screenOverlay();
-            if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
-        }
+        noteForeignScreen(desktop, any && !ours);
         return desktop.presentation(ours, any);
     }
 
@@ -375,7 +477,11 @@ public final class HostSession {
                               float wheel) {
         if (grabbed || !host.anyScreenUp()) return false;
         ScreenOverlay overlay = screenOverlay();
-        return overlay != null && overlay.offerMouse(xPx, yPx, button, pressed, wheel);
+        if (overlay == null) return false;
+        // Asynchronously the overlay answers from its committed regions and posts what it delivers.
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (owner == null || owner.isAsync()) return overlay.offerMouse(xPx, yPx, button, pressed, wheel);
+        return owner.ask(() -> overlay.offerMouse(xPx, yPx, button, pressed, wheel));
     }
 
     /**
@@ -429,30 +535,71 @@ public final class HostSession {
 
     private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
         Desktop desktop = desktop();
-        if (desktop == null) return;
+        UIDocument document = document();
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (desktop == null || document == null || owner == null) return;
 
         DesktopPresentation now;
         try {
             now = presentation(host);
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] could not decide a presentation; leaving HUD mode", failed);
-            desktop.exitHudMode();
+            post(desktop::exitHudMode);
             return;
         }
         // NONE paints nothing, and the other arm's hook owns the rest.
         if (now != arm) return;
         if (!deltaRead) deltaSeconds = frameDelta();
+        refreshHost();
+        returnUnhandledKeys();
 
         host.beforePaint();
         host.enter();
         try {
-            desktop.paint(now, deltaSeconds, services.surfaceWidth(), services.surfaceHeight());
-            painted = true;
+            if (owner.frame(deltaSeconds, services.surfaceWidth(), services.surfaceHeight(),
+                    new DesktopPainter(desktop, document, now))) {
+                painted = true;
+            }
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
-            desktop.exitHudMode();
+            post(desktop::exitHudMode);
         } finally {
             host.leave();
+        }
+    }
+
+    /** The desktop in one presentation, and what the host reads back about each recorded frame. */
+    private record DesktopPainter(Desktop desktop, UIDocument document, DesktopPresentation presentation)
+            implements DocumentDriver.Painter<DesktopFacts> {
+
+        @Override
+        public void paint(float deltaSeconds, int width, int height) {
+            desktop.paint(presentation, deltaSeconds, width, height);
+        }
+
+        @Override
+        @Nullable
+        public UiFrame record(float deltaSeconds, int width, int height) {
+            try {
+                return desktop.record(presentation, deltaSeconds, width, height);
+            } catch (RuntimeException | LinkageError failed) {
+                CrystalGuiCore.LOGGER.error("[cgui] recording the desktop failed; leaving HUD mode", failed);
+                desktop.exitHudMode();
+                return null;
+            }
+        }
+
+        @Override
+        public DesktopFacts facts() {
+            return new DesktopFacts(desktop.parent() != null, desktop.hasPinnedWindows(),
+                    document.input().textInputArea());
+        }
+    }
+
+    /** Every key the document dispatched and left since the last frame, to the game, in order. Render thread. */
+    private void returnUnhandledKeys() {
+        for (CgSystemInput.Keyboard.Event key; (key = input.pollUnhandledKey()) != null; ) {
+            services.reinjectKey(key);
         }
     }
 
@@ -460,7 +607,8 @@ public final class HostSession {
 
     private void build() {
         trace("begin");
-        DesktopHost built = DesktopHost.create(services);
+        snapshot = new HostSnapshot(services);
+        DesktopHost built = DesktopHost.create(snapshot);
         // WHERE A SERVER'S WINDOW IS OFFERED FIRST. An application with places of its own takes what it
         // recognises and hands the rest back, so a client with it closed still gets every window. A
         // supplier because the application is built later than this, and on demand.
@@ -472,6 +620,7 @@ public final class HostSession {
         });
         built.document().addClass(ROOT_CLASS);
         host = built;
+        driver = DocumentDriver.attach(built.document(), DocumentDriver.Mode.fromFlags(), "desktop");
         trace("DesktopHost");
     }
 
@@ -525,10 +674,11 @@ public final class HostSession {
      * higher origin for any window nobody placed.</p>
      */
     private void placeFirstRun(WindowFrame window) {
-        float scale = services.uiScale();
+        HostServices seen = snapshot != null ? snapshot : services;
+        float scale = seen.uiScale();
         if (scale <= 0f) return;
-        float width = services.surfaceWidth() / scale;
-        float height = services.surfaceHeight() / scale;
+        float width = seen.surfaceWidth() / scale;
+        float height = seen.surfaceHeight() / scale;
         // NO SURFACE YET, so there is nothing to be a fraction of. Placing against zero would pin the
         // window at 0x0 and then persist that, which survives every later run.
         if (width <= 0f || height <= 0f) return;

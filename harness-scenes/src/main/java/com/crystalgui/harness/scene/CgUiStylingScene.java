@@ -2,10 +2,10 @@ package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.harness.SceneRegistry;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -189,20 +189,28 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
+    private DocumentDriver<Void> driver;
+    private DocumentDriver.Painter<Void> painter;
+
     @Override
     public void init(HarnessContext ctx) {
         UIElement root = createStylingDemo();
-        this.document = new UIDocument().markFrameThread();
-        this.document.boxes().setUiScale(SCALE);
-        UIElement sceneRoot = root;
-        // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
-        // root and took the window's size; here the DOCUMENT is the root and this is an
-        // ordinary child, which sizes to its content -- so without this the scene lays out
-        // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
-        StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).heightPercent(100f));
-        this.document.append(sceneRoot);
-        this.document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
+        document = new UIDocument();
+        driver = DocumentDriver.attach(document);
+        painter = DocumentDriver.whole(document);
+        driver.run(() -> {
+            this.document.boxes().setUiScale(SCALE);
+            UIElement sceneRoot = root;
+            // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
+            // root and took the window's size; here the DOCUMENT is the root and this is an
+            // ordinary child, which sizes to its content -- so without this the scene lays out
+            // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
+            StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
+                    l -> l.widthPercent(100f).heightPercent(100f));
+            this.document.append(sceneRoot);
+            this.document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
+        });
     }
 
     private UIElement createStylingDemo() {
@@ -314,18 +322,12 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
     public void render(HarnessContext ctx, FrameInfo frame) {
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
-        // SURFACE pixels in, LOGICAL units to lay out in -- the scale lives on the box
-        // tree's root transform, so this is the only place the two spaces meet.
-        document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
-
-        CgUiPaintContext paintContext = document.paintContext();
-        paintContext.beginFrame(w, h);
-        document.paint(paintContext);
-        paintContext.endFrame();
+        driver.frame(frame.getDeltaTime(), w, h, painter);
     }
 
     @Override
     public void dispose() {
+        driver.close();
         document = null;
     }
 
@@ -346,6 +348,10 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+        return driver.offerKey(event, () -> handleKey(event));
+    }
+
+    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
         final var styleEngine = document.styles();
         if (!styleEngine.getSheets().isEmpty())
             styleEngine.removeStylesheet(styleEngine.getSheets().getFirst());
@@ -354,6 +360,10 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
+        return driver.offerMouse(event, () -> handleMouse(event));
+    }
+
+    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
         return document.input().consumeMouseEvent(event);
     }
 }

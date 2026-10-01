@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.diff;
 
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diff.LineDiff;
@@ -175,20 +176,12 @@ public final class MergeView extends UIElement {
     protected void connected() {
         super.connected();
         UIDocument window = document();
-        // The flag is not the old one's: `registerTicker` was HashSet-backed and idempotent, and
-        // `Animation.every` is a plain add, so a second attach without it is a second hook.
-        if (ticking || window == null) return;
-        ticking = true;
-        window.animation().every(this, this::tickFrame);
+        if (window == null) return;
+        window.animation().everyIfAbsent(this, tickHook);
     }
 
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        ticking = false;
-    }
-
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tickFrame;
 
     private UIElement pane(String title, TextEditor editor) {
         UIElement pane = new UIElement();

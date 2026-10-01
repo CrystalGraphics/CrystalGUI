@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.switcher;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.window.WindowState;
@@ -154,7 +154,6 @@ public class WindowSwitcher extends UIElement {
     private long openedAt;
     private long lastInteraction;
     private boolean shown;
-    private boolean ticking;
 
     public WindowSwitcher(Desktop desktop) {
         super(NAME);
@@ -454,12 +453,11 @@ public class WindowSwitcher extends UIElement {
     }
 
     private static int currentModifiers() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
+        PlatformPort input = PlatformPort.current();
+        return input == null ? 0 : input.modifiers();
     }
 
     private void wake() {
-        if (ticking) return;
         UIDocument window = document();
         if (window == null) {
             // NO TREE, so nothing will ever tick this. Committing immediately is the honest outcome --
@@ -467,19 +465,13 @@ public class WindowSwitcher extends UIElement {
             finish();
             return;
         }
-        ticking = true;
         // OWNED BY THE SWITCHER, which is `display: none` rather than detached while it is not up --
-        // so the hook survives between gestures, exactly as the old ticker's own idempotent
-        // registration did. It is what makes the modifier-release poll reachable at all.
-        window.animation().every(this, new Animation.Hook() {
-            @Override
-            public boolean frame(float deltaSeconds) {
-                boolean busy = tick();
-                if (!busy) ticking = false;
-                return busy;
-            }
-        });
+        // so the hook survives between gestures. It is what makes the modifier-release poll reachable at all.
+        window.animation().everyIfAbsent(this, poll);
     }
+
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook poll = delta -> tick();
 
     /** One tile per window, rebuilt per gesture — the window set changes between one press and the next. */
     private void buildEntries() {

@@ -1,5 +1,6 @@
 package com.crystalgui.mc.modern.client;
 
+import com.crystalgui.desktop.host.HostInput;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 //? if >=26.3 {
@@ -8,10 +9,14 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgGlfwKeyCodes;
 //?}
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.HostPointer;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+//? if >=1.21.9 {
+/*import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+*///?}
 
 /**
  * One 1.20.x screen callback into one engine event.
@@ -79,29 +84,29 @@ public final class CgUiInput {
     }
 
     /** @param button the host's numbering. @return whether the desktop consumed it */
-    public static boolean mouseButton(UIDocument window, int button, boolean pressed) {
+    public static boolean mouseButton(HostInput input, int button, boolean pressed) {
         int x = rawX();
         int y = rawY();
         lastX = x;
         lastY = y;
-        return send(window, x, y, 0, 0, CgPlatform.input().translateMouseCodes(button), pressed, 0f,
+        return send(input, x, y, 0, 0, CgPlatform.input().translateMouseCodes(button), pressed, 0f,
                 System.currentTimeMillis());
     }
 
     /** A move carries no button, and {@link HostPointer#of} is what drops the click time with it. */
-    public static void mouseMoved(UIDocument window) {
+    public static void mouseMoved(HostInput input) {
         int x = rawX();
         int y = rawY();
         int dx = x - lastX;
         int dy = y - lastY;
         lastX = x;
         lastY = y;
-        send(window, x, y, dx, dy, HostPointer.NO_BUTTON, false, 0f, HostPointer.NO_CLICK_TIME);
+        send(input, x, y, dx, dy, HostPointer.NO_BUTTON, false, 0f, HostPointer.NO_CLICK_TIME);
     }
 
     /** @return whether the desktop consumed it */
-    public static boolean scrolled(UIDocument window, double delta) {
-        return send(window, rawX(), rawY(), 0, 0, HostPointer.NO_BUTTON, false, wheel(delta),
+    public static boolean scrolled(HostInput input, double delta) {
+        return send(input, rawX(), rawY(), 0, 0, HostPointer.NO_BUTTON, false, wheel(delta),
                 HostPointer.NO_CLICK_TIME);
     }
 
@@ -111,21 +116,47 @@ public final class CgUiInput {
      *
      * @return whether the desktop consumed it
      */
-    public static boolean key(UIDocument window, int hostKey, boolean pressed) {
+    public static boolean key(HostInput input, int hostKey, boolean pressed) {
         int local = CgPlatform.input().translateKeyboardCodes(hostKey);
-        return window.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+        return input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
                 (char) 0, local, pressed, false, System.currentTimeMillis()));
     }
 
+    /**
+     * Gives {@code screen} a key through its own handlers, as if the desktop had never seen it: a key code to
+     * {@code keyPressed}/{@code keyReleased}, a character to {@code charTyped}. No modifiers ride along.
+     */
+    public static void giveToScreen(Screen screen, CgSystemInput.Keyboard.Event key) {
+        if (key.character() != 0) {
+            //? if >=26.1 {
+            /*screen.charTyped(new CharacterEvent(key.character()));
+            *///?} elif >=1.21.9 {
+            /*screen.charTyped(new CharacterEvent(key.character(), 0));
+            *///?} else {
+            screen.charTyped(key.character(), 0);
+            //?}
+            return;
+        }
+        int code = hostKey(key.key());
+        //? if >=1.21.9 {
+        /*KeyEvent event = new KeyEvent(code, 0, 0);
+        if (key.pressed()) screen.keyPressed(event);
+        else screen.keyReleased(event);
+        *///?} else {
+        if (key.pressed()) screen.keyPressed(code, 0, 0);
+        else screen.keyReleased(code, 0, 0);
+        //?}
+    }
+
     /** A character with no key. @return whether the desktop consumed it */
-    public static boolean character(UIDocument window, char typed) {
-        return window.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
+    public static boolean character(HostInput input, char typed) {
+        return input.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(
                 typed, CgKeyCodes.KEY_NONE, true, false, System.currentTimeMillis()));
     }
 
-    private static boolean send(UIDocument window, int x, int y, int dx, int dy,
+    private static boolean send(HostInput input, int x, int y, int dx, int dy,
                                 int button, boolean pressed, float wheel, long millis) {
-        return window.input().consumeMouseEvent(
+        return input.consumeMouseEvent(
                 HostPointer.of(x, y, dx, dy, button, pressed, wheel, millis));
     }
 }

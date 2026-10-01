@@ -59,6 +59,9 @@ harness.tasks.named<JavaExec>("runHarness") {
     systemProperty("crystalgui.engines.dir",
         project(":language").layout.buildDirectory.dir("engines").get().asFile.absolutePath)
 
+    // A scene's document records on its own sequence unless -Dcrystalgui.ui.async=false.
+    systemProperty("crystalgui.ui.async", "true")
+
     // CrystalGUI's own debug flags (crystalgui.keymap.trace), forwarded as the harness forwards
     // crystalgraphics.*: set on the Gradle daemon they would reach nothing.
     System.getProperties().stringPropertyNames()

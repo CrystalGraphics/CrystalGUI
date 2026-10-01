@@ -1,6 +1,7 @@
 package com.crystalgui.widget.collection.list;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -605,23 +606,28 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      */
     public static final String FOCUSED_CLASS = "__focused__";
 
-    private boolean ticking;
+    /** Whether the model subscription is live: released on detach, taken again on the next {@link #ensureTicking}. */
+    private boolean listening;
+
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tickFrame;
 
     /** Starts the per-frame tick if it is not already running. Protected so a subclass with deferred
      * work of its own can drive it from the ticker this class already owns, rather than registering a
      * second one -- two tickers means two lifecycles, and the second is always the one that leaks. */
     protected void ensureTicking() {
-        if (ticking) return;
         var window = document();
         if (window == null) return;
-        // BACK ON SCREEN. A detach released the model subscription; this is the moment it comes back, and
-        // the window is invalidated because the model may have moved on entirely while nobody was
-        // listening. @see #modelConnection
-        subscribeToModel();
-        invalidateWindow();
-        installDefaultContextMenu();
-        document().animation().every(this, this::tickFrame);
-        ticking = true;
+        if (!listening) {
+            // BACK ON SCREEN. A detach released the model subscription; this is the moment it comes back, and
+            // the window is invalidated because the model may have moved on entirely while nobody was
+            // listening. @see #modelConnection
+            subscribeToModel();
+            invalidateWindow();
+            installDefaultContextMenu();
+            listening = true;
+        }
+        window.animation().everyIfAbsent(this, tickHook);
     }
 
     /**
@@ -941,14 +947,14 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     private int pendingSelectOnRelease = -1;
 
     private static boolean isShiftDown() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasShift(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasShift(input.modifiers());
     }
 
     /** Ctrl, or Command on a Mac — {@code CgModifiers} already resolves which one this platform means. */
     private static boolean isMultiSelectModifierDown() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasCtrl(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasCtrl(input.modifiers());
     }
 
     public ListView<T> selectAll() {
@@ -1075,7 +1081,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     }
 
     @Nullable
-    private static Consumer<ListView<?>> defaultContextMenuInstaller;
+    private static volatile Consumer<ListView<?>> defaultContextMenuInstaller;
 
     private boolean defaultContextMenuInstalled;
 
@@ -1226,7 +1232,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             if (out.length() > 0) out.append('\n');
             out.append(renderer.copyTextFor(model.get(index)));
         }
-        CgPlatform.input().setClipboard(out.toString());
+        PlatformPort.current().setClipboard(out.toString());
     }
 
     @Override
@@ -1322,6 +1328,21 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
         target = Math.max(0, Math.min(count - 1, target));
         moveFocusTo(target, shift, ctrl);
         return true;
+    }
+
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        return isEnabled() && !model.isEmpty() && navigationKey(key, modifiers) || super.claimsKey(key, typed, modifiers);
+    }
+
+    /** The keys {@link #handleNavigationKey} takes. */
+    protected boolean navigationKey(int key, int modifiers) {
+        return switch (key) {
+            case CgKeyCodes.KEY_DOWN, CgKeyCodes.KEY_UP, CgKeyCodes.KEY_HOME, CgKeyCodes.KEY_END, CgKeyCodes.KEY_NEXT,
+                 CgKeyCodes.KEY_PRIOR, CgKeyCodes.KEY_SPACE, CgKeyCodes.KEY_RETURN, CgKeyCodes.KEY_NUMPADENTER -> true;
+            case CgKeyCodes.KEY_A -> CgModifiers.hasCtrl(modifiers) || CgModifiers.hasSuper(modifiers);
+            default -> false;
+        };
     }
 
     /** Set while this view is moving focus itself, so the row's focus listener knows the gesture was not
@@ -1622,7 +1643,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             modelConnection.disconnect();
             modelConnection = null;
         }
-        ticking = false;
+        listening = false;
     }
 
     /**

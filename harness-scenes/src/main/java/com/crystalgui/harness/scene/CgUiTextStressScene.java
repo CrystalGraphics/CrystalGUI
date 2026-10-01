@@ -8,6 +8,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -141,23 +142,30 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
     private boolean warmupCleared = false;
     private boolean running = true;
 
+    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
+    private DocumentDriver<Void> driver;
+
     @Override
     public void init(HarnessContext ctx) {
         this.ctx = ctx;
         CgTrace.enable("crystalgraphics");
-        this.document = new UIDocument().markFrameThread();
-        this.document.boxes().setUiScale(SCALE);
-        UIElement sceneRoot = buildStressPanel();
-        // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
-        // root and took the window's size; here the DOCUMENT is the root and this is an
-        // ordinary child, which sizes to its content -- so without this the scene lays out
-        // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
-        StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).heightPercent(100f));
-        this.document.append(sceneRoot);
-        document.styles().addStylesheet(StyleSheet.DEFAULT);
-        document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
-        csvRows.add(String.join(",", CSV_HEADER));
+        document = new UIDocument();
+        // INLINE: it measures the document's own frame, which asynchronously is not the frame it times.
+        driver = DocumentDriver.attach(document, DocumentDriver.Mode.INLINE, "CgUiTextStressScene");
+        driver.run(() -> {
+            this.document.boxes().setUiScale(SCALE);
+            UIElement sceneRoot = buildStressPanel();
+            // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
+            // root and took the window's size; here the DOCUMENT is the root and this is an
+            // ordinary child, which sizes to its content -- so without this the scene lays out
+            // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
+            StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
+                    l -> l.widthPercent(100f).heightPercent(100f));
+            this.document.append(sceneRoot);
+            document.styles().addStylesheet(StyleSheet.DEFAULT);
+            document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
+            csvRows.add(String.join(",", CSV_HEADER));
+        });
     }
 
     private UIElement buildStressPanel() {
@@ -406,11 +414,19 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
 
     @Override
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+        return driver.offerKey(event, () -> handleKey(event));
+    }
+
+    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
         return document.input().consumeKeyboardEvent(event);
     }
 
     @Override
     public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
+        return driver.offerMouse(event, () -> handleMouse(event));
+    }
+
+    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
         return document.input().consumeMouseEvent(event);
     }
 }

@@ -18,6 +18,7 @@ import dev.vfyjxf.taffy.tree.NodeId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import java.util.Objects;
@@ -50,6 +51,8 @@ public final class Box {
     final boolean mirror;
     final TaffyBridge bridge;
     NodeId taffyId;
+    /** Whether a layout has been read into this box; until then it is read whatever the engine reports. */
+    boolean read;
 
     /** The composed parent's box, as of the last sync. Null for the root. */
     @Nullable Box naturalHost;
@@ -139,6 +142,12 @@ public final class Box {
 
     /** Whether anything in this subtree moved on the current compose pass. @see BoxTree#composeInk */
     boolean subtreeChanged;
+
+    /** This box's matrix inputs changed: the next compose recomputes it and everything it hosts. */
+    boolean composeDirty;
+
+    /** Something this box hosts, at any depth, is {@link #composeDirty}: the walk must come down here. */
+    boolean descendantComposeDirty;
 
     /** What this box paints in its OWN space, refreshed only when its signature moves. */
     float localInkL, localInkT, localInkR, localInkB;
@@ -460,14 +469,12 @@ public final class Box {
      * @see UIElement#repaint
      */
     public void requestRepaint() {
-        // NO EARLY RETURN ON AN ALREADY-SET FLAG, and the asymmetry is the reason: the flag is set
-        // here and cleared only by the compose walk REACHING THIS BOX, so a box the walk does not
-        // reach keeps it set -- after which every later request returned without asking for a walk
-        // at all, and the node could never be repainted again by any route of its own. Guarding
-        // against that saved one boolean store, since transformsChanged() is exactly that.
+        // NO EARLY RETURN ON AN ALREADY-SET FLAG: the flag is cleared only when a pass reaches this box,
+        // so one it did not reach keeps it set, and a guard here would leave the node unable to ask again.
         repaintRequested = true;
-        // The compose walk is what turns this into a revision, and it does not run unless asked.
-        tree.transformsChanged();
+        // Queued rather than a whole compose: a repaint moves no matrix, so a pass with nothing else dirty
+        // refreshes only this box and folds the change up its hosts.
+        tree.repaintRequested(this);
     }
 
     public Matrix4f worldToLocal() {
@@ -494,9 +501,7 @@ public final class Box {
         if (!isScrollContainer()) return;
         left = clamp(left, 0f, maxScrollLeft());
         top = clamp(top, 0f, maxScrollTop());
-        if (left == node.scrollLeft() && top == node.scrollTop()) return;
         node.setScrollOffsets(left, top);
-        tree.transformsChanged();
     }
 
     // ── Scroll extents ───────────────────────────────────────────────────────
@@ -662,9 +667,11 @@ public final class Box {
 
     /** A compositor's transform, above the cascade's; {@code null} withdraws it. Layout-free. */
     public void setTransform(@Nullable Transform transform) {
+        // An editor re-states its layers' scroll translate every frame; the same value is not a move.
+        if (Objects.equals(transformOverride, transform)) return;
         transformOverride = transform;
         reclassify();
-        tree.transformsChanged();
+        tree.transformsChanged(this);
     }
 
     /**
@@ -681,9 +688,10 @@ public final class Box {
      * <p>Resolved lengths, not a {@link LengthPercent}: a compositor knows the box it is animating.</p>
      */
     public void setTransformOrigin(@Nullable Float x, @Nullable Float y) {
+        if (Objects.equals(transformOriginX, x) && Objects.equals(transformOriginY, y)) return;
         transformOriginX = x;
         transformOriginY = y;
-        tree.transformsChanged();
+        tree.transformsChanged(this);
     }
 
     /** @see #setTransformOrigin */
@@ -899,6 +907,52 @@ public final class Box {
         return inside && !skip.test(box) ? box : null;
     }
 
+    /**
+     * Every box in what this box paints, in the order {@link #hitTest} tries them: what is painted last first, and a
+     * box after everything it hosts. {@code descend} decides per box whether to visit what it hosts; the box itself is
+     * passed to {@code visit} either way. Points are not consulted, nor hit-testing, clipping or {@code skip}: a caller
+     * flattening the hit test applies those itself.
+     *
+     * <pre>{@code
+     * List<Box> order = new ArrayList<>();
+     * root.visitInHitOrder(box -> true, order::add);
+     * }</pre>
+     */
+    public void visitInHitOrder(Predicate<Box> descend, Consumer<Box> visit) {
+        visitInHitOrder(this, descend, visit, true);
+    }
+
+    private static void visitInHitOrder(Box box, Predicate<Box> descend, Consumer<Box> visit,
+                                        boolean asContext) {
+        if (descend.test(box)) {
+            StackingOrder order = asContext ? box.stackingOrder() : null;
+            if (order != null) {
+                visitLifted(order.top, descend, visit);
+                visitLifted(order.positive, descend, visit);
+                visitLifted(order.zero, descend, visit);
+            }
+            List<Box> flow = box.hosted;
+            for (int i = flow.size() - 1; i >= 0; i--) {
+                Box child = flow.get(i);
+                if (!child.isZOrdered()) visitInHitOrder(child, descend, visit, false);
+            }
+            if (order != null) visitLifted(order.negative, descend, visit);
+        }
+        visit.accept(box);
+    }
+
+    private static void visitLifted(List<Box> lifted, Predicate<Box> descend, Consumer<Box> visit) {
+        for (int i = lifted.size() - 1; i >= 0; i--) {
+            Box box = lifted.get(i);
+            visitInHitOrder(box, descend, visit, box.isStackingContext());
+        }
+    }
+
+    /** Whether this box is only a stacking container and never the answer to a hit test: the top layer. */
+    public boolean isStackingOnly() {
+        return stackingOnly;
+    }
+
     /** One of a context's lists, last painted first. */
     private static @Nullable Box searchLifted(List<Box> lifted, Box context, float worldX, float worldY,
                                               Predicate<Box> skip, boolean respectHitTest) {
@@ -952,6 +1006,21 @@ public final class Box {
                 && !outsideCorner(width - x, y, r.rxTR, r.ryTR)
                 && !outsideCorner(width - x, height - y, r.rxBR, r.ryBR)
                 && !outsideCorner(x, height - y, r.rxBL, r.ryBL);
+    }
+
+    /** {@link #insideCorners(float, float)} over radii already resolved, {@code rx, ry} from the top left clockwise. */
+    static boolean insideCorners(float x, float y, float width, float height, float[] r) {
+        return !outsideCorner(x, y, r[0], r[1])
+                && !outsideCorner(width - x, y, r[2], r[3])
+                && !outsideCorner(width - x, height - y, r[4], r[5])
+                && !outsideCorner(x, height - y, r[6], r[7]);
+    }
+
+    /** Where this box takes the pointer, frozen for a reader that may not touch the tree. */
+    public HitShape hitShape() {
+        BoxPainter.Radii r = BoxPainter.radiiOf(node.computedStyle(), width, height, tree.hitRadii);
+        float[] radii = {r.rxTL, r.ryTL, r.rxTR, r.ryTR, r.rxBR, r.ryBR, r.rxBL, r.ryBL};
+        return new HitShape(worldToLocal, width, height, radii);
     }
 
     /**

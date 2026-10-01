@@ -99,7 +99,6 @@ public final class TaskbarPreviews {
 
     /** When the pointer left both the entry and the panel, or 0 while it is on one of them. */
     private long leftAt;
-    private boolean ticking;
 
     /**
      * A placement waiting on a measurement, and whether it was an arrival or a move.
@@ -241,22 +240,16 @@ public final class TaskbarPreviews {
      * everything else here advances on. It drops itself the moment there is nothing to watch.</p>
      */
     private void wake() {
-        if (ticking) return;
         UIDocument window = taskbar.document();
         if (window == null) return;
-        ticking = true;
-        window.animation().every(taskbar, new Animation.Hook() {
-            @Override
-            public boolean frame(float deltaSeconds) {
-                if (taskbar.document() == null) {
-                    ticking = false;
-                    return false;
-                }
-                boolean busy = update();
-                if (!busy) ticking = false;
-                return busy;
-            }
-        });
+        window.animation().everyIfAbsent(taskbar, watch);
+    }
+
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook watch = this::watchFrame;
+
+    private boolean watchFrame(float deltaSeconds) {
+        return taskbar.document() != null && update();
     }
 
     /** Asks for a placement on a later frame, once whatever it is waiting on has been measured. */

@@ -1,5 +1,7 @@
 package com.crystalgui.mc.v1710.client;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.input.CgKeyCodes;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.gl.CgGL;
@@ -296,10 +298,18 @@ public final class CgUiScreen extends GuiScreen {
         // consumeKeyboardEvent returns TRUE when the UI CONSUMED the key -- that return exists precisely
         // so a host can act on what is LEFT OVER. Read as "unconsumed" it closed the screen on an Escape
         // the window had already dealt with and stayed open on one nobody wanted.
-        boolean consumed = CgUiInput.pumpKeyboard(window);
+        boolean consumed = CgUiInput.pumpKeyboard(HostSession.session().input());
         if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
             closeRequested = true;
         }
+    }
+
+    /**
+     * A key the desktop dispatched on its own thread and left, handed back a frame late: what this screen does with
+     * one nothing wanted. @see #handleKeyboardInput
+     */
+    void keyLeftByDesktop(CgSystemInput.Keyboard.Event key) {
+        if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) closeRequested = true;
     }
 
     /** <b>The mouse pump.</b> Once per event, same contract as above. */
@@ -308,7 +318,7 @@ public final class CgUiScreen extends GuiScreen {
         UIDocument window = window();
         if (window == null) return;
         // Raw device height, never GuiScreen.height -- see CgUiInput.pumpMouse.
-        CgUiInput.pumpMouse(window, mc.displayHeight);
+        CgUiInput.pumpMouse(HostSession.session().input(), mc.displayHeight);
     }
 
     /**

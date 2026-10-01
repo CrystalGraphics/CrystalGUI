@@ -9,6 +9,7 @@ import java.util.TreeMap;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
@@ -182,6 +183,14 @@ public final class AutoTest {
     private static boolean worldRequested;
     private static boolean opened;
     private static boolean capturedEarly;
+    /** The settle the desktop was first ready on (application up, a frame painted), or -1. */
+    private static int readySince = -1;
+    /** The settle the first capture was taken on. */
+    private static int earlyAt;
+    /** When the first capture fell due, so its wait for a painted frame is bounded. */
+    private static long captureDueNanos;
+    /** How long the first capture waits past its due point for the desktop to be ready. */
+    private static final long PAINT_GRACE_NANOS = 15_000_000_000L;
     private static boolean capturedLate;
     /** Calls to {@link #settled} since the desktop opened: the clock {@link #onFrame} counts on. */
     private static int settledSinceOpen;
@@ -233,7 +242,20 @@ public final class AutoTest {
         if (!ENABLED || !opened || capturedLate) return;
         runSteps(++settledSinceOpen);
 
-        if (!capturedEarly && sinceOpen >= host.captureAt()) {
+        // READY IS WHAT THE CAPTURE PHOTOGRAPHS: the application launched and a frame painted. A desktop on its own
+        // thread launches the application there and presents a frame later, so its first painted frame can be the
+        // bare taskbar; the capture comes a full settling delay after ready. Bounded in WALL time, since the hosts'
+        // units differ, so a desktop that never gets there is still photographed and reported.
+        boolean due = sinceOpen >= host.captureAt();
+        if (due && captureDueNanos == 0L) captureDueNanos = System.nanoTime();
+        if (readySince < 0 && HostSession.isInstalled() && HostSession.session().hasPainted()
+                && HostSession.session().application() != null) {
+            readySince = sinceOpen;
+        }
+        boolean settledSinceReady = readySince >= 0 && sinceOpen >= readySince + host.captureAt();
+        boolean waitedEnough = due && System.nanoTime() - captureDueNanos >= PAINT_GRACE_NANOS;
+        if (!capturedEarly && due && (settledSinceReady || waitedEnough)) {
+            earlyAt = sinceOpen;
             capturedEarly = true;
             host.capture(earlyCapture());
             // NOTHING LEFT TO TAKE THE SECOND WITH, so the first must not quit when one is wanted.
@@ -243,7 +265,8 @@ public final class AutoTest {
             }
             return;
         }
-        if (capturedEarly && host.lateCaptureAt() > 0 && sinceOpen >= host.lateCaptureAt()) {
+        if (capturedEarly && host.lateCaptureAt() > 0 && sinceOpen >= host.lateCaptureAt()
+                && sinceOpen >= earlyAt + host.captureAt()) {
             capturedLate = true;
             host.capture(lateCapture());
             host.quit();
