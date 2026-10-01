@@ -1,6 +1,7 @@
 package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.box.Box;
@@ -51,6 +52,13 @@ public final class ScreenOverlay {
      */
     private boolean keyboardIsOurs;
 
+    /** Answer presses from the frame's {@link HitRegions} rather than the live tree: T1's router, inline. */
+    private static final boolean USE_REGIONS = Boolean.getBoolean("crystalgui.ui.hitRegions");
+    /** Compare the two answers on every press and say where they differ. */
+    private static final boolean CHECK_REGIONS = Boolean.getBoolean("crystalgui.input.regionsCheck");
+
+    private volatile HitRegions regions = HitRegions.NONE;
+
     public ScreenOverlay(UIDocument window) {
         this.window = window;
         this.input = new HostInput(() -> window);
@@ -67,6 +75,16 @@ public final class ScreenOverlay {
      */
     public void onForeignScreenChanged(boolean open) {
         if (!open) keyboardIsOurs = false;
+    }
+
+    /** Freezes this frame's regions for the router. On the document's thread, after its frame. */
+    public void commit() {
+        regions = HitRegions.capture(window);
+    }
+
+    /** The regions the last {@link #commit} froze. */
+    public HitRegions regions() {
+        return regions;
     }
 
     /** Whether a pinned window currently owns the keyboard. @see #keyboardIsOurs */
@@ -95,9 +113,11 @@ public final class ScreenOverlay {
         // the pointer has left it -- which is exactly what capture is for, and exactly what a per-event
         // hit test destroys. The common case, not the edge case: every window move ends outside the
         // caption it started on.
-        boolean captured = window.input().pointerCaptureTarget() != null;
+        HitRegions frozen = regions;
+        boolean captured = USE_REGIONS ? frozen.pointerCaptured() : window.input().pointerCaptureTarget() != null;
+        boolean inside = isMove || captured || takes(frozen, xPx, yPx);
 
-        if (!isMove && !captured && overlayHitTest(xPx, yPx) == null) {
+        if (!inside) {
             // OUTSIDE. Two things have to happen here, and the first version did neither because it
             // returned before reaching them -- its own comment said "the outside case never reaches
             // here", which was true of the code and wrong about what the code needed to do.
@@ -128,6 +148,20 @@ public final class ScreenOverlay {
         // A PRESS INSIDE TAKES THE KEYBOARD.
         if (pressed) keyboardIsOurs = true;
         return true;
+    }
+
+    private boolean takes(HitRegions frozen, int xPx, int yPx) {
+        if (USE_REGIONS && !CHECK_REGIONS) return frozen.takes(xPx, yPx);
+        boolean live = overlayHitTest(xPx, yPx) != null;
+        if (CHECK_REGIONS) {
+            boolean fromRegions = frozen.takes(xPx, yPx);
+            if (fromRegions != live) {
+                CrystalGuiCore.LOGGER.warn("[cgui] hit regions say {} at {},{} where the live test says {} ({} regions)",
+                        fromRegions ? "ours" : "the game's", xPx, yPx, live ? "ours" : "the game's", frozen.size());
+            }
+            if (USE_REGIONS) return fromRegions;
+        }
+        return live;
     }
 
     /**
