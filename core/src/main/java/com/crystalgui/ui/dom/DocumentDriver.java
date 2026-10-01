@@ -360,7 +360,21 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         int node = box == null ? 0 : box.movedNode(frame.frameId());
         if (node == 0) return null;
         ReadOnlyVec2f pointer = document.input().pointer();
-        return new UiCommit.Follow(node, pointer.x(), pointer.y());
+        UIElement within = document.input().pointerFollowerWithin();
+        Box bounds = within == null ? null : within.box();
+        if (bounds == null) {
+            float free = UiCommit.Follow.FREE;
+            return new UiCommit.Follow(node, pointer.x(), pointer.y(), -free, free, -free, free);
+        }
+        // World rectangles, axis-aligned: what a clamp on left/top keeps inside its container.
+        float x0 = box.worldX(), y0 = box.worldY();
+        float x1 = x0 + box.width() * box.localToWorld().m00(), y1 = y0 + box.height() * box.localToWorld().m11();
+        float bx0 = bounds.worldX(), by0 = bounds.worldY();
+        float bx1 = bx0 + bounds.width() * bounds.localToWorld().m00();
+        float by1 = by0 + bounds.height() * bounds.localToWorld().m11();
+        float minX = Math.min(0f, bx0 - x0), minY = Math.min(0f, by0 - y0);
+        return new UiCommit.Follow(node, pointer.x(), pointer.y(),
+                minX, Math.max(minX, bx1 - x1), minY, Math.max(minY, by1 - y1));
     }
 
     // ── Compositor motion ───────────────────────────────────────────────────────────────────────
@@ -384,14 +398,18 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         if (!COMPOSITOR_MOTION) return false;
         UiCommit.Follow follow = commit.follow();
         if (follow == null || commit.frame() == null) return false;
-        int dx = Math.round(pointerX - follow.pointerX());
-        int dy = Math.round(pointerY - follow.pointerY());
+        int dx = Math.round(clamp(pointerX - follow.pointerX(), follow.minX(), follow.maxX()));
+        int dy = Math.round(clamp(pointerY - follow.pointerY(), follow.minY(), follow.maxY()));
         if (commit == moved && dx == movedX && dy == movedY) return false;
         commit.frame().values().translate(follow.node(), dx, dy);
         moved = commit;
         movedX = dx;
         movedY = dy;
         return true;
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     /** The facts of the frame on screen, or of the newest one committed; null before the first, and when not async. */

@@ -279,6 +279,22 @@ public class DialogTest extends UiDocumentTestBase {
         assertEquals(50f, top(), 0.5f);
     }
 
+    /** A caption drag moves the dialog one for one, so a compositor may move it while the document is busy. */
+    @Test
+    public void aCaptionDragDeclaresTheDialogFollowsThePointer() {
+        dialog.moveTo(20f, 20f);
+        dragTitleBarBy(40f, 30f);
+        assertSame("a caption drag did not declare its dialog", dialog, input.pointerFollower());
+        assertTrue("a following dialog records under a node of its own", dialog.box().willChangeTransform());
+
+        float hx = dialog.getTitleBar().box().worldX() + 4f * uiScale();
+        float hy = dialog.getTitleBar().box().worldY() + 4f * uiScale();
+        release(hx, hy);
+        settle();
+        assertNull("the drag ended and the dialog still follows", input.pointerFollower());
+        assertFalse(dialog.box().willChangeTransform());
+    }
+
     /** Accumulates from the position at grab time — reading the live box each frame would compound
      * the delta and the dialog would race away from the cursor. */
     @Test

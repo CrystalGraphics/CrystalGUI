@@ -285,6 +285,7 @@ public final class Drag implements InputMode {
      */
     public Drag withGhost(UIElement ghost, float offsetX, float offsetY) {
         this.ghost = ghost;
+        if (followed == null) followed = ghost;
         this.ghostOffsetX = offsetX;
         this.ghostOffsetY = offsetY;
         // RECORDED ONLY. This used to read `ghost.box()` here and give up when it was null -- which it
@@ -433,6 +434,7 @@ public final class Drag implements InputMode {
             float dx = x - pressSurfaceX, dy = y - pressSurfaceY;
             if (dx * dx + dy * dy < threshold * threshold) return true;
             activated = true;
+            declareFollow();
         }
         showGhost();
         ghostSurfaceX = x;
@@ -505,8 +507,53 @@ public final class Drag implements InputMode {
         // two paths that DO report (end and cancel) pop themselves first. The ghost is released HERE
         // rather than in end()/cancel(), because this is the one path every ending goes through.
         live = false;
+        follows(null);
         releaseGhost();
     }
+
+    /**
+     * Declares that {@code element} moves one for one with this drag's pointer, so a compositor may move it ahead of a
+     * busy document; null withdraws it. A drag ghost is declared already. From activation to the drag's end, however it
+     * ends.
+     *
+     * <pre>{@code
+     * Drag.start(titleBar, x, y, (mx, my, sx, sy, dx, dy) -> moveTo(startX + dx, startY + dy)).follows(this);
+     * }</pre>
+     *
+     * <p>Only an element that moves exactly with the pointer: a drag that clamps, snaps, eases or resizes as it goes
+     * would be drawn somewhere it is not, until the document's next frame.</p>
+     */
+    public Drag follows(@Nullable UIElement element) {
+        return follows(element, null);
+    }
+
+    /**
+     * {@link #follows(UIElement)} for an element the drag clamps inside {@code within}'s box, so the compositor stops it
+     * at the same edges.
+     *
+     * <pre>{@code
+     * Drag.start(header, x, y, (mx, my, sx, sy, dx, dy) -> moveClamped(startX + dx, startY + dy)).follows(this, container);
+     * }</pre>
+     */
+    public Drag follows(@Nullable UIElement element, @Nullable UIElement within) {
+        if (declared && followed != null) input.stopFollowingPointer(followed);
+        declared = false;
+        followed = element;
+        followedWithin = within;
+        if (activated && live) declareFollow();
+        return this;
+    }
+
+    private void declareFollow() {
+        if (declared || followed == null) return;
+        input.followPointer(followed, followedWithin);
+        declared = true;
+    }
+
+    /** What moves one for one with this drag's pointer, what bounds it, and whether the input has been told yet. */
+    @Nullable
+    private UIElement followed, followedWithin;
+    private boolean declared;
 
     // ── Drop targeting ───────────────────────────────────────────────────────
 

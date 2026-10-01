@@ -17,8 +17,12 @@ record UiCommit<F>(@Nullable UiFrame frame, @Nullable F facts, long index, @Null
 
     /**
      * An element the frame recorded mid-gesture, moving one for one with the pointer: its spatial node in this frame and
-     * where the pointer was, in surface pixels, when the document recorded it. What Input.followPointer declared.
+     * where the pointer was, in surface pixels, when the document recorded it, and how far it may move from there before
+     * an edge stops it. What Input.followPointer declared.
      */
-    record Follow(int node, float pointerX, float pointerY) {
+    record Follow(int node, float pointerX, float pointerY, float minX, float maxX, float minY, float maxY) {
+
+        /** No edge. */
+        static final float FREE = Float.POSITIVE_INFINITY;
     }
 }

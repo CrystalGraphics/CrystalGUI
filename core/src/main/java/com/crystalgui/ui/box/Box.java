@@ -12,6 +12,7 @@ import com.crystalgui.style.property.visual.stacking.WillChange;
 import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatRect;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -301,7 +302,7 @@ public final class Box {
      * Reads what decides this box's stacking from its style, its hosting and the compositor's overrides, and tells
      * the tree when the answer moved. Idempotent and cheap: a fade from 0.3 to 0.4 moves nothing.
      */
-    void reclassify() {
+    public void reclassify() {
         ComputedStyle style = node.computedStyle();
         ZIndex z = zIndex();
         boolean context = host() == null || hostOverride != null || mirrorRoot || stacksByInsertion
@@ -311,7 +312,8 @@ public final class Box {
                 || style.get(StylePropertyRegistry.BACKDROP_FILTER) != null
                 || style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY
                 || style.get(StylePropertyRegistry.ISOLATION) == Isolation.ISOLATE
-                || willChange(style, WillChange.TRANSFORM) || willChange(style, WillChange.OPACITY);
+                || willChange(style, WillChange.TRANSFORM) || willChange(style, WillChange.OPACITY)
+                || followsPointer();
         boolean absolute = style.get(LayoutProperties.POSITION) == TaffyPosition.ABSOLUTE;
         if (context == stackingContext && absolute == positioned && z.equals(classifiedZ)) return;
         stackingContext = context;
@@ -364,9 +366,17 @@ public final class Box {
         fadedFrame = frame;
     }
 
-    /** Whether {@code will-change} names {@code transform}: a compositor moves this box. */
+    /**
+     * Whether a compositor moves this box: {@code will-change} names {@code transform}, or its node is following the
+     * pointer in a drag ({@code Input.followPointer}), which is the same promise made for the drag's length.
+     */
     public boolean willChangeTransform() {
-        return willChange(node.computedStyle(), WillChange.TRANSFORM);
+        return willChange(node.computedStyle(), WillChange.TRANSFORM) || followsPointer();
+    }
+
+    private boolean followsPointer() {
+        UIDocument document = node.document();
+        return document != null && document.input().pointerFollower() == node;
     }
 
     private static boolean willChange(ComputedStyle style, WillChange change) {
