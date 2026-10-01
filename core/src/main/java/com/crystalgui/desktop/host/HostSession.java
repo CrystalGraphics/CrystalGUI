@@ -542,6 +542,7 @@ public final class HostSession {
             // Its paint context is made by the first paint, which lockstep runs on the render thread.
             sequence = UiSequence.create("desktop");
             built.document().runOn(sequence);
+            CrystalGuiCore.LOGGER.info("[cgui] the desktop's document runs on sequence '{}', in lockstep", sequence.name());
         }
         trace("DesktopHost");
     }
