@@ -946,7 +946,7 @@ public final class Box {
      * radii on a side add up past it.</p>
      */
     private boolean insideCorners(float x, float y) {
-        BoxPainter.Radii r = BoxPainter.radiiOf(node.computedStyle(), width, height);
+        BoxPainter.Radii r = BoxPainter.radiiOf(node.computedStyle(), width, height, tree.hitRadii);
         if (r.isZero()) return true;
         return !outsideCorner(x, y, r.rxTL, r.ryTL)
                 && !outsideCorner(width - x, y, r.rxTR, r.ryTR)

@@ -85,6 +85,11 @@ public final class BoxTree {
     private float viewportWidth, viewportHeight;
     private final Matrix4f rootTransform = new Matrix4f();
 
+    /** This tree's painter and its scratch, so documents painting on two threads share none. */
+    final BoxPainter painter = new BoxPainter();
+    /** {@link Box#hitTest}'s radii scratch, apart from the painter's: a hit test can run mid-paint. */
+    final BoxPainter.Radii hitRadii = new BoxPainter.Radii();
+
     /** A subtree laid out again under another host. */
     private static final class Mirror {
         final UIElement subtree;
@@ -349,7 +354,7 @@ public final class BoxTree {
      */
     public void paint(CgUiPaintContext ctx) {
         long timed = CgTrace.stamp(UiTrace.FRAME);
-        BoxPainter.paint(this, ctx);
+        painter.paint(this, ctx);
         CgTrace.zoneDone(UiTrace.FRAME, "paint:tree", timed);
     }
 
