@@ -183,7 +183,7 @@ public final class HostSession {
         else owner.runNow(work);
     }
     @Nullable
-    private Application primary;
+    private volatile Application primary;
     @Nullable
     private WindowFrame primaryWindow;
 
