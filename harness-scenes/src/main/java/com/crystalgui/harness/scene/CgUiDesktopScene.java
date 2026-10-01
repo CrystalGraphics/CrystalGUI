@@ -33,6 +33,7 @@ import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiGpu;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -445,6 +446,12 @@ public class CgUiDesktopScene
             refreshReadout();
         }
 
+        if (PRESENT_AGAIN && frame.getFrameNumber() > 60 && frame.getFrameNumber() % 2 == 1) {
+            UiGpu.presentAgain(w, h);
+            if (frame.getFrameNumber() == 101) ctx.getArtifactService().requestCapture("present-again");
+            return;
+        }
+        if (PRESENT_AGAIN && frame.getFrameNumber() == 100) ctx.getArtifactService().requestCapture("presented");
         CgUiPaintContext context = document.paintContext();
         context.beginFrame(w, h);
         // SIMULATED GAME MODE -- W14, and the closest a GL harness gets to Minecraft without being it.
@@ -479,6 +486,12 @@ public class CgUiDesktopScene
         if (PROFILER_SHOT) driveProfilerShot(ctx, frame.getFrameNumber());
         if (MINIMISE_SHOT) driveMinimiseShot(ctx, frame.getFrameNumber());
     }
+
+    /**
+     * {@code -Dcrystalgui.harness.desktop.presentAgain=true}: from frame 61 every odd frame paints nothing and shows the
+     * last frame again ({@link UiGpu#presentAgain}). {@code present-again} (frame 101) must match {@code presented}.
+     */
+    private static final boolean PRESENT_AGAIN = Boolean.getBoolean("crystalgui.harness.desktop.presentAgain");
 
     // ── -Dcrystalgui.harness.desktop.minimise=true: a window's snapshot, in flight ──
 
