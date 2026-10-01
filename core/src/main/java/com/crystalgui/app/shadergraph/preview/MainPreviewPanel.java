@@ -447,6 +447,8 @@ public class MainPreviewPanel extends UIElement implements Disposable {
             }
         }
 
+        private boolean hadPicture;
+
         private void paintContentTraced(CgUiPaintContext ctx, Box box) {
             super.paintContent(ctx, box);
 
@@ -462,6 +464,9 @@ public class MainPreviewPanel extends UIElement implements Disposable {
             }
             // Nothing yet: no successful compile so far. Painting nothing leaves the surface's own
             // background, so an empty panel reads as "not yet" rather than as a hole.
+            // A PICTURE THAT WENT AWAY is a blink on screen, counted where it can be found in the Frame Profiler.
+            if (texture == null && hadPicture) CgTrace.add(UiTrace.FRAME, "sg-preview-lost", 1);
+            hadPicture = texture != null;
             if (texture == null) return;
 
             // THE ORIGIN, because a paint hook already draws in its OWN box's space.
