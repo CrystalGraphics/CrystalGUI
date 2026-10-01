@@ -245,7 +245,7 @@ final class CgUiBackdrop {
         // that rule exists. A popup's left/top are logical and get scaled again, so surface pixels are
         // wrong there; a framebuffer region is already surface pixels, so they are the only right
         // answer here.
-        Matrix4f pose = ctx.poseStack.last().pose();
+        Matrix4f pose = new Matrix4f(ctx.targetPose());
         Vector3f tl = pose.transformPosition(new Vector3f(x, y, 0f));
         Vector3f tr = pose.transformPosition(new Vector3f(x + width, y, 0f));
         Vector3f bl = pose.transformPosition(new Vector3f(x, y + height, 0f));
@@ -566,7 +566,7 @@ final class CgUiBackdrop {
      * in it. A readback of the target is what finally showed it, and would have on day one.</p>
      */
     private void withoutScissor(Runnable body) {
-        int[] saved = ctx.suspendScissor();
+        ScissorStack.Saved saved = ctx.suspendScissor();
         try {
             body.run();
         } finally {

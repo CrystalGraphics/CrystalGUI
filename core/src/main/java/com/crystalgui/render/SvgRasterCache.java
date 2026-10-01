@@ -176,7 +176,7 @@ public final class SvgRasterCache {
 
     private boolean decide(SvgDocument document, float x, float y, float scale) {
         if (!ENABLED || !ctx.isPoseAxisAligned()) return false;
-        Matrix4f m = ctx.getPoseStack().last().pose();
+        Matrix4f m = ctx.targetPose();
         // Uniform and unflipped: the raster is built at one scale and drawn 1:1.
         if (m.m00() <= 0f || m.m00() != m.m11()) return false;
         float device = ctx.deviceScale();
@@ -287,7 +287,7 @@ public final class SvgRasterCache {
         CgTrace.add(UiTrace.FRAME, "svg-raster-builds", 1);
         long timed = CgTrace.stamp(UiTrace.FRAME);
         ctx.beginLayerFbo(atlas, false);
-        int[] scissor = ctx.suspendScissor();
+        ScissorStack.Saved scissor = ctx.suspendScissor();
         PoseStack pose = ctx.getPoseStack();
         pose.pushPose();
         pose.setIdentity();
