@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.UiGpu;
 
@@ -30,6 +31,11 @@ public final class SurfaceCompositor {
     private volatile boolean inFlight;
     @Nullable
     private UiCommit active;
+
+    /** How long a frame may stay in flight before the sequence is reported as not responding. */
+    private static final long HANG_NANOS = 2_000_000_000L;
+    private volatile long requestedNanos;
+    private boolean hangReported;
 
     public SurfaceCompositor(UiSequence sequence) {
         this.sequence = sequence;
@@ -65,8 +71,14 @@ public final class SurfaceCompositor {
      *         unpresented never gives its buffers back
      */
     public boolean requestFrame(Supplier<UiCommit> work) {
-        if (inFlight || pending.get() != null) return false;
+        if (inFlight) {
+            reportIfHung();
+            return false;
+        }
+        if (pending.get() != null) return false;
         inFlight = true;
+        requestedNanos = System.nanoTime();
+        hangReported = false;
         sequence.execute(() -> {
             try {
                 UiCommit commit = work.get();
@@ -76,5 +88,22 @@ public final class SurfaceCompositor {
             }
         });
         return true;
+    }
+
+    /**
+     * Once per frame in flight past {@link #HANG_NANOS}: what the sequence is doing, from its own stack. The document is
+     * not responding; the last frame keeps showing meanwhile.
+     */
+    private void reportIfHung() {
+        if (hangReported || System.nanoTime() - requestedNanos < HANG_NANOS) return;
+        hangReported = true;
+        Thread thread = sequence.runningThread();
+        StringBuilder stack = new StringBuilder();
+        if (thread != null) {
+            for (StackTraceElement frame : thread.getStackTrace()) stack.append("\n\tat ").append(frame);
+        }
+        CrystalGuiCore.LOGGER.warn("[cgui] sequence '{}' has not committed a frame in {} ms; it is {}{}", sequence.name(),
+                (System.nanoTime() - requestedNanos) / 1_000_000,
+                thread == null ? "idle, so the frame was lost" : "on " + thread.getName(), stack);
     }
 }
