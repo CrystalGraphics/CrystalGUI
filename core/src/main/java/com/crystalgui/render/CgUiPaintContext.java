@@ -1321,7 +1321,7 @@ public final class CgUiPaintContext {
      *
      * <h3>A rect test, deliberately NOT a frustum</h3>
      *
-     * <p>{@code CgTextCuller} tests a {@link com.crystalgraphics.api.render.CgViewFrustum} because a 3D
+     * <p>{@code CgTextCuller} tests a {@link com.crystalgraphics.render.CgViewFrustum} because a 3D
      * text layout can sit at any orientation in a perspective view. The UI cannot: {@link #beginFrame}
      * installs {@code ortho(0, w, h, 0)}, so post-pose coordinates <em>are</em> window pixels and the
      * visible region is an axis-aligned rectangle. Against that, six plane dot-products would be a slower
