@@ -52,6 +52,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The compositor host — CrystalOS's desktop, and the parent of every {@link WindowFrame}.
@@ -1534,8 +1535,8 @@ public class Desktop extends UIElement implements DataProvider {
         hideAfterRestore.clear();
     }
 
-    /** @see #announceTheSwitcherOnce */
-    private static boolean switcherAnnounced;
+    /** Once per process, claimed atomically since desktops may run on different threads. @see #announceTheSwitcherOnce */
+    private static final AtomicBoolean SWITCHER_ANNOUNCED = new AtomicBoolean();
 
     /**
      * Tells the user how to switch windows, the first time one is put away.
@@ -1558,13 +1559,12 @@ public class Desktop extends UIElement implements DataProvider {
      * this person want to be told".</p>
      */
     private void announceTheSwitcherOnce() {
-        if (switcherAnnounced) return;
+        if (SWITCHER_ANNOUNCED.get()) return;
         // NOT WORTH SAYING WITH ONE WINDOW. Advertising a switcher on a desktop that has nothing to switch
         // between teaches a chord that will appear broken the first time it is pressed.
         if (registry.size() < 2) return;
         KeyChord chord = Keymap.acceleratorFor(this, DesktopCommands.SWITCH_WINDOW);
-        if (chord == null) return;
-        switcherAnnounced = true;
+        if (chord == null || !SWITCHER_ANNOUNCED.compareAndSet(false, true)) return;
         Notifications.show(Notification.info("Window minimised")
                 .withDetail("Press " + chord + " to switch between windows")
                 .withNeverShowAgain("desktop.switcherHint"));
@@ -1572,7 +1572,7 @@ public class Desktop extends UIElement implements DataProvider {
 
     /** Lets a test drive the first-hide announcement more than once. */
     public static void resetSwitcherAnnouncementForTesting() {
-        switcherAnnounced = false;
+        SWITCHER_ANNOUNCED.set(false);
     }
 
     // ── The host seam ────────────────────────────────────────────────────────────────────

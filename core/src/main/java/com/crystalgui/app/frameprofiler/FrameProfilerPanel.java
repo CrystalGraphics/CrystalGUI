@@ -305,7 +305,7 @@ public class FrameProfilerPanel extends UIElement {
     }
 
     private static final int CLOCK_SAMPLES = 20_000;
-    private static long zoneCost;
+    private static volatile long zoneCost;
     private static volatile long clockSink;
 
     private static String shortMicros(long nanos) {
