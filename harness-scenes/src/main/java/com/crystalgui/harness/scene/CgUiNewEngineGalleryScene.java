@@ -939,7 +939,7 @@ public class CgUiNewEngineGalleryScene
 
         document.frame(delta, w / SCALE, h / SCALE);
 
-        CgUiPaintContext context = CgUiPaintContext.getInstance();
+        CgUiPaintContext context = document.recorder();
         context.beginFrame(w, h);
         document.paint(context);
         context.endFrame();

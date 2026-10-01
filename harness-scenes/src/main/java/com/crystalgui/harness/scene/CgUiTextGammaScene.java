@@ -125,7 +125,7 @@ public class CgUiTextGammaScene implements InteractiveSceneLifecycle, CgSystemIn
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
         document.frame(frame.getDeltaTime(), w / scale, h / scale);
-        CgUiPaintContext paint = CgUiPaintContext.getInstance();
+        CgUiPaintContext paint = document.recorder();
         paint.textGamma(PRESETS[preset]);
         paint.beginFrame(w, h);
         document.paint(paint);

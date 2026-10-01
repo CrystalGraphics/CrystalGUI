@@ -57,13 +57,8 @@ final class CgUiBackdrop {
         this.ctx = ctx;
     }
 
-    /**
-     * Records the draw target that was bound when the frame began, and invalidates last frame's capture.
-     *
-     * <p>Must run BEFORE the frame's redirect, because the redirect is what hides it. @see #sceneFboId</p>
-     */
-    void captureSceneTarget() {
-        sceneFboId = CgGL.glGetInteger(CgGL.GL_DRAW_FRAMEBUFFER_BINDING);
+    /** A new frame: last frame's capture describes nothing in it. */
+    void beginFrame() {
         captureFrame = -1L;
     }
 
@@ -76,22 +71,6 @@ final class CgUiBackdrop {
         targetsFor(blurScale);
     }
 
-    /**
-     * The draw target that was bound when {@link #beginFrame} ran — <b>the scene behind the UI</b>.
-     *
-     * <p><b>{@code ctx.frameFbo} is not the backdrop, and reaching for it is the mistake this field
-     * exists to prevent.</b> {@code beginFrame} binds it and clears it <em>fully transparent</em>, so the
-     * UI's own target holds the UI and nothing else. The world, the HUD and the hotbar are all in
-     * whatever was bound before that — which is what {@code endFrame} composites back onto. A backdrop
-     * grab that read {@code ctx.frameFbo} would capture an empty buffer and look exactly like the effect
-     * not working.</p>
-     *
-     * <p>Read from the binding rather than handed in by the host: it needs no loader change, it is true
-     * by construction in game and in the harness alike, and it stays correct when {@code framebufferMc}
-     * is off — the id is then {@code 0} and a blit reads the back buffer perfectly well, where an
-     * explicitly-registered MC framebuffer id would be wrong for exactly those players.</p>
-     */
-    private int sceneFboId;
 
     /** Scene plus whatever the UI had painted when the first glass element of the frame drew. */
     @Nullable
@@ -474,10 +453,12 @@ final class CgUiBackdrop {
 
         // 1. The scene, region only: a framebuffer this engine did not write, so a blit run when the frame executes,
         // in its place among the passes. 1b's clear goes with it.
-        final int sceneId = sceneFboId, bx0 = capX0, bw = capW, bh = capH, by0 = glY0, by1 = glY1, th = h;
+        final int bx0 = capX0, bw = capW, bh = capH, by0 = glY0, by1 = glY1, th = h;
         ctx.recordCallback("backdrop:scene", cap, () -> {
             CgFrameBuffer storage = cap.framebuffer();
-            CgFrameBuffer.blitFrom(sceneId, storage.getId(), bx0, by0, bx0 + bw, by1,
+            // THE SCENE BEHIND THE UI is whatever the host had bound when the frame began -- never the frame's own
+            // target, which holds the UI alone -- read when this executes. @see UiGpu#sceneTarget
+            CgFrameBuffer.blitFrom(UiGpu.get().sceneTarget(), storage.getId(), bx0, by0, bx0 + bw, by1,
                     0, th - bh, bw, th, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
             CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
             CgGL.glColorMask(false, false, false, true);

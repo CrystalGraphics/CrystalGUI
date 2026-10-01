@@ -162,11 +162,11 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
         // tree's root transform, so this is the only place the two spaces meet.
         document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
 
-        CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
+        CgUiPaintContext paintContext = document.recorder();
         paintContext.beginFrame(w, h);
         document.paint(paintContext);
         paintContext.endFrame();
-        var context = CgUiPaintContext.getInstance();
+        var context = document.recorder();
         context.text().draw().at(0, 0).text(document.boxes().uiScale() + "x").font(context.getFont().atSize(32)).submit();
     }
 

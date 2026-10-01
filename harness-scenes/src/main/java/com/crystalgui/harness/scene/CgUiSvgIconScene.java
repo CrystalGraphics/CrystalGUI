@@ -219,7 +219,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
     public void render(HarnessContext ctx, FrameInfo frame) {
         CgRenderPipeline.getInstance().getFrameData().timeSecs = (float) frame.getElapsedTime();
 
-        CgUiPaintContext paint = CgUiPaintContext.getInstance();
+        CgUiPaintContext paint = recorder();
         paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
 
         drawStudyStrip(paint);
@@ -410,5 +410,13 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
                     new java.io.File(profileCtx.getOutputDir()), "svg-lod-live", 0L);
             System.out.println("[profile] live dump=" + out);
         }
+    }
+
+    /** This scene's paint context: it has no document to ask for one. */
+    private CgUiPaintContext recorder;
+
+    private CgUiPaintContext recorder() {
+        if (recorder == null) recorder = CgUiPaintContext.create();
+        return recorder;
     }
 }
