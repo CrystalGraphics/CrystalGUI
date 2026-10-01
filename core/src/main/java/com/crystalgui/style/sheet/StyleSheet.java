@@ -1,11 +1,15 @@
 package com.crystalgui.style.sheet;
 
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.selector.Selector;
 import com.crystalgui.style.selector.SelectorType;
 import com.crystalgui.style.Styleable;
+import com.crystalgui.style.property.StyleValue;
 import javax.annotation.Nullable;
 
 import lombok.Getter;
@@ -18,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 
 /**
@@ -443,6 +448,35 @@ public final class StyleSheet {
                             + "out at zero size.");
         }
         return new StyleSheet(sheet.getRules(), StyleOrigin.USER_AGENT);
+    }
+
+    /** Values a worker computes ahead of the first style pass, in chunks of this many. */
+    private static final int WARM_CHUNK = 256;
+
+    private final AtomicBoolean warming = new AtomicBoolean();
+
+    /** {@code -Dcrystalgui.style.warm=false} leaves every value to be parsed by the first pass that needs it. */
+    private static final boolean WARM = !"false".equals(System.getProperty("crystalgui.style.warm"));
+
+    /**
+     * Parses every declared value on the shared worker pool, once, so the first style pass to match a rule finds its
+     * values ready: on a window's first frame half of matching was parsing values (a sprite decoded, an icon read).
+     * Returns at once; a value a pass needs before its worker reaches it is computed by the pass, and only once.
+     */
+    public void warmValues() {
+        if (!WARM || !warming.compareAndSet(false, true)) return;
+        List<StyleValue<?>> values = new ArrayList<>();
+        for (StyleRule rule : rules) {
+            for (StyleRule.Declaration declaration : rule.declarations()) values.add(declaration.value());
+        }
+        for (int from = 0; from < values.size(); from += WARM_CHUNK) {
+            List<StyleValue<?>> chunk = values.subList(from, Math.min(values.size(), from + WARM_CHUNK));
+            JobScheduler.sharedPool().execute(() -> {
+                try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "style:warmValues")) {
+                    for (StyleValue<?> value : chunk) value.compute();
+                }
+            });
+        }
     }
 
     public List<StyleRule> getRules() {
