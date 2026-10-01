@@ -22,7 +22,7 @@ import com.crystalgraphics.render.property.CgPropertyValues;
  * <pre>{@code
  * int window = windowBox.movedNode(frame.frameId());
  * frame.values().translate(window, dx, dy);
- * UiGpu.redraw(width, height);               // the last presented frame, executed again
+ * UiGpu.redraw(width, height, true);         // the last presented frame, executed again
  * }</pre>
  *
  * <ul>
