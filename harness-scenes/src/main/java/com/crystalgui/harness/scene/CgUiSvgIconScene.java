@@ -1,7 +1,6 @@
 package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.api.PoseStack;
-import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
 import com.crystalgui.render.CgUiPaintContext;
@@ -217,7 +216,6 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public void render(HarnessContext ctx, FrameInfo frame) {
-        CgRenderPipeline.getInstance().getFrameData().timeSecs = (float) frame.getElapsedTime();
 
         CgUiPaintContext paint = paintContext();
         paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
