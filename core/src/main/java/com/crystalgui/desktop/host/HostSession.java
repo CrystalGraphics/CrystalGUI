@@ -1,6 +1,7 @@
 package com.crystalgui.desktop.host;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -112,6 +113,23 @@ public final class HostSession {
 
     @Nullable
     private DesktopHost host;
+
+    /**
+     * Whether the desktop's document runs on a sequence of its own (plan engine-threaded-ui T1). Today in lockstep:
+     * every host entry that reads or writes the tree runs on the render thread AS the sequence
+     * ({@link UiSequence#runNow}), so the tree refuses everything else while the GL context stays where it is.
+     */
+    private static final String SEQUENCED = "crystalgui.ui.sequence";
+
+    @Nullable
+    private UiSequence sequence;
+
+    /** Runs {@code work} on the document's sequence in lockstep, or here when it has none. */
+    private void onDocument(Runnable work) {
+        UiSequence owner = sequence;
+        if (owner == null) work.run();
+        else owner.runNow(work);
+    }
     @Nullable
     private Application primary;
     @Nullable
@@ -184,8 +202,8 @@ public final class HostSession {
      */
     public void shown() {
         if (host == null) build();
-        else host.shown();
-        bringForward();
+        else onDocument(host::shown);
+        onDocument(this::bringForward);
     }
 
     /**
@@ -197,7 +215,8 @@ public final class HostSession {
      */
     public void hidden() {
         launchPending = false;
-        if (host != null) host.hidden();
+        DesktopHost built = host;
+        if (built != null) onDocument(built::hidden);
     }
 
     /**
@@ -207,9 +226,12 @@ public final class HostSession {
      * no connection to build against. Costs a boolean read once there is a window.</p>
      */
     public void frame(float deltaSeconds) {
-        if (host == null) return;
-        if (launchPending) bringForward();
-        host.frame(deltaSeconds);
+        DesktopHost built = host;
+        if (built == null) return;
+        onDocument(() -> {
+            if (launchPending) bringForward();
+            built.frame(deltaSeconds);
+        });
     }
 
     /**
@@ -228,8 +250,12 @@ public final class HostSession {
 
     /** Takes the desktop down. Game shutdown only — never a surface close. @see #hidden() */
     public void dispose() {
-        if (primary != null) primary.dispose();
-        if (host != null) host.dispose();
+        onDocument(() -> {
+            if (primary != null) primary.dispose();
+            if (host != null) host.dispose();
+        });
+        if (sequence != null) sequence.close();
+        sequence = null;
         primary = null;
         primaryWindow = null;
         host = null;
@@ -289,6 +315,20 @@ public final class HostSession {
         return painted;
     }
 
+    /**
+     * The focus owner's caret area in surface pixels, {@code [x, y, width, height]}, or null when nothing takes text:
+     * where an input method opens its candidate list.
+     */
+    @Nullable
+    public float[] textInputArea() {
+        UIDocument document = document();
+        if (document == null) return null;
+        if (sequence == null) return document.input().textInputArea();
+        float[][] area = new float[1][];
+        sequence.runNow(() -> area[0] = document.input().textInputArea());
+        return area[0];
+    }
+
     // ── Painting over the game ──────────────────────────────────────────────────────────────────
 
     /**
@@ -337,6 +377,13 @@ public final class HostSession {
      * fires no such event, so the close is never seen and ownership survives into the next screen.</p>
      */
     public DesktopPresentation presentation(PaintHost host) {
+        if (sequence == null) return presentationOnDocument(host);
+        DesktopPresentation[] answer = new DesktopPresentation[1];
+        sequence.runNow(() -> answer[0] = presentationOnDocument(host));
+        return answer[0];
+    }
+
+    private DesktopPresentation presentationOnDocument(PaintHost host) {
         Desktop desktop = desktop();
         if (desktop == null) return DesktopPresentation.NONE;
 
@@ -382,7 +429,11 @@ public final class HostSession {
                               float wheel) {
         if (grabbed || !host.anyScreenUp()) return false;
         ScreenOverlay overlay = screenOverlay();
-        return overlay != null && overlay.offerMouse(xPx, yPx, button, pressed, wheel);
+        if (overlay == null) return false;
+        if (sequence == null) return overlay.offerMouse(xPx, yPx, button, pressed, wheel);
+        boolean[] taken = new boolean[1];
+        sequence.runNow(() -> taken[0] = overlay.offerMouse(xPx, yPx, button, pressed, wheel));
+        return taken[0];
     }
 
     /**
@@ -435,6 +486,14 @@ public final class HostSession {
     }
 
     private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
+        if (sequence == null) {
+            paintOnDocument(arm, host, deltaRead, deltaSeconds);
+            return;
+        }
+        sequence.runNow(() -> paintOnDocument(arm, host, deltaRead, deltaSeconds));
+    }
+
+    private void paintOnDocument(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
         Desktop desktop = desktop();
         if (desktop == null) return;
 
@@ -479,6 +538,11 @@ public final class HostSession {
         });
         built.document().addClass(ROOT_CLASS);
         host = built;
+        if (Boolean.getBoolean(SEQUENCED)) {
+            // Its paint context is made by the first paint, which lockstep runs on the render thread.
+            sequence = UiSequence.create("desktop");
+            built.document().runOn(sequence);
+        }
         trace("DesktopHost");
     }
 

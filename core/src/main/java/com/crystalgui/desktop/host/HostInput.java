@@ -7,6 +7,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import javax.annotation.Nullable;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
@@ -22,20 +23,33 @@ import java.util.function.Supplier;
  * }</pre>
  *
  * <p>A document on the host's thread is handed each event and the answer is what dispatch decided. A document on its
- * own {@link UiSequence} cannot answer in time, so the event is posted there and the answer is "ours"; a key its
- * dispatch then leaves is queued for {@link #pollUnhandledKey}, Chromium's {@code UnhandledKeyboardEvent}, and the
- * host gives it to the game a frame late. Every key goes through the sequence while one is on it, so the game never
- * sees keys out of order.</p>
+ * own {@link UiSequence} is handed it in lockstep ({@link UiSequence#runNow}), with the same answer. With
+ * {@code -Dcrystalgui.ui.asyncInput=true} it is posted instead and the answer is "ours"; a key its dispatch then
+ * leaves is queued for {@link #pollUnhandledKey}, Chromium's {@code UnhandledKeyboardEvent}, and the host gives it to
+ * the game a frame late. Every key goes through the sequence while one is on it, so the game never sees keys out of
+ * order.</p>
  *
  * <p>Every method answers false while there is no document: nothing was there to take the event.</p>
  */
 public final class HostInput implements CgSystemInput.Mouse, CgSystemInput.Keyboard {
 
+    /**
+     * Whether a document on a sequence is handed input by posting rather than in lockstep. Off until recording leaves
+     * the render thread: in lockstep the host gets dispatch's own answer, and nothing needs giving back to the game.
+     */
+    static final boolean ASYNC_DEFAULT = Boolean.getBoolean("crystalgui.ui.asyncInput");
+
     private final Supplier<UIDocument> document;
+    private final boolean async;
     private final Queue<CgSystemInput.Keyboard.Event> unhandledKeys = new ConcurrentLinkedQueue<>();
 
     HostInput(Supplier<UIDocument> document) {
+        this(document, ASYNC_DEFAULT);
+    }
+
+    HostInput(Supplier<UIDocument> document, boolean async) {
         this.document = document;
+        this.async = async;
     }
 
     @Override
@@ -44,6 +58,7 @@ public final class HostInput implements CgSystemInput.Mouse, CgSystemInput.Keybo
         if (target == null) return false;
         UiSequence sequence = target.sequence();
         if (sequence == null) return target.input().consumeMouseEvent(event);
+        if (!async) return inLockstep(sequence, () -> target.input().consumeMouseEvent(event));
         sequence.execute(() -> target.input().consumeMouseEvent(event));
         return true;
     }
@@ -54,6 +69,7 @@ public final class HostInput implements CgSystemInput.Mouse, CgSystemInput.Keybo
         if (target == null) return false;
         UiSequence sequence = target.sequence();
         if (sequence == null) return target.input().consumeKeyboardEvent(event);
+        if (!async) return inLockstep(sequence, () -> target.input().consumeKeyboardEvent(event));
         sequence.execute(() -> {
             if (!target.input().consumeKeyboardEvent(event)) unhandledKeys.add(event);
         });
@@ -66,8 +82,15 @@ public final class HostInput implements CgSystemInput.Mouse, CgSystemInput.Keybo
         if (target == null) return false;
         UiSequence sequence = target.sequence();
         if (sequence == null) return target.input().consumeComposition(text, caret);
+        if (!async) return inLockstep(sequence, () -> target.input().consumeComposition(text, caret));
         sequence.execute(() -> target.input().consumeComposition(text, caret));
         return true;
+    }
+
+    private static boolean inLockstep(UiSequence sequence, BooleanSupplier dispatch) {
+        boolean[] taken = new boolean[1];
+        sequence.runNow(() -> taken[0] = dispatch.getAsBoolean());
+        return taken[0];
     }
 
     /** The oldest key a document on a sequence dispatched and did not take, or null. On the host's thread. */

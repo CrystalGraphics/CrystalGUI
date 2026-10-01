@@ -11,6 +11,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * Tasks run in the order posted, never two at once, on whichever pool thread is free: Chromium's sequence, and what
@@ -80,6 +81,43 @@ public final class UiSequence implements Executor {
         if (closed) return;
         tasks.add(task);
         schedule();
+    }
+
+    /**
+     * Runs {@code task} on the calling thread <b>as this sequence</b>, after everything posted before it, and returns
+     * when it has run. Waits for a turn already running on the pool; none starts until this returns.
+     *
+     * <pre>{@code
+     * sequence.runNow(() -> document.frame(delta, w, h));   // the render thread, in lockstep with the sequence
+     * }</pre>
+     *
+     * <p>What a host does while recording may not leave the render thread yet: ownership is the sequence's, so the tree
+     * refuses every other caller, while the work itself stays where the GL context is. Called from inside one of this
+     * sequence's tasks it simply runs {@code task}.</p>
+     */
+    public void runNow(Runnable task) {
+        if (isCurrent()) {
+            task.run();
+            return;
+        }
+        // CLAIMED THE WAY A TURN CLAIMS IT, so a turn and this can never overlap.
+        while (!scheduled.compareAndSet(false, true)) LockSupport.parkNanos(20_000L);
+        UiSequence outer = CURRENT.get();
+        CURRENT.set(this);
+        try {
+            for (Runnable queued; !closed && (queued = tasks.poll()) != null; ) {
+                try {
+                    queued.run();
+                } catch (RuntimeException | Error failed) {
+                    CrystalGuiCore.LOGGER.error("[cgui] a task on sequence '{}' threw", name, failed);
+                }
+            }
+            task.run();
+        } finally {
+            CURRENT.set(outer);
+            scheduled.set(false);
+        }
+        if (!tasks.isEmpty() && !closed) schedule();
     }
 
     /** Drops what is queued and refuses what comes after. */
