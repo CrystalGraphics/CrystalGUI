@@ -488,9 +488,15 @@ public class CgUiDesktopScene
         if (probing()) driver.run(() -> afterFrame(ctx, frame, workStart));
         // Late enough that the first window's placement, the entry animations and the editor's own
         // deferred rebuilds have all settled -- a capture at frame 5 photographs a desktop that is
-        // still assembling itself and every diff against it is noise.
-        if (frame.getFrameNumber() == 40) ctx.getArtifactService().requestCapture("startup");
+        // still assembling itself and every diff against it is noise. Counted from the first commit: a
+        // document recording on its own presents nothing until its first frame is done.
+        if (firstCommitFrame < 0 && driver.hasCommitted()) firstCommitFrame = frame.getFrameNumber();
+        if (firstCommitFrame >= 0 && frame.getFrameNumber() == firstCommitFrame + 40) {
+            ctx.getArtifactService().requestCapture("startup");
+        }
     }
+
+    private long firstCommitFrame = -1;
 
     private boolean probing() {
         return traceCost != null || hoverSweep != null || closeWhenClean || graphCost != null || PROFILER_SHOT
