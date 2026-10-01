@@ -10,6 +10,7 @@ import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.geometry.FloatSize;
 import dev.vfyjxf.taffy.geometry.TaffySize;
@@ -258,15 +259,26 @@ public final class BoxTree {
         boolean viewportMoved = width != viewportWidth || height != viewportHeight;
         viewportWidth = width;
         viewportHeight = height;
-        // NOT WALKED when no style changed and the structure did not move: every box's applied style is then
-        // still the one it would read. Sync covers hosting, which is the walk's other input.
-        long epoch = document.styles().computedEpoch();
-        if (synced || epoch != restyledEpoch) {
-            restyledEpoch = epoch;
+        // A SYNC WALKS EVERYTHING: hosting is the restyle's other input and new boxes have no applied style.
+        // Otherwise only what dropped its computed style, and below it only while an applied style moved.
+        Set<Styleable> dropped = document.styles().takeComputedDropped();
+        if (synced || !dropped.isEmpty()) {
             long restyled = CgTrace.stamp(UiTrace.FRAME);
             restyledBoxes = 0;
-            refreshStyles(root);
-            for (Mirror mirror : mirrors) refreshStyles(mirror.root);
+            if (synced) {
+                refreshStyles(root, false);
+                for (Mirror mirror : mirrors) refreshStyles(mirror.root, false);
+            } else {
+                for (Styleable element : dropped) {
+                    if (!(element instanceof UIElement node)) continue;
+                    Box box = boxes.get(node);
+                    if (box != null) refreshStyles(box, true);
+                    for (Mirror mirror : mirrors) {
+                        Box copy = mirror.realm.get(node);
+                        if (copy != null) refreshStyles(copy, true);
+                    }
+                }
+            }
             CgTrace.zoneDone(UiTrace.FRAME, "layout:restyle", restyled);
             CgTrace.add(UiTrace.FRAME, "layout-restyled-boxes", restyledBoxes);
         }
@@ -295,9 +307,6 @@ public final class BoxTree {
         }
         composeIfDirty();
     }
-
-    /** {@code StyleEngine.computedEpoch} at the last restyle walk. */
-    private long restyledEpoch = -1L;
 
     /** Boxes whose computed style changed in this pass's restyle. A trace count. */
     private int restyledBoxes;
@@ -616,7 +625,12 @@ public final class BoxTree {
         taffy.markDirty(root.taffyId);
     }
 
-    private void refreshStyles(Box box) {
+    /**
+     * Brings {@code box}'s applied style up to its computed one, then its children's. {@code changedOnly} stops at
+     * a box whose style did not move: its children's answers are keyed on its, so they hold too unless they
+     * dropped themselves, and then they are in the dropped set on their own.
+     */
+    private void refreshStyles(Box box, boolean changedOnly) {
         ComputedStyle computed = box.node.computedStyle();
         // The HOSTING is an input to the layout style as well as the computed style -- see
         // BoxStyle.apply(.., hosted). Promoting a node changes no style of its own, so comparing the
@@ -644,8 +658,10 @@ public final class BoxTree {
             taffy.markDirty(box.taffyId);
             transformsChanged(box);
             box.reclassify();
+        } else if (changedOnly) {
+            return;
         }
-        for (int ci = 0; ci < box.hosted.size(); ci++) refreshStyles(box.hosted.get(ci));
+        for (int ci = 0; ci < box.hosted.size(); ci++) refreshStyles(box.hosted.get(ci), changedOnly);
     }
 
     // ── Read + compose ───────────────────────────────────────────────────────

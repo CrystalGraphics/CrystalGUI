@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,18 +34,28 @@ import java.util.function.Supplier;
 public final class StyleEngine {
 
     /**
-     * Bumped whenever any element's {@code ComputedStyle} may have changed. The box tree compares it to skip a
-     * restyle walk that could find nothing: a child's answer is keyed on its parent's, so a change anywhere
-     * reaches the walk through some element's drop.
+     * The elements whose {@code ComputedStyle} may have changed since the box tree last took them: what a restyle
+     * starts from, so a frame restyles what changed rather than walking the tree to find it.
      */
-    private long computedEpoch;
+    private Set<Styleable> computedDropped = Collections.newSetFromMap(new IdentityHashMap<>());
 
-    public void computedChanged() {
-        computedEpoch++;
+    /** {@code element} dropped its frozen answer. */
+    public void computedChanged(Styleable element) {
+        if (computedDropped.add(element)) {
+            CgTrace.add(UiTrace.FRAME, "style-computed-dropped", 1);
+            // BLAMED: at rest this should be empty, and only the caller can say why it is not.
+            if (CgTrace.isEnabled(UiTrace.BLAME)) {
+                UiTrace.blame("restyle", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement", "com.crystalgui.ui.dom.UINode");
+            }
+        }
     }
 
-    public long computedEpoch() {
-        return computedEpoch;
+    /** Hands over the elements dropped since the last call and starts a new set. */
+    public Set<Styleable> takeComputedDropped() {
+        Set<Styleable> taken = computedDropped;
+        if (taken.isEmpty()) return taken;
+        computedDropped = Collections.newSetFromMap(new IdentityHashMap<>());
+        return taken;
     }
     /** Every styleable in the tree, for the whole-tree invalidation a sheet change is. */
     private final Supplier<? extends Collection<? extends Styleable>> elements;
