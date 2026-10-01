@@ -49,6 +49,8 @@ import java.util.function.Supplier;
  *   <li>Attach after building the tree: from then on only the driver's own entries may touch it.</li>
  *   <li>Asynchronously an input event answers "taken" before it is dispatched; a key the document then leaves comes
  *       back from {@link #pollUnhandledKey} a frame later.</li>
+ *   <li>Asynchronously the document's {@code PlatformPort} answers key and button state from the events offered here:
+ *       a host that hands the document events some other way leaves it a stale picture of the keyboard.</li>
  *   <li>{@link #run} waits for the sequence, and so for a frame being recorded. For a probe or a script, never per
  *       frame.</li>
  * </ul>
@@ -138,6 +140,9 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     private final UiSequence sequence;
     @Nullable
     private final SurfaceCompositor<F> compositor;
+    /** What the document asks of the platform when it records on its own; null otherwise. */
+    @Nullable
+    private final PostedPlatformPort port;
     private final Queue<CgSystemInput.Keyboard.Event> unhandledKeys = new ConcurrentLinkedQueue<>();
 
     /** Delta passed since the frame in flight was asked for. Render thread. */
@@ -151,11 +156,14 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         if (mode == Mode.INLINE) {
             sequence = null;
             compositor = null;
+            port = null;
             return;
         }
         sequence = UiSequence.create(name);
         document.runOn(sequence);
         compositor = mode == Mode.ASYNC ? new SurfaceCompositor<>(sequence) : null;
+        port = mode == Mode.ASYNC ? new PostedPlatformPort(sequence) : null;
+        if (port != null) document.usePlatform(port);
         CrystalGuiCore.LOGGER.info("[cgui] document '{}' runs on its own sequence, {}", name,
                 mode == Mode.ASYNC ? "recording on its own" : "in lockstep");
     }
@@ -239,14 +247,25 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     public boolean offerKey(CgSystemInput.Keyboard.Event key, BooleanSupplier dispatch) {
         if (mode != Mode.ASYNC) return offer(dispatch);
         sequence.execute(() -> {
+            port.note(key);
             if (!dispatch.getAsBoolean()) unhandledKeys.add(key);
+        });
+        return true;
+    }
+
+    /** {@link #offer} for a pointer event, whose buttons the document's platform answers from when posted. */
+    public boolean offerMouse(CgSystemInput.Mouse.Event event, BooleanSupplier dispatch) {
+        if (mode != Mode.ASYNC) return offer(dispatch);
+        sequence.execute(() -> {
+            port.note(event);
+            dispatch.getAsBoolean();
         });
         return true;
     }
 
     @Override
     public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return offer(() -> document.input().consumeMouseEvent(event));
+        return offerMouse(event, () -> document.input().consumeMouseEvent(event));
     }
 
     @Override
@@ -280,6 +299,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         }
         // Made here, on the render thread, before the sequence first records: fonts and the text renderer.
         document.paintContext();
+        port.service();
         pendingDelta += deltaSeconds;
         boolean shown = compositor.present(width, height) != null;
         float delta = pendingDelta;
