@@ -694,6 +694,7 @@ public final class CgUiPaintContext {
         frameId++;
         if (frameActive) throw new IllegalStateException("recordFrame() called without matching seal()");
         CgGL.enterGlFree("ui recording");
+        atlasEpoch = CgFontRegistry.get().getAtlasEvictionGeneration();
         layerOriginX = 0;
         layerOriginY = 0;
         setClip(0);
@@ -1970,6 +1971,33 @@ public final class CgUiPaintContext {
      * Whether the rectangle, in the current target's pixels, misses the live clip entirely: the scissor where one
      * is set, else the enclosing layer's region or the target. Allocates nothing, since it is asked per box.
      */
+    /**
+     * The live clip in the current draw space, {@code x0, y0, x1, y1} into {@code out}; false, and nothing written,
+     * when the draw space is not a translation of the target's pixels.
+     */
+    public boolean clipInDraw(float[] out) {
+        resolveClip();
+        Matrix4f m = drawToTarget();
+        if (m.m00() != 1f || m.m01() != 0f || m.m10() != 0f || m.m11() != 1f) return false;
+        out[0] = clipX0 - m.m30();
+        out[1] = clipY0 - m.m31();
+        out[2] = clipX1 - m.m30();
+        out[3] = clipY1 - m.m31();
+        return true;
+    }
+
+    /** The opacity a folded layer multiplies into every colour drawn now; 1 outside one. @see #pushLayerOpacity */
+    public float layerOpacity() {
+        return layerOpacity;
+    }
+
+    /** The glyph atlases' eviction generation as this frame began: a placement recorded under another may be gone. */
+    public long atlasEpoch() {
+        return atlasEpoch;
+    }
+
+    private long atlasEpoch;
+
     public boolean outsideClip(float x0, float y0, float x1, float y1) {
         if (LEGACY_LAYERS) return false;
         resolveClip();
