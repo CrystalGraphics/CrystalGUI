@@ -1685,6 +1685,8 @@ public class Desktop extends UIElement implements DataProvider {
         // reading the matrix it already reads.
         float scale = document.boxes().uiScale();
         document.frame(deltaSeconds, surfaceWidth / scale, surfaceHeight / scale);
+        // What the router answers a host from until the next frame. Only over another UI's screen is it asked.
+        if (screenOverlay != null && !presentation.paintsWholeDesktop()) screenOverlay.commit();
 
         CgUiPaintContext ctx = CgUiPaintContext.getInstance();
         ctx.beginFrame(surfaceWidth, surfaceHeight);

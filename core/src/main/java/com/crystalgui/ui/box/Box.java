@@ -18,6 +18,7 @@ import dev.vfyjxf.taffy.tree.NodeId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import java.util.Objects;
@@ -901,6 +902,52 @@ public final class Box {
         return inside && !skip.test(box) ? box : null;
     }
 
+    /**
+     * Every box in what this box paints, in the order {@link #hitTest} tries them: what is painted last first, and a
+     * box after everything it hosts. {@code descend} decides per box whether to visit what it hosts; the box itself is
+     * passed to {@code visit} either way. Points are not consulted, nor hit-testing, clipping or {@code skip}: a caller
+     * flattening the hit test applies those itself.
+     *
+     * <pre>{@code
+     * List<Box> order = new ArrayList<>();
+     * root.visitInHitOrder(box -> true, order::add);
+     * }</pre>
+     */
+    public void visitInHitOrder(Predicate<Box> descend, Consumer<Box> visit) {
+        visitInHitOrder(this, descend, visit, true);
+    }
+
+    private static void visitInHitOrder(Box box, Predicate<Box> descend, Consumer<Box> visit,
+                                        boolean asContext) {
+        if (descend.test(box)) {
+            StackingOrder order = asContext ? box.stackingOrder() : null;
+            if (order != null) {
+                visitLifted(order.top, descend, visit);
+                visitLifted(order.positive, descend, visit);
+                visitLifted(order.zero, descend, visit);
+            }
+            List<Box> flow = box.hosted;
+            for (int i = flow.size() - 1; i >= 0; i--) {
+                Box child = flow.get(i);
+                if (!child.isZOrdered()) visitInHitOrder(child, descend, visit, false);
+            }
+            if (order != null) visitLifted(order.negative, descend, visit);
+        }
+        visit.accept(box);
+    }
+
+    private static void visitLifted(List<Box> lifted, Predicate<Box> descend, Consumer<Box> visit) {
+        for (int i = lifted.size() - 1; i >= 0; i--) {
+            Box box = lifted.get(i);
+            visitInHitOrder(box, descend, visit, box.isStackingContext());
+        }
+    }
+
+    /** Whether this box is only a stacking container and never the answer to a hit test: the top layer. */
+    public boolean isStackingOnly() {
+        return stackingOnly;
+    }
+
     /** One of a context's lists, last painted first. */
     private static @Nullable Box searchLifted(List<Box> lifted, Box context, float worldX, float worldY,
                                               Predicate<Box> skip, boolean respectHitTest) {
@@ -954,6 +1001,21 @@ public final class Box {
                 && !outsideCorner(width - x, y, r.rxTR, r.ryTR)
                 && !outsideCorner(width - x, height - y, r.rxBR, r.ryBR)
                 && !outsideCorner(x, height - y, r.rxBL, r.ryBL);
+    }
+
+    /** {@link #insideCorners(float, float)} over radii already resolved, {@code rx, ry} from the top left clockwise. */
+    static boolean insideCorners(float x, float y, float width, float height, float[] r) {
+        return !outsideCorner(x, y, r[0], r[1])
+                && !outsideCorner(width - x, y, r[2], r[3])
+                && !outsideCorner(width - x, height - y, r[4], r[5])
+                && !outsideCorner(x, height - y, r[6], r[7]);
+    }
+
+    /** Where this box takes the pointer, frozen for a reader that may not touch the tree. */
+    public HitShape hitShape() {
+        BoxPainter.Radii r = BoxPainter.radiiOf(node.computedStyle(), width, height);
+        float[] radii = {r.rxTL, r.ryTL, r.rxTR, r.ryTR, r.rxBR, r.ryBR, r.rxBL, r.ryBL};
+        return new HitShape(worldToLocal, width, height, radii);
     }
 
     /**
