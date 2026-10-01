@@ -2,9 +2,12 @@ package com.crystalgui.style;
 
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import javax.annotation.Nullable;
 
@@ -50,6 +53,36 @@ public final class ComputedStyle {
             if (value != null) out.put(property, value);
         }
         return new ComputedStyle(Collections.unmodifiableMap(out));
+    }
+
+    /**
+     * Whether a child computed under {@code a} computes the same under {@code b}: every inheritable property
+     * equal. What lets a parent's restyle that touched nothing inherited leave its whole subtree's styles, and
+     * so their boxes and layout, alone.
+     */
+    static boolean sameInherited(@Nullable ComputedStyle a, @Nullable ComputedStyle b) {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        for (StyleProperty<?> property : inheritable()) {
+            if (!Objects.equals(a.values.get(property), b.values.get(property))) return false;
+        }
+        return true;
+    }
+
+    @Nullable
+    private static volatile List<StyleProperty<?>> inheritable;
+
+    /** Read after registration, which is done by the time anything computes. */
+    private static List<StyleProperty<?>> inheritable() {
+        List<StyleProperty<?>> known = inheritable;
+        if (known == null) {
+            List<StyleProperty<?>> found = new ArrayList<>();
+            for (StyleProperty<?> property : StylePropertyRegistry.all()) {
+                if (property.isInheritable()) found.add(property);
+            }
+            inheritable = known = List.copyOf(found);
+        }
+        return known;
     }
 
     /** The value — never null for a property whose initial is not. */

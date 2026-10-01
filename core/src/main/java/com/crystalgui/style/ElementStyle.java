@@ -472,8 +472,15 @@ public final class ElementStyle {
     public ComputedStyle computed() {
         var parent = host.inheritsFrom();
         ComputedStyle parentNow = parent == null ? null : parent.getStyle().computed();
-        if (computedCache == null || computedCacheParent != parentNow) {
+        if (computedCache == null) {
             computedCache = ComputedStyle.of(this, parentNow);
+            computedCacheParent = parentNow;
+        } else if (computedCacheParent != parentNow) {
+            // KEPT when nothing inherited moved: a new parent instance from a hover or a class change on a
+            // container must not rebuild, reapply and relayout everything under it.
+            if (!ComputedStyle.sameInherited(computedCacheParent, parentNow)) {
+                computedCache = ComputedStyle.of(this, parentNow);
+            }
             computedCacheParent = parentNow;
         }
         return computedCache;
