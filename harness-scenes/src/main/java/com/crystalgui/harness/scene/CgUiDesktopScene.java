@@ -580,7 +580,7 @@ public class CgUiDesktopScene
         if (graphShot != null) ctx.getArtifactService().requestCapture(graphShot);
         if (graphCost != null && graphCost.frame()) graphCostDone = true;
         if (PROFILER_SHOT) driveProfilerShot(ctx, frame.getFrameNumber());
-        if (MINIMISE_SHOT) driveMinimiseShot(ctx, frame.getFrameNumber());
+        if (MINIMISE_SHOT) driveMinimiseShot(ctx);
     }
 
     /**
@@ -690,19 +690,27 @@ public class CgUiDesktopScene
 
     private WindowFrame minimiseTarget;
 
-    private void driveMinimiseShot(HarnessContext ctx, long frameNumber) {
-        switch ((int) frameNumber) {
+    /** {@code -Dcrystalgui.harness.desktop.minimise.window=<title>} picks the window; the active one otherwise. */
+    private static final String MINIMISE_WINDOW = System.getProperty("crystalgui.harness.desktop.minimise.window");
+
+    private void driveMinimiseShot(HarnessContext ctx) {
+        switch ((int) driver.presentedFrames()) {
             case 99 -> {
-                minimiseTarget = desktop.activeWindow();
+                minimiseTarget = driver.ask(() -> {
+                    for (WindowFrame window : desktop.windows()) {
+                        if (window.getTitle().equals(MINIMISE_WINDOW)) return window;
+                    }
+                    return desktop.activeWindow();
+                });
                 ctx.getArtifactService().requestCapture("minimise-before");
             }
             case 100 -> {
-                if (minimiseTarget != null) minimiseTarget.minimize();
+                if (minimiseTarget != null) driver.run(minimiseTarget::minimize);
             }
             case 106 -> ctx.getArtifactService().requestCapture("minimise-mid");
             case 150 -> ctx.getArtifactService().requestCapture("minimised");
             case 160 -> {
-                if (minimiseTarget != null) minimiseTarget.show(true);
+                if (minimiseTarget != null) driver.run(() -> minimiseTarget.show(true));
             }
             case 166 -> ctx.getArtifactService().requestCapture("restore-mid");
             case 230 -> ctx.getArtifactService().requestCapture("restored");
