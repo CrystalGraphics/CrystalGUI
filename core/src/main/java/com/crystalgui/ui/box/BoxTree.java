@@ -846,7 +846,8 @@ public final class BoxTree {
     void structureChanged() {
         structureDirty = true;
         // Who changed the tree, past the node and box bookkeeping: a whole rebuild follows on the next layout.
-        UiTrace.blame("structure", "com.crystalgui.ui.box", "com.crystalgui.ui.dom");
+        // Guarded: the varargs array would be allocated on every call with the channel off.
+        if (CgTrace.isEnabled(UiTrace.BLAME)) UiTrace.blame("structure", "com.crystalgui.ui.box", "com.crystalgui.ui.dom");
     }
 
     /**
@@ -865,10 +866,13 @@ public final class BoxTree {
 
     /** Public because a node's {@code scroll-exempt} changes composition without changing layout. */
     public void transformsChanged() {
+        if (!transformsDirty && CgTrace.isEnabled(UiTrace.BLAME)) UiTrace.blame("recompose", "com.crystalgui.ui.box", "com.crystalgui.ui.dom.UIElement", "com.crystalgui.widget.text.UIText", "com.crystalgui.core.property", "com.crystalgui.core.signal", "com.crystalgui.ui.text");
         transformsDirty = true;
     }
 
     void markDirty(Box box) {
+        // BLAMED: a layout at rest computes only because something asked, and the count cannot say who.
+        if (CgTrace.isEnabled(UiTrace.BLAME)) UiTrace.blame("relayout", "com.crystalgui.ui.box", "com.crystalgui.ui.dom.UIElement", "com.crystalgui.style");
         if (taffy.containsNode(box.taffyId)) taffy.markDirty(box.taffyId);
     }
 

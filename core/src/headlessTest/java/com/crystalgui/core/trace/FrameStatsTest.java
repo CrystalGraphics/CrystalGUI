@@ -12,6 +12,7 @@ import org.junit.Test;
 
 import java.util.List;
 
+import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 
 /**
@@ -272,6 +273,20 @@ public class FrameStatsTest {
         assertTrue(FrameStats.isCollecting());
         stats.release();
         assertFalse(FrameStats.isCollecting());
+        stats.hold();   // the @After release is the matching one
+    }
+
+    @Test
+    public void aHoldRecordsTheGpuAndReleasesOnlyWhatItEnabled() {
+        assertTrue("the readout records the GPU", CgTrace.isEnabled(CgGpuTrace.GPU));
+        stats.release();
+        assertFalse(CgTrace.isEnabled(CgGpuTrace.GPU));
+
+        CgTrace.setEnabled(CgGpuTrace.GPU, true);
+        stats.hold();
+        stats.release();
+        assertTrue("a channel somebody else turned on stays on", CgTrace.isEnabled(CgGpuTrace.GPU));
+        CgTrace.setEnabled(CgGpuTrace.GPU, false);
         stats.hold();   // the @After release is the matching one
     }
 }

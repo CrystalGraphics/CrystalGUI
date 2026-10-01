@@ -1,6 +1,7 @@
 package com.crystalgui.core.trace;
 
 import com.crystalgraphics.trace.CgFrameRecord;
+import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceSnapshot;
 
@@ -36,7 +37,7 @@ import javax.annotation.Nullable;
  *
  * <h3>Collecting is opt-in, and nothing pays for it otherwise</h3>
  *
- * <p>{@link #hold()} enables CrystalGUI's trace channels and {@link #release()} drops them, counted so
+ * <p>{@link #hold()} enables CrystalGUI's trace channels and the GPU's, and {@link #release()} drops them, counted so
  * two holders cannot switch each other off. While nothing holds it, the per-frame cost is one mask
  * test.</p>
  *
@@ -89,10 +90,15 @@ public final class FrameStats {
             // REMEMBERED, so release() undoes only what this did. The mask is one global shared with
             // the profiler window, and a release that switched off channels somebody else had switched
             // on left that window recording nothing while its button still said it was.
+            //
+            // THE GPU TOO: a frame this readout shows slow is most often one the GPU held, and the profiler
+            // opened over it counts as recording already, so it adds nothing of its own.
             enabledFrame = !CgTrace.isEnabled(UiTrace.FRAME);
             enabledFlow = !CgTrace.isEnabled(UiTrace.FLOW);
+            enabledGpu = !CgTrace.isEnabled(CgGpuTrace.GPU);
             CgTrace.setEnabled(UiTrace.FRAME, true);
             CgTrace.setEnabled(UiTrace.FLOW, true);
+            CgTrace.setEnabled(CgGpuTrace.GPU, true);
         }
     }
 
@@ -109,14 +115,17 @@ public final class FrameStats {
         if (holders > 0 && --holders == 0) {
             if (enabledFrame) CgTrace.setEnabled(UiTrace.FRAME, false);
             if (enabledFlow) CgTrace.setEnabled(UiTrace.FLOW, false);
+            if (enabledGpu) CgTrace.setEnabled(CgGpuTrace.GPU, false);
             enabledFrame = false;
             enabledFlow = false;
+            enabledGpu = false;
         }
     }
 
     /** Whether the current hold turned each channel on, as opposed to finding it already on. */
     private boolean enabledFrame;
     private boolean enabledFlow;
+    private boolean enabledGpu;
 
     private float windowSeconds = 3f;
 
