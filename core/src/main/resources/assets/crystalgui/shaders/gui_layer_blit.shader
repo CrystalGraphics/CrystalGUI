@@ -62,6 +62,6 @@ Pass {
         // drawn rotated.
         fragColor = texture(_MainTex, CG_QUAD_EDGE_UV(i.param)) * i.color;
         fragColor *= CG_QUAD_EDGE_COVERAGE(i.param);
-        fragColor *= _LayerOpacity * boxClip;
+        fragColor *= _LayerOpacity * CG_QUAD_OPACITY * boxClip;
     }
 }

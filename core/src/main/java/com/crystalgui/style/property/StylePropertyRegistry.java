@@ -13,6 +13,8 @@ import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.style.property.visual.DrawableFit;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.stacking.Isolation;
+import com.crystalgui.style.property.visual.stacking.WillChange;
+import com.crystalgui.style.property.visual.stacking.WillChangeValue;
 import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.property.visual.stacking.ZIndexProperty;
 import com.crystalgui.style.property.visual.Resize;
@@ -52,6 +54,7 @@ import com.crystalgui.style.property.visual.transform.Transform;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -248,6 +251,23 @@ public class StylePropertyRegistry {
     public static final StyleProperty<ZIndex> Z_INDEX = create(new ZIndexProperty("z-index"));
     /** {@code isolate} makes the box a stacking context and does nothing else. */
     public static final StyleProperty<Isolation> ISOLATION = create("isolation", Isolation.class, Isolation.AUTO);
+    /**
+     * What a compositor may change on the box between frames its document draws: {@code transform} records it under a
+     * spatial node of its own, and {@code transform} or {@code opacity} makes it a stacking context. @see WillChange
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public static final StyleProperty<Set<WillChange>> WILL_CHANGE =
+            create("will-change", (Class) Set.class, Collections.emptySet(), WillChangeValue::new)
+                    .setWriter(value -> {
+                        Set<?> changes = (Set<?>) value;
+                        if (changes.isEmpty()) return "auto";
+                        StringBuilder out = new StringBuilder();
+                        for (Object change : changes) {
+                            if (out.length() > 0) out.append(", ");
+                            out.append(((Enum<?>) change).name().toLowerCase(Locale.ROOT).replace('_', '-'));
+                        }
+                        return out.toString();
+                    });
     // Whether clipping happens at all. The clip *mechanism* (scissor vs mask) is auto-detected from
     // the element's resolved shape — see UIElement#resolveOverflowClip(). Replaces the old
     // `clip: none|scissor|mask` property, which let authors pick the mechanism directly.
