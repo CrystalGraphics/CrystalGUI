@@ -284,7 +284,7 @@ public final class StyleEngine {
         // says why, and "why" is the whole question when nothing on screen is moving. @see UiTrace#blame
         // UINode too: a subtree joining the document marks each node from there, and the caller worth naming is
         // whoever appended it.
-        if (dirtyMatch.add(element)) {
+        if (dirtyMatch.add(element) && CgTrace.isEnabled(UiTrace.BLAME)) {
             UiTrace.blame("markDirty", "com.crystalgui.style", "com.crystalgui.ui.dom.UIElement", "com.crystalgui.ui.dom.UINode");
         }
     }
