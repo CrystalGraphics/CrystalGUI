@@ -1,5 +1,6 @@
 package com.crystalgui.widget.display;
 
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -84,7 +85,9 @@ public class ProgressBar extends UIElement {
     private boolean applied;
 
     private float sweep;
-    private boolean ticking;
+
+    /** Held, so the service can tell it is already live. @see Animation#afterLayoutIfAbsent */
+    private final Animation.Hook sweepHook = this::tickFrame;
 
     public ProgressBar() {
         super(NAME);
@@ -197,24 +200,11 @@ public class ProgressBar extends UIElement {
         startTicking();
     }
 
-    /** The hook goes with the tree, so the next connect must register it again. */
-    @Override
-    protected void disconnected() {
-        ticking = false;
-    }
-
-    /**
-     * Registers the sweep, if the bar needs one.
-     *
-     * <p>The {@code ticking} flag is this class's own, because {@link Animation#every} is a plain list
-     * add — registering twice would run the sweep twice per frame and advance it at double rate.</p>
-     */
+    /** Registers the sweep, if the bar needs one and it is not already running. */
     private void startTicking() {
-        if (ticking || !isIndeterminate()) return;
-        if (document() == null) return;
-        ticking = true;
+        if (!isIndeterminate() || document() == null) return;
         // After layout: the stripe is placed from the track's measured width.
-        document().animation().afterLayout(this, this::tickFrame);
+        document().animation().afterLayoutIfAbsent(this, sweepHook);
     }
 
     /**
@@ -226,10 +216,7 @@ public class ProgressBar extends UIElement {
      * the one condition left is the one only this widget knows.</p>
      */
     private boolean tickFrame(float deltaSeconds) {
-        if (!isIndeterminate()) {
-            ticking = false;
-            return false;
-        }
+        if (!isIndeterminate()) return false;
         sweep += deltaSeconds * SWEEP_RATE;
         if (sweep > 1f) sweep -= 1f;
         applySweep();

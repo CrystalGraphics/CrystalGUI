@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.inspect;
 
+import com.crystalgui.ui.service.Animation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -169,7 +170,11 @@ public final class BoxModelEditor extends UIElement implements Refillable<BoxMod
     @Nullable
     private UIElement focusBeforeEdit;
 
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#afterLayoutIfAbsent */
+    private final Animation.Hook follow = delta -> {
+        refresh();
+        return true;
+    };
 
     /** The node's own inline style, recorded in {@code document}; read-only without one. */
     public BoxModelEditor(UIElement node, @Nullable UiBuilderDocument document) {
@@ -274,18 +279,10 @@ public final class BoxModelEditor extends UIElement implements Refillable<BoxMod
 
     private void startTicking() {
         UIDocument window = document();
-        if (window == null || ticking) return;
-        ticking = true;
+        if (window == null) return;
         refresh();
         // AFTER LAYOUT: every number here is read from a box, and an ordinary hook runs before this frame's.
-        window.animation().afterLayout(this, delta -> {
-            if (!isConnected()) {
-                ticking = false;
-                return false;
-            }
-            refresh();
-            return true;
-        });
+        window.animation().afterLayoutIfAbsent(this, follow);
     }
 
     /** Re-reads every value but the one being typed. */

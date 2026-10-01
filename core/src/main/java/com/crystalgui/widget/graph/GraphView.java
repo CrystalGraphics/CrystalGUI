@@ -1113,22 +1113,14 @@ public class GraphView extends SurfaceEditor implements GraphContext {
         super.connected();
         // Once per attach: `Animation.every` is a plain add. Registered from a post-layout hook, this was
         // one more hook every frame for as long as the graph stayed open.
-        if (!ticking) {
-            ticking = true;
-            document().animation().every(this, this::tickPorts);
-        }
+        document().animation().everyIfAbsent(this, tickHook);
         // @see #everyFrame. Drained rather than replayed: `every` is owned by this node, so a re-attach
         // would otherwise register each hook a second time.
         for (Animation.Hook hook : pendingFrameHooks) document().animation().every(this, hook);
         pendingFrameHooks.clear();
     }
 
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        ticking = false;
-    }
-
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tickPorts;
 
 }

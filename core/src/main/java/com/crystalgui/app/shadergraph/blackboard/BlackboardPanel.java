@@ -1,5 +1,6 @@
 package com.crystalgui.app.shadergraph.blackboard;
 
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.command.ActionIcons;
@@ -1383,22 +1384,14 @@ public class BlackboardPanel extends UIElement implements DataProvider {
         }
         return typeId;
     }
-    /** The re-clamp ticker, once per attach: {@code Animation.every} is a plain add. */
+    /** The re-clamp ticker. */
     @Override
     protected void connected() {
         super.connected();
-        if (!ticking) {
-            ticking = true;
-            document().animation().every(this, this::tickFrame);
-        }
+        document().animation().everyIfAbsent(this, tickHook);
     }
 
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        ticking = false;
-    }
-
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tickFrame;
 
 }

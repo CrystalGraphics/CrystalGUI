@@ -205,6 +205,38 @@ public final class Animation {
         afterLayout.add(new OwnedHook(owner, hook));
     }
 
+    /**
+     * As {@link #every}, unless this very {@code hook} is already live — for a widget that registers on demand.
+     * Hold the hook in a field; a lambda written at the call is a new instance each time and is never found.
+     *
+     * <pre>{@code
+     * private final Animation.Hook sweep = this::tickFrame;   // returns false when there is nothing left to do
+     *
+     * void startTicking() {
+     *     document().animation().everyIfAbsent(this, sweep);
+     * }
+     * }</pre>
+     *
+     * <p>This replaces a {@code ticking} flag. A hook is dropped when its owner leaves the tree, and a flag cleared
+     * only by the hook stays set, so the widget never registered again; cleared on disconnect instead, a remove
+     * and re-add within one frame registered a second hook beside the first, which is still live.</p>
+     */
+    public void everyIfAbsent(UIElement owner, Hook hook) {
+        if (!holds(hooks, hook)) hooks.add(new OwnedHook(owner, hook));
+    }
+
+    /** As {@link #afterLayout}, unless this very {@code hook} is already live. @see #everyIfAbsent */
+    public void afterLayoutIfAbsent(UIElement owner, Hook hook) {
+        if (!holds(afterLayout, hook)) afterLayout.add(new OwnedHook(owner, hook));
+    }
+
+    private static boolean holds(List<OwnedHook> list, Hook hook) {
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).hook() == hook) return true;
+        }
+        return false;
+    }
+
     public int hookCount() {
         return hooks.size();
     }

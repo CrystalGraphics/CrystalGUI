@@ -1,5 +1,6 @@
 package com.crystalgui.widget.composite;
 
+import com.crystalgui.ui.service.Animation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -89,7 +90,8 @@ public class ActionButton extends Button {
     /** The open menu and its submenus, while one is open. */
     private final List<Menu> live = new ArrayList<>();
 
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tick;
 
     private float sinceRefresh;
 
@@ -317,16 +319,13 @@ public class ActionButton extends Button {
         refreshEnabled();
         refreshFace();
         UIDocument window = document();
-        if (commandId == null || ticking || window == null) return;
-        ticking = true;
-        window.animation().every(this, this::tick);
+        if (commandId == null || window == null) return;
+        window.animation().everyIfAbsent(this, tickHook);
     }
 
     @Override
     protected void disconnected() {
         super.disconnected();
-        // CLEARED, or a button shown again after a detach never ticks: the service drops the hook with it.
-        ticking = false;
         MenuBuilder.discard(live);
     }
 

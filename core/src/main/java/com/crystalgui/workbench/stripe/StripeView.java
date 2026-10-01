@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.stripe;
 
+import com.crystalgui.ui.service.Animation;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.Command;
@@ -285,7 +286,6 @@ public class StripeView extends UIElement {
     private CommandRegistry commands;
 
     private boolean pendingSync;
-    private boolean ticking;
 
     public StripeView(Workbench workbench, StripeRail rail) {
         super(NAME);
@@ -1112,13 +1112,14 @@ public class StripeView extends UIElement {
     private void requestSync() {
         pendingSync = true;
         UIDocument window = document();
-        if (window == null || ticking) return;
-        ticking = true;
-        window.animation().every(this, this::tickSync);
+        if (window == null) return;
+        window.animation().everyIfAbsent(this, syncHook);
     }
 
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook syncHook = this::tickSync;
+
     private boolean tickSync(float deltaSeconds) {
-        ticking = false;
         if (pendingSync && commands != null) {
             pendingSync = false;
             sync(commands);
