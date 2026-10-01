@@ -994,6 +994,11 @@ did. Under a node the
 > pose stack is node-local: a decision about pixels asks `ctx.targetPose()`, never the stack. What a recording decided
 > in the target's pixels stays as recorded (culling, layer regions, retained layers, backdrop captures).
 > `-Dcrystalgui.paint.nodes=false` records everything in the target's pixels.
+>
+> **A box's own paint is a segment** (render-graph G6): `BoxPainter` brackets what a box draws under its children and
+> what it draws over them with `ctx.beginSegment()`/`endSegment()`, which flush at both edges, so a segment is exactly
+> the chunks the recorder took between them -- what replay captures. `-Dcrystalgui.paint.segments=false` turns the
+> edges off.
 
 > **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,
 > so the background never masks the children; nested up to four deep and under any pose. Only a `mask`

@@ -159,9 +159,11 @@ public final class BoxPainter {
                 CgTrace.add(UiTrace.FRAME, "layers-elided", 1);
                 float previousOpacity = ctx.pushLayerOpacity(opacity);
                 try {
+                    ctx.beginSegment();
                     paintSelf(box, style, ctx, radii);
                     paintOverlay(box, style, ctx);
                     paintOutline(box, style, ctx);
+                    ctx.endSegment();
                 } finally {
                     ctx.popLayerOpacity(previousOpacity);
                 }
@@ -169,12 +171,9 @@ public final class BoxPainter {
             }
 
             if (!needsLayer) {
-                paintSelf(box, style, ctx, radii);
-                node.paintContent(ctx, box);
+                paintOwnBefore(box, style, node, ctx, radii);
                 paintChildren(box, ctx, base, scissor, asContext);
-                node.paintDecoration(ctx, box);
-                paintOverlay(box, style, ctx);
-                paintOutline(box, style, ctx);
+                paintOwnAfter(box, style, node, ctx);
                 return;
             }
 
@@ -233,8 +232,7 @@ public final class BoxPainter {
             CgGraphTexture subtreeFbo = keep != null
                     ? ctx.beginLayerFbo(keep.target(), region)
                     : ctx.beginLayerFbo(region);
-            paintSelf(box, style, ctx, radii);
-            node.paintContent(ctx, box);
+            paintOwnBefore(box, style, node, ctx, radii);
             if (mask && clipsAsShape(box, style) && pushShapeClip(box, style, ctx)) {
                 try {
                     paintChildren(box, ctx, inner, axisAligned(ctx), asContext);
@@ -254,10 +252,8 @@ public final class BoxPainter {
             } else {
                 paintChildren(box, ctx, inner, scissor, asContext);
             }
-            node.paintDecoration(ctx, box);
-            paintOverlay(box, style, ctx);
             // Inside the layer, so the outline fades with the box: CSS puts it in the opacity group.
-            paintOutline(box, style, ctx);
+            paintOwnAfter(box, style, node, ctx);
             ctx.endLayerFbo();
             if (keep != null) keep.painted();
             box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region, fades), ctx.frameId());
@@ -276,8 +272,7 @@ public final class BoxPainter {
     private void paintMaskedChildrenOnly(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx,
                                                 Matrix4f base, Radii radii, LayerRegion region, boolean asContext) {
         PoseStack pose = ctx.getPoseStack();
-        paintSelf(box, style, ctx, radii);
-        node.paintContent(ctx, box);
+        paintOwnBefore(box, style, node, ctx, radii);
 
         if (clipsAsShape(box, style) && pushShapeClip(box, style, ctx)) {
             try {
@@ -300,9 +295,24 @@ public final class BoxPainter {
             ctx.blitLayer(childrenFbo, 1f, region);
             pose.last().pose().set(base).mul(box.localToWorld());
         }
+        paintOwnAfter(box, style, node, ctx);
+    }
+
+    /** A box's own paint under its children, as one segment. @see CgUiPaintContext#beginSegment */
+    private void paintOwnBefore(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx, Radii radii) {
+        ctx.beginSegment();
+        paintSelf(box, style, ctx, radii);
+        node.paintContent(ctx, box);
+        ctx.endSegment();
+    }
+
+    /** A box's own paint over its children, as one segment. */
+    private void paintOwnAfter(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx) {
+        ctx.beginSegment();
         node.paintDecoration(ctx, box);
         paintOverlay(box, style, ctx);
         paintOutline(box, style, ctx);
+        ctx.endSegment();
     }
 
     /** A layer's owner as a profile names it: its tag, then its first class. */

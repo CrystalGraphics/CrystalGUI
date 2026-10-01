@@ -48,7 +48,7 @@ A `UIDocument` frame, and what each part records. Use this as the skeleton of th
 | After layout | `frame:afterLayout` | — | every `afterLayout` hook |
 | Input | `frame:input` | — | the hover diff and every listener the frame's pointer events reach |
 | Hover | `frame:hover` | — | the re-style, layout and settle when the hover moved |
-| Paint | `paint:tree`; `glbegin:*`, `glend:flush`, `glend:image:*`; `layer:clear`, `layer:blit`, `layer:mask`; `backdrop:capture`, `backdrop:blur`; `svg.*`, `svg-raster:build` | `drawcalls`, `layers`, `layers-d`, `layers-elided`, `masks-elided`, `clips-rounded`, `clips-square`, `culled`, `retain-*`, `layer-*-kpx`, `backdrop-capture-kpx`, `scissors`, `*-switches`, `layer-fbos`, `svg-*` | **each widget's `paintContent`/`paintDecoration`** — a slow widget shows as a `GAP` in `paint:tree` |
+| Paint | `paint:tree`; `glbegin:*`, `glend:flush`, `glend:image:*`; `layer:clear`, `layer:blit`, `layer:mask`; `backdrop:capture`, `backdrop:blur`; `svg.*`, `svg-raster:build` | `drawcalls`, `layers`, `layers-d`, `layers-elided`, `masks-elided`, `clips-rounded`, `clips-square`, `segments`, `segment-chunks`, `culled`, `retain-*`, `layer-*-kpx`, `backdrop-capture-kpx`, `scissors`, `*-switches`, `layer-fbos`, `svg-*` | **each widget's `paintContent`/`paintDecoration`** — a slow widget shows as a `GAP` in `paint:tree` |
 | Editor | `ed:*`, `ln:*`, `part:<name>` | — | already zoned per phase; `ed:*` spans on `flow` for edits |
 | GPU | `gpu:ui` (the whole paint, composite included) | — | — |
 
