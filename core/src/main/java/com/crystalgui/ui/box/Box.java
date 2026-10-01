@@ -51,6 +51,8 @@ public final class Box {
     final boolean mirror;
     final TaffyBridge bridge;
     NodeId taffyId;
+    /** Whether a layout has been read into this box; until then it is read whatever the engine reports. */
+    boolean read;
 
     /** The composed parent's box, as of the last sync. Null for the root. */
     @Nullable Box naturalHost;
@@ -665,6 +667,8 @@ public final class Box {
 
     /** A compositor's transform, above the cascade's; {@code null} withdraws it. Layout-free. */
     public void setTransform(@Nullable Transform transform) {
+        // An editor re-states its layers' scroll translate every frame; the same value is not a move.
+        if (Objects.equals(transformOverride, transform)) return;
         transformOverride = transform;
         reclassify();
         tree.transformsChanged(this);
@@ -684,6 +688,7 @@ public final class Box {
      * <p>Resolved lengths, not a {@link LengthPercent}: a compositor knows the box it is animating.</p>
      */
     public void setTransformOrigin(@Nullable Float x, @Nullable Float y) {
+        if (Objects.equals(transformOriginX, x) && Objects.equals(transformOriginY, y)) return;
         transformOriginX = x;
         transformOriginY = y;
         tree.transformsChanged(this);
