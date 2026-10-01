@@ -7,6 +7,7 @@ import static org.junit.Assert.assertSame;
 import org.junit.Test;
 
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -29,6 +30,23 @@ public class InheritedStyleKeptTest extends UiDocumentTestBase {
         document.update(W, H);
 
         assertSame(was, child.computedStyle());
+    }
+
+    /** A re-match that lands on the values it already had is not a change: nothing downstream may relayout. */
+    @Test
+    public void aRematchLandingOnTheSameValuesKeepsTheStyle() {
+        document.styles().addStylesheet(StyleSheet.parse(".a { background-color: #ff0000; } .b { background-color: #ff0000; }"));
+        UIElement node = new UIElement();
+        node.addClass("a");
+        document.append(node);
+        document.update(W, H);
+
+        ComputedStyle was = node.computedStyle();
+        node.removeClass("a");
+        node.addClass("b");
+        document.update(W, H);
+
+        assertSame(was, node.computedStyle());
     }
 
     @Test
