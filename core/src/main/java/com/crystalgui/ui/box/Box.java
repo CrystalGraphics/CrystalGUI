@@ -8,6 +8,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.stacking.Isolation;
+import com.crystalgui.style.property.visual.stacking.WillChange;
 import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.dom.Attribute;
@@ -18,6 +19,7 @@ import dev.vfyjxf.taffy.tree.NodeId;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import javax.annotation.Nullable;
@@ -308,13 +310,68 @@ public final class Box {
                 || !transform().isIdentity()
                 || style.get(StylePropertyRegistry.BACKDROP_FILTER) != null
                 || style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY
-                || style.get(StylePropertyRegistry.ISOLATION) == Isolation.ISOLATE;
+                || style.get(StylePropertyRegistry.ISOLATION) == Isolation.ISOLATE
+                || willChange(style, WillChange.TRANSFORM) || willChange(style, WillChange.OPACITY);
         boolean absolute = style.get(LayoutProperties.POSITION) == TaffyPosition.ABSOLUTE;
         if (context == stackingContext && absolute == positioned && z.equals(classifiedZ)) return;
         stackingContext = context;
         positioned = absolute;
         classifiedZ = z;
         tree.stackingChanged();
+    }
+
+    /** The nodes the last paint recorded this box under for a compositor, each with that paint's frame. */
+    private int movedNode, scrolledNode, fadedNode;
+    private long movedFrame = -1, scrolledFrame = -1, fadedFrame = -1;
+
+    /**
+     * The spatial node frame {@code frame}'s recording drew this box under, for a compositor to move: 0 when that
+     * paint made none. Node ids belong to one recording.
+     *
+     * <pre>{@code
+     * UiFrame frame = ctx.seal();
+     * int window = box.movedNode(frame.frameId());
+     * if (window != 0) frame.values().translate(window, dx, dy);
+     * }</pre>
+     */
+    public int movedNode(long frame) {
+        return movedFrame == frame ? movedNode : 0;
+    }
+
+    /** The spatial node frame {@code frame} drew this box's scrolled content under: its scroll. @see #movedNode */
+    public int scrolledNode(long frame) {
+        return scrolledFrame == frame ? scrolledNode : 0;
+    }
+
+    /** The effect node frame {@code frame} composited this box's layer under: its opacity. @see #movedNode */
+    public int fadedNode(long frame) {
+        return fadedFrame == frame ? fadedNode : 0;
+    }
+
+    void noteMovedNode(int node, long frame) {
+        movedNode = node;
+        movedFrame = frame;
+    }
+
+    void noteScrolledNode(int node, long frame) {
+        scrolledNode = node;
+        scrolledFrame = frame;
+    }
+
+    void noteFadedNode(int node, long frame) {
+        if (node == 0) return;
+        fadedNode = node;
+        fadedFrame = frame;
+    }
+
+    /** Whether {@code will-change} names {@code transform}: a compositor moves this box. */
+    public boolean willChangeTransform() {
+        return willChange(node.computedStyle(), WillChange.TRANSFORM);
+    }
+
+    private static boolean willChange(ComputedStyle style, WillChange change) {
+        Set<WillChange> changes = style.get(StylePropertyRegistry.WILL_CHANGE);
+        return changes != null && changes.contains(change);
     }
 
     // ── Geometry ─────────────────────────────────────────────────────────────
