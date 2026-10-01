@@ -8,9 +8,14 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiFrame;
+import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.service.CompositorAnimation;
+import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BooleanSupplier;
@@ -214,6 +219,11 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         return mode == Mode.ASYNC;
     }
 
+    /** Whether the compositor moves and fades between the document's frames: async, unless switched off. */
+    public boolean compositesMotion() {
+        return mode == Mode.ASYNC && COMPOSITOR_MOTION;
+    }
+
     public UIDocument document() {
         return document;
     }
@@ -331,7 +341,8 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         document.paintContext();
         port.service();
         pendingDelta += deltaSeconds;
-        boolean shown = compositor.present(width, height, this::followPointer) != null;
+        boolean shown = compositor.present(width, height, commit -> followPointer(commit) | animate(commit)) != null;
+        lastPresentNanos = System.nanoTime();
         float delta = pendingDelta;
         // READ ONLY FOR A FRAME THAT WILL BE TAKEN: the readings belong to the frame they are delivered in.
         if (compositor.accepting()) {
@@ -349,7 +360,34 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
 
     private UiCommit<F> commit(Painter<F> painter, float deltaSeconds, int width, int height) {
         UiFrame frame = painter.record(deltaSeconds, width, height);
-        return new UiCommit<>(frame, painter.facts(), ++commits, follow(frame));
+        return new UiCommit<>(frame, painter.facts(), ++commits, follow(frame), motions(frame));
+    }
+
+    /** What the compositor plays in {@code frame}: every animation handed to it, with its box's node if it has one. */
+    private List<UiCommit.Motion> motions(@Nullable UiFrame frame) {
+        List<CompositorAnimation> playing = document.animation().onCompositor();
+        if (frame == null || playing.isEmpty()) return List.of();
+        List<UiCommit.Motion> motions = new ArrayList<>(playing.size());
+        for (CompositorAnimation animation : playing) {
+            Box box = animation.target().box();
+            int moved = box == null ? 0 : box.movedNode(frame.frameId());
+            if (moved == 0) {
+                motions.add(new UiCommit.Motion(animation, 0, 0, null, null, null, 0f, 0f, 0f, 0f, 0f, 0f));
+                continue;
+            }
+            float width = box.width(), height = box.height();
+            float originX = animation.originX(width), originY = animation.originY(height);
+            Matrix4f recorded = box.transform().applyTo(new Matrix4f(), 0f, 0f, width, height,
+                    box.transformOriginX() != null ? box.transformOriginX() : originX,
+                    box.transformOriginY() != null ? box.transformOriginY() : originY);
+            Matrix4f recordedInverse = recorded.invert(new Matrix4f());
+            Matrix4f world = box.movedWorld();
+            Matrix4f place = new Matrix4f(world).mul(recordedInverse);
+            motions.add(new UiCommit.Motion(animation, moved, box.fadedNode(frame.frameId()), place,
+                    place.invert(new Matrix4f()), recordedInverse, width, height, originX, originY,
+                    Math.round(world.m30()), Math.round(world.m31())));
+        }
+        return motions;
     }
 
     /** What follows the pointer in {@code frame}, if anything and it has a node there to move. On the document. */
@@ -410,6 +448,49 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
 
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    /** The commit {@link #animate} last drew finished, so a settled flight is shown again rather than redrawn. */
+    @Nullable
+    private UiCommit<F> settled;
+    /** When the last host frame was presented, and how many slow ones a waiting flight has been held through. */
+    private long lastPresentNanos;
+    private int heldPresents;
+    /** A gap longer than this is a stall, and a flight does not start its clock in one. */
+    private static final long STALL_NANOS = 100_000_000L;
+    private static final int MAX_HELD_PRESENTS = 60;
+    private final Matrix4f motionAt = new Matrix4f(), motionNode = new Matrix4f();
+
+    /**
+     * Plays the commit's compositor animations at this host frame: each box's node takes the animation's transform
+     * now, and its effect node the opacity. Their clocks start the first time a frame carrying them is presented.
+     * Render thread.
+     */
+    private boolean animate(UiCommit<F> commit) {
+        List<UiCommit.Motion> motions = commit.motions();
+        if (motions.isEmpty() || commit.frame() == null || commit == settled) return false;
+        long now = System.nanoTime();
+        // NOT IN A STALL: the first windows open while the editor builds, and a clock started in a 400 ms present has
+        // run out before a second frame is drawn. It waits, at its start value, for frames at an ordinary pace.
+        boolean ordinary = now - lastPresentNanos <= STALL_NANOS || heldPresents++ >= MAX_HELD_PRESENTS;
+        if (ordinary) heldPresents = 0;
+        boolean finished = true;
+        for (int i = 0; i < motions.size(); i++) {
+            UiCommit.Motion motion = motions.get(i);
+            CompositorAnimation animation = motion.animation();
+            if (ordinary) animation.startAt(now);
+            finished &= animation.isFinished(now);
+            if (motion.moved() == 0) continue;
+            Transform at = animation.transformAt(now);
+            at.applyTo(motionAt.identity(), 0f, 0f, motion.width(), motion.height(), motion.originX(), motion.originY());
+            motionNode.set(motion.place()).mul(motionAt).mul(motion.recordedInverse()).mul(motion.placeInverse())
+                    .translate(motion.cornerX(), motion.cornerY(), 0f);
+            commit.frame().values().transform(motion.moved(), motionNode.m00(), motionNode.m01(), motionNode.m10(),
+                    motionNode.m11(), motionNode.m30(), motionNode.m31());
+            if (motion.faded() != 0) commit.frame().values().opacity(motion.faded(), animation.opacityAt(now));
+        }
+        if (finished) settled = commit;
+        return true;
     }
 
     /** The facts of the frame on screen, or of the newest one committed; null before the first, and when not async. */

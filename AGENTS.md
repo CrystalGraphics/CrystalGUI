@@ -1551,7 +1551,9 @@ com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (t
   .motion                      WindowAnimator over WindowAnimation (transform + opacity, what a
                                compositor does) and WindowGeometryAnimation (layout, because a size
                                change REFLOWS), behind WindowMotion. Writes through Box's compositor
-                               overrides, never the cascade
+                               overrides, never the cascade; under an async driver a WindowAnimation is
+                               a ui.service.CompositorAnimation instead, played on the render thread
+                               over the window's retained picture, recorded at rest
   .taskbar                     Taskbar (the registry RENDERED), TaskbarEntryMotion, TaskbarPreviews,
                                TaskbarDesigner, WindowPreview, WindowThumbnail
   .switcher                    WindowSwitcher — Mod+Tab, MRU order, live thumbnails

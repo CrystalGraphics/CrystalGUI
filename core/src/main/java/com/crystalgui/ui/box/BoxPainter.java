@@ -107,9 +107,10 @@ public final class BoxPainter {
         if (box.willChangeTransform()) {
             Matrix4f origin = nodeOrigin.set(base).mul(box.localToWorld());
             float x = Math.round(origin.m30()), y = Math.round(origin.m31());
+            movedWorld.set(origin);
             int moved = ctx.addNode(origin.translation(x, y, 0f), true);
             if (moved != 0) {
-                box.noteMovedNode(moved, ctx.frameId());
+                box.noteMovedNode(moved, ctx.frameId(), movedWorld);
                 int outer = ctx.enterNode(moved);
                 try {
                     paintBoxIn(box, ctx, new Matrix4f(base).translateLocal(-x, -y, 0f), asContext, opacity);
@@ -146,13 +147,15 @@ public final class BoxPainter {
                 CgTrace.add(UiTrace.FRAME, "masks-elided", 1);
                 mask = false;
             }
-            boolean needsLayer = opacity < 1f || mask;
+            // A compositor fading the box needs its effect node even at full opacity.
+            boolean fades = box.animatesOnCompositor();
+            boolean needsLayer = opacity < 1f || mask || fades;
 
             // AND AN OPACITY THAT CANNOT SELF-OVERLAP folds into the draw instead of flattening a
             // subtree -- Skia's rule, and Flutter's advice to colour a container rather than wrap it in
             // an `Opacity`. Group opacity differs from per-primitive opacity only where two primitives
             // cover the same pixel; where there is only one, they are the same number.
-            if (needsLayer && !mask && !CgUiPaintContext.LEGACY_LAYERS && foldsOpacity(box, style, node)) {
+            if (needsLayer && !mask && !fades && !CgUiPaintContext.LEGACY_LAYERS && foldsOpacity(box, style, node)) {
                 CgTrace.add(UiTrace.FRAME, "layers-elided", 1);
                 float previousOpacity = ctx.pushLayerOpacity(opacity);
                 try {
@@ -199,20 +202,22 @@ public final class BoxPainter {
             // reuse reads as a broken cache; most of the time nothing asked it, because a subtree that
             // repaints itself may not be kept. @see Box#retainable
             RetainedLayer keep = null;
-            if (box.retainable()) keep = ctx.retain(box, region, box.subtreeRevision());
+            // A box the compositor animates keeps its picture for the flight, dynamic content and all, as a window
+            // manager's does: every frame of it is then one composite.
+            if (box.retainable() || fades) keep = ctx.retain(box, region, box.subtreeRevision());
             else CgTrace.add(UiTrace.FRAME, "retain-dynamic", 1);
             if (keep != null && keep.isFresh()) {
                 // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
                 ctx.notePainted(ctx.targetToDraw(), region.x(), region.y(), region.x() + region.width(),
                         region.y() + region.height());
-                box.noteFadedNode(ctx.blitLayer(keep.target(), opacity, region), ctx.frameId());
+                box.noteFadedNode(ctx.blitLayer(keep.target(), opacity, region, fades), ctx.frameId());
                 return;
             }
 
             // A MASK AT FULL OPACITY needs no layer around the box: grouping at 1 is plain painter's order, so the
             // box paints into the target and only its children go through the mask. A layer as large as a whole
             // editor cleared and blitted once less a frame.
-            if (mask && opacity >= 1f && keep == null && !CgUiPaintContext.LEGACY_LAYERS) {
+            if (mask && opacity >= 1f && keep == null && !fades && !CgUiPaintContext.LEGACY_LAYERS) {
                 paintMaskedChildrenOnly(box, style, node, ctx, base, radii, region, asContext);
                 return;
             }
@@ -255,7 +260,7 @@ public final class BoxPainter {
             paintOutline(box, style, ctx);
             ctx.endLayerFbo();
             if (keep != null) keep.painted();
-            box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region), ctx.frameId());
+            box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region, fades), ctx.frameId());
         } finally {
             painted.set(base).mul(box.localToWorld());
             notePainted(box, ctx, painted);
@@ -457,6 +462,8 @@ public final class BoxPainter {
 
     /** {@link #paintChildren}'s scratch for a scroll node's origin, read by {@code addNode} at once. */
     private final Matrix4f nodeOrigin = new Matrix4f();
+    /** A moved box's world before rounding, handed to the box at once. */
+    private final Matrix4f movedWorld = new Matrix4f();
 
     /**
      * {@code base} carried into the bound target's pixels: itself at node 0, where draws are already in them. Read

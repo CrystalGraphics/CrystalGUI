@@ -332,7 +332,7 @@ public final class UIDocument extends UIElement {
 
     /** Timelines and the per-frame hooks a tree is allowed to have. */
     public Animation animation() {
-        if (animation == null) animation = new Animation();
+        if (animation == null) animation = new Animation(() -> driver != null && driver.compositesMotion());
         return animation;
     }
 
