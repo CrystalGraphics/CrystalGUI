@@ -31,6 +31,21 @@ import java.util.function.Supplier;
  * layout.
  */
 public final class StyleEngine {
+
+    /**
+     * Bumped whenever any element's {@code ComputedStyle} may have changed. The box tree compares it to skip a
+     * restyle walk that could find nothing: a child's answer is keyed on its parent's, so a change anywhere
+     * reaches the walk through some element's drop.
+     */
+    private long computedEpoch;
+
+    public void computedChanged() {
+        computedEpoch++;
+    }
+
+    public long computedEpoch() {
+        return computedEpoch;
+    }
     /** Every styleable in the tree, for the whole-tree invalidation a sheet change is. */
     private final Supplier<? extends Collection<? extends Styleable>> elements;
 

@@ -244,26 +244,31 @@ public final class BoxTree {
      */
     public void layout(float width, float height) {
         document.require("layout");
-        if (structureDirty || root == null) {
-            long synced = CgTrace.stamp(UiTrace.FRAME);
+        boolean synced = structureDirty || root == null;
+        if (synced) {
+            long syncing = CgTrace.stamp(UiTrace.FRAME);
             sync();
             structureDirty = false;
-            CgTrace.zoneDone(UiTrace.FRAME, "layout:sync", synced);
+            CgTrace.zoneDone(UiTrace.FRAME, "layout:sync", syncing);
         }
         Box root = this.root;
         if (root == null) throw new IllegalStateException("the document has no box");
         boolean viewportMoved = width != viewportWidth || height != viewportHeight;
         viewportWidth = width;
         viewportHeight = height;
-        long restyled = CgTrace.stamp(UiTrace.FRAME);
-        restyledBoxes = 0;
-        refreshStyles(root);
-        for (Mirror mirror : mirrors) {
-            refreshStyles(mirror.root);
-            pinMirrorSize(mirror);
+        // NOT WALKED when no style changed and the structure did not move: every box's applied style is then
+        // still the one it would read. Sync covers hosting, which is the walk's other input.
+        long epoch = document.styles().computedEpoch();
+        if (synced || epoch != restyledEpoch) {
+            restyledEpoch = epoch;
+            long restyled = CgTrace.stamp(UiTrace.FRAME);
+            restyledBoxes = 0;
+            refreshStyles(root);
+            for (Mirror mirror : mirrors) refreshStyles(mirror.root);
+            CgTrace.zoneDone(UiTrace.FRAME, "layout:restyle", restyled);
+            CgTrace.add(UiTrace.FRAME, "layout-restyled-boxes", restyledBoxes);
         }
-        CgTrace.zoneDone(UiTrace.FRAME, "layout:restyle", restyled);
-        CgTrace.add(UiTrace.FRAME, "layout-restyled-boxes", restyledBoxes);
+        for (Mirror mirror : mirrors) pinMirrorSize(mirror);
         // The document's box IS the viewport, whatever its style says -- written after the style
         // refresh, which would otherwise hand it back its sheet's `auto` on the next restyle. And it
         // is a BLOCK container unless a sheet says otherwise: CSS's root is one, so children stack
@@ -289,6 +294,9 @@ public final class BoxTree {
         }
         composeIfDirty();
     }
+
+    /** {@code StyleEngine.computedEpoch} at the last restyle walk. */
+    private long restyledEpoch = -1L;
 
     /** Boxes whose computed style changed in this pass's restyle. A trace count. */
     private int restyledBoxes;
@@ -324,7 +332,10 @@ public final class BoxTree {
      * <p>Free when nothing moved — the flag is false and this returns.</p>
      */
     public void composeIfDirty() {
-        if (!transformsDirty) return;
+        if (!transformsDirty) {
+            if (!repaints.isEmpty()) composeRepaints();
+            return;
+        }
         // NO ROOT IS A REAL STATE, not a broken one: a document whose content has been removed has
         // no root box until something is added back, and the dirty flag is set by the removal that
         // emptied it. It became reachable when `hitTest` started composing first -- a press arriving
@@ -341,6 +352,38 @@ public final class BoxTree {
         CgTrace.zoneDone(UiTrace.FRAME, "layout:compose", composed);
         CgTrace.add(UiTrace.FRAME, "layout-composed-boxes", composedBoxes);
         transformsDirty = false;
+        // The walk took every flag it reached; one it did not reach stays set and is queued again when asked.
+        repaints.clear();
+    }
+
+    /** Boxes asked to repaint since the last pass. @see Box#requestRepaint */
+    private final List<Box> repaints = new ArrayList<>();
+
+    void repaintRequested(Box box) {
+        repaints.add(box);
+    }
+
+    /**
+     * A pass where only repaints were asked. Every matrix still holds, so each queued box is checked on its
+     * own and its ink, revision and retainability folded up its hosts: the box and its ancestors, not the tree.
+     */
+    private void composeRepaints() {
+        if (root == null) {
+            repaints.clear();
+            return;
+        }
+        paintEpoch++;
+        long started = CgTrace.stamp(UiTrace.FRAME);
+        for (int i = 0; i < repaints.size(); i++) {
+            Box box = repaints.get(i);
+            // A second request for the same box finds its flag already taken; a destroyed box has no node here.
+            if (!box.repaintRequested || !taffy.containsNode(box.taffyId)) continue;
+            damageCheck(box);
+            for (Box at = box; at != null; at = at.host()) foldSubtree(at);
+        }
+        CgTrace.zoneDone(UiTrace.FRAME, "layout:repaint", started);
+        CgTrace.add(UiTrace.FRAME, "layout-repainted-boxes", repaints.size());
+        repaints.clear();
     }
 
     /**
@@ -715,8 +758,11 @@ public final class BoxTree {
             }
         }
         box.subtreeChanged = changed;
-        if (!changed) return;
+        if (changed) foldSubtree(box);
+    }
 
+    /** Ink bounds, revision and retainability of {@code box} from its own and its children's. */
+    private void foldSubtree(Box box) {
         composeInkBounds(box);
 
         long revision = box.paintRevision;

@@ -293,7 +293,7 @@ public final class ElementStyle {
         for (var p : touched) {
             resolveOne(p, oldRealValues.get(p), wasResolved.contains(p));
         }
-        computedCache = null;
+        dropComputed();
         host.onStyleChanged();
     }
 
@@ -332,13 +332,13 @@ public final class ElementStyle {
     // report fake diffs or re-enter transition-eligibility checks on their own writes.
 
     public <T> void startAnimationSlot(StyleProperty<T> p, T startValue, int sourceOrder) {
-        computedCache = null;
+        dropComputed();
         replaceAnimationSlot(p, startValue, sourceOrder);
         computedSlots.put(p, StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, startValue));
     }
 
     public <T> void tickAnimationSlot(StyleProperty<T> p, T interpolatedValue, int sourceOrder) {
-        computedCache = null;
+        dropComputed();
         replaceAnimationSlot(p, interpolatedValue, sourceOrder);
         computedSlots.put(p, StyleSlot.of(p, StyleOrigin.ANIMATION, 0, sourceOrder, interpolatedValue));
     }
@@ -351,7 +351,7 @@ public final class ElementStyle {
             if (slots.isEmpty()) candidates.remove(p);
         }
         computedSlots.put(p, computeCandidateSlot(p));
-        computedCache = null;
+        dropComputed();
         host.onStyleChanged();
     }
 
@@ -462,6 +462,13 @@ public final class ElementStyle {
      * or an ancestor's changes: the parent's own snapshot is part of the key, so an inherited value
      * that moved above is seen below without anything walking down to say so.
      */
+    /** Drops the frozen answer, and tells the document something will read differently. */
+    private void dropComputed() {
+        computedCache = null;
+        StyleEngine engine = host.styleEngine();
+        if (engine != null) engine.computedChanged();
+    }
+
     public ComputedStyle computed() {
         var parent = host.inheritsFrom();
         ComputedStyle parentNow = parent == null ? null : parent.getStyle().computed();
