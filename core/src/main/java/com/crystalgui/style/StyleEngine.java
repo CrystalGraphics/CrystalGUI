@@ -407,6 +407,8 @@ public final class StyleEngine {
         chains = SHARE_STYLES ? new IdentityHashMap<>() : null;
         chainIds = SHARE_STYLES ? new HashMap<>() : null;
         sharedHits = 0;
+        matchNanos = 0L;
+        applyNanos = 0L;
         for (int round = 0; round < MAX_SETTLE_ROUNDS && !dirtyMatch.isEmpty(); round++) {
             var batch = new ArrayList<>(dirtyMatch);
             dirtyMatch.clear();
@@ -432,6 +434,10 @@ public final class StyleEngine {
         chainIds = null;
         CgTrace.add(UiTrace.FRAME, "style-matched", total - sharedHits);
         CgTrace.add(UiTrace.FRAME, "style-shared", sharedHits);
+        if (matchNanos + applyNanos > 0L) {
+            CgTrace.add(UiTrace.FRAME, "style-match-us", matchNanos / 1_000L);
+            CgTrace.add(UiTrace.FRAME, "style-apply-us", applyNanos / 1_000L);
+        }
         if (!dirtyMatch.isEmpty()) {
             CrystalGuiCore.LOGGER.warn("Style matching did not settle in {} rounds; {} element(s) carry to the next pass",
                     MAX_SETTLE_ROUNDS, dirtyMatch.size());
@@ -559,6 +565,8 @@ public final class StyleEngine {
      *         {@code fontSize} at all
      */
     private boolean rematchAgainst(Styleable element, float fontSize) {
+        boolean timed = CgTrace.isEnabled(UiTrace.FRAME);
+        long began = timed ? System.nanoTime() : 0L;
         Map<SharingKey, Match> table = sharing;
         SharingKey key = table == null ? null : sharingKey(element, fontSize);
         Match match = key == null ? null : table.get(key);
@@ -568,9 +576,18 @@ public final class StyleEngine {
         } else {
             sharedHits++;
         }
+        long matched = timed ? System.nanoTime() : 0L;
         apply(element, match);
+        if (timed) {
+            matchNanos += matched - began;
+            applyNanos += System.nanoTime() - matched;
+        }
         return match.fontRelative();
     }
+
+    /** What a drain spent matching and applying, for the split T5 is decided on. Per drain. */
+    private long matchNanos;
+    private long applyNanos;
 
     /**
      * Whether a drain shares one element's matched rules with another that would match identically, Servo's style
