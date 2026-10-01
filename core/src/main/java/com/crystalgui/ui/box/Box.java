@@ -128,6 +128,15 @@ public final class Box {
     long paintRevision;
 
     /**
+     * When this box's own content last changed -- its style, its size or a {@link UIElement#repaint} -- ignoring where
+     * it is: what a replayed segment is keyed on, so a scroll or a move is not a change. @see BoxReplay
+     */
+    long contentRevision;
+
+    /** What its own-paint segments were last recorded under; null until it first paints. */
+    BoxReplay replay;
+
+    /**
      * Whether this box's subtree can be kept as a texture at all.
      *
      * <p>False as soon as anything under it paints by hand or filters what is behind it, because

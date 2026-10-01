@@ -1000,6 +1000,9 @@ public final class BoxTree {
                 && box.wasM30 == m.m30() && box.wasM31 == m.m31()) {
             return false;
         }
+        if (box.repaintRequested || box.wasStyle != style || box.wasWidth != box.width || box.wasHeight != box.height) {
+            box.contentRevision = paintEpoch;
+        }
         box.repaintRequested = false;
         box.wasStyle = style;
         box.wasWidth = box.width;

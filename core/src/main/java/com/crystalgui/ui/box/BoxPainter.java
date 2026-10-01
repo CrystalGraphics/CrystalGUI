@@ -300,6 +300,7 @@ public final class BoxPainter {
 
     /** A box's own paint under its children, as one segment. @see CgUiPaintContext#beginSegment */
     private void paintOwnBefore(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx, Radii radii) {
+        noteReplayable(box, node, ctx, BoxReplay.BEFORE);
         ctx.beginSegment();
         paintSelf(box, style, ctx, radii);
         node.paintContent(ctx, box);
@@ -308,6 +309,7 @@ public final class BoxPainter {
 
     /** A box's own paint over its children, as one segment. */
     private void paintOwnAfter(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx) {
+        noteReplayable(box, node, ctx, BoxReplay.AFTER);
         ctx.beginSegment();
         node.paintDecoration(ctx, box);
         paintOverlay(box, style, ctx);
@@ -384,7 +386,11 @@ public final class BoxPainter {
      * {@code x0, y0, x1, y1}. Asked per box by the cull, so into scratch rather than a new rectangle.
      */
     private void inkThrough(Box box, Matrix4f base) {
-        float x0 = box.inkX0(), y0 = box.inkY0(), x1 = box.inkX1(), y1 = box.inkY1();
+        boundsThrough(box.inkX0(), box.inkY0(), box.inkX1(), box.inkY1(), base);
+    }
+
+    /** The rectangle {@code (x0, y0)-(x1, y1)} through {@code base}, its bounding box written to {@link #ink}. */
+    private void boundsThrough(float x0, float y0, float x1, float y1, Matrix4f base) {
         float m00 = base.m00(), m10 = base.m10(), m30 = base.m30();
         float m01 = base.m01(), m11 = base.m11(), m31 = base.m31();
         float ax = m00 * x0 + m10 * y0 + m30, ay = m01 * x0 + m11 * y0 + m31;
@@ -396,6 +402,42 @@ public final class BoxPainter {
         ink[2] = Math.max(Math.max(ax, bx), Math.max(cx, dx));
         ink[3] = Math.max(Math.max(ay, by), Math.max(cy, dy));
     }
+
+    /**
+     * Counts whether {@code segment} would draw what it drew last frame -- the measure replay is built on (render-graph
+     * G6.2), taken before anything is replayed: `segments-unchanged` against `-changed`, and the two kinds a key
+     * cannot speak for, `-dynamic` (a widget painting what the tree cannot see) and `-unkeyed` (a draw space that is
+     * not a translation of the target).
+     */
+    private void noteReplayable(Box box, UIElement node, CgUiPaintContext ctx, int segment) {
+        if (node.paintsDynamically()) {
+            CgTrace.add(UiTrace.FRAME, "segments-dynamic", 1);
+            return;
+        }
+        Matrix4f pose = ctx.getPoseStack().last().pose();
+        if (!ctx.clipInDraw(segmentClip)) {
+            CgTrace.add(UiTrace.FRAME, "segments-unkeyed", 1);
+            return;
+        }
+        boundsThrough(box.localInkL, box.localInkT, box.localInkR, box.localInkB, pose);
+        float[] k = segmentKey;
+        k[0] = pose.m00();
+        k[1] = pose.m01();
+        k[2] = pose.m10();
+        k[3] = pose.m11();
+        k[4] = pose.m30();
+        k[5] = pose.m31();
+        k[6] = Math.max(ink[0], segmentClip[0]);
+        k[7] = Math.max(ink[1], segmentClip[1]);
+        k[8] = Math.min(ink[2], segmentClip[2]);
+        k[9] = Math.min(ink[3], segmentClip[3]);
+        k[10] = ctx.layerOpacity();
+        if (box.replay == null) box.replay = new BoxReplay();
+        boolean same = box.replay.sameAs(segment, k, box.contentRevision, ctx.atlasEpoch());
+        CgTrace.add(UiTrace.FRAME, same ? "segments-unchanged" : "segments-changed", 1);
+    }
+
+    private final float[] segmentKey = new float[BoxReplay.KEY_FLOATS], segmentClip = new float[4];
 
     /** {@link #inkThrough}'s answer. Read immediately: a tree paints one box at a time. */
     private final float[] ink = new float[4];
