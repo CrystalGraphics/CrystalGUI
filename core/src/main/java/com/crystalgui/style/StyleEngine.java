@@ -403,6 +403,10 @@ public final class StyleEngine {
         // ConcurrentModificationException.
         long timed = CgTrace.stamp(UiTrace.FLOW);
         int total = 0;
+        sharing = SHARE_STYLES ? new HashMap<>() : null;
+        chains = SHARE_STYLES ? new IdentityHashMap<>() : null;
+        chainIds = SHARE_STYLES ? new HashMap<>() : null;
+        sharedHits = 0;
         for (int round = 0; round < MAX_SETTLE_ROUNDS && !dirtyMatch.isEmpty(); round++) {
             var batch = new ArrayList<>(dirtyMatch);
             dirtyMatch.clear();
@@ -416,7 +420,18 @@ public final class StyleEngine {
                 rematch(element);
             }
             total += batch.size();
+            // A round's own matches only: a later round re-matches what a listener changed in this one.
+            if (sharing != null) {
+                sharing.clear();
+                chains.clear();
+                chainIds.clear();
+            }
         }
+        sharing = null;
+        chains = null;
+        chainIds = null;
+        CgTrace.add(UiTrace.FRAME, "style-matched", total - sharedHits);
+        CgTrace.add(UiTrace.FRAME, "style-shared", sharedHits);
         if (!dirtyMatch.isEmpty()) {
             CrystalGuiCore.LOGGER.warn("Style matching did not settle in {} rounds; {} element(s) carry to the next pass",
                     MAX_SETTLE_ROUNDS, dirtyMatch.size());
@@ -544,7 +559,92 @@ public final class StyleEngine {
      *         {@code fontSize} at all
      */
     private boolean rematchAgainst(Styleable element, float fontSize) {
-        var previouslyApplied = appliedByElement.get(element);
+        Map<SharingKey, Match> table = sharing;
+        SharingKey key = table == null ? null : sharingKey(element, fontSize);
+        Match match = key == null ? null : table.get(key);
+        if (match == null) {
+            match = match(element, fontSize);
+            if (key != null) table.put(key, match);
+        } else {
+            sharedHits++;
+        }
+        apply(element, match);
+        return match.fontRelative();
+    }
+
+    /**
+     * Whether a drain shares one element's matched rules with another that would match identically, Servo's style
+     * sharing. {@code -Dcrystalgui.style.share=false} matches every element.
+     */
+    private static final boolean SHARE_STYLES =
+            !"false".equals(System.getProperty("crystalgui.style.share"));
+
+    /** The current drain round's matches by {@link SharingKey}; null outside a drain. */
+    @Nullable
+    private Map<SharingKey, Match> sharing;
+    private int sharedHits;
+
+    /** What one element's rules came to: never mutated, so siblings may hold the same instance. */
+    private record Match(List<StyleSlot<?>> slots, @Nullable Map<String, HighlightStyle> highlights,
+                         boolean fontRelative) {
+    }
+
+    /**
+     * Everything a match reads of an element. Combinators walk {@link Styleable#getParent()}, comparing each ancestor's
+     * type, id, classes and state, so two elements whose ancestor chains agree on those, level by level, match the same
+     * rules whoever their parents are: no selector here can tell siblings or cousins apart (no {@code :nth-child}, no
+     * sibling combinators, no attribute selectors). A {@code ::part} rule reads the host's chain, a scoped sheet the
+     * distance to its root, and an {@code em} the font size.
+     */
+    private record SharingKey(int chain, int hostChain, @Nullable List<Integer> proximities, int fontBits) {
+    }
+
+    /** One level of an ancestor chain: the element's own matched fields over its parent's chain. */
+    private record ChainKey(int parent, String tag, String id, Set<String> classes, @Nullable String part, int state) {
+    }
+
+    /** Each element's chain this round, and the chains interned so far; null outside a drain. */
+    @Nullable
+    private Map<Styleable, Integer> chains;
+    @Nullable
+    private Map<ChainKey, Integer> chainIds;
+
+    private static final PseudoClasses[] PSEUDO = PseudoClasses.values();
+
+    private SharingKey sharingKey(Styleable element, float fontSize) {
+        Styleable host = element.shadowHost();
+        List<Integer> proximities = null;
+        for (Installed installed : sheets) {
+            if (installed.root() == null) continue;
+            if (proximities == null) proximities = new ArrayList<>();
+            proximities.add(proximityOf(element, installed.root()));
+            if (host != null) proximities.add(proximityOf(host, installed.root()));
+        }
+        return new SharingKey(chainOf(element), chainOf(host), proximities, Float.floatToIntBits(fontSize));
+    }
+
+    /** {@code element}'s interned ancestor chain, 0 for none. */
+    private int chainOf(@Nullable Styleable element) {
+        if (element == null) return 0;
+        Integer known = chains.get(element);
+        if (known != null) return known;
+        int state = 0;
+        for (PseudoClasses pseudo : PSEUDO) {
+            if (pseudo.applies(element)) state |= 1 << pseudo.ordinal();
+        }
+        ChainKey key = new ChainKey(chainOf(element.getParent()), element.tagName(), element.getId(),
+                new HashSet<>(element.getClasses()), element.partName(), state);
+        Integer id = chainIds.get(key);
+        if (id == null) {
+            id = chainIds.size() + 1;
+            chainIds.put(key, id);
+        }
+        chains.put(element, id);
+        return id;
+    }
+
+    /** {@code element}'s rules against every sheet, with {@code em} resolved against {@code fontSize}. */
+    private Match match(Styleable element, float fontSize) {
         boolean sawFontRelative = false;
 
         List<StyleSlot<?>> newSlots = new ArrayList<>();
@@ -646,16 +746,26 @@ public final class StyleEngine {
             }
         }
 
-        if (highlightSlots.isEmpty()) {
+        Map<String, HighlightStyle> resolved = null;
+        if (!highlightSlots.isEmpty()) {
+            resolved = new HashMap<>();
+            for (var entry : highlightSlots.entrySet()) {
+                Map<StyleProperty<?>, Object> values = new HashMap<>();
+                entry.getValue().forEach((property, slot) -> values.put(property, slot.value()));
+                resolved.put(entry.getKey(), new HighlightStyle(values));
+            }
+        }
+        return new Match(newSlots, resolved, sawFontRelative);
+    }
+
+    /** Puts {@code match} on {@code element}, replacing what its last match put there. */
+    private void apply(Styleable element, Match match) {
+        var previouslyApplied = appliedByElement.get(element);
+        List<StyleSlot<?>> newSlots = match.slots();
+        if (match.highlights() == null) {
             highlightsByElement.remove(element);
         } else {
-            Map<String, HighlightStyle> resolved = new HashMap<>();
-            highlightSlots.forEach((name, slots) -> {
-                Map<StyleProperty<?>, Object> values = new HashMap<>();
-                slots.forEach((property, slot) -> values.put(property, slot.value()));
-                resolved.put(name, new HighlightStyle(values));
-            });
-            highlightsByElement.put(element, resolved);
+            highlightsByElement.put(element, match.highlights());
         }
 
         if (newSlots.isEmpty()) {
@@ -673,7 +783,6 @@ public final class StyleEngine {
                 element.getStyle().putCandidates(newSlots);
             }
         }
-        return sawFontRelative;
     }
 
     /**

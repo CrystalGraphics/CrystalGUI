@@ -669,7 +669,7 @@ ranges without wrapping them in elements. It never matches the originating eleme
 `matchesOriginating` is for), and `StyleEngine` cascades it into a `HighlightStyle` kept apart from
 `ElementStyle`. `::before`/`::after` are rejected at parse time — shadow parts are the substitute.
 
-**Not supported:** `:nth-child`, attribute selectors, `~`/`+` sibling combinators, `@media`, `@import`.
+**Not supported:** `:nth-child`, attribute selectors, `~`/`+` sibling combinators, `@media`, `@import`. Adding any of the first three means extending `StyleEngine.ChainKey`, which style sharing reads to decide that two elements match alike.
 
 `PseudoClasses` — `ENABLED`, `DISABLED`, `CHECKED`, `BLANK`, `INVALID`, `HOVER`, `ACTIVE`, `FOCUS` —
 each bound to a real `UINode` getter. **A widget gets a pseudo-class for free by overriding the
