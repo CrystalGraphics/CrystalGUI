@@ -109,7 +109,7 @@ public final class UIDocument extends UIElement {
     private boolean draining;
     private final ArrayDeque<Runnable> callbacks = new ArrayDeque<>();
     private final Set<ShadowRoot> dirtyShadowRoots = new LinkedHashSet<>();
-    private final List<Runnable> structureListeners = new ArrayList<>();
+    private final List<StructureListener> structureListeners = new ArrayList<>();
     /** The root of a tree, which owns the frame thread, the id index and the observer. */
     public static final Name NAME = Name.of("document");
 
@@ -777,13 +777,33 @@ public final class UIDocument extends UIElement {
      * Hears every change to the COMPOSED structure -- an insert, a remove, a move, a shadow root
      * attached, a slot reassigned, a {@code display} toggled -- so a consumer that derives a tree
      * from this one (the box tree) walks it only on frames where something moved.
+     *
+     * <pre>{@code
+     * document.addStructureListener(where -> {
+     *     if (where == null) rebuildEverything();
+     *     else rebuildUnder(where);   // only where's own box may have appeared or gone
+     * });
+     * }</pre>
      */
-    public void addStructureListener(Runnable listener) {
+    public void addStructureListener(StructureListener listener) {
         structureListeners.add(listener);
     }
 
+    /** What {@link #addStructureListener} hears. */
+    public interface StructureListener {
+        /**
+         * @param where the one node whose box may have appeared or gone, when nothing else in the composed tree
+         *              moved -- a {@code hidden} or {@code display} toggle; null for any other change
+         */
+        void structureChanged(@Nullable UIElement where);
+    }
+
     void fireStructureChanged() {
-        for (Runnable listener : structureListeners) listener.run();
+        fireStructureChanged(null);
+    }
+
+    void fireStructureChanged(@Nullable UIElement where) {
+        for (StructureListener listener : structureListeners) listener.structureChanged(where);
     }
 
     /** Runs the style pass: re-matches what is dirty, ticks transitions. */
