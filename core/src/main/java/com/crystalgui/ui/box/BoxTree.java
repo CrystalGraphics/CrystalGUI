@@ -301,8 +301,9 @@ public final class BoxTree {
             CgTrace.add(UiTrace.FRAME, "layout-computes", 1);
             layoutPasses++;
             long readBack = CgTrace.stamp(UiTrace.FRAME);
+            readBoxes = 0;
             read(root);
-            clampScrolls(root);
+            CgTrace.add(UiTrace.FRAME, "layout-read-boxes", readBoxes);
             CgTrace.zoneDone(UiTrace.FRAME, "layout:read", readBack);
         }
         composeIfDirty();
@@ -677,12 +678,30 @@ public final class BoxTree {
      *
      * <p>Free when nothing is out of range: {@link Box#clampScroll} compares before it writes.</p>
      */
-    private void clampScrolls(Box box) {
-        box.clampScroll();
-        for (int ci = 0; ci < box.hosted.size(); ci++) clampScrolls(box.hosted.get(ci));
+    /** Boxes the last read copied a layout into. A trace count. */
+    private int readBoxes;
+
+    /**
+     * Copies what the compute wrote into {@code box} and what it hosts, and clamps their scroll to it. Only where the
+     * layout engine wrote something: it writes a node's layout only from a parent that laid itself out again, so a
+     * subtree with no new layout anywhere (Yoga's {@code hasNewLayout}, carried up as a dirty descendant) is unchanged
+     * and is not visited. A box's scroll range is its own layout's, so the same boxes are the only ones to clamp.
+     */
+    private void read(Box box) {
+        NodeId id = box.taffyId;
+        boolean fresh = !box.read;
+        if (!fresh && !taffy.needsVisit(id)) return;
+        if (fresh || taffy.hasNewLayout(id)) {
+            readOwn(box);
+            box.clampScroll();
+            box.read = true;
+            readBoxes++;
+        }
+        for (int ci = 0; ci < box.hosted.size(); ci++) read(box.hosted.get(ci));
+        taffy.acknowledgeSubtree(id);
     }
 
-    private void read(Box box) {
+    private void readOwn(Box box) {
         Layout layout = taffy.getLayout(box.taffyId);
         float x = layout.location().x, y = layout.location().y;
         float width = layout.size().width, height = layout.size().height;
@@ -698,7 +717,6 @@ public final class BoxTree {
         box.border = layout.border();
         box.padding = layout.padding();
         box.margin = layout.margin();
-        for (int ci = 0; ci < box.hosted.size(); ci++) read(box.hosted.get(ci));
     }
 
     /**
