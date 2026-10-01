@@ -1,6 +1,7 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.api.render.CgFrameData;
@@ -9,6 +10,7 @@ import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
@@ -100,7 +102,8 @@ final class CgUiBackdrop {
     /** The frame {@link #captureFbo} was captured on — the whole of the "once per frame" rule. */
     private long captureFrame = -1L;
     private int captureDepth = -1;
-    private int captureTarget = -1;
+    @Nullable
+    private CgGraphTexture captureTarget;
 
     /**
      * THE REGION THE CURRENT CAPTURE COVERS, in surface pixels, occupying the target's top-left corner.
@@ -426,13 +429,13 @@ final class CgUiBackdrop {
 
     private boolean ensureCaptured(int needX0, int needY0, int needX1, int needY1) {
         int depth = ctx.layerStack.size();
-        CgFrameBuffer innermost = ctx.layerStack.isEmpty() ? ctx.frameFbo : ctx.layerStack.peek().fbo();
+        CgGraphTexture innermost = ctx.currentTarget();
         // AND NOTHING PAINTED OVER IT SINCE. A capture is the picture at the moment it was taken, so a second
         // consumer reusing it missed whatever was painted between the two -- an artboard's glass drawn after a
         // row of images showed the artboard as it was before the images. Only paint over THIS consumer's area
         // counts, so glass over untouched ground still shares one capture a frame.
         boolean sameTarget = captureFrame == ctx.frameId
-                && captureDepth == depth && captureTarget == innermost.getId()
+                && captureDepth == depth && captureTarget == innermost
                 && !ctx.paintedOver(needX0, needY0, needX1, needY1);
         if (sameTarget && needX0 >= capX0 && needY0 >= capY0
                 && needX1 <= capX0 + capW && needY1 <= capY0 + capH) {
@@ -463,10 +466,16 @@ final class CgUiBackdrop {
         // terms too - hence h - capH as the GL y origin. Everything downstream reads the same sub-rect.
         int glY0 = h - (capY0 + capH), glY1 = h - capY0;
 
-        // 1. The scene, region only.
-        CgFrameBuffer.blitFrom(sceneFboId, captureFbo.getId(),
-                capX0, glY0, capX0 + capW, glY1,
-                0, h - capH, capW, h, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
+        // 1. The scene, region only: a framebuffer this engine did not write, so a blit run when the frame executes,
+        // in its place among the passes. 1b's clear goes with it.
+        final int sceneId = sceneFboId, bx0 = capX0, bw = capW, bh = capH, by0 = glY0, by1 = glY1, th = h;
+        ctx.recordCallback("backdrop:scene", ctx.imported(captureFbo), () -> {
+            CgFrameBuffer.blitFrom(sceneId, captureFbo.getId(), bx0, by0, bx0 + bw, by1,
+                    0, th - bh, bw, th, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
+            CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
+            CgGL.glColorMask(false, false, false, true);
+            captureFbo.clearColor(0f, 0f, 0f, 1f);
+        });
 
         // 1b. THE SCENE IS OPAQUE, AND SAYING SO IS WHAT MAKES THE REST OF THIS PIPELINE TRUE.
         //
@@ -497,17 +506,10 @@ final class CgUiBackdrop {
         // colour, so the capture's alpha is whatever we chose it to be and the divide is near enough to
         // harmless; gui_blur's own note about a dark fringe is the same channel read the other way. The
         // capture is the one place in the engine that samples a buffer we did not write.
-        withoutScissor(() -> {
-            try (CgGlScope ignored = CgGlState.save(CgGlSlot.COLOR_MASK)) {
-                CgGL.glColorMask(false, false, false, true);
-                captureFbo.clearColor(0f, 0f, 0f, 1f);
-            }
-        });
-
         // SNAPSHOT FIRST. beginLayerFbo below pushes onto the very stack being read. Each layer with where it sits
         // on the screen and how much of its texture is its own: a pooled target is bucketed, and past its region
         // it holds whatever the slot's last user left.
-        List<CgFrameBuffer> enclosing = new ArrayList<>();
+        List<CgGraphTexture> enclosing = new ArrayList<>();
         List<int[]> placed = new ArrayList<>();
         int originX = 0, originY = 0;
         for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
@@ -517,10 +519,10 @@ final class CgUiBackdrop {
                 originX += region.x();
                 originY += region.y();
             }
-            enclosing.add(frame.fbo());
+            enclosing.add(frame.target());
             placed.add(new int[] {originX, originY,
-                    region == null ? frame.fbo().getWidth() : region.width(),
-                    region == null ? frame.fbo().getHeight() : region.height()});
+                    region == null ? frame.target().getWidth() : region.width(),
+                    region == null ? frame.target().getHeight() : region.height()});
         }
 
         // KEEP the scene blit above -- see ctx.beginLayerFbo(fbo, clear).
@@ -533,11 +535,10 @@ final class CgUiBackdrop {
             // an OPAQUE BLACK one erases it completely. Those two produce an identical-looking flat
             // panel downstream, and only the alpha channel tells them apart.
             withoutScissor(() -> {
-                drawOver((CgTexture2D) ctx.frameFbo.getColorTexture(0), 0, 0, w, h, fx0, fy0, fw, fh);
+                drawOver(ctx.frameTarget, 0, 0, w, h, fx0, fy0, fw, fh);
                 for (int i = 0; i < enclosing.size(); i++) {
                     int[] at = placed.get(i);
-                    drawOver((CgTexture2D) enclosing.get(i).getColorTexture(0), at[0], at[1], at[2], at[3],
-                            fx0, fy0, fw, fh);
+                    drawOver(enclosing.get(i), at[0], at[1], at[2], at[3], fx0, fy0, fw, fh);
                 }
             });
         } finally {
@@ -547,7 +548,7 @@ final class CgUiBackdrop {
         captureFrame = ctx.frameId;
         ctx.clearPainted();
         captureDepth = depth;
-        captureTarget = innermost.getId();
+        captureTarget = innermost;
         blurFrame = -1L;   // the capture moved, so whatever was blurred describes somewhere else
         CgGpuTrace.end();
         CgTrace.zoneDone(UiTrace.FRAME, "backdrop:capture", probeT0);
@@ -592,8 +593,7 @@ final class CgUiBackdrop {
      * @param ox where the texture's pixel (0,0) is on the screen
      * @param lw how much of the texture, from that corner, holds the layer — its region, not the bucket
      */
-    private void drawOver(@Nullable CgTexture2D tex, int ox, int oy, int lw, int lh, int cx, int cy, int cw, int ch) {
-        if (tex == null) return;
+    private void drawOver(CgTexture tex, int ox, int oy, int lw, int lh, int cx, int cy, int cw, int ch) {
         int x0 = Math.max(cx, ox), y0 = Math.max(cy, oy);
         int x1 = Math.min(cx + cw, ox + lw), y1 = Math.min(cy + ch, oy + lh);
         if (x1 <= x0 || y1 <= y0) return;

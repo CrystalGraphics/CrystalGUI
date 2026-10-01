@@ -16,7 +16,7 @@ import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
  *     ctx.blitLayer(layer.fbo(), opacity, region);      // nothing under it changed
  *     return;
  * }
- * CgFrameBuffer target = layer != null ? ctx.beginLayerFbo(layer.fbo(), region) : ctx.beginLayerFbo(region);
+ * CgGraphTexture target = layer != null ? ctx.beginLayerFbo(layer.fbo(), region) : ctx.beginLayerFbo(region);
  * // ...paint the subtree...
  * ctx.endLayerFbo();
  * if (layer != null) layer.painted();
@@ -24,7 +24,7 @@ import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
  * }</pre>
  *
  * <p><b>Null is the ordinary answer</b>, not a failure: a subtree that paints by hand, or one the
- * retention budget will not stretch to, is painted straight into a pooled target as before.</p>
+ * retention budget will not stretch to, is painted into a texture the executor lends for the frame.</p>
  */
 public final class RetainedLayer {
 

@@ -1,7 +1,7 @@
 package com.crystalgui.ui.box;
 
 import com.crystalgui.render.InkOverflow;
-import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
@@ -202,7 +202,7 @@ public final class BoxPainter {
 
             // The subtree blends as one unit before opacity applies, and a mask multiplies only the
             // CHILDREN -- the box's own background is composited unmasked underneath.
-            CgFrameBuffer subtreeFbo = keep != null
+            CgGraphTexture subtreeFbo = keep != null
                     ? ctx.beginLayerFbo(keep.fbo(), region)
                     : ctx.beginLayerFbo(region);
             paintSelf(box, style, ctx, radii);
@@ -215,9 +215,9 @@ public final class BoxPainter {
                 }
             } else if (mask) {
                 CgTrace.add(UiTrace.FRAME, "layers-mask", 1);
-                CgFrameBuffer childrenFbo = ctx.beginLayerFbo(inside);
+                CgGraphTexture childrenFbo = ctx.beginLayerFbo(inside);
                 paintChildren(box, ctx, inner, false, asContext);
-                CgFrameBuffer maskFbo = ctx.beginLayerFbo(inside);
+                CgGraphTexture maskFbo = ctx.beginLayerFbo(inside);
                 paintMask(box, style, ctx);
                 ctx.endLayerFbo();
                 ctx.compositeMask(childrenFbo, maskFbo, inside);
@@ -262,9 +262,9 @@ public final class BoxPainter {
             Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
             pose.last().pose().set(inner).mul(box.localToWorld());
             LayerRegion inside = region.atOrigin();
-            CgFrameBuffer childrenFbo = ctx.beginLayerFbo(region);
+            CgGraphTexture childrenFbo = ctx.beginLayerFbo(region);
             paintChildren(box, ctx, inner, false, asContext);
-            CgFrameBuffer maskFbo = ctx.beginLayerFbo(inside);
+            CgGraphTexture maskFbo = ctx.beginLayerFbo(inside);
             paintMask(box, style, ctx);
             ctx.endLayerFbo();
             ctx.compositeMask(childrenFbo, maskFbo, inside);
@@ -489,9 +489,9 @@ public final class BoxPainter {
         CgTrace.add(UiTrace.FRAME, "layers-mask", 1);
         Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
         LayerRegion inside = region.atOrigin();
-        CgFrameBuffer content = ctx.beginLayerFbo(region);
+        CgGraphTexture content = ctx.beginLayerFbo(region);
         paintClipped(lifted, clips, at - 1, ctx, inner);
-        CgFrameBuffer mask = ctx.beginLayerFbo(inside);
+        CgGraphTexture mask = ctx.beginLayerFbo(inside);
         pose.pushPose();
         pose.last().pose().set(inner).mul(clip.localToWorld());
         paintMask(clip, style, ctx);

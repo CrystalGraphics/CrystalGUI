@@ -875,10 +875,10 @@ registration order.
 ## `CgUiPaintContext` — a singleton
 
 Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. **It records** (`render-graph`
-G4): a draw lands in a chunk under its material's snapshot and the scissor current at its flush, and what the bound
-target holds executes at a **drain** — a layer opening or closing, a backdrop capture, the end of the frame. So
-`flush()` ends the open chunks and executes nothing; a caller about to read the target or draw into it with raw GL
-drains first. A flush into any other target still executes at once (`CgImmediate.deferInto`).
+G4): every draw of a frame is a chunk in one `CgRecording`, executed once in `endFrame`. A layer is a pass on a
+texture the executor lends for the frame; the target around it ends its pass at the layer and continues in another
+after, so passes run in the order they were made and a read follows the write it sees. `flush()` ends the open
+chunks and executes nothing. Raw GL a widget needs goes in a callback pass (`recordCallback`), never inline.
 
 | Group | Methods |
 |---|---|
