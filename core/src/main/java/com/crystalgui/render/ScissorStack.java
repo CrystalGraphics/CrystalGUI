@@ -12,7 +12,8 @@ import com.crystalgraphics.render.graph.CgPassRecorder;
  * space, which is what is recorded, so it moves with the node.</p>
  *
  * <p>An applied stack becomes the scissor chain of the chunks its recorder records after it; nothing here touches
- * GL.</p>
+ * GL. A level pushed with {@link #pushClip} is a clip table entry its owner stamps on each draw instead, and is left
+ * out of the chain.</p>
  *
  * <h3>Usage</h3>
  * <pre>{@code
@@ -35,6 +36,8 @@ public final class ScissorStack {
     /** Per level, the spatial node it was pushed under and its clip there, x0, y0, x1, y1; unused for node 0. */
     private final int[] nodes = new int[MAX_DEPTH];
     private final float[] boxes = new float[MAX_DEPTH * 4];
+    /** Per level, the clip entry it is, 0 for a scissor, and the entry current before it. */
+    private final int[] clips = new int[MAX_DEPTH], restores = new int[MAX_DEPTH];
     private int depth;
     /** Where an applied stack goes: the scissor chain of the chunks recorded after it. */
     private final CgPassRecorder recorder;
@@ -61,6 +64,20 @@ public final class ScissorStack {
      * y1)} is the same clip in the node's space, top-down, and is what the recorder is given.
      */
     public ScissorStack pushScissor(int x, int y, int w, int h, int node, float x0, float y0, float x1, float y1) {
+        return push(x, y, w, h, node, x0, y0, x1, y1, 0, 0);
+    }
+
+    /**
+     * Pushes a level that clips through clip table entry {@code entry} rather than a scissor: culling sees its rect,
+     * the recorder never does. {@code restore} is the entry current before it, which {@link #topRestore} answers while
+     * it is the top level.
+     */
+    public ScissorStack pushClip(int x, int y, int w, int h, int entry, int restore) {
+        return push(x, y, w, h, 0, 0f, 0f, 0f, 0f, entry, restore);
+    }
+
+    private ScissorStack push(int x, int y, int w, int h, int node, float x0, float y0, float x1, float y1,
+                              int clip, int restore) {
         if (depth == MAX_DEPTH) throw new IllegalStateException("clips nest " + MAX_DEPTH + " deep at most");
         int ix = x, iy = y, iw = w, ih = h;
 
@@ -93,8 +110,20 @@ public final class ScissorStack {
         boxes[base + 1] = y0;
         boxes[base + 2] = x1;
         boxes[base + 3] = y1;
+        clips[depth] = clip;
+        restores[depth] = restore;
         depth++;
         return this;
+    }
+
+    /** The clip entry the top level is, 0 when it is a scissor or there is none. */
+    public int topClip() {
+        return depth > 0 ? clips[depth - 1] : 0;
+    }
+
+    /** The clip entry current before the top level was pushed; meaningful when {@link #topClip} is not 0. */
+    public int topRestore() {
+        return depth > 0 ? restores[depth - 1] : 0;
     }
 
     /** Remove the topmost scissor rect. No-op if stack is empty. */
@@ -144,14 +173,16 @@ public final class ScissorStack {
 
     /** A stack set aside by {@link #suspend}: opaque but for {@link #shifted}. */
     public static final class Saved {
-        private final int[] stack, own, nodes;
+        private final int[] stack, own, nodes, clips, restores;
         private final float[] boxes;
 
-        private Saved(int[] stack, int[] own, int[] nodes, float[] boxes) {
+        private Saved(int[] stack, int[] own, int[] nodes, float[] boxes, int[] clips, int[] restores) {
             this.stack = stack;
             this.own = own;
             this.nodes = nodes;
             this.boxes = boxes;
+            this.clips = clips;
+            this.restores = restores;
         }
 
         /**
@@ -167,7 +198,7 @@ public final class ScissorStack {
                 movedOwn[i] += dx;
                 movedOwn[i + 1] += dy;
             }
-            return new Saved(movedStack, movedOwn, nodes, boxes);
+            return new Saved(movedStack, movedOwn, nodes, boxes, clips, restores);
         }
     }
 
@@ -186,7 +217,8 @@ public final class ScissorStack {
      */
     public Saved suspend() {
         Saved saved = new Saved(Arrays.copyOf(stack, depth * 4), Arrays.copyOf(own, depth * 4),
-                Arrays.copyOf(nodes, depth), Arrays.copyOf(boxes, depth * 4));
+                Arrays.copyOf(nodes, depth), Arrays.copyOf(boxes, depth * 4), Arrays.copyOf(clips, depth),
+                Arrays.copyOf(restores, depth));
         depth = 0;
         return saved;
     }
@@ -197,6 +229,8 @@ public final class ScissorStack {
         System.arraycopy(saved.own, 0, own, 0, saved.own.length);
         System.arraycopy(saved.nodes, 0, nodes, 0, saved.nodes.length);
         System.arraycopy(saved.boxes, 0, boxes, 0, saved.boxes.length);
+        System.arraycopy(saved.clips, 0, clips, 0, saved.clips.length);
+        System.arraycopy(saved.restores, 0, restores, 0, saved.restores.length);
         depth = saved.nodes.length;
     }
 
@@ -220,6 +254,7 @@ public final class ScissorStack {
         if (!hasScissor()) return;
         recorder.noScissor();
         for (int i = 0; i < depth; i++) {
+            if (clips[i] != 0) continue;
             int o = i * 4;
             if (nodes[i] == 0) {
                 recorder.pushScissor(own[o], targetHeight - (own[o + 1] + own[o + 3]), own[o + 2], own[o + 3]);

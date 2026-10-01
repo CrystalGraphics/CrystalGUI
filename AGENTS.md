@@ -944,7 +944,7 @@ UiGpu.present(frame);                             // render thread
 > element transform. It's re-applied per call because `CgQuadRenderer.quad()` resets the scratch
 > instance's pose to null. The returned object is that shared scratch — build and `submit()` in one
 > expression, never hold it.
-| Clip | `pushScissor` / `popScissor`, and `pushRoundedClip` / `popRoundedClip` — a rounded rect every draw is stamped with (`CgClipTable`), no layer and no flush |
+| Clip | `pushScissor` / `popScissor` — a whole-pixel clip entry every draw is stamped with, no flush (a real scissor inside a snapshot or capture, under a node that is not a whole-pixel translation, or past the clip chain's depth; `-Dcrystalgui.paint.squareClips=false` everywhere) — and `pushRoundedClip` / `popRoundedClip`, a rounded rect stamped the same way (`CgClipTable`), no layer and no flush |
 | Material | `withMaterial(material, body)` |
 | Layers | `withLayerOpacity(opacity, body)` and its lambda-free pair `pushLayerOpacity`/`popLayerOpacity`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `requestLayer(name, w, h)` / `releaseTexture(texture)` and `drawLayer(texture, x, y, w, h)` for a picture kept across frames, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `retain(key, region, revision)` |
 | Lifecycle | `UiGpu.destroy()`, `UiGpu.hasInstance()` |

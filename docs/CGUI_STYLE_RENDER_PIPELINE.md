@@ -951,7 +951,8 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
   the main motivation, avoiding a clipped final tile.
 - **No `outline-clip`/`background-clip`** — the outline is clipped by neither the element's own
   `border-radius` nor its `overflow: hidden`. It *is* clipped by an **ancestor's** scissor/mask
-  (`pushScissor` drives real `GL_SCISSOR_TEST` and survives into nested layer FBOs), so a positive
+  (`pushScissor` is a clip entry on every draw, or a scissor where it cannot be, and reaches nested layers when
+  they are composited), so a positive
   `outline-offset` inside a scroll view gets cut — real CSS behaves the same way.
 - **No `overlay-color`** — `paintDecoration`/`paintOutline` reset the ambient tint to white, so those
   layers can only be tinted via a tint baked into the value (`image(path, #tint)`), unlike

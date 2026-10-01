@@ -1493,11 +1493,6 @@ public final class CgUiPaintContext {
      * rendering has no effect on the separate scissor-test raster stage.</p>
      */
     public void pushScissor(float x, float y, float w, float h) {
-        // A SCISSOR IS A FLUSH TOO, and every element with overflow pushes one. Counted beside the
-        // fills because they add up in the same place: a clipped container costs a draw call to enter
-        // and another to leave, whatever it contains.
-        CgTrace.add(UiTrace.FRAME, "scissors", 1);
-        flush();
         Matrix4f m = targetPose();
         float physX0 = m.m00() * x + m.m10() * y + m.m30();
         float physY0 = m.m01() * x + m.m11() * y + m.m31();
@@ -1509,6 +1504,16 @@ public final class CgUiPaintContext {
         int physY = (int) Math.floor(Math.min(physY0, physY1));
         int physW = (int) Math.ceil(Math.max(physX0, physX1)) - physX;
         int physH = (int) Math.ceil(Math.max(physY0, physY1)) - physY;
+        int clip = squareClip(physX, physY, Math.max(0, physW), Math.max(0, physH));
+        if (clip > 0) {
+            CgTrace.add(UiTrace.FRAME, "clips-square", 1);
+            scissorStack.pushClip(physX, physY, Math.max(0, physW), Math.max(0, physH), clip, clipEntry);
+            setClip(clip);
+            return;
+        }
+        // A SCISSOR IS A FLUSH TOO: a clipped container costs a draw call to enter and another to leave.
+        CgTrace.add(UiTrace.FRAME, "scissors", 1);
+        flush();
         // Stored TOP-LEFT, in the target's physical pixels; the flip to GL's bottom-left happens when the
         // rect is APPLIED, against whichever buffer is bound at that moment. @see ScissorStack#applyScissorIfNeeded
         if (spatialNode == 0) {
@@ -1545,6 +1550,11 @@ public final class CgUiPaintContext {
      * {@code GL_SCISSOR_TEST} entirely once the stack is empty.
      */
     public void popScissor() {
+        if (scissorStack.topClip() != 0) {
+            setClip(scissorStack.topRestore());
+            scissorStack.popScissor();
+            return;
+        }
         flush();
         scissorStack.popScissor();
         if (scissorStack.hasScissor()) {
@@ -1554,8 +1564,32 @@ public final class CgUiPaintContext {
         }
     }
 
-    /** The {@link CgClipTable} entry every draw is stamped with; 0 when no rounded clip is active. */
+    /** The {@link CgClipTable} entry every draw is stamped with; 0 when no clip is active. */
     private int clipEntry;
+
+    /** Off with {@code -Dcrystalgui.paint.squareClips=false}: every {@link #pushScissor} is a scissor. */
+    private static final boolean SQUARE_CLIPS = !"false".equals(System.getProperty("crystalgui.paint.squareClips"));
+
+    /**
+     * {@code (x, y, w, h)}, whole pixels of the bound target, as a clip entry each draw is stamped with: no flush and
+     * no batch break, where a scissor is both. 0 where a scissor must do -- inside a target with a space of its own,
+     * whose materials read no clip; under a node that is not a whole-pixel translation; past the chain's depth.
+     */
+    private int squareClip(int x, int y, int w, int h) {
+        if (!SQUARE_CLIPS || !frameActive || nodesSuspended > 0) return 0;
+        int tx = 0, ty = 0;
+        if (spatialNode != 0) {
+            Matrix4f world = drawToTarget();
+            if (world.m00() != 1f || world.m01() != 0f || world.m10() != 0f || world.m11() != 1f) return 0;
+            float fx = world.m30(), fy = world.m31();
+            if (fx != (int) fx || fy != (int) fy) return 0;
+            tx = (int) fx;
+            ty = (int) fy;
+        }
+        int entry = recording.clips().addPixelRect(clipEntry, spatialNode, x - tx, y - ty, x - tx + w, y - ty + h,
+                targetHeight());
+        return Math.max(entry, 0);
+    }
 
     /**
      * Clips everything drawn until {@link #popRoundedClip} to a rounded rectangle, antialiased like a rect's own
