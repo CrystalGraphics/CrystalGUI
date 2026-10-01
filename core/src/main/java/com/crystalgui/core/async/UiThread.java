@@ -33,37 +33,37 @@ import javax.annotation.Nullable;
  * <p><b>Not known until the first frame</b>, and that is deliberate rather than a gap: before one has
  * run there is no tree to own, so a headless test, a server and a background load are all correctly
  * "not the UI thread" and pay nothing.</p>
+ *
+ * <p><b>Per thread, not per process.</b> Several documents may run frames, each on its own thread
+ * (plan engine-threaded-ui), so this answers "does this thread run frames for some tree", and
+ * {@link #require(String, Thread)} answers "for THIS tree".</p>
  */
 public final class UiThread {
 
     private UiThread() {
     }
 
-    /** Volatile rather than synchronized: written once per process, read on every provider call. */
-    @Nullable
-    private static volatile Thread owner;
+    /** Set on every thread a document has claimed for its frames. */
+    private static final ThreadLocal<Boolean> RUNS_FRAMES = new ThreadLocal<>();
 
     /**
-     * Records the calling thread as the one that runs frames.
+     * Records the calling thread as one that runs frames.
      *
-     * <p>Called from the frame itself, so it is right whatever drives it — a real window, the harness,
-     * or a test stepping frames by hand. Re-marking is free and keeps it correct if a host ever moves
-     * its loop.</p>
+     * <p>Called by {@code UIDocument} when it claims a thread, so it is right whatever drives it — a real
+     * window, the harness, or a test stepping frames by hand.</p>
      */
     public static void markCurrent() {
-        Thread current = Thread.currentThread();
-        if (owner != current) owner = current;
+        RUNS_FRAMES.set(Boolean.TRUE);
     }
 
-    /** Whether this is the thread that runs frames. False before the first frame — see the class note. */
+    /** Whether this thread runs frames for some tree. False before its first frame — see the class note. */
     public static boolean isCurrent() {
-        Thread known = owner;
-        return known != null && known == Thread.currentThread();
+        return RUNS_FRAMES.get() != null;
     }
 
-    /** Forgets the marked thread, so a test can assert what happens before any frame has run. */
+    /** Forgets this thread's mark, so a test can assert what happens before any frame has run. */
     public static void forgetForTesting() {
-        owner = null;
+        RUNS_FRAMES.remove();
     }
 
     // ── The assertion ────────────────────────────────────────────────────────────
@@ -89,7 +89,8 @@ public final class UiThread {
     private static volatile boolean enforcing = true;
 
     /**
-     * Throws unless this is the thread that runs frames.
+     * Throws unless this is {@code treeOwner}, the thread that runs frames <b>for the tree being
+     * touched</b>.
      *
      * <h3>Why an exception and not a log line</h3>
      *
@@ -110,16 +111,6 @@ public final class UiThread {
      * added to hot paths now and tightened later: it costs one volatile read until a host marks a
      * thread, and one reference comparison after.</p>
      *
-     * @param what what was being attempted, for the message. Name the OPERATION, not the class.
-     */
-    public static void require(String what) {
-        require(what, owner);
-    }
-
-    /**
-     * Throws unless this is {@code treeOwner}, the thread that runs frames <b>for the tree being
-     * touched</b>.
-     *
      * <h3>Ownership is per-TREE, not per-process, and the difference is the whole usability of this</h3>
      *
      * <p>A process-wide owner refuses any thread that is not the one that most recently drew -- which is
@@ -135,6 +126,7 @@ public final class UiThread {
      * that IS being painted refuses everyone but its own painter, which is the case worth catching and
      * the only one that can corrupt anything.</p>
      *
+     * @param what      what was being attempted, for the message. Name the OPERATION, not the class.
      * @param treeOwner the thread that runs frames for this tree, or null if none ever has
      */
     public static void require(String what, @Nullable Thread treeOwner) {
