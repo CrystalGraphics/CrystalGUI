@@ -104,6 +104,12 @@ desktop .__windows__ {
     isolation: isolate;
 }
 
+/* A COMPOSITOR MOVES A WINDOW: recorded under a spatial node of its own, a move is that node's value rather than a
+ * new recording. Its z-index already makes it a stacking context, so this changes no order. */
+desktop .__windows__ > window {
+    will-change: transform;
+}
+
 /* THE DIALOG BAND — the work area exactly, and nothing of its own.
  *
  * Absolute, so it does not take a share of the layer it covers: the window layer is a flex column and

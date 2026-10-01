@@ -3,6 +3,7 @@ package com.crystalgui.desktop.window;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgui.desktop.motion.WindowAnimation;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.ScissorStack;
 import com.crystalgui.ui.box.BoxPainter;
 import com.crystalgui.ui.box.Box;
 import org.joml.Matrix4f;
@@ -115,7 +116,7 @@ public final class WindowSnapshot {
         // a minimised editor's preview showing its top half over flat panel colour.)
         // Flushed first: what is queued was drawn under the caller's clip, and is recorded with the clip at its flush.
         ctx.flush();
-        int[] outerClip = ctx.getScissorStack().suspend();
+        ScissorStack.Saved outerClip = ctx.getScissorStack().suspend();
         ctx.getScissorStack().clearScissorIfNeeded();
         ctx.beginLayerFbo(picture, true);
         ctx.getPoseStack().pushPose();

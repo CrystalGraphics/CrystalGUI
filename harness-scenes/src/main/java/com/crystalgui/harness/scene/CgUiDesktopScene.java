@@ -32,6 +32,7 @@ import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.render.UiFrame;
 import com.crystalgui.render.UiGpu;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
@@ -462,6 +463,7 @@ public class CgUiDesktopScene
         // Nothing here reinjects a key the document left: the harness has no game to give it to.
         while (driver.pollUnhandledKey() != null) { }
 
+        if (NODES_SHOT && driveNodesShot(ctx, frame.getFrameNumber(), w, h)) return;
         if (PRESENT_AGAIN && frame.getFrameNumber() > 60 && frame.getFrameNumber() % 2 == 1) {
             driver.run(() -> {
                 document.frame(delta, w / SCALE, h / SCALE);
@@ -520,6 +522,96 @@ public class CgUiDesktopScene
      * last frame again ({@link UiGpu#presentAgain}). {@code present-again} (frame 101) must match {@code presented}.
      */
     private static final boolean PRESENT_AGAIN = Boolean.getBoolean("crystalgui.harness.desktop.presentAgain");
+
+    // ── -Dcrystalgui.harness.desktop.nodes=true: a scroll and a window move as property values ──
+
+    /**
+     * At frame 91, moves a window and scrolls a box by writing the presented frame's values and executing it again
+     * ({@link UiGpu#redraw}), with nothing recorded or built: {@code nodes-redraw}. At frame 92, makes the same changes
+     * in the document and photographs the frame it records: {@code nodes-recorded}. The two must match but for the
+     * band the scroll revealed, which the first recording never held. Prints {@code [nodes-probe]} lines. Inline only:
+     * run with {@code -Dcrystalgui.ui.async=false}.
+     */
+    private static final boolean NODES_SHOT = Boolean.getBoolean("crystalgui.harness.desktop.nodes");
+    private static final float NODES_MOVE_X = 40f, NODES_MOVE_Y = 30f, NODES_SCROLL = 24f;
+
+    private WindowFrame nodesWindow;
+    private Box nodesScroller;
+
+    /** @return whether this frame was the redraw, which presents in place of the document's frame */
+    private boolean driveNodesShot(HarnessContext ctx, long frameNumber, int w, int h) {
+        // The window to move goes on top first: one behind the maximised editor would move unseen.
+        if (frameNumber == 30) {
+            driver.run(() -> {
+                for (WindowFrame window : desktop.windows()) {
+                    if (!window.isMaximized() && window.box() != null) {
+                        desktop.activate(window);
+                        break;
+                    }
+                }
+            });
+        }
+        if (frameNumber == 90) ctx.getArtifactService().requestCapture("nodes-before");
+        if (frameNumber == 91) {
+            UiFrame shown = UiGpu.presented();
+            if (shown == null || driver.isAsync()) {
+                System.out.println("[nodes-probe] SKIPPED: needs a presented frame, inline (-Dcrystalgui.ui.async=false)");
+                return false;
+            }
+            long id = shown.frameId();
+            for (WindowFrame window : desktop.windows()) {
+                Box box = window.box();
+                if (box != null && box.movedNode(id) != 0 && !window.isMaximized()) {
+                    nodesWindow = window;
+                    break;
+                }
+            }
+            Box root = document.boxes().root();
+            nodesScroller = root == null ? null : scrolledBox(root, id);
+            if (nodesWindow == null || nodesScroller == null) {
+                System.out.println("[nodes-probe] SKIPPED: window " + nodesWindow + ", scroller " + nodesScroller);
+                return false;
+            }
+            int moved = nodesWindow.box().movedNode(id), scrolled = nodesScroller.scrolledNode(id);
+            shown.values().translate(moved, NODES_MOVE_X * SCALE, NODES_MOVE_Y * SCALE);
+            shown.values().translate(scrolled, 0f, -NODES_SCROLL * SCALE);
+            UiGpu.redraw(w, h);
+            ctx.getArtifactService().requestCapture("nodes-redraw");
+            System.out.println("[nodes-probe] frame " + id + " redrawn: window node " + moved + " ('" + nodesWindow.getTitle()
+                    + "' at " + nodesWindow.left() + "," + nodesWindow.top() + "), scroll node " + scrolled + " ("
+                    + nodesScroller.node().tagName() + " scrolled " + nodesScroller.scrollTop() + " of "
+                    + nodesScroller.maxScrollTop() + ", inside the window " + isInside(nodesScroller, nodesWindow.box())
+                    + ")");
+            return true;
+        }
+        if (frameNumber == 92 && nodesWindow != null && nodesScroller != null) {
+            long before = UiGpu.presented() == null ? -1 : UiGpu.presented().frameId();
+            driver.run(() -> {
+                nodesWindow.moveTo(nodesWindow.left() + NODES_MOVE_X, nodesWindow.top() + NODES_MOVE_Y);
+                nodesScroller.setScroll(nodesScroller.scrollLeft(), nodesScroller.scrollTop() + NODES_SCROLL);
+            });
+            ctx.getArtifactService().requestCapture("nodes-recorded");
+            System.out.println("[nodes-probe] frame " + before + " was presented last; recording the same changes: window at "
+                    + nodesWindow.left() + "," + nodesWindow.top() + ", scrolled " + nodesScroller.scrollTop());
+        }
+        return false;
+    }
+
+    /** The first box whose content frame {@code frame} scrolled under a node, with room to scroll on, and not virtualised. */
+    private static Box scrolledBox(Box box, long frame) {
+        if (box.scrolledNode(frame) != 0 && box.node().scrollExtent(false) < 0f
+                && box.maxScrollTop() - box.scrollTop() >= NODES_SCROLL) return box;
+        for (Box child : box.children()) {
+            Box found = scrolledBox(child, frame);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static boolean isInside(Box box, Box ancestor) {
+        for (Box at = box; at != null; at = at.host()) if (at == ancestor) return true;
+        return false;
+    }
 
     // ── -Dcrystalgui.harness.desktop.minimise=true: a window's snapshot, in flight ──
 
