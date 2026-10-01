@@ -67,7 +67,7 @@ import com.crystalgui.widget.graph.GraphView;
  * <p>Previews attach from a frame hook once there is a window, never from the layout pass: attaching adds elements,
  * and doing that inside layout re-dirtied the tree on every pass until the window hung.</p>
  */
-public class ShaderGraphView extends UIElement implements DocumentEditor, Disposable.Gl, DataProvider {
+public class ShaderGraphView extends UIElement implements DocumentEditor, Disposable, DataProvider {
     /** A whole shader graph editor. Named by the sheets. */
     public static final Name NAME = Name.of("shadergrapheditor");
 
@@ -467,7 +467,7 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
         }
         if (!mainPreviewAttached) {
             mainPreviewAttached = panel.attach();
-            // Registered, because MainPreviewPanel's delete() had no caller and its createOwned target leaked.
+            // Registered, so closing the pane gives the panel's target back to the pool.
             if (mainPreviewAttached) Disposer.register(this, panel);
         }
         return !(previewsAttached && mainPreviewAttached);

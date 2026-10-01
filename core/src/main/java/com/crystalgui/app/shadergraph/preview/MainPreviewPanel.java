@@ -6,8 +6,8 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
 import com.crystalgui.core.command.ActionIcons;
-import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.render.graph.CgGraphTexture;
+import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.shadergraph.CgMainPreviewRenderer;
 import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgPreviewMesh;
@@ -16,7 +16,6 @@ import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UIDocument;
@@ -55,7 +54,7 @@ import javax.annotation.Nullable;
  * ({@link com.crystalgraphics.shadergraph.CgShaderEmitter.Shading}), touching no engine state, and the
  * {@code Lighting} menu entry turns it off when the colour matters more than the form.</p>
  */
-public class MainPreviewPanel extends UIElement implements Disposable.Gl {
+public class MainPreviewPanel extends UIElement implements Disposable {
 
     public static final String PANEL_CLASS = "__main-preview__";
     /** The header strip. A CONTAINER, matching the configurator's group heading exactly — see the
@@ -390,13 +389,6 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
 
     // ── Redraw ──────────────────────────────────────────────────────────────
 
-    /**
-     * Re-renders once per frame.
-     *
-     * <p>Cheap when nothing changed: {@link CgMainPreviewRenderer#render} compares the emitted source,
-     * the mesh and the camera and returns the existing texture untouched. The compile is the only cost
-     * paid unconditionally, and it is the same one the node thumbnails already pay.</p>
-     */
     /** What the driver said about the last generated source, or null. @see CgMainPreviewRenderer */
     @Nullable
     public String lastDriverError() {
@@ -413,30 +405,16 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
         move.reclampIfPlaced(placedLeft(), placedTop());
         // Not while hidden: an inactive tab is `display: none`, not detached, so it still ticks.
         Box box = surface.box();
-        if (box == null || box.width() <= 0f || box.height() <= 0f) return true;        // Rebuilt on change and not per frame. A null answer (no master node) is rebuilt every frame, which is cheap.
+        if (box == null || box.width() <= 0f || box.height() <= 0f) return true;
+        // Rebuilt on change and not per frame. A null answer (no master node) is rebuilt every frame, which is cheap.
         if (graph == null) graph = ShaderGraphBridge.toShaderGraph(document, shaderNodes, master);
-        // The camera is framed for the panel, so the picture fills it rather than sitting letterboxed in
-        // the middle of it. Read from the SURFACE, not from the panel: the header takes a strip off the
-        // top, and framing to the outer box would crop the mesh by exactly that much.
-        renderer.render(graph, master, mesh, yaw, pitch, zoom, lit, surfaceAspect());
         return true;
     }
 
-    /** Frees the render target and meshes. */
-    /**
-     * Releases the preview renderer.
-     *
-     * <p>{@code Disposable.Gl} because {@code CgMainPreviewRenderer}'s target is {@code createOwned} and
-     * therefore invisible to {@code CgFrameBufferRegistry} — so nothing else in the engine can free it,
-     * and freeing it off the GL thread would corrupt silently rather than throw.</p>
-     *
-     * <p><b>This was dead code.</b> {@code delete()} existed and had no caller anywhere:
-     * {@code ShaderGraphView}'s teardown released {@code previews} and not this, so the target and
-     * its meshes leaked for the life of the process. It is now owned by the graph editor that builds it.</p>
-     */
+    /** Gives the renderer's target back to the pool and frees its meshes. Registered with the graph editor. */
     @Override
     public void dispose() {
-        Disposer.dispose(this);
+        renderer.delete();
     }
 
     public CgMainPreviewRenderer renderer() {
@@ -472,10 +450,19 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
         private void paintContentTraced(CgUiPaintContext ctx, Box box) {
             super.paintContent(ctx, box);
 
-            CgTexture texture = renderer.currentTexture();
+            // Recorded here, in the frame that draws it: cheap when nothing changed, since the renderer compares
+            // the emitted source, the mesh and the camera and records nothing. Framed for the SURFACE, not the
+            // panel: the header takes a strip off the top, and framing to the outer box would crop the mesh.
+            CgRecording recording = ctx.beginPasses();
+            CgGraphTexture texture;
+            try {
+                texture = renderer.render(graph, master, mesh, yaw, pitch, zoom, lit, surfaceAspect(), recording);
+            } finally {
+                ctx.endPasses();
+            }
             // Nothing yet: no successful compile so far. Painting nothing leaves the surface's own
             // background, so an empty panel reads as "not yet" rather than as a hole.
-            if (!(texture instanceof CgTexture2D)) return;
+            if (texture == null) return;
 
             // THE ORIGIN, because a paint hook already draws in its OWN box's space.
             //
@@ -502,7 +489,7 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
             // reads as the shader being broken rather than as a frame.
             //
             // v1 and v0 swapped: GL's framebuffer origin is bottom-left and the UI's is top-left.
-            ctx.drawImage((CgTexture2D) texture, x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            ctx.drawImage(texture, x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
         }
     }
 

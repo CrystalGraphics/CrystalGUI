@@ -14,10 +14,10 @@ package com.crystalgui.core.dispose;
  *       <em>wanted</em>. Closing a shader graph still frees nothing: the dock tells a closed panel
  *       nothing, so twenty open-and-close cycles hold twenty preview pools until the process ends.
  *       Closing that gap needs the dock to announce a close — see {@code plan/shell-architecture-audit.md} step 3.</li>
- *   <li><b>Reach what no registry can see.</b> {@code CgPreviewRenderer.delete()} says it outright —
- *       <i>"the pool's targets are {@code createOwned}, so no registry sweeps them"</i> — and
- *       {@code CgUiPaintContext}'s layer pool is the same. For that class, release depends on somebody
- *       remembering, which is the thing an ownership tree exists to stop depending on.</li>
+ *   <li><b>Reach what no registry can see.</b> A requested texture's storage is made outside any registry,
+ *       so the shader-graph preview pool and {@code CgUiPaintContext}'s retained layers are freed only because
+ *       their owner says so. For that class, release depends on somebody remembering, which is the thing an
+ *       ownership tree exists to stop depending on.</li>
  * </ol>
  *
  * <h3>One method, deliberately</h3>
