@@ -5,6 +5,7 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -42,15 +43,25 @@ public final class ComputedStyle {
         return INITIAL;
     }
 
-    /** Snapshots {@code style}: computed slots first, then inheritance for what has none. */
+    /**
+     * Snapshots {@code style}: computed slots first, then inheritance for what has none. Walks what the element has
+     * candidates for and what it can inherit, not every registered property: the same answer, built once per element
+     * per change, and opening a large panel builds thousands.
+     */
     static ComputedStyle of(ElementStyle style, @Nullable ComputedStyle inheritFrom) {
         Map<StyleProperty<?>, Object> out = new HashMap<>();
-        for (StyleProperty<?> property : StylePropertyRegistry.all()) {
+        Set<StyleProperty<?>> registered = registered();
+        for (StyleProperty<?> property : style.candidates.keySet()) {
+            if (!registered.contains(property)) continue;
             Object value = style.computeCandidate(property);
-            if (value == null && property.isInheritable() && inheritFrom != null) {
-                value = inheritFrom.values.get(property);
-            }
             if (value != null) out.put(property, value);
+        }
+        if (inheritFrom != null) {
+            for (StyleProperty<?> property : inheritable()) {
+                if (out.containsKey(property)) continue;
+                Object value = inheritFrom.values.get(property);
+                if (value != null) out.put(property, value);
+            }
         }
         return new ComputedStyle(Collections.unmodifiableMap(out));
     }
@@ -71,6 +82,19 @@ public final class ComputedStyle {
 
     @Nullable
     private static volatile List<StyleProperty<?>> inheritable;
+    @Nullable
+    private static volatile Set<StyleProperty<?>> registered;
+
+    /** Every registered property, by identity. Read after registration, like {@link #inheritable()}. */
+    private static Set<StyleProperty<?>> registered() {
+        Set<StyleProperty<?>> known = registered;
+        if (known == null) {
+            Set<StyleProperty<?>> found = Collections.newSetFromMap(new IdentityHashMap<>());
+            found.addAll(StylePropertyRegistry.all());
+            registered = known = Collections.unmodifiableSet(found);
+        }
+        return known;
+    }
 
     /** Read after registration, which is done by the time anything computes. */
     private static List<StyleProperty<?>> inheritable() {
