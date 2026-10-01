@@ -13,7 +13,7 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.graph.PortDirection;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.canvas.WorldRect;
@@ -344,14 +344,14 @@ public class GraphNode extends UIElement {
      * ring" instead of only ever being able to choose one side of that pair.</p>
      */
     @Override
-    public void paintDecoration(CgUiPaintContext ctx, Box box) {
+    public void paintDecoration(UiRecorder ctx, Box box) {
         CgTrace.add(UiTrace.FRAME, "graph-nodes-painted", 1);
         try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "graph:paintNode")) {
             paintDecorationTraced(ctx, box);
         }
     }
 
-    private void paintDecorationTraced(CgUiPaintContext ctx, Box box) {
+    private void paintDecorationTraced(UiRecorder ctx, Box box) {
         super.paintDecoration(ctx, box);
         GraphView view = graphView();
         if (view == null) return;

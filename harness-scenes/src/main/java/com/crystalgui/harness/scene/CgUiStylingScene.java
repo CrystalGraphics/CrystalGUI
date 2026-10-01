@@ -2,7 +2,7 @@ package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.harness.SceneRegistry;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
@@ -318,7 +318,7 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
         // tree's root transform, so this is the only place the two spaces meet.
         document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
 
-        CgUiPaintContext paintContext = document.recorder();
+        UiRecorder paintContext = document.recorder();
         paintContext.beginFrame(w, h);
         document.paint(paintContext);
         paintContext.endFrame();

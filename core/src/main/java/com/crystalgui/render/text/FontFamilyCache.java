@@ -126,7 +126,7 @@ public final class FontFamilyCache {
      * Queues printable ASCII for a face the moment it first enters play.
      *
      * <p><b>Warming from a cache miss here, rather than from a list of stylesheets, because this is the
-     * one place that knows a face is about to be drawn.</b> {@code CgUiPaintContext.warmGlyphs} reads
+     * one place that knows a face is about to be drawn.</b> {@code UiRecorder.warmGlyphs} reads
      * faces out of {@code StyleSheet.DEFAULT} alone, so anything a THEME introduces — {@code ore.css}'s
      * {@code MinecraftRegular.otf}, say — was never warmed at all, and neither was any face that only a
      * theme or an application sheet names. Switching themes therefore dropped to bitmap fallbacks for

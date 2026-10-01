@@ -2058,7 +2058,7 @@ documentationpopup .__doc-footer-edit__ {
  * It was `opacity: 0.7` with `:hover { opacity: 1 }`, and the two looked like different artwork: the
  * dimmed one came apart into fragments while the hovered one was crisp. The cause is in `UIElement`'s
  * paint path -- an element whose opacity is not 1 has its whole subtree rendered into an offscreen layer
- * FBO and blitted back (see `drawSubtree` and `CgUiPaintContext#beginLayerFbo`), so the vector icon is
+ * FBO and blitted back (see `drawSubtree` and `UiRecorder#beginLayerFbo`), so the vector icon is
  * rasterised through an intermediate buffer instead of straight onto the surface at the pose scale. At
  * full opacity that round trip does not happen, which is exactly why hovering "fixed" it.
  *

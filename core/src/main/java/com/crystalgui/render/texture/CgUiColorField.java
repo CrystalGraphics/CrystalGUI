@@ -2,7 +2,7 @@ package com.crystalgui.render.texture;
 
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.shader.CgShaderBindings;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 
 /**
  * The continuously-varying surfaces a colour picker is made of — a hue ring, a saturation/value
@@ -82,7 +82,7 @@ public final class CgUiColorField implements CgUiDrawable {
      * frame. A method reference stored once costs nothing after the first draw. These fields are not
      * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
      */
-    private CgUiPaintContext drawCtx;
+    private UiRecorder drawCtx;
     private float drawX, drawY, drawWidth, drawHeight;
     private final Runnable quadBody = this::quadBody;
     // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
@@ -150,7 +150,7 @@ public final class CgUiColorField implements CgUiDrawable {
     }
 
     @Override
-    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
+    public void draw(UiRecorder ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
         drawCtx = ctx;
         drawX = x; drawY = y; drawWidth = width; drawHeight = height;

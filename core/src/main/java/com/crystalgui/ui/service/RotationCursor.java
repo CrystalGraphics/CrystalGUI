@@ -1,6 +1,6 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 
 /**
  * <b>The curved double arrow that says "this rotates"</b>, drawn at any angle.
@@ -69,7 +69,7 @@ public final class RotationCursor {
     /**
      * @param radians from the pivot TOWARD the pointer; the arrow is drawn across it
      */
-    public static void paint(CgUiPaintContext ctx, float x, float y, float radians) {
+    public static void paint(UiRecorder ctx, float x, float y, float radians) {
         // A WHITE BODY OVER A DARK HALO, which is what every OS cursor does and why CursorBitmaps draws
         // its own art the same way: design-time chrome lands on whatever the document happens to be, and
         // a single-colour mark disappears against half of it.
@@ -77,7 +77,7 @@ public final class RotationCursor {
         stroke(ctx, x, y, radians, BODY_WIDTH, BODY);
     }
 
-    private static void stroke(CgUiPaintContext ctx, float x, float y, float radians,
+    private static void stroke(UiRecorder ctx, float x, float y, float radians,
                                float width, int colour) {
         // Local space: +x is the radial direction, +y the tangent, so a point is the pointer plus
         // `radial` along the radius and `tangential` across it. Expanded rather than passed through a
@@ -112,7 +112,7 @@ public final class RotationCursor {
      *
      * @param outRadial the tip's outward direction in local (radial, tangential); need not be unit
      */
-    private static void head(CgUiPaintContext ctx, float x, float y, float cos, float sin,
+    private static void head(UiRecorder ctx, float x, float y, float cos, float sin,
                              float tangential, float outRadial, float outTangential,
                              float width, int colour) {
         float length = (float) Math.hypot(outRadial, outTangential);

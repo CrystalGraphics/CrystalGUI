@@ -3,7 +3,7 @@ package com.crystalgui.render.texture;
 import java.util.Locale;
 
 import com.crystalgraphics.gl.render.CgVectorRenderer;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 
 /**
  * A named vector mark — chevron, triangle, checkmark, cross, plus/minus, arrow — drawn directly by
@@ -36,10 +36,10 @@ import com.crystalgui.render.CgUiPaintContext;
  * "does not respond well to zoom" rather than as the aspect-ratio bug it actually is.</p>
  *
  * <h3>Stroke kinds vs. fill kinds</h3>
- * <p>Chevrons, checkmark, cross, plus/minus and arrows are 1–2 {@link CgUiPaintContext#curve()}
+ * <p>Chevrons, checkmark, cross, plus/minus and arrows are 1–2 {@link UiRecorder#curve()}
  * calls — {@link CgVectorRenderer} already draws arbitrary straight strokes with caps, so nothing new
  * was needed in the engine for these. Triangles are the one kind that needs {@link
- * CgUiPaintContext#triangle()} — a filled region, not a stroked path. Callers of this class never
+ * UiRecorder#triangle()} — a filled region, not a stroked path. Callers of this class never
  * see the difference; {@link #draw} dispatches internally.</p>
  *
  * <h3>Every joint is round, including where two segments meet</h3>
@@ -120,7 +120,7 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
     }
 
     @Override
-    public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
+    public void draw(UiRecorder ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         int argb = ArgbMath.multiply(0xFFFFFFFF, ctx.getColor());
 
         // CLAMP TO A CENTERED SQUARE FIRST — every kind below is defined in a square coordinate
@@ -181,7 +181,7 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
      * antialiasing hardening exactly at the joint, not missing geometry, and is not visible at the
      * sizes this draws at (8–16px icons).</p>
      */
-    private static void chevron(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb,
+    private static void chevron(UiRecorder ctx, float x, float y, float w, float h, float hw, int argb,
                                 float leftY, float midY, float rightY) {
         float lx = x + w * 0.24f, ly = y + h * leftY;
         float mx = x + w * 0.50f, my = y + h * midY;
@@ -192,7 +192,7 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
 
     /** Vertical-opening chevron (left/right pointing) — same shape, transposed. Round at every end,
      * including the shared apex — see {@link #chevron}'s doc for why. */
-    private static void chevronVertical(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb,
+    private static void chevronVertical(UiRecorder ctx, float x, float y, float w, float h, float hw, int argb,
                                         float topX, float midX, float bottomX) {
         float tx = x + w * topX, ty = y + h * 0.24f;
         float mx = x + w * midX, my = y + h * 0.50f;
@@ -201,7 +201,7 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
         ctx.curve().line(mx, my, bx, by).width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
     }
 
-    private static void triangle(CgUiPaintContext ctx, float x, float y, float w, float h, int argb,
+    private static void triangle(UiRecorder ctx, float x, float y, float w, float h, int argb,
                                  float fx0, float fy0, float fx1, float fy1, float fx2, float fy2) {
         ctx.triangle()
            .points(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1, x + w * fx2, y + h * fy2)
@@ -211,7 +211,7 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
 
     /** Short leg then long leg, sharing the low point — round at every end, including the joint,
      * for the same line-join reason as {@link #chevron}. */
-    private static void checkmark(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb) {
+    private static void checkmark(UiRecorder ctx, float x, float y, float w, float h, float hw, int argb) {
         float x1 = x + w * 0.22f, y1 = y + h * 0.52f;
         float x2 = x + w * 0.42f, y2 = y + h * 0.72f;
         float x3 = x + w * 0.80f, y3 = y + h * 0.26f;
@@ -220,7 +220,7 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
     }
 
     /** Two independent diagonals — no shared endpoint, so both can round-cap freely. */
-    private static void cross(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb) {
+    private static void cross(UiRecorder ctx, float x, float y, float w, float h, float hw, int argb) {
         ctx.curve().line(x + w * 0.26f, y + h * 0.26f, x + w * 0.74f, y + h * 0.74f)
            .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
         ctx.curve().line(x + w * 0.74f, y + h * 0.26f, x + w * 0.26f, y + h * 0.74f)
@@ -228,7 +228,7 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
     }
 
     /** Horizontal bar, plus an optional vertical one — neither shares an endpoint with the other. */
-    private static void plus(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb,
+    private static void plus(UiRecorder ctx, float x, float y, float w, float h, float hw, int argb,
                              boolean withVertical) {
         ctx.curve().line(x + w * 0.22f, y + h * 0.5f, x + w * 0.78f, y + h * 0.5f)
            .width(hw).color(argb).cap(CgVectorRenderer.CAP_ROUND).submit();
@@ -239,7 +239,7 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
     }
 
     /** Shaft with a round start and an arrowhead end — one curve, CAP_ARROW does the rest. */
-    private static void arrow(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb,
+    private static void arrow(UiRecorder ctx, float x, float y, float w, float h, float hw, int argb,
                               float fx0, float fy0, float fx1, float fy1) {
         ctx.curve().line(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1)
            .width(hw).color(argb)

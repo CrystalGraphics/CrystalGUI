@@ -754,7 +754,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
      * <p>The nine {@code mirrored} sites are deletions rather than conversions. The old engine drew the
      * subtree twice against one cached {@code localToWorld} per element, so the copy overwrote the
      * original's idea of where it lived and the real window stopped being clickable where it was drawn
-     * — which is why {@code CgUiPaintContext.mirrored} was a counter rather than a boolean. A mirror
+     * — which is why {@code UiRecorder.mirrored} was a counter rather than a boolean. A mirror
      * has boxes of its own, so the node is never told it is drawn twice.</p>
      *
      * <p><b>The assertion is on the ORIGINAL's geometry, not the copy's.</b> A mirror that produced no

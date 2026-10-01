@@ -9,7 +9,7 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -110,7 +110,7 @@ final class GraphPorts {
      * possible at all. No sibling element, however z-ordered, can land between two steps of one other
      * element's atomic paint call.</p>
      */
-    void paintStub(CgUiPaintContext ctx, NodePort port, UIElement space) {
+    void paintStub(UiRecorder ctx, NodePort port, UIElement space) {
         PortDefaultEditor editor = editors.get(port);
         if (editor != null && editor.isMounted()) editor.paintStub(ctx, space);
     }

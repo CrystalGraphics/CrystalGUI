@@ -78,7 +78,7 @@ public final class CgUiLayerProbe {
      * -- so a black region on screen and a black layer in the log could only be correlated by counting
      * nesting depth and guessing. The painter knows the answer for free; it just had nowhere to put it.
      *
-     * <p>A plain static rather than a parameter, because it has to reach {@code CgUiPaintContext}
+     * <p>A plain static rather than a parameter, because it has to reach {@code UiRecorder}
      * through calls that have no business carrying a debug label ({@code beginLayerFbo} is public API).
      * Single-threaded by the frame-thread rule, so there is nothing to synchronise.</p>
      */

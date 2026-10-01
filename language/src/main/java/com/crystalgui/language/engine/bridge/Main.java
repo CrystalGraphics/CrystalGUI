@@ -1,6 +1,6 @@
 package com.crystalgui.language.engine.bridge;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 
 import java.util.ArrayList;
 import java.util.Comparator;

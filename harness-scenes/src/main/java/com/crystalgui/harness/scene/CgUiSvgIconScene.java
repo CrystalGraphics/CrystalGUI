@@ -4,7 +4,7 @@ import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
@@ -39,7 +39,7 @@ import java.util.List;
  *
  * <p>The cells, the icons and the labels are drawn in three separate loops rather than cell by cell, and
  * that is deliberate: quads, vector fills and text are three different materials, and
- * {@code CgUiPaintContext} flushes whenever it switches between them. Interleaved, this scene would cost
+ * {@code UiRecorder} flushes whenever it switches between them. Interleaved, this scene would cost
  * three material binds per icon; batched by kind it costs three in total.</p>
  *
  * <p>That is also the bug this scene exists downstream of. Alternating an icon and a label per row — which
@@ -219,7 +219,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
     public void render(HarnessContext ctx, FrameInfo frame) {
         CgRenderPipeline.getInstance().getFrameData().timeSecs = (float) frame.getElapsedTime();
 
-        CgUiPaintContext paint = recorder();
+        UiRecorder paint = recorder();
         paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
 
         drawStudyStrip(paint);
@@ -319,7 +319,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
      * uniform {@code uiScale} pose, at integer logical coordinates. Not panned or zoomed — the whole
      * question is what the device pixels look like at the size the stylesheet chose.
      */
-    private void drawStudyStrip(CgUiPaintContext paint) {
+    private void drawStudyStrip(UiRecorder paint) {
         if (study == null) return;
         PoseStack pose = paint.getPoseStack();
         pose.pushPose();
@@ -413,10 +413,10 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
     }
 
     /** This scene's paint context: it has no document to ask for one. */
-    private CgUiPaintContext recorder;
+    private UiRecorder recorder;
 
-    private CgUiPaintContext recorder() {
-        if (recorder == null) recorder = CgUiPaintContext.create();
+    private UiRecorder recorder() {
+        if (recorder == null) recorder = UiRecorder.create();
         return recorder;
     }
 }

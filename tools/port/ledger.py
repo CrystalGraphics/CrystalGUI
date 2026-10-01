@@ -671,7 +671,7 @@ def classify_classes():
                 lines = text.count('\n')
                 # A class that reaches the old engine is COPIED by the codemod; one that does not is
                 # MOVED in the IDE, whose Move refactor fixes both engines' imports for nothing.
-                touches = bool(re.search(r'\bUIElement\b|\bUIWindow\b|getRuntimeCache|CgUiPaintContext', text))
+                touches = bool(re.search(r'\bUIElement\b|\bUIWindow\b|getRuntimeCache|UiRecorder', text))
                 dest = forced or destination(rel, stem)
                 batch = BATCH_OVERRIDE.get(stem) or batch_of(dest)
                 how = HOW_OVERRIDE.get(stem) or how_of(dest, stem, touches)

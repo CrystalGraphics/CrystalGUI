@@ -127,7 +127,7 @@ public final class JobScheduler implements Disposable {
      * it. Tests construct their own instead, which is what the injecting constructor is for; this is the
      * wiring for everything that just wants the shared one.</p>
      *
-     * <p>Guarded by {@link #hasShared()} at the drain site for the same reason {@code CgUiPaintContext}
+     * <p>Guarded by {@link #hasShared()} at the drain site for the same reason {@code UiRecorder}
      * has {@code hasInstance()}: merely asking whether there is work to do must not be what spawns a
      * thread pool. A headless process that never schedules anything never creates one.</p>
      */

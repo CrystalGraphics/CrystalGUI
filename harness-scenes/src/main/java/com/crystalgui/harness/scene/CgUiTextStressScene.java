@@ -5,7 +5,7 @@ import com.crystalgraphics.util.trace.CgChannels;
 import com.crystalgraphics.harness.trace.TraceReport;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
@@ -235,7 +235,7 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
 
                 // AND THE PAINT. `paintFrame()` did both; `frame()` only advances, so a scene that
                 // lost this half advanced perfectly and drew nothing.
-                CgUiPaintContext paintContext = document.recorder();
+                UiRecorder paintContext = document.recorder();
                 paintContext.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
                 document.paint(paintContext);
                 paintContext.endFrame();

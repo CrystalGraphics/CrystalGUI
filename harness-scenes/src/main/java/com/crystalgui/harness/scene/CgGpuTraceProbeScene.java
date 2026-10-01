@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
@@ -118,7 +118,7 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     private static void paint(HarnessContext ctx, int quads) {
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
-        CgUiPaintContext paint = recorder();
+        UiRecorder paint = recorder();
         paint.beginFrame(w, h);
         paint.fillRect(0, 0, w, h, 0x08FF8040); // binds the white pixel the batch below draws with
         for (int i = quads; i > 1; i--) {
@@ -247,10 +247,10 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     }
 
     /** This scene's paint context: it has no document to ask for one. */
-    private static CgUiPaintContext recorder;
+    private static UiRecorder recorder;
 
-    private static CgUiPaintContext recorder() {
-        if (recorder == null) recorder = CgUiPaintContext.create();
+    private static UiRecorder recorder() {
+        if (recorder == null) recorder = UiRecorder.create();
         return recorder;
     }
 }

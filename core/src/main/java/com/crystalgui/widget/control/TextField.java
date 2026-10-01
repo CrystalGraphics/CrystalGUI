@@ -22,7 +22,7 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
@@ -1364,7 +1364,7 @@ public class TextField extends UIElement implements Measurable {
     }
 
     @Override
-    public void paintDecoration(CgUiPaintContext ctx, Box box) {
+    public void paintDecoration(UiRecorder ctx, Box box) {
         super.paintDecoration(ctx, box);
         ensureMeasured();
         ensureCaretVisible();
@@ -1444,7 +1444,7 @@ public class TextField extends UIElement implements Measurable {
         String shown = showingPlaceholder && !drawsFocused() && !placeholderShownUnfocused ? "" : showingPlaceholder ? placeholder : text;
         if (!shown.isEmpty()) {
             // A draw that did not get the glyph tier it asked for is provisional, so come back for it
-            // next frame. @see CgUiPaintContext#textDegradedDrawCount
+            // next frame. @see UiRecorder#textDegradedDrawCount
             long degradedBefore = ctx.textDegradedDrawCount();
             CgFontFamily family = resolveFamily();
             int shownColor = showingPlaceholder ? dim(styleGen.color()) : styleGen.color();

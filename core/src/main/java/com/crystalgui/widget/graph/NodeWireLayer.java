@@ -4,7 +4,7 @@ import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.canvas.WorldRect;
@@ -281,13 +281,13 @@ public class NodeWireLayer extends UIElement {
     // ── Paint ───────────────────────────────────────────────────────────────
 
     @Override
-    public void paintContent(CgUiPaintContext ctx, Box box) {
+    public void paintContent(UiRecorder ctx, Box box) {
         try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "graph:paintWires")) {
             paintContentTraced(ctx, box);
         }
     }
 
-    private void paintContentTraced(CgUiPaintContext ctx, Box box) {
+    private void paintContentTraced(UiRecorder ctx, Box box) {
         super.paintContent(ctx, box);
         if (connections.isEmpty() && !pendingLive) return;
 
@@ -366,7 +366,7 @@ public class NodeWireLayer extends UIElement {
      * would have used from the true endpoints closely enough that a several-pixel trim on a
      * `MIN_TANGENT`-or-wider curve is not worth a second computation.</p>
      */
-    private void wire(CgUiPaintContext ctx, float x0, float y0, float x1, float y1,
+    private void wire(UiRecorder ctx, float x0, float y0, float x1, float y1,
                       float radius0, float radius1, int color0, int color1, boolean emphasised) {
         x0 += radius0;
         x1 -= radius1;

@@ -7,7 +7,7 @@ import org.joml.Vector2f;
 import org.joml.Vector3f;
 
 import com.crystalgui.core.data.Transform2D;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
@@ -150,7 +150,7 @@ public final class CanvasRects {
      * Outlines a quad from {@link #quadOf}: upright, the ring {@link #outline} draws; rotated or skewed, a hairline
      * along each edge, which stays one pixel wide whatever the element's own transform does to its box.
      */
-    public static void outlineQuad(CgUiPaintContext ctx, @Nullable float[] quad, float thickness, int argb) {
+    public static void outlineQuad(UiRecorder ctx, @Nullable float[] quad, float thickness, int argb) {
         if (quad == null) return;
         if (isUpright(quad)) {
             outline(ctx, bounds(quad), thickness, argb);
@@ -169,7 +169,7 @@ public final class CanvasRects {
      * quad path carries no coverage term to soften one with; the stroke path computes coverage from the segment's
      * distance field, so the edge is smooth at every angle and every zoom.</p>
      */
-    public static void line(CgUiPaintContext ctx, float x0, float y0, float x1, float y1, float halfWidth, int argb) {
+    public static void line(UiRecorder ctx, float x0, float y0, float x1, float y1, float halfWidth, int argb) {
         float dx = x1 - x0;
         float dy = y1 - y0;
         if (dx * dx + dy * dy < 0.0001f) return;
@@ -286,7 +286,7 @@ public final class CanvasRects {
      * the same reason the CSS {@code outline} the engine draws goes through it. It is also one draw
      * call rather than four, and no two strokes overlap at the corners to blend twice.</p>
      */
-    public static void outline(CgUiPaintContext ctx, @Nullable float[] rect, float thickness, int argb) {
+    public static void outline(UiRecorder ctx, @Nullable float[] rect, float thickness, int argb) {
         float[] ring = outlineRing(rect, thickness);
         if (ring == null) return;
         // A transparent interior carrying the stroke's rgb, so the shader's edge-to-fill mix has no dark

@@ -27,7 +27,7 @@ import com.crystalgui.app.uibuilder.canvas.transform.TransformGesture.Kind;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
@@ -982,7 +982,7 @@ public final class TransformBox extends UIElement {
     // ---------------------------------------------------------------- painting
 
     @Override
-    public void paintContent(CgUiPaintContext paint, Box box) {
+    public void paintContent(UiRecorder paint, Box box) {
         if (!active || box == null) return;
         int colour = getStyle().computed().get(StylePropertyRegistry.COLOR);
 
@@ -1035,7 +1035,7 @@ public final class TransformBox extends UIElement {
     }
 
     /** One side of the box, at any angle. @see CanvasRects#line */
-    private static void edge(CgUiPaintContext paint, Vector2f from, Vector2f to, int colour) {
+    private static void edge(UiRecorder paint, Vector2f from, Vector2f to, int colour) {
         CanvasRects.line(paint, from.x, from.y, to.x, to.y, HAIRLINE, colour);
     }
 }

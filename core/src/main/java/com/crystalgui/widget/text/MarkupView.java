@@ -3,7 +3,7 @@ package com.crystalgui.widget.text;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.markup.MarkupBlock;
 import com.crystalgui.text.markup.MarkupDocument;
@@ -702,7 +702,7 @@ public class MarkupView extends UIElement {
         private static final float LINE = 0.6f;
 
         @Override
-        public void paintDecoration(CgUiPaintContext ctx, Box box) {
+        public void paintDecoration(UiRecorder ctx, Box box) {
             super.paintDecoration(ctx, box);
             List<UIElement> rows = new ArrayList<>();
             for (UIElement child : children()) {
@@ -810,7 +810,7 @@ public class MarkupView extends UIElement {
          * second draw path. The width is in LOGICAL pixels: {@code CgUiRenderer} applies the
          * {@code PoseStack} to the stroke, so one pixel stays one pixel at any {@code uiScale}.</p>
          */
-        private static void stroke(CgUiPaintContext ctx, float x0, float y0, float x1, float y1,
+        private static void stroke(UiRecorder ctx, float x0, float y0, float x1, float y1,
                                    int color) {
             ctx.curve()
                     .cubic(x0, y0, x0, y0, x1, y1, x1, y1)

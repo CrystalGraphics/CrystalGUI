@@ -14,7 +14,7 @@ import com.crystalgraphics.shadergraph.CgPreviewMesh;
 import com.crystalgraphics.shadergraph.CgShaderGraph;
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
 import com.crystalgui.graph.GraphDocument;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiRecorder;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.ui.dom.UIElement;
@@ -463,13 +463,13 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
     private final class Surface extends UIElement {
 
         @Override
-        public void paintContent(CgUiPaintContext ctx, Box box) {
+        public void paintContent(UiRecorder ctx, Box box) {
             try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:paintMainPreview")) {
                 paintContentTraced(ctx, box);
             }
         }
 
-        private void paintContentTraced(CgUiPaintContext ctx, Box box) {
+        private void paintContentTraced(UiRecorder ctx, Box box) {
             super.paintContent(ctx, box);
 
             CgTexture texture = renderer.currentTexture();

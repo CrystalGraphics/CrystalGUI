@@ -35,9 +35,9 @@ public final class CgUiRenderer {
 
     private final CgQuadRenderer renderer;
     private final CgVectorRenderer vectorRenderer;
-    private final CgUiPaintContext ctx;
+    private final UiRecorder ctx;
 
-    CgUiRenderer(CgUiPaintContext ctx) {
+    CgUiRenderer(UiRecorder ctx) {
         this.renderer = CgQuadRenderer.create();
         this.vectorRenderer = CgVectorRenderer.create();
         this.ctx = ctx;
@@ -64,7 +64,7 @@ public final class CgUiRenderer {
      * drawn. {@code submit()} alone never touches the GPU.
      *
      * <p>Flushing both is safe in either order because <b>at most one path ever holds pending work</b>:
-     * {@link CgUiPaintContext} flushes the outgoing path when it switches between quads and curves,
+     * {@link UiRecorder} flushes the outgoing path when it switches between quads and curves,
      * which it must do anyway to swap the bound material. An empty flush is a cheap early return.</p>
      */
     public void flush() {
@@ -73,7 +73,7 @@ public final class CgUiRenderer {
     }
 
     /**
-     * Flushes only the quad path. Called by {@link CgUiPaintContext} when switching to curves —
+     * Flushes only the quad path. Called by {@link UiRecorder} when switching to curves —
      * the quads must reach the GPU while <em>their</em> material is still bound.
      */
     void flushQuads() {
@@ -185,7 +185,7 @@ public final class CgUiRenderer {
      * Starts a filled triangle, <b>with this context's pose already applied</b> — the fill-mode
      * twin of {@link #curve()}. Shares the same {@code CgVectorRenderer} and the same curve material,
      * so submitting a triangle does <em>not</em> switch material paths any differently than
-     * submitting a curve does — see {@code CgUiPaintContext.beginCurvePath()}.
+     * submitting a curve does — see {@code UiRecorder.beginCurvePath()}.
      *
      * <p>Same pose/scale/unrounded-coordinates conventions as {@link #curve()}: corner radius and
      * feather scale with the pose exactly as a stroke width would, since both are distances in the
@@ -211,7 +211,7 @@ public final class CgUiRenderer {
     /**
      * Releases what this renderer owns.
      *
-     * <p>Called by {@link CgUiPaintContext#destroy()}. {@link CgQuadRenderer#delete()} only unbinds
+     * <p>Called by {@link UiRecorder#destroy()}. {@link CgQuadRenderer#delete()} only unbinds
      * the material it left bound — the shared unit-quad mesh and instance buffer are class-wide and
      * registry-owned, so they deliberately outlive any one renderer.</p>
      */
