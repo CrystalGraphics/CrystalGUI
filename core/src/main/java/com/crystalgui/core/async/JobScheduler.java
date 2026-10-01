@@ -121,7 +121,7 @@ public final class JobScheduler implements Disposable {
     }
 
     /**
-     * The application-wide scheduler, created on first use.
+     * The calling sequence's scheduler, or on the render thread the application-wide one, created on first use.
      *
      * <p>One pool, not one per feature — three pools compete for the same cores and none of them knows
      * it. Tests construct their own instead, which is what the injecting constructor is for; this is the
@@ -132,12 +132,18 @@ public final class JobScheduler implements Disposable {
      * thread pool. A headless process that never schedules anything never creates one.</p>
      */
     public static JobScheduler shared() {
+        // A DOCUMENT ON ITS OWN SEQUENCE drains its own: this class's maps are its owner's alone, and an answer
+        // must come back to the sequence that asked. @see UiSequence
+        UiSequence sequence = UiSequence.current();
+        if (sequence != null) return sequence.jobs();
         if (shared == null) shared = new JobScheduler();
         return shared;
     }
 
     /** Whether {@link #shared()} has been created — checked before draining, so asking never constructs. */
     public static boolean hasShared() {
+        UiSequence sequence = UiSequence.current();
+        if (sequence != null) return sequence.hasJobs();
         return shared != null;
     }
 

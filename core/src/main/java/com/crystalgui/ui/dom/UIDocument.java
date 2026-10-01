@@ -1,6 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
@@ -141,8 +142,38 @@ public final class UIDocument extends UIElement {
         return this;
     }
 
+    /**
+     * Gives this tree to {@code sequence}: from now on it is touched only from the sequence's tasks, on whichever pool
+     * thread runs them, and {@link #require} asks the sequence rather than a thread. Null hands it back to whichever
+     * thread next runs a frame.
+     *
+     * <pre>{@code
+     * UiSequence sequence = UiSequence.create("desktop");
+     * document.runOn(sequence);
+     * sequence.execute(() -> document.frame(delta, w, h));
+     * }</pre>
+     */
+    public UIDocument runOn(@Nullable UiSequence sequence) {
+        this.sequence = sequence;
+        frameThread = null;
+        return this;
+    }
+
+    /** The sequence this tree runs on, or null when a thread owns it. */
+    @Nullable
+    public UiSequence sequence() {
+        return sequence;
+    }
+
+    @Nullable
+    private volatile UiSequence sequence;
+
     /** The first frame claims its thread, as does a frame after the claiming thread died. */
     private void claimFrameThread() {
+        if (sequence != null) {
+            require("A frame");
+            return;
+        }
         Thread owner = frameThread;
         if (owner == Thread.currentThread()) return;
         if (owner == null || !owner.isAlive()) {
@@ -159,7 +190,9 @@ public final class UIDocument extends UIElement {
 
     /** Refuses a caller on any thread but the frame thread, once one has been claimed. */
     public void require(String what) {
-        UiThread.require(what, frameThread);
+        UiSequence owner = sequence;
+        if (owner != null) UiThread.require(what, owner);
+        else UiThread.require(what, frameThread);
     }
 
     // ── The running document ─────────────────────────────────────────────────
@@ -524,7 +557,16 @@ public final class UIDocument extends UIElement {
      */
     public void frame(float deltaSeconds, float width, float height) {
         try (Running ignored = makeCurrent()) {
-            runFrame(deltaSeconds, width, height);
+            // ON A SEQUENCE THIS IS WORK INSIDE THE RENDER THREAD'S FRAME, not a frame of its own: the trace ring's
+            // unit is a presented frame, and only the host's frame opens one.
+            if (sequence == null) {
+                UiTrace.frameBegin();
+                runFrame(deltaSeconds, width, height);
+            } else {
+                long timed = CgTrace.stamp(UiTrace.FRAME);
+                runFrame(deltaSeconds, width, height);
+                CgTrace.zoneDone(UiTrace.FRAME, "doc:frame", timed);
+            }
         }
     }
 
@@ -533,7 +575,6 @@ public final class UIDocument extends UIElement {
         // separately: this is animation, style and layout, and the paint that follows is a call the
         // host makes itself. @see CgUiPaintContext#endFrame
         claimFrameThread();
-        UiTrace.frameBegin();
         if (JobScheduler.hasShared()) {
             CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
             long drained = CgTrace.stamp(UiTrace.FRAME);

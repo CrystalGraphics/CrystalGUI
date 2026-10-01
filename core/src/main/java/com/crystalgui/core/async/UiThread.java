@@ -140,6 +140,16 @@ public final class UiThread {
      * @param what      what was being attempted, for the message. Name the OPERATION, not the class.
      * @param treeOwner the thread that runs frames for this tree, or null if none ever has
      */
+    public static void require(String what, UiSequence treeOwner) {
+        if (!enforcing || treeOwner.isCurrent()) return;
+        UiSequence running = UiSequence.current();
+        throw new IllegalStateException(
+                what + " must happen on the tree's sequence (" + treeOwner.name() + "), not on "
+                        + (running == null ? "thread " + Thread.currentThread().getName() : running.name())
+                        + ". Post it there: sequence.execute(...).");
+    }
+
+    /** As {@link #require(String, UiSequence)}, for a tree a thread owns. */
     public static void require(String what, @Nullable Thread treeOwner) {
         if (!enforcing) return;
         Thread known = treeOwner;
