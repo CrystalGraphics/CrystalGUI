@@ -1,6 +1,7 @@
 package com.crystalgui.app.shadergraph.preview;
 
 import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.Drag;
@@ -413,7 +414,10 @@ public class MainPreviewPanel extends UIElement implements Disposable.Gl {
         move.reclampIfPlaced(placedLeft(), placedTop());
         // Not while hidden: an inactive tab is `display: none`, not detached, so it still ticks.
         Box box = surface.box();
-        if (box == null || box.width() <= 0f || box.height() <= 0f) return true;        // Rebuilt on change and not per frame. A null answer (no master node) is rebuilt every frame, which is cheap.
+        if (box == null || box.width() <= 0f || box.height() <= 0f) return true;
+        // Off the GL thread the preview keeps its last picture until it is recorded with the frame (render-graph G3.5).
+        if (!CgGL.ownedByCurrentThread()) return true;
+        // Rebuilt on change and not per frame. A null answer (no master node) is rebuilt every frame, which is cheap.
         if (graph == null) graph = ShaderGraphBridge.toShaderGraph(document, shaderNodes, master);
         // The camera is framed for the panel, so the picture fills it rather than sitting letterboxed in
         // the middle of it. Read from the SURFACE, not from the panel: the header takes a strip off the
