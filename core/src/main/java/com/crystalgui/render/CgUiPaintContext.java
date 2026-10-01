@@ -1,11 +1,11 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgRenderPassVariant;
-import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
@@ -716,7 +716,7 @@ public final class CgUiPaintContext {
         // Every flush from here is a chunk in the frame's recording, starting with the frame target's clear; nothing
         // executes until endFrame.
         // The frame's clock, which a material reading CG_TIME animates by -- a shader graph's Time node.
-        passConstants.time(CgRenderPipeline.getInstance().frameTime());
+        passConstants.time(CgFrameClock.seconds());
         targetConstants(screenWidth, screenHeight);
         recordFlushes(true);
         for (CgGraphTexture released : pendingReleases) recording.release(released);

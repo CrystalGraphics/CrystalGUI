@@ -2,7 +2,6 @@ package com.crystalgui.mc.v1710.client;
 
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
@@ -157,14 +156,6 @@ public final class CgUiScreen extends GuiScreen {
         }
 
         if (!session.isBuilt()) return;
-
-        // THE CLOCK EVERY NODE PREVIEW READS. CgPreviewRenderer reuses the shared CgRenderPipeline
-        // singleton's one CgFrameData rather than owning its own, which is what lets a Time node's
-        // thumbnail animate off whatever clock the application already drives. Nothing else here drives
-        // it, so without this line CG_TIME is permanently zero -- and a Multiply of Colour x SineTime
-        // renders BLACK whatever colour you pick, which reads as "the preview does not recompile".
-        CgRenderPipeline.getInstance().getFrameData().timeSecs =
-                (float) (System.nanoTime() / 1_000_000_000.0);
 
         // INPUT, DRAINED PER FRAME RATHER THAN PER TICK.
         //
