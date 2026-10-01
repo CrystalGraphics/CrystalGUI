@@ -2,6 +2,7 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiFrame;
@@ -162,6 +163,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     private long commits;
     /** Host frames that drew the document. Render thread. */
     private long presented;
+    private boolean closed;
 
     private DocumentDriver(UIDocument document, Mode mode, String name) {
         this.document = document;
@@ -176,7 +178,10 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         document.runOn(sequence);
         compositor = mode == Mode.ASYNC ? new SurfaceCompositor<>(sequence) : null;
         port = mode == Mode.ASYNC ? new PostedPlatformPort(sequence) : null;
-        if (port != null) document.usePlatform(port);
+        if (port != null) {
+            document.usePlatform(port);
+            JobScheduler.asynchronousDocumentOpened();
+        }
         CrystalGuiCore.LOGGER.info("[cgui] document '{}' runs on its own sequence, {}", name,
                 mode == Mode.ASYNC ? "recording on its own" : "in lockstep");
     }
@@ -353,8 +358,10 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
      * the host may free what its frames use. The document is not touched; dispose it first, through {@link #run}.
      */
     public void close() {
-        if (sequence == null) return;
+        if (sequence == null || closed) return;
+        closed = true;
         sequence.runNow(() -> { });
         sequence.close();
+        if (port != null) JobScheduler.asynchronousDocumentClosed();
     }
 }
