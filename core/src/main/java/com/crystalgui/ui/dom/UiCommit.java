@@ -13,5 +13,12 @@ import javax.annotation.Nullable;
  *   <li>{@code facts} is whatever the {@link DocumentDriver.Painter} answered for this frame.</li>
  * </ul>
  */
-record UiCommit<F>(@Nullable UiFrame frame, @Nullable F facts, long index) {
+record UiCommit<F>(@Nullable UiFrame frame, @Nullable F facts, long index, @Nullable Follow follow) {
+
+    /**
+     * An element the frame recorded mid-gesture, moving one for one with the pointer: its spatial node in this frame and
+     * where the pointer was, in surface pixels, when the document recorded it. What Input.followPointer declared.
+     */
+    record Follow(int node, float pointerX, float pointerY) {
+    }
 }

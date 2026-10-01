@@ -247,6 +247,7 @@ public class CgUiDesktopScene
             try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "scene:readout")) {
                 refreshReadout();
             }
+            if (followBusy) sleepQuietly(FOLLOW_BUSY_MS);
         }, null);
         driver.run(() -> build(ctx));
     }
@@ -488,11 +489,76 @@ public class CgUiDesktopScene
         driver.frame(delta, w, h, painter);
         // The probes read and drive the tree, so they run on the document -- waited for, which is why they are off unless asked.
         if (probing()) driver.run(() -> afterFrame(ctx, frame, workStart));
+        if (FOLLOW_SHOT) driveFollowShot(ctx);
         // Late enough that the first window's placement, the entry animations and the editor's own
         // deferred rebuilds have all settled -- a capture at frame 5 photographs a desktop that is
         // still assembling itself and every diff against it is noise. Counted in frames that showed the
         // document: one recording on its own presents nothing until its first frame is done.
         if (driver.presentedFrames() == 40) ctx.getArtifactService().requestCapture("startup");
+    }
+
+    // ── -Dcrystalgui.harness.desktop.follow=true: a window dragged across a busy document ──
+
+    /**
+     * Makes the document take {@link #FOLLOW_BUSY_MS} a frame, then drags a window's caption {@link #FOLLOW_STEP} px a
+     * host frame and photographs it mid-drag ({@code follow-mid}). With compositor motion the window is under the
+     * pointer in every host frame; with {@code -Dcrystalgui.ui.compositorMotion=false} it moves only when the document
+     * commits. Async. Prints {@code [follow-probe]} lines.
+     */
+    private static final boolean FOLLOW_SHOT = Boolean.getBoolean("crystalgui.harness.desktop.follow");
+    private static final long FOLLOW_BUSY_MS = 60L;
+    private static final int FOLLOW_STEP = 8;
+
+    private volatile boolean followBusy;
+    private WindowFrame followWindow;
+    private int followX, followY;
+
+    private void driveFollowShot(HarnessContext ctx) {
+        long n = driver.presentedFrames();
+        if (n == 60) driver.run(() -> {
+            for (WindowFrame window : desktop.windows()) {
+                if (!window.isMaximized() && window.box() != null) {
+                    desktop.activate(window);
+                    followWindow = window;
+                    break;
+                }
+            }
+        });
+        if (followWindow == null || n < 90 || n > 135) return;
+        if (n == 90) {
+            float[] at = driver.ask(() -> new float[] {followWindow.titleBar().box().worldX(), followWindow.titleBar().box().worldY(),
+                    followWindow.titleBar().box().height() * document.boxes().uiScale()});
+            followX = Math.round(at[0] + 40f);
+            followY = Math.round(at[1] + at[2] / 2f);
+            followBusy = true;
+            consumeMouseEvent(new CgSystemInput.Mouse.Event(followX, followY, 0, 0, 0, true, 0f, System.currentTimeMillis()));
+            System.out.println("[follow-probe] pressed '" + followWindow.getTitle() + "' at " + followX + "," + followY);
+            return;
+        }
+        if (n <= 130) {
+            int x = followX + (int) (n - 90) * FOLLOW_STEP;
+            consumeMouseEvent(new CgSystemInput.Mouse.Event(x, followY, FOLLOW_STEP, 0, -1, false, 0f, -1L));
+            if (n == 110) {
+                ctx.getArtifactService().requestCapture("follow-mid");
+                System.out.println("[follow-probe] mid-drag: pointer at " + x + ", document's window at "
+                        + driver.ask(() -> followWindow.left()) + " (layout px)");
+            }
+            return;
+        }
+        if (n == 131) {
+            followBusy = false;
+            consumeMouseEvent(new CgSystemInput.Mouse.Event(followX + 40 * FOLLOW_STEP, followY, 0, 0, 0, false, 0f,
+                    System.currentTimeMillis()));
+            System.out.println("[follow-probe] released");
+        }
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private boolean probing() {

@@ -3,10 +3,12 @@ package com.crystalgui.ui.dom;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.HostThread;
+import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiFrame;
+import com.crystalgui.ui.box.Box;
 
 import javax.annotation.Nullable;
 import java.util.Queue;
@@ -275,6 +277,8 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     /** {@link #offer} for a pointer event, whose buttons the document's platform answers from when posted. */
     public boolean offerMouse(CgSystemInput.Mouse.Event event, BooleanSupplier dispatch) {
         if (mode != Mode.ASYNC) return offer(dispatch);
+        pointerX = event.x();
+        pointerY = event.y();
         sequence.execute(() -> {
             port.note(event);
             dispatch.getAsBoolean();
@@ -327,7 +331,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         document.paintContext();
         port.service();
         pendingDelta += deltaSeconds;
-        boolean shown = compositor.present(width, height) != null;
+        boolean shown = compositor.present(width, height, this::followPointer) != null;
         float delta = pendingDelta;
         // READ ONLY FOR A FRAME THAT WILL BE TAKEN: the readings belong to the frame they are delivered in.
         if (compositor.accepting()) {
@@ -345,7 +349,49 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
 
     private UiCommit<F> commit(Painter<F> painter, float deltaSeconds, int width, int height) {
         UiFrame frame = painter.record(deltaSeconds, width, height);
-        return new UiCommit<>(frame, painter.facts(), ++commits);
+        return new UiCommit<>(frame, painter.facts(), ++commits, follow(frame));
+    }
+
+    /** What follows the pointer in {@code frame}, if anything and it has a node there to move. On the document. */
+    @Nullable
+    private UiCommit.Follow follow(@Nullable UiFrame frame) {
+        UIElement element = frame == null ? null : document.input().pointerFollower();
+        Box box = element == null ? null : element.box();
+        int node = box == null ? 0 : box.movedNode(frame.frameId());
+        if (node == 0) return null;
+        ReadOnlyVec2f pointer = document.input().pointer();
+        return new UiCommit.Follow(node, pointer.x(), pointer.y());
+    }
+
+    // ── Compositor motion ───────────────────────────────────────────────────────────────────────
+
+    /** {@code -Dcrystalgui.ui.compositorMotion=false}: nothing moves between the document's frames. */
+    private static final boolean COMPOSITOR_MOTION =
+            !"false".equals(System.getProperty("crystalgui.ui.compositorMotion"));
+
+    /** The pointer as the render thread last saw it, in surface pixels. Render thread. */
+    private float pointerX, pointerY;
+    /** The commit {@link #followPointer} last moved, and by how much, so an unchanged offset is not drawn again. */
+    @Nullable
+    private UiCommit<F> moved;
+    private int movedX, movedY;
+
+    /**
+     * Moves what the commit recorded following the pointer by the pointer's travel since: a window dragged across a busy
+     * document stays under the hand. Whole device pixels, as a spatial node is placed. Render thread.
+     */
+    private boolean followPointer(UiCommit<F> commit) {
+        if (!COMPOSITOR_MOTION) return false;
+        UiCommit.Follow follow = commit.follow();
+        if (follow == null || commit.frame() == null) return false;
+        int dx = Math.round(pointerX - follow.pointerX());
+        int dy = Math.round(pointerY - follow.pointerY());
+        if (commit == moved && dx == movedX && dy == movedY) return false;
+        commit.frame().values().translate(follow.node(), dx, dy);
+        moved = commit;
+        movedX = dx;
+        movedY = dy;
+        return true;
     }
 
     /** The facts of the frame on screen, or of the newest one committed; null before the first, and when not async. */
