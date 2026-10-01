@@ -35,6 +35,7 @@ import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.graph.CgPassRecorder;
 import com.crystalgraphics.render.graph.CgRecording;
+import com.crystalgraphics.render.property.CgPropertyValues;
 import com.crystalgraphics.render.property.CgSpatialTree;
 import com.crystalgraphics.render.graph.CgTextureDesc;
 import com.crystalgraphics.platform.gl.CgCapabilities;
@@ -766,7 +767,9 @@ public final class CgUiPaintContext {
         timed = CgTrace.stamp(UiTrace.FRAME);
         UiFrame frame;
         try {
-            frame = new UiFrame(build(recording), build(present), builder, screenWidth, screenHeight);
+            CgPropertyValues values = new CgPropertyValues();
+            frame = new UiFrame(build(recording, values), build(present, null), builder, values, frameId, screenWidth,
+                    screenHeight);
         } finally {
             recording.reset();
             present.reset();
@@ -785,9 +788,9 @@ public final class CgUiPaintContext {
         return frame;
     }
 
-    private CgFrame build(CgRecording what) {
+    private CgFrame build(CgRecording what, @Nullable CgPropertyValues values) {
         try {
-            graph.add(what.seal());
+            graph.add(what.seal(), values);
             return builder.build(graph);
         } finally {
             graph.clear();
@@ -2477,10 +2480,12 @@ public final class CgUiPaintContext {
      *       clear, so its partially covered pixels carry their alpha in their colour.</li>
      *   <li>V is flipped: a target's row 0 is its bottom, and the UI's is its top.</li>
      *   <li>The region is in the target's pixels, drawn in the current node, so the composite moves with it.</li>
+     *   <li>Below full opacity it is drawn under an effect node holding {@code opacity}, which a compositor may change.
+     *       Answers that node, or 0.</li>
      * </ul>
      */
-    public void blitLayer(CgGraphTexture layer, float opacity, LayerRegion region) {
-        if (region.isEmpty()) return;
+    public int blitLayer(CgGraphTexture layer, float opacity, LayerRegion region) {
+        if (region.isEmpty()) return 0;
         long timed = CgTrace.stamp(UiTrace.FRAME);
         CgTrace.add(UiTrace.FRAME, "layer-blit-kpx", region.width() * region.height() / 1000);
         float u1 = Math.min(1f, (float) region.width() / layer.getWidth());
@@ -2488,16 +2493,28 @@ public final class CgUiPaintContext {
         // Declared rather than bound by hand: _MainTex has a "white" default, so an undeclared texture composites
         // the white fallback, premultiplied -- a destination flooded white rather than a missing image.
         layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
-        withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
-            poseStack.pushPose();
-            poseStack.last().pose().set(targetToDraw());
-            quad().at(region.x(), region.y()).size(region.width(), region.height())
-                  .uv(0f, 1f, u1, v1)
-                  .color(getColor()).submit();
-            flush();
-            poseStack.popPose();
-        }));
+        int effect = 0;
+        if (NODES && opacity < 1f && nodesSuspended == 0 && recording.effects().count() < CgSpatialTree.MAX_NODES) {
+            effect = recording.effects().add(effectNode, opacity);
+        }
+        int outerEffect = effectNode;
+        effectNode = effect != 0 ? effect : effectNode;
+        float drawn = effect != 0 ? 1f : opacity;
+        try {
+            withMaterial(layerBlitMaterial, () -> withLayerOpacity(drawn, () -> {
+                poseStack.pushPose();
+                poseStack.last().pose().set(targetToDraw());
+                quad().at(region.x(), region.y()).size(region.width(), region.height())
+                      .uv(0f, 1f, u1, v1)
+                      .color(getColor()).submit();
+                flush();
+                poseStack.popPose();
+            }));
+        } finally {
+            effectNode = outerEffect;
+        }
         CgTrace.zoneDone(UiTrace.FRAME, "layer:blit", timed);
+        return effect;
     }
 
     /** The target being drawn into: the innermost layer, or the frame's own target when none is open. */

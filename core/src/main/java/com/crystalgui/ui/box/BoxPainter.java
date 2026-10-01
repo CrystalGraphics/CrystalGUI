@@ -101,6 +101,29 @@ public final class BoxPainter {
                 return;
             }
         }
+        // A BOX A COMPOSITOR MOVES (`will-change: transform`) is recorded in its own space, under a node that is a
+        // whole-pixel translation to its corner: a move is the node's value. A translation for the reason scrolled
+        // content's node is one. @see #paintChildren
+        if (box.willChangeTransform()) {
+            Matrix4f origin = nodeOrigin.set(base).mul(box.localToWorld());
+            float x = Math.round(origin.m30()), y = Math.round(origin.m31());
+            int moved = ctx.addNode(origin.translation(x, y, 0f), true);
+            if (moved != 0) {
+                box.noteMovedNode(moved, ctx.frameId());
+                int outer = ctx.enterNode(moved);
+                try {
+                    paintBoxIn(box, ctx, new Matrix4f(base).translateLocal(-x, -y, 0f), asContext, opacity);
+                } finally {
+                    ctx.enterNode(outer);
+                }
+                return;
+            }
+        }
+        paintBoxIn(box, ctx, base, asContext, opacity);
+    }
+
+    /** {@link #paintBox} once it is known to paint, in the node it draws in. */
+    private void paintBoxIn(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext, float opacity) {
         UIElement node = box.node();
         ComputedStyle style = node.computedStyle();
         PoseStack pose = ctx.getPoseStack();
@@ -182,7 +205,7 @@ public final class BoxPainter {
                 // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
                 ctx.notePainted(ctx.targetToDraw(), region.x(), region.y(), region.x() + region.width(),
                         region.y() + region.height());
-                ctx.blitLayer(keep.target(), opacity, region);
+                box.noteFadedNode(ctx.blitLayer(keep.target(), opacity, region), ctx.frameId());
                 return;
             }
 
@@ -232,7 +255,7 @@ public final class BoxPainter {
             paintOutline(box, style, ctx);
             ctx.endLayerFbo();
             if (keep != null) keep.painted();
-            ctx.blitLayer(subtreeFbo, opacity, region);
+            box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region), ctx.frameId());
         } finally {
             painted.set(base).mul(box.localToWorld());
             notePainted(box, ctx, painted);
@@ -385,7 +408,10 @@ public final class BoxPainter {
                     .translate(-box.scrollLeft(), -box.scrollTop(), 0f);
             float x = Math.round(origin.m30()), y = Math.round(origin.m31());
             content = ctx.addNode(origin.translation(x, y, 0f), true);
-            if (content != 0) contentBase = new Matrix4f(base).translateLocal(-x, -y, 0f);
+            if (content != 0) {
+                contentBase = new Matrix4f(base).translateLocal(-x, -y, 0f);
+                box.noteScrolledNode(content, ctx.frameId());
+            }
         }
         int outer = ctx.spatialNode();
         try {

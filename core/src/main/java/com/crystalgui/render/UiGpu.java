@@ -67,9 +67,13 @@ public final class UiGpu {
     /** Built on the first frame a picture is asked for; three in flight covers a GPU two frames behind. */
     @Nullable
     private CgPixelReadback frameImages;
-    /** The last presented frame's composite, kept for {@link #presentAgain}, and the builder it goes back to. */
+    /** The last presented frame and its composite, kept for {@link #redraw} and {@link #presentAgain}. */
+    @Nullable
+    private CgFrame lastFrame;
     @Nullable
     private CgFrame lastPresent;
+    @Nullable
+    private UiFrame lastShown;
     @Nullable
     private CgFrameBuilder lastPresentBuilder;
     private int lastWidth, lastHeight;
@@ -142,12 +146,41 @@ public final class UiGpu {
     void endFrame(UiFrame frame) {
         boolean executed = false;
         try {
-            execute(frame);
+            execute(frame.frame, frame.present);
             executed = true;
         } finally {
-            frame.builder.recycle(frame.frame);
-            if (executed) keepPresent(frame);
-            else frame.builder.recycle(frame.present);
+            if (executed) {
+                keep(frame);
+            } else {
+                frame.builder.recycle(frame.frame);
+                frame.builder.recycle(frame.present);
+            }
+        }
+    }
+
+    /**
+     * Executes the last presented frame again, with its {@link UiFrame#values()} as they stand now, and composites it:
+     * a compositor's scroll, move or fade with nothing recorded or built. The host's state is saved and restored
+     * around it, as for {@link #present}. A no-op where {@link #presentAgain} would be one.
+     *
+     * <pre>{@code
+     * frame.values().translate(listBox.scrolledNode(frame.frameId()), 0f, -scrolledPx);
+     * UiGpu.redraw(width, height);
+     * }</pre>
+     *
+     * <p>What a recording decided in the target's pixels stays as recorded: what was culled, a layer's region, a
+     * retained layer, a backdrop's capture. A move far enough to reach those wants a new frame.</p>
+     */
+    public static void redraw(int width, int height) {
+        UiGpu gpu = instance;
+        if (gpu == null || gpu.lastFrame == null || width != gpu.lastWidth || height != gpu.lastHeight) return;
+        gpu.beginFrame(width, height);
+        boolean executed = false;
+        try {
+            gpu.execute(gpu.lastFrame, gpu.lastPresent);
+            executed = true;
+        } finally {
+            if (!executed) gpu.abortFrame();
         }
     }
 
@@ -177,17 +210,20 @@ public final class UiGpu {
         }
     }
 
-    private void keepPresent(UiFrame frame) {
+    private void keep(UiFrame frame) {
+        if (lastFrame != null) lastPresentBuilder.recycle(lastFrame);
         if (lastPresent != null) lastPresentBuilder.recycle(lastPresent);
+        lastFrame = frame.frame;
         lastPresent = frame.present;
+        lastShown = frame;
         lastPresentBuilder = frame.builder;
         lastWidth = frame.width();
         lastHeight = frame.height();
     }
 
-    private void execute(UiFrame frame) {
+    private void execute(CgFrame frame, CgFrame present) {
         long timed = CgTrace.stamp(UiTrace.FRAME);
-        CgExecutor.execute(frame.frame);
+        CgExecutor.execute(frame);
         CgTrace.zoneDone(UiTrace.FRAME, "glend:execute", timed);
 
         timed = CgTrace.stamp(UiTrace.FRAME);
@@ -202,7 +238,7 @@ public final class UiGpu {
             glScope = null;
             CgTrace.zoneDone(UiTrace.FRAME, "glend:restoreState", timed);
         }
-        composite(frame.present);
+        composite(present);
         unparkSamplers();
         CgGpuTrace.end();
         // The other half of the frame the document opened: reports and clears. A no-op when none was opened.
@@ -292,10 +328,18 @@ public final class UiGpu {
         }
         gpu.contexts.clear();
         gpu.glScope = null;
+        gpu.lastFrame = null;
         gpu.lastPresent = null;
+        gpu.lastShown = null;
         gpu.frameFbo.delete();
         if (gpu.frameImages != null) gpu.frameImages.delete();
         instance = null;
+    }
+
+    /** The frame last presented, whose values {@link #redraw} draws with; null before the first. Render thread. */
+    @Nullable
+    public static UiFrame presented() {
+        return instance == null ? null : instance.lastShown;
     }
 
     /** Whether an instance exists, without making one. */
