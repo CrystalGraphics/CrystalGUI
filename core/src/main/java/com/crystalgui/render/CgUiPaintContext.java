@@ -603,6 +603,13 @@ public final class CgUiPaintContext {
         return frameId;
     }
 
+    private final SvgDocument.LodBudget svgLodBudget = new SvgDocument.LodBudget();
+
+    /** What this paint has spent building icon mesh tiers this frame. */
+    public SvgDocument.LodBudget svgLodBudget() {
+        return svgLodBudget;
+    }
+
     /**
      * Depth of nested mirror passes. @see #mirroring()
      *
