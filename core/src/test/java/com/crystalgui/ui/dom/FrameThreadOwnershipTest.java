@@ -122,7 +122,6 @@ public class FrameThreadOwnershipTest extends UiDocumentTestBase {
         unclaimed.frame(0f, 100f, 100f);
 
         assertSame(Thread.currentThread(), unclaimed.frameThread());
-        assertTrue("a thread running frames is a UI thread", UiThread.isCurrent());
 
         final Throwable[] raised = new Throwable[1];
         Thread other = new Thread(() -> {

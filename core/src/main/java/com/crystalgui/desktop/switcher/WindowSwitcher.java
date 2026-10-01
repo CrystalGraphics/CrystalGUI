@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.switcher;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.window.WindowState;
@@ -454,8 +454,8 @@ public class WindowSwitcher extends UIElement {
     }
 
     private static int currentModifiers() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
+        PlatformPort input = PlatformPort.current();
+        return input == null ? 0 : input.modifiers();
     }
 
     private void wake() {

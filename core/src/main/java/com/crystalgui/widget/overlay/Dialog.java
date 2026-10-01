@@ -1,5 +1,6 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
@@ -143,7 +144,7 @@ public class Dialog extends UIElement {
         if (window == null || pulsing) return;
         pulsing = true;
         addClass(PULSE_CLASS);
-        CgPlatform.sound().play("dialog_blocked");
+        PlatformPort.current().playSound("dialog_blocked");
         window.animation().every(this, delta -> {
             removeClass(PULSE_CLASS);
             pulsing = false;

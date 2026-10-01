@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas;
 
+import com.crystalgui.ui.service.PlatformPort;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -7,7 +8,6 @@ import javax.annotation.Nullable;
 
 import org.joml.Vector2f;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
@@ -267,7 +267,7 @@ public final class ReorderInFlow extends UIElement {
     }
 
     private static int modifiersNow() {
-        var input = CgPlatform.input();
-        return input == null ? 0 : input.getCurrentModifiers();
+        PlatformPort input = PlatformPort.current();
+        return input == null ? 0 : input.modifiers();
     }
 }

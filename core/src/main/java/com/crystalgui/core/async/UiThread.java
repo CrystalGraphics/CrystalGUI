@@ -43,27 +43,38 @@ public final class UiThread {
     private UiThread() {
     }
 
-    /** Set on every thread a document has claimed for its frames. */
-    private static final ThreadLocal<Boolean> RUNS_FRAMES = new ThreadLocal<>();
+    /** A thread marked by hand as running frames. */
+    private static final ThreadLocal<Boolean> MARKED = new ThreadLocal<>();
 
-    /**
-     * Records the calling thread as one that runs frames.
-     *
-     * <p>Called by {@code UIDocument} when it claims a thread, so it is right whatever drives it — a real
-     * window, the harness, or a test stepping frames by hand.</p>
-     */
+    /** How deep this thread is inside documents' frames, input events or tasks, from {@link #enter}. */
+    private static final ThreadLocal<int[]> DEPTH = ThreadLocal.withInitial(() -> new int[1]);
+
+    /** Marks the calling thread as running frames until {@link #forgetForTesting}: for tests and hosts with no document. */
     public static void markCurrent() {
-        RUNS_FRAMES.set(Boolean.TRUE);
+        MARKED.set(Boolean.TRUE);
     }
 
-    /** Whether this thread runs frames for some tree. False before its first frame — see the class note. */
+    /**
+     * This thread is now running a document. {@code UIDocument.makeCurrent} calls it; pair with
+     * {@link #exit}. A pool thread running a document's task is a UI thread for that task only.
+     */
+    public static void enter() {
+        DEPTH.get()[0]++;
+    }
+
+    public static void exit() {
+        DEPTH.get()[0]--;
+    }
+
+    /** Whether this thread is running a document now, or was marked. False before any frame — see the class note. */
     public static boolean isCurrent() {
-        return RUNS_FRAMES.get() != null;
+        return DEPTH.get()[0] > 0 || MARKED.get() != null;
     }
 
     /** Forgets this thread's mark, so a test can assert what happens before any frame has run. */
     public static void forgetForTesting() {
-        RUNS_FRAMES.remove();
+        MARKED.remove();
+        DEPTH.remove();
     }
 
     // ── The assertion ────────────────────────────────────────────────────────────

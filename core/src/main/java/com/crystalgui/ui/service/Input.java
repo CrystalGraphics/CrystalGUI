@@ -1,8 +1,6 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.cursor.Cursor;
-import com.crystalgui.core.cursor.CursorService;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -384,7 +382,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         if (resolved == lastCursor) return;
         lastCursor = resolved;
         // Inert until CrystalGraphics has a cursor adapter, which is correct for a headless tree.
-        CursorService.setCursor(resolved);
+        document.platform().setCursor(resolved);
     }
 
     /**
@@ -761,6 +759,12 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
     @Override
     public boolean consumeMouseEvent(Mouse.Event event) {
+        try (UIDocument.Running ignored = document.makeCurrent()) {
+            return mouseEvent(event);
+        }
+    }
+
+    private boolean mouseEvent(Mouse.Event event) {
         releaseEndedDrag = false;
         boolean moved = event.x() != position.x || event.y() != position.y;
         if (moved) hoverValid = false;
@@ -880,6 +884,12 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * @return whether a node showed it -- when false, a host may draw the run itself
      */
     public boolean consumeComposition(String text, int caret) {
+        try (UIDocument.Running ignored = document.makeCurrent()) {
+            return composition(text, caret);
+        }
+    }
+
+    private boolean composition(String text, int caret) {
         UIElement focused = document.focus().focused();
         if (focused == null) return false;
         CompositionEvent event = new CompositionEvent(focused, text, caret);
@@ -896,6 +906,12 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
 
     @Override
     public boolean consumeKeyboardEvent(Keyboard.Event event) {
+        try (UIDocument.Running ignored = document.makeCurrent()) {
+            return keyboardEvent(event);
+        }
+    }
+
+    private boolean keyboardEvent(Keyboard.Event event) {
         int modifiers = modifiers();
         for (InputMode mode : modes()) {
             boolean taken = event.pressed()
@@ -993,11 +1009,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * than failing, which is the honest reading of "this host has no modifier state".
      */
     private int modifiers() {
-        try {
-            return CgPlatform.input().getCurrentModifiers();
-        } catch (IllegalStateException noPlatform) {
-            return 0;
-        }
+        return document.platform().modifiers();
     }
 
     /**

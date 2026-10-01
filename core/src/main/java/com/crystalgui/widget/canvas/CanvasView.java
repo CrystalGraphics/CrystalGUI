@@ -1,5 +1,6 @@
 package com.crystalgui.widget.canvas;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
@@ -7,7 +8,6 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.box.Box;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
@@ -727,7 +727,7 @@ public class CanvasView extends UIElement {
     }
 
     private static boolean isSpaceHeld() {
-        var input = CgPlatform.input();
+        PlatformPort input = PlatformPort.current();
         return input != null && input.isKeyDown(CgKeyCodes.KEY_SPACE);
     }
 

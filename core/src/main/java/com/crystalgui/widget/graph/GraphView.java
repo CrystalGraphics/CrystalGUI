@@ -1,5 +1,6 @@
 package com.crystalgui.widget.graph;
 
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.widget.overlay.ContextMenu;
@@ -11,7 +12,6 @@ import com.crystalgui.ui.input.keymap.KeymapScope;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.data.ClipboardActions;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
@@ -987,13 +987,13 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     }
 
     private static boolean isShiftHeld() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasShift(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasShift(input.modifiers());
     }
 
     private static boolean isAltHeld() {
-        var input = CgPlatform.input();
-        return input != null && CgModifiers.hasAlt(input.getCurrentModifiers());
+        PlatformPort input = PlatformPort.current();
+        return input != null && CgModifiers.hasAlt(input.modifiers());
     }
 
     // ── Framing ─────────────────────────────────────────────────────────────

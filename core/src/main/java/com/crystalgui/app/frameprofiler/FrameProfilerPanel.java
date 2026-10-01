@@ -1,6 +1,6 @@
 package com.crystalgui.app.frameprofiler;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgFrameRecord;
@@ -485,7 +485,7 @@ public class FrameProfilerPanel extends UIElement {
                     range == null ? Long.MIN_VALUE : range.fromIndex(),
                     range == null ? Long.MAX_VALUE : range.toIndex());
             String path = file.toAbsolutePath().toString();
-            CgPlatform.input().setClipboard(path);
+            PlatformPort.current().setClipboard(path);
             exportNote.setText("Saved " + (range == null ? "every frame held" : range.label())
                     + " to " + path + "  (path copied)");
             compare.refreshTraces();
