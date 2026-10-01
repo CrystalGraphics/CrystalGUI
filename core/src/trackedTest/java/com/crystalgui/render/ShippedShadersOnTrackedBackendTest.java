@@ -1,9 +1,8 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.api.CgBindingPoints;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgRenderPassVariant;
-import com.crystalgraphics.api.render.CgFrameData;
-import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.gl.material.CgMaterialShader;
 import com.crystalgraphics.gl.material.CgMaterialShaderRegistry;
 import com.crystalgraphics.gl.material.parse.CgParsedPass;
@@ -51,7 +50,7 @@ public class ShippedShadersOnTrackedBackendTest {
         CgGlState.reset();
         CgGlState.setProvider(new CgTrackedStateProvider(gl));
         // CgGraphicsLifecycle.initContext's own steps, less the platform it would ask for a context.
-        CgRenderPipeline.init();
+        CgBindingPoints.init(CgCapabilities.detect());
         CgFallbackTextures.init();
     }
 
@@ -84,7 +83,7 @@ public class ShippedShadersOnTrackedBackendTest {
                 }
             }
             CgMaterial material = CgMaterial.newInstance(path);
-            if (CgFrameData.SHADOWS_SUPPORTED && material.hasShadowCasterPass()
+            if (CgMaterialShader.SHADOWS_SUPPORTED && material.hasShadowCasterPass()
                     && !shader.hasCompiledPass(CgRenderPassVariant.SHADOW.lightModeName()))
                 failures.add(path + ": the generated shadow pass did not link (see log)");
             if (parsed.renderQueue() < 3000 && forward != null && !material.hasDepthPass()
