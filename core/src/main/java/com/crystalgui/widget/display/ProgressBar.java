@@ -1,5 +1,7 @@
 package com.crystalgui.widget.display;
 
+import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
@@ -36,6 +38,9 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  * it needs a clock. {@link Animation.Hook} is that clock, and the ticker returns {@code false} — dropping
  * itself — the moment the bar becomes determinate or leaves the tree. A permanently-registered ticker on
  * a widget that is usually determinate is a frame cost paid by every screen that shows one.</p>
+ *
+ * <p>The stripe moves by a compositor transform on its box, sized once: writing its margin and width each
+ * frame restyled and relaid out the bar sixty times a second for as long as anything was indeterminate.</p>
  */
 public class ProgressBar extends UIElement {
 
@@ -136,10 +141,14 @@ public class ProgressBar extends UIElement {
 
         if (nowIndeterminate) {
             addClass(INDETERMINATE_CLASS);
+            StyleGroup.inlinePipeline(fill.getStyle().getLayoutGroup(),
+                    l -> l.widthPercent(SWEEP_WIDTH * 100f).marginLeft(0f));
             startTicking();
             applySweep();
         } else {
             removeClass(INDETERMINATE_CLASS);
+            Box stripe = fill.box();
+            if (stripe != null) stripe.setTransform(null);
             // The ticker drops itself on its next tick; nothing to unregister.
             float percent = this.fraction * 100f;
             // INLINE, not IMPORTANT. The fill's width is DATA -- what the bar is reporting -- so it has
@@ -188,6 +197,12 @@ public class ProgressBar extends UIElement {
         startTicking();
     }
 
+    /** The hook goes with the tree, so the next connect must register it again. */
+    @Override
+    protected void disconnected() {
+        ticking = false;
+    }
+
     /**
      * Registers the sweep, if the bar needs one.
      *
@@ -198,7 +213,8 @@ public class ProgressBar extends UIElement {
         if (ticking || !isIndeterminate()) return;
         if (document() == null) return;
         ticking = true;
-        document().animation().every(this, this::tickFrame);
+        // After layout: the stripe is placed from the track's measured width.
+        document().animation().afterLayout(this, this::tickFrame);
     }
 
     /**
@@ -221,22 +237,18 @@ public class ProgressBar extends UIElement {
     }
 
     /**
-     * Places a fixed-width stripe along the track.
+     * Places the stripe along the track.
      *
      * <p>Travels from fully off the left to fully off the right, so the stripe enters and leaves rather
-     * than appearing at the edge — which is what makes it read as motion rather than as a flicker.</p>
+     * than appearing at the edge — which is what makes it read as motion rather than as a flicker. The
+     * track's {@code overflow: hidden} clips what is outside it.</p>
      */
     private void applySweep() {
-        float travel = 1f + SWEEP_WIDTH;
-        float left = (sweep * travel) - SWEEP_WIDTH;
-        float visibleLeft = Math.max(0f, left);
-        float visibleRight = Math.min(1f, left + SWEEP_WIDTH);
-        float width = Math.max(0f, visibleRight - visibleLeft);
-
-        float marginPercent = visibleLeft * 100f;
-        float widthPercent = width * 100f;
-        StyleGroup.inlinePipeline(fill.getStyle().getLayoutGroup(),
-                l -> l.marginLeftPercent(marginPercent).widthPercent(widthPercent));
+        Box track = box();
+        Box stripe = fill.box();
+        if (track == null || stripe == null) return;
+        float left = (sweep * (1f + SWEEP_WIDTH)) - SWEEP_WIDTH;
+        stripe.setTransform(Transform.translate(left * track.contentBoxWidth(), 0f));
     }
 
 }
