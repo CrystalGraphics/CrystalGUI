@@ -1,4 +1,4 @@
-package com.crystalgui.desktop.host;
+package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.UiSequence;
@@ -24,20 +24,20 @@ import java.util.function.Supplier;
  *   <li>{@link #requestFrame} refuses while a frame is in flight: the caller carries its delta to the next request.</li>
  * </ul>
  */
-public final class SurfaceCompositor {
+final class SurfaceCompositor<F> {
 
     private final UiSequence sequence;
-    private final AtomicReference<UiCommit> pending = new AtomicReference<>();
+    private final AtomicReference<UiCommit<F>> pending = new AtomicReference<>();
     private volatile boolean inFlight;
     @Nullable
-    private UiCommit active;
+    private UiCommit<F> active;
 
     /** How long a frame may stay in flight before the sequence is reported as not responding. */
     private static final long HANG_NANOS = 2_000_000_000L;
     private volatile long requestedNanos;
     private boolean hangReported;
 
-    public SurfaceCompositor(UiSequence sequence) {
+    SurfaceCompositor(UiSequence sequence) {
         this.sequence = sequence;
     }
 
@@ -46,8 +46,8 @@ public final class SurfaceCompositor {
      * the commit shown. Render thread. Null until the first commit.
      */
     @Nullable
-    public UiCommit present(int width, int height) {
-        UiCommit fresh = pending.getAndSet(null);
+    UiCommit<F> present(int width, int height) {
+        UiCommit<F> fresh = pending.getAndSet(null);
         if (fresh != null) {
             active = fresh;
             if (fresh.frame() != null) UiGpu.present(fresh.frame());
@@ -59,8 +59,8 @@ public final class SurfaceCompositor {
 
     /** The commit last presented, without drawing anything; null until the first. */
     @Nullable
-    public UiCommit active() {
-        UiCommit fresh = pending.get();
+    UiCommit<F> active() {
+        UiCommit<F> fresh = pending.get();
         return fresh != null ? fresh : active;
     }
 
@@ -70,7 +70,7 @@ public final class SurfaceCompositor {
      * @return false, and nothing posted, while the previous frame is in flight or not yet presented: a frame dropped
      *         unpresented never gives its buffers back
      */
-    public boolean requestFrame(Supplier<UiCommit> work) {
+    boolean requestFrame(Supplier<UiCommit<F>> work) {
         if (inFlight) {
             reportIfHung();
             return false;
@@ -81,7 +81,7 @@ public final class SurfaceCompositor {
         hangReported = false;
         sequence.execute(() -> {
             try {
-                UiCommit commit = work.get();
+                UiCommit<F> commit = work.get();
                 if (commit != null) pending.set(commit);
             } finally {
                 inFlight = false;

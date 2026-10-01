@@ -33,12 +33,12 @@ import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgraphics.api.render.CgRenderPipeline;
-import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiGpu;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -74,7 +74,6 @@ import com.crystalgui.harness.TraceCostProbe;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.data.Transform2D;
-import org.joml.Matrix4f;
 import org.joml.Vector2f;
 
 
@@ -233,12 +232,30 @@ public class CgUiDesktopScene
     private boolean focusGiven;
     private int backgroundWindows;
 
+    /**
+     * Runs the document: on this thread, or on a sequence with {@code -Dcrystalgui.ui.async=true} or
+     * {@code -Dcrystalgui.ui.sequence=true}. Everything the scene does to the tree goes through it.
+     */
+    private DocumentDriver<Void> driver;
+    private DocumentDriver.Painter<Void> painter;
+
     @Override
     public void init(HarnessContext ctx) {
-        document = new UIDocument().markFrameThread();
+        document = new UIDocument();
+        driver = DocumentDriver.attach(document);
+        painter = DocumentDriver.whole(document, () -> {
+            try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "scene:readout")) {
+                refreshReadout();
+            }
+        });
+        driver.run(() -> build(ctx));
+    }
+
+    private void build(HarnessContext ctx) {
+        if (driver.sequence() == null) document.markFrameThread();
         document.styles().addStylesheet(StyleSheet.DEFAULT);
         document.styles().addStylesheet(StyleSheet.parse(STYLES));
-        document.boxes().setRootTransform(new Matrix4f().scale(SCALE, SCALE, 1f));
+        document.boxes().setUiScale(SCALE);
 
         // ALL A HOST PROVIDES IS A ROOT WITH A SIZE. Nobody constructs a desktop -- `Desktop.of` finds
         // or builds the document's one, because the engine may not name a compositor, so the compositor
@@ -433,9 +450,12 @@ public class CgUiDesktopScene
         long workStart = System.nanoTime();
 
         // ONE NETWORK TICK, before anything reads the workspace.
-        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "scene:workspacePump")) {
-            workspace.pump(frame.getDeltaTime());
-        }
+        float delta = frame.getDeltaTime();
+        driver.post(() -> {
+            try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "scene:workspacePump")) {
+                workspace.pump(delta);
+            }
+        });
         // THE PROJECT ASK AND THE SESSION RESTORE WERE HERE, behind a "have I asked yet" flag this scene
         // kept for itself and the 1.7.10 screen kept for itself. Both are the application's now: it
         // hangs them off the greeting and the project listing, so the ordering is stated once and a
@@ -443,19 +463,19 @@ public class CgUiDesktopScene
 
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
-        document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
-        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "scene:readout")) {
-            refreshReadout();
-        }
+        // Nothing here reinjects a key the document left: the harness has no game to give it to.
+        while (driver.pollUnhandledKey() != null) { }
 
         if (PRESENT_AGAIN && frame.getFrameNumber() > 60 && frame.getFrameNumber() % 2 == 1) {
+            driver.run(() -> {
+                document.frame(delta, w / SCALE, h / SCALE);
+                refreshReadout();
+            });
             UiGpu.presentAgain(w, h);
             if (frame.getFrameNumber() == 101) ctx.getArtifactService().requestCapture("present-again");
             return;
         }
         if (PRESENT_AGAIN && frame.getFrameNumber() == 100) ctx.getArtifactService().requestCapture("presented");
-        CgUiPaintContext context = document.paintContext();
-        context.beginFrame(w, h);
         // SIMULATED GAME MODE -- W14, and the closest a GL harness gets to Minecraft without being it.
         // F6 flips the scene to input-off and leaves ONLY pinned frames on screen. What it is really
         // testing is the thing no unit test can reach: that a pinned window keeps its hooks and its
@@ -467,8 +487,21 @@ public class CgUiDesktopScene
         // HIDES the unpinned windows instead, so what is left on screen is already exactly the HUD and
         // an ordinary paint draws it. `DesktopPresentation` still exists -- it is one of the three
         // types in `core.window` both engines name -- and on this engine nothing reads it yet.
-        document.paint(context);
-        context.endFrame();
+        driver.frame(delta, w, h, painter);
+        // The probes read and drive the tree, so they run on the document -- waited for, which is why they are off unless asked.
+        if (probing()) driver.run(() -> afterFrame(ctx, frame, workStart));
+        // Late enough that the first window's placement, the entry animations and the editor's own
+        // deferred rebuilds have all settled -- a capture at frame 5 photographs a desktop that is
+        // still assembling itself and every diff against it is noise.
+        if (frame.getFrameNumber() == 40) ctx.getArtifactService().requestCapture("startup");
+    }
+
+    private boolean probing() {
+        return traceCost != null || hoverSweep != null || closeWhenClean || graphCost != null || PROFILER_SHOT
+                || MINIMISE_SHOT;
+    }
+
+    private void afterFrame(HarnessContext ctx, FrameInfo frame, long workStart) {
         if (traceCost != null && traceCost.frame(System.nanoTime() - workStart)) traceCostDone = true;
         if (hoverSweep != null && hoverSweep.frame(System.nanoTime() - workStart)) hoverSweepDone = true;
         if (closeWhenClean) {
@@ -481,11 +514,6 @@ public class CgUiDesktopScene
         String graphShot = graphCost == null ? null : graphCost.captureNow();
         if (graphShot != null) ctx.getArtifactService().requestCapture(graphShot);
         if (graphCost != null && graphCost.frame()) graphCostDone = true;
-
-        // Late enough that the first window's placement, the entry animations and the editor's own
-        // deferred rebuilds have all settled -- a capture at frame 5 photographs a desktop that is
-        // still assembling itself and every diff against it is noise.
-        if (frame.getFrameNumber() == 40) ctx.getArtifactService().requestCapture("startup");
         if (PROFILER_SHOT) driveProfilerShot(ctx, frame.getFrameNumber());
         if (MINIMISE_SHOT) driveMinimiseShot(ctx, frame.getFrameNumber());
     }
@@ -1592,6 +1620,10 @@ public class CgUiDesktopScene
 
     @Override
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+        return driver.offerKey(event, () -> handleKey(event));
+    }
+
+    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
         // THE MODE OWNS THE KEYBOARD except for its own way out. In game the keyboard is the game's;
         // here the scene has to stand in for that, and a mode nobody can leave is worse than no mode.
         if (event.pressed() && event.key() == CgKeyCodes.KEY_F6) {
@@ -1726,19 +1758,23 @@ public class CgUiDesktopScene
         // reported position is wherever the player last had a menu open -- delivering a move against it
         // would enter and leave elements under a pointer that is not there. Refusing here is the
         // harness standing in for a grab it has no way to perform.
-        if (desktop.isHudMode()) return true;
-        return document.input().consumeMouseEvent(event);
+        return driver.offer(() -> desktop.isHudMode() || document.input().consumeMouseEvent(event));
     }
 
     @Override
     public void dispose() {
-        // ASKED FOR EXPLICITLY, because this scene tears down without ever detaching anything -- and
-        // detaching is the moment each of these would otherwise write itself. WHAT to write is still
-        // theirs; this only says when.
-        if (desktop != null) desktop.savePersistedState();
-        // QUITTING IT, which writes its state on the way out. Closing the window would not: a
-        // workbench under HIDE_ON_CLOSE is still running with everything in it.
-        if (editor != null) editor.dispose();
+        if (driver == null) return;
+        driver.run(() -> {
+            // ASKED FOR EXPLICITLY, because this scene tears down without ever detaching anything -- and
+            // detaching is the moment each of these would otherwise write itself. WHAT to write is still
+            // theirs; this only says when.
+            if (desktop != null) desktop.savePersistedState();
+            // QUITTING IT, which writes its state on the way out. Closing the window would not: a
+            // workbench under HIDE_ON_CLOSE is still running with everything in it.
+            if (editor != null) editor.dispose();
+        });
+        driver.close();
+        driver = null;
         editor = null;
         document = null;
         desktop = null;

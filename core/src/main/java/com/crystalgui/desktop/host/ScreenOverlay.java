@@ -1,6 +1,7 @@
 package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.Desktop;
@@ -60,7 +61,8 @@ public final class ScreenOverlay {
      * committed regions, and what a press outside does to the tree is posted to the document.
      */
     private boolean async() {
-        return input.isAsync() && window.sequence() != null;
+        DocumentDriver<?> driver = window.driver();
+        return driver != null && driver.isAsync();
     }
     /** Compare the two answers on every press and say where they differ. */
     private static final boolean CHECK_REGIONS = Boolean.getBoolean("crystalgui.input.regionsCheck");
@@ -93,11 +95,6 @@ public final class ScreenOverlay {
     /** The regions the last {@link #commit} froze. */
     public HitRegions regions() {
         return regions;
-    }
-
-    /** Where this overlay delivers what it takes; asynchronously, the keys its document left wait here. */
-    HostInput input() {
-        return input;
     }
 
     /** Whether a pinned window currently owns the keyboard. @see #keyboardIsOurs */
@@ -142,7 +139,7 @@ public final class ScreenOverlay {
                 // and that will not accept a single character -- which reads as chat being broken.
                 keyboardIsOurs = false;
                 if (async()) {
-                    window.sequence().execute(this::pressedOutside);
+                    window.driver().post(this::pressedOutside);
                     return false;
                 }
                 // AND THE FOCUS RING GOES WITH IT, or the editor keeps drawing itself focused while
