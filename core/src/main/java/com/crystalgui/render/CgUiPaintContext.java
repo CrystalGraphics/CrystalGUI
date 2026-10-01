@@ -5,7 +5,6 @@ import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgRenderPassVariant;
-import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
@@ -26,8 +25,10 @@ import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.render.CgImmediate;
+import com.crystalgraphics.render.draw.CgPassConstants;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
+import com.crystalgraphics.render.graph.CgPassRecorder;
 import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.render.graph.CgTextureDesc;
 import com.crystalgraphics.platform.gl.CgCapabilities;
@@ -87,12 +88,11 @@ import java.util.Set;
  * owns that lifecycle must call {@link #destroy()} on context destruction — see that method for what
  * is and isn't freed, and why the distinction matters.</p>
  *
- * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation. It does <em>not</em> restore
- * {@link CgFrameData}, which it overwrites with a screen-space camera — see {@link #beginFrame} for
- * why that needs no restore and what does.</p>
+ * <p>Wraps frame lifecycle in {@link CgGlScope} for GL state isolation. Global frame state is neither read nor
+ * written: each pass carries its own constants — the frame's time, the target's ortho.</p>
  *
- * <p>Integrates {@link ScissorStack} for nested clip regions: the GL scissor it sets is recorded with each chunk
- * at its flush.</p>
+ * <p>Integrates {@link ScissorStack} for nested clip regions: a push sets the scissor the chunks recorded after
+ * it draw under.</p>
  *
  * <p><b>Frame lifecycle</b> — call {@link #beginFrame} once before walking the UI tree, then {@link #endFrame} once
  * after. A draw in between is a chunk in the frame's one recording, which {@link #endFrame} executes; {@link #flush}
@@ -189,11 +189,12 @@ public final class CgUiPaintContext {
     private void abortFrame() {
         unparkSamplers();
         endTextPath();
-        CgImmediate.abandonRecording();
+        renderer.end();   // safe unbegun: begin() may be what never ran; what it flushes goes with the recording
+        recordFlushes(false);
+        recorder.abandon();
         recording.reset();
         imported.clear();
         layerStack.clear();
-        renderer.end();   // safe unbegun: begin() may be what never ran
         if (glScope != null) {
             glScope.close();
             glScope = null;
@@ -316,14 +317,14 @@ public final class CgUiPaintContext {
 
     /**
      * @param target       what the layer is drawn into, as the frame's recording names it
+     * @param enclosingWidth the size of the target around it, whose ortho comes back at the end
      * @param savedScissor the clip stack as the ENCLOSING target expressed it. A bounded layer has its
      *                     own origin, so every rect on the stack is shifted into its space on the way
      *                     in and this is what puts them back — the stack always describes the target
      *                     being drawn into, which is what lets {@code applyScissorIfNeeded} stay a
      *                     one-argument flip.
      */
-    record LayerFrame(CgGraphTexture target, Matrix4f savedProjMatrix,
-                      int savedViewportW, int savedViewportH, int[] savedScissor,
+    record LayerFrame(CgGraphTexture target, int enclosingWidth, int enclosingHeight, int[] savedScissor,
                       @Nullable LayerRegion region, int savedClip) {
     }
     
@@ -357,6 +358,12 @@ public final class CgUiPaintContext {
     // another after, so passes are created in the order they must run and every read follows the write it sees.
 
     private final CgRecording recording = new CgRecording();
+    /** What every renderer of this context flushes into: the passes of {@link #recording} or {@link #present}. */
+    private final CgPassRecorder recorder = new CgPassRecorder();
+    /** The finished frame onto the host's target, recorded and executed once the host's target is bound again. */
+    private final CgRecording present = new CgRecording();
+    /** The pass block of the target being drawn into: the frame's time, the target's ortho and size. */
+    private final CgPassConstants passConstants = new CgPassConstants();
     /** {@link #frameFbo}, as the recording names it. */
     final CgGraphTexture frameTarget = CgGraphTexture.imported("cgui_frame", frameFbo);
     /** A caller's framebuffer as the recording names it: one per framebuffer a frame, so a read finds its write. */
@@ -380,9 +387,17 @@ public final class CgUiPaintContext {
         recording.callback(name, target, body);
     }
 
+    /** Points the pass constants at a {@code width x height} target, top-left origin; chunks from now take them. */
+    private void targetConstants(int width, int height) {
+        passConstants.view.identity();
+        passConstants.projection.identity().ortho(0, width, height, 0, -1, 1);
+        passConstants.resolution(width, height);
+        recorder.constants(passConstants);
+    }
+
     // ── Scissor ─────────────────────────────────────────────────────────────
     @Getter
-    private final ScissorStack scissorStack = new ScissorStack();
+    private final ScissorStack scissorStack = new ScissorStack(recorder);
 
     // ── State elision ───────────────────────────────────────────────────────
     @Getter
@@ -467,6 +482,15 @@ public final class CgUiPaintContext {
                 bindQuadPath(boxModelMaterial);
                 currentTexture = null;
             });
+    }
+
+    /**
+     * Inside a frame everything this context's renderers flush is recorded; outside one they draw at once, as any
+     * renderer does — a scene drawing a label over the finished frame uses them that way.
+     */
+    private void recordFlushes(boolean recorded) {
+        renderer.sink(recorded ? recorder : null);
+        textRenderer.sink(recorded ? recorder : null);
     }
 
     /**
@@ -622,11 +646,6 @@ public final class CgUiPaintContext {
     // ── Frame lifecycle ─────────────────────────────────────────────────────
 
     /**
-     * Saves GL state via {@link CgGlScope}, overwrites {@link CgFrameData} with an orthographic
-     * screen-space projection, and binds the shared box-model material. Call once per frame before
-     * {@code rootElement.drawSubtree(ctx)}.
-     */
-    /**
      * Monotonic frame counter, for work a drawable wants to rate-limit to once per frame.
      *
      * <p>Exposed as a plain token rather than a callback so the dependency points the right way: a
@@ -732,32 +751,11 @@ public final class CgUiPaintContext {
         int w = Math.max(1, screenWidth), h = Math.max(1, screenHeight);
         if (frameFbo.getWidth() != w || frameFbo.getHeight() != h) frameFbo.resize(w, h);
 
-        // Overwritten and deliberately NOT restored — the javadoc used to claim otherwise and was
-        // corrected rather than implemented. CgFrameData is per-frame scratch that every consumer
-        // repopulates before executing a pass, so at frame level nothing reads what we leave. NESTED
-        // draws are the case that does need it, and already have it: CgPreviewRenderer copies the
-        // camera out and back, because its caller is this frame. Restoring here also costs more than
-        // it saves — prepareFrame() moves the active texture unit, so it needs a TEXTURES scope of its
-        // own or MC's fixed-function present samples the wrong unit and the window goes white.
-        CgRenderPipeline pipeline = CgRenderPipeline.getInstance();
-        CgFrameData fd = pipeline.getFrameData();
-        // Set ortho projection for UI
-        fd.viewMatrix.identity();
-        fd.projMatrix.identity().ortho(0, screenWidth, screenHeight, 0, -1, 1);
-        fd.viewportW = screenWidth;
-        fd.viewportH = screenHeight;
-        // EACH STEP OF beginFrame TIMED SEPARATELY. `gl:begin` was measured at 19.9ms on the frame after
-        // a tab closes, with `glbegin:frameClear` -- the only thing in here that touches every pixel --
-        // never even reaching the report threshold. So the cost is one of the four below, and they have
-        // nothing in common: a UBO upload, a projection write plus an atlas tick, a buffer rewind, and a
-        // material bind that compiles on its first use.
-        long timed = CgTrace.stamp(UiTrace.FRAME);
-        pipeline.prepareFrame();
-        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:prepareFrame", timed);
-
+        // EACH STEP OF beginFrame TIMED SEPARATELY: `gl:begin` was measured at 19.9ms on the frame after a tab
+        // closes, and the steps below have nothing in common.
         // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
         // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
-        timed = CgTrace.stamp(UiTrace.FRAME);
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.context().updateOrtho(screenWidth, screenHeight);
         CgTrace.zoneDone(UiTrace.FRAME, "glbegin:textOrtho", timed);
 
@@ -771,8 +769,12 @@ public final class CgUiPaintContext {
         currentMaterial = boxModelMaterial;
         currentTexture = null;
         // Every flush from here is a chunk in the frame's recording, starting with the frame target's clear; nothing
-        // executes until endFrame. After the projection above, which the pass takes as its constants.
-        CgImmediate.recordInto(recording, frameTarget, CgLoad.clear(0f, 0f, 0f, 0f));
+        // executes until endFrame.
+        // The frame's clock, which a material reading CG_TIME animates by -- a shader graph's Time node.
+        passConstants.time(CgRenderPipeline.getInstance().frameTime());
+        targetConstants(screenWidth, screenHeight);
+        recordFlushes(true);
+        recorder.recordInto(recording, frameTarget, CgLoad.clear(0f, 0f, 0f, 0f), passConstants);
         frameActive = true; // must be set before the pool warms a slot — quad() requires an active frame
 
         // AFTER frameActive, with the pool's own warm-up, because warming a target SUBMITS A QUAD and
@@ -856,7 +858,7 @@ public final class CgUiPaintContext {
         long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.endBatch();
         renderer.flush();
-        CgImmediate.stopRecording();
+        recorder.stop();
         CgTrace.zoneDone(UiTrace.FRAME, "glend:flush", timed);
 
         // THE FRAME, EXECUTED: every target's passes, in the order their reads and writes ask for.
@@ -926,7 +928,7 @@ public final class CgUiPaintContext {
                 CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST,
                 CgGlSlot.VERTEX_INPUT)) {   // the host's VAO, as in beginFrame
             disableFixedFunctionAlphaTest();
-            blitLayer(frameFbo, 1f);
+            presentFrame();
             // THE HOST'S OWN TARGET, and the last thing this class can observe. Content here with a flat
             // fill on screen means the presenting broke, not the drawing — which is the reading the
             // comment above has described for two loaders without anything ever measuring it.
@@ -1177,7 +1179,6 @@ public final class CgUiPaintContext {
      * off screen while sliders and icons still drew.
      */
     public void bindCompositeTexture(CgTexture2D texture) {
-        CgGlState.manager().invalidate(CgGlSlot.TEXTURES);
         currentTexture = null;
         bindTexture(texture);
     }
@@ -1188,8 +1189,7 @@ public final class CgUiPaintContext {
         // with this one. A cached icon relies on this -- it submits its quad and leaves the flush to
         // whoever changes the texture next, so a run of icons from the atlas is one draw.
         renderer.flushQuads();
-        texture.bind(0);
-        renderer.bindTexture(0, texture);   // what the recorded draw binds: the raw bind is gone by then
+        renderer.bindTexture(0, texture);   // recorded: the draw binds it when it executes
         currentTexture = texture;
     }
 
@@ -1473,7 +1473,7 @@ public final class CgUiPaintContext {
      */
     void drain() {
         flush();
-        CgImmediate.endPass();
+        recorder.endPass();
     }
 
     /**
@@ -2225,14 +2225,13 @@ public final class CgUiPaintContext {
         // The enclosing target's pass ends here and continues in another after the layer, so the pass that
         // composites the layer runs after the layer's own.
         drain();
-        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
+        int enclosingWidth = targetWidth(), enclosingHeight = targetHeight();
         int[] savedScissor = scissorStack.suspend();
         if (region != null) {
             layerOriginX += region.x();
             layerOriginY += region.y();
         }
-        layerStack.push(new LayerFrame(target, new Matrix4f(fd.projMatrix), fd.viewportW, fd.viewportH,
-                savedScissor, region, clipEntry));
+        layerStack.push(new LayerFrame(target, enclosingWidth, enclosingHeight, savedScissor, region, clipEntry));
         // A rounded clip is in the enclosing target's pixels; it applies when this layer is composited back.
         setClip(0);
         int width = target.getWidth(), height = target.getHeight();
@@ -2243,10 +2242,7 @@ public final class CgUiPaintContext {
         scissorStack.resume(region == null ? savedScissor : shifted(savedScissor, -region.x(), -region.y()));
         reapplyScissorFor(height);
 
-        fd.projMatrix.identity().ortho(0, width, height, 0, -1, 1);
-        fd.viewportW = width;
-        fd.viewportH = height;
-        CgRenderPipeline.getInstance().prepareFrame();
+        targetConstants(width, height);
         // TEXT HAS ITS OWN PROJECTION, and it has to follow the target too: CgTextRenderer does not read
         // cg_ProjMatrix. Inside a window's snapshot, sized to the window, a screen ortho drew every string at a
         // third of its size in the corner. updateOrtho is a no-op when the size is unchanged.
@@ -2255,7 +2251,7 @@ public final class CgUiPaintContext {
             CgTrace.add(UiTrace.FRAME, "layer-clear-kpx",
                     (region == null ? width * height : region.width() * region.height()) / 1000);
         }
-        CgImmediate.recordInto(recording, target, clear ? CgLoad.clear(0f, 0f, 0f, 0f) : CgLoad.load());
+        recorder.recordInto(recording, target, clear ? CgLoad.clear(0f, 0f, 0f, 0f) : CgLoad.load(), passConstants);
         currentTexture = null;
         return target;
     }
@@ -2271,19 +2267,33 @@ public final class CgUiPaintContext {
             layerOriginX -= frame.region().x();
             layerOriginY -= frame.region().y();
         }
-        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
-        fd.projMatrix.set(frame.savedProjMatrix());
-        fd.viewportW = frame.savedViewportW();
-        fd.viewportH = frame.savedViewportH();
-        CgRenderPipeline.getInstance().prepareFrame();
-        textRenderer.context().updateOrtho(frame.savedViewportW(), frame.savedViewportH());
+        targetConstants(frame.enclosingWidth(), frame.enclosingHeight());
+        textRenderer.context().updateOrtho(frame.enclosingWidth(), frame.enclosingHeight());
         // The clip stack as the enclosing target expressed it -- a bounded layer shifted every rect
         // into its own origin on the way in. @see LayerFrame#savedScissor
         scissorStack.resume(frame.savedScissor());
         setClip(frame.savedClip());
         reapplyScissor();
-        CgImmediate.recordInto(recording, currentTarget(), CgLoad.load());
+        recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
         currentTexture = null;
+    }
+
+    /**
+     * The finished frame onto the host's target, which the frame's GL scope has just bound again: one recording of
+     * one draw, executed at once.
+     */
+    private void presentFrame() {
+        targetConstants(screenWidth, screenHeight);
+        recorder.recordInto(present, CgGraphTexture.current(), CgLoad.load(), passConstants);
+        try {
+            blitLayer(frameTarget, 1f, new LayerRegion(0, 0, frameFbo.getWidth(), frameFbo.getHeight()));
+            recorder.stop();
+            CgImmediate.execute(present);
+        } finally {
+            recorder.abandon();
+            present.reset();
+            recordFlushes(false);
+        }
     }
 
     /**
@@ -2420,19 +2430,14 @@ public final class CgUiPaintContext {
         long timed = CgTrace.stamp(UiTrace.FRAME);
         flush();
         boolean elsewhere = subtree != currentTarget();
-        if (elsewhere) CgImmediate.recordInto(recording, subtree, CgLoad.load());
+        if (elsewhere) recorder.recordInto(recording, subtree, CgLoad.load(), passConstants);
         int[] suspendedMask = scissorStack.suspend();
         scissorStack.clearScissorIfNeeded();
         // AND THE PROJECTION, which must be the subtree's own: a mask quad the size of the layer drawn through another
         // target's ortho is stretched and shifted, and the multiply then zeroes everything it no longer reaches.
         CgMaterial masked = currentMaterial;
-        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
-        Matrix4f enclosingProj = new Matrix4f(fd.projMatrix);
-        int enclosingW = fd.viewportW, enclosingH = fd.viewportH;
-        fd.projMatrix.identity().ortho(0, subtree.getWidth(), subtree.getHeight(), 0, -1, 1);
-        fd.viewportW = subtree.getWidth();
-        fd.viewportH = subtree.getHeight();
-        CgRenderPipeline.getInstance().prepareFrame();
+        int enclosingW = targetWidth(), enclosingH = targetHeight();
+        targetConstants(subtree.getWidth(), subtree.getHeight());
         try {
             // On a material of ours rather than the caller's: a sampler property is retained, so setting it on the
             // enclosing material would rewrite what every later draw through it samples.
@@ -2463,12 +2468,9 @@ public final class CgUiPaintContext {
             bindQuadPath(masked != null ? masked : boxModelMaterial);
             currentTexture = null;
             scissorStack.resume(suspendedMask);
-            fd.projMatrix.set(enclosingProj);
-            fd.viewportW = enclosingW;
-            fd.viewportH = enclosingH;
-            CgRenderPipeline.getInstance().prepareFrame();
+            targetConstants(enclosingW, enclosingH);
         }
-        if (elsewhere) CgImmediate.recordInto(recording, currentTarget(), CgLoad.load());
+        if (elsewhere) recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
         reapplyScissor();
         currentTexture = null;
         CgTrace.zoneDone(UiTrace.FRAME, "layer:mask", timed);

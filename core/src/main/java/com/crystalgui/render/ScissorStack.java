@@ -2,7 +2,7 @@ package com.crystalgui.render;
 
 import java.util.Arrays;
 
-import com.crystalgraphics.platform.gl.CgGL;
+import com.crystalgraphics.render.graph.CgPassRecorder;
 
 /**
  * Allocation-free nested clip region stack.
@@ -11,15 +11,14 @@ import com.crystalgraphics.platform.gl.CgGL;
  * per rect: x, y, w, h) to track nested scissor rectangles. Zero heap allocation
  * on push/pop — pure primitive int stack with zero GC pressure.</p>
  *
- * <p>This is a <strong>logical-only</strong> data structure. GL scissor application
- * is done by {@code CgUiPaintContext} at draw time, not by this class.</p>
+ * <p>An applied rect becomes the scissor of the chunks its recorder records after it; nothing here touches GL.</p>
  *
  * <h3>Usage</h3>
  * <pre>{@code
- * ScissorStack stack = new ScissorStack();
+ * ScissorStack stack = new ScissorStack(recorder);
  * stack.pushScissor(0, 0, 400, 300);   // full screen
  * stack.pushScissor(50, 50, 200, 200); // nested clip
- * // ... draw calls here, clipped to (50,50,200,200) ...
+ * stack.applyScissorIfNeeded(targetHeight);   // chunks recorded from here are clipped to (50,50,200,200)
  * stack.popScissor();                   // back to (0,0,400,300)
  * stack.reset();                        // clear all
  * }</pre>
@@ -29,6 +28,12 @@ public final class ScissorStack {
     /** 16 depth levels × 4 ints per rect (x, y, w, h). */
     private final int[] stack = new int[64];
     private int depth;
+    /** Where an applied rect goes: the scissor of the chunks recorded after it. */
+    private final CgPassRecorder recorder;
+
+    public ScissorStack(CgPassRecorder recorder) {
+        this.recorder = recorder;
+    }
 
     /**
      * Push a new scissor rect. If a parent scissor is active, the new rect
@@ -115,7 +120,7 @@ public final class ScissorStack {
      * Sets the whole stack aside, so a render into a target with its OWN coordinate space starts from
      * no clip at all; {@link #resume} puts it back exactly as it was.
      *
-     * <p>{@link #clearScissorIfNeeded} is not this: it only disables the GL test, and only when the
+     * <p>{@link #clearScissorIfNeeded} is not this: it only lifts the scissor, and only when the
      * stack is already empty. A rect inherited from an ancestor stays on the stack, and every push made
      * during the nested render is INTERSECTED with it — in the ancestor's screen pixels, against a
      * target that is not the screen. A window photographed under any enclosing clip came out cut along
@@ -130,7 +135,7 @@ public final class ScissorStack {
         return saved;
     }
 
-    /** Restores what {@link #suspend} set aside. Does not touch GL state — apply or clear afterwards. */
+    /** Restores what {@link #suspend} set aside. Does not set the recorder's scissor — apply or clear afterwards. */
     public void resume(int[] saved) {
         System.arraycopy(saved, 0, stack, 0, saved.length);
         depth = saved.length / 4;
@@ -138,11 +143,11 @@ public final class ScissorStack {
 
 
     /**
-     * Applies the current rect to GL, flipped against {@code targetHeight} — the height of the buffer
-     * being drawn into <em>right now</em>.
+     * Sets the current rect as the recorder's scissor, flipped against {@code targetHeight} — the height of
+     * the target being drawn into <em>right now</em>.
      *
-     * <p><b>The stack holds TOP-LEFT rects and the flip happens here, per target</b>, because a GL
-     * scissor rect is bottom-left-origin pixels of a particular buffer and means nothing in a buffer of
+     * <p><b>The stack holds TOP-LEFT rects and the flip happens here, per target</b>, because a scissor
+     * rect is bottom-left-origin pixels of a particular buffer and means nothing in a buffer of
      * another height. It used to hold GL rects, flipped once at push time against the screen, which is
      * the same thing for as long as every target is the screen's size — every pooled layer is. The first
      * target that was not, a window's snapshot, showed what that assumption costs: a clip pushed against
@@ -153,19 +158,14 @@ public final class ScissorStack {
      */
     public void applyScissorIfNeeded(int targetHeight) {
         if (this.hasScissor()) {
-            CgGL.glEnable(CgGL.GL_SCISSOR_TEST);
-            CgGL.glScissor(
-                    this.currentX(),
-                    targetHeight - (this.currentY() + this.currentH()),
-                    this.currentW(),
-                    this.currentH());
+            recorder.scissor(currentX(), targetHeight - (currentY() + currentH()), currentW(), currentH());
         }
     }
 
-    /** Disables {@code GL_SCISSOR_TEST} once no scissor rect remains active (stack fully popped). */
+    /** Lifts the recorder's scissor once no rect remains active (stack fully popped). */
     public void clearScissorIfNeeded() {
         if (!this.hasScissor()) {
-            CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
+            recorder.noScissor();
         }
     }
 }

@@ -4,7 +4,6 @@ import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
@@ -442,9 +441,8 @@ final class CgUiBackdrop {
             return true;
         }
         long probeT0 = PROBE ? System.nanoTime() : CgTrace.stamp(UiTrace.FRAME);
-        // Queued draws go first: the capture reads the target, and the GPU timer holds the capture alone.
+        // Queued draws go first: the capture reads the target.
         ctx.drain();
-        CgGpuTrace.begin(GPU_CAPTURE);
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
         if (captureFbo.getWidth() != w || captureFbo.getHeight() != h) captureFbo.resize(w, h);
 
@@ -550,7 +548,6 @@ final class CgUiBackdrop {
         captureDepth = depth;
         captureTarget = innermost;
         blurFrame = -1L;   // the capture moved, so whatever was blurred describes somewhere else
-        CgGpuTrace.end();
         CgTrace.zoneDone(UiTrace.FRAME, "backdrop:capture", probeT0);
         CgTrace.add(UiTrace.FRAME, "backdrop-capture-kpx", (capW * capH) / 1000);
         if (PROBE) {
@@ -580,9 +577,11 @@ final class CgUiBackdrop {
      * in it. A readback of the target is what finally showed it, and would have on day one.</p>
      */
     private void withoutScissor(Runnable body) {
-        try (CgGlScope ignored = CgGlState.save(CgGlSlot.SCISSOR)) {
-            CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
+        int[] saved = ctx.suspendScissor();
+        try {
             body.run();
+        } finally {
+            ctx.resumeScissor(saved);
         }
     }
 
@@ -677,12 +676,7 @@ final class CgUiBackdrop {
         if (captured == null) return null;
 
         ctx.flush();
-        CgGpuTrace.begin(GPU_BLUR);
-        try {
-            return blurCaptured(captured, radiusPx, fracW, fracH, probeB0);
-        } finally {
-            CgGpuTrace.end();
-        }
+        return blurCaptured(captured, radiusPx, fracW, fracH, probeB0);
     }
 
     /** {@link #blurredBackdrop}'s passes, apart so its GPU timer closes on every exit. */
@@ -847,17 +841,8 @@ final class CgUiBackdrop {
                            int quadW, int quadH, float uvSpanW, float uvSpanH) {
         int qw = Math.max(1, Math.min(target.getWidth(), quadW));
         int qh = Math.max(1, Math.min(target.getHeight(), quadH));
+        // beginLayerFbo gives the pass the target's own ortho, so a quad of whole texels fills it at any scale.
         ctx.beginLayerFbo(target);
-        // The ortho as well as the viewport: beginLayerFbo sets only the viewport, which is enough for a
-        // screen-sized layer and not for a blur target at a working scale above 1 -- a full-size quad
-        // lands on a fraction of it and the rest keeps the clear. @see CgUiPaintContext#compositeMask
-        CgFrameData fd = CgRenderPipeline.getInstance().getFrameData();
-        Matrix4f enclosingProj = new Matrix4f(fd.projMatrix);
-        int enclosingW = fd.viewportW, enclosingH = fd.viewportH;
-        fd.projMatrix.identity().ortho(0, target.getWidth(), target.getHeight(), 0, -1, 1);
-        fd.viewportW = target.getWidth();
-        fd.viewportH = target.getHeight();
-        CgRenderPipeline.getInstance().prepareFrame();
         try {
             withoutScissor(() -> ctx.withMaterial(material, () -> {
                 ctx.poseStack.pushPose();
@@ -868,10 +853,6 @@ final class CgUiBackdrop {
                 ctx.poseStack.popPose();
             }));
         } finally {
-            fd.projMatrix.set(enclosingProj);
-            fd.viewportW = enclosingW;
-            fd.viewportH = enclosingH;
-            CgRenderPipeline.getInstance().prepareFrame();
             ctx.endLayerFbo();
         }
     }
@@ -886,9 +867,6 @@ final class CgUiBackdrop {
     // GPU-side in the very work they enqueue.
     private static final boolean PROBE = Boolean.getBoolean("crystalgui.glass.probe");
 
-    /** Inside the paint context's "ui", which they pause. */
-    private static final int GPU_CAPTURE = CgGpuTrace.name("ui.backdropCapture");
-    private static final int GPU_BLUR = CgGpuTrace.name("ui.backdropBlur");
     private long probeLastStart;
     private long pFramePeriod, pCapture, pBlur;
     private int pConsumers, pRecaptures, pFrames, pLayerDepth, pCapW, pCapH;
