@@ -100,7 +100,7 @@ cpu mark, so it shows as idle — the verdict names it.
 
 | Scene | Profile it for |
 |---|---|
-| `cgui-desktop` | the real shell: windows, taskbar, the editor, the Frame Profiler. `-Dcrystalgui.harness.desktop.profiler=true` drives the profiler window itself; `-Dcrystalgui.harness.desktop.traceCost=true` measures the engine's own cost with channels off and on; `-Dcrystalgui.harness.desktop.graphCost=true` measures the scratch shader graph: the desktop without it, open and idle, six constant edits, and closed again, in one process (`ShaderGraphCostProbe`, writes `graph-cost.txt`) |
+| `cgui-desktop` | the real shell: windows, taskbar, the editor, the Frame Profiler. `-Dcrystalgui.harness.desktop.profiler=true` drives the profiler window itself; `-Dcrystalgui.harness.desktop.traceCost=true` measures the engine's own cost with channels off and on; `-Dcrystalgui.harness.desktop.graphCost=true` measures the scratch shader graph: the desktop without it, open and idle, six constant edits, and closed again, in one process (`ShaderGraphCostProbe`, writes `graph-cost.txt`); `-Dcrystalgui.harness.desktop.hoverSweep=true` parks the pointer for 600 frames, then sweeps it across the editor window for 600 and prints work median and p95 per block plus the per-zone comparison (`HoverSweepProbe`, `[hover-sweep]` lines) |
 | `cgui-gallery` | one widget, a page each |
 | `cgui-text-stress` | text shaping and layout under load |
 | `cgui-timeline` | the profiler's own tracks under 10,000 spans |
