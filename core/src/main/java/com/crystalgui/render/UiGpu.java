@@ -165,19 +165,23 @@ public final class UiGpu {
      *
      * <pre>{@code
      * frame.values().translate(listBox.scrolledNode(frame.frameId()), 0f, -scrolledPx);
-     * UiGpu.redraw(width, height);
+     * UiGpu.redraw(width, height, true);
      * }</pre>
      *
      * <p>What a recording decided in the target's pixels stays as recorded: what was culled, a layer's region, a
      * retained layer, a backdrop's capture. A move far enough to reach those wants a new frame.</p>
+     *
+     * @param keepRequested skip every pass that writes a requested texture -- a retained layer, a shader-graph
+     *                      preview -- leaving it as the frame's first execution did. A move under property values
+     *                      changes none of them; false paints them again
      */
-    public static void redraw(int width, int height) {
+    public static void redraw(int width, int height, boolean keepRequested) {
         UiGpu gpu = instance;
         if (gpu == null || gpu.lastFrame == null || width != gpu.lastWidth || height != gpu.lastHeight) return;
         gpu.beginFrame(width, height);
         boolean executed = false;
         try {
-            gpu.execute(gpu.lastFrame, gpu.lastPresent);
+            gpu.executeAgain(gpu.lastFrame, gpu.lastPresent, keepRequested);
             executed = true;
         } finally {
             if (!executed) gpu.abortFrame();
@@ -225,8 +229,19 @@ public final class UiGpu {
         long timed = CgTrace.stamp(UiTrace.FRAME);
         CgExecutor.execute(frame);
         CgTrace.zoneDone(UiTrace.FRAME, "glend:execute", timed);
+        finish(present);
+    }
 
-        timed = CgTrace.stamp(UiTrace.FRAME);
+    private void executeAgain(CgFrame frame, CgFrame present, boolean keepRequested) {
+        long timed = CgTrace.stamp(UiTrace.FRAME);
+        CgExecutor.executeAgain(frame, keepRequested);
+        CgTrace.zoneDone(UiTrace.FRAME, "glend:execute", timed);
+        finish(present);
+    }
+
+    /** After the frame's execution: the trace's photograph, the host's state back, the composite. */
+    private void finish(CgFrame present) {
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         captureFrameImage();
         CgTrace.zoneDone(UiTrace.FRAME, "glend:captureImage", timed);
 

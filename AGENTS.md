@@ -982,7 +982,9 @@ UiGpu.present(frame);                             // render thread
 > `will-change: transform` box (every desktop window) draw in their own space under a spatial node — a translation by
 > whole device pixels, with `uiScale` left in the pose so text still snaps to the pixel grid — and a layer composited
 > below full opacity under an effect node. `Box.movedNode`/`scrolledNode`/`fadedNode(frameId)` name them;
-> `UiFrame.values()` moves them and `UiGpu.redraw` draws the last frame again with nothing recorded. Under a node the
+> `UiFrame.values()` moves them and `UiGpu.redraw` draws the last frame again with nothing recorded — with
+`keepRequested`, leaving every requested texture (a retained layer, a shader-graph preview) as the first execution
+did. Under a node the
 > pose stack is node-local: a decision about pixels asks `ctx.targetPose()`, never the stack. What a recording decided
 > in the target's pixels stays as recorded (culling, layer regions, retained layers, backdrop captures).
 > `-Dcrystalgui.paint.nodes=false` records everything in the target's pixels.

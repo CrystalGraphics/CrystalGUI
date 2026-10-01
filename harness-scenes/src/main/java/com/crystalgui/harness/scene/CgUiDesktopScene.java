@@ -634,7 +634,7 @@ public class CgUiDesktopScene
             int moved = nodesWindow.box().movedNode(id), scrolled = nodesScroller.scrolledNode(id);
             shown.values().translate(moved, NODES_MOVE_X * SCALE, NODES_MOVE_Y * SCALE);
             shown.values().translate(scrolled, 0f, -NODES_SCROLL * SCALE);
-            UiGpu.redraw(w, h);
+            UiGpu.redraw(w, h, true);
             ctx.getArtifactService().requestCapture("nodes-redraw");
             System.out.println("[nodes-probe] frame " + id + " redrawn: window node " + moved + " ('" + nodesWindow.getTitle()
                     + "' at " + nodesWindow.left() + "," + nodesWindow.top() + "), scroll node " + scrolled + " ("
