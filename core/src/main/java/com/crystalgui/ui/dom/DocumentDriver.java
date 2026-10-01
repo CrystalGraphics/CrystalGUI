@@ -165,8 +165,6 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     private final PostedPlatformPort port;
     private final Queue<CgSystemInput.Keyboard.Event> unhandledKeys = new ConcurrentLinkedQueue<>();
 
-    /** Delta passed since the frame in flight was asked for. Render thread. */
-    private float pendingDelta;
     /** Commits built so far. The sequence's. */
     private long commits;
     /** Host frames that drew the document. Render thread. */
@@ -340,22 +338,47 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         // Made here, on the render thread, before the sequence first records: fonts and the text renderer.
         document.paintContext();
         port.service();
-        pendingDelta += deltaSeconds;
         boolean shown = compositor.present(width, height, commit -> followPointer(commit) | animate(commit)) != null;
         lastPresentNanos = System.nanoTime();
-        float delta = pendingDelta;
-        // READ ONLY FOR A FRAME THAT WILL BE TAKEN: the readings belong to the frame they are delivered in.
+        lastPainter = painter;
+        lastWidth = width;
+        lastHeight = height;
+        Runnable delivery = document.readExtracts();
         if (compositor.accepting()) {
-            Runnable delivery = document.readExtracts();
-            if (compositor.requestFrame(() -> {
+            compositor.requestFrame(() -> {
                 if (delivery != null) delivery.run();
-                return commit(painter, delta, width, height);
-            })) {
-                pendingDelta = 0f;
-            }
+                return commit(painter, recordDelta(), width, height);
+            }, this::chainedCommit);
+        } else if (delivery != null) {
+            // THE DOCUMENT IS BUSY, possibly chaining frames of its own: the readings wait in its inbox for the next.
+            document.post(delivery);
         }
         if (shown) presented++;
         return shown;
+    }
+
+    /** What a recording chained behind a slow one records: the painter and size the host last framed with. */
+    private UiCommit<F> chainedCommit() {
+        Painter<F> painter = lastPainter;
+        return painter == null ? null : commit(painter, recordDelta(), lastWidth, lastHeight);
+    }
+
+    /** The host's last painter and size, for a frame the sequence chains on its own. Written on the render thread. */
+    @Nullable
+    private volatile Painter<F> lastPainter;
+    private volatile int lastWidth, lastHeight;
+    /** When the sequence last began recording. Sequence thread. */
+    private long lastRecordNanos;
+
+    /**
+     * Seconds since the last recording began, on the sequence's own clock: a chained frame has no host delta, and one
+     * clock for both kinds counts no time twice.
+     */
+    private float recordDelta() {
+        long now = System.nanoTime();
+        float delta = lastRecordNanos == 0L ? 0f : (now - lastRecordNanos) / 1_000_000_000f;
+        lastRecordNanos = now;
+        return delta;
     }
 
     private UiCommit<F> commit(Painter<F> painter, float deltaSeconds, int width, int height) {
