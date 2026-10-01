@@ -25,7 +25,7 @@ import java.util.List;
  * <h3>Why the values are the {@code .shader} vocabulary and not Unity's</h3>
  * <p>Unity's inspector spells this {@code Surface Type} / {@code Workflow Mode} / {@code Material}, and
  * two of those three are lighting-model selectors with nothing behind them here. What is real is what
- * {@code CgShaderParser} actually reads and {@code CgTransparentRenderer} actually runs, so the options
+ * {@code CgShaderParser} actually reads and the world renderer's transparent pass actually runs, so the options
  * are the tokens a {@code .shader} file genuinely accepts. A dropdown offering a word the parser has
  * never heard of is the same failure as a master port nothing consumes.</p>
  */

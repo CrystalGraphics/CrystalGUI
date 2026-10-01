@@ -22,7 +22,7 @@ dependencies {
     //
     // integration.gradle.kts already adds the crystalgraphics MOD as `devOnlyNonPublishable`, which puts
     // it on the dev RUN classpath and not the compile one -- so `com.crystalgraphics.platform.*` and
-    // `com.crystalgraphics.api.render.*` were invisible to javac while being present at runtime, which
+    // `com.crystalgraphics.api.*` were invisible to javac while being present at runtime, which
     // reads as a missing dependency when it is really a missing configuration.
     //
     // compileOnly and never `api`/`implementation`, exactly as :core declares them: CrystalGraphics is
@@ -87,7 +87,7 @@ dependencies {
     // classes, including references to CrystalGraphics API whose signatures mention JOML types. So
     // CgUiPaintContext went looking for:
     //
-    //     CgFrameData.viewMatrix : Lcom/crystalgui/shadow/org/joml/Matrix4f;
+    //     CgPassConstants.view : Lcom/crystalgui/shadow/org/joml/Matrix4f;
     //
     // while CrystalGraphics ships org/joml unrelocated and declares it Lorg/joml/Matrix4f;. The field
     // descriptor is part of resolution, so that is a NoSuchFieldError -- naming a field that plainly
