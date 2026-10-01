@@ -1,6 +1,8 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 
@@ -86,6 +88,16 @@ public final class CgUiRenderer {
      */
     public void useMaterial(CgMaterial material) {
         renderer.useMaterial(material);
+    }
+
+    /** A texture bound to {@code unit} by hand for the quads queued next; wins over the material's sampler there. */
+    void bindTexture(int unit, CgTexture texture) {
+        renderer.bindTexture(unit, texture);
+    }
+
+    /** As {@link #useMaterial(CgMaterial)}, under {@code state} instead of the render state the material declares. */
+    void useMaterial(CgMaterial material, CgRenderState state) {
+        renderer.useMaterial(material, state);
     }
 
     /**
