@@ -146,4 +146,22 @@ public class UiSequenceTest {
         assertNotNull("the answer was never delivered", deliveredOn.get());
         assertSame(a, deliveredOn.get());
     }
+
+    /** A service that kept the process-wide scheduler at registration, as the language stack does, then used on a sequence. */
+    @Test
+    public void aSchedulerKeptFromBeforeTheSequenceStillAnswersOnIt() throws Exception {
+        UiSequence a = sequence("kept");
+        JobScheduler kept = JobScheduler.shared();
+
+        AtomicReference<UiSequence> deliveredOn = new AtomicReference<>();
+        on(a, () -> kept.job(JobKey.of(this, "kept"), JobLane.INTERACTIVE, context -> 42)
+                .onDone(answer -> deliveredOn.set(UiSequence.current()))
+                .submit());
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (deliveredOn.get() == null && System.currentTimeMillis() < deadline) {
+            on(a, () -> JobScheduler.shared().drain());
+        }
+        assertNotNull("the sequence never got the answer to work it posted through a kept scheduler", deliveredOn.get());
+        assertSame(a, deliveredOn.get());
+    }
 }
