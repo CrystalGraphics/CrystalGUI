@@ -102,8 +102,9 @@ public final class HostSession {
 
     private static final boolean TRACE = Boolean.getBoolean("crystalgui.startup.trace");
 
+    /** One per client and the render thread's, not a document's; volatile so a document thread reads it whole. */
     @Nullable
-    private static HostSession current;
+    private static volatile HostSession current;
 
     private final HostServices services;
     private final ApplicationKind primaryKind;
