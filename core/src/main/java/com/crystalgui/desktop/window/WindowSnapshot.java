@@ -1,8 +1,6 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
-import com.crystalgraphics.api.texture.CgTextureType;
-import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgui.desktop.motion.WindowAnimation;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.box.BoxPainter;
@@ -34,43 +32,18 @@ import javax.annotation.Nullable;
  * is still whole and — because {@code WindowAnimation} starts from a neutral transform at full opacity —
  * before any of the flight has been applied to it.</p>
  *
- * <h3>Owned, and therefore this class's problem to free</h3>
+ * <h3>A requested texture</h3>
  *
- * <p>{@code createOwned} deliberately bypasses {@code CgFrameBufferRegistry}, so nothing sweeps this: the
- * same arrangement {@code CgUiPaintContext}'s layer pool has, and the same obligation. A window disposes
- * its snapshot with itself. The one case not covered is GL context loss, which in this engine happens
- * only at process shutdown — there is no destroy-then-init cycle to survive.</p>
+ * <p>Paint may not make a framebuffer, so the picture is a texture the paint context requests: made when the frame
+ * executes, kept across frames, and released through the same context when the window is disposed or resized.</p>
  */
 public final class WindowSnapshot {
 
-    /** Matches the layer pool's: colour only, straight RGBA8, premultiplied by how it is drawn into. */
-    /**
-     * Built on first use, never at class-init — the headless contract.
-     *
-     * <p>A {@code static final} here constructs a CrystalGraphics <b>core</b> type while this class is
-     * being initialised, which makes the whole class unloadable on a dedicated server: every reference to
-     * it throws {@code NoClassDefFoundError} rather than failing anywhere near the GL that is actually
-     * missing. And it does not stop at this class — {@code WindowFrame} has a field of this type, and a
-     * field descriptor resolves at class load, so {@code window} and {@code desktop} became unconstructible
-     * too. Exactly the trap {@code StyleSheet.DEFAULT} is documented for, which reads {@code default.css}
-     * at class-init and takes {@code StyleSheet.parse} down with it.</p>
-     *
-     * <p>Only ever read from {@link #capture}, which is a paint-time method — so on a server it is never
-     * touched, which is the whole point.</p>
-     */
     @Nullable
-    private static CgFrameBufferFormat format;
-
-    private static CgFrameBufferFormat format() {
-        if (format == null) {
-            format = CgFrameBufferFormat.builder("cgui_window_snapshot")
-                    .color(0, CgTextureType.RGBA8).build();
-        }
-        return format;
-    }
-
+    private CgGraphTexture picture;
+    /** The paint context that requested {@link #picture}, and releases it. */
     @Nullable
-    private CgFrameBuffer fbo;
+    private CgUiPaintContext owner;
 
     /** The logical size of what was captured — the thumbnail fits against this, not against pixels. */
     private float capturedWidth;
@@ -78,7 +51,7 @@ public final class WindowSnapshot {
 
     /** Whether there is a picture to draw. */
     public boolean isValid() {
-        return fbo != null && capturedWidth > 0f && capturedHeight > 0f;
+        return picture != null && capturedWidth > 0f && capturedHeight > 0f;
     }
 
     public float capturedWidth() {
@@ -106,53 +79,27 @@ public final class WindowSnapshot {
 
         int physicalWidth = Math.max(1, Math.round(box.width() * scale));
         int physicalHeight = Math.max(1, Math.round(box.height() * scale));
-        // WARMED THE MOMENT IT EXISTS, and again after any reallocation.
-        //
-        // A brand-new framebuffer that has never been drawn into loses the first real draw made into it
-        // -- a documented driver behaviour this engine already works around for its layer pool, and one
-        // whose symptom is uniquely misleading: the FIRST minimise produced a photograph with the editor
-        // missing from it and every one after was perfect, which reads as a race in the window rather
-        // than in the target it was being drawn onto.
-        //
-        // Also after a resize, which the pool does not bother with because its slots settle at the
-        // screen size and stay there. A window's snapshot is sized to the WINDOW, so it is reallocated
-        // whenever one is resized, and a throwaway transparent quad is nothing against that.
-        boolean fresh = false;
-        if (fbo == null) {
-            fbo = CgFrameBuffer.createOwned("cgui_snapshot", physicalWidth, physicalHeight, format());
-            fresh = true;
-        } else if (fbo.getWidth() != physicalWidth || fbo.getHeight() != physicalHeight) {
-            fbo.resize(physicalWidth, physicalHeight);
-            fresh = true;
+        boolean fresh = picture == null || owner != ctx
+                || picture.getWidth() != physicalWidth || picture.getHeight() != physicalHeight;
+        if (fresh) {
+            release();
+            picture = ctx.requestLayer("cgui_window_snapshot", physicalWidth, physicalHeight);
+            owner = ctx;
         }
         capturedWidth = box.width();
         capturedHeight = box.height();
 
-        // A FRESHLY ALLOCATED TARGET LOSES THE FIRST DRAW MADE INTO IT, so the first one is thrown away.
-        //
-        // The engine already works around this for its layer pool, with a transparent throwaway quad
-        // (warmUpLayer) drawn the moment a slot is created -- and its own note says why it is phrased as
-        // a COINCIDENCE rather than a property of the buffer: "a cold program's first draw into a cold
-        // FBO, same frame". Warming with that one quad is enough for the pool because the only thing the
-        // pool needs to survive is the blit material.
-        //
-        // It is NOT enough here, and the symptom said so precisely: the first photograph of a window came
-        // out complete except for the editor's TEXT. Text does not go through the quad path at all --
-        // CgTextRenderer owns its own renderer, its own instance buffer and its own material -- so
-        // warming one program vouches for nothing about another, and a snapshot draws a whole window's
-        // worth of programs rather than one.
-        //
-        // So rather than enumerate them, the real content is drawn twice and the first is overwritten.
-        // Whatever was cold is warm by the second pass, and this costs one extra subtree draw exactly
-        // once per allocation -- a minimise, or a resize of a window that has been minimised before.
+        // A FRESH TARGET LOSES THE FIRST DRAW MADE INTO IT on at least one driver -- the first photograph of a
+        // window came out without the editor's text. warmUpLayer warms one program and a window draws many, so the
+        // content itself is drawn twice and the first is overwritten: one extra subtree draw per allocation.
         if (fresh) {
-            ctx.warmUpLayer(fbo);
+            ctx.warmUpLayer(picture);
             renderInto(ctx, box, scale);
         }
         renderInto(ctx, box, scale);
     }
 
-    /** One pass of the window into {@link #fbo}. @see #capture */
+    /** One pass of the window into {@link #picture}. @see #capture */
     private void renderInto(CgUiPaintContext ctx, Box box, float scale) {
         // THE SCISSOR IS SCREEN-SPACE and this target is not the screen. An enclosing clip -- the
         // desktop's, a scroller's -- would be applied in coordinates that mean nothing here, and would
@@ -170,7 +117,7 @@ public final class WindowSnapshot {
         ctx.flush();
         int[] outerClip = ctx.getScissorStack().suspend();
         ctx.getScissorStack().clearScissorIfNeeded();
-        ctx.beginLayerFbo(fbo);
+        ctx.beginLayerFbo(picture, true);
         ctx.getPoseStack().pushPose();
         // A PHOTOGRAPH IS TAKEN IN THE WINDOW'S RESTING FRAME OF REFERENCE, never in the animation's
         // current one -- so the ambient pose is DISCARDED rather than built on.
@@ -211,16 +158,20 @@ public final class WindowSnapshot {
 
     /** Draws the photograph into a rect. Does nothing when there is none. */
     public void draw(CgUiPaintContext ctx, float x, float y, float width, float height) {
-        if (fbo == null) return;
-        ctx.drawLayer(fbo, x, y, width, height);
+        if (picture == null) return;
+        ctx.drawLayer(picture, x, y, width, height);
     }
 
-    /** Frees the target. Idempotent, and safe on a window that never minimised. */
+    /** Frees the picture. Idempotent, and safe on a window that never minimised. */
     void dispose() {
-        if (fbo == null) return;
-        fbo.delete();
-        fbo = null;
+        release();
         capturedWidth = 0f;
         capturedHeight = 0f;
+    }
+
+    private void release() {
+        if (picture != null && owner != null) owner.releaseTexture(picture);
+        picture = null;
+        owner = null;
     }
 }

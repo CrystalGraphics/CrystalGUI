@@ -2939,6 +2939,8 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
                         buttonClicks,
                         continuous.getValue()))
                 .font(context.getFont().atSize(14)).submit();
+        // Between frames this draws at once, on top; left queued it would flush inside the next frame's recording.
+        context.flush();
 
         // OPEN ON A NAMED PAGE, AND PHOTOGRAPH IT. `-Dcrystalgui.gallery.page=glass` with `--seconds=N`
         // turns this scene into an unattended diagnostic: a run that leaves a PNG of ONE page on disk.

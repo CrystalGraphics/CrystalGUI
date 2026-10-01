@@ -477,6 +477,38 @@ public class CgUiDesktopScene
         // still assembling itself and every diff against it is noise.
         if (frame.getFrameNumber() == 40) ctx.getArtifactService().requestCapture("startup");
         if (PROFILER_SHOT) driveProfilerShot(ctx, frame.getFrameNumber());
+        if (MINIMISE_SHOT) driveMinimiseShot(ctx, frame.getFrameNumber());
+    }
+
+    // ── -Dcrystalgui.harness.desktop.minimise=true: a window's snapshot, in flight ──
+
+    /**
+     * Minimises the active window -- the editor -- and restores it, photographing each flight halfway: what flies is the window's
+     * snapshot, so {@code minimise-mid} and {@code restore-mid} show whether it was drawn, and {@code restored}
+     * against {@code minimise-before} whether the window came back as it left. ~4s, with {@code --seconds=5}.
+     */
+    private static final boolean MINIMISE_SHOT = Boolean.getBoolean("crystalgui.harness.desktop.minimise");
+
+    private WindowFrame minimiseTarget;
+
+    private void driveMinimiseShot(HarnessContext ctx, long frameNumber) {
+        switch ((int) frameNumber) {
+            case 99 -> {
+                minimiseTarget = desktop.activeWindow();
+                ctx.getArtifactService().requestCapture("minimise-before");
+            }
+            case 100 -> {
+                if (minimiseTarget != null) minimiseTarget.minimize();
+            }
+            case 106 -> ctx.getArtifactService().requestCapture("minimise-mid");
+            case 150 -> ctx.getArtifactService().requestCapture("minimised");
+            case 160 -> {
+                if (minimiseTarget != null) minimiseTarget.show(true);
+            }
+            case 166 -> ctx.getArtifactService().requestCapture("restore-mid");
+            case 230 -> ctx.getArtifactService().requestCapture("restored");
+            default -> { }
+        }
     }
 
     /**
