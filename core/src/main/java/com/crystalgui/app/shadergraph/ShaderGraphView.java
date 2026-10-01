@@ -1,5 +1,6 @@
 package com.crystalgui.app.shadergraph;
 
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import java.util.List;
@@ -145,7 +146,9 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
 
     private boolean previewsAttached;
     private boolean mainPreviewAttached;
-    private boolean ticking;
+    /** Held, so the service can tell each is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook attachHook = this::attachPreviews;
+    private final Animation.Hook verdictHook = this::reportPreviewVerdicts;
 
     /** @see #ShaderGraphView(ShaderGraphDocument) */
     private final Connection adoption;
@@ -429,22 +432,15 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
     @Override
     protected void connected() {
         super.connected();
-        // THE STATUS THAT COULD NOT BE WRITTEN WHILE DETACHED, outside the ticking guard.
+        // THE STATUS THAT COULD NOT BE WRITTEN WHILE DETACHED.
         refreshStatus();
         UIDocument window = document();
-        // `Animation.every` is a plain add, and `disconnected()` clears the flag, or a pane hidden and reshown
-        // comes back with the flag set and no hooks behind it.
-        if (ticking || window == null) return;
-        ticking = true;
-        window.animation().every(this, this::attachPreviews);
-        window.animation().every(this, this::reportPreviewVerdicts);
+        if (window == null) return;
+        window.animation().everyIfAbsent(this, attachHook);
+        window.animation().everyIfAbsent(this, verdictHook);
     }
 
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        ticking = false;
-    }
+
 
     /**
      * Attaches this pane's preview renderers, retrying until they take: the main preview needs the GL context, which

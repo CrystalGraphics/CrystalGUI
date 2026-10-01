@@ -1112,7 +1112,8 @@ int value types.
 - **Per-frame work is an `Animation` hook OWNED by a node**, not a ticker a widget registers and can
   never unregister. It stops when the node leaves the tree, which is what the old one-way registration
   could not guarantee — a hidden window's ticker carried on invisibly. Anything that reads GEOMETRY
-  uses `afterLayout` instead: an ordinary hook runs BEFORE this frame's layout.
+  uses `afterLayout` instead: an ordinary hook runs BEFORE this frame's layout. A hook started on demand
+  is held in a field and registered with `everyIfAbsent`/`afterLayoutIfAbsent`, never behind a `ticking` flag.
 - **New pseudo-class = override a getter.** See `PseudoClasses` above.
 
 ## `UIText` — asked, not told

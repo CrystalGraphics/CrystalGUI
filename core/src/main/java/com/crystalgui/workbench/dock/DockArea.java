@@ -121,7 +121,6 @@ public class DockArea extends UIElement implements MinimumSize {
 
     /** Set across buildNode, so a group's own announce waits for the tree to be re-attached. */
     private boolean rebuilding;
-    private boolean ticking;
     @Nullable
     private DockGroup activeGroup;
 

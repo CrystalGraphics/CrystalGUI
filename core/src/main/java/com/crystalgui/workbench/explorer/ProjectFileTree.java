@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.explorer;
 
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -193,7 +194,8 @@ public class ProjectFileTree extends UIElement
      */
     private final Map<UIElement, CgPath> rowItems = new HashMap<>();
 
-    private boolean ticking;
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::drain;
     private boolean projectsRequested;
 
     /**
@@ -335,15 +337,6 @@ public class ProjectFileTree extends UIElement
      * refreshing the view is a structural change, so it must not run inside the layout pass that this hook
      * is part of.</p>
      */
-    @Override
-    protected void disconnected() {
-        super.disconnected();
-        // CLEARED, or the panel never ticks again. `Animation` drops a hook on the first tick after
-        // its owner disconnects, so a tool window -- which is hidden and reshown rather than rebuilt
-        // -- would come back with the flag still set and no hook behind it.
-        ticking = false;
-    }
-
     /**
      * Re-binds the rows when the panel comes back into a window.
      *
@@ -369,23 +362,13 @@ public class ProjectFileTree extends UIElement
         // answers null inside disconnected() anyway. @see #PROJECT_TREE
         UIDocument surface = document();
         if (surface != null) surface.addDataProvider(this);
-        // THE PER-FRAME HOOK, and the guard is not the old one's: `registerTicker` was
-        // HashSet-backed and idempotent, and `Animation.every` is a plain add, so a second attach
-        // without this is a second hook. `disconnected()` clears it, or a panel that is hidden and
-        // reshown -- which is every tool window -- comes back with the flag set and no hook behind it.
-        if (!ticking && document() != null) {
-            ticking = true;
-            document().animation().every(this, this::drain);
-        }
+        if (document() != null) document().animation().everyIfAbsent(this, tickHook);
         if (document() != null) pendingRefresh = true;
     }
 
     private boolean drain(float deltaSeconds) {
         UIDocument window = document();
-        if (window == null) {
-            ticking = false;
-            return false;
-        }
+        if (window == null) return false;
         // FIRST, and only while attached, which is the whole point of doing it here — CrystalOS W11.
         //
         // A reconnect leaves every listing describing a server this client is no longer talking to. The

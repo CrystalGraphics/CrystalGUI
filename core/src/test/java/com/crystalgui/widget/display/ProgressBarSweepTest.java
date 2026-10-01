@@ -1,5 +1,6 @@
 package com.crystalgui.widget.display;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertSame;
 
@@ -40,6 +41,21 @@ public class ProgressBarSweepTest extends UiDocumentTestBase {
         float was = stripeX(bar);
         step();
         assertNotEquals("the sweep died when the bar left the tree", was, stripeX(bar), 0.001f);
+    }
+
+    /** Moved within one frame, the old hook is still live: a second would sweep at twice the rate. */
+    @Test
+    public void aBarMovedWithinAFrameKeepsOneHook() {
+        ProgressBar bar = new ProgressBar();
+        bar.layout(l -> l.width(100).height(4));
+        document.append(bar);
+        step();
+        int hooks = document.animation().afterLayoutCount();
+
+        document.remove(bar);
+        document.append(bar);
+        step();
+        assertEquals(hooks, document.animation().afterLayoutCount());
     }
 
     private void step() {

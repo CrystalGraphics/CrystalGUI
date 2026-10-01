@@ -1,5 +1,6 @@
 package com.crystalgui.widget.collection.list;
 
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -605,23 +606,28 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      */
     public static final String FOCUSED_CLASS = "__focused__";
 
-    private boolean ticking;
+    /** Whether the model subscription is live: released on detach, taken again on the next {@link #ensureTicking}. */
+    private boolean listening;
+
+    /** Held, so the service can tell it is already live. @see Animation#everyIfAbsent */
+    private final Animation.Hook tickHook = this::tickFrame;
 
     /** Starts the per-frame tick if it is not already running. Protected so a subclass with deferred
      * work of its own can drive it from the ticker this class already owns, rather than registering a
      * second one -- two tickers means two lifecycles, and the second is always the one that leaks. */
     protected void ensureTicking() {
-        if (ticking) return;
         var window = document();
         if (window == null) return;
-        // BACK ON SCREEN. A detach released the model subscription; this is the moment it comes back, and
-        // the window is invalidated because the model may have moved on entirely while nobody was
-        // listening. @see #modelConnection
-        subscribeToModel();
-        invalidateWindow();
-        installDefaultContextMenu();
-        document().animation().every(this, this::tickFrame);
-        ticking = true;
+        if (!listening) {
+            // BACK ON SCREEN. A detach released the model subscription; this is the moment it comes back, and
+            // the window is invalidated because the model may have moved on entirely while nobody was
+            // listening. @see #modelConnection
+            subscribeToModel();
+            invalidateWindow();
+            installDefaultContextMenu();
+            listening = true;
+        }
+        window.animation().everyIfAbsent(this, tickHook);
     }
 
     /**
@@ -1637,7 +1643,7 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             modelConnection.disconnect();
             modelConnection = null;
         }
-        ticking = false;
+        listening = false;
     }
 
     /**
