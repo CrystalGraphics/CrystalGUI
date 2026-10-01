@@ -156,10 +156,10 @@ It exists for the two things a registry structurally cannot do:
 
 1. **Release on close rather than on exit.** A registry knows what exists, never what is still
    *wanted*. Closing a shader graph frees nothing unless somebody says so.
-2. **Reach what no registry can see.** `CgPreviewRenderer.delete()` states it: *"the pool's targets
-   are `createOwned`, so no registry sweeps them."* `CgUiPaintContext`'s layer FBO pool is the same.
-   For that class, release depends on somebody remembering — which is the thing an ownership tree
-   exists to stop depending on.
+2. **Reach what no registry can see.** A requested texture's storage is made by the executor outside any
+   registry, so the shader-graph preview targets (`CgPreviewPool`) and `CgUiPaintContext`'s retained layers
+   are freed only because their owner says so. For that class, release depends on somebody remembering —
+   which is the thing an ownership tree exists to stop depending on.
 
 ### Rules
 
@@ -217,12 +217,12 @@ graph's cull cannot release another's targets.
 | Reopen | allocates a pool | takes slots back; allocates nothing |
 | Teardown | every renderer's owner had to remember `delete()` | `CgGraphicsLifecycle.destroyContext()` frees the pool |
 
-That last row is the ownership point made real: the targets are `createOwned`, so no registry sweeps them,
-and release depended on somebody remembering — which is the thing an ownership tree exists to stop
-depending on.
+That last row is the ownership point made real: a target's storage is made outside any registry, so no
+registry sweeps it, and release depended on somebody remembering — which is the thing an ownership tree
+exists to stop depending on. The main preview borrows its target from the same pool, under a key of its own.
 
-`CgPreviewRenderer.delete()` still deletes its own two meshes. Those are genuinely its own, and they are
-the small half.
+`CgPreviewRenderer.delete()` still frees its own two meshes, on the render thread. Those are genuinely its
+own, and they are the small half.
 
 #### The rule that follows
 
