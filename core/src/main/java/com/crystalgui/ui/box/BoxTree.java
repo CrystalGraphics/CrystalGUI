@@ -79,6 +79,8 @@ public final class BoxTree {
     private @Nullable Box root;
 
     private boolean structureDirty = true;
+    /** Nodes whose box alone may have appeared or gone since the last pass. @see #syncToggled */
+    private final Set<UIElement> toggled = Collections.newSetFromMap(new IdentityHashMap<>());
     private boolean transformsDirty = true;
     private int hostedSequence;
     private int layoutPasses;
@@ -251,6 +253,12 @@ public final class BoxTree {
     public void layout(float width, float height) {
         document.require("layout");
         boolean synced = structureDirty || root == null;
+        if (!synced && !toggled.isEmpty()) {
+            long syncing = CgTrace.stamp(UiTrace.FRAME);
+            synced = !syncToggled();
+            CgTrace.zoneDone(UiTrace.FRAME, "layout:syncLocal", syncing);
+        }
+        toggled.clear();
         if (synced) {
             long syncing = CgTrace.stamp(UiTrace.FRAME);
             sync();
@@ -328,7 +336,7 @@ public final class BoxTree {
      * it rather than the one after.</p>
      */
     public boolean isLayoutDirty() {
-        return root == null || structureDirty || taffy.isDirty(root.taffyId);
+        return root == null || structureDirty || !toggled.isEmpty() || taffy.isDirty(root.taffyId);
     }
 
     /**
@@ -503,6 +511,125 @@ public final class BoxTree {
         // have gained or lost a box.
         for (Box box : inOrder) box.reclassify();
         stackingChanged();
+    }
+
+    /**
+     * Brings the boxes of the {@link #toggled} nodes up to date without walking the document: each one's subtree is
+     * built or destroyed under its composed parent's box, that parent's children are rewritten, and only what was
+     * built is restyled. False, having changed nothing, when a change reaches past the subtree -- a promotion, a
+     * mirror, a box hosted across the boundary, a node that moved -- and the full {@link #sync} must run.
+     *
+     * <p>What a scrolling list or a growing editor does every frame is exactly this: rows shown and hidden in one
+     * layer. The full sync re-hosts, reclassifies, restyles and recomposes the whole document for each of them.</p>
+     */
+    private boolean syncToggled() {
+        List<UIElement> nodes = new ArrayList<>(toggled);
+        // Ancestors first: building or destroying one settles every toggled node under it.
+        if (nodes.size() > 1) nodes.sort((a, b) -> Integer.compare(composedDepth(a), composedDepth(b)));
+        for (UIElement node : nodes) {
+            if (!localOnly(node)) return false;
+        }
+        for (UIElement node : nodes) {
+            if (!syncOne(node)) return false;
+        }
+        stackingChanged();
+        return true;
+    }
+
+    /** Whether a change to {@code node}'s box stays inside its subtree: no promotion or mirror reaches across it. */
+    private boolean localOnly(UIElement node) {
+        if (node == document || node.document() != document) return node.document() != document;
+        for (UIElement promoted : document.promotedNodes()) {
+            if (UIElement.isShadowIncludingInclusiveAncestor(node, promoted)) return false;
+        }
+        for (Mirror mirror : mirrors) {
+            if (UIElement.isShadowIncludingInclusiveAncestor(node, mirror.subtree)
+                    || UIElement.isShadowIncludingInclusiveAncestor(mirror.subtree, node)) return false;
+        }
+        return true;
+    }
+
+    /** One toggled node's subtree, built or destroyed. False when it turns out not to be local. */
+    private boolean syncOne(UIElement node) {
+        Box box = boxes.get(node);
+        UIElement parent = node.document() == document ? node.composedParent() : null;
+        Box parentBox = parent == null ? null : boxes.get(parent);
+        if (box != null && box.naturalHost != parentBox) {
+            // It has a box under another host: a move, or its parent's box is going. The parent's own entry, or the
+            // full sync, decides it.
+            if (parentBox != null) return false;
+        }
+        if (parentBox != null && box == null) {
+            List<Box> built = new ArrayList<>();
+            Box created = syncNode(node, parentBox, boxes, false, Collections.newSetFromMap(new IdentityHashMap<>()),
+                    built);
+            if (created == null) return true;
+            for (Box made : built) {
+                made.hosted.clear();
+                made.stackingOnly = made.node.get(Attribute.HIT_TRANSPARENT);
+            }
+            for (Box made : built) {
+                if (made != created) made.naturalHost.hosted.add(made);
+            }
+            for (Box made : built) setTaffyChildren(made);
+            rehost(parentBox);
+            for (Box made : built) made.reclassify();
+            refreshStyles(created, false);
+            transformsChanged(parentBox);
+            return true;
+        }
+        if (box != null && (parentBox == null || !boxable(node))) {
+            List<Box> gone = new ArrayList<>();
+            collectHosted(box, gone);
+            for (Box going : gone) {
+                if (going.hostOverride != null || going.hostedByPromotion) return false;
+            }
+            Box host = box.naturalHost;
+            for (Box going : gone) destroy(going);
+            if (host != null && boxes.get(host.node) == host) {
+                rehost(host);
+                transformsChanged(host);
+            }
+        }
+        return true;
+    }
+
+    /** Whether {@code node} has a box when its parent does. The same questions {@link #syncNode} asks. */
+    private boolean boxable(UIElement node) {
+        return node.computedStyle().get(LayoutProperties.DISPLAY) != TaffyDisplay.NONE && node.isDisplayed()
+                && !node.isFrozen();
+    }
+
+    /** {@code box}'s hosted list rebuilt: its natural children in composed order, then what is hosted on it. */
+    private void rehost(Box box) {
+        List<Box> wanted = new ArrayList<>(box.hosted.size() + 1);
+        for (UIElement child : box.node.composedChildren()) {
+            Box childBox = boxes.get(child);
+            if (childBox != null && childBox.hostOverride == null && childBox.naturalHost == box) wanted.add(childBox);
+        }
+        for (Box hostedBox : box.hosted) {
+            if (hostedBox.hostOverride != null) wanted.add(hostedBox);
+        }
+        box.hosted.clear();
+        box.hosted.addAll(wanted);
+        setTaffyChildren(box);
+    }
+
+    private void setTaffyChildren(Box box) {
+        NodeId[] wanted = new NodeId[box.hosted.size()];
+        for (int i = 0; i < wanted.length; i++) wanted[i] = box.hosted.get(i).taffyId;
+        if (!sameChildren(box.taffyId, wanted)) taffy.setChildren(box.taffyId, wanted);
+    }
+
+    private static void collectHosted(Box box, List<Box> into) {
+        into.add(box);
+        for (int i = 0; i < box.hosted.size(); i++) collectHosted(box.hosted.get(i), into);
+    }
+
+    private static int composedDepth(UIElement node) {
+        int depth = 0;
+        for (UIElement at = node.composedParent(); at != null; at = at.composedParent()) depth++;
+        return depth;
     }
 
     private @Nullable Box syncNode(UIElement node, @Nullable Box naturalHost, Map<UIElement, Box> realm,
@@ -954,6 +1081,15 @@ public final class BoxTree {
     // ── Dirtying ─────────────────────────────────────────────────────────────
 
     void structureChanged() {
+        structureChanged(null);
+    }
+
+    /** @see UIDocument.StructureListener */
+    private void structureChanged(@Nullable UIElement where) {
+        if (where != null && !structureDirty) {
+            toggled.add(where);
+            return;
+        }
         structureDirty = true;
         // Who changed the tree, past the node and box bookkeeping: a whole rebuild follows on the next layout.
         // Guarded: the varargs array would be allocated on every call with the channel off.

@@ -2,12 +2,20 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.HostThread;
+import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiFrame;
+import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.service.CompositorAnimation;
+import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BooleanSupplier;
@@ -157,8 +165,6 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     private final PostedPlatformPort port;
     private final Queue<CgSystemInput.Keyboard.Event> unhandledKeys = new ConcurrentLinkedQueue<>();
 
-    /** Delta passed since the frame in flight was asked for. Render thread. */
-    private float pendingDelta;
     /** Commits built so far. The sequence's. */
     private long commits;
     /** Host frames that drew the document. Render thread. */
@@ -209,6 +215,11 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
 
     public boolean isAsync() {
         return mode == Mode.ASYNC;
+    }
+
+    /** Whether the compositor moves and fades between the document's frames: async, unless switched off. */
+    public boolean compositesMotion() {
+        return mode == Mode.ASYNC && COMPOSITOR_MOTION;
     }
 
     public UIDocument document() {
@@ -274,6 +285,8 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     /** {@link #offer} for a pointer event, whose buttons the document's platform answers from when posted. */
     public boolean offerMouse(CgSystemInput.Mouse.Event event, BooleanSupplier dispatch) {
         if (mode != Mode.ASYNC) return offer(dispatch);
+        pointerX = event.x();
+        pointerY = event.y();
         sequence.execute(() -> {
             port.note(event);
             dispatch.getAsBoolean();
@@ -311,25 +324,196 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
      * @return whether anything was drawn: asynchronously, false until the first frame has been recorded
      */
     public boolean frame(float deltaSeconds, int width, int height, Painter<F> painter) {
+        // This thread is where documents are framed: work and answers queued for it run first.
+        HostThread.drainFrames();
         if (compositor == null) {
-            run(() -> painter.paint(deltaSeconds, width, height));
+            Runnable delivery = document.readExtracts();
+            run(() -> {
+                if (delivery != null) delivery.run();
+                painter.paint(deltaSeconds, width, height);
+            });
             presented++;
             return true;
         }
         // Made here, on the render thread, before the sequence first records: fonts and the text renderer.
         document.paintContext();
         port.service();
-        pendingDelta += deltaSeconds;
-        boolean shown = compositor.present(width, height) != null;
-        float delta = pendingDelta;
-        if (compositor.requestFrame(() -> commit(painter, delta, width, height))) pendingDelta = 0f;
+        boolean shown = compositor.present(width, height, commit -> followPointer(commit) | animate(commit)) != null;
+        lastPresentNanos = System.nanoTime();
+        lastPainter = painter;
+        lastWidth = width;
+        lastHeight = height;
+        Runnable delivery = document.readExtracts();
+        if (compositor.accepting()) {
+            compositor.requestFrame(() -> {
+                if (delivery != null) delivery.run();
+                return commit(painter, recordDelta(), width, height);
+            }, this::chainedCommit);
+        } else if (delivery != null) {
+            // THE DOCUMENT IS BUSY, possibly chaining frames of its own: the readings wait in its inbox for the next.
+            document.post(delivery);
+        }
         if (shown) presented++;
         return shown;
     }
 
+    /** What a recording chained behind a slow one records: the painter and size the host last framed with. */
+    private UiCommit<F> chainedCommit() {
+        Painter<F> painter = lastPainter;
+        return painter == null ? null : commit(painter, recordDelta(), lastWidth, lastHeight);
+    }
+
+    /** The host's last painter and size, for a frame the sequence chains on its own. Written on the render thread. */
+    @Nullable
+    private volatile Painter<F> lastPainter;
+    private volatile int lastWidth, lastHeight;
+    /** When the sequence last began recording. Sequence thread. */
+    private long lastRecordNanos;
+
+    /**
+     * Seconds since the last recording began, on the sequence's own clock: a chained frame has no host delta, and one
+     * clock for both kinds counts no time twice.
+     */
+    private float recordDelta() {
+        long now = System.nanoTime();
+        float delta = lastRecordNanos == 0L ? 0f : (now - lastRecordNanos) / 1_000_000_000f;
+        lastRecordNanos = now;
+        return delta;
+    }
+
     private UiCommit<F> commit(Painter<F> painter, float deltaSeconds, int width, int height) {
         UiFrame frame = painter.record(deltaSeconds, width, height);
-        return new UiCommit<>(frame, painter.facts(), ++commits);
+        return new UiCommit<>(frame, painter.facts(), ++commits, follow(frame), motions(frame));
+    }
+
+    /** What the compositor plays in {@code frame}: every animation handed to it, with its box's node if it has one. */
+    private List<UiCommit.Motion> motions(@Nullable UiFrame frame) {
+        List<CompositorAnimation> playing = document.animation().onCompositor();
+        if (frame == null || playing.isEmpty()) return List.of();
+        List<UiCommit.Motion> motions = new ArrayList<>(playing.size());
+        for (CompositorAnimation animation : playing) {
+            Box box = animation.target().box();
+            int moved = box == null ? 0 : box.movedNode(frame.frameId());
+            if (moved == 0) {
+                motions.add(new UiCommit.Motion(animation, 0, 0, null, null, null, 0f, 0f, 0f, 0f, 0f, 0f));
+                continue;
+            }
+            float width = box.width(), height = box.height();
+            float originX = animation.originX(width), originY = animation.originY(height);
+            Matrix4f recorded = box.transform().applyTo(new Matrix4f(), 0f, 0f, width, height,
+                    box.transformOriginX() != null ? box.transformOriginX() : originX,
+                    box.transformOriginY() != null ? box.transformOriginY() : originY);
+            Matrix4f recordedInverse = recorded.invert(new Matrix4f());
+            Matrix4f world = box.movedWorld();
+            Matrix4f place = new Matrix4f(world).mul(recordedInverse);
+            motions.add(new UiCommit.Motion(animation, moved, box.fadedNode(frame.frameId()), place,
+                    place.invert(new Matrix4f()), recordedInverse, width, height, originX, originY,
+                    Math.round(world.m30()), Math.round(world.m31())));
+        }
+        return motions;
+    }
+
+    /** What follows the pointer in {@code frame}, if anything and it has a node there to move. On the document. */
+    @Nullable
+    private UiCommit.Follow follow(@Nullable UiFrame frame) {
+        UIElement element = frame == null ? null : document.input().pointerFollower();
+        Box box = element == null ? null : element.box();
+        int node = box == null ? 0 : box.movedNode(frame.frameId());
+        if (node == 0) return null;
+        ReadOnlyVec2f pointer = document.input().pointer();
+        UIElement within = document.input().pointerFollowerWithin();
+        Box bounds = within == null ? null : within.box();
+        if (bounds == null) {
+            float free = UiCommit.Follow.FREE;
+            return new UiCommit.Follow(node, pointer.x(), pointer.y(), -free, free, -free, free);
+        }
+        // World rectangles, axis-aligned: what a clamp on left/top keeps inside its container.
+        float x0 = box.worldX(), y0 = box.worldY();
+        float x1 = x0 + box.width() * box.localToWorld().m00(), y1 = y0 + box.height() * box.localToWorld().m11();
+        float bx0 = bounds.worldX(), by0 = bounds.worldY();
+        float bx1 = bx0 + bounds.width() * bounds.localToWorld().m00();
+        float by1 = by0 + bounds.height() * bounds.localToWorld().m11();
+        float minX = Math.min(0f, bx0 - x0), minY = Math.min(0f, by0 - y0);
+        return new UiCommit.Follow(node, pointer.x(), pointer.y(),
+                minX, Math.max(minX, bx1 - x1), minY, Math.max(minY, by1 - y1));
+    }
+
+    // ── Compositor motion ───────────────────────────────────────────────────────────────────────
+
+    /** {@code -Dcrystalgui.ui.compositorMotion=false}: nothing moves between the document's frames. */
+    private static final boolean COMPOSITOR_MOTION =
+            !"false".equals(System.getProperty("crystalgui.ui.compositorMotion"));
+
+    /** The pointer as the render thread last saw it, in surface pixels. Render thread. */
+    private float pointerX, pointerY;
+    /** The commit {@link #followPointer} last moved, and by how much, so an unchanged offset is not drawn again. */
+    @Nullable
+    private UiCommit<F> moved;
+    private int movedX, movedY;
+
+    /**
+     * Moves what the commit recorded following the pointer by the pointer's travel since: a window dragged across a busy
+     * document stays under the hand. Whole device pixels, as a spatial node is placed. Render thread.
+     */
+    private boolean followPointer(UiCommit<F> commit) {
+        if (!COMPOSITOR_MOTION) return false;
+        UiCommit.Follow follow = commit.follow();
+        if (follow == null || commit.frame() == null) return false;
+        int dx = Math.round(clamp(pointerX - follow.pointerX(), follow.minX(), follow.maxX()));
+        int dy = Math.round(clamp(pointerY - follow.pointerY(), follow.minY(), follow.maxY()));
+        if (commit == moved && dx == movedX && dy == movedY) return false;
+        commit.frame().values().translate(follow.node(), dx, dy);
+        moved = commit;
+        movedX = dx;
+        movedY = dy;
+        return true;
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    /** The commit {@link #animate} last drew finished, so a settled flight is shown again rather than redrawn. */
+    @Nullable
+    private UiCommit<F> settled;
+    /** When the last host frame was presented, and how many slow ones a waiting flight has been held through. */
+    private long lastPresentNanos;
+    private int heldPresents;
+    /** A gap longer than this is a stall, and a flight does not start its clock in one. */
+    private static final long STALL_NANOS = 100_000_000L;
+    private static final int MAX_HELD_PRESENTS = 60;
+    private final Matrix4f motionAt = new Matrix4f(), motionNode = new Matrix4f();
+
+    /**
+     * Plays the commit's compositor animations at this host frame: each box's node takes the animation's transform
+     * now, and its effect node the opacity. Their clocks start the first time a frame carrying them is presented.
+     * Render thread.
+     */
+    private boolean animate(UiCommit<F> commit) {
+        List<UiCommit.Motion> motions = commit.motions();
+        if (motions.isEmpty() || commit.frame() == null || commit == settled) return false;
+        long now = System.nanoTime();
+        // NOT IN A STALL: the first windows open while the editor builds, and a clock started in a 400 ms present has
+        // run out before a second frame is drawn. It waits, at its start value, for frames at an ordinary pace.
+        boolean ordinary = now - lastPresentNanos <= STALL_NANOS || heldPresents++ >= MAX_HELD_PRESENTS;
+        if (ordinary) heldPresents = 0;
+        boolean finished = true;
+        for (int i = 0; i < motions.size(); i++) {
+            UiCommit.Motion motion = motions.get(i);
+            CompositorAnimation animation = motion.animation();
+            if (ordinary) animation.startAt(now);
+            finished &= animation.isFinished(now);
+            if (motion.moved() == 0) continue;
+            Transform at = animation.transformAt(now);
+            at.applyTo(motionAt.identity(), 0f, 0f, motion.width(), motion.height(), motion.originX(), motion.originY());
+            motionNode.set(motion.place()).mul(motionAt).mul(motion.recordedInverse()).mul(motion.placeInverse())
+                    .translate(motion.cornerX(), motion.cornerY(), 0f);
+            commit.frame().values().transform(motion.moved(), motionNode.m00(), motionNode.m01(), motionNode.m10(),
+                    motionNode.m11(), motionNode.m30(), motionNode.m31());
+            if (motion.faded() != 0) commit.frame().values().opacity(motion.faded(), animation.opacityAt(now));
+        }
+        if (finished) settled = commit;
+        return true;
     }
 
     /** The facts of the frame on screen, or of the newest one committed; null before the first, and when not async. */

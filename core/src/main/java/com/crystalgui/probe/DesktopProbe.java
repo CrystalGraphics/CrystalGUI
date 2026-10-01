@@ -5,6 +5,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -109,7 +110,7 @@ public final class DesktopProbe {
     private static final String JAVA_PROBE_FILE = "workspace:src/main/java/com/example/Main.java";
 
     private enum Step {
-        WAIT_WORLD, OPEN_DESKTOP, WAIT_WINDOW, SHOOT_DESKTOP,
+        WAIT_WORLD, GAME_THREADS, WAIT_GAME_THREADS, OPEN_DESKTOP, WAIT_WINDOW, SHOOT_DESKTOP,
         MINIMISE, SHOOT_MINIMISE_MID, SHOOT_MINIMISED,
         RESTORE, SHOOT_RESTORE_MID, SHOOT_RESTORED,
         JUMP_LIST, SHOOT_JUMP_LIST,
@@ -124,6 +125,9 @@ public final class DesktopProbe {
     private static int totalTicks;
     private static int shot;
     private static int windowWaited;
+    private static int threadsWaited;
+    private static volatile String clientAnswer;
+    private static volatile String serverAnswer;
 
     private DesktopProbe() {
     }
@@ -158,8 +162,28 @@ public final class DesktopProbe {
             case WAIT_WORLD:
                 if (!host.inWorld()) return;
                 say("in a world");
-                step = Step.OPEN_DESKTOP;
+                step = Step.GAME_THREADS;
                 waitTicks = SETTLE;
+                break;
+            case GAME_THREADS:
+                // FROM UI CODE, as a mod would: each game thread runs the work and answers here.
+                HostThread.CLIENT.call(() -> Thread.currentThread().getName()).then(name -> clientAnswer = name);
+                if (HostThread.SERVER.isAvailable()) {
+                    HostThread.SERVER.call(() -> Thread.currentThread().getName()).then(name -> serverAnswer = name);
+                } else {
+                    serverAnswer = "(no integrated server)";
+                }
+                threadsWaited = 0;
+                step = Step.WAIT_GAME_THREADS;
+                break;
+            case WAIT_GAME_THREADS:
+                if ((clientAnswer == null || serverAnswer == null) && ++threadsWaited < WINDOW_DEADLINE) return;
+                say("game threads: client work ran on '" + clientAnswer + "', server work on '" + serverAnswer + "'");
+                if (clientAnswer == null || serverAnswer == null) {
+                    CrystalGuiCore.LOGGER.error("[cgui-probe] a game thread never answered: client {}, server {}",
+                            clientAnswer, serverAnswer);
+                }
+                step = Step.OPEN_DESKTOP;
                 break;
             case OPEN_DESKTOP:
                 host.openDesktop();

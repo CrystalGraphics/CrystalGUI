@@ -20,6 +20,7 @@ beside this file. Nothing here assumes you have read them.
 6. [Sending your own messages](#6-sending-your-own-messages)
 7. [Nesting panels](#7-nesting-panels)
 7b. [Long lists — inventories, logs and files](#7b-long-lists--inventories-logs-and-files)
+7c. [Reading and changing the game](#7c-reading-and-changing-the-game)
 8. [Opening and closing](#8-opening-and-closing)
 9. [Remembering things](#9-remembering-things)
 10. [Owning a file type](#10-owning-a-file-type)
@@ -898,6 +899,77 @@ io.addLocal(row, new Button("Copy"));
 It is an ordinary child in every way that shows and invisible to the server in every way that travels:
 never described, never numbered, never counted. Appending one by hand instead puts it in the described
 child list, and the server's next insert lands one index off — silently.
+
+---
+
+## 7c. Reading and changing the game
+
+A CrystalGUI window may run on a thread of its own, and the game does not: its world, its player and its
+inventories live on the game's threads, and touching them from anywhere else races the game. So UI code
+never reaches into the game directly. It asks a **`HostThread`** to do the work there, and gets the answer
+back where the UI runs.
+
+### Showing something that changes: `extract`
+
+In a widget's constructor, name what to read and what to do with it:
+
+```java
+public class HealthBar extends UIElement {
+    private final ProgressBar bar = new ProgressBar();
+
+    public HealthBar() {
+        append(bar);
+        extract(() -> player().getHealth() / player().getMaxHealth(), bar::setFraction);
+    }
+}
+```
+
+That is the whole of it. Every frame the read runs on the game's client thread, and whenever its answer
+changes `bar.setFraction` runs on the UI's. It starts when the widget joins a window and stops when it
+leaves.
+
+```java
+extract(() -> List.copyOf(player().getInventory().items), slots::show);       // a copy, never the live list
+extract(HostThread.SERVER, () -> level().getDayTime(), clock::setTime);       // the integrated server's world
+extract(HostThread.RENDER, () -> camera().position(), compass::point);        // where frames are drawn
+```
+
+### Doing something, or asking once: `run` and `call`
+
+From a click handler, or anything else in UI code:
+
+```java
+drop.onPressed.connect(() -> HostThread.CLIENT.run(() -> player().drop(stack, false)));
+
+HostThread.SERVER.call(() -> level().getBlockState(pos))                       // runs on the server thread...
+        .then(state -> label.setText(state.getBlock().getName().getString())); // ...answered on the UI's
+```
+
+`call` answers a `Reply`, so the usual `onError`, `map` and `cancel` apply.
+
+### The threads
+
+| `HostThread` | What lives there | 1.7.10, Forge 1.8–1.12 | Modern |
+|---|---|---|---|
+| `CLIENT` (the default) | the client world, the player, inventories, screens | the main thread, which also draws | Minecraft's own task queue |
+| `SERVER` | the authoritative world, in single player | the integrated server's thread | the integrated server's task queue |
+| `RENDER` | the camera, interpolated positions, what is on screen | the main thread | the thread that draws |
+
+### What to know
+
+- **A read must answer a snapshot**: `List.copyOf(items)`, not `items`. The UI reads it later, on its own
+  thread, while the game moves on.
+- **Never touch a widget inside the work** — it runs on the game's thread. Touch it in `then`, or in an
+  extract's use, which run on the UI's.
+- **It is instant wherever it can be.** Where the thread you named is the one drawing the frame, the read
+  happens as the frame starts and is used in that frame, and a `call` is answered before it returns.
+  Otherwise the answer lands at the start of the next frame.
+- **An extract's use runs only when the answer changes** (by `equals`), so reading every frame is cheap
+  for the UI.
+- **`SERVER` is single player only.** Connected to a server there is no server thread on the client:
+  `HostThread.SERVER.isAvailable()` is false, an extract reads nothing, `run` drops the work with a
+  warning and `call` fails with `HostThread.UNAVAILABLE`. A UI that needs the server's truth in
+  multiplayer is a [networked UI](#4-a-networked-ui).
 
 ---
 

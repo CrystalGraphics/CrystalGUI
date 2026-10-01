@@ -523,6 +523,64 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return pointer;
     }
 
+    @Nullable
+    private UIElement pointerFollower;
+    @Nullable
+    private UIElement pointerFollowerWithin;
+
+    /**
+     * Declares that {@code element} moves one for one with the pointer until {@link #stopFollowingPointer}: what a
+     * compositor may move ahead of this document, by the pointer's travel since a frame was recorded, while the
+     * document is busy. A window drag declares its window; a gesture that does not move its element exactly with the
+     * pointer -- a resize, a drag that eases or snaps as it goes -- declares nothing.
+     *
+     * <pre>{@code
+     * document.input().followPointer(window);        // the drag begins
+     * document.input().stopFollowingPointer(window); // it ends, either way
+     * }</pre>
+     */
+    public void followPointer(UIElement element) {
+        followPointer(element, null);
+    }
+
+    /**
+     * {@link #followPointer(UIElement)} for an element the drag keeps inside {@code within}'s box: the compositor stops
+     * it at the same edges.
+     */
+    public void followPointer(UIElement element, @Nullable UIElement within) {
+        UIElement previous = pointerFollower;
+        pointerFollower = element;
+        pointerFollowerWithin = within;
+        restack(previous);
+        restack(element);
+    }
+
+    /** Ends what {@link #followPointer} began, if {@code element} is still what follows. */
+    public void stopFollowingPointer(UIElement element) {
+        if (pointerFollower != element) return;
+        pointerFollower = null;
+        pointerFollowerWithin = null;
+        restack(element);
+    }
+
+    /** A follower records under a node of its own and stacks as a context: asked again now, not at the next restyle. */
+    private static void restack(@Nullable UIElement element) {
+        Box box = element == null ? null : element.box();
+        if (box != null) box.reclassify();
+    }
+
+    /** What follows the pointer one for one now, or null. @see #followPointer */
+    @Nullable
+    public UIElement pointerFollower() {
+        return pointerFollower;
+    }
+
+    /** What {@link #pointerFollower} is kept inside, or null when nothing bounds it. */
+    @Nullable
+    public UIElement pointerFollowerWithin() {
+        return pointerFollowerWithin;
+    }
+
     /**
      * Whether the pointer has moved since the last button press.
      *

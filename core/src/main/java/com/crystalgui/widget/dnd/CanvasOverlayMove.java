@@ -105,7 +105,8 @@ public final class CanvasOverlayMove {
             move.dragLeft = panelBox.x() - containerBox.x();
             move.dragTop = panelBox.y() - containerBox.y();
             Drag.start(handle, rawX, rawY,
-                    (mouseX, mouseY, startX, startY, deltaX, deltaY) -> move.moveBy(deltaX, deltaY));
+                    (mouseX, mouseY, startX, startY, deltaX, deltaY) -> move.moveBy(deltaX, deltaY))
+                    .follows(panel, container);
             event.stopPropagation();
         }, false, true);
         return move;

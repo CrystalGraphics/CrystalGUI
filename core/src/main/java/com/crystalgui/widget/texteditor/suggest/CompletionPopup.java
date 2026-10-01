@@ -508,7 +508,7 @@ public final class CompletionPopup extends Popover {
                             StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                                     l -> l.left(placedLeft).top(placedTop));
                         }
-                    });
+                    }).follows(this);
             event.stopPropagation();
         }, false, false);
     }

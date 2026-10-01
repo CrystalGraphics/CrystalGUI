@@ -4,7 +4,9 @@ import com.crystalgui.style.easing.Easing;
 import com.crystalgui.ui.dom.UIElement;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import javax.annotation.Nullable;
 
 /**
@@ -131,6 +133,46 @@ public final class Animation {
     private final List<Timeline> timelines = new ArrayList<>();
     private final List<OwnedHook> hooks = new ArrayList<>();
     private final List<OwnedHook> afterLayout = new ArrayList<>();
+    private final List<CompositorAnimation> onCompositor = new ArrayList<>();
+    private final BooleanSupplier compositing;
+
+    /** A document no compositor presents: {@link #playOnCompositor} always declines. */
+    public Animation() {
+        this(() -> false);
+    }
+
+    /** @param compositing whether a compositor presents this document's frames and plays its animations */
+    public Animation(BooleanSupplier compositing) {
+        this.compositing = compositing;
+    }
+
+    /**
+     * Hands {@code animation} to the compositor, which plays it at the display's rate; false, and nothing kept, when
+     * no compositor presents this document. Stop it with {@link #stopOnCompositor} however it ends.
+     */
+    public boolean playOnCompositor(CompositorAnimation animation) {
+        if (!compositing.getAsBoolean()) return false;
+        onCompositor.add(animation);
+        return true;
+    }
+
+    public void stopOnCompositor(CompositorAnimation animation) {
+        onCompositor.remove(animation);
+    }
+
+    /** What the compositor is playing, in the order handed over. */
+    public List<CompositorAnimation> onCompositor() {
+        return Collections.unmodifiableList(onCompositor);
+    }
+
+    /** What the compositor plays on {@code node}'s box, or null. */
+    @Nullable
+    public CompositorAnimation onCompositor(UIElement node) {
+        for (int i = 0; i < onCompositor.size(); i++) {
+            if (onCompositor.get(i).target() == node) return onCompositor.get(i);
+        }
+        return null;
+    }
 
     /** Starts a timeline, writing its start value now. */
     public Timeline start(float durationSeconds, Easing easing, Body body, @Nullable Runnable onDone) {
@@ -302,5 +344,6 @@ public final class Animation {
     public void forget(UIElement node) {
         hooks.removeIf(owned -> UIElement.isShadowIncludingInclusiveAncestor(node, owned.owner()));
         afterLayout.removeIf(owned -> UIElement.isShadowIncludingInclusiveAncestor(node, owned.owner()));
+        onCompositor.removeIf(played -> UIElement.isShadowIncludingInclusiveAncestor(node, played.target()));
     }
 }

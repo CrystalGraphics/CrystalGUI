@@ -5,7 +5,8 @@ import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.UiGpu;
 
 import javax.annotation.Nullable;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.ArrayDeque;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -21,14 +22,21 @@ import java.util.function.Supplier;
  * <ul>
  *   <li>A frame committed is presented exactly once; a host frame with nothing new re-presents the last
  *       ({@link UiGpu#presentAgain}), so a busy document shows its previous picture rather than nothing.</li>
- *   <li>{@link #requestFrame} refuses while a frame is in flight: the caller carries its delta to the next request.</li>
+ *   <li>{@link #requestFrame} refuses while a frame is in flight or one waits to be presented.</li>
+ *   <li>A recording longer than a host frame chains the next at once, on the sequence, rather than waiting a host
+ *       frame to be asked: a document at 9 ms a frame then shows 110 frames a second where it showed 60. At most two
+ *       commits ever wait, oldest presented first.</li>
  * </ul>
  */
 final class SurfaceCompositor<F> {
 
     private final UiSequence sequence;
-    private final AtomicReference<UiCommit<F>> pending = new AtomicReference<>();
+    /** Commits waiting to be presented, oldest first; at most two. Guarded by itself. */
+    private final ArrayDeque<UiCommit<F>> ready = new ArrayDeque<>(2);
     private volatile boolean inFlight;
+    /** The host's frame interval, as presents measure it: what a recording must exceed to chain. */
+    private volatile long hostFrameNanos = 16_666_667L;
+    private long lastPresentNanos;
     @Nullable
     private UiCommit<F> active;
 
@@ -47,12 +55,33 @@ final class SurfaceCompositor<F> {
      */
     @Nullable
     UiCommit<F> present(int width, int height) {
-        UiCommit<F> fresh = pending.getAndSet(null);
+        return present(width, height, commit -> false);
+    }
+
+    /**
+     * {@link #present(int, int)}, letting {@code move} write a commit's property values first: given the commit about to
+     * be drawn, it answers whether it changed them. A fresh commit is presented with them; an older one is executed again
+     * ({@link UiGpu#redraw}) when they changed, and shown again as it was otherwise.
+     */
+    UiCommit<F> present(int width, int height, Predicate<UiCommit<F>> move) {
+        long now = System.nanoTime();
+        long gap = now - lastPresentNanos;
+        if (lastPresentNanos != 0L && gap > 0L && gap < 100_000_000L) hostFrameNanos = (hostFrameNanos * 7L + gap) / 8L;
+        lastPresentNanos = now;
+        UiCommit<F> fresh;
+        synchronized (ready) {
+            fresh = ready.pollFirst();
+        }
         if (fresh != null) {
             active = fresh;
-            if (fresh.frame() != null) UiGpu.present(fresh.frame());
+            if (fresh.frame() != null) {
+                move.test(fresh);
+                UiGpu.present(fresh.frame());
+            }
         } else if (active != null && active.frame() != null) {
-            UiGpu.presentAgain(width, height);
+            // What moves is a window's node or a drag's: what the layers under it drew holds still, so not again.
+            if (move.test(active)) UiGpu.redraw(width, height, true);
+            else UiGpu.presentAgain(width, height);
         }
         return active;
     }
@@ -60,8 +89,11 @@ final class SurfaceCompositor<F> {
     /** The commit last presented, without drawing anything; null until the first. */
     @Nullable
     UiCommit<F> active() {
-        UiCommit<F> fresh = pending.get();
-        return fresh != null ? fresh : active;
+        synchronized (ready) {
+            UiCommit<F> newest = ready.peekLast();
+            if (newest != null) return newest;
+        }
+        return active;
     }
 
     /**
@@ -70,24 +102,58 @@ final class SurfaceCompositor<F> {
      * @return false, and nothing posted, while the previous frame is in flight or not yet presented: a frame dropped
      *         unpresented never gives its buffers back
      */
-    boolean requestFrame(Supplier<UiCommit<F>> work) {
+    /** Whether {@link #requestFrame} would take a frame now. Render thread. */
+    boolean accepting() {
         if (inFlight) {
             reportIfHung();
             return false;
         }
-        if (pending.get() != null) return false;
+        synchronized (ready) {
+            return ready.isEmpty();
+        }
+    }
+
+    /**
+     * {@link #requestFrame(Supplier, Supplier)} that never chains. Render thread.
+     */
+    boolean requestFrame(Supplier<UiCommit<F>> work) {
+        return requestFrame(work, null);
+    }
+
+    /**
+     * Posts {@code work} to the sequence, and {@code next} after it for as long as each recording takes longer than a
+     * host frame. Render thread.
+     */
+    boolean requestFrame(Supplier<UiCommit<F>> work, @Nullable Supplier<UiCommit<F>> next) {
+        if (!accepting()) return false;
         inFlight = true;
         requestedNanos = System.nanoTime();
         hangReported = false;
-        sequence.execute(() -> {
-            try {
-                UiCommit<F> commit = work.get();
-                if (commit != null) pending.set(commit);
-            } finally {
-                inFlight = false;
-            }
-        });
+        sequence.execute(() -> record(work, next));
         return true;
+    }
+
+    /** One recording on the sequence, and the next posted behind it when this one missed a host frame. */
+    private void record(Supplier<UiCommit<F>> work, @Nullable Supplier<UiCommit<F>> next) {
+        boolean chained = false;
+        try {
+            long started = System.nanoTime();
+            UiCommit<F> commit = work.get();
+            long took = System.nanoTime() - started;
+            int waiting;
+            synchronized (ready) {
+                if (commit != null) ready.addLast(commit);
+                waiting = ready.size();
+            }
+            // POSTED, not run here: input queued behind this frame runs before the next one records.
+            chained = next != null && commit != null && took > hostFrameNanos && waiting < 2;
+            if (chained) {
+                requestedNanos = System.nanoTime();
+                sequence.execute(() -> record(next, next));
+            }
+        } finally {
+            if (!chained) inFlight = false;
+        }
     }
 
     /**
