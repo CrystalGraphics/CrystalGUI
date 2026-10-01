@@ -1,6 +1,8 @@
 package com.crystalgui.desktop;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -10,6 +12,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -256,5 +259,36 @@ public class DesktopWindowTest extends UiDocumentTestBase {
         assertEquals((area.box().height() - 100f) / 2f, first.top(), 0.01f);
         assertEquals(first.left() + step, second.left(), 0.01f);
         assertEquals(first.top() + step, second.top(), 0.01f);
+    }
+
+    /**
+     * <b>A window being dragged follows the pointer one for one</b>, and says so: that declaration is what lets a
+     * compositor move it ahead of a busy document. It ends with the drag.
+     */
+    @Test
+    public void aDraggedWindowDeclaresItFollowsThePointer() {
+        build();
+        WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame("One")).resizeTo(200, 120);
+        frame.moveTo(40, 40);
+        settle();
+        Input input = document.input();
+        float x = frame.titleBar().box().worldX() + 20f * uiScale();
+        float y = frame.titleBar().box().worldY() + captionOf(frame) / 2f * uiScale();
+
+        mouse(input, x, y, 0, true);
+        mouse(input, x + 30f, y + 20f, -1, false);
+        settle();
+        assertSame("a caption drag did not declare its window", frame, input.pointerFollower());
+        assertEquals("the window did not move with the pointer", 40f + 30f / uiScale(), frame.left(), 0.5f);
+
+        mouse(input, x + 30f, y + 20f, 0, false);
+        settle();
+        assertNull("the drag ended and the window still follows", input.pointerFollower());
+    }
+
+    private static void mouse(Input input, float x, float y, int button, boolean pressed) {
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(Math.round(x), Math.round(y), 0, 0, button, pressed, 0f, 1L));
+        input.beginFrame();
+        input.endFrame();
     }
 }

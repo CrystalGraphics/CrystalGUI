@@ -247,6 +247,7 @@ public class CgUiDesktopScene
             try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "scene:readout")) {
                 refreshReadout();
             }
+            if (followBusy) sleepQuietly(FOLLOW_BUSY_MS);
         }, null);
         driver.run(() -> build(ctx));
     }
@@ -488,6 +489,7 @@ public class CgUiDesktopScene
         driver.frame(delta, w, h, painter);
         // The probes read and drive the tree, so they run on the document -- waited for, which is why they are off unless asked.
         if (probing()) driver.run(() -> afterFrame(ctx, frame, workStart));
+        if (FOLLOW_SHOT) driveFollowShot(ctx);
         // Late enough that the first window's placement, the entry animations and the editor's own
         // deferred rebuilds have all settled -- a capture at frame 5 photographs a desktop that is
         // still assembling itself and every diff against it is noise. Counted in frames that showed the
@@ -530,6 +532,70 @@ public class CgUiDesktopScene
         }
     }
 
+    // ── -Dcrystalgui.harness.desktop.follow=true: a window dragged across a busy document ──
+
+    /**
+     * Makes the document take {@link #FOLLOW_BUSY_MS} a frame, then drags a window's caption {@link #FOLLOW_STEP} px a
+     * host frame and photographs it mid-drag ({@code follow-mid}). With compositor motion the window is under the
+     * pointer in every host frame; with {@code -Dcrystalgui.ui.compositorMotion=false} it moves only when the document
+     * commits. Async. Prints {@code [follow-probe]} lines.
+     */
+    private static final boolean FOLLOW_SHOT = Boolean.getBoolean("crystalgui.harness.desktop.follow");
+    private static final long FOLLOW_BUSY_MS = 60L;
+    private static final int FOLLOW_STEP = 8;
+
+    private volatile boolean followBusy;
+    private WindowFrame followWindow;
+    private int followX, followY;
+
+    private void driveFollowShot(HarnessContext ctx) {
+        long n = driver.presentedFrames();
+        if (n == 60) driver.run(() -> {
+            for (WindowFrame window : desktop.windows()) {
+                if (!window.isMaximized() && window.box() != null) {
+                    desktop.activate(window);
+                    followWindow = window;
+                    break;
+                }
+            }
+        });
+        if (followWindow == null || n < 90 || n > 135) return;
+        if (n == 90) {
+            float[] at = driver.ask(() -> new float[] {followWindow.titleBar().box().worldX(), followWindow.titleBar().box().worldY(),
+                    followWindow.titleBar().box().height() * document.boxes().uiScale()});
+            followX = Math.round(at[0] + 40f);
+            followY = Math.round(at[1] + at[2] / 2f);
+            followBusy = true;
+            consumeMouseEvent(new CgSystemInput.Mouse.Event(followX, followY, 0, 0, 0, true, 0f, System.currentTimeMillis()));
+            System.out.println("[follow-probe] pressed '" + followWindow.getTitle() + "' at " + followX + "," + followY);
+            return;
+        }
+        if (n <= 130) {
+            int x = followX + (int) (n - 90) * FOLLOW_STEP;
+            consumeMouseEvent(new CgSystemInput.Mouse.Event(x, followY, FOLLOW_STEP, 0, -1, false, 0f, -1L));
+            if (n == 110) {
+                ctx.getArtifactService().requestCapture("follow-mid");
+                System.out.println("[follow-probe] mid-drag: pointer at " + x + ", document's window at "
+                        + driver.ask(() -> followWindow.left()) + " (layout px)");
+            }
+            return;
+        }
+        if (n == 131) {
+            followBusy = false;
+            consumeMouseEvent(new CgSystemInput.Mouse.Event(followX + 40 * FOLLOW_STEP, followY, 0, 0, 0, false, 0f,
+                    System.currentTimeMillis()));
+            System.out.println("[follow-probe] released");
+        }
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private boolean probing() {
         return traceCost != null || hoverSweep != null || closeWhenClean || graphCost != null || PROFILER_SHOT
                 || MINIMISE_SHOT;
@@ -549,7 +615,7 @@ public class CgUiDesktopScene
         if (graphShot != null) ctx.getArtifactService().requestCapture(graphShot);
         if (graphCost != null && graphCost.frame()) graphCostDone = true;
         if (PROFILER_SHOT) driveProfilerShot(ctx, frame.getFrameNumber());
-        if (MINIMISE_SHOT) driveMinimiseShot(ctx, frame.getFrameNumber());
+        if (MINIMISE_SHOT) driveMinimiseShot(ctx);
     }
 
     /**
@@ -683,22 +749,54 @@ public class CgUiDesktopScene
 
     private WindowFrame minimiseTarget;
 
-    private void driveMinimiseShot(HarnessContext ctx, long frameNumber) {
-        switch ((int) frameNumber) {
-            case 99 -> {
-                minimiseTarget = desktop.activeWindow();
-                ctx.getArtifactService().requestCapture("minimise-before");
-            }
-            case 100 -> {
-                if (minimiseTarget != null) minimiseTarget.minimize();
-            }
+    /** {@code -Dcrystalgui.harness.desktop.minimise.window=<title>} picks the window; the active one otherwise. */
+    private static final String MINIMISE_WINDOW = System.getProperty("crystalgui.harness.desktop.minimise.window");
+    /**
+     * {@code -Dcrystalgui.harness.desktop.minimise.action=maximise} maximises and restores twice instead,
+     * photographing nothing: the trace holds only the second cycle, so the exit report is two warm gestures alone.
+     */
+    private static final boolean MAXIMISE = "maximise".equals(System.getProperty("crystalgui.harness.desktop.minimise.action"));
+
+    private void driveMinimiseShot(HarnessContext ctx) {
+        int n = (int) driver.presentedFrames();
+        if (n == 99) {
+            minimiseTarget = driver.ask(() -> {
+                for (WindowFrame window : desktop.windows()) {
+                    if (window.getTitle().equals(MINIMISE_WINDOW)) return window;
+                }
+                return desktop.activeWindow();
+            });
+        }
+        if (minimiseTarget == null) return;
+        if (MAXIMISE) {
+            driveMaximise(n);
+            return;
+        }
+        switch (n) {
+            case 99 -> ctx.getArtifactService().requestCapture("minimise-before");
+            case 100 -> driver.run(minimiseTarget::minimize);
             case 106 -> ctx.getArtifactService().requestCapture("minimise-mid");
             case 150 -> ctx.getArtifactService().requestCapture("minimised");
-            case 160 -> {
-                if (minimiseTarget != null) minimiseTarget.show(true);
-            }
+            case 160 -> driver.run(() -> minimiseTarget.show(true));
             case 166 -> ctx.getArtifactService().requestCapture("restore-mid");
             case 230 -> ctx.getArtifactService().requestCapture("restored");
+            default -> { }
+        }
+    }
+
+    /**
+     * Maximises and restores twice, tracing only the second, warm cycle: the first reveals text the glyph cache has
+     * never drawn, which is a cost paid once rather than what a repeated gesture feels like.
+     */
+    private void driveMaximise(int n) {
+        switch (n) {
+            case 100, 220 -> driver.run(minimiseTarget::maximize);
+            case 160, 280 -> driver.run(minimiseTarget::restore);
+            case 210 -> CgTrace.clear();
+            case 340 -> {
+                CgTrace.disable("crystalgui");
+                CgTrace.disable("crystalgraphics");
+            }
             default -> { }
         }
     }

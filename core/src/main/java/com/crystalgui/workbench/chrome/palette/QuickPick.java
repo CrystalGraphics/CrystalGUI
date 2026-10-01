@@ -363,7 +363,7 @@ public class QuickPick extends Popover {
         // interpretation to protect.
         Drag.start(header,
                 event.getPosition().x(), event.getPosition().y(),
-                (mx, my, sx, sy, dx, dy) -> moveClamped(dragStartLeft + dx, dragStartTop + dy));
+                (mx, my, sx, sy, dx, dy) -> moveClamped(dragStartLeft + dx, dragStartTop + dy)).follows(this, window);
     }
 
     /** Writes the dragged position, clamped into the window so it cannot be lost off an edge. */

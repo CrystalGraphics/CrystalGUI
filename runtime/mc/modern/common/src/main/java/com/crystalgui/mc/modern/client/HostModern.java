@@ -9,6 +9,7 @@ import java.util.Locale;
 import javax.annotation.Nullable;
 
 import com.crystalgui.desktop.host.HostServices;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.mc.modern.net.Connections;
 import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.net.protocol.ProtocolConnection;
@@ -99,4 +100,71 @@ final class HostModern implements HostServices {
         if (screen instanceof CgUiScreen) ((CgUiScreen) screen).keyLeftByDesktop(key);
         else if (screen != null) CgUiInput.giveToScreen(screen, key);
     }
+
+    /** Minecraft's own task queue from 1.14.3; before it the client thread is the one the desktop is framed on. */
+    @Override
+    @Nullable
+    public HostThread.Binding clientThread() {
+        //? if >=1.14.3 {
+        return CLIENT_THREAD;
+        //?} else {
+        /*return null;
+        *///?}
+    }
+
+    /** The integrated server's task queue from 1.14.3; before it there is none to reach. */
+    @Override
+    @Nullable
+    public HostThread.Binding serverThread() {
+        //? if >=1.14.3 {
+        return SERVER_THREAD;
+        //?} else {
+        /*return null;
+        *///?}
+    }
+
+    //? if >=1.14.3 {
+    private static final HostThread.Binding CLIENT_THREAD = new HostThread.Binding() {
+        @Override
+        public void execute(Runnable work) {
+            Minecraft.getInstance().execute(work);
+        }
+
+        @Override
+        public boolean isCurrent() {
+            Minecraft mc = Minecraft.getInstance();
+            return mc != null && mc.isSameThread();
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return Minecraft.getInstance() != null;
+        }
+    };
+
+    private static final HostThread.Binding SERVER_THREAD = new HostThread.Binding() {
+        @Override
+        public void execute(Runnable work) {
+            IntegratedServer server = integratedServer();
+            if (server != null) server.execute(work);
+        }
+
+        @Override
+        public boolean isCurrent() {
+            IntegratedServer server = integratedServer();
+            return server != null && server.isSameThread();
+        }
+
+        @Override
+        public boolean isAvailable() {
+            return integratedServer() != null;
+        }
+    };
+
+    @Nullable
+    private static IntegratedServer integratedServer() {
+        Minecraft mc = Minecraft.getInstance();
+        return mc == null ? null : mc.getSingleplayerServer();
+    }
+    //?}
 }

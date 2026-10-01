@@ -1,10 +1,12 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.JobScheduler;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
@@ -29,6 +31,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.Queue;
+import java.util.function.Supplier;
+import java.util.function.Consumer;
 import javax.annotation.Nullable;
 import lombok.Getter;
 
@@ -103,7 +109,7 @@ public final class UIDocument extends UIElement {
     private boolean draining;
     private final ArrayDeque<Runnable> callbacks = new ArrayDeque<>();
     private final Set<ShadowRoot> dirtyShadowRoots = new LinkedHashSet<>();
-    private final List<Runnable> structureListeners = new ArrayList<>();
+    private final List<StructureListener> structureListeners = new ArrayList<>();
     /** The root of a tree, which owns the frame thread, the id index and the observer. */
     public static final Name NAME = Name.of("document");
 
@@ -181,6 +187,29 @@ public final class UIDocument extends UIElement {
 
     void useDriver(DocumentDriver<?> driver) {
         this.driver = driver;
+    }
+
+    // ── Reading the host ─────────────────────────────────────────────────────
+
+    private final Extracts extracts = new Extracts(this);
+    /** Answers from other threads, run on this document at the start of its next frame. */
+    private final Queue<Runnable> inbox = new ConcurrentLinkedQueue<>();
+
+    /** Registers an extract; the public form is {@link UINode#extract}, which ties it to a node's time in the tree. */
+    <T> Connection addExtract(HostThread thread, Supplier<T> read, Consumer<T> use) {
+        return extracts.add(Objects.requireNonNull(thread, "thread"), Objects.requireNonNull(read, "read"),
+                Objects.requireNonNull(use, "use"));
+    }
+
+    /** Runs {@code work} on this document at the start of its next frame. From any thread. */
+    void post(Runnable work) {
+        inbox.add(work);
+    }
+
+    /** The extracts' readings for this frame, taken on the calling thread; null when none is registered. */
+    @Nullable
+    Runnable readExtracts() {
+        return extracts.read();
     }
 
     /** The first frame claims its thread, as does a frame after the claiming thread died. */
@@ -303,7 +332,7 @@ public final class UIDocument extends UIElement {
 
     /** Timelines and the per-frame hooks a tree is allowed to have. */
     public Animation animation() {
-        if (animation == null) animation = new Animation();
+        if (animation == null) animation = new Animation(() -> driver != null && driver.compositesMotion());
         return animation;
     }
 
@@ -606,6 +635,12 @@ public final class UIDocument extends UIElement {
         // separately: this is animation, style and layout, and the paint that follows is a call the
         // host makes itself. @see CgUiPaintContext#endFrame
         claimFrameThread();
+        for (Runnable arrived; (arrived = inbox.poll()) != null; ) arrived.run();
+        // With no driver the host calls this on its own thread, which is where an extract reads; a driver reads them itself.
+        if (driver == null) {
+            Runnable delivery = extracts.read();
+            if (delivery != null) delivery.run();
+        }
         if (JobScheduler.hasShared()) {
             CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
             long drained = CgTrace.stamp(UiTrace.FRAME);
@@ -742,13 +777,33 @@ public final class UIDocument extends UIElement {
      * Hears every change to the COMPOSED structure -- an insert, a remove, a move, a shadow root
      * attached, a slot reassigned, a {@code display} toggled -- so a consumer that derives a tree
      * from this one (the box tree) walks it only on frames where something moved.
+     *
+     * <pre>{@code
+     * document.addStructureListener(where -> {
+     *     if (where == null) rebuildEverything();
+     *     else rebuildUnder(where);   // only where's own box may have appeared or gone
+     * });
+     * }</pre>
      */
-    public void addStructureListener(Runnable listener) {
+    public void addStructureListener(StructureListener listener) {
         structureListeners.add(listener);
     }
 
+    /** What {@link #addStructureListener} hears. */
+    public interface StructureListener {
+        /**
+         * @param where the one node whose box may have appeared or gone, when nothing else in the composed tree
+         *              moved -- a {@code hidden} or {@code display} toggle; null for any other change
+         */
+        void structureChanged(@Nullable UIElement where);
+    }
+
     void fireStructureChanged() {
-        for (Runnable listener : structureListeners) listener.run();
+        fireStructureChanged(null);
+    }
+
+    void fireStructureChanged(@Nullable UIElement where) {
+        for (StructureListener listener : structureListeners) listener.structureChanged(where);
     }
 
     /** Runs the style pass: re-matches what is dirty, ticks transitions. */

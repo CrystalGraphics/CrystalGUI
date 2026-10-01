@@ -961,7 +961,7 @@ public class Dialog extends UIElement {
         // Positional drag, zero threshold: a window must track the very first pixel, and there is no
         // competing click interpretation on a title bar to protect.
         Drag.start(titleBar, pointerX, pointerY,
-                (mx, my, sx, sy, dx, dy) -> applyPosition(dragStartLeft + dx, dragStartTop + dy));
+                (mx, my, sx, sy, dx, dy) -> applyPosition(dragStartLeft + dx, dragStartTop + dy)).follows(this);
     }
 
     /**

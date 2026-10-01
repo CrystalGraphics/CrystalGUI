@@ -5,7 +5,10 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.ActiveTransition;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.service.CompositorAnimation;
 import com.crystalgui.style.property.visual.transform.Transform;
 
 import javax.annotation.Nullable;
@@ -116,6 +119,15 @@ public final class WindowAnimation implements WindowMotion {
     private boolean over;
 
     /**
+     * The same flight, played by the compositor when one presents the document: at the display's rate, whatever the
+     * document's frames cost. The document then follows its clock. Null when nothing composites.
+     */
+    @Nullable
+    private final CompositorAnimation compositor;
+    @Nullable
+    private final Animation playedBy;
+
+    /**
      * Starts immediately — the first values are written here, not on the first tick.
      *
      * <p>A frame's gap between "the animation was asked for" and "the animation is showing its start
@@ -167,7 +179,16 @@ public final class WindowAnimation implements WindowMotion {
         // about the corner.
         this.originX = originX;
         this.originY = originY;
-        write(from, fromOpacity);
+        UIDocument document = target.document();
+        CompositorAnimation flight = new CompositorAnimation(target, from, to, fromOpacity, toOpacity,
+                originX, originY, durationNanos, easing);
+        boolean played = document != null && document.animation().playOnCompositor(flight);
+        this.compositor = played ? flight : null;
+        this.playedBy = played ? document.animation() : null;
+        // PLAYED BY THE COMPOSITOR, the window is recorded at rest: the compositor applies the whole curve to one
+        // picture of it, which it keeps for the flight. Overrides written here would change that picture every frame.
+        if (played) clearSlots();
+        else write(from, fromOpacity);
     }
 
     /** Where this animation is going. The only observable of a motion whose whole point is its target. */
@@ -187,6 +208,7 @@ public final class WindowAnimation implements WindowMotion {
         // write to. Registration is one-way by design, so nothing else will stop it.
         if (!alive.getAsBoolean()) {
             over = true;
+            stopCompositor();
             return false;
         }
         // A VIRTUAL CLOCK, ADVANCED BY CAPPED STEPS -- not wall time.
@@ -202,6 +224,7 @@ public final class WindowAnimation implements WindowMotion {
         // during it, so charging the animation for it animates against time the user never observed.
         // A stall now costs the animation one capped step and it plays out over the frames that follow.
         long real = System.nanoTime();
+        if (compositor != null) return followCompositor(real);
         long delta = lastRealNow == 0L ? 0L : real - lastRealNow;
         lastRealNow = real;
 
@@ -261,6 +284,17 @@ public final class WindowAnimation implements WindowMotion {
     }
 
     /**
+     * A frame of a flight the compositor plays, which ends when the compositor's clock does: that starts when a frame
+     * carrying the flight is first presented. The stall rules have nothing to do here -- the compositor draws every
+     * frame of it, however long the document's take.
+     */
+    private boolean followCompositor(long now) {
+        if (!compositor.isFinished(now)) return true;
+        finish();
+        return false;
+    }
+
+    /**
      * Ends it early, leaving nothing behind — for a gesture that interrupts another.
      *
      * <p>Maximise then immediately restore is the ordinary case, and two drivers writing the same slot
@@ -271,11 +305,17 @@ public final class WindowAnimation implements WindowMotion {
     public void cancel() {
         if (over) return;
         over = true;
+        stopCompositor();
         clearSlots();
+    }
+
+    private void stopCompositor() {
+        if (playedBy != null) playedBy.stopOnCompositor(compositor);
     }
 
     private void finish() {
         over = true;
+        stopCompositor();
         // THE CONTINUATION FIRST, AND THE WITHDRAWAL ONLY IF THE WINDOW IS STILL ON SCREEN.
         //
         // A minimise's continuation is the hide, and hiding is DETACHING -- which does not reach the

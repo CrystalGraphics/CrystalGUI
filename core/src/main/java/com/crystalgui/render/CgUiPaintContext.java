@@ -2535,6 +2535,11 @@ public final class CgUiPaintContext {
      * </ul>
      */
     public int blitLayer(CgGraphTexture layer, float opacity, LayerRegion region) {
+        return blitLayer(layer, opacity, region, false);
+    }
+
+    /** {@link #blitLayer(CgGraphTexture, float, LayerRegion)}; {@code fades} makes the effect node at full opacity too. */
+    public int blitLayer(CgGraphTexture layer, float opacity, LayerRegion region, boolean fades) {
         if (region.isEmpty()) return 0;
         long timed = CgTrace.stamp(UiTrace.FRAME);
         CgTrace.add(UiTrace.FRAME, "layer-blit-kpx", region.width() * region.height() / 1000);
@@ -2544,7 +2549,7 @@ public final class CgUiPaintContext {
         // the white fallback, premultiplied -- a destination flooded white rather than a missing image.
         layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
         int effect = 0;
-        if (NODES && opacity < 1f && nodesSuspended == 0 && recording.effects().count() < CgSpatialTree.MAX_NODES) {
+        if (NODES && (opacity < 1f || fades) && nodesSuspended == 0 && recording.effects().count() < CgSpatialTree.MAX_NODES) {
             effect = recording.effects().add(effectNode, opacity);
         }
         int outerEffect = effectNode;

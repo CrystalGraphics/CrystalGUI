@@ -1,5 +1,7 @@
 package com.crystalgui.ui.dom;
 
+import java.util.function.Consumer;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.settings.Settings;
@@ -781,6 +783,48 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      *
      * @return ends the registration: disconnects it now and stops it being made on any later attach
      */
+    /**
+     * Reads the game on its client thread each frame, and hands the answer to {@code use} on this node's document
+     * whenever it changes. Reads while this node is in a document and stops when it leaves.
+     *
+     * <pre>{@code
+     * // in a widget's constructor
+     * extract(() -> player.getHealth(), health -> bar.setFraction(health / 20f));
+     * extract(() -> List.copyOf(player.getInventory().items), slots::show);
+     * }</pre>
+     *
+     * @see #extract(HostThread, Supplier, Consumer)
+     */
+    public final <T> Connection extract(Supplier<T> read, Consumer<T> use) {
+        return extract(HostThread.CLIENT, read, use);
+    }
+
+    /**
+     * {@link #extract(Supplier, Consumer)} on a thread of your choosing.
+     *
+     * <pre>{@code
+     * extract(HostThread.SERVER, () -> level.getDayTime(), clock::setTime);    // the integrated server's world
+     * extract(HostThread.RENDER, () -> camera.position(), compass::point);     // where frames are drawn
+     * }</pre>
+     *
+     * <ul>
+     *   <li>{@code read} runs on {@code thread} and must answer a snapshot -- a copy, never a live view -- since the
+     *       document reads it later, on its own thread.</li>
+     *   <li>{@code use} runs on the document, where the tree may be touched, and only when the answer is not
+     *       {@code equals} to the last.</li>
+     *   <li>Instant when the thread is the one the frame is drawn on: read as the frame starts, used in that frame.
+     *       Otherwise one read is in flight at a time and its answer lands at the start of a later frame.</li>
+     *   <li>A read that throws is skipped for that frame, and the error logged once. {@link HostThread#SERVER} reads
+     *       nothing while no server runs here.</li>
+     * </ul>
+     */
+    public final <T> Connection extract(HostThread thread, Supplier<T> read, Consumer<T> use) {
+        Objects.requireNonNull(thread, "thread");
+        Objects.requireNonNull(read, "read");
+        Objects.requireNonNull(use, "use");
+        return whileConnected(() -> document().addExtract(thread, read, use));
+    }
+
     public final Connection whileConnected(Supplier<Connection> subscribe) {
         Objects.requireNonNull(subscribe, "subscribe");
         if (subscriptions == null) subscriptions = new ArrayList<>();

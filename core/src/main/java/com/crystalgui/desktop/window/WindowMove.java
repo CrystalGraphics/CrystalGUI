@@ -59,6 +59,10 @@ final class WindowMove {
     /** The drag handle, which is also the drag SOURCE every callback coordinate is converted against. */
     private final UIElement bar;
 
+    /** The current drag, which declares the window it moves. */
+    @Nullable
+    private Drag drag;
+
     /** Where the window was when the current drag began. @see #beginMove */
     private float dragStartLeft, dragStartTop;
 
@@ -240,7 +244,7 @@ final class WindowMove {
         // Positional drag, zero threshold: a window must track the very first pixel, and a title bar has
         // no competing click interpretation to protect.
         frame.setMoving(true);
-        Drag.start(bar, pointerX, pointerY, new Drag.Listener() {
+        drag = Drag.start(bar, pointerX, pointerY, new Drag.Listener() {
             @Override
             public void onDragUpdate(float mouseX, float mouseY, float startX, float startY,
                                      float deltaX, float deltaY) {
@@ -303,6 +307,8 @@ final class WindowMove {
                 if (desktop != null) desktop.hideSnapPreview();
             }
         });
+        // ONE FOR ONE, so a compositor may move it ahead of a busy document. Not once torn loose: that re-anchors.
+        if (!frame.isMaximized()) drag.follows(frame);
     }
 
     /**
@@ -396,6 +402,7 @@ final class WindowMove {
      * round: that one is raw, which is why the caption guard uses {@code containsScreenPoint}.</p>
      */
     private void beginTearLoose(float pointerX, float pointerY) {
+        if (drag != null) drag.follows(null);
         Box barBox = bar.box();
         if (barBox == null) return;
         // NO SUBTRACTION. The pointer is already an offset within the BAR, which is exactly what

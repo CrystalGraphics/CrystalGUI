@@ -945,7 +945,7 @@ public final class DocumentationPopup extends Popover {
         float startTop = self.y();
         Drag.start(frame, rawX, rawY,
                 (mouseX, mouseY, startX, startY, deltaX, deltaY) ->
-                        moveTo(startLeft + deltaX, startTop + deltaY));
+                        moveTo(startLeft + deltaX, startTop + deltaY)).follows(this);
     }
 
     /**

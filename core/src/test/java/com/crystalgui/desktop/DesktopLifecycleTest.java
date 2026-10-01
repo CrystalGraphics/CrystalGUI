@@ -1,6 +1,7 @@
 package com.crystalgui.desktop;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.async.HostThread;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.Attribute;
@@ -598,6 +599,8 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
             @Override public ProtocolConnection<Object> connection() { return null; }
             @Override public Locale locale() { return Locale.getDefault(); }
             @Override public void reinjectKey(CgSystemInput.Keyboard.Event key) { }
+            @Override public HostThread.Binding clientThread() { return null; }
+            @Override public HostThread.Binding serverThread() { return null; }
         });
     }
 
