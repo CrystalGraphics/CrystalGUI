@@ -692,6 +692,8 @@ public class CgUiDesktopScene
 
     /** {@code -Dcrystalgui.harness.desktop.minimise.window=<title>} picks the window; the active one otherwise. */
     private static final String MINIMISE_WINDOW = System.getProperty("crystalgui.harness.desktop.minimise.window");
+    /** {@code -Dcrystalgui.harness.desktop.minimise.action=maximise} maximises and restores instead. */
+    private static final boolean MAXIMISE = "maximise".equals(System.getProperty("crystalgui.harness.desktop.minimise.action"));
 
     private void driveMinimiseShot(HarnessContext ctx) {
         switch ((int) driver.presentedFrames()) {
@@ -705,12 +707,17 @@ public class CgUiDesktopScene
                 ctx.getArtifactService().requestCapture("minimise-before");
             }
             case 100 -> {
-                if (minimiseTarget != null) driver.run(minimiseTarget::minimize);
+                if (minimiseTarget != null) driver.run(MAXIMISE ? minimiseTarget::maximize : minimiseTarget::minimize);
             }
             case 106 -> ctx.getArtifactService().requestCapture("minimise-mid");
             case 150 -> ctx.getArtifactService().requestCapture("minimised");
             case 160 -> {
-                if (minimiseTarget != null) driver.run(() -> minimiseTarget.show(true));
+                if (minimiseTarget != null) {
+                    driver.run(() -> {
+                        if (MAXIMISE) minimiseTarget.restore();
+                        else minimiseTarget.show(true);
+                    });
+                }
             }
             case 166 -> ctx.getArtifactService().requestCapture("restore-mid");
             case 230 -> ctx.getArtifactService().requestCapture("restored");
