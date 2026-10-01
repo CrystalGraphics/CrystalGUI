@@ -44,6 +44,9 @@ public final class UiSequence implements Executor {
     private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean scheduled = new AtomicBoolean();
     private volatile boolean closed;
+    /** The thread running this sequence's work now, or null between turns. */
+    @Nullable
+    private volatile Thread running;
     private volatile JobScheduler jobs;
 
     private UiSequence(String name, Executor pool) {
@@ -104,6 +107,7 @@ public final class UiSequence implements Executor {
         while (!scheduled.compareAndSet(false, true)) LockSupport.parkNanos(20_000L);
         UiSequence outer = CURRENT.get();
         CURRENT.set(this);
+        running = Thread.currentThread();
         try {
             for (Runnable queued; !closed && (queued = tasks.poll()) != null; ) {
                 try {
@@ -114,10 +118,17 @@ public final class UiSequence implements Executor {
             }
             task.run();
         } finally {
+            running = null;
             CURRENT.set(outer);
             scheduled.set(false);
         }
         if (!tasks.isEmpty() && !closed) schedule();
+    }
+
+    /** The thread running this sequence's work at this moment, or null when it is idle: what a hang report names. */
+    @Nullable
+    public Thread runningThread() {
+        return running;
     }
 
     /** Drops what is queued and refuses what comes after. */
@@ -154,6 +165,7 @@ public final class UiSequence implements Executor {
     private void runTurn() {
         UiSequence outer = CURRENT.get();
         CURRENT.set(this);
+        running = Thread.currentThread();
         try {
             for (int i = 0; i < TASKS_PER_TURN && !closed; i++) {
                 Runnable task = tasks.poll();
@@ -165,6 +177,7 @@ public final class UiSequence implements Executor {
                 }
             }
         } finally {
+            running = null;
             CURRENT.set(outer);
             scheduled.set(false);
         }
