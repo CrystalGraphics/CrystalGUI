@@ -4,11 +4,13 @@ import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
+import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.render.CgFrameData;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
+import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
@@ -233,6 +235,8 @@ public final class CgUiPaintContext {
      * hand-back. Neither reads as a mask bug.</p>
      */
     private final CgMaterial maskMaterial;
+    /** {@link #maskMaterial}'s pass state with the alpha-multiply blend a mask composite draws under, and its base. */
+    private CgRenderState maskState, maskStateBase;
 
     /**
      * Dedicated material for {@link #blitLayer}, distinct from {@link #boxModelMaterial}.
@@ -1151,6 +1155,7 @@ public final class CgUiPaintContext {
         // whoever changes the texture next, so a run of icons from the atlas is one draw.
         renderer.flushQuads();
         texture.bind(0);
+        renderer.bindTexture(0, texture);   // what the recorded draw binds: the raw bind is gone by then
         currentTexture = texture;
     }
 
@@ -2517,9 +2522,17 @@ public final class CgUiPaintContext {
                 // is retained, so setting it on the enclosing material rewrites what every later draw
                 // through it samples. gui_quad like boxModelMaterial, so MASK_ALPHA_MULTIPLY survives.
                 maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, maskTex));
-                bindQuadPath(maskMaterial);
+                // The multiply rides on the draw's own pipeline: a blend applied after binding would be
+                // overwritten when the recorded draw binds gui_quad's declared blend.
+                if (activePath == InstancePath.TEXT) textRenderer.endBatch();
+                CgRenderState quadState = maskMaterial.getPassRenderState(CgRenderPassVariant.FORWARD);
+                if (quadState != maskStateBase) {
+                    maskStateBase = quadState;
+                    maskState = quadState.withBlend(CgBlendState.MASK_ALPHA_MULTIPLY);
+                }
+                renderer.useMaterial(maskMaterial, maskState);
+                activePath = InstancePath.QUAD;
                 currentTexture = null;
-                CgBlendState.MASK_ALPHA_MULTIPLY.apply();
                 // Same v-flip as blitLayer — maskTex is another FBO color attachment, same OpenGL
                 // bottom-left-origin storage vs. our top-left screen-space convention. Same
                 // identity-pose bypass as blitLayer too — this quad is already physical-pixel-sized.
