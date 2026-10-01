@@ -22,6 +22,7 @@ import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.gl.render.CgClipTable;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
+import com.crystalgraphics.gl.render.CgShapeTable;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
@@ -208,11 +209,14 @@ public final class CgUiPaintContext {
         }
     }
 
+    /** Every box the UI draws: fills, textures, shapes, icons, composites. @see CgShapeTable */
+    private static final String BOX_SHADER = "crystalgui:shaders/gui_box.shader";
+
     private final CgMaterial boxModelMaterial;
 
     /**
      * Shared material for every Bézier stroke — {@code gui_curve.shader}, the curve twin of
-     * {@code gui_quad.shader}. Distinct from CrystalGraphics' own {@code curve.shader} because the UI
+     * {@code gui_box.shader}. Distinct from CrystalGraphics' own {@code curve.shader} because the UI
      * needs {@code DepthTest ALWAYS} and a {@code _LayerOpacity} property, neither of which belongs
      * in the backend's reference material.
      */
@@ -233,12 +237,10 @@ public final class CgUiPaintContext {
     private CgRenderState maskState, maskStateBase;
 
     /**
-     * Dedicated material for {@link #blitLayer}, distinct from {@link #boxModelMaterial}.
-     * A visual-layer FBO is always cleared fully transparent before anything paints into it, so
-     * at every partially-covered pixel its stored color ends up premultiplied by its own alpha —
-     * compositing that back onto the screen needs premultiplied blend (@{@code srcRGB=ONE}), not
-     * {@link #boxModelMaterial}'s straight-alpha blend (which is correct for its other, much more
-     * common use: painting straight-alpha colors directly onto an already-opaque destination).
+     * The box material again, for {@link #blitLayer}: a quad drawn while it is current is stamped
+     * {@link CgShapeTable#PREMULTIPLIED}, since a layer was drawn over a transparent clear and its partly covered pixels
+     * carry their alpha in their colour. Its own instance because a sampler property is retained: the layer it last
+     * composited must not become what every box samples.
      */
     /** Package-private: {@link CgUiBackdrop} composites the capture with it. */
     final CgMaterial layerBlitMaterial;
@@ -411,7 +413,7 @@ public final class CgUiPaintContext {
 
     /**
      * Current layer-compositing opacity (distinct from {@link #color}'s tint — see
-     * {@code gui_quad.shader}'s doc comment). Every UI-facing material declares a
+     * {@code gui_box.shader}'s doc comment). Every UI-facing material declares a
      * {@code _LayerOpacity} property; {@link #withMaterial} keeps whichever material is
      * currently bound in sync with this value on every switch.
      */
@@ -439,12 +441,12 @@ public final class CgUiPaintContext {
         this.frameTarget = gpu.frameTarget;
         this.poseStack = new PoseStack();
         this.renderer = new CgUiRenderer(this);
-        this.boxModelMaterial = CgMaterial.load("crystalgui:shaders/gui_quad.shader");
+        this.boxModelMaterial = CgMaterial.load(BOX_SHADER);
         this.curveMaterial = CgMaterial.load("crystalgui:shaders/gui_curve.shader");
-        this.layerBlitMaterial = CgMaterial.load("crystalgui:shaders/gui_layer_blit.shader");
+        this.layerBlitMaterial = CgMaterial.newInstance(BOX_SHADER);
         // newInstance, not load: load() is registry-cached, so it would hand back boxModelMaterial
         // itself and reintroduce exactly the sharing this material exists to avoid.
-        this.maskMaterial = CgMaterial.newInstance("crystalgui:shaders/gui_quad.shader");
+        this.maskMaterial = CgMaterial.newInstance(BOX_SHADER);
         this.blurMaterial = CgMaterial.load("crystalgui:shaders/gui_blur.shader");
         this.blurMaterial.toggleKeyword("LINEAR_KERNEL", CgUiBackdrop.LINEAR_KERNEL);
         this.downsampleMaterial = CgMaterial.load("crystalgui:shaders/gui_downsample.shader");
@@ -1016,7 +1018,7 @@ public final class CgUiPaintContext {
      * 1.20.1 client: {@code activeUnit=28} with the wanted texture bound to 28.
      *
      * <p><b>What the sampler reads then is not nothing.</b> An unbound unit answers {@code (0,0,0,1)} --
-     * opaque black -- and {@code gui_layer_blit} declares {@code _MainTex = "white"}, so a premultiplied
+     * opaque black -- and {@code gui_box} declares {@code _MainTex = "white"}, so a premultiplied
      * `over` composite either erases its destination or floods it. Both were measured in one run: a
      * fully EMPTY layer compositing to pure white, and a populated one compositing to black.
      *
@@ -1032,6 +1034,9 @@ public final class CgUiPaintContext {
     }
 
     public void bindTexture(CgTexture texture) {
+        // ON THE QUAD PATH FIRST: a switch rebinds the material, whose own white _MainTex would then win over a texture
+        // bound before it.
+        beginQuadPath();
         if (texture == currentTexture) return;
         // Whatever is queued was submitted against the texture bound NOW: switching first would draw it
         // with this one. A cached icon relies on this -- it submits its quad and leaves the flush to
@@ -1061,7 +1066,18 @@ public final class CgUiPaintContext {
      */
     public CgQuadRenderer.Quad quad() {
         beginQuadPath();
-        return renderer.quad();
+        CgQuadRenderer.Quad quad = renderer.quad();
+        return currentMaterial == layerBlitMaterial ? quad.custom2(CgShapeTable.PREMULTIPLIED) : quad;
+    }
+
+    /** The material every box draws through. A drawable on another material comes back to it with {@link #withMaterial}. */
+    public CgMaterial boxMaterial() {
+        return boxModelMaterial;
+    }
+
+    /** The shapes this frame's quads name. Inside a frame. @see CgShapeTable */
+    public CgShapeTable shapes() {
+        return recording.shapes();
     }
 
     /** The one rect scratch, handed out by {@link #rect()}. */
@@ -2549,7 +2565,7 @@ public final class CgUiPaintContext {
             // enclosing material would rewrite what every later draw through it samples.
             maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, mask));
             // The multiply rides on the draw's own pipeline: a blend applied after binding would be overwritten
-            // when the recorded draw binds gui_quad's declared blend.
+            // when the recorded draw binds gui_box's declared blend.
             if (activePath == InstancePath.TEXT) textRenderer.endBatch();
             CgRenderState quadState = maskMaterial.getPassRenderState(CgRenderPassVariant.FORWARD);
             if (quadState != maskStateBase) {

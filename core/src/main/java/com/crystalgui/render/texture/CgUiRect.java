@@ -1,13 +1,11 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
+import com.crystalgraphics.gl.render.CgShapeTable;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.Objects;
-import java.util.function.Consumer;
 
 /**
  * A rectangle with a {@link Fill} — the one drawable behind every {@code background}, and the
@@ -25,14 +23,12 @@ import java.util.function.Consumer;
  * <p>Corner radii are independent per corner and per axis (rx/ry, TL/TR/BR/BL, CSS
  * {@code border-radius} order) — elliptical, not just circular.</p>
  *
- * <h3>Two draw paths, and which one runs is not a style choice</h3>
+ * <h3>One quad either way</h3>
  *
- * <p><b>A plain rectangle draws through the frame's own batch</b> — {@code fillRect} for a colour,
- * one quad for a stretched texture or a whole sprite. Only a rect that the batch cannot express
- * takes the SDF material ({@code gui_rect.shader}): one with a radius, a border, or a 9-slice fill,
- * whose nine regions are remapped per pixel. That split is why merging the three old drawables cost
- * nothing: the material carries sixteen per-draw uniforms, so routing every flat fill through it
- * would make each its own draw, and instance traffic is what dominates a UI frame.</p>
+ * <p><b>A plain rectangle is a plain quad</b> — {@code fillRect} for a colour, one quad for a stretched texture or a
+ * whole sprite. A rect with a radius, a border or a 9-slice fill is a quad naming a shape in the frame's
+ * {@link CgShapeTable}, drawn by the same box material ({@code gui_box.shader}), so the two batch together; a 9-slice
+ * remaps its nine regions per pixel. Equal shapes share an entry.</p>
  *
  * <h3>It is a value, and equality is load-bearing</h3>
  *
@@ -81,17 +77,6 @@ public final class CgUiRect implements CgUiDrawable {
         }
     }
 
-    /**
-     * The shared SDF material. No {@code attachTo} needed — {@code gui_rect.shader} declares
-     * {@code #pragma cg_use quad}, so the instance buffer is wired during parsing.
-     *
-     * <p>That matters here specifically: {@link #draw} calls {@code toggleKeyword} <em>before</em>
-     * the material ever reaches {@code CgQuadRenderer.useMaterial()}, and {@code enableKeyword}
-     * compiles on the spot when the shader has not been parsed yet. This class is why the attach has
-     * to happen at parse time rather than first use.</p>
-     */
-    private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_rect.shader");
-
     private final float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
     private final float borderWidth;
     /** The LEFT and RIGHT edges always take this — there is no border-left/right-color to split them
@@ -100,7 +85,7 @@ public final class CgUiRect implements CgUiDrawable {
     private final int borderColorArgb;
     /** Equal to {@link #borderColorArgb} unless {@link #withBorder(float, int, int, int)} was used —
      * the pair that lets the shader stroke the TOP and BOTTOM edges differently (Unity's inset
-     * text-field bevel). See {@code gui_rect.shader}'s {@code SPLIT_BORDER} feature. */
+     * text-field bevel). See {@link CgShapeTable#SPLIT_BORDER}. */
     private final int borderTopColorArgb;
     private final int borderBottomColorArgb;
     private final Fill fill;
@@ -242,11 +227,10 @@ public final class CgUiRect implements CgUiDrawable {
      * capturing lambdas the draw itself needed, per element per frame. A painter that HAS radii and a
      * fill but no rect comes straight here and builds none of them.</p>
      *
-     * <p>It is its own {@code Runnable} and {@code Consumer} for the same reason: {@code withMaterial}
-     * and {@code applyProperties} each take a callback, and a lambda over the draw's arguments is a
-     * fresh capture every time one runs.</p>
+     * <p>It is its own {@code Runnable} for the same reason: {@code withMaterial} takes a callback, and a lambda over
+     * the draw's arguments is a fresh capture every time one runs.</p>
      */
-    public static final class Draw implements Runnable, Consumer<CgShaderBindings> {
+    public static final class Draw implements Runnable {
 
         /** What fill was last set. Distinguishes a colour fill from a texture fill whose texture is
          * null, which draws nothing rather than drawing white. */
@@ -263,8 +247,8 @@ public final class CgUiRect implements CgUiDrawable {
         private CgTexture2D texture;
         private CgUiSprite sprite;
 
-        /** Set by {@link #drawShaped} for {@link #run} and {@link #accept} to read: the SDF path's two
-         * callbacks take no arguments, so what they draw with lives here. */
+        /** Set by {@link #drawShaped} for {@link #run} to read: the callback takes no arguments, so what it draws
+         * with lives here. */
         private int quadTint, shaderFillArgb;
 
         /** Resets to a bare rect and binds the context. {@code CgUiPaintContext.rect()} is the way in;
@@ -438,65 +422,47 @@ public final class CgUiRect implements CgUiDrawable {
             drawShaped(tint, 0);
         }
 
-        /**
-         * The SDF path — a radius, a border, or a 9-slice, none of which the batch can express.
-         *
-         * <p>{@code this} goes to both callbacks rather than a lambda; see the class doc.</p>
-         */
+        /** A radius, a border or a 9-slice: a quad naming its shape, on the box material. */
         private void drawShaped(int quadTint, int shaderFillArgb) {
             this.quadTint = quadTint;
             this.shaderFillArgb = shaderFillArgb;
-            MATERIAL.toggleKeyword("WITH_BORDER", bordered());
-            // Only ever true when the 4-arg border was given a top or bottom that actually differs from
-            // the uniform colour -- the 2-arg overload passes all three equal, which keeps every existing
-            // caller (the outline ring, the mask border, every uniform-border widget) on the exact same
-            // shader path as before this feature existed.
-            MATERIAL.toggleKeyword("SPLIT_BORDER",
-                    borderTopColorArgb != borderColorArgb || borderBottomColorArgb != borderColorArgb);
-            MATERIAL.toggleKeyword("WITH_TEXTURE_FILL", sprite == null && texture != null);
-            MATERIAL.toggleKeyword("WITH_9SLICE_FILL", sprite != null);
-            ctx.withMaterial(MATERIAL, this);
+            if (ctx.getCurrentMaterial() == ctx.boxMaterial()) run();
+            else ctx.withMaterial(ctx.boxMaterial(), this);
         }
 
         @Override
         public void run() {
-            MATERIAL.applyProperties(this);
-            ctx.quad().at(x, y).size(width, height).color(quadTint).submit();
-        }
-
-        @Override
-        public void accept(CgShaderBindings b) {
-            b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
-            b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
-            b.vec4("_BorderWidths", borderLeft, borderTop, borderRight, borderBottom);
-            b.colorARGB("_BorderColor", borderColorArgb);
-            b.colorARGB("_BorderColorTop", borderTopColorArgb);
-            b.colorARGB("_BorderColorBottom", borderBottomColorArgb);
-            b.colorARGB("_FillColor", shaderFillArgb);
-            b.vec2("_BoxSize", width, height);
+            int kind = sprite != null ? CgShapeTable.NINE_SLICE : texture != null ? CgShapeTable.TEXTURE : CgShapeTable.FLAT;
+            CgShapeTable.Shape shape = ctx.shapes().begin(kind, width, height)
+                    .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
+            if (bordered()) {
+                shape.border(borderLeft, borderTop, borderRight, borderBottom,
+                        borderColorArgb, borderTopColorArgb, borderBottomColorArgb);
+            }
             if (sprite != null) {
-                b.sampler("_MainTex", 0, sprite.getTexture());
                 float scale = sprite.getBorderScale();
                 float bL = sprite.getBorderLeft() * scale, bT = sprite.getBorderTop() * scale;
                 float bR = sprite.getBorderRight() * scale, bB = sprite.getBorderBottom() * scale;
-                b.vec4("_NineSliceBorder", bL, bT, bR, bB);
-                b.vec4("_NineSliceOuterUV", sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3());
-                b.vec4("_NineSliceInnerUV", sprite.getU1(), sprite.getV1(), sprite.getU2(), sprite.getV2());
-
-                // Tile counts are computed HERE, in Java, and handed to the shader -- rather than
-                // letting the shader derive them from source sizes, so the rounding happens once.
+                // Tile counts are computed HERE, in Java, rather than derived in the shader from source sizes, so the
+                // rounding happens once.
                 float centerSpanX = Math.max(0f, width - bL - bR);
                 float centerSpanY = Math.max(0f, height - bT - bB);
                 float srcW = sprite.centerSourceWidth();
                 float srcH = sprite.centerSourceHeight();
-                float nx = sprite.getRepeatX().tileCount(centerSpanX, srcW);
-                float ny = sprite.getRepeatY().tileCount(centerSpanY, srcH);
-                b.vec4("_NineSliceTiles", nx, ny, srcW, srcH);
-                b.vec2("_NineSliceRepeat", sprite.getRepeatX().ordinal(), sprite.getRepeatY().ordinal());
-                b.vec2("_NineSliceFlags", sprite.isFillCenter() ? 1f : 0f, 0f);
+                shape.slices(bL, bT, bR, bB,
+                        sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3(),
+                        sprite.getU1(), sprite.getV1(), sprite.getU2(), sprite.getV2(),
+                        sprite.getRepeatX().tileCount(centerSpanX, srcW), sprite.getRepeatY().tileCount(centerSpanY, srcH),
+                        srcW, srcH, sprite.getRepeatX().ordinal(), sprite.getRepeatY().ordinal(), sprite.isFillCenter());
+                ctx.bindTexture(sprite.getTexture());
             } else if (texture != null) {
-                b.sampler("_MainTex", 0, texture);
+                ctx.bindTexture(texture);
+            } else {
+                shape.fill(shaderFillArgb);
+                ctx.bindTexture(ctx.getWhitePixel());
             }
+            int index = shape.end();
+            ctx.quad().at(x, y).size(width, height).custom2(index).color(quadTint).submit();
         }
     }
 
