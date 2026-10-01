@@ -5,6 +5,7 @@ import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
+import com.crystalgraphics.render.draw.CgChunkSink;
 
 /**
  * Thin wrapper over {@link CgQuadRenderer} — CrystalGUI's whole box-model quad path.
@@ -45,6 +46,12 @@ public final class CgUiRenderer {
     void begin() {
         renderer.begin();
         vectorRenderer.begin();
+    }
+
+    /** Where both paths' flushes go. @see CgQuadRenderer#sink */
+    void sink(CgChunkSink sink) {
+        renderer.sink(sink);
+        vectorRenderer.sink(sink);
     }
 
     void end() {
