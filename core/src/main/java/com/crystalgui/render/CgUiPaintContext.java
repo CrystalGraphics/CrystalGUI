@@ -62,6 +62,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.function.Consumer;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -185,6 +186,7 @@ public final class CgUiPaintContext {
         present.reset();
         imported.clear();
         layerStack.clear();
+        CgGL.exitGlFree();
         gpu.abortFrame();
         frameActive = false;
     }
@@ -683,6 +685,7 @@ public final class CgUiPaintContext {
     public void recordFrame(int screenWidth, int screenHeight) {
         frameId++;
         if (frameActive) throw new IllegalStateException("recordFrame() called without matching seal()");
+        CgGL.enterGlFree("ui recording");
         layerOriginX = 0;
         layerOriginY = 0;
         setClip(0);
@@ -716,6 +719,8 @@ public final class CgUiPaintContext {
         passConstants.time(CgRenderPipeline.getInstance().frameTime());
         targetConstants(screenWidth, screenHeight);
         recordFlushes(true);
+        for (CgGraphTexture released : pendingReleases) recording.release(released);
+        pendingReleases.clear();
         recorder.recordInto(recording, frameTarget, CgLoad.clear(0f, 0f, 0f, 0f), passConstants);
         frameActive = true; // must be set before the pool warms a slot — quad() requires an active frame
 
@@ -766,6 +771,7 @@ public final class CgUiPaintContext {
         renderer.end();
         poseStack.popPose();
         if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
+        CgGL.exitGlFree();
         return frame;
     }
 
@@ -1815,6 +1821,8 @@ public final class CgUiPaintContext {
     private static final long RETAINED_IDLE_FRAMES = 300L;
 
     private final Map<Object, RetainedLayer> retained = new LinkedHashMap<>();
+    /** Requested textures released between frames: the next frame records their release first. */
+    private final List<CgGraphTexture> pendingReleases = new ArrayList<>();
 
     /** A subtree seen once and not yet given a texture. @see #retain */
     private record Candidate(long revision, LayerRegion region, long frame) {
@@ -1977,7 +1985,7 @@ public final class CgUiPaintContext {
     }
 
     /** {@link #warmUpLayer(CgFrameBuffer)} for a texture the recording makes: a requested one, warmed as it is made. */
-    void warmUpLayer(CgGraphTexture target) {
+    public void warmUpLayer(CgGraphTexture target) {
         CgMaterial previousMaterial = currentMaterial;
         beginLayer(target, true, null);
         // Rest the material on a texture that is never deleted: a sampler property is retained and re-bound later.
@@ -2053,7 +2061,7 @@ public final class CgUiPaintContext {
     }
 
     /** As {@link #beginLayerFbo(CgFrameBuffer, boolean)}, into a texture the recording makes and keeps. */
-    CgGraphTexture beginLayerFbo(CgGraphTexture target, boolean clear) {
+    public CgGraphTexture beginLayerFbo(CgGraphTexture target, boolean clear) {
         return beginLayer(target, clear, null);
     }
 
@@ -2065,8 +2073,32 @@ public final class CgUiPaintContext {
         return CgGraphTexture.requested(name, new CgTextureDesc(Math.max(1, width), Math.max(1, height), format));
     }
 
-    /** Frees a {@link #requestTexture}'s storage once the frame has executed what was recorded before this. */
-    void releaseTexture(CgGraphTexture requested) {
+    /**
+     * A layer-format texture made when a frame executes and kept until {@link #releaseTexture}: what paint draws into
+     * and keeps across frames, where it may not make a framebuffer itself.
+     *
+     * <pre>{@code
+     * CgGraphTexture picture = ctx.requestLayer("my_picture", w, h);   // in paint, once
+     * ctx.beginLayerFbo(picture, true);
+     * // ... draw ...
+     * ctx.endLayerFbo();
+     * ctx.drawLayer(picture, x, y, w, h);                               // this frame or any later one
+     * ctx.releaseTexture(picture);                                      // in a frame or between frames
+     * }</pre>
+     */
+    public CgGraphTexture requestLayer(String name, int width, int height) {
+        return requestTexture(name, width, height, LAYER_FORMAT);
+    }
+
+    /**
+     * Frees a requested texture's storage once what was recorded before this has executed. Between frames the release
+     * waits for the next frame.
+     */
+    public void releaseTexture(CgGraphTexture requested) {
+        if (!frameActive) {
+            pendingReleases.add(requested);
+            return;
+        }
         drain();
         recording.release(requested);
     }
@@ -2158,7 +2190,11 @@ public final class CgUiPaintContext {
      * <p>Same material and flipped V as {@link #blitLayer}, for the same reasons.</p>
      */
     public void drawLayer(CgFrameBuffer fbo, float x, float y, float width, float height) {
-        CgGraphTexture layer = imported(fbo);
+        drawLayer(imported(fbo), x, y, width, height);
+    }
+
+    /** {@link #drawLayer(CgFrameBuffer, float, float, float, float)} for a {@link #requestLayer requested} texture. */
+    public void drawLayer(CgGraphTexture layer, float x, float y, float width, float height) {
         // Declared rather than bound by hand. @see #blitLayer
         layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
         withMaterial(layerBlitMaterial, () -> {
@@ -2344,6 +2380,8 @@ public final class CgUiPaintContext {
         imported.clear();
         for (RetainedLayer layer : retained.values()) deleteNow(layer.target());
         retained.clear();
+        for (CgGraphTexture released : pendingReleases) deleteNow(released);
+        pendingReleases.clear();
         candidates.clear();
         retainedBytes = 0L;
 

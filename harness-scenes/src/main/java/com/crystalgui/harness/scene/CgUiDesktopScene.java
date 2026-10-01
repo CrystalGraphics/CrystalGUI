@@ -34,6 +34,7 @@ import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiGpu;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -447,6 +448,12 @@ public class CgUiDesktopScene
             refreshReadout();
         }
 
+        if (PRESENT_AGAIN && frame.getFrameNumber() > 60 && frame.getFrameNumber() % 2 == 1) {
+            UiGpu.presentAgain(w, h);
+            if (frame.getFrameNumber() == 101) ctx.getArtifactService().requestCapture("present-again");
+            return;
+        }
+        if (PRESENT_AGAIN && frame.getFrameNumber() == 100) ctx.getArtifactService().requestCapture("presented");
         CgUiPaintContext context = document.paintContext();
         context.beginFrame(w, h);
         // SIMULATED GAME MODE -- W14, and the closest a GL harness gets to Minecraft without being it.
@@ -480,6 +487,44 @@ public class CgUiDesktopScene
         // still assembling itself and every diff against it is noise.
         if (frame.getFrameNumber() == 40) ctx.getArtifactService().requestCapture("startup");
         if (PROFILER_SHOT) driveProfilerShot(ctx, frame.getFrameNumber());
+        if (MINIMISE_SHOT) driveMinimiseShot(ctx, frame.getFrameNumber());
+    }
+
+    /**
+     * {@code -Dcrystalgui.harness.desktop.presentAgain=true}: from frame 61 every odd frame paints nothing and shows the
+     * last frame again ({@link UiGpu#presentAgain}). {@code present-again} (frame 101) must match {@code presented}.
+     */
+    private static final boolean PRESENT_AGAIN = Boolean.getBoolean("crystalgui.harness.desktop.presentAgain");
+
+    // ── -Dcrystalgui.harness.desktop.minimise=true: a window's snapshot, in flight ──
+
+    /**
+     * Minimises the active window -- the editor -- and restores it, photographing each flight halfway: what flies is the window's
+     * snapshot, so {@code minimise-mid} and {@code restore-mid} show whether it was drawn, and {@code restored}
+     * against {@code minimise-before} whether the window came back as it left. ~4s, with {@code --seconds=5}.
+     */
+    private static final boolean MINIMISE_SHOT = Boolean.getBoolean("crystalgui.harness.desktop.minimise");
+
+    private WindowFrame minimiseTarget;
+
+    private void driveMinimiseShot(HarnessContext ctx, long frameNumber) {
+        switch ((int) frameNumber) {
+            case 99 -> {
+                minimiseTarget = desktop.activeWindow();
+                ctx.getArtifactService().requestCapture("minimise-before");
+            }
+            case 100 -> {
+                if (minimiseTarget != null) minimiseTarget.minimize();
+            }
+            case 106 -> ctx.getArtifactService().requestCapture("minimise-mid");
+            case 150 -> ctx.getArtifactService().requestCapture("minimised");
+            case 160 -> {
+                if (minimiseTarget != null) minimiseTarget.show(true);
+            }
+            case 166 -> ctx.getArtifactService().requestCapture("restore-mid");
+            case 230 -> ctx.getArtifactService().requestCapture("restored");
+            default -> { }
+        }
     }
 
     /**

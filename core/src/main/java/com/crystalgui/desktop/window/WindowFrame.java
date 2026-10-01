@@ -1863,8 +1863,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // BEFORE anything else: adopted chrome belongs to the content, so it goes home rather than being
         // destroyed with the window that borrowed it.
         releaseChrome();
-        // OWNED, so nothing else frees it: createOwned bypasses CgFrameBufferRegistry by design, the
-        // same arrangement CgUiPaintContext's layer pool has and the same obligation.
+        // Its picture is a requested texture, released through the paint context that made it.
         snapshot.dispose();
         // READ BEFORE hide() clears it, and this is the whole of the hide/destroy distinction. Hiding
         // hands activation to nobody -- putting a window away is not asking for another one, and
