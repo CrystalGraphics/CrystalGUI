@@ -181,7 +181,7 @@ public class CreateMenu<N, T> extends Popover {
         final float startTop = placed == null ? 0f : placed.y();
         // No payload, no drop targets, no activation threshold: a move must track the first pixel.
         Drag.start(window, pointerX, pointerY,
-                (mx, my, sx, sy, dx, dy) -> moveTo(startLeft + dx, startTop + dy));
+                (mx, my, sx, sy, dx, dy) -> moveTo(startLeft + dx, startTop + dy)).follows(this);
     }
 
     /** None: the title bar and the search tree ARE this widget, and the constructor rebuilds them. */
