@@ -1,5 +1,6 @@
 package com.crystalgui.style;
 
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.property.FontRelative;
 import com.crystalgui.style.property.StyleProperty;
@@ -13,6 +14,10 @@ import com.crystalgui.core.trace.UiTrace;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CountDownLatch;
+import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -167,6 +172,7 @@ public final class StyleEngine {
      * reaches into no shadow tree at all, except through {@code ::part()}.
      */
     public void addStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
+        sheet.warmValues();
         sheets.add(new Installed(sheet, root));
         sheetsRevision++;
         markAllDirty();
@@ -407,6 +413,7 @@ public final class StyleEngine {
         chains = SHARE_STYLES ? new IdentityHashMap<>() : null;
         chainIds = SHARE_STYLES ? new HashMap<>() : null;
         sharedHits = 0;
+        prematched = 0;
         matchNanos = 0L;
         applyNanos = 0L;
         for (int round = 0; round < MAX_SETTLE_ROUNDS && !dirtyMatch.isEmpty(); round++) {
@@ -418,6 +425,7 @@ public final class StyleEngine {
             // who is churning, and eight shifting counters a batch would bury the frame's own.
             if (CgTrace.isEnabled(UiTrace.BLAME)) profileBatch(batch);
             if (recordRematches) rematchedForTesting.addAll(batch);
+            if (sharing != null && parallelMin > 0 && batch.size() >= parallelMin) prematch(batch);
             for (var element : batch) {
                 rematch(element);
             }
@@ -432,8 +440,10 @@ public final class StyleEngine {
         sharing = null;
         chains = null;
         chainIds = null;
-        CgTrace.add(UiTrace.FRAME, "style-matched", total - sharedHits);
-        CgTrace.add(UiTrace.FRAME, "style-shared", sharedHits);
+        // A prematched element's lookup counts as a shared hit; its match was made once, on a worker.
+        CgTrace.add(UiTrace.FRAME, "style-matched", total - sharedHits + prematched);
+        CgTrace.add(UiTrace.FRAME, "style-shared", sharedHits - prematched);
+        if (prematched > 0) CgTrace.add(UiTrace.FRAME, "style-prematched", prematched);
         if (matchNanos + applyNanos > 0L) {
             CgTrace.add(UiTrace.FRAME, "style-match-us", matchNanos / 1_000L);
             CgTrace.add(UiTrace.FRAME, "style-apply-us", applyNanos / 1_000L);
@@ -584,6 +594,81 @@ public final class StyleEngine {
         }
         return match.fontRelative();
     }
+
+    /**
+     * The fewest distinct matches a round must need before they are matched on workers: below it a task costs more
+     * than the match. 0 matches every round on the frame thread ({@code -Dcrystalgui.style.parallelMin=0}).
+     */
+    private static int parallelMin = Integer.getInteger("crystalgui.style.parallelMin", 64);
+
+    /** For a test that compares the two paths. */
+    static void setParallelMin(int min) {
+        parallelMin = min;
+    }
+
+    /**
+     * Matches a large round's distinct elements across the shared worker pool before the round applies them,
+     * Stylo's split: matching reads the sheets and the tree and writes nothing, applying writes the cascade and runs
+     * listeners, so only the first leaves this thread.
+     *
+     * <p>Each result is filed under its {@link SharingKey}, computed with the font size the element has now. The
+     * round then applies in depth order as it always does and finds a result only where the key still agrees once
+     * the element's parents are applied: a font size moved by a parent is a different key, matched there.</p>
+     *
+     * <p>This thread works too and waits only for what a worker has taken, so a pool busy with other work delays
+     * nothing.</p>
+     */
+    private void prematch(List<Styleable> batch) {
+        LinkedHashMap<SharingKey, Styleable> distinct = new LinkedHashMap<>();
+        Map<SharingKey, Float> sizes = new HashMap<>();
+        for (Styleable element : batch) {
+            float fontSize = element.getStyle().getGeneralGroup().fontSize();
+            SharingKey key = sharingKey(element, fontSize);
+            if (sharing.containsKey(key) || distinct.putIfAbsent(key, element) != null) continue;
+            sizes.put(key, fontSize);
+        }
+        int count = distinct.size();
+        if (count < parallelMin) return;
+        long timed = CgTrace.stamp(UiTrace.FRAME);
+        SharingKey[] keys = distinct.keySet().toArray(new SharingKey[0]);
+        Styleable[] elements = distinct.values().toArray(new Styleable[0]);
+        Match[] matches = new Match[count];
+        AtomicInteger next = new AtomicInteger();
+        CountDownLatch done = new CountDownLatch(count);
+        AtomicReference<Throwable> failed = new AtomicReference<>();
+        Runnable worker = () -> {
+            for (int i; (i = next.getAndIncrement()) < count; ) {
+                try {
+                    matches[i] = match(elements[i], sizes.get(keys[i]));
+                } catch (Throwable thrown) {
+                    failed.compareAndSet(null, thrown);
+                } finally {
+                    done.countDown();
+                }
+            }
+        };
+        int helpers = Math.min(PARALLEL_HELPERS, count / Math.max(1, parallelMin / 4));
+        for (int h = 0; h < helpers; h++) JobScheduler.sharedPool().execute(worker);
+        worker.run();
+        try {
+            done.await();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            return;
+        }
+        if (failed.get() != null) {
+            throw new IllegalStateException("matching a style round on workers failed", failed.get());
+        }
+        for (int i = 0; i < count; i++) sharing.put(keys[i], matches[i]);
+        prematched += count;
+        CgTrace.zoneDone(UiTrace.FRAME, "style:prematch", timed);
+    }
+
+    /** Workers a round may borrow, beside this thread: the pool leaves two cores for the frame. */
+    private static final int PARALLEL_HELPERS = Math.max(0, Runtime.getRuntime().availableProcessors() - 3);
+
+    /** Distinct matches made on workers this drain; their uses are counted as shared, so this is subtracted back. */
+    private int prematched;
 
     /** What a drain spent matching and applying, for the split T5 is decided on. Per drain. */
     private long matchNanos;

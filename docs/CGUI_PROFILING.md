@@ -43,7 +43,7 @@ A `UIDocument` frame, and what each part records. Use this as the skeleton of th
 |---|---|---|---|
 | Jobs | `frame:jobs`, and `done:<job>` per completion inside it | `jobs-busy` | the completion callbacks' own work |
 | Hooks | `frame:hooks` | — | every `Animation` per-frame hook a widget registered — no per-hook zones |
-| Style | `style:drainDirtyMatch`, `style:transitions` | `rematched`, `whole-window-invalidations` | who invalidated: `crystalgui.blame` |
+| Style | `style:drainDirtyMatch`, `style:prematch` (a large round matched on workers), `style:transitions`, `style:warmValues` (a sheet's values parsed on a worker) | `rematched`, `whole-window-invalidations`, `style-matched`, `style-shared`, `style-prematched`, `style-match-us`, `style-apply-us` | who invalidated: `crystalgui.blame` |
 | Layout | `frame:layout` | — | Taffy's compute and every `Measurable.measure` (text measurement); CrystalGraphics' text zones show shaping |
 | After layout | `frame:afterLayout` | — | every `afterLayout` hook |
 | Input | `frame:input` | — | the hover diff and every listener the frame's pointer events reach |
