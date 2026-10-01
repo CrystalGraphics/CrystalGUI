@@ -493,6 +493,41 @@ public class CgUiDesktopScene
         // still assembling itself and every diff against it is noise. Counted in frames that showed the
         // document: one recording on its own presents nothing until its first frame is done.
         if (driver.presentedFrames() == 40) ctx.getArtifactService().requestCapture("startup");
+        // -Dcrystalgui.harness.desktop.splitLoop=true: the first split swung a little every frame from 100 to 500, as a hand
+        // dragging it does -- what makes a document commit as fast as it can.
+        if (SPLIT_LOOP) {
+            long shown = driver.presentedFrames();
+            if (shown == 100) {
+                float[] at = driver.ask(() -> {
+                    SplitView split = firstSplit(document);
+                    return split == null ? null : at(split.divider(), 0.5f, 0.5f);
+                });
+                splitAt = at;
+                if (at != null) {
+                    consumeMouseEvent(new CgSystemInput.Mouse.Event((int) at[0], (int) at[1], 0, 0, CgMouseCodes.NONE, false, 0f, -1L));
+                    consumeMouseEvent(new CgSystemInput.Mouse.Event((int) at[0], (int) at[1], 0, 0, CgMouseCodes.LEFT_BUTTON, true, 0f,
+                            System.currentTimeMillis()));
+                }
+            } else if (splitAt != null && shown > 100 && shown <= 400 && shown != splitShown) {
+                splitShown = shown;
+                int d = (int) (60 * Math.sin(shown * 0.12));
+                consumeMouseEvent(new CgSystemInput.Mouse.Event((int) splitAt[0] + d, (int) splitAt[1] + d, 0, 0, CgMouseCodes.NONE,
+                        false, 0f, -1L));
+            } else if (splitAt != null && shown == 401) {
+                consumeMouseEvent(new CgSystemInput.Mouse.Event((int) splitAt[0], (int) splitAt[1], 0, 0, CgMouseCodes.LEFT_BUTTON, false,
+                        0f, System.currentTimeMillis()));
+                splitAt = null;
+            }
+        }
+        // -Dcrystalgui.harness.desktop.everyFrame=FIRST..LAST: a capture of every presented frame in the range, for a
+        // picture that is wrong for one frame at a time.
+        if (EVERY_FRAME != null) {
+            long shown = driver.presentedFrames();
+            if (shown >= EVERY_FRAME[0] && shown <= EVERY_FRAME[1] && shown != lastEveryFrame) {
+                lastEveryFrame = shown;
+                ctx.getArtifactService().requestCapture("f" + shown);
+            }
+        }
     }
 
     private boolean probing() {
@@ -533,6 +568,30 @@ public class CgUiDesktopScene
      * run with {@code -Dcrystalgui.ui.async=false}.
      */
     private static final boolean NODES_SHOT = Boolean.getBoolean("crystalgui.harness.desktop.nodes");
+
+    private static final boolean SPLIT_LOOP = Boolean.getBoolean("crystalgui.harness.desktop.splitLoop");
+    private float[] splitAt;
+    private long splitShown;
+
+    @Nullable
+    private static SplitView firstSplit(UIElement node) {
+        if (node instanceof SplitView split) return split;
+        for (UIElement child : node.composedChildren()) {
+            SplitView found = firstSplit(child);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private static final long[] EVERY_FRAME = everyFrame(System.getProperty("crystalgui.harness.desktop.everyFrame"));
+    private long lastEveryFrame = -1;
+
+    private static long[] everyFrame(String range) {
+        if (range == null) return null;
+        int dots = range.indexOf("..");
+        String[] ends = {range.substring(0, dots), range.substring(dots + 2)};
+        return new long[] {Long.parseLong(ends[0].trim()), Long.parseLong(ends[1].trim())};
+    }
     private static final float NODES_MOVE_X = 40f, NODES_MOVE_Y = 30f, NODES_SCROLL = 24f;
 
     private WindowFrame nodesWindow;
