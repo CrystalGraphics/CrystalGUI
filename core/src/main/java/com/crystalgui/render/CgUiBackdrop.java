@@ -3,7 +3,6 @@ package com.crystalgui.render;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
@@ -95,10 +94,20 @@ final class CgUiBackdrop {
     private int sceneFboId;
 
     /** Scene plus whatever the UI had painted when the first glass element of the frame drew. */
-    private final CgFrameBuffer captureFbo =
-            CgFrameBuffer.createOwned("cgui_backdrop_filter", 1, 1, CgUiPaintContext.LAYER_FORMAT);
+    @Nullable
+    private CgGraphTexture capture;
 
-    /** The frame {@link #captureFbo} was captured on — the whole of the "once per frame" rule. */
+    /** The capture's texture at the surface's size: made when a frame executes, replaced when the surface resizes. */
+    private CgGraphTexture captureTexture(int w, int h) {
+        if (capture != null && (capture.getWidth() != w || capture.getHeight() != h)) {
+            ctx.releaseTexture(capture);
+            capture = null;
+        }
+        if (capture == null) capture = ctx.requestTexture("cgui_backdrop_filter", w, h, CgUiPaintContext.LAYER_FORMAT);
+        return capture;
+    }
+
+    /** The frame {@link #capture} was captured on — the whole of the "once per frame" rule. */
     private long captureFrame = -1L;
     private int captureDepth = -1;
     @Nullable
@@ -154,7 +163,7 @@ final class CgUiBackdrop {
      * enough. Keeping a pair per scale means a radius change SELECTS a target instead of rebuilding one,
      * and only a surface resize rebuilds anything.</p>
      */
-    private final Map<Integer, CgFrameBuffer[]> blurTargets = new HashMap<>();
+    private final Map<Integer, CgGraphTexture[]> blurTargets = new HashMap<>();
 
     /**
      * The pair for {@code scale}, built on first use at the surface's own fraction of that scale.
@@ -163,23 +172,22 @@ final class CgUiBackdrop {
      * {@link #blurredBackdrop} only ever reads back what is already there -- a pair is never built with
      * our own bindings in flight.</p>
      */
-    private CgFrameBuffer[] targetsFor(int scale) {
+    private CgGraphTexture[] targetsFor(int scale) {
         int w = Math.max(1, Math.max(1, ctx.screenWidth) / scale);
         int h = Math.max(1, Math.max(1, ctx.screenHeight) / scale);
-        CgFrameBuffer[] pair = blurTargets.get(scale);
+        CgGraphTexture[] pair = blurTargets.get(scale);
+        if (pair != null && (pair[0].getWidth() != w || pair[0].getHeight() != h)) {
+            // Only a SURFACE resize reaches here; a radius change picks a different pair instead.
+            for (CgGraphTexture target : pair) ctx.releaseTexture(target);
+            pair = null;
+        }
         if (pair == null) {
-            pair = new CgFrameBuffer[] {
-                    CgFrameBuffer.createOwned("cgui_blur_a" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
-                    CgFrameBuffer.createOwned("cgui_blur_b" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
+            pair = new CgGraphTexture[] {
+                    ctx.requestTexture("cgui_blur_a" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
+                    ctx.requestTexture("cgui_blur_b" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
             };
             blurTargets.put(scale, pair);
-            for (CgFrameBuffer fbo : pair) ctx.warmUpLayer(fbo);
-        } else if (pair[0].getWidth() != w || pair[0].getHeight() != h) {
-            // Only a SURFACE resize reaches here; a radius change picks a different pair instead.
-            for (CgFrameBuffer fbo : pair) {
-                fbo.resize(w, h);
-                ctx.warmUpLayer(fbo);
-            }
+            for (CgGraphTexture target : pair) ctx.warmUpLayer(target);
         }
         return pair;
     }
@@ -227,7 +235,7 @@ final class CgUiBackdrop {
 
     /** Which of the working pair holds the finished blur for {@link #blurFrame}. */
     @Nullable
-    private CgFrameBuffer blurResult;
+    private CgGraphTexture blurResult;
 
     private long blurFrame = -1L;
     private float blurRadiusPx = Float.NaN;
@@ -319,8 +327,8 @@ final class CgUiBackdrop {
         float ux = (tr.x - tl.x) / w, vx = -(tr.y - tl.y) / h;
         float uy = (bl.x - tl.x) / w, vy = -(bl.y - tl.y) / h;
 
-        CgTexture2D sharp = (CgTexture2D) captureFbo.getColorTexture(0);
-        CgTexture2D blurred = blurredBackdrop(blurRadiusPx);
+        CgTexture sharp = capture;
+        CgTexture blurred = blurredBackdrop(blurRadiusPx);
         if (sharp == null || blurred == null) return null;
         if (GEOMETRY_LOG && blurRadiusPx != loggedRadius) {
             loggedRadius = blurRadiusPx;
@@ -345,8 +353,8 @@ final class CgUiBackdrop {
      * sized from a fraction again. @see #blurredBackdrop</p>
      */
     private void logGeometry(float radiusPx, int px0, int py0, int px1, int py1, int w, int h,
-                             float vTop, float vBottom, CgTexture2D blurred) {
-        CgFrameBuffer[] pair = blurTargets.get(blurScale);
+                             float vTop, float vBottom, CgTexture blurred) {
+        CgGraphTexture[] pair = blurTargets.get(blurScale);
         int tw = pair == null ? -1 : pair[0].getWidth();
         int th = pair == null ? -1 : pair[0].getHeight();
         float fracW = capW / (float) w, fracH = capH / (float) h;
@@ -444,7 +452,7 @@ final class CgUiBackdrop {
         // Queued draws go first: the capture reads the target.
         ctx.drain();
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
-        if (captureFbo.getWidth() != w || captureFbo.getHeight() != h) captureFbo.resize(w, h);
+        CgGraphTexture cap = captureTexture(w, h);
 
         // Seed from the previous frame's union so a settled UI captures ONCE for every consumer, and
         // widen to whatever is being asked for now so the answer is never stale.
@@ -467,12 +475,13 @@ final class CgUiBackdrop {
         // 1. The scene, region only: a framebuffer this engine did not write, so a blit run when the frame executes,
         // in its place among the passes. 1b's clear goes with it.
         final int sceneId = sceneFboId, bx0 = capX0, bw = capW, bh = capH, by0 = glY0, by1 = glY1, th = h;
-        ctx.recordCallback("backdrop:scene", ctx.imported(captureFbo), () -> {
-            CgFrameBuffer.blitFrom(sceneId, captureFbo.getId(), bx0, by0, bx0 + bw, by1,
+        ctx.recordCallback("backdrop:scene", cap, () -> {
+            CgFrameBuffer storage = cap.framebuffer();
+            CgFrameBuffer.blitFrom(sceneId, storage.getId(), bx0, by0, bx0 + bw, by1,
                     0, th - bh, bw, th, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
             CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
             CgGL.glColorMask(false, false, false, true);
-            captureFbo.clearColor(0f, 0f, 0f, 1f);
+            storage.clearColor(0f, 0f, 0f, 1f);
         });
 
         // 1b. THE SCENE IS OPAQUE, AND SAYING SO IS WHAT MAKES THE REST OF THIS PIPELINE TRUE.
@@ -525,7 +534,7 @@ final class CgUiBackdrop {
 
         // KEEP the scene blit above -- see ctx.beginLayerFbo(fbo, clear).
         final int fx0 = capX0, fy0 = capY0, fw = capW, fh = capH;
-        ctx.beginLayerFbo(captureFbo, false);
+        ctx.beginLayerFbo(cap, false);
         try {
             // WHAT THE UI-SO-FAR ACTUALLY HOLDS OVER THE CAPTURED REGION, read before it is composited.
             // The whole pipeline rests on it being TRANSPARENT wherever nothing has drawn: premultiplied
@@ -659,11 +668,11 @@ final class CgUiBackdrop {
      * scale 4 is a few thousand texels per pass.</p>
      */
     @Nullable
-    private CgTexture2D blurredBackdrop(float radiusPx) {
-        if (radiusPx < 0.5f) return (CgTexture2D) captureFbo.getColorTexture(0);
+    private CgTexture blurredBackdrop(float radiusPx) {
+        if (radiusPx < 0.5f) return capture;
         if (blurFrame == ctx.frameId && blurRadiusPx == radiusPx && blurResult != null) {
             if (PROBE) probeBlurSkipped++;
-            return (CgTexture2D) blurResult.getColorTexture(0);
+            return blurResult;
         }
         long probeB0 = PROBE ? System.nanoTime() : CgTrace.stamp(UiTrace.FRAME);
 
@@ -672,7 +681,7 @@ final class CgUiBackdrop {
         float fracW = capW / (float) Math.max(1, ctx.screenWidth);
         float fracH = capH / (float) Math.max(1, ctx.screenHeight);
 
-        CgTexture2D captured = (CgTexture2D) captureFbo.getColorTexture(0);
+        CgTexture captured = capture;
         if (captured == null) return null;
 
         ctx.flush();
@@ -681,7 +690,7 @@ final class CgUiBackdrop {
 
     /** {@link #blurredBackdrop}'s passes, apart so its GPU timer closes on every exit. */
     @Nullable
-    private CgTexture2D blurCaptured(CgTexture2D captured, float radiusPx, float fracW, float fracH, long probeB0) {
+    private CgTexture blurCaptured(CgTexture captured, float radiusPx, float fracW, float fracH, long probeB0) {
         // Sigma at the working scale, and the taps that reach three of it. The radius is CLAMPED rather
         // than the scale raised past 4 (the box prefilter reduces 4x cleanly and no further), so a blur
         // asked to reach beyond 3 * MAX_KERNEL_RADIUS * 4 surface pixels comes back slightly narrower
@@ -690,8 +699,8 @@ final class CgUiBackdrop {
         float sigma = radiusPx / REACH_PER_SIGMA / scale;
         int taps = Math.max(1, Math.min(MAX_KERNEL_RADIUS, (int) Math.ceil(REACH_PER_SIGMA * sigma)));
 
-        CgFrameBuffer[] pair = targetsFor(scale);
-        CgFrameBuffer blurA = pair[0], blurB = pair[1];
+        CgGraphTexture[] pair = targetsFor(scale);
+        CgGraphTexture blurA = pair[0], blurB = pair[1];
 
         // WHOLE TEXELS FIRST, fraction derived from them -- never the screen fraction rounded into the
         // target's grid. A band of round(targetH * capH/H) texels spans capH source rows at capH/that
@@ -704,7 +713,7 @@ final class CgUiBackdrop {
         float redFracW = redW / (float) blurA.getWidth();
         float redFracH = redH / (float) blurA.getHeight();
 
-        CgFrameBuffer result;
+        CgGraphTexture result;
         if (scale > 1) {
             // The quad's uv span covers redW*scale source texels, which overshoots the capture by up to
             // scale-1: exactly what makes each output texel a whole scale x scale block. _Bounds still
@@ -712,18 +721,12 @@ final class CgUiBackdrop {
             downsamplePass(captured, blurA, scale, redW, redH,
                     redW * scale / (float) Math.max(1, ctx.screenWidth),
                     redH * scale / (float) Math.max(1, ctx.screenHeight), fracW, fracH);
-            CgTexture2D reduced = (CgTexture2D) blurA.getColorTexture(0);
-            if (reduced == null) return null;
-            blurPass(reduced, blurB, 1f, 0f, sigma, taps, redW, redH, redFracW, redFracH);
-            CgTexture2D horizontal = (CgTexture2D) blurB.getColorTexture(0);
-            if (horizontal == null) return null;
-            blurPass(horizontal, blurA, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
+            blurPass(blurA, blurB, 1f, 0f, sigma, taps, redW, redH, redFracW, redFracH);
+            blurPass(blurB, blurA, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
             result = blurA;
         } else {
             blurPass(captured, blurA, 1f, 0f, sigma, taps, redW, redH, redFracW, redFracH);
-            CgTexture2D horizontal = (CgTexture2D) blurA.getColorTexture(0);
-            if (horizontal == null) return null;
-            blurPass(horizontal, blurB, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
+            blurPass(blurA, blurB, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
             result = blurB;
         }
 
@@ -737,7 +740,7 @@ final class CgUiBackdrop {
         blurResult = result;
         CgTrace.zoneDone(UiTrace.FRAME, "backdrop:blur", probeB0);
         if (PROBE) pBlur += System.nanoTime() - probeB0;
-        return (CgTexture2D) result.getColorTexture(0);
+        return result;
     }
 
     /**
@@ -749,7 +752,7 @@ final class CgUiBackdrop {
      * block. A source decimated without this aliases, and an aliased source blurred is what a comb looks
      * like. @see gui_downsample.shader</p>
      */
-    private void downsamplePass(CgTexture2D source, CgFrameBuffer target, int scale,
+    private void downsamplePass(CgTexture source, CgGraphTexture target, int scale,
                                 int quadW, int quadH, float uvSpanW, float uvSpanH,
                                 float srcFracW, float srcFracH) {
         float halfU = 0.5f / Math.max(1, source.getWidth());
@@ -787,7 +790,7 @@ final class CgUiBackdrop {
      * SOURCE texels in UV, which is what "one texel apart" means whatever resolution the pass runs at.
      * {@code sigma} and {@code taps} are in the same texels. @see gui_blur.shader</p>
      */
-    private void blurPass(CgTexture2D source, CgFrameBuffer target, float dirU, float dirV,
+    private void blurPass(CgTexture source, CgGraphTexture target, float dirU, float dirV,
                           float sigma, int taps, int quadW, int quadH, float fracW, float fracH) {
         // PROPERTIES BEFORE THE BIND, and this is not style. withMaterial binds the material, and
         // binding VALIDATES the samplers it currently holds - which, on the frame after a resize, are
@@ -837,12 +840,12 @@ final class CgUiBackdrop {
      * cancelled: correct output from two errors, which is the kind of thing that stays true right up
      * until somebody changes the level count.</p>
      */
-    private void runFilter(CgMaterial material, CgFrameBuffer target,
+    private void runFilter(CgMaterial material, CgGraphTexture target,
                            int quadW, int quadH, float uvSpanW, float uvSpanH) {
         int qw = Math.max(1, Math.min(target.getWidth(), quadW));
         int qh = Math.max(1, Math.min(target.getHeight(), quadH));
         // beginLayerFbo gives the pass the target's own ortho, so a quad of whole texels fills it at any scale.
-        ctx.beginLayerFbo(target);
+        ctx.beginLayerFbo(target, true);
         try {
             withoutScissor(() -> ctx.withMaterial(material, () -> {
                 ctx.poseStack.pushPose();
@@ -905,13 +908,19 @@ final class CgUiBackdrop {
     }
     // ------------------------------------------------------------------------------------------
 
-    /** Frees the framebuffers this owns. They are {@code createOwned}, so no registry sweeps them. */
+    /** Frees the storage of every texture this made: teardown, with no frame to record a release into. */
     void delete() {
-        captureFbo.delete();
-        for (CgFrameBuffer[] pair : blurTargets.values()) {
-            pair[0].delete();
-            pair[1].delete();
+        deleteNow(capture);
+        capture = null;
+        for (CgGraphTexture[] pair : blurTargets.values()) {
+            deleteNow(pair[0]);
+            deleteNow(pair[1]);
         }
         blurTargets.clear();
+    }
+
+    private static void deleteNow(@Nullable CgGraphTexture requested) {
+        CgFrameBuffer storage = requested == null ? null : requested.framebuffer();
+        if (storage != null) storage.delete();
     }
 }

@@ -4,7 +4,8 @@ import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.api.texture.CgTexture;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.api.PoseStack;
 
 import com.crystalgraphics.trace.CgTrace;
@@ -148,7 +149,8 @@ public final class SvgRasterCache {
 
     private final CgUiPaintContext ctx;
     private final Map<Key, Entry> entries = new HashMap<>();
-    private CgFrameBuffer atlas;
+    /** Made when the first frame that rasterises executes, and kept; cleared when it is full. */
+    private CgGraphTexture atlas;
     private CgMaterial coverage;
     private CgMaterial coverageMax;
     private CgMaterial accumulate;
@@ -233,7 +235,7 @@ public final class SvgRasterCache {
         // V flipped: the atlas is drawn into under the same inverted ortho as the frame, so its row 0 is
         // at the bottom of the texture -- the convention drawLayer already documents.
         float v0 = 1f - (float) entry.y / ATLAS_SIZE, v1 = 1f - (float) (entry.y + entry.height) / ATLAS_SIZE;
-        CgTexture2D texture = (CgTexture2D) atlas.getColorTexture(0);
+        CgTexture texture = atlas;
         CgTrace.add(UiTrace.FRAME, "svg-raster-draws", 1);
 
         if (!entry.baked) {
@@ -335,7 +337,7 @@ public final class SvgRasterCache {
 
     private void ensureAtlas() {
         if (atlas != null) return;
-        atlas = CgFrameBuffer.createOwned("cgui_svg_raster_" + generation++, ATLAS_SIZE, ATLAS_SIZE, ATLAS_FORMAT);
+        atlas = ctx.requestTexture("cgui_svg_raster_" + generation++, ATLAS_SIZE, ATLAS_SIZE, ATLAS_FORMAT);
         clear();
     }
 
@@ -369,7 +371,8 @@ public final class SvgRasterCache {
     void delete() {
         entries.clear();
         if (atlas != null) {
-            atlas.delete();
+            CgFrameBuffer storage = atlas.framebuffer();
+            if (storage != null) storage.delete();
             atlas = null;
         }
         shelfX = shelfY = shelfHeight = 0;

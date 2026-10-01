@@ -182,7 +182,7 @@ public final class BoxPainter {
                 // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
                 ctx.notePainted(IDENTITY, region.x(), region.y(), region.x() + region.width(),
                         region.y() + region.height());
-                ctx.blitLayer(keep.fbo(), opacity, region);
+                ctx.blitLayer(keep.target(), opacity, region);
                 return;
             }
 
@@ -203,7 +203,7 @@ public final class BoxPainter {
             // The subtree blends as one unit before opacity applies, and a mask multiplies only the
             // CHILDREN -- the box's own background is composited unmasked underneath.
             CgGraphTexture subtreeFbo = keep != null
-                    ? ctx.beginLayerFbo(keep.fbo(), region)
+                    ? ctx.beginLayerFbo(keep.target(), region)
                     : ctx.beginLayerFbo(region);
             paintSelf(box, style, ctx, radii);
             node.paintContent(ctx, box);

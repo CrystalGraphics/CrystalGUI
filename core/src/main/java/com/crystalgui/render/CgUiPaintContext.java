@@ -10,6 +10,7 @@ import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
@@ -401,7 +402,7 @@ public final class CgUiPaintContext {
 
     // ── State elision ───────────────────────────────────────────────────────
     @Getter
-    private CgTexture2D currentTexture;
+    private CgTexture currentTexture;
     @Getter
     boolean frameActive;
 
@@ -1183,7 +1184,7 @@ public final class CgUiPaintContext {
         bindTexture(texture);
     }
 
-    public void bindTexture(CgTexture2D texture) {
+    public void bindTexture(CgTexture texture) {
         if (texture == currentTexture) return;
         // Whatever is queued was submitted against the texture bound NOW: switching first would draw it
         // with this one. A cached icon relies on this -- it submits its quad and leaves the flush to
@@ -1732,7 +1733,7 @@ public final class CgUiPaintContext {
      */
     public boolean pushRoundedClip(float x, float y, float w, float h, float[] rx, float[] ry,
                                    @Nullable float[] border) {
-        int entry = CgClipTable.add(clipEntry, poseStack.last().pose(), targetHeight(), x, y, x + w, y + h,
+        int entry = recording.clips().add(clipEntry, poseStack.last().pose(), targetHeight(), x, y, x + w, y + h,
                 rx, ry, border);
         if (entry < 0) return false;
         CgTrace.add(UiTrace.FRAME, "clips-rounded", 1);
@@ -1742,7 +1743,7 @@ public final class CgUiPaintContext {
 
     /** Ends the innermost {@link #pushRoundedClip} that answered true. */
     public void popRoundedClip() {
-        setClip(CgClipTable.parent(clipEntry));
+        setClip(recording.clips().parent(clipEntry));
     }
 
     /** The entry {@link CgUiRenderer} stamps on each instance. */
@@ -2038,7 +2039,7 @@ public final class CgUiPaintContext {
             layer.lastFrame = frameId;
             // Too small is a miss; MUCH too big is one as well. An element that was 800px and is now 40
             // would otherwise keep its 832px texture for as long as it stayed on screen.
-            int held = layer.fbo().getWidth(), tall = layer.fbo().getHeight();
+            int held = layer.target().getWidth(), tall = layer.target().getHeight();
             boolean fits = held >= region.width() && tall >= region.height()
                     && held <= Math.max(64, region.width() * 2) && tall <= Math.max(64, region.height() * 2);
             if (fits) {
@@ -2082,10 +2083,10 @@ public final class CgUiPaintContext {
         candidates.remove(key);
 
         long timed = CgTrace.stamp(UiTrace.FRAME);
-        CgFrameBuffer fbo = CgFrameBuffer.createOwned("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);
-        warmUpLayer(fbo);
+        CgGraphTexture target = requestTexture("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);
+        warmUpLayer(target);
         CgTrace.zoneDone(UiTrace.FRAME, "retain:createFbo", timed);
-        layer = new RetainedLayer(fbo, region, revision);
+        layer = new RetainedLayer(target, region, revision);
         layer.lastFrame = frameId;
         layer.setFresh(false, revision);
         retained.put(key, layer);
@@ -2134,8 +2135,8 @@ public final class CgUiPaintContext {
     }
 
     private void release(RetainedLayer layer) {
-        retainedBytes -= (long) layer.fbo().getWidth() * layer.fbo().getHeight() * 4L;
-        layer.fbo().delete();
+        retainedBytes -= (long) layer.target().getWidth() * layer.target().getHeight() * 4L;
+        releaseTexture(layer.target());
     }
 
     /**
@@ -2147,13 +2148,18 @@ public final class CgUiPaintContext {
      * to {@link #beginLayerFbo(CgFrameBuffer)}; a layer's own texture comes from the executor's pool.</p>
      */
     public void warmUpLayer(CgFrameBuffer fbo) {
+        warmUpLayer(imported(fbo));
+    }
+
+    /** {@link #warmUpLayer(CgFrameBuffer)} for a texture the recording makes: a requested one, warmed as it is made. */
+    void warmUpLayer(CgGraphTexture target) {
         CgMaterial previousMaterial = currentMaterial;
-        beginLayerFbo(fbo);
+        beginLayer(target, true, null);
         // Rest the material on a texture that is never deleted: a sampler property is retained and re-bound later.
         layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
         withMaterial(layerBlitMaterial, () -> {
             bindTexture(whitePixel);
-            quad().at(0, 0).size(fbo.getWidth(), fbo.getHeight()).color(0x0).submit();
+            quad().at(0, 0).size(target.getWidth(), target.getHeight()).color(0x0).submit();
             flush();
         });
         endLayerFbo();
@@ -2211,9 +2217,39 @@ public final class CgUiPaintContext {
         return beginLayer(imported(fbo), clear, null);
     }
 
-    /** As {@link #beginLayerFbo(LayerRegion)}, into a target the caller keeps — a {@link RetainedLayer}'s. */
+    /** As {@link #beginLayerFbo(LayerRegion)}, into a target the caller keeps. */
     public CgGraphTexture beginLayerFbo(CgFrameBuffer fbo, LayerRegion region) {
         return beginLayer(imported(fbo), true, region);
+    }
+
+    /** As {@link #beginLayerFbo(LayerRegion)}, into a texture that outlives the frame — a {@link RetainedLayer}'s. */
+    public CgGraphTexture beginLayerFbo(CgGraphTexture target, LayerRegion region) {
+        return beginLayer(target, true, region);
+    }
+
+    /** As {@link #beginLayerFbo(CgFrameBuffer, boolean)}, into a texture the recording makes and keeps. */
+    CgGraphTexture beginLayerFbo(CgGraphTexture target, boolean clear) {
+        return beginLayer(target, clear, null);
+    }
+
+    /**
+     * A texture made when the frame executes and kept across frames until {@link #releaseTexture}: the GL object a
+     * recording may not make itself.
+     */
+    CgGraphTexture requestTexture(String name, int width, int height, CgFrameBufferFormat format) {
+        return CgGraphTexture.requested(name, new CgTextureDesc(Math.max(1, width), Math.max(1, height), format));
+    }
+
+    /** Frees a {@link #requestTexture}'s storage once the frame has executed what was recorded before this. */
+    void releaseTexture(CgGraphTexture requested) {
+        drain();
+        recording.release(requested);
+    }
+
+    /** Frees a requested texture's storage now: teardown, with no frame to record a release into. */
+    private static void deleteNow(CgGraphTexture requested) {
+        CgFrameBuffer storage = requested.framebuffer();
+        if (storage != null) storage.delete();
     }
 
     /**
@@ -2338,7 +2374,7 @@ public final class CgUiPaintContext {
      * <p>{@code cu0..cv1} is the axis-aligned rect it may sample at all — its bounds padded by the blur's
      * and the lens's reach, cut to its clip — which stays a rect because the capture is one.</p>
      */
-    public record Backdrop(CgTexture2D sharp, CgTexture2D blurred,
+    public record Backdrop(CgTexture sharp, CgTexture blurred,
                            float u0, float v0, float ux, float vx, float uy, float vy,
                            float cu0, float cv0, float cu1, float cv1) {}
 
@@ -2542,7 +2578,7 @@ public final class CgUiPaintContext {
 
         recording.reset();
         imported.clear();
-        for (RetainedLayer layer : retained.values()) layer.fbo().delete();
+        for (RetainedLayer layer : retained.values()) deleteNow(layer.target());
         retained.clear();
         candidates.clear();
         retainedBytes = 0L;
