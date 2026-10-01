@@ -2,6 +2,7 @@ package com.crystalgui.app.frameprofiler;
 
 import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgGpuTrace;
@@ -613,6 +614,18 @@ public class FrameProfilerPanel extends UIElement {
     }
 
     // ── Keyboard ────────────────────────────────────────────────────────────────────────────
+
+    /** The keys {@link #handleKey} takes, declared for the host's "is this key yours". */
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        if (CgModifiers.hasCtrl(modifiers) || CgModifiers.hasAlt(modifiers)) return super.claimsKey(key, typed, modifiers);
+        return switch (key) {
+            case CgKeyCodes.KEY_LEFT, CgKeyCodes.KEY_RIGHT, CgKeyCodes.KEY_PRIOR, CgKeyCodes.KEY_NEXT,
+                 CgKeyCodes.KEY_HOME, CgKeyCodes.KEY_END, CgKeyCodes.KEY_F, CgKeyCodes.KEY_A,
+                 CgKeyCodes.KEY_W, CgKeyCodes.KEY_SPACE -> true;
+            default -> super.claimsKey(key, typed, modifiers);
+        };
+    }
 
     private boolean handleKey(KeyboardEvent.Down event) {
         switch (event.getKeyCode()) {

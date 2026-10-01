@@ -610,6 +610,12 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
         }
     }
 
+    @Override
+    protected boolean navigationKey(int key, int modifiers) {
+        return key == CgKeyCodes.KEY_RIGHT || key == CgKeyCodes.KEY_LEFT || key == CgKeyCodes.KEY_MULTIPLY
+                || super.navigationKey(key, modifiers);
+    }
+
     /** Unmodifiable view of the flattened rows, in display order. */
     public List<TreeRow<T>> visibleRows() {
         List<TreeRow<T>> out = new ArrayList<>(getModel().size());

@@ -1099,6 +1099,22 @@ public class TextField extends UIElement implements Measurable {
         return adapter == null ? 0 : adapter.modifiers();
     }
 
+    /** The keys {@link #handleKey} consumes beyond typing and caret movement, which {@code KeyClaims} covers. */
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        if (CgModifiers.hasCtrl(modifiers)) {
+            switch (key) {
+                case CgKeyCodes.KEY_A, CgKeyCodes.KEY_C, CgKeyCodes.KEY_X, CgKeyCodes.KEY_V, CgKeyCodes.KEY_BACK,
+                     CgKeyCodes.KEY_DELETE, CgKeyCodes.KEY_LEFT, CgKeyCodes.KEY_RIGHT -> {
+                    return true;
+                }
+                default -> { }
+            }
+        }
+        if (key == CgKeyCodes.KEY_ESCAPE && !text.equals(value.get())) return true;
+        return super.claimsKey(key, typed, modifiers);
+    }
+
     /** @return whether the key was consumed. */
     private boolean handleKey(int key, int modifiers) {
         boolean shift = CgModifiers.hasShift(modifiers);

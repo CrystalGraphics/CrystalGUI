@@ -31,6 +31,21 @@ public interface InputMode {
         return false;
     }
 
+    /**
+     * Whether {@link #keyPressed} would take this press, answered without acting: the declared half
+     * {@link KeyClaims} reads.
+     *
+     * <pre>{@code
+     * @Override
+     * public boolean claimsKey(int key, int modifiers) {
+     *     return key == CgKeyCodes.KEY_ESCAPE;   // all keyPressed acts on
+     * }
+     * }</pre>
+     */
+    default boolean claimsKey(int key, int modifiers) {
+        return false;
+    }
+
     /** @return whether this mode consumed the release. */
     default boolean keyReleased(int key, int modifiers) {
         return false;

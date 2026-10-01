@@ -124,6 +124,8 @@ public final class InsertMenu extends CreateMenu<InsertMenu.Row, Insertable> {
         });
         onChosen.connect(offer -> offer.insert(worldX, worldY));
 
+        searchField().claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_TAB && onCycle.hasListeners()
+                && !CgModifiers.hasCtrl(modifiers) && !CgModifiers.hasAlt(modifiers) && !CgModifiers.hasSuper(modifiers));
         searchField().onKeyDown.attachListener((element, event) -> {
             if (event.getKeyCode() != CgKeyCodes.KEY_TAB || !onCycle.hasListeners()) return;
             // A HELD Ctrl, Alt or Super makes the chord somebody else's -- the window switcher's, today.

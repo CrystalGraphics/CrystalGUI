@@ -343,6 +343,8 @@ public final class BoxModelEditor extends UIElement implements Refillable<BoxMod
         TextField input = new TextField();
         input.addClass(EDITOR_CLASS);
         input.setText(cell.text.getText());
+        input.claimKeys((key, typed, modifiers) -> key == CgKeyCodes.KEY_RETURN || key == CgKeyCodes.KEY_ESCAPE
+                || key == CgKeyCodes.KEY_UP || key == CgKeyCodes.KEY_DOWN);
         input.onKeyDown.attachListener((element, event) -> {
             if (handleKey(event)) {
                 event.stopPropagation();

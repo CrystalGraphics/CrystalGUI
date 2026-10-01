@@ -85,6 +85,12 @@ final class SurfaceMode implements InputMode {
         return tool != null && tool.keyPressed(key, modifiers, repeat);
     }
 
+    @Override
+    public boolean claimsKey(int key, int modifiers) {
+        Tool tool = modes.current();
+        return tool != null && tool.claimsKey(key, modifiers);
+    }
+
     /**
      * Whether the press landed on something ABOVE the canvas rather than on the canvas itself.
      *

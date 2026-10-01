@@ -368,4 +368,11 @@ public class Slider extends UIElement {
             }
         });
     }
+
+    @Override
+    public boolean claimsKey(int key, char typed, int modifiers) {
+        boolean ours = isEnabled() && (key == CgKeyCodes.KEY_LEFT || key == CgKeyCodes.KEY_RIGHT
+                || key == CgKeyCodes.KEY_HOME || key == CgKeyCodes.KEY_END);
+        return ours || super.claimsKey(key, typed, modifiers);
+    }
 }

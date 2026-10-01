@@ -74,6 +74,11 @@ public final class TreeSelectTool implements Tool {
     }
 
     @Override
+    public boolean claimsKey(int key, int modifiers) {
+        return select.claimsKey(key, modifiers);
+    }
+
+    @Override
     public void activated() {
         select.activated();
     }

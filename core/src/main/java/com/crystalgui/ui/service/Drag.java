@@ -422,6 +422,11 @@ public final class Drag implements InputMode {
     }
 
     @Override
+    public boolean claimsKey(int key, int modifiers) {
+        return key == CgKeyCodes.KEY_ESCAPE;
+    }
+
+    @Override
     public boolean pointerMoved(float x, float y) {
         if (!live) return false;
         if (!activated) {
