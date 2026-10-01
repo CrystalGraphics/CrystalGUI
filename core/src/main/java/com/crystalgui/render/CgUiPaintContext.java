@@ -35,6 +35,7 @@ import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.graph.CgPassRecorder;
 import com.crystalgraphics.render.graph.CgRecording;
+import com.crystalgraphics.render.property.CgSpatialTree;
 import com.crystalgraphics.render.graph.CgTextureDesc;
 import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
@@ -64,6 +65,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.function.Consumer;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -307,9 +309,11 @@ public final class CgUiPaintContext {
      *                     in and this is what puts them back — the stack always describes the target
      *                     being drawn into, which is what lets {@code applyScissorIfNeeded} stay a
      *                     one-argument flip.
+     * @param savedView    the enclosing target's view owner. @see CgPassRecorder#view
+     * @param savedSpatial the node drawing was in, for a target with a space of its own, which sets nodes aside
      */
-    record LayerFrame(CgGraphTexture target, int enclosingWidth, int enclosingHeight, int[] savedScissor,
-                      @Nullable LayerRegion region, int savedClip) {
+    record LayerFrame(CgGraphTexture target, int enclosingWidth, int enclosingHeight, ScissorStack.Saved savedScissor,
+                      @Nullable LayerRegion region, int savedClip, int savedView, int savedSpatial, int savedEffect) {
     }
     
     static final CgFrameBufferFormat LAYER_FORMAT = CgFrameBufferFormat.builder("cgui_layer")
@@ -690,6 +694,11 @@ public final class CgUiPaintContext {
         layerOriginX = 0;
         layerOriginY = 0;
         setClip(0);
+        nodesSuspended = 0;
+        enterNode(0);
+        effectNode = 0;
+        viewOwner = 0;
+        recorder.view(0, 0f, 0f);
         clearPainted();
         this.screenWidth = screenWidth;
         this.screenHeight = screenHeight;
@@ -890,7 +899,8 @@ public final class CgUiPaintContext {
      * Records that a box painted over {@code (left, top)..(right, bottom)} of its own space, drawn through
      * {@code pose} into the bound target. Four corners and a min/max; no allocation.
      */
-    public void notePainted(Matrix4f pose, float left, float top, float right, float bottom) {
+    public void notePainted(Matrix4f drawn, float left, float top, float right, float bottom) {
+        Matrix4f pose = spatialNode == 0 ? drawn : notedScratch.set(drawToTarget()).mul(drawn);
         float m00 = pose.m00(), m10 = pose.m10(), m30 = pose.m30() + layerOriginX;
         float m01 = pose.m01(), m11 = pose.m11(), m31 = pose.m31() + layerOriginY;
         float ax = m00 * left + m10 * top + m30, ay = m01 * left + m11 * top + m31;
@@ -902,6 +912,8 @@ public final class CgUiPaintContext {
         paintedX1 = Math.max(paintedX1, Math.max(Math.max(ax, bx), Math.max(cx, dx)));
         paintedY1 = Math.max(paintedY1, Math.max(Math.max(ay, by), Math.max(cy, dy)));
     }
+
+    private final Matrix4f notedScratch = new Matrix4f();
 
     /** Whether anything noted since {@link #clearPainted} overlaps the screen rect {@code (x0, y0)..(x1, y1)}. */
     boolean paintedOver(int x0, int y0, int x1, int y1) {
@@ -1219,14 +1231,14 @@ public final class CgUiPaintContext {
     }
 
     /** Lifts every clip rect until {@link #resumeScissor}; for a draw into a target the clips do not describe. */
-    int[] suspendScissor() {
+    ScissorStack.Saved suspendScissor() {
         flush();
-        int[] saved = scissorStack.suspend();
+        ScissorStack.Saved saved = scissorStack.suspend();
         reapplyScissorFor(targetHeight());
         return saved;
     }
 
-    void resumeScissor(int[] saved) {
+    void resumeScissor(ScissorStack.Saved saved) {
         flush();
         scissorStack.resume(saved);
         reapplyScissorFor(targetHeight());
@@ -1346,7 +1358,7 @@ public final class CgUiPaintContext {
      * display and correct everywhere else — the worst kind of bug to reproduce.</p>
      */
     public float deviceScale() {
-        Matrix4f m = poseStack.last().pose();
+        Matrix4f m = targetPose();
         float sx = (float) Math.sqrt(m.m00() * m.m00() + m.m01() * m.m01());
         float sy = (float) Math.sqrt(m.m10() * m.m10() + m.m11() * m.m11());
         return Math.max(sx, sy);
@@ -1360,7 +1372,7 @@ public final class CgUiPaintContext {
      * coordinate that lands a shape on it and snapping one axis at a time is meaningless.</p>
      */
     public boolean isPoseAxisAligned() {
-        Matrix4f m = poseStack.last().pose();
+        Matrix4f m = targetPose();
         return Math.abs(m.m01()) < 1e-5f && Math.abs(m.m10()) < 1e-5f;
     }
 
@@ -1385,7 +1397,7 @@ public final class CgUiPaintContext {
      * <p>Returns {@code logicalX} unchanged when {@link #isPoseAxisAligned} is false.</p>
      */
     public float snapXToDevicePixel(float logicalX) {
-        Matrix4f m = poseStack.last().pose();
+        Matrix4f m = targetPose();
         if (!isPoseAxisAligned() || Math.abs(m.m00()) < 1e-6f) return logicalX;
         float device = m.m00() * logicalX + m.m30();
         return (Math.round(device) - m.m30()) / m.m00();
@@ -1393,14 +1405,14 @@ public final class CgUiPaintContext {
 
     /** The Y-axis twin of {@link #snapXToDevicePixel}. */
     public float snapYToDevicePixel(float logicalY) {
-        Matrix4f m = poseStack.last().pose();
+        Matrix4f m = targetPose();
         if (!isPoseAxisAligned() || Math.abs(m.m11()) < 1e-6f) return logicalY;
         float device = m.m11() * logicalY + m.m31();
         return (Math.round(device) - m.m31()) / m.m11();
     }
 
     public boolean isVisible(float x, float y, float w, float h) {
-        Matrix4f m = poseStack.last().pose();
+        Matrix4f m = targetPose();
         float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
         float maxX = -Float.MAX_VALUE, maxY = -Float.MAX_VALUE;
         for (int corner = 0; corner < 4; corner++) {
@@ -1467,7 +1479,7 @@ public final class CgUiPaintContext {
         // and another to leave, whatever it contains.
         CgTrace.add(UiTrace.FRAME, "scissors", 1);
         flush();
-        Matrix4f m = poseStack.last().pose();
+        Matrix4f m = targetPose();
         float physX0 = m.m00() * x + m.m10() * y + m.m30();
         float physY0 = m.m01() * x + m.m11() * y + m.m31();
         float physX1 = m.m00() * (x + w) + m.m10() * (y + h) + m.m30();
@@ -1480,7 +1492,16 @@ public final class CgUiPaintContext {
         int physH = (int) Math.ceil(Math.max(physY0, physY1)) - physY;
         // Stored TOP-LEFT, in the target's physical pixels; the flip to GL's bottom-left happens when the
         // rect is APPLIED, against whichever buffer is bound at that moment. @see ScissorStack#applyScissorIfNeeded
-        scissorStack.pushScissor(physX, physY, Math.max(0, physW), Math.max(0, physH));
+        if (spatialNode == 0) {
+            scissorStack.pushScissor(physX, physY, Math.max(0, physW), Math.max(0, physH));
+        } else {
+            // In the node's space as well, which is what moves with it.
+            Matrix4f p = poseStack.last().pose();
+            float ax = p.m00() * x + p.m10() * y + p.m30(), ay = p.m01() * x + p.m11() * y + p.m31();
+            float bx = p.m00() * (x + w) + p.m10() * (y + h) + p.m30(), by = p.m01() * (x + w) + p.m11() * (y + h) + p.m31();
+            scissorStack.pushScissor(physX, physY, Math.max(0, physW), Math.max(0, physH), spatialNode,
+                    Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by));
+        }
         scissorStack.applyScissorIfNeeded(targetHeight());
     }
 
@@ -1498,23 +1519,6 @@ public final class CgUiPaintContext {
     private void reapplyScissorFor(int targetHeight) {
         if (scissorStack.hasScissor()) scissorStack.applyScissorIfNeeded(targetHeight);
         else scissorStack.clearScissorIfNeeded();
-    }
-
-    /**
-     * The clip stack's rects, moved into a target whose origin is somewhere else.
-     *
-     * <p>A bounded layer's pixel {@code (0,0)} is its region's corner, so an inherited rect describing
-     * the enclosing target describes a different place inside it. Rects are stored top-left and
-     * unflipped precisely so this is a subtraction rather than a re-derivation.</p>
-     */
-    private static int[] shifted(int[] rects, int dx, int dy) {
-        if (dx == 0 && dy == 0 || rects.length == 0) return rects;
-        int[] moved = rects.clone();
-        for (int i = 0; i < moved.length; i += 4) {
-            moved[i] += dx;
-            moved[i + 1] += dy;
-        }
-        return moved;
     }
 
     /**
@@ -1565,8 +1569,8 @@ public final class CgUiPaintContext {
      */
     public boolean pushRoundedClip(float x, float y, float w, float h, float[] rx, float[] ry,
                                    @Nullable float[] border) {
-        int entry = recording.clips().add(clipEntry, poseStack.last().pose(), targetHeight(), x, y, x + w, y + h,
-                rx, ry, border);
+        int entry = recording.clips().add(clipEntry, spatialNode, poseStack.last().pose(), targetHeight(), x, y,
+                x + w, y + h, rx, ry, border);
         if (entry < 0) return false;
         CgTrace.add(UiTrace.FRAME, "clips-rounded", 1);
         setClip(entry);
@@ -1587,6 +1591,136 @@ public final class CgUiPaintContext {
     private void setClip(int entry) {
         clipEntry = entry;
         textRenderer.clip(entry);
+    }
+
+    // ── Spatial nodes ───────────────────────────────────────────────────────
+
+    /** Off with {@code -Dcrystalgui.paint.nodes=false}: every draw baked into its target's pixels, as before nodes. */
+    public static final boolean NODES = !"false".equals(System.getProperty("crystalgui.paint.nodes"));
+
+    /** The spatial and effect nodes draws are recorded in: 0 and 0 for the bound target's own space. */
+    private int spatialNode, effectNode;
+    /** Open targets with a space of their own -- a snapshot, a capture -- inside which no node is made. */
+    private int nodesSuspended;
+    /** Per spatial node of this frame, its world in the frame target's pixels as recorded: a b c d tx ty. */
+    private float[] nodeWorlds = new float[6 * 64];
+    /** The current draw space into the bound target's pixels, and back; recomputed after a node or target change. */
+    private final Matrix4f drawToTarget = new Matrix4f(), targetToDraw = new Matrix4f(), targetPose = new Matrix4f();
+    private boolean drawToTargetValid;
+    /** The view owner of the passes being recorded. @see CgPassRecorder#view */
+    private int viewOwner;
+
+    /**
+     * A spatial node inside the current one, for content whose origin is {@code origin} in the current draw space;
+     * 0 where none can be made -- inside a target with a space of its own, past the tree's size, or with nodes off.
+     * Content entered into it draws in its own space: {@code origin}'s inverse times the draw space's base. A node
+     * moves by the values a compositor gives it, with nothing recorded again.
+     *
+     * <pre>{@code
+     * Matrix4f origin = new Matrix4f(base).mul(box.localToWorld()).translate(-scrollLeft, -scrollTop, 0f);
+     * int content = ctx.addNode(origin, true);
+     * if (content != 0) {
+     *     int outer = ctx.enterNode(content);
+     *     paintChildren(new Matrix4f(origin).invert().mul(base));
+     *     ctx.enterNode(outer);
+     * }
+     * }</pre>
+     *
+     * @param movable whether a compositor moves it: draws under it never batch past draws outside it
+     */
+    public int addNode(Matrix4f origin, boolean movable) {
+        if (!NODES || nodesSuspended > 0 || !frameActive) return 0;
+        CgSpatialTree tree = recording.spatial();
+        if (tree.count() >= CgSpatialTree.MAX_NODES) return 0;
+        float a = origin.m00(), b = origin.m01(), c = origin.m10(), d = origin.m11(), tx = origin.m30(), ty = origin.m31();
+        // In a node, the origin IS the local affine; at 0 it is in the bound target, which sits at the layer origin.
+        if (spatialNode == 0) {
+            tx += layerOriginX;
+            ty += layerOriginY;
+        }
+        int node = tree.add(spatialNode, a, b, c, d, tx, ty, movable);
+        if (nodeWorlds.length < (node + 1) * 6) nodeWorlds = Arrays.copyOf(nodeWorlds, nodeWorlds.length * 2);
+        int o = node * 6;
+        if (spatialNode == 0) {
+            nodeWorlds[o] = a;
+            nodeWorlds[o + 1] = b;
+            nodeWorlds[o + 2] = c;
+            nodeWorlds[o + 3] = d;
+            nodeWorlds[o + 4] = tx;
+            nodeWorlds[o + 5] = ty;
+        } else {
+            int p = spatialNode * 6;
+            float pa = nodeWorlds[p], pb = nodeWorlds[p + 1], pc = nodeWorlds[p + 2], pd = nodeWorlds[p + 3];
+            nodeWorlds[o] = pa * a + pc * b;
+            nodeWorlds[o + 1] = pb * a + pd * b;
+            nodeWorlds[o + 2] = pa * c + pc * d;
+            nodeWorlds[o + 3] = pb * c + pd * d;
+            nodeWorlds[o + 4] = pa * tx + pc * ty + nodeWorlds[p + 4];
+            nodeWorlds[o + 5] = pb * tx + pd * ty + nodeWorlds[p + 5];
+        }
+        return node;
+    }
+
+    /**
+     * Records what is drawn from now on in spatial node {@code node}, one {@link #addNode} made this frame, or 0; the
+     * pose is then in its space. Answers the node it replaces, to enter again after. Needs no flush: a node is stamped
+     * on each instance.
+     */
+    public int enterNode(int node) {
+        int previous = spatialNode;
+        spatialNode = node;
+        drawToTargetValid = false;
+        textRenderer.node(node, effectNode);
+        return previous;
+    }
+
+    /** The spatial node draws are recorded in; 0 for the bound target's own space. */
+    public int spatialNode() {
+        return spatialNode;
+    }
+
+    /** The effect node draws are grouped under; 0 for none. */
+    public int effectNode() {
+        return effectNode;
+    }
+
+    /**
+     * The current draw space into the bound target's pixels: identity at node 0. Read at once; the matrix is this
+     * context's and changes with the node or the target.
+     */
+    public Matrix4f drawToTarget() {
+        validateDrawToTarget();
+        return drawToTarget;
+    }
+
+    /** The bound target's pixels into the current draw space: what a pose set to "the target's pixels" is. */
+    public Matrix4f targetToDraw() {
+        validateDrawToTarget();
+        return targetToDraw;
+    }
+
+    /**
+     * The pose on the stack carried into the bound target's pixels: the pose itself at node 0. What a decision about
+     * pixels -- snapping, culling, a scissor -- asks. Read at once.
+     */
+    public Matrix4f targetPose() {
+        Matrix4f pose = poseStack.last().pose();
+        return spatialNode == 0 ? pose : targetPose.set(drawToTarget()).mul(pose);
+    }
+
+    private void validateDrawToTarget() {
+        if (drawToTargetValid) return;
+        drawToTargetValid = true;
+        if (spatialNode == 0) {
+            drawToTarget.identity();
+            targetToDraw.identity();
+            return;
+        }
+        int o = spatialNode * 6;
+        drawToTarget.identity();
+        drawToTarget.m00(nodeWorlds[o]).m01(nodeWorlds[o + 1]).m10(nodeWorlds[o + 2]).m11(nodeWorlds[o + 3])
+                .m30(nodeWorlds[o + 4] - layerOriginX).m31(nodeWorlds[o + 5] - layerOriginY);
+        drawToTarget.invert(targetToDraw);
     }
 
     /** Nesting depth of the clip stack; 0 when nothing is clipped. Exposed so the top-layer paint
@@ -1991,11 +2125,13 @@ public final class CgUiPaintContext {
         beginLayer(target, true, null);
         // Rest the material on a texture that is never deleted: a sampler property is retained and re-bound later.
         layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, whitePixel));
+        int outerNode = enterNode(0);
         withMaterial(layerBlitMaterial, () -> {
             bindTexture(whitePixel);
             quad().at(0, 0).size(target.getWidth(), target.getHeight()).color(0x0).submit();
             flush();
         });
+        enterNode(outerNode);
         endLayerFbo();
         // The caller's material back on the quad path: withMaterial restored the box model, not what was current.
         currentMaterial = previousMaterial;
@@ -2163,20 +2299,31 @@ public final class CgUiPaintContext {
         // composites the layer runs after the layer's own.
         drain();
         int enclosingWidth = targetWidth(), enclosingHeight = targetHeight();
-        int[] savedScissor = scissorStack.suspend();
+        ScissorStack.Saved savedScissor = scissorStack.suspend();
         if (region != null) {
             layerOriginX += region.x();
             layerOriginY += region.y();
         }
-        layerStack.push(new LayerFrame(target, enclosingWidth, enclosingHeight, savedScissor, region, clipEntry));
+        layerStack.push(new LayerFrame(target, enclosingWidth, enclosingHeight, savedScissor, region, clipEntry,
+                viewOwner, spatialNode, effectNode));
         // A rounded clip is in the enclosing target's pixels; it applies when this layer is composited back.
         setClip(0);
+        // A TARGET WITH A SPACE OF ITS OWN -- a snapshot, a capture -- is drawn in its own pixels, at node 0. A bounded
+        // layer is a piece of the frame: drawing goes on in the current node, and the layer moves with that node.
+        if (region == null) {
+            nodesSuspended++;
+            effectNode = 0;
+            enterNode(0);
+        }
+        viewOwner = spatialNode;
+        recorder.view(viewOwner, layerOriginX, layerOriginY);
+        drawToTargetValid = false;
         int width = target.getWidth(), height = target.getHeight();
 
         // THE INHERITED CLIP, RE-EXPRESSED FOR THIS TARGET. The stack keeps rects top-left and flips them against
         // the target's height, so a layer of another height than its parent clips the same region rather than a
         // band at its bottom. A BOUNDED layer moves the origin as well, so every inherited rect shifts with it.
-        scissorStack.resume(region == null ? savedScissor : shifted(savedScissor, -region.x(), -region.y()));
+        scissorStack.resume(region == null ? savedScissor : savedScissor.shifted(-region.x(), -region.y()));
         reapplyScissorFor(height);
 
         targetConstants(width, height);
@@ -2203,7 +2350,14 @@ public final class CgUiPaintContext {
         if (frame.region() != null) {
             layerOriginX -= frame.region().x();
             layerOriginY -= frame.region().y();
+        } else {
+            nodesSuspended--;
+            effectNode = frame.savedEffect();
+            enterNode(frame.savedSpatial());
         }
+        viewOwner = frame.savedView();
+        recorder.view(viewOwner, layerOriginX, layerOriginY);
+        drawToTargetValid = false;
         targetConstants(frame.enclosingWidth(), frame.enclosingHeight());
         textRenderer.context().updateOrtho(frame.enclosingWidth(), frame.enclosingHeight());
         // The clip stack as the enclosing target expressed it -- a bounded layer shifted every rect
@@ -2322,7 +2476,7 @@ public final class CgUiPaintContext {
      *   <li>Premultiplied, through {@link #layerBlitMaterial}: everything in a layer was drawn over a transparent
      *       clear, so its partially covered pixels carry their alpha in their colour.</li>
      *   <li>V is flipped: a target's row 0 is its bottom, and the UI's is its top.</li>
-     *   <li>At an identity pose: the region is already in the target's pixels.</li>
+     *   <li>The region is in the target's pixels, drawn in the current node, so the composite moves with it.</li>
      * </ul>
      */
     public void blitLayer(CgGraphTexture layer, float opacity, LayerRegion region) {
@@ -2336,7 +2490,7 @@ public final class CgUiPaintContext {
         layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
         withMaterial(layerBlitMaterial, () -> withLayerOpacity(opacity, () -> {
             poseStack.pushPose();
-            poseStack.setIdentity();
+            poseStack.last().pose().set(targetToDraw());
             quad().at(region.x(), region.y()).size(region.width(), region.height())
                   .uv(0f, 1f, u1, v1)
                   .color(getColor()).submit();
@@ -2365,8 +2519,9 @@ public final class CgUiPaintContext {
         flush();
         boolean elsewhere = subtree != currentTarget();
         if (elsewhere) recorder.recordInto(recording, subtree, CgLoad.load(), passConstants);
-        int[] suspendedMask = scissorStack.suspend();
+        ScissorStack.Saved suspendedMask = scissorStack.suspend();
         scissorStack.clearScissorIfNeeded();
+        int outerNode = enterNode(0);
         // AND THE PROJECTION, which must be the subtree's own: a mask quad the size of the layer drawn through another
         // target's ortho is stretched and shifted, and the multiply then zeroes everything it no longer reaches.
         CgMaterial masked = currentMaterial;
@@ -2403,6 +2558,7 @@ public final class CgUiPaintContext {
             currentTexture = null;
             scissorStack.resume(suspendedMask);
             targetConstants(enclosingW, enclosingH);
+            enterNode(outerNode);
         }
         if (elsewhere) recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
         reapplyScissor();

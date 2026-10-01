@@ -95,7 +95,7 @@ public final class BoxPainter {
         if (opacity <= 0f) return;
         // NOTHING OF IT CAN LAND: a row scrolled past its list's edge draws nothing the scissor would keep.
         if (CgUiPaintContext.CULL) {
-            inkThrough(box, base);
+            inkThrough(box, targetOf(ctx, base));
             if (ctx.outsideClip(ink[0], ink[1], ink[2], ink[3])) {
                 CgTrace.add(UiTrace.FRAME, "culled", 1);
                 return;
@@ -180,7 +180,7 @@ public final class BoxPainter {
             else CgTrace.add(UiTrace.FRAME, "retain-dynamic", 1);
             if (keep != null && keep.isFresh()) {
                 // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
-                ctx.notePainted(IDENTITY, region.x(), region.y(), region.x() + region.width(),
+                ctx.notePainted(ctx.targetToDraw(), region.x(), region.y(), region.x() + region.width(),
                         region.y() + region.height());
                 ctx.blitLayer(keep.target(), opacity, region);
                 return;
@@ -196,7 +196,7 @@ public final class BoxPainter {
 
             // The layer's own origin: its pixel (0,0) is the region's corner, so everything drawn
             // inside it -- this box and every descendant -- goes through a base shifted to match.
-            Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
+            Matrix4f inner = layerBase(ctx, base, region);
             pose.last().pose().set(inner).mul(box.localToWorld());
             LayerRegion inside = region.atOrigin();
 
@@ -259,7 +259,7 @@ public final class BoxPainter {
             }
         } else {
             CgTrace.add(UiTrace.FRAME, "layers-mask", 1);
-            Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
+            Matrix4f inner = layerBase(ctx, base, region);
             pose.last().pose().set(inner).mul(box.localToWorld());
             LayerRegion inside = region.atOrigin();
             CgGraphTexture childrenFbo = ctx.beginLayerFbo(region);
@@ -291,8 +291,6 @@ public final class BoxPainter {
 
     /** {@link #notePainted}'s scratch. Read immediately: a tree paints one box at a time. */
     private final Matrix4f painted = new Matrix4f();
-    /** A region already in the target's pixels. */
-    private static final Matrix4f IDENTITY = new Matrix4f();
 
     /**
      * Whether {@code opacity} can be multiplied into this box's own draw rather than flattening it
@@ -339,7 +337,7 @@ public final class BoxPainter {
      * answer for an allocation.</p>
      */
     private LayerRegion regionOf(Box box, CgUiPaintContext ctx, Matrix4f base) {
-        inkThrough(box, base);
+        inkThrough(box, targetOf(ctx, base));
         return ctx.layerRegion(ink[0], ink[1], ink[2], ink[3]);
     }
 
@@ -376,22 +374,80 @@ public final class BoxPainter {
             // space, and the context quantises it once in physical pixels through the pose.
             pushPaddingScissor(box, ctx);
         }
+        // SCROLLED CONTENT IS RECORDED IN ITS OWN SPACE, under a node whose value is the scroll: a compositor scrolls
+        // it by moving the node, with nothing recorded again. A scroll-exempt child does not move with it.
+        // A TRANSLATION BY WHOLE PIXELS, with the scale left in the pose: text snaps to the pixel grid through the pose,
+        // and a node scaling to layout units snapped it to every second pixel at a uiScale of 2.
+        int content = 0;
+        Matrix4f contentBase = base;
+        if (box.isScrollContainer() && (box.maxScrollLeft() > 0f || box.maxScrollTop() > 0f)) {
+            Matrix4f origin = nodeOrigin.set(base).mul(box.localToWorld())
+                    .translate(-box.scrollLeft(), -box.scrollTop(), 0f);
+            float x = Math.round(origin.m30()), y = Math.round(origin.m31());
+            content = ctx.addNode(origin.translation(x, y, 0f), true);
+            if (content != 0) contentBase = new Matrix4f(base).translateLocal(-x, -y, 0f);
+        }
+        int outer = ctx.spatialNode();
         try {
             StackingOrder order = asContext ? box.stackingOrder() : null;
-            if (order != null) paintLifted(order.negative, box, ctx, base);
+            if (order != null) paintLiftedIn(order.negative, box, ctx, content, contentBase, outer);
             List<Box> children = box.children();
             for (int i = 0; i < children.size(); i++) {
                 Box child = children.get(i);
-                if (!child.isZOrdered()) paintBox(child, ctx, base, false);
+                if (child.isZOrdered()) continue;
+                if (content == 0 || child.node().isScrollExempt()) {
+                    paintBox(child, ctx, base, false);
+                } else {
+                    ctx.enterNode(content);
+                    paintBox(child, ctx, contentBase, false);
+                    ctx.enterNode(outer);
+                }
             }
             if (order != null) {
-                paintLifted(order.zero, box, ctx, base);
-                paintLifted(order.positive, box, ctx, base);
-                paintLifted(order.top, box, ctx, base);
+                paintLiftedIn(order.zero, box, ctx, content, contentBase, outer);
+                paintLiftedIn(order.positive, box, ctx, content, contentBase, outer);
+                paintLiftedIn(order.top, box, ctx, content, contentBase, outer);
             }
         } finally {
+            ctx.enterNode(outer);
             if (scissor) ctx.popScissor();
         }
+    }
+
+    /** A context's list painted in its scrolled content's node, when it has one. */
+    private void paintLiftedIn(List<Box> lifted, Box context, CgUiPaintContext ctx, int content, Matrix4f contentBase,
+                               int outer) {
+        if (content == 0) {
+            paintLifted(lifted, context, ctx, contentBase);
+            return;
+        }
+        ctx.enterNode(content);
+        try {
+            paintLifted(lifted, context, ctx, contentBase);
+        } finally {
+            ctx.enterNode(outer);
+        }
+    }
+
+    /** {@link #paintChildren}'s scratch for a scroll node's origin, read by {@code addNode} at once. */
+    private final Matrix4f nodeOrigin = new Matrix4f();
+
+    /**
+     * {@code base} carried into the bound target's pixels: itself at node 0, where draws are already in them. Read
+     * at once; the matrix may be scratch.
+     */
+    private Matrix4f targetOf(CgUiPaintContext ctx, Matrix4f base) {
+        return ctx.spatialNode() == 0 ? base : targetBase.set(ctx.drawToTarget()).mul(base);
+    }
+
+    private final Matrix4f targetBase = new Matrix4f();
+
+    /**
+     * The base drawing inside a layer at {@code region}: shifted to the layer's corner at node 0, where draws are in
+     * the target's pixels, and unchanged under a node, whose layer is placed by the pass's view.
+     */
+    private static Matrix4f layerBase(CgUiPaintContext ctx, Matrix4f base, LayerRegion region) {
+        return ctx.spatialNode() == 0 ? new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f) : base;
     }
 
     private static void pushPaddingScissor(Box box, CgUiPaintContext ctx) {
@@ -407,7 +463,7 @@ public final class BoxPainter {
             Box box = lifted.get(i);
             // CULLED BEFORE THE WALK UP: a context lists every realised row of every virtualised list under it.
             if (CgUiPaintContext.CULL) {
-                inkThrough(box, base);
+                inkThrough(box, targetOf(ctx, base));
                 if (ctx.outsideClip(ink[0], ink[1], ink[2], ink[3])) continue;
             }
             List<Box> clips = clipsBetween(box, context);
@@ -455,7 +511,8 @@ public final class BoxPainter {
         if (region != null && region.isEmpty()) return;
         // A LAYER PAIR PER LIFTED BOX PER ROUNDED ANCESTOR, for corners it was nowhere near: every graph node and
         // port editor inside a rounded window paid two targets and a composite for a clip a scissor makes exactly.
-        boolean elided = !square && !CgUiPaintContext.LEGACY_LAYERS && missesRoundedCorners(clip, style, region, base);
+        boolean elided = !square && !CgUiPaintContext.LEGACY_LAYERS
+                && missesRoundedCorners(clip, style, region, targetOf(ctx, base));
         boolean shaped = false;
         if (!square && !elided && clipsAsShape(clip, style)) {
             pose.pushPose();
@@ -473,7 +530,7 @@ public final class BoxPainter {
             boolean toRegion = elided || shaped;
             if (toRegion) {
                 if (elided) CgTrace.add(UiTrace.FRAME, "masks-elided", 1);
-                pose.last().pose().identity();
+                pose.last().pose().set(ctx.targetToDraw());
                 ctx.pushScissor(region.x(), region.y(), region.width(), region.height());
             }
             pose.popPose();
@@ -487,7 +544,7 @@ public final class BoxPainter {
             return;
         }
         CgTrace.add(UiTrace.FRAME, "layers-mask", 1);
-        Matrix4f inner = new Matrix4f(base).translateLocal(-region.x(), -region.y(), 0f);
+        Matrix4f inner = layerBase(ctx, base, region);
         LayerRegion inside = region.atOrigin();
         CgGraphTexture content = ctx.beginLayerFbo(region);
         paintClipped(lifted, clips, at - 1, ctx, inner);
@@ -693,7 +750,7 @@ public final class BoxPainter {
 
     /** Whether the current pose keeps a rect a rect on screen, so a scissor can cut it. */
     private static boolean axisAligned(CgUiPaintContext ctx) {
-        Matrix4f m = ctx.getPoseStack().last().pose();
+        Matrix4f m = ctx.targetPose();
         return m.m10() == 0f && m.m01() == 0f;
     }
 
