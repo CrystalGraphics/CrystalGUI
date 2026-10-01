@@ -5,6 +5,7 @@ import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.InkOverflow;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.canvas.WorldRect;
@@ -279,6 +280,12 @@ public class NodeWireLayer extends UIElement {
     }
 
     // ── Paint ───────────────────────────────────────────────────────────────
+
+    /** Wires go wherever the nodes are, which this box does not follow: the painter's cull must not judge them by it. */
+    @Override
+    public InkOverflow inkOverflow() {
+        return InkOverflow.UNBOUNDED;
+    }
 
     @Override
     public void paintContent(CgUiPaintContext ctx, Box box) {
