@@ -751,35 +751,52 @@ public class CgUiDesktopScene
 
     /** {@code -Dcrystalgui.harness.desktop.minimise.window=<title>} picks the window; the active one otherwise. */
     private static final String MINIMISE_WINDOW = System.getProperty("crystalgui.harness.desktop.minimise.window");
-    /** {@code -Dcrystalgui.harness.desktop.minimise.action=maximise} maximises and restores instead. */
+    /**
+     * {@code -Dcrystalgui.harness.desktop.minimise.action=maximise} maximises and restores twice instead,
+     * photographing nothing: the trace holds only the second cycle, so the exit report is two warm gestures alone.
+     */
     private static final boolean MAXIMISE = "maximise".equals(System.getProperty("crystalgui.harness.desktop.minimise.action"));
 
     private void driveMinimiseShot(HarnessContext ctx) {
-        switch ((int) driver.presentedFrames()) {
-            case 99 -> {
-                minimiseTarget = driver.ask(() -> {
-                    for (WindowFrame window : desktop.windows()) {
-                        if (window.getTitle().equals(MINIMISE_WINDOW)) return window;
-                    }
-                    return desktop.activeWindow();
-                });
-                ctx.getArtifactService().requestCapture("minimise-before");
-            }
-            case 100 -> {
-                if (minimiseTarget != null) driver.run(MAXIMISE ? minimiseTarget::maximize : minimiseTarget::minimize);
-            }
+        int n = (int) driver.presentedFrames();
+        if (n == 99) {
+            minimiseTarget = driver.ask(() -> {
+                for (WindowFrame window : desktop.windows()) {
+                    if (window.getTitle().equals(MINIMISE_WINDOW)) return window;
+                }
+                return desktop.activeWindow();
+            });
+        }
+        if (minimiseTarget == null) return;
+        if (MAXIMISE) {
+            driveMaximise(n);
+            return;
+        }
+        switch (n) {
+            case 99 -> ctx.getArtifactService().requestCapture("minimise-before");
+            case 100 -> driver.run(minimiseTarget::minimize);
             case 106 -> ctx.getArtifactService().requestCapture("minimise-mid");
             case 150 -> ctx.getArtifactService().requestCapture("minimised");
-            case 160 -> {
-                if (minimiseTarget != null) {
-                    driver.run(() -> {
-                        if (MAXIMISE) minimiseTarget.restore();
-                        else minimiseTarget.show(true);
-                    });
-                }
-            }
+            case 160 -> driver.run(() -> minimiseTarget.show(true));
             case 166 -> ctx.getArtifactService().requestCapture("restore-mid");
             case 230 -> ctx.getArtifactService().requestCapture("restored");
+            default -> { }
+        }
+    }
+
+    /**
+     * Maximises and restores twice, tracing only the second, warm cycle: the first reveals text the glyph cache has
+     * never drawn, which is a cost paid once rather than what a repeated gesture feels like.
+     */
+    private void driveMaximise(int n) {
+        switch (n) {
+            case 100, 220 -> driver.run(minimiseTarget::maximize);
+            case 160, 280 -> driver.run(minimiseTarget::restore);
+            case 210 -> CgTrace.clear();
+            case 340 -> {
+                CgTrace.disable("crystalgui");
+                CgTrace.disable("crystalgraphics");
+            }
             default -> { }
         }
     }
