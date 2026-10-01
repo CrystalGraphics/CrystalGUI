@@ -5,9 +5,9 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -84,20 +84,29 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
             }
             """;
 
+    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
+    private DocumentDriver<Void> driver;
+    private DocumentDriver.Painter<Void> painter;
+
     @Override
     public void init(HarnessContext ctx) {
         UIElement root = createTextDemo();
-        this.document = new UIDocument().markFrameThread();
-        this.document.boxes().setUiScale(SCALE);
-        UIElement sceneRoot = root;
-        // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
-        // root and took the window's size; here the DOCUMENT is the root and this is an
-        // ordinary child, which sizes to its content -- so without this the scene lays out
-        // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
-        StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).heightPercent(100f));
-        this.document.append(sceneRoot);
-        this.document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
+        document = new UIDocument();
+        driver = DocumentDriver.attach(document);
+        painter = DocumentDriver.whole(document, null, context -> context.text().draw().at(0, 0)
+                .text(document.boxes().uiScale() + "x").font(context.getFont().atSize(32)).submit());
+        driver.run(() -> {
+            this.document.boxes().setUiScale(SCALE);
+            UIElement sceneRoot = root;
+            // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
+            // root and took the window's size; here the DOCUMENT is the root and this is an
+            // ordinary child, which sizes to its content -- so without this the scene lays out
+            // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
+            StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
+                    l -> l.widthPercent(100f).heightPercent(100f));
+            this.document.append(sceneRoot);
+            this.document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
+        });
     }
 
     private UIElement createTextDemo() {
@@ -158,22 +167,12 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
     public void render(HarnessContext ctx, FrameInfo frame) {
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
-        // SURFACE pixels in, LOGICAL units to lay out in -- the scale lives on the box
-        // tree's root transform, so this is the only place the two spaces meet.
-        document.frame(frame.getDeltaTime(), w / SCALE, h / SCALE);
-
-        CgUiPaintContext paintContext = document.paintContext();
-        paintContext.beginFrame(w, h);
-        document.paint(paintContext);
-        paintContext.endFrame();
-        var context = document.paintContext();
-        context.text().draw().at(0, 0).text(document.boxes().uiScale() + "x").font(context.getFont().atSize(32)).submit();
-        // Between frames this draws at once, on top; left queued it would flush inside the next frame's recording.
-        context.flush();
+        driver.frame(frame.getDeltaTime(), w, h, painter);
     }
 
     @Override
     public void dispose() {
+        driver.close();
         document = null;
     }
 
@@ -194,6 +193,10 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
 
     @Override
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+        return driver.offerKey(event, () -> handleKey(event));
+    }
+
+    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
         if (event.pressed() && !event.repeat()) {
             switch(event.key()) {
                 case CgKeyCodes.KEY_SPACE:
@@ -213,6 +216,10 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
 
     @Override
     public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
+        return driver.offerMouse(event, () -> handleMouse(event));
+    }
+
+    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
         return document.input().consumeMouseEvent(event);
     }
 }

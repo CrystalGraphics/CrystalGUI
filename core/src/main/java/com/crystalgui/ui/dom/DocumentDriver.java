@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -101,15 +102,24 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     /**
      * The whole document at its box tree's scale: a host with nothing to add to the document's own frame.
      *
-     * <p>{@code afterFrame} runs between the document's frame and its paint, on the document; null for none.</p>
+     * <pre>{@code
+     * DocumentDriver.whole(document);
+     * DocumentDriver.whole(document, this::refreshReadout, null);                // after the frame, before paint
+     * DocumentDriver.whole(document, null, ctx -> ctx.text().draw()...submit()); // over the document, in its frame
+     * }</pre>
+     *
+     * <p>{@code afterFrame} runs between the document's frame and its paint, and {@code overlay} draws after the
+     * document in the same frame; both on the document, null for none.</p>
      */
-    public static <F> Painter<F> whole(UIDocument document, @Nullable Runnable afterFrame) {
+    public static <F> Painter<F> whole(UIDocument document, @Nullable Runnable afterFrame,
+                                       @Nullable Consumer<CgUiPaintContext> overlay) {
         return new Painter<>() {
             @Override
             public void paint(float deltaSeconds, int width, int height) {
                 CgUiPaintContext ctx = frame(deltaSeconds, width, height);
                 ctx.beginFrame(width, height);
                 document.paint(ctx);
+                if (overlay != null) overlay.accept(ctx);
                 ctx.endFrame();
             }
 
@@ -118,6 +128,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
                 CgUiPaintContext ctx = frame(deltaSeconds, width, height);
                 ctx.recordFrame(width, height);
                 document.paint(ctx);
+                if (overlay != null) overlay.accept(ctx);
                 return ctx.seal();
             }
 
@@ -131,7 +142,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     }
 
     public static <F> Painter<F> whole(UIDocument document) {
-        return whole(document, null);
+        return whole(document, null, null);
     }
 
     private final UIDocument document;
@@ -149,6 +160,8 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     private float pendingDelta;
     /** Commits built so far. The sequence's. */
     private long commits;
+    /** Host frames that drew the document. Render thread. */
+    private long presented;
 
     private DocumentDriver(UIDocument document, Mode mode, String name) {
         this.document = document;
@@ -295,6 +308,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     public boolean frame(float deltaSeconds, int width, int height, Painter<F> painter) {
         if (compositor == null) {
             run(() -> painter.paint(deltaSeconds, width, height));
+            presented++;
             return true;
         }
         // Made here, on the render thread, before the sequence first records: fonts and the text renderer.
@@ -304,6 +318,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         boolean shown = compositor.present(width, height) != null;
         float delta = pendingDelta;
         if (compositor.requestFrame(() -> commit(painter, delta, width, height))) pendingDelta = 0f;
+        if (shown) presented++;
         return shown;
     }
 
@@ -320,13 +335,26 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         return shown == null ? null : shown.facts();
     }
 
+    /**
+     * How many host frames have drawn the document: the frame count a capture or a script waits on, since
+     * asynchronously the first frames present nothing. Render thread.
+     */
+    public long presentedFrames() {
+        return presented;
+    }
+
     /** Whether a frame has been committed: asynchronously, whether there is anything to present yet. */
     public boolean hasCommitted() {
         return compositor == null || compositor.active() != null;
     }
 
-    /** Stops the sequence. The document is not touched; dispose it first, through {@link #run}. */
+    /**
+     * Waits for the frame being recorded, then stops the sequence: after it returns nothing of the document runs, so
+     * the host may free what its frames use. The document is not touched; dispose it first, through {@link #run}.
+     */
     public void close() {
-        if (sequence != null) sequence.close();
+        if (sequence == null) return;
+        sequence.runNow(() -> { });
+        sequence.close();
     }
 }
