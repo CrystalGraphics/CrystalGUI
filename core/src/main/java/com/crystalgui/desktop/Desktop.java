@@ -8,6 +8,7 @@ import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.box.BoxPainter;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiFrame;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
@@ -333,7 +334,7 @@ public class Desktop extends UIElement implements DataProvider {
     @Nullable
     private UIDocument suspendedIn;
     @Nullable
-    private ScreenOverlay screenOverlay;
+    private volatile ScreenOverlay screenOverlay;
 
     public static final String LIVE_CLASS = "__live__";
 
@@ -1640,9 +1641,18 @@ public class Desktop extends UIElement implements DataProvider {
      * @param anyScreenIsUp some GuiScreen is up, ours or a foreign one
      */
     public DesktopPresentation presentation(boolean ourScreenIsUp, boolean anyScreenIsUp) {
+        return presentation(ourScreenIsUp, anyScreenIsUp, parent() != null, hasPinnedWindows());
+    }
+
+    /**
+     * {@link #presentation(boolean, boolean)} from facts about a desktop rather than the desktop: what a host asks of a
+     * document that runs on another thread, from what it last committed.
+     */
+    public static DesktopPresentation presentation(boolean ourScreenIsUp, boolean anyScreenIsUp, boolean attached,
+                                                   boolean hasPinnedWindows) {
         if (ourScreenIsUp) return DesktopPresentation.DESKTOP;
-        if (parent() == null) return DesktopPresentation.NONE;
-        if (!hasPinnedWindows()) return DesktopPresentation.NONE;
+        if (!attached) return DesktopPresentation.NONE;
+        if (!hasPinnedWindows) return DesktopPresentation.NONE;
         return anyScreenIsUp ? DesktopPresentation.OVERLAY : DesktopPresentation.HUD;
     }
 
@@ -1668,6 +1678,37 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public void paint(DesktopPresentation presentation, float deltaSeconds,
                       int surfaceWidth, int surfaceHeight) {
+        UIDocument document = prepare(presentation, deltaSeconds, surfaceWidth, surfaceHeight);
+        if (document == null) return;
+        CgUiPaintContext ctx = document.paintContext();
+        ctx.beginFrame(surfaceWidth, surfaceHeight);
+        paintInto(presentation, document, ctx);
+        ctx.endFrame();
+    }
+
+    /**
+     * {@link #paint}, recorded rather than drawn: the frame {@code UiGpu.present} draws later, on the render thread.
+     * Null when the presentation paints nothing. On the document's own thread.
+     *
+     * <pre>{@code
+     * UiFrame frame = desktop.record(presentation, delta, width, height);   // the document's sequence
+     * if (frame != null) UiGpu.present(frame);                              // the render thread
+     * }</pre>
+     */
+    @Nullable
+    public UiFrame record(DesktopPresentation presentation, float deltaSeconds, int surfaceWidth, int surfaceHeight) {
+        UIDocument document = prepare(presentation, deltaSeconds, surfaceWidth, surfaceHeight);
+        if (document == null) return null;
+        CgUiPaintContext ctx = document.paintContext();
+        ctx.recordFrame(surfaceWidth, surfaceHeight);
+        paintInto(presentation, document, ctx);
+        return ctx.seal();
+    }
+
+    /** Presence, then the document's frame and the overlay's regions; null when there is nothing to paint. */
+    @Nullable
+    private UIDocument prepare(@Nullable DesktopPresentation presentation, float deltaSeconds,
+                               int surfaceWidth, int surfaceHeight) {
         // Whether the compositor owns the surface, which is a different question from whether it holds a
         // window. Asked before the returns below so the answer is never a stale one.
         boolean whole = presentation != null && presentation.paintsWholeDesktop();
@@ -1675,10 +1716,10 @@ public class Desktop extends UIElement implements DataProvider {
             wholeSurface = whole;
             syncPresence();
         }
-        if (presentation == null || !presentation.paintsAnything()) return;
+        if (presentation == null || !presentation.paintsAnything()) return null;
         UIDocument document = document();
-        if (document == null) return;
-        if (!presentation.paintsWholeDesktop() && parent() == null) return;
+        if (document == null) return null;
+        if (!presentation.paintsWholeDesktop() && parent() == null) return null;
 
         // SURFACE pixels in, LOGICAL units to lay out in: the scale lives on the box tree's root
         // transform and nowhere else, so this is the only division and painting picks it up by
@@ -1687,23 +1728,23 @@ public class Desktop extends UIElement implements DataProvider {
         document.frame(deltaSeconds, surfaceWidth / scale, surfaceHeight / scale);
         // What the router answers a host from until the next frame. Only over another UI's screen is it asked.
         if (screenOverlay != null && !presentation.paintsWholeDesktop()) screenOverlay.commit();
+        return document;
+    }
 
-        CgUiPaintContext ctx = document.paintContext();
-        ctx.beginFrame(surfaceWidth, surfaceHeight);
+    private void paintInto(DesktopPresentation presentation, UIDocument document, CgUiPaintContext ctx) {
         if (presentation.paintsWholeDesktop()) {
             document.paint(ctx);
-        } else {
-            // THE WINDOW LAYER, not the desktop: the taskbar is chrome for a desktop that is not up,
-            // and a strip listing windows most of which are hidden is not something to put over a
-            // game. The top layer is skipped for the same reason unless the presentation asks.
-            Box layer = windowLayer().box();
-            if (layer != null) BoxPainter.paintSubtree(layer, ctx);
-            if (presentation.paintsTopLayer()) {
-                Box top = document.hasTopLayerContent() ? document.topLayer() : null;
-                if (top != null) BoxPainter.paintSubtree(top, ctx);
-            }
+            return;
         }
-        ctx.endFrame();
+        // THE WINDOW LAYER, not the desktop: the taskbar is chrome for a desktop that is not up,
+        // and a strip listing windows most of which are hidden is not something to put over a
+        // game. The top layer is skipped for the same reason unless the presentation asks.
+        Box layer = windowLayer().box();
+        if (layer != null) BoxPainter.paintSubtree(layer, ctx);
+        if (presentation.paintsTopLayer()) {
+            Box top = document.hasTopLayerContent() ? document.topLayer() : null;
+            if (top != null) BoxPainter.paintSubtree(top, ctx);
+        }
     }
 
     private final ApplicationRegistry applications = new ApplicationRegistry(this);

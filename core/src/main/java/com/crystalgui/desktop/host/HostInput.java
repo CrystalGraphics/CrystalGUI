@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  *
  * <p>A document on the host's thread is handed each event and the answer is what dispatch decided. A document on its
  * own {@link UiSequence} is handed it in lockstep ({@link UiSequence#runNow}), with the same answer. With
- * {@code -Dcrystalgui.ui.asyncInput=true} it is posted instead and the answer is "ours"; a key its dispatch then
+ * {@code -Dcrystalgui.ui.async=true} it is posted instead and the answer is "ours"; a key its dispatch then
  * leaves is queued for {@link #pollUnhandledKey}, Chromium's {@code UnhandledKeyboardEvent}, and the host gives it to
  * the game a frame late. Every key goes through the sequence while one is on it, so the game never sees keys out of
  * order.</p>
@@ -37,14 +37,14 @@ public final class HostInput implements CgSystemInput.Mouse, CgSystemInput.Keybo
      * Whether a document on a sequence is handed input by posting rather than in lockstep. Off until recording leaves
      * the render thread: in lockstep the host gets dispatch's own answer, and nothing needs giving back to the game.
      */
-    static final boolean ASYNC_DEFAULT = Boolean.getBoolean("crystalgui.ui.asyncInput");
+    static final String ASYNC = "crystalgui.ui.async";
 
     private final Supplier<UIDocument> document;
     private final boolean async;
     private final Queue<CgSystemInput.Keyboard.Event> unhandledKeys = new ConcurrentLinkedQueue<>();
 
     HostInput(Supplier<UIDocument> document) {
-        this(document, ASYNC_DEFAULT);
+        this(document, Boolean.getBoolean(ASYNC));
     }
 
     HostInput(Supplier<UIDocument> document, boolean async) {
@@ -85,6 +85,11 @@ public final class HostInput implements CgSystemInput.Mouse, CgSystemInput.Keybo
         if (!async) return inLockstep(sequence, () -> target.input().consumeComposition(text, caret));
         sequence.execute(() -> target.input().consumeComposition(text, caret));
         return true;
+    }
+
+    /** Whether a document on a sequence is handed input by posting. */
+    boolean isAsync() {
+        return async;
     }
 
     private static boolean inLockstep(UiSequence sequence, BooleanSupplier dispatch) {

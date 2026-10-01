@@ -5,6 +5,7 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.api.render.CgRenderPipeline;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
@@ -441,6 +442,14 @@ public final class CgUiScreen extends Screen {
         return window != null && CgUiInput.character(HostSession.session().input(), codePoint);
     }
     //?}
+
+    /**
+     * A key the desktop dispatched on its own thread and left, handed back a frame late: what this screen does with
+     * one nothing wanted. @see #keyPressed
+     */
+    void keyLeftByDesktop(CgSystemInput.Keyboard.Event key) {
+        if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) onClose();
+    }
 
     /** @see #keyPressed */
     @Override

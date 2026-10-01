@@ -1,0 +1,80 @@
+package com.crystalgui.desktop.host;
+
+import com.crystalgui.core.async.UiSequence;
+import com.crystalgui.render.UiGpu;
+
+import javax.annotation.Nullable;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
+
+/**
+ * The render thread's side of a document on a sequence: it draws the newest committed frame, or the last one again, and
+ * asks for the next with at most one in flight (plan engine-threaded-ui §2.4).
+ *
+ * <pre>{@code
+ * // the render thread, once a host frame, inside the host's draw bracket
+ * UiCommit shown = compositor.present(width, height);
+ * compositor.requestFrame(() -> recordOnTheSequence());   // runs on the sequence; its commit shows next frame
+ * }</pre>
+ *
+ * <ul>
+ *   <li>A frame committed is presented exactly once; a host frame with nothing new re-presents the last
+ *       ({@link UiGpu#presentAgain}), so a busy document shows its previous picture rather than nothing.</li>
+ *   <li>{@link #requestFrame} refuses while a frame is in flight: the caller carries its delta to the next request.</li>
+ * </ul>
+ */
+public final class SurfaceCompositor {
+
+    private final UiSequence sequence;
+    private final AtomicReference<UiCommit> pending = new AtomicReference<>();
+    private volatile boolean inFlight;
+    @Nullable
+    private UiCommit active;
+
+    public SurfaceCompositor(UiSequence sequence) {
+        this.sequence = sequence;
+    }
+
+    /**
+     * Draws the newest commit onto the bound host target, or the last one again when nothing new arrived, and answers
+     * the commit shown. Render thread. Null until the first commit.
+     */
+    @Nullable
+    public UiCommit present(int width, int height) {
+        UiCommit fresh = pending.getAndSet(null);
+        if (fresh != null) {
+            active = fresh;
+            if (fresh.frame() != null) UiGpu.present(fresh.frame());
+        } else if (active != null && active.frame() != null) {
+            UiGpu.presentAgain(width, height);
+        }
+        return active;
+    }
+
+    /** The commit last presented, without drawing anything; null until the first. */
+    @Nullable
+    public UiCommit active() {
+        UiCommit fresh = pending.get();
+        return fresh != null ? fresh : active;
+    }
+
+    /**
+     * Posts {@code work} to the sequence, whose answer is presented by a later {@link #present}. Render thread.
+     *
+     * @return false, and nothing posted, while the previous frame is in flight or not yet presented: a frame dropped
+     *         unpresented never gives its buffers back
+     */
+    public boolean requestFrame(Supplier<UiCommit> work) {
+        if (inFlight || pending.get() != null) return false;
+        inFlight = true;
+        sequence.execute(() -> {
+            try {
+                UiCommit commit = work.get();
+                if (commit != null) pending.set(commit);
+            } finally {
+                inFlight = false;
+            }
+        });
+        return true;
+    }
+}

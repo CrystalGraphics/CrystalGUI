@@ -1,5 +1,7 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.render.UiFrame;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.window.DesktopPresentation;
@@ -124,6 +126,43 @@ public final class HostSession {
     @Nullable
     private UiSequence sequence;
 
+    /**
+     * Whether the sequence records on its own, with the render thread presenting what it committed
+     * ({@code -Dcrystalgui.ui.async=true}, which implies the sequence). Off until recording text off the render thread
+     * is safe (plan engine-threaded-ui §5.1).
+     */
+    private static final String ASYNC = HostInput.ASYNC;
+
+    /** The render thread's side of an asynchronous document; null otherwise. */
+    @Nullable
+    private SurfaceCompositor compositor;
+
+    /** Delta the host has passed since the frame in flight was asked for. Render thread. */
+    private float pendingDelta;
+
+    /** Commits built so far. The sequence's. */
+    private long commits;
+
+    /** What the document is told about the host: the render thread's answers, copied at each entry. */
+    @Nullable
+    private HostSnapshot snapshot;
+
+    /**
+     * Posts {@code work} to the document's sequence when it records on its own, or runs it in lockstep, or here when
+     * there is no sequence. For an entry whose result the host does not wait for.
+     */
+    private void post(Runnable work) {
+        UiSequence owner = sequence;
+        if (compositor != null && owner != null) owner.execute(work);
+        else onDocument(work);
+    }
+
+    /** Copies the host's answers for the document. Render thread, at every host entry. */
+    private void refreshHost() {
+        HostSnapshot copy = snapshot;
+        if (copy != null) copy.refresh();
+    }
+
     /** Runs {@code work} on the document's sequence in lockstep, or here when it has none. */
     private void onDocument(Runnable work) {
         UiSequence owner = sequence;
@@ -136,10 +175,10 @@ public final class HostSession {
     private WindowFrame primaryWindow;
 
     /** Consumed by {@link #shown()}, never merely read. @see #requestApplication() */
-    private boolean raiseOnShow;
+    private volatile boolean raiseOnShow;
 
     /** A launch was wanted and could not be done. Cleared once there is a window. @see #frame(float) */
-    private boolean launchPending;
+    private volatile boolean launchPending;
 
     /** What the last frame saw, so a screen opening or closing is noticed exactly once. */
     private boolean foreignScreenWasUp;
@@ -201,9 +240,10 @@ public final class HostSession {
      * <p>Safe to call on a resize, which is how a game re-initialises a screen.</p>
      */
     public void shown() {
+        refreshHost();
         if (host == null) build();
-        else onDocument(host::shown);
-        onDocument(this::bringForward);
+        else post(host::shown);
+        post(this::bringForward);
     }
 
     /**
@@ -216,7 +256,7 @@ public final class HostSession {
     public void hidden() {
         launchPending = false;
         DesktopHost built = host;
-        if (built != null) onDocument(built::hidden);
+        if (built != null) post(built::hidden);
     }
 
     /**
@@ -228,7 +268,8 @@ public final class HostSession {
     public void frame(float deltaSeconds) {
         DesktopHost built = host;
         if (built == null) return;
-        onDocument(() -> {
+        refreshHost();
+        post(() -> {
             if (launchPending) bringForward();
             built.frame(deltaSeconds);
         });
@@ -256,6 +297,7 @@ public final class HostSession {
         });
         if (sequence != null) sequence.close();
         sequence = null;
+        compositor = null;
         primary = null;
         primaryWindow = null;
         host = null;
@@ -323,6 +365,10 @@ public final class HostSession {
     public float[] textInputArea() {
         UIDocument document = document();
         if (document == null) return null;
+        if (compositor != null) {
+            UiCommit shown = compositor.active();
+            return shown == null ? null : shown.textInputArea();
+        }
         if (sequence == null) return document.input().textInputArea();
         float[][] area = new float[1][];
         sequence.runNow(() -> area[0] = document.input().textInputArea());
@@ -377,10 +423,34 @@ public final class HostSession {
      * fires no such event, so the close is never seen and ownership survives into the next screen.</p>
      */
     public DesktopPresentation presentation(PaintHost host) {
+        if (compositor != null) return presentationFromCommit(host);
         if (sequence == null) return presentationOnDocument(host);
         DesktopPresentation[] answer = new DesktopPresentation[1];
         sequence.runNow(() -> answer[0] = presentationOnDocument(host));
         return answer[0];
+    }
+
+    /** {@link #presentationOnDocument}, from what the document last committed rather than from its tree. */
+    private DesktopPresentation presentationFromCommit(PaintHost host) {
+        Desktop desktop = desktop();
+        if (desktop == null) return DesktopPresentation.NONE;
+        boolean ours = host.ownScreenUp();
+        boolean any = host.anyScreenUp();
+        noteForeignScreen(desktop, any && !ours);
+        UiCommit shown = compositor.active();
+        // Before the first commit the desktop is attached and holds nothing pinned, as it was built.
+        return Desktop.presentation(ours, any, shown == null || shown.attached(), shown != null && shown.pinned());
+    }
+
+    private void noteForeignScreen(Desktop desktop, boolean foreignUp) {
+        if (foreignUp == foreignScreenWasUp) return;
+        foreignScreenWasUp = foreignUp;
+        // Nullable: screenOverlay() answers null while the compositor has no document, which is what
+        // a closed UI leaves behind -- desktop() still hands back the Desktop. Thrown from a render
+        // hook it takes the rest of the game's overlay chain with it. The missed transition is owed
+        // to nobody: a fresh overlay is built when a document appears.
+        ScreenOverlay overlay = desktop.screenOverlay();
+        if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
     }
 
     private DesktopPresentation presentationOnDocument(PaintHost host) {
@@ -390,16 +460,7 @@ public final class HostSession {
         boolean ours = host.ownScreenUp();
         boolean any = host.anyScreenUp();
 
-        boolean foreignUp = any && !ours;
-        if (foreignUp != foreignScreenWasUp) {
-            foreignScreenWasUp = foreignUp;
-            // Nullable: screenOverlay() answers null while the compositor has no document, which is what
-            // a closed UI leaves behind -- desktop() still hands back the Desktop. Thrown from a render
-            // hook it takes the rest of the game's overlay chain with it. The missed transition is owed
-            // to nobody: a fresh overlay is built when a document appears.
-            ScreenOverlay overlay = desktop.screenOverlay();
-            if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
-        }
+        noteForeignScreen(desktop, any && !ours);
         return desktop.presentation(ours, any);
     }
 
@@ -430,7 +491,8 @@ public final class HostSession {
         if (grabbed || !host.anyScreenUp()) return false;
         ScreenOverlay overlay = screenOverlay();
         if (overlay == null) return false;
-        if (sequence == null) return overlay.offerMouse(xPx, yPx, button, pressed, wheel);
+        // Asynchronously the overlay answers from its committed regions and posts what it delivers.
+        if (sequence == null || compositor != null) return overlay.offerMouse(xPx, yPx, button, pressed, wheel);
         boolean[] taken = new boolean[1];
         sequence.runNow(() -> taken[0] = overlay.offerMouse(xPx, yPx, button, pressed, wheel));
         return taken[0];
@@ -486,11 +548,76 @@ public final class HostSession {
     }
 
     private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
+        if (compositor != null) {
+            paintFromCommit(arm, host, deltaRead, deltaSeconds);
+            return;
+        }
         if (sequence == null) {
             paintOnDocument(arm, host, deltaRead, deltaSeconds);
             return;
         }
         sequence.runNow(() -> paintOnDocument(arm, host, deltaRead, deltaSeconds));
+    }
+
+    /**
+     * The asynchronous paint: draws what the document last committed, hands the game the keys it left, and asks for the
+     * next frame, recorded on the sequence while this one shows.
+     */
+    private void paintFromCommit(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
+        Desktop desktop = desktop();
+        UIDocument document = document();
+        if (desktop == null || document == null) return;
+        DesktopPresentation now = presentationFromCommit(host);
+        if (now != arm) return;
+        if (!deltaRead) deltaSeconds = frameDelta();
+        pendingDelta += deltaSeconds;
+        refreshHost();
+        returnUnhandledKeys(desktop);
+        int width = services.surfaceWidth();
+        int height = services.surfaceHeight();
+        // Built here, on the render thread, before the sequence first records: fonts and the text renderer.
+        document.paintContext();
+
+        host.beforePaint();
+        host.enter();
+        try {
+            if (compositor.present(width, height) != null) painted = true;
+            float delta = pendingDelta;
+            if (compositor.requestFrame(() -> recordCommit(desktop, document, now, delta, width, height))) {
+                pendingDelta = 0f;
+            }
+        } catch (RuntimeException | LinkageError failed) {
+            CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
+            post(desktop::exitHudMode);
+        } finally {
+            host.leave();
+        }
+    }
+
+    /** One frame on the sequence: the document's frame, recorded, with the facts the host will ask about. */
+    private UiCommit recordCommit(Desktop desktop, UIDocument document, DesktopPresentation presentation,
+                                  float deltaSeconds, int width, int height) {
+        UiFrame frame = null;
+        try {
+            frame = desktop.record(presentation, deltaSeconds, width, height);
+        } catch (RuntimeException | LinkageError failed) {
+            CrystalGuiCore.LOGGER.error("[cgui] recording the desktop failed; leaving HUD mode", failed);
+            desktop.exitHudMode();
+        }
+        return new UiCommit(frame, desktop.parent() != null, desktop.hasPinnedWindows(),
+                document.input().textInputArea(), ++commits);
+    }
+
+    /** Every key the document dispatched and left since the last frame, to the game, in order. Render thread. */
+    private void returnUnhandledKeys(Desktop desktop) {
+        for (CgSystemInput.Keyboard.Event key; (key = input.pollUnhandledKey()) != null; ) {
+            services.reinjectKey(key);
+        }
+        ScreenOverlay overlay = desktop.screenOverlay();
+        if (overlay == null) return;
+        for (CgSystemInput.Keyboard.Event key; (key = overlay.input().pollUnhandledKey()) != null; ) {
+            services.reinjectKey(key);
+        }
     }
 
     private void paintOnDocument(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds) {
@@ -526,7 +653,8 @@ public final class HostSession {
 
     private void build() {
         trace("begin");
-        DesktopHost built = DesktopHost.create(services);
+        snapshot = new HostSnapshot(services);
+        DesktopHost built = DesktopHost.create(snapshot);
         // WHERE A SERVER'S WINDOW IS OFFERED FIRST. An application with places of its own takes what it
         // recognises and hands the rest back, so a client with it closed still gets every window. A
         // supplier because the application is built later than this, and on demand.
@@ -538,11 +666,14 @@ public final class HostSession {
         });
         built.document().addClass(ROOT_CLASS);
         host = built;
-        if (Boolean.getBoolean(SEQUENCED)) {
-            // Its paint context is made by the first paint, which lockstep runs on the render thread.
+        boolean async = Boolean.getBoolean(ASYNC);
+        if (async || Boolean.getBoolean(SEQUENCED)) {
+            // Its paint context is made by the first paint, on the render thread either way.
             sequence = UiSequence.create("desktop");
             built.document().runOn(sequence);
-            CrystalGuiCore.LOGGER.info("[cgui] the desktop's document runs on sequence '{}', in lockstep", sequence.name());
+            if (async) compositor = new SurfaceCompositor(sequence);
+            CrystalGuiCore.LOGGER.info("[cgui] the desktop's document runs on sequence '{}', {}", sequence.name(),
+                    async ? "recording on its own" : "in lockstep");
         }
         trace("DesktopHost");
     }
@@ -597,10 +728,11 @@ public final class HostSession {
      * higher origin for any window nobody placed.</p>
      */
     private void placeFirstRun(WindowFrame window) {
-        float scale = services.uiScale();
+        HostServices seen = snapshot != null ? snapshot : services;
+        float scale = seen.uiScale();
         if (scale <= 0f) return;
-        float width = services.surfaceWidth() / scale;
-        float height = services.surfaceHeight() / scale;
+        float width = seen.surfaceWidth() / scale;
+        float height = seen.surfaceHeight() / scale;
         // NO SURFACE YET, so there is nothing to be a fraction of. Placing against zero would pin the
         // window at 0x0 and then persist that, which survives every later run.
         if (width <= 0f || height <= 0f) return;
