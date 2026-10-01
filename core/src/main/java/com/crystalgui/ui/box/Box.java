@@ -460,14 +460,12 @@ public final class Box {
      * @see UIElement#repaint
      */
     public void requestRepaint() {
-        // NO EARLY RETURN ON AN ALREADY-SET FLAG, and the asymmetry is the reason: the flag is set
-        // here and cleared only by the compose walk REACHING THIS BOX, so a box the walk does not
-        // reach keeps it set -- after which every later request returned without asking for a walk
-        // at all, and the node could never be repainted again by any route of its own. Guarding
-        // against that saved one boolean store, since transformsChanged() is exactly that.
+        // NO EARLY RETURN ON AN ALREADY-SET FLAG: the flag is cleared only when a pass reaches this box,
+        // so one it did not reach keeps it set, and a guard here would leave the node unable to ask again.
         repaintRequested = true;
-        // The compose walk is what turns this into a revision, and it does not run unless asked.
-        tree.transformsChanged();
+        // Queued rather than a whole compose: a repaint moves no matrix, so a pass with nothing else dirty
+        // refreshes only this box and folds the change up its hosts.
+        tree.repaintRequested(this);
     }
 
     public Matrix4f worldToLocal() {

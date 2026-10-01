@@ -92,6 +92,45 @@ public class PaintDamageTest extends UiDocumentTestBase {
         assertNotEquals(was, parent.box().subtreeRevision());
     }
 
+    /** A repaint refolds its own ancestry and nothing beside it. */
+    @Test
+    public void aRepaintLeavesASiblingAlone() {
+        UIElement left = new UIElement().layout(l -> l.width(10).height(10));
+        UIElement right = new UIElement().layout(l -> l.width(10).height(10));
+        UIElement root = new UIElement().layout(l -> l.width(40).height(20));
+        root.append(left);
+        root.append(right);
+        document.append(root);
+        document.update(W, H);
+
+        long wasRight = right.box().subtreeRevision();
+        long wasRoot = root.box().subtreeRevision();
+        left.repaint();
+        document.update(W, H);
+
+        assertEquals(wasRight, right.box().subtreeRevision());
+        assertNotEquals(wasRoot, root.box().subtreeRevision());
+    }
+
+    /** A repaint asked in the same frame as a move is taken by the full walk, not lost to it. */
+    @Test
+    public void aRepaintBesideAMoveStillDamages() {
+        UIElement left = new UIElement().layout(l -> l.width(10).height(10));
+        UIElement right = new UIElement().layout(l -> l.width(10).height(10));
+        UIElement root = new UIElement().layout(l -> l.width(40).height(20));
+        root.append(left);
+        root.append(right);
+        document.append(root);
+        document.update(W, H);
+
+        long wasRight = right.box().subtreeRevision();
+        right.repaint();
+        left.layout(l -> l.width(12));
+        document.update(W, H);
+
+        assertNotEquals(wasRight, right.box().subtreeRevision());
+    }
+
     /** Everything dirtied between two paints shares one tick, so a busy frame is still one comparison. */
     @Test
     public void everythingDamagedBetweenTwoPaintsSharesATick() {
