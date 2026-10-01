@@ -263,6 +263,8 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
                 .text(mode.name() + (DRAW_LABELS ? " (painted) — " : " (layout only) — ") + mode.description
                         + String.format(Locale.ROOT, "  [%.1f/%.1fs]", now, TOTAL_SECONDS))
                 .font(context.getFont().atSize(14)).submit();
+        // Between frames this draws at once, on top; left queued it would flush inside the next frame's recording.
+        context.flush();
     }
 
     private void advanceMode(TraceReport report) {

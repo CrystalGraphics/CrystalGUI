@@ -168,6 +168,8 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
         paintContext.endFrame();
         var context = document.paintContext();
         context.text().draw().at(0, 0).text(document.boxes().uiScale() + "x").font(context.getFont().atSize(32)).submit();
+        // Between frames this draws at once, on top; left queued it would flush inside the next frame's recording.
+        context.flush();
     }
 
     @Override

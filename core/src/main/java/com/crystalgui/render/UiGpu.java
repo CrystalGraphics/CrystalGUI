@@ -9,8 +9,10 @@ import com.crystalgraphics.platform.gl.state.CgGlCensus;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.platform.gl.state.CgGlState;
-import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgExecutor;
+import com.crystalgraphics.render.graph.CgFrame;
+import com.crystalgraphics.render.graph.CgFrameBuilder;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
@@ -65,6 +67,12 @@ public final class UiGpu {
     /** Built on the first frame a picture is asked for; three in flight covers a GPU two frames behind. */
     @Nullable
     private CgPixelReadback frameImages;
+    /** The last presented frame's composite, kept for {@link #presentAgain}, and the builder it goes back to. */
+    @Nullable
+    private CgFrame lastPresent;
+    @Nullable
+    private CgFrameBuilder lastPresentBuilder;
+    private int lastWidth, lastHeight;
     /** Every paint context made, for {@link #destroy()} to free what each made. */
     private final List<WeakReference<CgUiPaintContext>> contexts = new ArrayList<>();
 
@@ -132,12 +140,49 @@ public final class UiGpu {
      * the composite onto the host's target, which the restored scope has bound again. Hands the frame's buffers back.
      */
     void endFrame(UiFrame frame) {
+        boolean executed = false;
         try {
             execute(frame);
+            executed = true;
         } finally {
             frame.builder.recycle(frame.frame);
-            frame.builder.recycle(frame.present);
+            if (executed) keepPresent(frame);
+            else frame.builder.recycle(frame.present);
         }
+    }
+
+    /**
+     * Composites the last presented frame onto the bound host target again, recording and executing nothing else:
+     * for a host frame that arrives before a new frame was sealed. The host's state is saved and restored around it,
+     * as for {@link #present}. A no-op when nothing was presented, or when the surface is not the size it was.
+     *
+     * <pre>{@code
+     * UiFrame next = sequence.poll();
+     * if (next != null) UiGpu.present(next);
+     * else UiGpu.presentAgain(width, height);
+     * }</pre>
+     *
+     * <p>What it shows is the frame target as the last execution left it — with several documents presenting through
+     * one process, the last of them.</p>
+     */
+    public static void presentAgain(int width, int height) {
+        UiGpu gpu = instance;
+        if (gpu == null || gpu.lastPresent == null || width != gpu.lastWidth || height != gpu.lastHeight) return;
+        if (gpu.frameFbo.getWidth() != Math.max(1, width) || gpu.frameFbo.getHeight() != Math.max(1, height)) return;
+        CgHostSamplers.park();
+        try {
+            gpu.composite(gpu.lastPresent);
+        } finally {
+            CgHostSamplers.unpark();
+        }
+    }
+
+    private void keepPresent(UiFrame frame) {
+        if (lastPresent != null) lastPresentBuilder.recycle(lastPresent);
+        lastPresent = frame.present;
+        lastPresentBuilder = frame.builder;
+        lastWidth = frame.width();
+        lastHeight = frame.height();
     }
 
     private void execute(UiFrame frame) {
@@ -157,6 +202,15 @@ public final class UiGpu {
             glScope = null;
             CgTrace.zoneDone(UiTrace.FRAME, "glend:restoreState", timed);
         }
+        composite(frame.present);
+        unparkSamplers();
+        CgGpuTrace.end();
+        // The other half of the frame the document opened: reports and clears. A no-op when none was opened.
+        UiTrace.frameEnd();
+    }
+
+    /** The finished frame target onto the host's bound target: one draw, after the host's state is back. */
+    private void composite(CgFrame present) {
         // SCOPED, because the composite runs after the frame's own restore and would otherwise leave our program and
         // render state bound for the host. Minecraft's final present is fixed-function and never unbinds a program,
         // so its blit of its own framebuffer ran through our vertex shader and the window showed a flat fill while
@@ -169,12 +223,8 @@ public final class UiGpu {
             // Again: the restore just handed the host's alpha test back, and the composite is clipped by the
             // picture's ACCUMULATED alpha -- a 7% panel would be discarded whole on the way to the screen.
             disableFixedFunctionAlphaTest();
-            CgExecutor.execute(frame.present);
+            CgExecutor.execute(present);
         }
-        unparkSamplers();
-        CgGpuTrace.end();
-        // The other half of the frame the document opened: reports and clears. A no-op when none was opened.
-        UiTrace.frameEnd();
     }
 
     /** Gives a frame that threw part-way its GL state back. */
@@ -242,6 +292,7 @@ public final class UiGpu {
         }
         gpu.contexts.clear();
         gpu.glScope = null;
+        gpu.lastPresent = null;
         gpu.frameFbo.delete();
         if (gpu.frameImages != null) gpu.frameImages.delete();
         instance = null;
