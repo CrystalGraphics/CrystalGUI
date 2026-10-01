@@ -77,6 +77,13 @@ public class MarkdownTest {
         assertTrue(constant.contains("READ_ONLY"));
     }
 
+    /** A run inside a run: the outer one advances past its own end, not the inner one's. */
+    @Test
+    public void nestedEmphasisAdvancesPastTheOuterRun() {
+        String html = Markdown.toHtml("a **bold *slanted* bold** end");
+        assertTrue(html, html.contains("<b>bold <i>slanted</i> bold</b> end"));
+    }
+
     /**
      * <b>A code span is read before anything else.</b>
      *

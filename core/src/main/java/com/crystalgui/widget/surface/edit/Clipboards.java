@@ -21,7 +21,7 @@ public final class Clipboards {
     }
 
     @Nullable
-    private static Object stored;
+    private static volatile Object stored;
 
     /** Replaces what is held. Null is ignored, so copying nothing keeps what was copied before. */
     public static void store(@Nullable Object clip) {

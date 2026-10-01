@@ -191,7 +191,7 @@ public final class WindowAnimator {
      * every caller of {@code requestClose} would have to learn to wait for a window that, as far as the
      * user is concerned, is not animating. Off means off, including the waiting.</p>
      */
-    private static boolean enabled = true;
+    private static volatile boolean enabled = true;
 
     public static void setEnabled(boolean value) {
         enabled = value;
