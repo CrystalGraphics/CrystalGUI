@@ -228,7 +228,7 @@ public final class CgUiScreen extends Screen {
     // two CORNERS, as EditBox passes them, not a size. Sent only on a change: SDL passes it to the OS each time.
     private static void placeTextInputArea() {
         UIDocument window = window();
-        float[] area = window == null ? null : window.input().textInputArea();
+        float[] area = window == null ? null : HostSession.session().textInputArea();
         if (area == null) return;
         Minecraft mc = Minecraft.getInstance();
         float scale = Math.max(1, mc.getWindow().getGuiScale());

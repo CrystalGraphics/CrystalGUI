@@ -1018,7 +1018,7 @@ public final class Box {
 
     /** Where this box takes the pointer, frozen for a reader that may not touch the tree. */
     public HitShape hitShape() {
-        BoxPainter.Radii r = BoxPainter.radiiOf(node.computedStyle(), width, height);
+        BoxPainter.Radii r = BoxPainter.radiiOf(node.computedStyle(), width, height, tree.hitRadii);
         float[] radii = {r.rxTL, r.ryTL, r.rxTR, r.ryTR, r.rxBR, r.ryBR, r.rxBL, r.ryBL};
         return new HitShape(worldToLocal, width, height, radii);
     }

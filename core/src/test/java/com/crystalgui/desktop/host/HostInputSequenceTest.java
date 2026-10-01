@@ -16,7 +16,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-/** The router with a document on a sequence: every key answered "ours" at once, the ones dispatch left handed back in order. */
+/** The router posting to a document on a sequence: every key answered "ours" at once, the ones dispatch left handed back in order. */
 public class HostInputSequenceTest {
 
     private final UiSequence sequence = UiSequence.create("input");
@@ -42,7 +42,7 @@ public class HostInputSequenceTest {
         });
         assertTrue(built.await(10, TimeUnit.SECONDS));
 
-        HostInput input = new HostInput(() -> document);
+        HostInput input = new HostInput(() -> document, true);
         int[] keys = {CgKeyCodes.KEY_E, CgKeyCodes.KEY_F, CgKeyCodes.KEY_G};
         for (int key : keys) {
             assertTrue("a key to a document on a sequence is answered ours",

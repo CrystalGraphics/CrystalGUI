@@ -79,6 +79,29 @@ public class UiSequenceTest {
     }
 
     @Test
+    public void runNowRunsHereAsTheSequenceAfterWhatWasPosted() {
+        UiSequence sequence = sequence("lockstep");
+        List<String> seen = Collections.synchronizedList(new ArrayList<>());
+        for (int i = 0; i < 50; i++) {
+            int index = i;
+            sequence.execute(() -> seen.add("posted " + index));
+        }
+        Thread caller = Thread.currentThread();
+        AtomicReference<Boolean> asSequence = new AtomicReference<>();
+        AtomicReference<Thread> ranOn = new AtomicReference<>();
+        sequence.runNow(() -> {
+            seen.add("now");
+            asSequence.set(sequence.isCurrent());
+            ranOn.set(Thread.currentThread());
+        });
+        assertEquals("now", seen.get(seen.size() - 1));
+        assertEquals(51, seen.size());
+        assertTrue("runNow did not run as the sequence", asSequence.get());
+        assertSame("runNow left the calling thread", caller, ranOn.get());
+        assertTrue("the caller is still the sequence after runNow", !sequence.isCurrent());
+    }
+
+    @Test
     public void theTreeIsRefusedOutsideItsSequence() throws Exception {
         UiSequence sequence = sequence("owner");
         UIDocument document = new UIDocument().runOn(sequence);
