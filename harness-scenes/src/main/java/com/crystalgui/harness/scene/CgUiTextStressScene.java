@@ -235,7 +235,7 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
 
                 // AND THE PAINT. `paintFrame()` did both; `frame()` only advances, so a scene that
                 // lost this half advanced perfectly and drew nothing.
-                CgUiPaintContext paintContext = CgUiPaintContext.getInstance();
+                CgUiPaintContext paintContext = document.paintContext();
                 paintContext.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
                 document.paint(paintContext);
                 paintContext.endFrame();
@@ -258,7 +258,7 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
         boolean lastFrameOfMode = inMode >= MODE_SECONDS;
         if (lastFrameOfMode) advanceMode(report);
 
-        var context = CgUiPaintContext.getInstance();
+        var context = document.paintContext();
         context.text().draw().at(0, 0)
                 .text(mode.name() + (DRAW_LABELS ? " (painted) — " : " (layout only) — ") + mode.description
                         + String.format(Locale.ROOT, "  [%.1f/%.1fs]", now, TOTAL_SECONDS))

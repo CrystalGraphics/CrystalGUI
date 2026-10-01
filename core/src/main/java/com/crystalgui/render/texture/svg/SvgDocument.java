@@ -209,17 +209,18 @@ public final class SvgDocument {
             SvgDocument cached = lods.get(LOD_STEPS[i]);
             if (cached != null) return cached;
 
+            LodBudget budget = ctx.svgLodBudget();
             long frame = ctx.frameId();
-            if (frame != lodBudgetFrame) {
+            if (frame != budget.frame) {
                 // Sampled on the way OUT of a frame, which is the only place the per-frame total is known.
                 // An aggregate scope cannot answer "did the budget spread the work" -- 12ms of building
                 // looks identical whether it landed on one frame or twenty. This records the distribution,
                 // so the max IS the worst frame.
-                if (lodNanosThisFrame > 0L) {
-                    CgTrace.counter(UiTrace.FRAME, "svg.lodMsPerFrame", lodNanosThisFrame / 1_000_000.0);
+                if (budget.spent > 0L) {
+                    CgTrace.counter(UiTrace.FRAME, "svg.lodMsPerFrame", budget.spent / 1_000_000.0);
                 }
-                lodBudgetFrame = frame;
-                lodNanosThisFrame = 0L;
+                budget.frame = frame;
+                budget.spent = 0L;
             }
             // Out of budget: draw with whatever coarse mesh already exists and try again next frame.
             // Deliberately not a queue -- whatever is on screen next frame is what deserves the budget,
@@ -234,7 +235,7 @@ public final class SvgDocument {
             //
             // So: prefer any tier already built, and if there is none, build the requested one anyway.
             // Overshooting the budget by one coarse tier is strictly cheaper than the alternative.
-            if (lodNanosThisFrame >= LOD_BUILD_BUDGET_NANOS) {
+            if (budget.spent >= LOD_BUILD_BUDGET_NANOS) {
                 SvgDocument fallback = coarsestBuilt();
                 if (fallback != null) {
                     // Counted, so "the budget deferred work" is visible rather than inferred from its absence.
@@ -263,7 +264,7 @@ public final class SvgDocument {
                     tier.ops();
                     return tier;
                 });
-                lodNanosThisFrame += System.nanoTime() - startedAt;
+                budget.spent += System.nanoTime() - startedAt;
                 return built;
             }
         }
@@ -590,12 +591,13 @@ public final class SvgDocument {
     private static final long LOD_BUILD_BUDGET_NANOS = 1_000_000L;
 
     /**
-     * Render-thread only, hence plain statics: CrystalGUI paints from one thread, and a budget shared
-     * across documents is the whole point — the stall comes from FIFTY-SEVEN of them building at once, so
-     * a per-document limit would not bound anything.
+     * What one paint has spent building tiers this frame, kept by its paint context: one budget across every icon
+     * a document draws, since the stall comes from fifty-seven of them building at once.
      */
-    private static long lodBudgetFrame = -1L;
-    private static long lodNanosThisFrame;
+    public static final class LodBudget {
+        long frame = -1L;
+        long spent;
+    }
 
     private List<SvgScanner.Tag> tags;
     private final Map<Integer, SvgDocument> lods = new ConcurrentHashMap<>();

@@ -166,6 +166,8 @@ public final class WindowSnapshot {
         // was. (The push itself also has to flip against THIS buffer's height rather than the screen's,
         // which CgUiPaintContext.pushScissor now does; the two halves were found from the same picture,
         // a minimised editor's preview showing its top half over flat panel colour.)
+        // Flushed first: what is queued was drawn under the caller's clip, and is recorded with the clip at its flush.
+        ctx.flush();
         int[] outerClip = ctx.getScissorStack().suspend();
         ctx.getScissorStack().clearScissorIfNeeded();
         ctx.beginLayerFbo(fbo);

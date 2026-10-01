@@ -118,7 +118,7 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     private static void paint(HarnessContext ctx, int quads) {
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
-        CgUiPaintContext paint = CgUiPaintContext.getInstance();
+        CgUiPaintContext paint = paintContext();
         paint.beginFrame(w, h);
         paint.fillRect(0, 0, w, h, 0x08FF8040); // binds the white pixel the batch below draws with
         for (int i = quads; i > 1; i--) {
@@ -244,5 +244,13 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     @Override
     public boolean shouldShutdownOnComplete() {
         return true;
+    }
+
+    /** This scene's paint context: it has no document to ask for one. */
+    private static CgUiPaintContext paintContext;
+
+    private static CgUiPaintContext paintContext() {
+        if (paintContext == null) paintContext = CgUiPaintContext.create();
+        return paintContext;
     }
 }

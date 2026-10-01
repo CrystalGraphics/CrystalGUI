@@ -211,7 +211,7 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
 
         document.frame(frame.getDeltaTime(), ctx.getScreenWidth() / SCALE, ctx.getScreenHeight() / SCALE);
 
-        CgUiPaintContext paint = CgUiPaintContext.getInstance();
+        CgUiPaintContext paint = document.paintContext();
         paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
         document.paint(paint);
         paint.endFrame();

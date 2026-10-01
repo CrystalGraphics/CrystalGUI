@@ -1688,7 +1688,7 @@ public class Desktop extends UIElement implements DataProvider {
         // What the router answers a host from until the next frame. Only over another UI's screen is it asked.
         if (screenOverlay != null && !presentation.paintsWholeDesktop()) screenOverlay.commit();
 
-        CgUiPaintContext ctx = CgUiPaintContext.getInstance();
+        CgUiPaintContext ctx = document.paintContext();
         ctx.beginFrame(surfaceWidth, surfaceHeight);
         if (presentation.paintsWholeDesktop()) {
             document.paint(ctx);

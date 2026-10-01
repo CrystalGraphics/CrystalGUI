@@ -837,7 +837,7 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 |---|---|
 | `onInit` | Nothing — every GL resource is lazily built on first paint, and forcing them here would defeat `CgUiPaintContext`'s deliberate laziness. It *does* fire though (see below), so work added here will run |
 | `onFrame` | Nothing — per-frame work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
-| `onDestroy` | `CgUiPaintContext.destroy()`, and nothing else |
+| `onDestroy` | `UiGpu.destroy()`, and nothing else |
 
 > **`onInit` reaches late registrants.** CrystalGUI registers from a class initializer on the *first
 > paint*, which is always after `CgGraphicsLifecycle.initContext()` has run — so a fire-only-during-init
@@ -868,30 +868,46 @@ registration order.
 
 ---
 
-# Stack 5: Render — immediate-mode
+# Stack 5: Render — recorded, executed once
 
 **The V3.1 draw-list design is gone.** `CgUiDrawList`, `CgUiDrawListExecutor`, `CgUiDrawState`,
 `CgUiBatchSlots`, and `CgScissorRect` do not exist. Do not reference them.
 
-## `CgUiPaintContext` — a singleton
+## `CgUiPaintContext` — one per document, and `UiGpu`
 
-Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. Every `fillRect`/
-`drawImage` call draws immediately; there is no recording phase and nothing to flush.
+`document.paintContext()` gives a document its own. **It records** (`render-graph` G4): every draw of a frame is a
+chunk in one `CgRecording`, touching no GL; `seal()` builds it into a `UiFrame` that refers back to nothing, and
+`UiGpu` — the render thread's half, one per process — executes it and composites it onto the host's target. A layer
+is a pass on a texture the executor lends for the frame; the target around it ends its pass at the layer and
+continues in another after, so passes run in the order they were made and a read follows the write it sees.
+`flush()` ends the open chunks and executes nothing. Raw GL a widget needs goes in a callback pass
+(`recordCallback`), never inline.
+
+```java
+CgUiPaintContext ctx = document.paintContext();   // first call on the render thread
+ctx.beginFrame(w, h);                             // inline: the host's GL state saved, recording starts
+document.paint(ctx);
+ctx.endFrame();                                   // sealed, executed, composited, the host's state back
+
+ctx.recordFrame(w, h);                            // split: no GL from here...
+document.paint(ctx);
+UiFrame frame = ctx.seal();                       // ...to here
+UiGpu.present(frame);                             // render thread
+```
 
 | Group | Methods |
 |---|---|
-| Frame | `beginFrame(w,h)` / `endFrame()` — save/restore GL via `CgGlScope`, redirect the whole tree into `frameFbo` and composite it back once, ortho projection, bind `crystalgui:shaders/gui_quad.shader`, reset `ScissorStack` |
+| Frame | `beginFrame(w,h)` / `endFrame()` inline, or `recordFrame(w,h)` / `seal()` and `UiGpu.present(frame)` split — the whole tree records into `UiGpu`'s frame target, composited onto the host's once |
 | Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `rect()`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
 
 > **`curve()` is `quad()`'s twin, and switching between them flushes.** Bézier strokes go through
-> `CgVectorRenderer` with their own instance buffer and their own material (`gui_curve.shader`), and GL
-> binds one program at a time — so the two cannot both be live. Every switch flushes the outgoing path,
-> which is a **painter's-order requirement, not tidiness**: letting queued quads survive a switch would
-> draw them after the curves regardless of submission order, so a stroke under a panel would jump on top
-> — and only when the two happened to batch together, which reads as a z-order bug in the widget rather
-> than a batching bug in the context. Because every switch flushes, at most one path ever holds pending
-> work, which is what makes `CgUiRenderer.flush()` safe to run over both in any order. Alternating them
-> per element costs a draw call each way; correctness never depends on batching.
+> `CgVectorRenderer` with their own instance kind and their own material (`gui_curve.shader`). Every switch
+> ends the outgoing path's chunk, which is a **painter's-order requirement, not tidiness**: quads still queued
+> across a switch would land after the curves regardless of submission order, so a stroke under a panel would
+> jump on top — and only when the two happened to batch together, which reads as a z-order bug in the widget
+> rather than in the context. Because every switch flushes, at most one path ever holds pending work, which is
+> what makes `CgUiRenderer.flush()` safe to run over both in any order. Alternating them per element breaks the
+> batch each way; correctness never depends on batching.
 >
 > `curve()` applies the `PoseStack` exactly as `quad()` does — **never call `.pose(...)` on the result** —
 > and stroke widths are scaled by the pose too, so a 2px stroke stays 2 *logical* px at any `uiScale`,
@@ -920,16 +936,13 @@ Obtained via `CgUiPaintContext.getInstance()`, **not** owned per-`UIDocument`. E
 | Clip | `pushScissor` / `popScissor`, and `pushRoundedClip` / `popRoundedClip` — a rounded rect every draw is stamped with (`CgClipTable`), no layer and no flush |
 | Material | `withMaterial(material, body)` |
 | Layers | `withLayerOpacity(opacity, body)` and its lambda-free pair `pushLayerOpacity`/`popLayerOpacity`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `retain(key, region, revision)` |
-| Lifecycle | `hasInstance()`, `destroy()` |
+| Lifecycle | `UiGpu.destroy()`, `UiGpu.hasInstance()` |
 
-> **`destroy()` must be called on GL-context destruction.** The instance is `static`, so it outlives
-> the context it was built against; without this the next context is handed an object whose material,
-> VAO/VBO and FBO handles are all dead — which draws nothing or draws garbage rather than failing
-> loudly. It frees only what the context genuinely owns (the layer FBO pool, the `CgUiRenderer`, the
-> `CgTextRenderer`) and deliberately not what it borrows from CrystalGraphics registries (materials,
-> the fallback white pixel, font atlases), since those are swept by `CgGraphicsLifecycle.destroyContext()`
-> and freeing them here would be a double free. Use `hasInstance()` to check without *causing*
-> construction.
+> **`UiGpu.destroy()` must be called on GL-context destruction** (`CgUiLifecycle.onDestroy` does). It frees
+> what nothing else sweeps: the frame target, the readback, and each paint context's retained layers, backdrop and
+> icon-raster textures — all made outside any registry — and the contexts' renderers. Not what is borrowed from
+> CrystalGraphics' registries (materials, the fallback white pixel, font atlases): `destroyContext()` sweeps those,
+> and freeing them here would be a double free.
 
 > **The whole tree paints into `frameFbo` and is composited onto the host's target once.** So the
 > finished picture is a texture this engine owns — the backdrop samples it, a readback sees the UI and
@@ -1559,7 +1572,8 @@ com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platfo
 com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener CrystalGUI registers with
                                CrystalGraphics; drives paint-context teardown + cache invalidation
 
-com.crystalgui.render          CgUiPaintContext (singleton), CgUiRenderer, ScissorStack,
+com.crystalgui.render          CgUiPaintContext (one per document: records), UiGpu (one per process: executes), UiFrame
+                               (a sealed frame), CgUiRenderer, ScissorStack,
                                SvgRasterCache — icon fills rasterised once by additive accumulation into an
                                RGBA16F atlas and drawn as a tinted quad; sits beside the paint context and
                                reaches it through package-private members, as the backdrop does.
