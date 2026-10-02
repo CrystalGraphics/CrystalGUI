@@ -165,16 +165,20 @@ public final class BoxPainter {
                 CgTrace.add(UiTrace.FRAME, !box.retainable() ? "surface-miss-dynamic"
                         : surface.missed(box, box.innerRevision(), nodeX, nodeY, region, epoch, stacking), 1);
             }
+            long degraded = ctx.textDegradedDrawCount();
             ctx.beginSurface(surface, region, !surface.drewAt(box, nodeX, nodeY, region));
             paintBoxIn(box, ctx, layerBase(ctx, base, region), asContext, 1f, true);
-            // CHECK MODE: a surface that would have been kept was walked, and must have found nothing to draw.
-            if (ctx.endSurface() && holds) {
+            // CHECK MODE: a surface that would have been kept was walked, and must have found nothing to draw -- unless
+            // the replay check painted every keyed box in it anew.
+            if (ctx.endSurface() && holds && !CgUiPaintContext.REPLAY_CHECK) {
                 CgTrace.add(UiTrace.FRAME, "surface-check-kept-damaged", 1);
                 CrystalGuiCore.LOGGER.warn("[damage-check] {} would have been kept, but its walk damaged it",
                         layerLabel(box.node()));
             }
             if (CgUiPaintContext.DAMAGE_CHECK) checkDamage(box, ctx, base, region, surface, asContext);
             surface.drew(box, box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
+            // TEXT STILL GENERATING was not kept, and the surface must come back for it while nothing else changes.
+            if (ctx.textDegradedDrawCount() != degraded) surface.walkAgain();
             // ITS PICTURE: the border box in the texture, what a thumbnail draws.
             boundsThrough(0f, 0f, box.width(), box.height(), surfaceScratch.set(targetOf(ctx, base)).mul(box.localToWorld()));
             surface.pictured(ink[0] - region.x(), ink[1] - region.y(), ink[2] - region.x(), ink[3] - region.y(),
@@ -553,6 +557,8 @@ public final class BoxPainter {
         k[8] = Math.min(ink[2], segmentClip[2]);
         k[9] = Math.min(ink[3], segmentClip[3]);
         k[10] = ctx.layerOpacity();
+        k[11] = ctx.targetWidth();
+        k[12] = ctx.targetHeight();
         if (box.replay == null) box.replay = new BoxReplay();
         boolean same = box.replay.sameAs(segment, k, box.contentRevision, ctx.replayEpoch());
         CgTrace.add(UiTrace.FRAME, same ? "segments-unchanged" : "segments-changed", 1);
