@@ -1,7 +1,7 @@
 package com.crystalgui.desktop.motion;
 
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.style.easing.Easing;
+import com.crystalgraphics.easing.CgEasing;
 import com.crystalgui.ui.dom.UIElement;
 
 import java.util.function.BooleanSupplier;
@@ -76,7 +76,7 @@ public final class WindowGeometryAnimation implements WindowMotion {
 
     private final long startNanos;
     private final long durationNanos;
-    private final Easing easing;
+    private final CgEasing easing;
     private final Runnable onDone;
     private boolean over;
 
@@ -84,7 +84,7 @@ public final class WindowGeometryAnimation implements WindowMotion {
                                    float fromLeft, float fromTop, float fromWidth, float fromHeight,
                                    float toLeft, float toTop, float toWidth, float toHeight,
                                    boolean animatePosition, boolean animateSize,
-                                   long durationNanos, Easing easing, Runnable onDone) {
+                                   long durationNanos, CgEasing easing, Runnable onDone) {
         this.target = target;
         this.alive = alive;
         this.fromLeft = fromLeft;

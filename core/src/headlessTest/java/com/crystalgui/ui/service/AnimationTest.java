@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import com.crystalgui.style.easing.Easing;
+import com.crystalgraphics.easing.CgEasing;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -23,7 +23,7 @@ import org.junit.Test;
 public class AnimationTest {
 
     /** The identity curve: this file is about the TIMELINE, not about any particular easing. */
-    private static final Easing LINEAR = t -> t;
+    private static final CgEasing LINEAR = t -> t;
 
     @Test
     public void theStartValueIsWrittenBeforeAnyTick() {

@@ -1,9 +1,9 @@
 package com.crystalgui.style.transition;
 
 import com.crystalgui.style.CssParsingUtil;
-import com.crystalgui.style.easing.CubicBezier;
-import com.crystalgui.style.easing.Easing;
-import com.crystalgui.style.easing.ProgressFunctions;
+import com.crystalgraphics.easing.CgCubicBezier;
+import com.crystalgraphics.easing.CgEasing;
+import com.crystalgraphics.easing.CgEasings;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  * ({@code linear|ease|ease-in|ease-out|ease-in-out}) or a {@code cubic-bezier(a,b,c,d)} call with
  * arbitrary control points — no {@code steps()} support (not in the underlying easing library).
  */
-public record TransitionSpec(String propertyNameOrAll, long durationNanos, long delayNanos, Easing easing) {
+public record TransitionSpec(String propertyNameOrAll, long durationNanos, long delayNanos, CgEasing easing) {
 
     public static final String ALL = "all";
 
@@ -65,7 +65,7 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
 
         long duration = parseTime(tokens.get(1), entry);
         long delay = 0;
-        Easing easing = parseTimingFunction("ease"); // CSS default transition-timing-function
+        CgEasing easing = parseTimingFunction("ease"); // CSS default transition-timing-function
 
         int next = 2;
         if (next < tokens.size() && TIME.matcher(tokens.get(next)).matches()) {
@@ -95,21 +95,21 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
         return Math.round(millis * 1_000_000.0);
     }
 
-    private static Easing parseTimingFunction(String token) {
+    private static CgEasing parseTimingFunction(String token) {
         Matcher bezier = CUBIC_BEZIER.matcher(token);
         if (bezier.matches()) {
-            return ProgressFunctions.cubicBezier(
+            return CgEasings.cubicBezier(
                     Double.parseDouble(bezier.group(1)),
                     Double.parseDouble(bezier.group(2)),
                     Double.parseDouble(bezier.group(3)),
                     Double.parseDouble(bezier.group(4)));
         }
         return switch (token.toLowerCase(Locale.ROOT)) {
-            case "linear" -> ProgressFunctions.Premade.LINEAR;
-            case "ease" -> ProgressFunctions.cubicBezier(0.25, 0.1, 0.25, 1.0);
-            case "ease-in" -> ProgressFunctions.cubicBezier(0.42, 0.0, 1.0, 1.0);
-            case "ease-out" -> ProgressFunctions.cubicBezier(0.0, 0.0, 0.58, 1.0);
-            case "ease-in-out" -> ProgressFunctions.cubicBezier(0.42, 0.0, 0.58, 1.0);
+            case "linear" -> CgEasings.LINEAR;
+            case "ease" -> CgEasings.cubicBezier(0.25, 0.1, 0.25, 1.0);
+            case "ease-in" -> CgEasings.cubicBezier(0.42, 0.0, 1.0, 1.0);
+            case "ease-out" -> CgEasings.cubicBezier(0.0, 0.0, 0.58, 1.0);
+            case "ease-in-out" -> CgEasings.cubicBezier(0.42, 0.0, 0.58, 1.0);
             default -> throw new IllegalArgumentException("Unknown transition-timing-function '" + token + "'");
         };
     }
@@ -146,9 +146,9 @@ public record TransitionSpec(String propertyNameOrAll, long durationNanos, long 
     }
 
     /** The keyword or {@code cubic-bezier(...)} that {@code parseTimingFunction} would answer with. */
-    private static String timingFunction(Easing easing) {
-        if (easing == ProgressFunctions.Premade.LINEAR) return "linear";
-        if (easing instanceof CubicBezier bezier) {
+    private static String timingFunction(CgEasing easing) {
+        if (easing == CgEasings.LINEAR) return "linear";
+        if (easing instanceof CgCubicBezier bezier) {
             return "cubic-bezier(" + bezier.getX1() + ", " + bezier.getY1() + ", "
                     + bezier.getX2() + ", " + bezier.getY2() + ")";
         }

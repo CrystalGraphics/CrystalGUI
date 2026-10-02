@@ -5,22 +5,15 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 /**
- * Guards the guard.
- *
- * <p>Every other test in this source set proves something by <em>not</em> throwing
- * {@code NoClassDefFoundError}. That proof is worth exactly nothing if CrystalGraphics quietly
- * reappears on the classpath — the tests would all still pass, while asserting nothing at all. This
- * one fails loudly in that case.</p>
+ * What the headless classpath must hold: a dedicated server's. CrystalGraphics core ships on a server and holds shared
+ * utilities the engine names in its field and signature types (easing); JOML and Taffy are field types too. What a
+ * server lacks is a GL context, and no test here has one.
  */
 public class HeadlessClasspathSanityTest {
 
     @Test
-    public void crystalGraphicsIsNotOnTheClasspath() {
-        assertAbsent("com.crystalgraphics.gl.texture.CgTexture2D");
-        assertAbsent("com.crystalgraphics.api.text.CgTextLayout");
-        assertAbsent("com.crystalgraphics.api.font.CgFont");
-        assertAbsent("com.crystalgraphics.util.io.CgIO");
-        assertAbsent("com.crystalgraphics.api.vertex.CgVertexTransformUtil");
+    public void crystalGraphicsCoreIsPresentForItsSharedUtilities() {
+        assertPresent("com.crystalgraphics.easing.CgEasing");
     }
 
     /** JOML and Taffy are required even headlessly — UIElement/ElementStyle have fields of these
@@ -32,15 +25,10 @@ public class HeadlessClasspathSanityTest {
         assertPresent("dev.vfyjxf.taffy.tree.TaffyTree");
     }
 
-    private static void assertAbsent(String className) {
-        try {
-            Class.forName(className);
-            fail("CrystalGraphics is on the headless classpath (" + className + ") — "
-                    + "every headless assertion in this source set is now vacuous. "
-                    + "Remove it from headlessTest's dependencies.");
-        } catch (ClassNotFoundException expected) {
-            // exactly right
-        }
+    /** It reads default.css through CgIO when it initialises, which needs core and no GL. */
+    @Test
+    public void styleSheetLoads() {
+        assertPresent("com.crystalgui.style.sheet.StyleSheet");
     }
 
     private static void assertPresent(String className) {
