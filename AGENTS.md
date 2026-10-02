@@ -1365,7 +1365,7 @@ capability we **add it to CrystalGraphics** and integrate against the new API â€
 the backend here.
 
 > The full infrastructure ownership map (`CgStreamBuffer`, `CgStagingBuffer`, `CgVertexWriter`,
-> `CgInstanceWriter`, `CgBufferWriter`, `CgShaderBuffer`, `CgMesh`, `CgVertexArray`,
+> `CgBufferWriter`, `CgShaderBuffer`, `CgMesh`, `CgVertexArray`,
 > `CgAbstractShaderProgram`, and the decision tree for picking between them) lives in
 > **`CrystalGraphics/AGENTS.md`**, which `CLAUDE.md` already loads every session. Read it there;
 > it is not duplicated here.
