@@ -78,7 +78,6 @@ import java.util.function.Consumer;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Deque;
 import java.util.List;
@@ -783,7 +782,6 @@ public final class CgUiPaintContext {
      */
     public UiFrame seal() {
         if (!frameActive) throw new IllegalStateException("seal() without recordFrame()");
-        sweepRetained();
         sweepSurfaces();
         long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.endBatch();
@@ -904,8 +902,8 @@ public final class CgUiPaintContext {
      * done settling repaints on damage alone, so nothing collects that on its own and the degraded
      * picture stands until something unrelated dirties it — a label that came out unstroked stays
      * unstroked until the mouse moves. The repaint has to be the DRAWING NODE's: damage becomes a
-     * revision on its own box, and a retained ancestor layer keyed on {@code subtreeRevision} would
-     * otherwise keep blitting the stale texture.</p>
+     * revision on its own box, and a kept segment or surface above it would otherwise keep drawing the stale
+     * picture.</p>
      *
      * <p><b>Deliberately not {@code text().degradedDrawCount()}</b>: {@link #text()} switches the
      * instance path and flushes the quad one, so asking a question through it would cost a draw call
@@ -959,8 +957,8 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * The coverage correction every label is drawn with. A retained layer keeps the text it already holds until
-     * its subtree repaints.
+     * The coverage correction every label is drawn with. A kept segment or surface keeps the text it already holds
+     * until it repaints.
      */
     public void textGamma(CgTextGamma gamma) {
         textRenderer.gamma(gamma);
@@ -2427,33 +2425,15 @@ public final class CgUiPaintContext {
         }
     }
 
-    // ── Retained layers ──────────────────────────────────────────────────────
+    // ── Kept pictures ────────────────────────────────────────────────────────
 
-    /** Retained targets are owned outright, so this is the whole ceiling on what retention costs. */
-    private static final long RETAINED_BUDGET_BYTES = 48L * 1024L * 1024L;
-
-    /** Frames a retained layer may go unasked-for before it is freed. At 60Hz, five seconds. */
-    private static final long RETAINED_IDLE_FRAMES = 300L;
-
-    private final Map<Object, RetainedLayer> retained = new LinkedHashMap<>();
     /** Requested textures released between frames: the next frame records their release first. */
     private final List<CgGraphTexture> pendingReleases = new ArrayList<>();
-
-    /** A subtree seen once and not yet given a texture. @see #retain */
-    private record Candidate(long revision, LayerRegion region, long frame) {
-    }
-
-    private final Map<Object, Candidate> candidates = new HashMap<>();
-    private long retainedBytes;
-    private int retainedCreated;
     private boolean retentionSuspended;
 
     /**
-     * Runs {@code body} with {@link #retain} answering null throughout.
-     *
-     * <p>For a pass that draws the same subtree somewhere else — a window photographing itself. A
-     * retained layer remembers WHERE it was drawn, and a second pass at other coordinates would keep
-     * overwriting the live one's picture with the copy's and then the copy's with the live one's.</p>
+     * Runs {@code body} with {@link #surface} answering null throughout: for a pass that draws a subtree a second
+     * time, a copy or a check, whose drawing must not become the picture a surface holds.
      */
     public void withoutRetention(Runnable body) {
         boolean was = retentionSuspended;
@@ -2465,126 +2445,9 @@ public final class CgUiPaintContext {
         }
     }
 
-    /**
-     * The kept texture for a subtree, or null when it is not worth keeping one.
-     *
-     * <p>Ask before painting a layer. A returned layer whose {@link RetainedLayer#isFresh()} is true
-     * already holds the picture for {@code revision} at {@code region} and can be composited straight
-     * back; one that is not fresh is a target to paint into, followed by
-     * {@link RetainedLayer#painted()}.</p>
-     *
-     * @param key      what the caller retains under, compared by identity — a box, in practice
-     * @param revision what the subtree looks like now. @see com.crystalgui.ui.box.Box#subtreeRevision
-     * @return null when the budget is spent, in which case paint into a pooled target as usual
-     */
-    @Nullable
-    public RetainedLayer retain(Object key, LayerRegion region, long revision) {
-        if (retentionSuspended || LEGACY_LAYERS) return null;
-        RetainedLayer layer = retained.remove(key);
-        if (layer != null) {
-            // Re-inserted so iteration order stays least-recently-used first, for the sweep below.
-            retained.put(key, layer);
-            layer.lastFrame = frameId;
-            // Too small is a miss; MUCH too big is one as well. An element that was 800px and is now 40
-            // would otherwise keep its 832px texture for as long as it stayed on screen.
-            int held = layer.target().getWidth(), tall = layer.target().getHeight();
-            boolean fits = held >= region.width() && tall >= region.height()
-                    && held <= Math.max(64, region.width() * 2) && tall <= Math.max(64, region.height() * 2);
-            if (fits) {
-                // A LAYER THAT MOVED IS REDRAWN, not slid: the region is where it was composited FROM as
-                // well as to, and everything in it was drawn at that origin.
-                boolean fresh = layer.revision == revision && layer.region.equals(region);
-                layer.region = region;
-                layer.setFresh(fresh, revision);
-                CgTrace.add(UiTrace.FRAME, fresh ? "layers-reused" : "layers-repainted", 1);
-                return layer;
-            }
-            // COUNTED APART FROM A FIRST SIGHTING: a layer whose element resizes every frame keeps
-            // starting over as a candidate and never settles, which is a different finding.
-            CgTrace.add(UiTrace.FRAME, "retain-resized", 1);
-            drop(key, layer);
-        }
-
-        // NOT ON FIRST SIGHT. A layer that changes every frame -- a window mid-fade, a scroller being
-        // dragged -- is never worth a texture of its own: it would repaint into it regardless, and hold
-        // it against the budget while the shared pool would have served. So a subtree has to be seen
-        // UNCHANGED once before it earns one. Flutter's raster cache scored pictures for complexity
-        // instead, and the score was bad enough to be disabled in the engine; stability is the same
-        // question answered by observation.
-        Candidate seen = candidates.get(key);
-        if (seen == null || seen.revision() != revision || !seen.region().equals(region)) {
-            candidates.put(key, new Candidate(revision, region, frameId));
-            // NOT YET, rather than no: the subtree has to be seen unchanged once. A frame where this
-            // dominates is one where everything is moving, and no cache would have helped.
-            CgTrace.add(UiTrace.FRAME, "retain-settling", 1);
-            return null;
-        }
-
-        int width = bucket(region.width()), height = bucket(region.height());
-        long bytes = (long) width * height * 4L;
-        if (retainedBytes + bytes > RETAINED_BUDGET_BYTES && !evictUntil(bytes)) {
-            // THE BUDGET IS SPENT, which is the one refusal a bigger budget would fix -- and the only
-            // way to tell it from the others is to count it.
-            CgTrace.add(UiTrace.FRAME, "retain-nobudget", 1);
-            return null;
-        }
-        candidates.remove(key);
-
-        long timed = CgTrace.stamp(UiTrace.FRAME);
-        CgGraphTexture target = requestTexture("cgui_retained_" + retainedCreated++, width, height, LAYER_FORMAT);
-        warmUpLayer(target);
-        CgTrace.zoneDone(UiTrace.FRAME, "retain:createFbo", timed);
-        layer = new RetainedLayer(target, region, revision);
-        layer.lastFrame = frameId;
-        layer.setFresh(false, revision);
-        retained.put(key, layer);
-        retainedBytes += bytes;
-        CgTrace.add(UiTrace.FRAME, "layers-retained-new", 1);
-        return layer;
-    }
-
     /** Rounded up so an element resizing by a pixel a frame does not reallocate its texture every frame. */
     private static int bucket(int size) {
         return Math.max(64, (Math.max(1, size) + 63) & ~63);
-    }
-
-    /** Frees least-recently-used layers until {@code wanted} bytes fit, or gives up. */
-    private boolean evictUntil(long wanted) {
-        Iterator<Map.Entry<Object, RetainedLayer>> entries = retained.entrySet().iterator();
-        while (entries.hasNext() && retainedBytes + wanted > RETAINED_BUDGET_BYTES) {
-            Map.Entry<Object, RetainedLayer> entry = entries.next();
-            if (entry.getValue().lastFrame == frameId) break;   // in use this very frame
-            release(entry.getValue());
-            entries.remove();
-        }
-        return retainedBytes + wanted <= RETAINED_BUDGET_BYTES;
-    }
-
-    /** Frees anything nothing has asked for in a while. Called once a frame, from {@link #endFrame}. */
-    private void sweepRetained() {
-        // Candidates are only useful across one frame gap, and there is one per layered box that has
-        // not settled. Swept in a batch rather than per frame: the map is small and the walk is not
-        // worth doing sixty times a second to save a few hundred bytes.
-        if ((frameId & 63L) == 0L) candidates.values().removeIf(c -> frameId - c.frame() > 4L);
-        if (retained.isEmpty()) return;
-        Iterator<Map.Entry<Object, RetainedLayer>> entries = retained.entrySet().iterator();
-        while (entries.hasNext()) {
-            Map.Entry<Object, RetainedLayer> entry = entries.next();
-            // Ordered least-recently-used first, so the first live one ends the sweep.
-            if (frameId - entry.getValue().lastFrame < RETAINED_IDLE_FRAMES) break;
-            release(entry.getValue());
-            entries.remove();
-        }
-    }
-
-    private void drop(Object key, RetainedLayer layer) {
-        retained.remove(key);
-        release(layer);
-    }
-
-    private void release(RetainedLayer layer) {
-        retainedBytes -= (long) layer.target().getWidth() * layer.target().getHeight() * 4L;
-        releaseTexture(layer.target());
     }
 
     /**
@@ -2672,7 +2535,7 @@ public final class CgUiPaintContext {
         return beginLayer(imported(fbo), true, region);
     }
 
-    /** As {@link #beginLayerFbo(LayerRegion)}, into a texture that outlives the frame — a {@link RetainedLayer}'s. */
+    /** As {@link #beginLayerFbo(LayerRegion)}, into a texture that outlives the frame. */
     public CgGraphTexture beginLayerFbo(CgGraphTexture target, LayerRegion region) {
         return beginLayer(target, true, region);
     }
@@ -3091,7 +2954,7 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Frees what this context made — its retained layers, the backdrop's and the icon raster's textures — and its
+     * Frees what this context made — its surfaces, the backdrop's and the icon raster's textures — and its
      * renderers. {@link UiGpu#destroy} calls it at GL context destruction. Only what is genuinely its own: materials,
      * the fallback texture and the font atlases are swept by {@code CgGraphicsLifecycle.destroyContext()}, and freeing
      * them here would be a double free.
@@ -3102,8 +2965,6 @@ public final class CgUiPaintContext {
 
         recording.reset();
         imported.clear();
-        for (RetainedLayer layer : retained.values()) deleteNow(layer.target());
-        retained.clear();
         for (Surface surface : surfaces.values()) {
             surface.released = true;
             deleteNow(surface.target());
@@ -3112,8 +2973,6 @@ public final class CgUiPaintContext {
         surfaces.clear();
         for (CgGraphTexture released : pendingReleases) deleteNow(released);
         pendingReleases.clear();
-        candidates.clear();
-        retainedBytes = 0L;
 
         // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
         backdrop.delete();

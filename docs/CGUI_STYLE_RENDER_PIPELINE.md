@@ -599,8 +599,8 @@ mask) skip this entirely — same direct-draw path as always, zero overhead — 
 
 **A layer is the size of what goes in it**, not the size of the display. `BoxPainter` takes the
 subtree's [ink bounds](#ink-bounds) through the pose, intersects them with the live clip, and opens a
-`LayerRegion`; the allocation, the clear and the composite are all sized from it, and the target comes
-from `LayerPool` bucketed by size and kept per surface. **The layer's pixel `(0,0)` is the region's
+`LayerRegion`; the allocation, the clear and the composite are all sized from it, and the target is a
+transient texture the executor lends for the frame from its pool, bucketed by size. **The layer's pixel `(0,0)` is the region's
 corner**, so the painter shifts its base matrix by the region's negated origin and the clip stack is
 shifted with it — a caller opening a layer by hand has to do the same.
 
@@ -616,12 +616,14 @@ into the draw through `_LayerOpacity` instead of flattening anything. The fold i
 that overrides a paint hook, because CrystalGraphics' text material carries no `_LayerOpacity` and a
 folded label would ignore the fade.
 
-**And a layer whose subtree did not change is not painted again.** `Box.subtreeRevision` is composed
-in the same walk as the ink bounds; `CgUiPaintContext.retain` keeps the texture, and a layer still
-holding the revision it was drawn at is composited straight back. Retention is refused for any subtree
-containing a node whose `paintsDynamically()` is true (the default for anything overriding a paint
-hook) or a `backdrop-filter`, whose subject is not in this tree at all. `UIElement.repaint()` is the
-door for a widget whose picture changes without moving a box.
+**A layer lives for one frame; what is kept is a surface.** A layer is drawn again every frame it is
+open, and what did not change inside it is replayed from its kept chunks rather than painted (render-graph
+G6). A picture kept across frames belongs to a box the compositor moves -- a window, a pointer follower, a
+compositor animation -- whose surface is composited again while nothing in it changed and repainted only
+where something did (G7, `AGENTS.md` § *Stack 5*). Neither is kept for a subtree containing a node whose
+`paintsDynamically()` is true (the default for anything overriding a paint hook) or a `backdrop-filter`,
+whose subject is not in this tree at all. `UIElement.repaint()` is the door for a widget whose picture
+changes without moving a box.
 
 **A rounded `overflow: hidden` is a clip, not a layer.** It clips to the box's shape less its border,
 **whatever the background** — CSS's rule; a translucent panel does not fade its own children, and alpha

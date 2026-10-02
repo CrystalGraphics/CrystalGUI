@@ -7,7 +7,6 @@ import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.LayerRegion;
-import com.crystalgui.render.RetainedLayer;
 import com.crystalgui.render.Surface;
 import com.crystalgui.render.texture.*;
 import com.crystalgui.render.texture.CgUiRect;
@@ -285,30 +284,10 @@ public final class BoxPainter {
                         (long) region.width() * region.height() / 1000L);
             }
 
-            // AND IF NOTHING UNDER IT MOVED, THE PICTURE IS STILL THERE. The whole of what a frame owes
-            // an unchanged subtree is one composited quad; the clear, the walk and every draw beneath
-            // are the difference between two frames, and there is none.
-            // THE REFUSAL IS COUNTED AS WELL AS THE HIT. A readout showing seventeen layers and no
-            // reuse reads as a broken cache; most of the time nothing asked it, because a subtree that
-            // repaints itself may not be kept. @see Box#retainable
-            RetainedLayer keep = null;
-            // A box the compositor animates keeps its picture for the flight, dynamic content and all, as a window
-            // manager's does: every frame of it is then one composite.
-            if (box.retainable() || fades) keep = ctx.retain(box, region, box.subtreeRevision());
-            else CgTrace.add(UiTrace.FRAME, "retain-dynamic", 1);
-            if (keep != null && keep.isFresh()) {
-                // A WHOLE SUBTREE IN ONE COMPOSITE, and none of its boxes paint to note themselves.
-                ctx.notePainted(ctx.targetToDraw(), region.x(), region.y(), region.x() + region.width(),
-                        region.y() + region.height());
-                box.noteFadedNode(ctx.blitLayer(keep.target(), opacity, region, fades), ctx.frameId());
-                ctx.damageSurface(region);
-                return;
-            }
-
             // A MASK AT FULL OPACITY needs no layer around the box: grouping at 1 is plain painter's order, so the
             // box paints into the target and only its children go through the mask. A layer as large as a whole
             // editor cleared and blitted once less a frame.
-            if (mask && opacity >= 1f && keep == null && !fades && !CgUiPaintContext.LEGACY_LAYERS) {
+            if (mask && opacity >= 1f && !fades && !CgUiPaintContext.LEGACY_LAYERS) {
                 paintMaskedChildrenOnly(box, style, node, ctx, base, radii, region, asContext);
                 return;
             }
@@ -321,9 +300,7 @@ public final class BoxPainter {
 
             // The subtree blends as one unit before opacity applies, and a mask multiplies only the
             // CHILDREN -- the box's own background is composited unmasked underneath.
-            CgGraphTexture subtreeFbo = keep != null
-                    ? ctx.beginLayerFbo(keep.target(), region)
-                    : ctx.beginLayerFbo(region);
+            CgGraphTexture subtreeFbo = ctx.beginLayerFbo(region);
             paintOwnBefore(box, style, node, ctx, radii);
             if (mask && clipsAsShape(box, style) && pushShapeClip(box, style, ctx)) {
                 try {
@@ -347,7 +324,6 @@ public final class BoxPainter {
             // Inside the layer, so the outline fades with the box: CSS puts it in the opacity group.
             paintOwnAfter(box, style, node, ctx);
             ctx.endLayerFbo();
-            if (keep != null) keep.painted();
             box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region, fades), ctx.frameId());
             ctx.damageSurface(region);
         } finally {
