@@ -86,7 +86,9 @@ Read `harness-output/<scene>/profile-harness-<n>f/report.txt` (game:
 2. **Noise** — are the slowest frames the first profiled ones (warm-up too short)? A `GC` column on the
    worst frame? Was anything else running? Two runs' medians apart by more than the effect? Then the numbers
    are noise, and the report must say so. `unexplained` idle is machine noise only once the host's loop is
-   zoned.
+   zoned. A spike of tens of ms or more that lands in a readback (`glState.adopt`, `stage.parkSamplers`), the
+   swap or the event poll is the driver held up by something: run the two-minute bare GLFW window from
+   `plan/gl-gpu-stalls-notes.md` before any engine theory (`PROFILING.md` § *Noise*).
 3. **Coverage** — each frame's `unzoned` cpu and `unexplained` idle with their **longest stretch** (the
    zones either side are where the missing zone goes), its `GAP` lines, the `SELF TIME` kinds. If any is
    as large as the effect you are chasing, the map was wrong: **fix every gap the report names,
