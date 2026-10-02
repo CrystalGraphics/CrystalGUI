@@ -5,7 +5,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.desktop.motion.WindowMotion;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.style.easing.ProgressFunctions;
+import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Animation;
@@ -453,7 +453,7 @@ public final class TaskbarPreviews {
         float fromTop = entering ? target.y + RISE : morphTop;
         play(new WindowGeometryAnimation(preview, this::panelIsLive,
                 fromLeft, fromTop, 0f, 0f, target.x, target.y, 0f, 0f,
-                true, false, TRAVEL_NANOS, ProgressFunctions.Premade.OUT_QUAD, this::motionFinished));
+                true, false, TRAVEL_NANOS, CgEasings.OUT_QUAD, this::motionFinished));
 
         if (fit != null) morphThumbnail(window, fit[0], fit[1]);
     }
@@ -472,7 +472,7 @@ public final class TaskbarPreviews {
         WindowMotion started = new WindowGeometryAnimation(picture, this::panelIsLive,
                 0f, 0f, morphThumbWidth, morphThumbHeight,
                 0f, 0f, toWidth, toHeight,
-                false, true, TRAVEL_NANOS, ProgressFunctions.Premade.OUT_QUAD, () -> {
+                false, true, TRAVEL_NANOS, CgEasings.OUT_QUAD, () -> {
                     thumbMotion = null;
                     preview.setThumbnailSizingSuppressed(false);
                     preview.applyThumbnailSize(toWidth, toHeight);

@@ -31,8 +31,8 @@ import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.style.easing.Easing;
-import com.crystalgui.style.easing.ProgressFunctions;
+import com.crystalgraphics.easing.CgEasing;
+import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -1196,7 +1196,7 @@ public class Desktop extends UIElement implements DataProvider {
      * opens at nearly seven times its average speed — a quarter of the journey in the first frame. Expo
      * is kept for things that only scale within their own box.</p>
      */
-    private static final Easing SNAP_PREVIEW_EASING = ProgressFunctions.Premade.OUT_QUAD;
+    private static final CgEasing SNAP_PREVIEW_EASING = CgEasings.OUT_QUAD;
 
     /**
      * The translucent rectangle showing where a snap would land — W13b.

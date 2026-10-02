@@ -1,6 +1,6 @@
 package com.crystalgui.style.transition;
 
-import com.crystalgui.style.easing.Easing;
+import com.crystalgraphics.easing.CgEasing;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 
@@ -13,7 +13,7 @@ public record ActiveTransition<T>(
         long startNanos,
         long delayNanos,
         long durationNanos,
-        Easing easing
+        CgEasing easing
 ) {
     /** Progress in [0,1]. 0 while still within the delay window; a zero-duration transition is
      * instantly done (1.0) the moment the delay elapses. */
