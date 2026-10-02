@@ -2264,6 +2264,7 @@ public final class CgUiPaintContext {
                     || held > Math.max(64, region.width() * 2) || tall > Math.max(64, region.height() * 2)) {
                 CgTrace.add(UiTrace.FRAME, "surfaces-resized", 1);
                 surfaces.remove(key);
+                surface.released = true;
                 releaseTexture(surface.target());
                 if (surface.checkTarget != null) releaseTexture(surface.checkTarget);
                 surface = null;
@@ -2278,7 +2279,25 @@ public final class CgUiPaintContext {
             CgTrace.add(UiTrace.FRAME, "surfaces-new", 1);
         }
         surface.lastFrame = frameId;
+        if (key instanceof Surface.Owner owner) owner.surface(surface);
         return surface;
+    }
+
+    /** Past this many pixels a side a surface holds only what its clip shows. @see #surfaceRegion */
+    private static final int SURFACE_MAX = 4096;
+
+    /**
+     * Where a surface for the box inked over {@code (x0, y0)-(x1, y1)} goes, in the target's pixels: all of it, NOT cut
+     * to the clip, which cuts its composite instead -- so a window hanging off the screen keeps its whole picture and
+     * moving it there draws nothing again. Cut like {@link #layerRegion} past {@link #SURFACE_MAX} a side.
+     */
+    public LayerRegion surfaceRegion(float x0, float y0, float x1, float y1) {
+        if (LEGACY_LAYERS) return layerRegion(x0, y0, x1, y1);
+        // A hair inside: a transform taken out and put back is not exact, and a region a pixel larger would miss.
+        int left = (int) Math.floor(x0 + 1e-3f), top = (int) Math.floor(y0 + 1e-3f);
+        int right = (int) Math.ceil(x1 - 1e-3f), bottom = (int) Math.ceil(y1 - 1e-3f);
+        if (right - left > SURFACE_MAX || bottom - top > SURFACE_MAX) return layerRegion(x0, y0, x1, y1);
+        return new LayerRegion(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
     }
 
     /** Surfaces being walked, innermost last, with the recording's operation count when each began. */
@@ -2298,7 +2317,8 @@ public final class CgUiPaintContext {
         }
         walkingMarks[walkingDepth] = recording.operations();
         walking[walkingDepth++] = surface;
-        beginLayerFbo(surface.target(), region);
+        // ITS OWN CLIP ONLY: the window's whole picture, which the clip around it cuts as it is composited.
+        beginLayer(surface.target(), true, region, false);
         surface.beginWalk(frameId, full || !DAMAGE);
     }
 
@@ -2360,6 +2380,11 @@ public final class CgUiPaintContext {
         return surface.checkTarget;
     }
 
+    /** Opens {@code surface}'s {@link #damageCheckTarget} over {@code region} as a surface opens: unclipped. */
+    public void beginDamageCheck(Surface surface, LayerRegion region) {
+        beginLayer(damageCheckTarget(surface), true, region, false);
+    }
+
     /**
      * Check mode: compares {@code region} of {@code surface} with its {@link #damageCheckTarget} once both are drawn,
      * and names {@code label} where they differ -- a change the surface's damage missed.
@@ -2389,10 +2414,13 @@ public final class CgUiPaintContext {
     /** Frees the surfaces nothing has asked for in a while. */
     private void sweepSurfaces() {
         if (surfaces.isEmpty() || (frameId & 15L) != 0L) return;
-        Iterator<Surface> each = surfaces.values().iterator();
+        Iterator<Map.Entry<Object, Surface>> each = surfaces.entrySet().iterator();
         while (each.hasNext()) {
-            Surface surface = each.next();
+            Map.Entry<Object, Surface> entry = each.next();
+            Surface surface = entry.getValue();
             if (frameId - surface.lastFrame < SURFACE_IDLE_FRAMES) continue;
+            if (entry.getKey() instanceof Surface.Owner owner && owner.keepsSurface()) continue;
+            surface.released = true;
             releaseTexture(surface.target());
             if (surface.checkTarget != null) releaseTexture(surface.checkTarget);
             each.remove();
@@ -2747,6 +2775,12 @@ public final class CgUiPaintContext {
      *               origin; null leaves it alone.
      */
     private CgGraphTexture beginLayer(CgGraphTexture target, boolean clear, @Nullable LayerRegion region) {
+        return beginLayer(target, clear, region, true);
+    }
+
+    /** {@code inheritClip}: the clip around it applies inside, shifted into its origin; false starts unclipped. */
+    private CgGraphTexture beginLayer(CgGraphTexture target, boolean clear, @Nullable LayerRegion region,
+                                      boolean inheritClip) {
         // The enclosing target's pass ends here and continues in another after the layer, so the pass that
         // composites the layer runs after the layer's own.
         drain();
@@ -2775,7 +2809,9 @@ public final class CgUiPaintContext {
         // THE INHERITED CLIP, RE-EXPRESSED FOR THIS TARGET. The stack keeps rects top-left and flips them against
         // the target's height, so a layer of another height than its parent clips the same region rather than a
         // band at its bottom. A BOUNDED layer moves the origin as well, so every inherited rect shifts with it.
-        scissorStack.resume(region == null ? savedScissor : savedScissor.shifted(-region.x(), -region.y()));
+        if (inheritClip) {
+            scissorStack.resume(region == null ? savedScissor : savedScissor.shifted(-region.x(), -region.y()));
+        }
         reapplyScissorFor(height);
 
         targetConstants(width, height);
@@ -2845,12 +2881,19 @@ public final class CgUiPaintContext {
 
     /** {@link #drawLayer(CgFrameBuffer, float, float, float, float)} for a {@link #requestLayer requested} texture. */
     public void drawLayer(CgGraphTexture layer, float x, float y, float width, float height) {
+        drawLayer(layer, x, y, width, height, 0f, 1f, 1f, 0f);   // V flipped — see blitLayer's javadoc
+    }
+
+    /**
+     * {@link #drawLayer(CgGraphTexture, float, float, float, float)} for the part of {@code layer} between
+     * {@code (u0, v0)} and {@code (u1, v1)}, v counted from the texture's bottom: a window's border box in its surface.
+     */
+    public void drawLayer(CgGraphTexture layer, float x, float y, float width, float height, float u0, float v0,
+                          float u1, float v1) {
         // Declared rather than bound by hand. @see #blitLayer
         layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
         withMaterial(layerBlitMaterial, () -> {
-            quad().at(x, y).size(width, height)
-                  .uv(0f, 1f, 1f, 0f)   // V flipped — see blitLayer's javadoc
-                  .color(getColor()).submit();
+            quad().at(x, y).size(width, height).uv(u0, v0, u1, v1).color(getColor()).submit();
             flush();
         });
     }
@@ -2939,6 +2982,15 @@ public final class CgUiPaintContext {
 
     /** {@link #blitLayer(CgGraphTexture, float, LayerRegion)}; {@code fades} makes the effect node at full opacity too. */
     public int blitLayer(CgGraphTexture layer, float opacity, LayerRegion region, boolean fades) {
+        return blitLayer(layer, opacity, region, fades, null);
+    }
+
+    /**
+     * {@link #blitLayer(CgGraphTexture, float, LayerRegion, boolean)} through {@code turn}, a matrix in the current draw
+     * space: a surface drawn at rest, composited with its box's own transform.
+     */
+    public int blitLayer(CgGraphTexture layer, float opacity, LayerRegion region, boolean fades,
+                         @Nullable Matrix4f turn) {
         if (region.isEmpty()) return 0;
         long timed = CgTrace.stamp(UiTrace.FRAME);
         CgTrace.add(UiTrace.FRAME, "layer-blit-kpx", region.width() * region.height() / 1000);
@@ -2957,7 +3009,8 @@ public final class CgUiPaintContext {
         try {
             withMaterial(layerBlitMaterial, () -> withLayerOpacity(drawn, () -> {
                 poseStack.pushPose();
-                poseStack.last().pose().set(targetToDraw());
+                if (turn != null) poseStack.last().pose().set(turn).mul(targetToDraw());
+                else poseStack.last().pose().set(targetToDraw());
                 quad().at(region.x(), region.y()).size(region.width(), region.height())
                       .uv(0f, 1f, u1, v1)
                       .color(getColor()).submit();
@@ -3052,6 +3105,7 @@ public final class CgUiPaintContext {
         for (RetainedLayer layer : retained.values()) deleteNow(layer.target());
         retained.clear();
         for (Surface surface : surfaces.values()) {
+            surface.released = true;
             deleteNow(surface.target());
             if (surface.checkTarget != null) deleteNow(surface.checkTarget);
         }

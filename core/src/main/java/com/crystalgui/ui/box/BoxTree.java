@@ -887,7 +887,10 @@ public final class BoxTree {
         box.composedLocalY = box.y - hostScrollTop;
         box.localToWorld.set(hostWorld).translate(box.composedLocalX, box.composedLocalY, 0f);
         Transform transform = box.transform();
-        if (!transform.isIdentity()) {
+        box.transformed = !transform.isIdentity();
+        if (box.transformed) {
+            if (box.restToWorld == null) box.restToWorld = new Matrix4f();
+            box.restToWorld.set(box.localToWorld);
             if (box.mirrorRoot) {
                 // A MIRROR ROOT SCALES ABOUT ITS OWN CORNER, never about its source's
                 // `transform-origin`. The transform on a mirror is a PLACEMENT written by whoever owns

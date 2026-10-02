@@ -531,6 +531,24 @@ public final class Box {
         return localToWorld;
     }
 
+    /** {@link #localToWorld} before its own {@code transform}, while it has one; null otherwise. */
+    @Nullable
+    Matrix4f restToWorld;
+    boolean transformed;
+
+    /**
+     * Where the box is at rest: {@link #localToWorld} without its own {@code transform} -- what a surface draws it at,
+     * the transform going into the composite. The same matrix as {@code localToWorld} while it has none.
+     */
+    public Matrix4f restToWorld() {
+        return transformed ? restToWorld : localToWorld;
+    }
+
+    /** Whether it carries a {@code transform} of its own. @see #restToWorld */
+    public boolean isTransformed() {
+        return transformed;
+    }
+
     /** @see #inkX0 */
     public float inkX0() {
         return inkX0;

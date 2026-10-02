@@ -3,60 +3,42 @@ package com.crystalgui.desktop.taskbar;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowIcon;
-import com.crystalgui.desktop.window.WindowSnapshot;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.Surface;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.style.property.visual.transform.Transform;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 
 import javax.annotation.Nullable;
 
 /**
- * A live picture of a window, drawn at whatever size this element happens to be.
+ * A picture of a window, drawn at whatever size this element happens to be: the window's surface.
  *
- * <h3>It re-draws the window rather than keeping a copy of it</h3>
+ * <pre>{@code
+ * WindowThumbnail thumbnail = new WindowThumbnail().setFrame(window);
+ * panel.append(thumbnail);
+ * thumbnail.syncSize();          // per frame: the box takes the window's shape, fitted into the sheet's maximum
+ * }</pre>
  *
- * <p>Windows' DWM hands out a thumbnail by registering the window's composited surface and letting the
- * taskbar blit it; we have no per-window surface, so the equivalent is to paint the subtree a second time
- * under a different pose. It costs one extra subtree walk while a preview is open, and the fill is at
- * thumbnail size, so it is cheap in the only dimension that matters — but it is genuinely LIVE, which a
- * cached frame would not be. A window whose editor is scrolling shows it scrolling.</p>
+ * <h3>It draws the window's surface</h3>
  *
- * <p><b>On this engine that is a real second BOX, and the mirroring flag is gone.</b> The old engine
- * drew the subtree twice against one cached {@code localToWorld} per element, so the copy overwrote the
- * original's idea of where it lived and the real window stopped being clickable where it was drawn —
- * which is why {@code CgUiPaintContext.mirrored} existed and why it had to be a counter rather than a
- * boolean. {@link com.crystalgui.ui.box.BoxTree#mirror} lays the subtree out a second time under this
- * element, so each copy has its own matrices and its own place in the hit order, and the node is never
- * told it is drawn twice. Nothing here paints: the painter walks the mirror like any other box.</p>
+ * <p>DWM hands a taskbar a thumbnail by letting it draw the window's redirection surface, and so does this
+ * (render-graph G7): a window is drawn into a texture of its own, {@link WindowFrame#surface()}, and the thumbnail
+ * draws that texture's border box scaled into its own. It is live -- a window whose editor scrolls shows it scrolling,
+ * a frame behind at most -- and costs one textured quad, where a second layout of the window and a second walk of it
+ * used to be the price.</p>
+ *
+ * <p><b>A minimised window keeps its surface</b> ({@link WindowFrame#keepsSurface}): hiding detaches it, so nothing
+ * paints it, and the picture stays the one it last painted, at rest -- the flight that minimised it was its
+ * composite's, never its surface's. A window that has never painted has no picture, and shows {@link #placeholder}.</p>
  *
  * <h3>The BOX is the window fitted into a maximum, rather than the picture letterboxed inside a fixed one</h3>
  *
- * <p>Windows' model, and it is worth stating precisely because the near-misses all look reasonable: the
- * taskbar asks for a thumbnail no larger than a maximum on <b>each axis</b> and the window answers with
- * its own shape scaled to fit. So both of a thumbnail's dimensions vary — a tall window comes back
- * full-height and narrow, a wide one full-width and short — and the panel is built around whatever came
- * back. Nothing is ever letterboxed, and no two previews need be the same size.</p>
- *
- * <p>The sheet gives the maximum as a square, and {@link #syncSize} does the fitting. The fit-and-centre
- * in {@link #syncMirror} is then a no-op in the ordinary case and stays as the honest fallback for a box
- * that something else has constrained.</p>
- *
- * <h3>A minimised window is a PHOTOGRAPH instead</h3>
- *
- * <p>Hiding is DETACHING in CrystalOS — the point being that a hidden window genuinely stops: no layout,
- * no paint, no input — so a minimised window has no boxes to mirror and there is nothing to draw live.
- * {@link WindowSnapshot} covers that case with a picture taken on the way out, which is what DWM does too,
- * and its javadoc carries the argument for why keeping one does not fight the freeze contract: a texture
- * is not a window and cannot run.</p>
- *
- * <p>So there are two paths here and only one of them mirrors. A live window is a subtree laid out
- * again; a minimised one is already a texture, drawn in {@link #paintDecoration} because a texture has
- * no boxes.</p>
+ * <p>Windows' model: the taskbar asks for a thumbnail no larger than a maximum on <b>each axis</b> and the window
+ * answers with its own shape scaled to fit. So both of a thumbnail's dimensions vary, and nothing is letterboxed.
+ * The sheet gives the maximum as a square, and {@link #syncSize} does the fitting; the fit-and-centre in
+ * {@link #paintDecoration} is the fallback for a box something else has constrained.</p>
  */
 public class WindowThumbnail extends UIElement {
 
@@ -105,9 +87,7 @@ public class WindowThumbnail extends UIElement {
     public WindowThumbnail() {
         super(NAME);
         addClass(THUMBNAIL_CLASS);
-        // NOTHING IN HERE IS INTERACTIVE. The picture is a picture: a click belongs to the preview panel
-        // around it, which activates the window. Leaving it hittable would also mean the MIRRORED subtree
-        // competed for hits, which is the other half of what `mirrored` exists to prevent.
+        // NOTHING IN HERE IS INTERACTIVE: a click belongs to the preview panel around it, which activates the window.
         setHitTest(false);
         placeholder.addClass(PLACEHOLDER_CLASS);
         placeholder.setDisplayed(false);
@@ -242,12 +222,13 @@ public class WindowThumbnail extends UIElement {
         float sourceWidth;
         float sourceHeight;
         Box live = liveBox();
+        Surface picture = frame == null ? null : frame.surface();
         if (live != null) {
             sourceWidth = live.width();
             sourceHeight = live.height();
-        } else if (frame != null && frame.snapshot().isValid()) {
-            sourceWidth = frame.snapshot().capturedWidth();
-            sourceHeight = frame.snapshot().capturedHeight();
+        } else if (picture != null) {
+            sourceWidth = picture.pictureWidth();
+            sourceHeight = picture.pictureHeight();
         } else if (frame != null) {
             // NO PICTURE STILL HAS A SHAPE: the placeholder card. Answering null here is what made a
             // pictureless window stall the preview's placement for good. @see #placeholder
@@ -269,13 +250,7 @@ public class WindowThumbnail extends UIElement {
         return new float[] { sourceWidth * scale, sourceHeight * scale };
     }
 
-    /**
-     * Whether the window can be drawn LIVE — false for a minimised one, which is detached.
-     *
-     * <p>The freeze contract working as intended: a hidden window has no layout, so there are no boxes
-     * to mirror. {@link #hasPicture} is the question a caller usually wants, since a minimised window
-     * still has a photograph.</p>
-     */
+    /** The window's box while it is on screen; null for a minimised one, which is detached. */
     @Nullable
     private Box liveBox() {
         if (frame == null || frame.state() != WindowState.VISIBLE || frame.parent() == null) {
@@ -291,134 +266,26 @@ public class WindowThumbnail extends UIElement {
     }
 
     /**
-     * Whether there is anything at all to draw — live, or a photograph taken before it was minimised.
-     *
-     * <p>Exposed so a preview can collapse rather than reserve a picture-sized hole that will stay
-     * empty, which is what a window that has never been on screen leaves.</p>
+     * Whether there is anything to draw: a window on screen, whose surface comes with its first paint, or one that
+     * kept its picture when it was minimised.
      */
     public boolean hasPicture() {
-        return hasLive() || (frame != null && frame.snapshot().isValid());
+        return hasLive() || (frame != null && frame.surface() != null);
     }
 
-    // ── The mirror ──────────────────────────────────────────────────────────────────────────────
-
-    /** The window's second layout, hosted here, or null while there is nothing live to mirror. */
-    @Nullable
-    private Box mirror;
-
-    /** What {@link #mirror} was built for, so a changed window takes a new one. */
-    @Nullable
-    private WindowFrame mirrored;
-
-    /**
-     * Keeps the mirror in step with the window and the box — from a post-layout hook, per frame.
-     *
-     * <p><b>Nothing here draws.</b> The old engine composed a pose by hand and re-walked the frame's
-     * subtree inside {@code ctx.mirrored(...)}; this asks the box tree for a second layout and sets a
-     * transform on its root, and the painter reaches it like any other box. The three things the hand
-     * version had to get right — the scissor, the origin, and the mirroring guard — are the box tree's
-     * now: a mirror root is hosted HERE, so it is clipped by this element's own {@code overflow} and
-     * positioned in this element's space, and it has matrices of its own so hit-testing was never
-     * confused in the first place.</p>
-     *
-     * <p>Post-layout because every input is a measured box: this element's, for the maximum, and the
-     * window's, for the shape. Before layout both are the previous frame's, and on the frame a preview
-     * first opens both are absent.</p>
-     */
-    private void syncMirror() {
-        Box self = box();
-        Box live = liveBox();
-        if (self == null || live == null || self.width() <= 0f || self.height() <= 0f) {
-            dropMirror();
-            return;
-        }
-        UIDocument document = document();
-        if (document == null) {
-            dropMirror();
-            return;
-        }
-        if (mirror == null || mirrored != frame) {
-            dropMirror();
-            mirror = document.boxes().mirror(frame, self);
-            mirrored = frame;
-        }
-        // FIT AND CENTRE, as a transform on the copy. A `left`/`top` would move the ORIGINAL too --
-        // a mirror shares its subtree's nodes and therefore its styles, which is exactly why
-        // BoxTree.mirror tells a caller to transform the returned box instead.
-        float scale = Math.min(self.width() / live.width(), self.height() / live.height());
-        float width = live.width() * scale;
-        float height = live.height() * scale;
-        // TRANSLATE THEN SCALE, in that order and never the other. A transform list applies
-        // LEFT TO RIGHT as matrix multiplication, so `scale then translate` would scale the offset too
-        // and put the picture at a fraction of where it belongs -- the ordering `SvgTransform.parse`
-        // once got backwards and that Transform's own javadoc states.
-        mirror.setTransform(Transform.of(
-                Transform.Op.translate(LengthPercent.px((self.width() - width) / 2f),
-                        LengthPercent.px((self.height() - height) / 2f)),
-                Transform.Op.scale(scale, scale)));
-    }
-
-    private void dropMirror() {
-        if (mirror == null) return;
-        UIDocument document = document();
-        if (document != null) document.boxes().unmirror(mirror);
-        mirror = null;
-        mirrored = null;
-    }
-
-    @Override
-    protected void connected() {
-        super.connected();
-        UIDocument document = document();
-        if (document == null) return;
-        document.animation().afterLayout(this, delta -> {
-            syncMirror();
-            return true;
-        });
-    }
-
-    @Override
-    protected void disconnected() {
-        // A MIRROR IS A LAYOUT, so it has to go when this leaves the tree -- the hook is dropped for us
-        // by ownership, and the boxes it made are not.
-        dropMirror();
-        super.disconnected();
-    }
-
-    /**
-     * Draws the PHOTOGRAPH — the only thing here that is painted rather than laid out.
-     *
-     * <p>A minimised window is detached and has no boxes, so there is nothing to mirror and
-     * {@link WindowSnapshot} is a texture. It is clipped to this box all the same: the picture is
-     * fitted inside it, so in principle nothing can escape, but the live path clips and an asymmetry
-     * between two paths that are supposed to look identical is the kind of thing only ever noticed as
-     * a symptom somewhere else.</p>
-     */
+    /** Draws the window's surface, fitted and centred, clipped to this box. */
     @Override
     public void paintDecoration(CgUiPaintContext ctx, Box box) {
         super.paintDecoration(ctx, box);
-        if (frame == null || hasLive()) return;
-        if (box.width() <= 0f || box.height() <= 0f) return;
-
-        WindowSnapshot photograph = frame.snapshot();
-        if (!photograph.isValid()) return;
-
-        float sourceWidth = photograph.capturedWidth();
-        float sourceHeight = photograph.capturedHeight();
+        Surface picture = frame == null ? null : frame.surface();
+        if (picture == null || box.width() <= 0f || box.height() <= 0f) return;
+        float sourceWidth = picture.pictureWidth(), sourceHeight = picture.pictureHeight();
         if (sourceWidth <= 0f || sourceHeight <= 0f) return;
-
         float scale = Math.min(box.width() / sourceWidth, box.height() / sourceHeight);
-        float width = sourceWidth * scale;
-        float height = sourceHeight * scale;
-        // IN THIS BOX'S OWN SPACE. The painter draws every box with the pose set from its own
-        // localToWorld, so a decoration starts at (0,0) rather than at an absolute layout coordinate --
-        // the same origin change `toLocal` made, on the paint side.
-        float left = (box.width() - width) / 2f;
-        float top = (box.height() - height) / 2f;
-
+        float width = sourceWidth * scale, height = sourceHeight * scale;
         ctx.pushScissor(0f, 0f, box.width(), box.height());
         try {
-            photograph.draw(ctx, left, top, width, height);
+            picture.drawPicture(ctx, (box.width() - width) / 2f, (box.height() - height) / 2f, width, height);
         } finally {
             ctx.popScissor();
         }

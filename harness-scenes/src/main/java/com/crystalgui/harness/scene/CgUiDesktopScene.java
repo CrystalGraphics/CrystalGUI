@@ -739,12 +739,13 @@ public class CgUiDesktopScene
         return false;
     }
 
-    // ── -Dcrystalgui.harness.desktop.minimise=true: a window's snapshot, in flight ──
+    // ── -Dcrystalgui.harness.desktop.minimise=true: a window's surface, in flight ──
 
     /**
-     * Minimises the active window -- the editor -- and restores it, photographing each flight halfway: what flies is the window's
-     * snapshot, so {@code minimise-mid} and {@code restore-mid} show whether it was drawn, and {@code restored}
-     * against {@code minimise-before} whether the window came back as it left. ~4s, with {@code --seconds=5}.
+     * Minimises the active window -- the editor -- and restores it, photographing each flight halfway: what flies is the
+     * window's surface, so {@code minimise-mid} and {@code restore-mid} show whether it was drawn, {@code
+     * minimised-preview} its taskbar preview drawn from the surface it kept, and {@code restored} against {@code
+     * minimise-before} whether the window came back as it left. ~7s after the desktop is up.
      */
     private static final boolean MINIMISE_SHOT = Boolean.getBoolean("crystalgui.harness.desktop.minimise");
 
@@ -778,9 +779,16 @@ public class CgUiDesktopScene
             case 100 -> driver.run(minimiseTarget::minimize);
             case 106 -> ctx.getArtifactService().requestCapture("minimise-mid");
             case 150 -> ctx.getArtifactService().requestCapture("minimised");
-            case 160 -> driver.run(() -> minimiseTarget.show(true));
-            case 166 -> ctx.getArtifactService().requestCapture("restore-mid");
-            case 230 -> ctx.getArtifactService().requestCapture("restored");
+            // Its taskbar preview: the surface it kept, drawn at rest.
+            case 151 -> driver.run(() -> {
+                float[] entry = at(desktop.taskbar().entryFor(minimiseTarget), 0.5f, 0.5f);
+                document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event((int) entry[0], (int) entry[1], 0, 0,
+                        CgMouseCodes.NONE, false, 0f, -1L));
+            });
+            case 300 -> ctx.getArtifactService().requestCapture("minimised-preview");
+            case 310 -> driver.run(() -> minimiseTarget.show(true));
+            case 316 -> ctx.getArtifactService().requestCapture("restore-mid");
+            case 380 -> ctx.getArtifactService().requestCapture("restored");
             default -> { }
         }
     }

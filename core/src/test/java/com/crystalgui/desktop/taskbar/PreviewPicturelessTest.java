@@ -16,6 +16,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -99,7 +100,7 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
         WindowFrame frame = open(title, 250f, 250f);
         frame.hide();
         frame();
-        assertFalse("the fixture needs a document with NO photograph", frame.snapshot().isValid());
+        assertNull("the fixture needs a document with NO picture", frame.surface());
         return frame;
     }
 

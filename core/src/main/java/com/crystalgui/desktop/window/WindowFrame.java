@@ -19,7 +19,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.Surface;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
@@ -90,7 +90,7 @@ import java.util.function.BooleanSupplier;
  * this clamp starts), and the fix belongs with W6's maximise/restore geometry rather than in a special
  * case here.</p>
  */
-public class WindowFrame extends UIElement implements Disposable, DataProvider {
+public class WindowFrame extends UIElement implements Disposable, DataProvider, Surface.Owner {
 
     /** The cascade identity `ua/desktop.css` names. @see com.crystalgui.ui.dom.Name */
     public static final Name NAME = Name.of("window");
@@ -279,125 +279,28 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
     /** The open/close/minimise/maximise transitions. @see WindowAnimator */
     private final WindowAnimator animator = new WindowAnimator(this);
 
-    /** This window's last frame, for previewing it once it is minimised. @see WindowSnapshot */
-    private final WindowSnapshot snapshot = new WindowSnapshot();
-
-    /** Set by a minimise, cleared by the paint that acts on it. @see #paintDecoration */
-    private boolean snapshotPending;
-
-    /** Photograph this window on its next paint. @see WindowSnapshot */
-    public void requestSnapshot() {
-        snapshotPending = true;
-        repaint();
-    }
-
-    /** Only while a photograph is pending: otherwise its picture is its tree's, and its surface may be kept. */
-    @Override
-    public boolean paintsDynamically() {
-        return snapshotPending;
-    }
-
-    /** The last photograph of this window, valid only after a minimise. @see WindowSnapshot */
-    public WindowSnapshot snapshot() {
-        return snapshot;
-    }
-
     /**
-     * Takes the pending photograph, once its subtree has finished drawing for real.
-     *
-     * <p>The flag is cleared BEFORE the capture and that is not tidiness: capturing re-enters this very
-     * subtree's {@code drawSubtree}, so a flag still set when the nested draw reaches here would recurse
-     * without end.</p>
-     *
-     * <p>The scale comes off the live pose rather than from {@code uiScale} directly, because the pose is
-     * what the subtree is actually about to be drawn with — {@code uiScale} times whatever any ancestor
-     * has scaled. A snapshot allocated against the wrong one is blurry or four times too large.</p>
+     * Its surface (render-graph G7): what a thumbnail, a preview and the switcher draw. Kept while the window is hidden,
+     * so a minimised window still has its picture -- a texture, which does not run, so keeping one does not undo the
+     * freeze a hidden window is.
      */
-    /**
-     * While a surface animation is playing, draw the PHOTOGRAPH instead of the whole window.
-     *
-     * <h3>The cost this removes</h3>
-     *
-     * <p>An animating window has {@code opacity < 1}, and a group opacity makes {@code drawSubtree}
-     * isolate the subtree in a layer FBO — which re-renders <b>everything inside the window, every
-     * frame</b>. Measured in a client: a minimise of the editor dropped the render loop from a steady
-     * 120Hz to between 60 and, in the worst case seen, 9 — and because a window animation is ticked
-     * once per rendered frame, the animation's own smoothness collapsed with it. Reported as animations
-     * running at "10-20fps while the game holds 120", which is precisely backwards: the game was not
-     * holding 120 for those 400ms, and nothing else was slow enough to notice.</p>
-     *
-     * <p>So the window is photographed once when the animation starts and the picture is what moves and
-     * fades — {@code DWM}, {@code Quartz} and Mutter all animate a surface, and this file's own note on
-     * {@code WindowAnimation} already said a compositor animates the window's surface. It was animating
-     * the live tree.</p>
-     *
-     * <h3>Two guards, and both are load-bearing</h3>
-     *
-     * <p><b>Not while the capture is pending</b>: {@code paintOverlay} is where the photograph is taken,
-     * and returning early here would skip it — so the animation would run for ever on whatever stale
-     * picture a previous minimise had left, or on nothing at all.</p>
-     *
-     * <p><b>Only for a SURFACE animation</b>: a maximise animates layout, so its content genuinely
-     * reflows and a stretched photograph of the old layout is the artefact {@code WindowGeometryAnimation}
-     * exists to avoid.</p>
-     */
+    @Nullable
+    private Surface surface;
 
     @Override
-    public void paintDecoration(CgUiPaintContext ctx, Box box) {
-        super.paintDecoration(ctx, box);
-        if (!snapshotPending) return;
-        snapshotPending = false;
-        repaint();
-        UIDocument window = document();
-        if (window == null) return;
+    public void surface(Surface surface) {
+        this.surface = surface;
+    }
 
-        // THE ROOT SCALE, never the live pose's. pose().m00() here is uiScale MULTIPLIED BY the
-        // animation's own scale, so an open -- which starts at a sliver -- sized its photograph to the
-        // sliver and then stretched it back over the whole window.
-        float uiScale = window.boxes().rootTransform().m00();
+    @Override
+    public boolean keepsSurface() {
+        return state == WindowState.HIDDEN;
+    }
 
-        // AND THE ANIMATION'S OPACITY IS SUPPRESSED FOR THE DURATION OF THE SHOT. The other half of the
-        // same rule: drawSubtree reads this element's opacity, so a photograph taken mid-fade is a faded
-        // photograph, which is then faded AGAIN every frame it is drawn. playOpen and the restore from a
-        // minimise both start at opacity 0, so the picture came out at about 6% and the window appeared
-        // to snap into existence at the end of the animation with nothing visible before it.
-        //
-        // A PHOTOGRAPH IS OF THE WINDOW AT REST, so the running animation's own transform and opacity
-        // are suppressed for the length of the shot -- and through the ANIMATION SLOT, because that is
-        // where WindowAnimation writes them. A StyleGroup write at the same origin is simply outranked
-        // by the slot and does nothing at all.
-        //
-        // Both halves were learned from the same photograph. drawSubtree reads this element's opacity,
-        // so one taken mid-fade is a faded picture that is then faded AGAIN wherever it is drawn; and
-        // clearing the ambient pose in renderInto is not enough, because the capture re-enters
-        // drawSubtree and the first thing drawSubtree does is push this element's own transform.
-        //
-        // Only a minimise photographs itself now, and it does so on a frame where both are already
-        // neutral -- so this guards a picture taken at any other moment rather than fixing a live bug.
-        //
-        // SUPPRESSED ON THE BOX, where the animation writes it. The old engine wrote ANIMATION-origin
-        // slots and had to withdraw the same slots; here the compositor's overrides ARE the animation,
-        // so setting them aside and putting them back is the whole of it -- and the transform origin
-        // goes with the transform, because a photograph taken about a pinned corner is the artefact
-        // this suppression exists to avoid.
-        Float wasOpacity = box.opacity() < 1f ? box.opacity() : null;
-        Transform wasTransform = box.transform().isIdentity() ? null : box.transform();
-        Float wasOriginX = box.transformOriginX();
-        Float wasOriginY = box.transformOriginY();
-        if (wasOpacity != null) box.setOpacity(1f);
-        if (wasTransform != null) {
-            box.setTransform(Transform.IDENTITY);
-            box.setTransformOrigin(null, null);
-        }
-        try {
-            snapshot.capture(ctx, this, uiScale);
-        } finally {
-            if (wasOpacity != null) box.setOpacity(wasOpacity);
-            if (wasTransform != null) {
-                box.setTransform(wasTransform);
-                box.setTransformOrigin(wasOriginX, wasOriginY);
-            }
-        }
+    /** Its picture as it last painted, at rest; null before it first paints, or once nothing keeps it. */
+    @Nullable
+    public Surface surface() {
+        return surface != null && surface.hasPicture() ? surface : null;
     }
     private final UIElement captionChrome;
     private final UIText titleLabel;
@@ -1871,8 +1774,6 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         // BEFORE anything else: adopted chrome belongs to the content, so it goes home rather than being
         // destroyed with the window that borrowed it.
         releaseChrome();
-        // Its picture is a requested texture, released through the paint context that made it.
-        snapshot.dispose();
         // READ BEFORE hide() clears it, and this is the whole of the hide/destroy distinction. Hiding
         // hands activation to nobody -- putting a window away is not asking for another one, and
         // activation drags the keyboard with it. Destroying is different: the window it was in is gone,
