@@ -184,7 +184,7 @@ public final class TypeIndex {
      * <p>This filtered with {@code startsWith} while {@link com.crystalgui.core.search.SearchMatcher},
      * which ranks the list afterwards, matches scattered characters. An index that pre-filters more
      * strictly than the thing consuming it is worse than no index: typing {@code CgRenderer} found nothing,
-     * because <em>nothing</em> starts with that — {@code CgBatchRenderer}, {@code CgQuadRenderer} and
+     * because <em>nothing</em> starts with that — {@code CgVectorRenderer}, {@code CgQuadRenderer} and
      * {@code CgTextRenderer} were never handed over to be ranked. The one row that did appear had survived
      * from an earlier, shorter query's batch, which made it look like an index with a single entry in it.
      * </p>

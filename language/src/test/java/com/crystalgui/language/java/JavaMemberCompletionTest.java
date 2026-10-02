@@ -376,7 +376,7 @@ public class JavaMemberCompletionTest {
      *
      * <p>Typing {@code CgRenderer} offered one row. Nothing on the machine <em>starts</em> with that, and
      * the index filtered with {@code startsWith} while {@code SearchMatcher} — which ranks whatever the
-     * index hands over — matches scattered characters. So {@code CgBatchRenderer}, {@code CgQuadRenderer}
+     * index hands over — matches scattered characters. So {@code CgVectorRenderer}, {@code CgQuadRenderer}
      * and {@code CgTextRenderer} were rejected a step before anything could rank them, and the single row
      * that did show had survived from an earlier, shorter query's batch.</p>
      *
