@@ -43,7 +43,7 @@ cross-agent tool use permitted is asking the orchestrator a clarifying question,
 
 # What this was built for
 
-CrystalGUI exists because of one product: a **node-based shader graph for Minecraft**, cross-version,
+CrystalGUI was started for one product: a **node-based shader graph for Minecraft**, cross-version,
 true to GLSL, on a modern GL 3.x+ pipeline with instancing as the default draw path — Unity's Shader
 Graph without the lies about what the GPU is doing.
 
@@ -53,8 +53,7 @@ for the rest. What the goal leaves behind is the standard: every widget here was
 node editor, which is why the box tree lays out once, why `transform` never reflows, and why a canvas
 can hold ten thousand nodes.
 
-📄 **CrystalShader Manifesto** (`plan/crystalgraphics/archive/CRYSTALSHADER_MANIFESTO.md`, in the private plan repository) — the rendering
-philosophy, which outlives the milestone.
+The rendering principles everything here stands on are CrystalGraphics' `AGENTS.md` § *Project philosophy*.
 
 # Build and run
 
