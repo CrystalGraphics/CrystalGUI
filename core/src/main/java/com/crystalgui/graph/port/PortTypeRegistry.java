@@ -29,7 +29,7 @@ public final class PortTypeRegistry {
     /**
      * Registers {@code type} under its own id.
      *
-     * <p>Throws on a duplicate id, matching {@code ElementRegistry.register} and {@code CgMeshRegistry}
+     * <p>Throws on a duplicate id, matching {@code ElementRegistry.register}
      * — a silent overwrite hides two consumers fighting over one id far more often than it is a
      * deliberate re-registration. Re-registering the <em>identical</em> type is a no-op rather than a
      * throw, so a host that registers from more than one entry point is not punished for it.</p>
