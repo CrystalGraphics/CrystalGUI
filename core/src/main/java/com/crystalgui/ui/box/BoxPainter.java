@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.InkOverflow;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.trace.CgTrace;
@@ -300,21 +301,43 @@ public final class BoxPainter {
 
     /** A box's own paint under its children, as one segment. @see CgUiPaintContext#beginSegment */
     private void paintOwnBefore(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx, Radii radii) {
-        noteReplayable(box, node, ctx, BoxReplay.BEFORE);
+        int key = keyOf(box, node, ctx, BoxReplay.BEFORE);
+        if (key == SAME && !checked(box, BoxReplay.BEFORE) && box.replay.replay(BoxReplay.BEFORE, ctx)) return;
         ctx.beginSegment();
         paintSelf(box, style, ctx, radii);
         node.paintContent(ctx, box);
-        ctx.endSegment();
+        endSegment(box, node, ctx, BoxReplay.BEFORE, key);
     }
 
     /** A box's own paint over its children, as one segment. */
     private void paintOwnAfter(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx) {
-        noteReplayable(box, node, ctx, BoxReplay.AFTER);
+        int key = keyOf(box, node, ctx, BoxReplay.AFTER);
+        if (key == SAME && !checked(box, BoxReplay.AFTER) && box.replay.replay(BoxReplay.AFTER, ctx)) return;
         ctx.beginSegment();
         node.paintDecoration(ctx, box);
         paintOverlay(box, style, ctx);
         paintOutline(box, style, ctx);
-        ctx.endSegment();
+        endSegment(box, node, ctx, BoxReplay.AFTER, key);
+    }
+
+    /** Check mode: a segment whose key holds is painted and compared rather than replayed. */
+    private static boolean checked(Box box, int segment) {
+        return CgUiPaintContext.REPLAY_CHECK && box.replay.kept(segment);
+    }
+
+    /** Ends a box's segment, keeping what it recorded when a key speaks for it, or comparing it in check mode. */
+    private static void endSegment(Box box, UIElement node, CgUiPaintContext ctx, int segment, int key) {
+        if (key == UNKEYED) {
+            ctx.endSegment();
+        } else if (key == SAME && checked(box, segment)) {
+            String differs = box.replay.check(segment, ctx);
+            if (differs == null) return;
+            CgTrace.add(UiTrace.FRAME, "replay-check-differs", 1);
+            CrystalGuiCore.LOGGER.warn("[replay-check] {} drew {} its children otherwise under an unchanged key: {}",
+                    layerLabel(node), segment == BoxReplay.BEFORE ? "under" : "over", differs);
+        } else {
+            box.replay.kept(segment, ctx.endSegment(box.replay.stretch(segment)));
+        }
     }
 
     /** A layer's owner as a profile names it: its tag, then its first class. */
@@ -403,21 +426,25 @@ public final class BoxPainter {
         ink[3] = Math.max(Math.max(ay, by), Math.max(cy, dy));
     }
 
+    /** {@link #keyOf}'s answers: no key speaks for the segment, it differs from last time, or it is the same. */
+    private static final int UNKEYED = 0, CHANGED = 1, SAME = 2;
+
     /**
-     * Counts whether {@code segment} would draw what it drew last frame -- the measure replay is built on (render-graph
-     * G6.2), taken before anything is replayed: `segments-unchanged` against `-changed`, and the two kinds a key
-     * cannot speak for, `-dynamic` (a widget painting what the tree cannot see) and `-unkeyed` (a draw space that is
-     * not a translation of the target).
+     * Whether {@code segment} would draw what it drew last time (render-graph G6.2), counted: `segments-unchanged`
+     * against `-changed`, and the two kinds a key cannot speak for, `-dynamic` (a widget painting what the tree
+     * cannot see) and `-unkeyed` (a draw space that is not a translation of the target).
      */
-    private void noteReplayable(Box box, UIElement node, CgUiPaintContext ctx, int segment) {
+    private int keyOf(Box box, UIElement node, CgUiPaintContext ctx, int segment) {
         if (node.paintsDynamically()) {
             CgTrace.add(UiTrace.FRAME, "segments-dynamic", 1);
-            return;
+            if (box.replay != null) box.replay.forget(segment);
+            return UNKEYED;
         }
         Matrix4f pose = ctx.getPoseStack().last().pose();
         if (!ctx.clipInDraw(segmentClip)) {
             CgTrace.add(UiTrace.FRAME, "segments-unkeyed", 1);
-            return;
+            if (box.replay != null) box.replay.forget(segment);
+            return UNKEYED;
         }
         boundsThrough(box.localInkL, box.localInkT, box.localInkR, box.localInkB, pose);
         float[] k = segmentKey;
@@ -433,8 +460,9 @@ public final class BoxPainter {
         k[9] = Math.min(ink[3], segmentClip[3]);
         k[10] = ctx.layerOpacity();
         if (box.replay == null) box.replay = new BoxReplay();
-        boolean same = box.replay.sameAs(segment, k, box.contentRevision, ctx.atlasEpoch());
+        boolean same = box.replay.sameAs(segment, k, box.contentRevision, ctx.replayEpoch());
         CgTrace.add(UiTrace.FRAME, same ? "segments-unchanged" : "segments-changed", 1);
+        return same ? SAME : CHANGED;
     }
 
     private final float[] segmentKey = new float[BoxReplay.KEY_FLOATS], segmentClip = new float[4];
