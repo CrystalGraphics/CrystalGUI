@@ -554,6 +554,8 @@ public class CgUiDesktopScene
             for (WindowFrame window : desktop.windows()) {
                 if (!window.isMaximized() && window.box() != null) {
                     desktop.activate(window);
+                    // FROM ONE PLACE EVERY RUN: the session keeps where the last drag left it.
+                    window.moveTo(24f, 24f);
                     followWindow = window;
                     break;
                 }
