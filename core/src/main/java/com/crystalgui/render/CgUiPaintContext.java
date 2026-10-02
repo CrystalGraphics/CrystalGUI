@@ -27,6 +27,7 @@ import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.render.CgImmediate;
+import com.crystalgraphics.render.draw.CgBindingTable;
 import com.crystalgraphics.render.draw.CgPassConstants;
 import com.crystalgraphics.render.graph.CgUpload;
 import com.crystalgraphics.render.graph.CgFrame;
@@ -36,6 +37,7 @@ import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.graph.CgPassRecorder;
 import com.crystalgraphics.render.graph.CgRecording;
+import com.crystalgraphics.render.graph.CgReplay;
 import com.crystalgraphics.render.property.CgPropertyValues;
 import com.crystalgraphics.render.property.CgSpatialTree;
 import com.crystalgraphics.render.graph.CgTextureDesc;
@@ -47,6 +49,7 @@ import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
+import com.crystalgraphics.text.atlas.CgGlyphAtlas;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
@@ -694,7 +697,22 @@ public final class CgUiPaintContext {
         frameId++;
         if (frameActive) throw new IllegalStateException("recordFrame() called without matching seal()");
         CgGL.enterGlFree("ui recording");
-        atlasEpoch = CgFontRegistry.get().getAtlasEvictionGeneration();
+        // A text kept while its glyphs were still generating drew without them, and an atlas that grew binds
+        // another texture: new glyph content is a new epoch, read once a frame since a frame kept under the old one
+        // is painted again in the next.
+        long evicted = CgFontRegistry.get().getAtlasEvictionGeneration();
+        long content = CgFontRegistry.get().getAtlasContentGeneration();
+        if (evicted != seenFontGeneration || content != seenFontContent) {
+            CgTrace.add(UiTrace.FRAME, evicted != seenFontGeneration ? "replay-epoch-evicted" : "replay-epoch-glyphs", 1);
+            seenFontGeneration = evicted;
+            seenFontContent = content;
+            replayEpoch++;
+        }
+        if (keptBindings.size() > KEPT_SNAPSHOTS) {
+            keptBindings.reset();
+            replayEpoch++;
+            CgTrace.add(UiTrace.FRAME, "replay-kept-resets", 1);
+        }
         layerOriginX = 0;
         layerOriginY = 0;
         setClip(0);
@@ -1634,9 +1652,32 @@ public final class CgUiPaintContext {
     /** Off with {@code -Dcrystalgui.paint.segments=false}: a box's paint shares chunks with its neighbours'. */
     private static final boolean SEGMENTS = !"false".equals(System.getProperty("crystalgui.paint.segments"));
 
+    /** Off with {@code -Dcrystalgui.paint.replay=false}: every box painted every frame. Needs segments. */
+    public static final boolean REPLAY = SEGMENTS && !"false".equals(System.getProperty("crystalgui.paint.replay"));
+
+    /**
+     * {@code -Dcrystalgui.paint.replayCheck=true}: a segment whose key holds is painted anyway and compared with what it
+     * kept, and a box that drew otherwise under an unchanged key is named once -- a widget whose picture changes
+     * without saying so. Every box paints, so it costs what replay saves.
+     */
+    public static final boolean REPLAY_CHECK = REPLAY && Boolean.getBoolean("crystalgui.paint.replayCheck");
+
+    /** Snapshots kept past which they are all dropped, and every kept segment with them. */
+    private static final int KEPT_SNAPSHOTS = 4096;
+
     /** Where each open segment started, in {@link CgPassRecorder#chunksTaken}: segments nest. */
     private long[] segmentStarts = new long[8];
+    /** Per open segment, the recorder's {@link CgPassRecorder#stateChanges} where it started. */
+    private long[] segmentStates = new long[8];
+    /** Per open segment: the recording's operations and clip entries, then the clip entry and nodes it began under. */
+    private int[] segmentMarks = new int[8 * SEGMENT_MARKS];
+    private static final int SEGMENT_MARKS = 5;
     private int segments;
+
+    /** The snapshots kept segments bind, which outlive the recordings. @see CgReplay */
+    private final CgBindingTable keptBindings = new CgBindingTable();
+    private long replayEpoch, seenFontGeneration, seenFontContent, seenEvictions;
+    private int seenIconResets;
 
     /**
      * Starts a box's own paint: what the recorder takes until {@link #endSegment} is that box's and nothing else's.
@@ -1654,17 +1695,83 @@ public final class CgUiPaintContext {
     public void beginSegment() {
         if (!SEGMENTS) return;
         flush();
-        if (segments == segmentStarts.length) segmentStarts = Arrays.copyOf(segmentStarts, segments * 2);
-        segmentStarts[segments++] = recorder.chunksTaken();
+        if (segments == segmentStarts.length) {
+            segmentStarts = Arrays.copyOf(segmentStarts, segments * 2);
+            segmentStates = Arrays.copyOf(segmentStates, segments * 2);
+            segmentMarks = Arrays.copyOf(segmentMarks, segments * 2 * SEGMENT_MARKS);
+        }
+        int s = segments++, m = s * SEGMENT_MARKS;
+        segmentStarts[s] = recorder.chunksTaken();
+        segmentStates[s] = recorder.stateChanges();
+        segmentMarks[m] = recording.operations();
+        segmentMarks[m + 1] = recording.clips().count();
+        segmentMarks[m + 2] = clipEntry;
+        segmentMarks[m + 3] = spatialNode;
+        segmentMarks[m + 4] = effectNode;
     }
 
     /** Ends the innermost {@link #beginSegment}; its draws are flushed into chunks of their own. */
     public void endSegment() {
-        if (!SEGMENTS) return;
+        endSegment(null);
+    }
+
+    /**
+     * {@link #endSegment()}, keeping what the segment recorded in {@code keep} for {@link #replay}: answers whether it
+     * did. Not kept: a segment that recorded anything but draws -- a request, a layer, a capture -- or changed pass or
+     * scissor, drew in another node, or binds a texture made for this frame alone. With replay off, nothing is kept.
+     */
+    public boolean endSegment(@Nullable CgReplay keep) {
+        if (!SEGMENTS) return false;
         flush();
-        long chunks = recorder.chunksTaken() - segmentStarts[--segments];
+        int s = --segments, m = s * SEGMENT_MARKS;
         CgTrace.add(UiTrace.FRAME, "segments", 1);
-        CgTrace.add(UiTrace.FRAME, "segment-chunks", chunks);
+        CgTrace.add(UiTrace.FRAME, "segment-chunks", recorder.chunksTaken() - segmentStarts[s]);
+        if (keep == null || !REPLAY) return false;
+        boolean kept = recorder.stateChanges() == segmentStates[s] && recording.operations() == segmentMarks[m]
+                && keep.capture(recorder, segmentStarts[s], recording, keptBindings, segmentMarks[m + 1],
+                        segmentMarks[m + 2], segmentMarks[m + 3], segmentMarks[m + 4]);
+        if (!kept) keep.clear();
+        CgTrace.add(UiTrace.FRAME, kept ? "segments-kept" : "segments-unkept", 1);
+        return kept;
+    }
+
+    /**
+     * Records what {@code kept} holds in place of drawing it again, under the clip entry and nodes current now:
+     * answers false, having recorded nothing, when it cannot. Only for a segment that would come out the same, under a
+     * {@link #replayEpoch} that has not moved since it was kept.
+     *
+     * <pre>{@code
+     * if (sameKey && ctx.replay(stretch)) return;
+     * ctx.beginSegment();
+     * ... paint ...
+     * kept = ctx.endSegment(stretch);
+     * }</pre>
+     */
+    public boolean replay(CgReplay kept) {
+        if (!REPLAY) return false;
+        flush();
+        long before = recorder.chunksTaken();
+        if (!kept.replay(recorder, recording, clipEntry, spatialNode, effectNode)) return false;
+        CgTrace.add(UiTrace.FRAME, "segments-replayed", 1);
+        CgTrace.add(UiTrace.FRAME, "chunks-replayed", recorder.chunksTaken() - before);
+        return true;
+    }
+
+    /**
+     * What every kept segment was recorded under: moved when a glyph atlas evicts a page or gains glyphs, the icon
+     * raster clears its atlas, or the kept snapshots are dropped -- whatever changes what a kept record points at.
+     * Evictions and icon resets are read live, since they move a placement in the middle of a frame.
+     */
+    public long replayEpoch() {
+        long evictions = CgGlyphAtlas.evictions();
+        int iconResets = svgRaster.resets();
+        if (evictions != seenEvictions || iconResets != seenIconResets) {
+            CgTrace.add(UiTrace.FRAME, iconResets != seenIconResets ? "replay-epoch-icons" : "replay-epoch-evicted", 1);
+            seenEvictions = evictions;
+            seenIconResets = iconResets;
+            replayEpoch++;
+        }
+        return replayEpoch;
     }
 
     /** Ends the innermost {@link #pushRoundedClip} that answered true. */
@@ -1990,13 +2097,6 @@ public final class CgUiPaintContext {
     public float layerOpacity() {
         return layerOpacity;
     }
-
-    /** The glyph atlases' eviction generation as this frame began: a placement recorded under another may be gone. */
-    public long atlasEpoch() {
-        return atlasEpoch;
-    }
-
-    private long atlasEpoch;
 
     public boolean outsideClip(float x0, float y0, float x1, float y1) {
         if (LEGACY_LAYERS) return false;

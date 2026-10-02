@@ -156,6 +156,8 @@ public final class SvgRasterCache {
     private CgMaterial accumulate;
     private int shelfX, shelfY, shelfHeight;
     private int generation;
+    /** Times the atlas was cleared and its icons placed again. @see #resets() */
+    private int resets;
 
     SvgRasterCache(CgUiPaintContext ctx) {
         this.ctx = ctx;
@@ -335,6 +337,11 @@ public final class SvgRasterCache {
         return entry;
     }
 
+    /** How many times the atlas has been cleared: an icon drawn before a reset is elsewhere after it. */
+    int resets() {
+        return resets;
+    }
+
     private void ensureAtlas() {
         if (atlas != null) return;
         atlas = ctx.requestTexture("cgui_svg_raster_" + generation++, ATLAS_SIZE, ATLAS_SIZE, ATLAS_FORMAT);
@@ -342,6 +349,7 @@ public final class SvgRasterCache {
     }
 
     private void reset() {
+        resets++;
         entries.clear();
         shelfX = shelfY = shelfHeight = 0;
         clear();

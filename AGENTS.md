@@ -997,8 +997,15 @@ did. Under a node the
 >
 > **A box's own paint is a segment** (render-graph G6): `BoxPainter` brackets what a box draws under its children and
 > what it draws over them with `ctx.beginSegment()`/`endSegment()`, which flush at both edges, so a segment is exactly
-> the chunks the recorder took between them -- what replay captures. `-Dcrystalgui.paint.segments=false` turns the
-> edges off.
+> the chunks the recorder took between them. **A segment whose key holds is replayed, not painted** (G6.3): the key is
+> the box's content revision, its pose in its spatial node, the visible part of its ink and the folded opacity, under
+> `ctx.replayEpoch()` (a glyph page evicted or new glyphs, the icon atlas cleared, the kept snapshots dropped). `endSegment(stretch)`
+> keeps the chunks with the clip entries, shapes and snapshots they name (`CgReplay`), and `ctx.replay` adds them again,
+> renumbered into the new recording. **A widget whose picture changes while its box does not calls `repaint()` or
+> answers `paintsDynamically()`**; one that does neither shows its last picture, and
+> `-Dcrystalgui.paint.replayCheck=true` finds it: every keyed box painted anyway, compared with what it kept, and the
+> one that drew otherwise under an unchanged key named in the log. `-Dcrystalgui.paint.replay=false` paints every
+> box; `-Dcrystalgui.paint.segments=false` turns the edges off.
 
 > **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,
 > so the background never masks the children; nested up to four deep and under any pose. Only a `mask`
