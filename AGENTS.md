@@ -3,7 +3,7 @@
 **Project type**: Platform-agnostic retained-mode UI engine, shaped like a lightweight web browser
 (DOM + CSS cascade + Taffy layout + immediate-mode painting).
 **Authored in**: Java 25, with a Java 8 copy of every engine module for consumers below it · **Layout**: Taffy · **Backend**: CrystalGraphics
-**Ships**: one jar for Forge 1.7.10–26.3, NeoForge 1.20.2–26.3 and Fabric 1.14.4–26.3, plus an optional language jar — see [Build and run](#build-and-run)
+**Runs**: in any application that hosts it on CrystalGraphics (the GL debug harness is one), and also inside Minecraft: one jar for Forge 1.7.10–26.3, NeoForge 1.20.2–26.3 and Fabric 1.14.4–26.3, plus an optional language jar — see [Build and run](#build-and-run)
 
 ---
 
