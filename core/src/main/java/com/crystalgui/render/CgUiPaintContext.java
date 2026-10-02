@@ -28,6 +28,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.render.draw.CgBindingTable;
+import com.crystalgraphics.render.draw.CgDrawChunk;
 import com.crystalgraphics.render.draw.CgPassConstants;
 import com.crystalgraphics.render.graph.CgUpload;
 import com.crystalgraphics.render.graph.CgFrame;
@@ -36,7 +37,9 @@ import com.crystalgraphics.render.graph.CgFrameGraph;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.graph.CgPassRecorder;
+import com.crystalgraphics.render.graph.CgRasterPass;
 import com.crystalgraphics.render.graph.CgRecording;
+import com.crystalgraphics.render.graph.CgTargetCompare;
 import com.crystalgraphics.render.graph.CgReplay;
 import com.crystalgraphics.render.property.CgPropertyValues;
 import com.crystalgraphics.render.property.CgSpatialTree;
@@ -192,6 +195,9 @@ public final class CgUiPaintContext {
         recorder.abandon();
         recording.reset();
         present.reset();
+        // What the walks noted never reached the textures: each surface is drawn whole next time.
+        for (Surface surface : surfaces.values()) surface.invalidate();
+        walkingDepth = 0;
         imported.clear();
         layerStack.clear();
         CgGL.exitGlFree();
@@ -1725,6 +1731,7 @@ public final class CgUiPaintContext {
         if (!SEGMENTS) return false;
         flush();
         int s = --segments, m = s * SEGMENT_MARKS;
+        drawnSince(segmentStarts[s]);
         CgTrace.add(UiTrace.FRAME, "segments", 1);
         CgTrace.add(UiTrace.FRAME, "segment-chunks", recorder.chunksTaken() - segmentStarts[s]);
         if (keep == null || !REPLAY) return false;
@@ -1753,9 +1760,62 @@ public final class CgUiPaintContext {
         flush();
         long before = recorder.chunksTaken();
         if (!kept.replay(recorder, recording, clipEntry, spatialNode, effectNode)) return false;
+        drawnSince(before);
         CgTrace.add(UiTrace.FRAME, "segments-replayed", 1);
         CgTrace.add(UiTrace.FRAME, "chunks-replayed", recorder.chunksTaken() - before);
         return true;
+    }
+
+    /** What the last segment drew, x0, y0, x1, y1 in the target's pixels, and whether that is known. @see #segmentDrawn */
+    private final float[] drawn = new float[4];
+    private boolean drawnKnown;
+
+    /**
+     * Where the last {@link #endSegment} or {@link #replay} drew, {@code x0, y0, x1, y1} in the target's pixels: the union
+     * of its draws' bounds, empty ({@code x1 <= x0}) when it drew nothing. False when a draw covers everything or lies
+     * under another node, where its box's ink has to speak for it instead. What a surface's damage is made of.
+     */
+    public boolean segmentDrawn(float[] out) {
+        if (!drawnKnown) return false;
+        System.arraycopy(drawn, 0, out, 0, 4);
+        return true;
+    }
+
+    /** The union of the bounds of every draw taken since chunk {@code from}, into {@link #drawn}. */
+    private void drawnSince(long from) {
+        float x0 = Float.MAX_VALUE, y0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, y1 = -Float.MAX_VALUE;
+        drawnKnown = true;
+        for (long at = from, to = recorder.chunksTaken(); at < to; at++) {
+            CgDrawChunk chunk = recorder.taken(at);
+            if (chunk == null || chunk.spatial() != spatialNode) {
+                drawnKnown = false;
+                return;
+            }
+            for (int d = 0; d < chunk.draws(); d++) {
+                float a = chunk.x0(d), b = chunk.y0(d), c = chunk.x1(d), e = chunk.y1(d);
+                if (Float.isInfinite(a) || Float.isInfinite(b) || Float.isInfinite(c) || Float.isInfinite(e)) {
+                    drawnKnown = false;
+                    return;
+                }
+                x0 = Math.min(x0, a);
+                y0 = Math.min(y0, b);
+                x1 = Math.max(x1, c);
+                y1 = Math.max(y1, e);
+            }
+        }
+        if (x1 <= x0 || y1 <= y0) {
+            drawn[0] = drawn[1] = drawn[2] = drawn[3] = 0f;
+            return;
+        }
+        Matrix4f m = drawToTarget();
+        float ax = m.m00() * x0 + m.m10() * y0 + m.m30(), ay = m.m01() * x0 + m.m11() * y0 + m.m31();
+        float bx = m.m00() * x1 + m.m10() * y0 + m.m30(), by = m.m01() * x1 + m.m11() * y0 + m.m31();
+        float cx = m.m00() * x1 + m.m10() * y1 + m.m30(), cy = m.m01() * x1 + m.m11() * y1 + m.m31();
+        float dx = m.m00() * x0 + m.m10() * y1 + m.m30(), dy = m.m01() * x0 + m.m11() * y1 + m.m31();
+        drawn[0] = Math.min(Math.min(ax, bx), Math.min(cx, dx));
+        drawn[1] = Math.min(Math.min(ay, by), Math.min(cy, dy));
+        drawn[2] = Math.max(Math.max(ax, bx), Math.max(cx, dx));
+        drawn[3] = Math.max(Math.max(ay, by), Math.max(cy, dy));
     }
 
     /**
@@ -2170,6 +2230,17 @@ public final class CgUiPaintContext {
     /** Off with {@code -Dcrystalgui.paint.surfaces=false}: a box the compositor moves draws into the frame's target. */
     public static final boolean SURFACES = NODES && !"false".equals(System.getProperty("crystalgui.paint.surfaces"));
 
+    /** Off with {@code -Dcrystalgui.paint.damage=false}: a surface drawn again executes all of itself. */
+    public static final boolean DAMAGE = !"false".equals(System.getProperty("crystalgui.paint.damage"));
+
+    /**
+     * {@code -Dcrystalgui.paint.damageCheck=true}: every surface is walked, a kept one included, and its box painted
+     * again, whole, into a texture beside it ({@link #damageCheckTarget}); the two are read back and compared once both
+     * are drawn. A difference, or a would-be-kept surface whose walk damaged it, is named in the log. Two paints and a
+     * stall per surface: diagnostics only.
+     */
+    public static final boolean DAMAGE_CHECK = DAMAGE && Boolean.getBoolean("crystalgui.paint.damageCheck");
+
     /** Frames a surface may go unasked-for before it is freed: a window hidden for a while. */
     private static final long SURFACE_IDLE_FRAMES = 300L;
 
@@ -2194,6 +2265,7 @@ public final class CgUiPaintContext {
                 CgTrace.add(UiTrace.FRAME, "surfaces-resized", 1);
                 surfaces.remove(key);
                 releaseTexture(surface.target());
+                if (surface.checkTarget != null) releaseTexture(surface.checkTarget);
                 surface = null;
             }
         }
@@ -2209,6 +2281,111 @@ public final class CgUiPaintContext {
         return surface;
     }
 
+    /** Surfaces being walked, innermost last, with the recording's operation count when each began. */
+    private Surface[] walking = new Surface[4];
+    private int[] walkingMarks = new int[4];
+    private int walkingDepth;
+    private final float[] damageScratch = new float[4];
+
+    /**
+     * Opens {@code surface} over {@code region} to draw its box again, every piece of drawing placing itself in it
+     * ({@link #walkingSurface}); {@code full} when nothing of its last picture stands. Pair with {@link #endSurface}.
+     */
+    public void beginSurface(Surface surface, LayerRegion region, boolean full) {
+        if (walkingDepth == walking.length) {
+            walking = Arrays.copyOf(walking, walkingDepth * 2);
+            walkingMarks = Arrays.copyOf(walkingMarks, walkingDepth * 2);
+        }
+        walkingMarks[walkingDepth] = recording.operations();
+        walking[walkingDepth++] = surface;
+        beginLayerFbo(surface.target(), region);
+        surface.beginWalk(frameId, full || !DAMAGE);
+    }
+
+    /**
+     * Closes the innermost {@link #beginSurface}, and cuts every pass it drew into to what the walk damaged: a surface
+     * nothing changed in executes nothing, one whose caret blinked executes the caret. Answers whether anything was.
+     */
+    public boolean endSurface() {
+        Surface surface = walking[--walkingDepth];
+        walking[walkingDepth] = null;
+        surface.endWalk();
+        endLayerFbo();
+        if (surface.fullyDamaged()) return true;
+        CgGraphTexture target = surface.target();
+        int width = target.getWidth(), height = target.getHeight();
+        int x = 0, y = 0, w = 0, h = 0;
+        if (surface.damage(damageScratch)) {
+            // A pixel either side for edge coverage, then the bottom-left rect a pass takes.
+            int x0 = Math.max(0, (int) Math.floor(damageScratch[0]) - 1);
+            int y0 = Math.max(0, (int) Math.floor(damageScratch[1]) - 1);
+            int x1 = Math.min(width, (int) Math.ceil(damageScratch[2]) + 1);
+            int y1 = Math.min(height, (int) Math.ceil(damageScratch[3]) + 1);
+            if (x1 > x0 && y1 > y0) {
+                x = x0;
+                y = height - y1;
+                w = x1 - x0;
+                h = y1 - y0;
+            }
+        }
+        CgTrace.add(UiTrace.FRAME, w == 0 ? "surfaces-undamaged" : "surfaces-damaged", 1);
+        CgTrace.add(UiTrace.FRAME, "surface-damage-kpx", (long) w * h / 1000L);
+        for (int i = walkingMarks[walkingDepth], n = recording.operations(); i < n; i++) {
+            if (recording.pass(i) instanceof CgRasterPass raster && raster.target() == target) raster.damage(x, y, w, h);
+        }
+        return w != 0;
+    }
+
+    /**
+     * The surface being walked, when what is drawn now lands in it rather than in a layer inside it; null otherwise.
+     * A piece of drawing places itself in it. @see Surface#visit
+     */
+    @Nullable
+    public Surface walkingSurface() {
+        if (walkingDepth == 0) return null;
+        Surface surface = walking[walkingDepth - 1];
+        return currentTarget() == surface.target() ? surface : null;
+    }
+
+    /**
+     * Check mode: the texture {@code surface}'s box is painted again into, whole, to compare with the surface once both
+     * are drawn ({@link #compareSurface}). Made with the surface's size and freed with it.
+     */
+    public CgGraphTexture damageCheckTarget(Surface surface) {
+        if (surface.checkTarget == null) {
+            surface.checkTarget = requestTexture("cgui_surface_check_" + surfacesCreated++, surface.target().getWidth(),
+                    surface.target().getHeight(), LAYER_FORMAT);
+            warmUpLayer(surface.checkTarget);
+        }
+        return surface.checkTarget;
+    }
+
+    /**
+     * Check mode: compares {@code region} of {@code surface} with its {@link #damageCheckTarget} once both are drawn,
+     * and names {@code label} where they differ -- a change the surface's damage missed.
+     */
+    public void compareSurface(Surface surface, LayerRegion region, String label) {
+        CgGraphTexture limited = surface.target(), whole = surface.checkTarget;
+        int width = region.width(), height = region.height(), y = limited.getHeight() - height;
+        flush();
+        recording.callback("damage-check " + label, null, () -> {
+            CgTargetCompare.Difference d = CgTargetCompare.compare(limited, whole, 0, y, width, height);
+            CgTrace.add(UiTrace.FRAME, "surface-checks", 1);
+            if (d == null) return;
+            CgTrace.add(UiTrace.FRAME, "surface-check-differs", 1);
+            CrystalGuiCore.LOGGER.warn("[damage-check] {}: {} pixels differ by up to {} in ({},{})-({},{}), bottom-left",
+                    label, d.pixels(), d.worst(), d.x0(), d.y0(), d.x1(), d.y1());
+        }, limited, whole);
+    }
+
+    /** Damages {@code region} of the surface being walked when drawn straight into it: a layer composited there. */
+    public void damageSurface(LayerRegion region) {
+        Surface surface = walkingSurface();
+        if (surface != null) {
+            surface.damage(region.x(), region.y(), region.x() + region.width(), region.y() + region.height());
+        }
+    }
+
     /** Frees the surfaces nothing has asked for in a while. */
     private void sweepSurfaces() {
         if (surfaces.isEmpty() || (frameId & 15L) != 0L) return;
@@ -2217,6 +2394,7 @@ public final class CgUiPaintContext {
             Surface surface = each.next();
             if (frameId - surface.lastFrame < SURFACE_IDLE_FRAMES) continue;
             releaseTexture(surface.target());
+            if (surface.checkTarget != null) releaseTexture(surface.checkTarget);
             each.remove();
         }
     }
@@ -2873,7 +3051,10 @@ public final class CgUiPaintContext {
         imported.clear();
         for (RetainedLayer layer : retained.values()) deleteNow(layer.target());
         retained.clear();
-        for (Surface surface : surfaces.values()) deleteNow(surface.target());
+        for (Surface surface : surfaces.values()) {
+            deleteNow(surface.target());
+            if (surface.checkTarget != null) deleteNow(surface.checkTarget);
+        }
         surfaces.clear();
         for (CgGraphTexture released : pendingReleases) deleteNow(released);
         pendingReleases.clear();

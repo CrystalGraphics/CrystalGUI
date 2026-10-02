@@ -1012,8 +1012,13 @@ did. Under a node the
 > (`Surface`, `ctx.surface`), composited under its node with its opacity and fade -- so a move or a fade leaves the
 > texture as it is, and `UiGpu.redraw` executes none. **A surface nothing changed inside is composited and not
 > walked**: kept against the box's `innerRevision` (what changed or moved inside it, never where it is), its region in
-> its node and the replay and stacking epochs, and only while nothing in it paints dynamically.
-> `-Dcrystalgui.paint.surfaces=false` draws into the frame.
+> its node and the replay and stacking epochs, and only while nothing in it paints dynamically. **A surface walked
+> again executes only its damage**: each segment places what it drew (`ctx.segmentDrawn`, the bounds of its draws)
+> in the surface, and one that drew anew, moved or vanished damages its old and new places; a layer composited into it
+> damages its region. The surface's passes are cut to the union (`CgRasterPass.damage`) -- an empty one executes
+> nothing. `-Dcrystalgui.paint.damage=false` executes all of it; `-Dcrystalgui.paint.surfaces=false` draws into the
+> frame; `-Dcrystalgui.paint.damageCheck=true` paints each window again, whole, beside its surface and logs
+> `[damage-check]` where the two differ.
 
 > **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,
 > so the background never masks the children; nested up to four deep and under any pose. Only a `mask`

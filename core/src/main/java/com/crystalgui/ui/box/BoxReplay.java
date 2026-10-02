@@ -1,6 +1,7 @@
 package com.crystalgui.ui.box;
 
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.Surface;
 import com.crystalgraphics.render.graph.CgReplay;
 import javax.annotation.Nullable;
 
@@ -18,7 +19,7 @@ import javax.annotation.Nullable;
  * box.replay.kept(BoxReplay.BEFORE, ctx.endSegment(box.replay.stretch(BoxReplay.BEFORE)));
  * }</pre>
  */
-final class BoxReplay {
+final class BoxReplay implements Surface.Tenant {
 
     /** The segment under the box's children, and the one over them. */
     static final int BEFORE = 0, AFTER = 1;
@@ -37,6 +38,10 @@ final class BoxReplay {
     /** Check mode: a fresh paint to compare against what was kept, and whether a difference was named yet. */
     private final CgReplay[] fresh = new CgReplay[2];
     private final boolean[] reported = new boolean[2];
+    /** Per segment, the surface it last drew in, where in it (x0, y0, x1, y1) and when. @see #place */
+    private final Surface[] placedIn = new Surface[2];
+    private final int[] placed = new int[8];
+    private final long[] placedFrame = new long[2];
 
     /**
      * Whether {@code segment} is recorded under this same key; the key is stored either way, and a segment whose key
@@ -94,6 +99,34 @@ final class BoxReplay {
         if (differs == null || reported[segment]) return null;
         reported[segment] = true;
         return differs;
+    }
+
+    /**
+     * Places {@code segment} at {@code (x0, y0)-(x1, y1)} in {@code surface}, which it drew into this walk: drawn anew
+     * ({@code changed}) or moved, it damages both its places. @see Surface.Tenant
+     */
+    void place(Surface surface, int segment, int x0, int y0, int x1, int y1, boolean changed, long frame) {
+        int o = segment * 4;
+        boolean here = placedIn[segment] == surface;
+        if (changed || !here || placed[o] != x0 || placed[o + 1] != y0 || placed[o + 2] != x1 || placed[o + 3] != y1) {
+            surface.damage(x0, y0, x1, y1);
+            if (here) surface.damage(placed[o], placed[o + 1], placed[o + 2], placed[o + 3]);
+        }
+        placed[o] = x0;
+        placed[o + 1] = y0;
+        placed[o + 2] = x1;
+        placed[o + 3] = y1;
+        placedIn[segment] = surface;
+        placedFrame[segment] = frame;
+        surface.visit(this, segment);
+    }
+
+    @Override
+    public void vacate(Surface surface, int part, long frame) {
+        if (placedIn[part] != surface || placedFrame[part] == frame) return;
+        int o = part * 4;
+        surface.damage(placed[o], placed[o + 1], placed[o + 2], placed[o + 3]);
+        placedIn[part] = null;
     }
 
     /** Records {@code segment} again from what it kept, when it kept anything: answers whether it did. */

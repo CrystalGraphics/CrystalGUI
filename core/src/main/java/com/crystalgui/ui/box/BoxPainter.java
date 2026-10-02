@@ -138,22 +138,44 @@ public final class BoxPainter {
         Matrix4f toTarget = ctx.drawToTarget();
         int nodeX = region.x() - Math.round(toTarget.m30()), nodeY = region.y() - Math.round(toTarget.m31());
         long epoch = ctx.replayEpoch(), stacking = box.tree().stackingEpoch();
-        if (box.retainable() && surface.holds(box.innerRevision(), nodeX, nodeY, region, epoch, stacking)) {
+        boolean holds = box.retainable() && surface.holds(box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
+        if (holds && !CgUiPaintContext.DAMAGE_CHECK) {
             // NOTHING UNDER IT CHANGED: one composite, and none of its boxes paint to note themselves.
             CgTrace.add(UiTrace.FRAME, "surfaces-kept", 1);
             ctx.notePainted(ctx.targetToDraw(), region.x(), region.y(), region.x() + region.width(),
                     region.y() + region.height());
         } else {
-            CgTrace.add(UiTrace.FRAME, !box.retainable() ? "surface-miss-dynamic"
-                    : surface.missed(box.innerRevision(), nodeX, nodeY, region, epoch, stacking), 1);
-            ctx.beginLayerFbo(surface.target(), region);
+            if (!holds) {
+                CgTrace.add(UiTrace.FRAME, !box.retainable() ? "surface-miss-dynamic"
+                        : surface.missed(box.innerRevision(), nodeX, nodeY, region, epoch, stacking), 1);
+            }
+            ctx.beginSurface(surface, region, !surface.drewAt(nodeX, nodeY, region));
             paintBoxIn(box, ctx, layerBase(ctx, base, region), asContext, 1f, true);
-            ctx.endLayerFbo();
+            // CHECK MODE: a surface that would have been kept was walked, and must have found nothing to draw.
+            if (ctx.endSurface() && holds) {
+                CgTrace.add(UiTrace.FRAME, "surface-check-kept-damaged", 1);
+                CrystalGuiCore.LOGGER.warn("[damage-check] {} would have been kept, but its walk damaged it",
+                        layerLabel(box.node()));
+            }
+            if (CgUiPaintContext.DAMAGE_CHECK) checkDamage(box, ctx, base, region, surface, asContext);
             surface.drew(box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
             CgTrace.add(UiTrace.FRAME, "surfaces-painted", 1);
         }
         box.noteFadedNode(ctx.blitLayer(surface.target(), opacity, region, box.animatesOnCompositor()), ctx.frameId());
+        ctx.damageSurface(region);
         return true;
+    }
+
+    /**
+     * Check mode: the box painted again, whole, into a texture beside its surface -- replaying, and placing nothing --
+     * and the two compared once both are drawn. A difference is a change the surface's damage missed.
+     */
+    private void checkDamage(Box box, CgUiPaintContext ctx, Matrix4f base, LayerRegion region, Surface surface,
+                             boolean asContext) {
+        ctx.beginLayerFbo(ctx.damageCheckTarget(surface), region);
+        ctx.withoutRetention(() -> paintBoxIn(box, ctx, layerBase(ctx, base, region), asContext, 1f, true));
+        ctx.endLayerFbo();
+        ctx.compareSurface(surface, region, layerLabel(box.node()));
     }
 
     /**
@@ -201,6 +223,7 @@ public final class BoxPainter {
                     paintOverlay(box, style, ctx);
                     paintOutline(box, style, ctx);
                     ctx.endSegment();
+                    place(box, ctx, BoxReplay.BEFORE, true);
                 } finally {
                     ctx.popLayerOpacity(previousOpacity);
                 }
@@ -247,6 +270,7 @@ public final class BoxPainter {
                 ctx.notePainted(ctx.targetToDraw(), region.x(), region.y(), region.x() + region.width(),
                         region.y() + region.height());
                 box.noteFadedNode(ctx.blitLayer(keep.target(), opacity, region, fades), ctx.frameId());
+                ctx.damageSurface(region);
                 return;
             }
 
@@ -294,6 +318,7 @@ public final class BoxPainter {
             ctx.endLayerFbo();
             if (keep != null) keep.painted();
             box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region, fades), ctx.frameId());
+            ctx.damageSurface(region);
         } finally {
             painted.set(base).mul(box.localToWorld());
             notePainted(box, ctx, painted);
@@ -330,6 +355,7 @@ public final class BoxPainter {
             ctx.compositeMask(childrenFbo, maskFbo, inside);
             ctx.endLayerFbo();
             ctx.blitLayer(childrenFbo, 1f, region);
+            ctx.damageSurface(region);
             pose.last().pose().set(base).mul(box.localToWorld());
         }
         paintOwnAfter(box, style, node, ctx);
@@ -338,22 +364,47 @@ public final class BoxPainter {
     /** A box's own paint under its children, as one segment. @see CgUiPaintContext#beginSegment */
     private void paintOwnBefore(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx, Radii radii) {
         int key = keyOf(box, node, ctx, BoxReplay.BEFORE);
-        if (key == SAME && !checked(box, BoxReplay.BEFORE) && box.replay.replay(BoxReplay.BEFORE, ctx)) return;
+        if (key == SAME && !checked(box, BoxReplay.BEFORE) && box.replay.replay(BoxReplay.BEFORE, ctx)) {
+            place(box, ctx, BoxReplay.BEFORE, false);
+            return;
+        }
         ctx.beginSegment();
         paintSelf(box, style, ctx, radii);
         node.paintContent(ctx, box);
         endSegment(box, node, ctx, BoxReplay.BEFORE, key);
+        place(box, ctx, BoxReplay.BEFORE, true);
     }
 
     /** A box's own paint over its children, as one segment. */
     private void paintOwnAfter(Box box, ComputedStyle style, UIElement node, CgUiPaintContext ctx) {
         int key = keyOf(box, node, ctx, BoxReplay.AFTER);
-        if (key == SAME && !checked(box, BoxReplay.AFTER) && box.replay.replay(BoxReplay.AFTER, ctx)) return;
+        if (key == SAME && !checked(box, BoxReplay.AFTER) && box.replay.replay(BoxReplay.AFTER, ctx)) {
+            place(box, ctx, BoxReplay.AFTER, false);
+            return;
+        }
         ctx.beginSegment();
         node.paintDecoration(ctx, box);
         paintOverlay(box, style, ctx);
         paintOutline(box, style, ctx);
         endSegment(box, node, ctx, BoxReplay.AFTER, key);
+        place(box, ctx, BoxReplay.AFTER, true);
+    }
+
+    /**
+     * Where {@code segment} just drew in the surface being walked, if it drew straight into one: the bounds of its
+     * draws, or its own ink where those are not known, in the surface's pixels. {@code changed}: painted, not replayed.
+     * @see Surface
+     */
+    private void place(Box box, CgUiPaintContext ctx, int segment, boolean changed) {
+        Surface surface = ctx.walkingSurface();
+        if (surface == null) return;
+        // WHAT IT DREW, not what it might: an overlay sized to a whole canvas that drew one outline damages the outline.
+        if (!ctx.segmentDrawn(ink)) {
+            boundsThrough(box.localInkL, box.localInkT, box.localInkR, box.localInkB, ctx.targetPose());
+        }
+        if (box.replay == null) box.replay = new BoxReplay();
+        box.replay.place(surface, segment, (int) Math.floor(ink[0]), (int) Math.floor(ink[1]),
+                (int) Math.ceil(ink[2]), (int) Math.ceil(ink[3]), changed, ctx.frameId());
     }
 
     /** Check mode: a segment whose key holds is painted and compared rather than replayed. */
