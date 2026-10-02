@@ -1208,7 +1208,7 @@ ClientWindows.of(c).setMount(myWindowMount);
 |---|---|
 | `com.crystalgui.app.machine` | All of this, runnable. **Start here** — and `docs/CGUI_BUILDING_UIS.md` is its written half |
 | `docs/CGUI_SERVER_AND_SERIALIZATION.md` | The same ground as a reference: codecs, hashing, the headless contract |
-| `core/src/headlessTest/` | CrystalGraphics deliberately absent. If it loads here, it runs on a server |
+| `core/src/headlessTest/` | A server's classpath: CrystalGraphics core, no GL context. If it runs here, it runs on a server |
 | `com.crystalgui.probe.ConnectionProbe` | **The whole stack against a real connection**, as a checklist — the session handshake, tree and state deltas, events, calls, fan-out, and the workspace. Topology is a parameter: single player, a real socket, or two clients with roles, where a check that means nothing in the topology you ran is reported SKIPPED rather than silently passed. It was six probe classes, three of which existed mainly to refuse to run in the wrong one |
 | `plan/net-window-host.md` | Why the layer above the sessions exists: the audit that produced it, and the seventeen findings |
 | `./gradlew :runtime:mc:1710:serverSmoke` | Boots a dedicated server, asserts the stack came up, stops. ~48s |

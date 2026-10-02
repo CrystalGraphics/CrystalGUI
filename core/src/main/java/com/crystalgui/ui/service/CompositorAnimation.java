@@ -1,6 +1,6 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgui.style.easing.Easing;
+import com.crystalgraphics.easing.CgEasing;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
@@ -36,11 +36,11 @@ public final class CompositorAnimation {
     private final float fromOpacity, toOpacity;
     private final LengthPercent originX, originY;
     private final long durationNanos;
-    private final Easing easing;
+    private final CgEasing easing;
     private final AtomicLong start = new AtomicLong();
 
     public CompositorAnimation(UIElement target, Transform from, Transform to, float fromOpacity, float toOpacity,
-                               LengthPercent originX, LengthPercent originY, long durationNanos, Easing easing) {
+                               LengthPercent originX, LengthPercent originY, long durationNanos, CgEasing easing) {
         this.target = target;
         this.from = from;
         this.to = to;

@@ -1,6 +1,6 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgui.style.easing.Easing;
+import com.crystalgraphics.easing.CgEasing;
 import com.crystalgui.ui.dom.UIElement;
 
 import java.util.ArrayList;
@@ -56,14 +56,14 @@ public final class Animation {
     /** One running animation. */
     public final class Timeline {
         private final float duration;
-        private final Easing easing;
+        private final CgEasing easing;
         private final Body body;
         private final @Nullable Runnable onDone;
         private float elapsed;
         private int held;
         private boolean running = true;
 
-        private Timeline(float duration, Easing easing, Body body, @Nullable Runnable onDone) {
+        private Timeline(float duration, CgEasing easing, Body body, @Nullable Runnable onDone) {
             this.duration = Math.max(0f, duration);
             this.easing = easing;
             this.body = body;
@@ -175,7 +175,7 @@ public final class Animation {
     }
 
     /** Starts a timeline, writing its start value now. */
-    public Timeline start(float durationSeconds, Easing easing, Body body, @Nullable Runnable onDone) {
+    public Timeline start(float durationSeconds, CgEasing easing, Body body, @Nullable Runnable onDone) {
         Timeline timeline = new Timeline(durationSeconds, easing, body, onDone);
         if (timeline.running) timelines.add(timeline);
         return timeline;

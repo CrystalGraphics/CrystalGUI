@@ -12,7 +12,7 @@ import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.style.easing.ProgressFunctions;
+import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -1303,7 +1303,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
         float fromTop = scrollTop;
         if (targetLeft == fromLeft && targetTop == fromTop) return;
         float duration = Math.max(0.01f, computedStyle().get(StylePropertyRegistry.SCROLL_DURATION));
-        doc.animation().start(duration, ProgressFunctions.Premade.LINEAR, t -> {
+        doc.animation().start(duration, CgEasings.LINEAR, t -> {
             Box live = box();
             if (live != null) {
                 live.setScroll(fromLeft + (targetLeft - fromLeft) * t, fromTop + (targetTop - fromTop) * t);

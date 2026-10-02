@@ -193,6 +193,9 @@ dependencies {
     // Test-only: the mod jar's ASM is language/'s, relocated, and this must not become a second copy.
     "headlessTestImplementation"("org.ow2.asm:asm:${rootProject.properties["asmVersion"]}")
     "headlessTestImplementation"("com.crystalgraphics:platform:$crystalgraphics")
+    // Shared utilities live in core (easing). A server ships core too; what it lacks is a GL context, which no
+    // headless test has.
+    "headlessTestImplementation"("com.crystalgraphics:core:$crystalgraphics")
     "headlessTestImplementation"("org.apache.logging.log4j:log4j-core:2.26.1")
     "headlessTestImplementation"("com.google.code.gson:gson:2.11.0")
     "headlessTestImplementation"(project(":taffy"))

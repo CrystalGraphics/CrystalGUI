@@ -454,15 +454,11 @@ Four entries that used to stand here are gone, and what replaced each is worth k
 `core/src/headlessTest/`, wired as its own Gradle source set in `core/build.gradle.kts` and attached
 to `check`.
 
-**CrystalGraphics is deliberately absent from this source set's classpath**, because it is absent on a
-dedicated server — `compileOnly` in `core`, never shipped. If a class can be loaded here, it can run
-on a server.
-
-The trap, found the hard way: **`StyleSheet` is unloadable headlessly.** Its `DEFAULT` field is
-`static final` and reads `default.css` through `CgIO` at class-init, so even `StyleSheet.parse()`
-throws `NoClassDefFoundError` here. Anything needing CSS *text* belongs in `core/src/test/`, not
-`headlessTest`. `HeadlessClasspathSanityTest` exists to make that boundary fail loudly rather than
-drift.
+**Its classpath is a dedicated server's**: CrystalGraphics `core` and `platform`, which a server ships, and no GL
+context or fonts, which it does not have. If a class can be loaded and run here, it can run on a server. `core` is
+here for the shared utilities the engine names in its types (`com.crystalgraphics.easing`); code that reaches the GPU
+fails here for want of a context. `HeadlessClasspathSanityTest` pins what must be present, `StyleSheet` included,
+which reads `default.css` through `CgIO` when it initialises.
 
 ```bash
 ./gradlew :core:headlessTest

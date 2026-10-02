@@ -4,8 +4,8 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.style.easing.ProgressFunctions;
-import com.crystalgui.style.easing.Easing;
+import com.crystalgraphics.easing.CgEasings;
+import com.crystalgraphics.easing.CgEasing;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
@@ -113,7 +113,7 @@ public final class WindowAnimator {
      * leaving nine frames to cover the last three percent. Reported exactly as it behaves: "it feels
      * like the animation is 2 frames, one intermediate and the other the final state".</p>
      */
-    private static final Easing ARRIVING = ProgressFunctions.Premade.OUT_QUAD;
+    private static final CgEasing ARRIVING = CgEasings.OUT_QUAD;
 
     /**
      * {@code EASE_OUT_QUAD} — a close, a size change, and (deviating from GNOME) a minimise.
@@ -132,7 +132,7 @@ public final class WindowAnimator {
      * survives on a compositor with motion blur and vsync-aligned presentation, and over the short
      * scale-only distance an opening window travels, which is why it is kept there.</p>
      */
-    private static final Easing MOVING = ProgressFunctions.Premade.OUT_QUAD;
+    private static final CgEasing MOVING = CgEasings.OUT_QUAD;
 
     /**
      * What a window grows FROM: {@code scale (0.01, 0.05)} about a {@code (0.5, 1.0)} pivot.
@@ -518,7 +518,7 @@ public final class WindowAnimator {
      */
     private void start(Transform from, Transform to, float fromOpacity, float toOpacity,
                        LengthPercent originX, LengthPercent originY,
-                       long durationNanos, Easing easing, @Nullable Runnable then) {
+                       long durationNanos, CgEasing easing, @Nullable Runnable then) {
         cancelCurrent();
         UIDocument window = frame.document();
         if (window == null) {
