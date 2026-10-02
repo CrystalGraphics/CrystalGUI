@@ -263,7 +263,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
     /**
      * Always true: a track's picture changes without its box moving.
      *
-     * <p>Panning, zooming, hovering and selecting all redraw the same geometry, so a retained layer
+     * <p>Panning, zooming, hovering and selecting all redraw the same geometry, so a kept picture
      * would hold the first frame of a drag for the whole drag.</p>
      */
     @Override

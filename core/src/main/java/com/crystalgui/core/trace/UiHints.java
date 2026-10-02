@@ -22,7 +22,7 @@ import java.util.Map;
  * }</pre>
  *
  * <p>Here rather than in the engine because a hint is a rule over counter NAMES, and
- * {@code retain-dynamic} and {@code layer-clear-kpx} mean something to whoever wrote the painter and
+ * {@code surface-miss-dynamic} and {@code layer-clear-kpx} mean something to whoever wrote the painter and
  * nothing to a capture engine.</p>
  *
  * <p><b>Every hint links somewhere</b>, to a zone or a counter wherever there is one, so the window can
@@ -72,16 +72,16 @@ public final class UiHints {
             }
         });
 
-        // RETENTION-REFUSED. A readout showing many layers and no reuse reads as a broken cache; most
-        // of the time nothing asked it, because a subtree that repaints itself may not be kept.
+        // RETENTION-REFUSED. A window walked every frame reads as a broken cache; most of the time something in
+        // it repaints itself, and a surface may not be kept while anything in it does.
         CgTraceHints.register((frame, zones, counters, out) -> {
-            long dynamic = counters.getOrDefault("retain-dynamic", 0L);
-            long layers = counters.getOrDefault("layers", 0L);
-            if (layers > 0L && dynamic * 2L >= layers) {
+            long dynamic = counters.getOrDefault("surface-miss-dynamic", 0L);
+            long painted = counters.getOrDefault("surfaces-painted", 0L);
+            if (painted > 0L && dynamic * 2L >= painted) {
                 out.add(new CgTraceHints.Hint("RETENTION-REFUSED",
-                        dynamic + " of " + layers + " layers were never offered to the cache"
-                                + " (paintsDynamically, or a backdrop-filter)",
-                        CgTraceHints.Hint.counter("retain-dynamic")));
+                        dynamic + " of " + painted + " surfaces were walked because something in them paints"
+                                + " dynamically (paintsDynamically, or a backdrop-filter)",
+                        CgTraceHints.Hint.counter("surface-miss-dynamic")));
             }
         });
 

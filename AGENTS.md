@@ -952,11 +952,11 @@ UiGpu.present(frame);                             // render thread
 > expression, never hold it.
 | Clip | `pushScissor` / `popScissor` — a whole-pixel clip entry every draw is stamped with, no flush (a real scissor inside a snapshot or capture, under a node that is not a whole-pixel translation, or past the clip chain's depth; `-Dcrystalgui.paint.squareClips=false` everywhere) — and `pushRoundedClip` / `popRoundedClip`, a rounded rect stamped the same way (`CgClipTable`), no layer and no flush |
 | Material | `withMaterial(material, body)` |
-| Layers | `withLayerOpacity(opacity, body)` and its lambda-free pair `pushLayerOpacity`/`popLayerOpacity`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `requestLayer(name, w, h)` / `releaseTexture(texture)` and `drawLayer(texture, x, y, w, h)` for a picture kept across frames, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `retain(key, region, revision)` |
+| Layers | `withLayerOpacity(opacity, body)` and its lambda-free pair `pushLayerOpacity`/`popLayerOpacity`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `requestLayer(name, w, h)` / `releaseTexture(texture)` and `drawLayer(texture, x, y, w, h)` for a picture kept across frames, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `surface(key, region)` |
 | Lifecycle | `UiGpu.destroy()`, `UiGpu.hasInstance()` |
 
 > **`UiGpu.destroy()` must be called on GL-context destruction** (`CgUiLifecycle.onDestroy` does). It frees
-> what nothing else sweeps: the frame target, the readback, and each paint context's retained layers, backdrop and
+> what nothing else sweeps: the frame target, the readback, and each paint context's surfaces, backdrop and
 > icon-raster textures — all made outside any registry — and the contexts' renderers. Not what is borrowed from
 > CrystalGraphics' registries (materials, the fallback white pixel, font atlases): `destroyContext()` sweeps those,
 > and freeing them here would be a double free.
@@ -974,25 +974,24 @@ UiGpu.present(frame);                             // render thread
 > CPU-bound in buffer mapping. What it gives up is the case analytic coverage cannot reach: geometry
 > finer than one sample, a graph wire zoomed far out.
 
-> **A layer is the size of what goes in it, and one whose subtree did not change is not painted
-> again.** `BoxPainter` sizes every layer from the subtree's ink bounds (`Box.inkX0..inkY1`, composed
-> bottom-up in `BoxTree` — Blink's visual overflow, with `UIElement.inkOverflow()` for a widget that
-> paints past its own box), clipped to the live scissor; the allocation, the clear and the composite all
-> address that `LayerRegion`, and **the layer's pixel (0,0) is the region's corner**. `Box.subtreeRevision`
-> is composed in the same walk, and `CgUiPaintContext.retain` keeps the texture across frames — refused
-> for any subtree with a `backdrop-filter` or a node whose `paintsDynamically()` is true, which is the
-> default for anything overriding a paint hook. `UIElement.repaint()` is the door for a widget whose
-> picture changes without moving a box. Full account in `docs/CGUI_STYLE_RENDER_PIPELINE.md` §8.
+> **A layer is the size of what goes in it, and lives for one frame.** `BoxPainter` sizes every layer from the
+> subtree's ink bounds (`Box.inkX0..inkY1`, composed bottom-up in `BoxTree` — Blink's visual overflow, with
+> `UIElement.inkOverflow()` for a widget that paints past its own box), clipped to the live scissor; the allocation,
+> the clear and the composite all address that `LayerRegion`, and **the layer's pixel (0,0) is the region's
+> corner**. What did not change in it is replayed rather than painted (G6), and a picture kept across frames is a
+> surface's (G7, below) -- the retained layers that came before both were deleted in G9. `UIElement.repaint()` is
+> the door for a widget whose picture changes without moving a box. Full account in
+> `docs/CGUI_STYLE_RENDER_PIPELINE.md` §8.
 
 > **What a compositor moves is recorded under a node** (render-graph G10). A scrolling box's content and a
 > `will-change: transform` box (every desktop window) draw in their own space under a spatial node — a translation by
 > whole device pixels, with `uiScale` left in the pose so text still snaps to the pixel grid — and a layer composited
 > below full opacity under an effect node. `Box.movedNode`/`scrolledNode`/`fadedNode(frameId)` name them;
 > `UiFrame.values()` moves them and `UiGpu.redraw` draws the last frame again with nothing recorded — with
-`keepRequested`, leaving every requested texture (a retained layer, a shader-graph preview) as the first execution
+`keepRequested`, leaving every requested texture (a surface, a shader-graph preview) as the first execution
 did. Under a node the
 > pose stack is node-local: a decision about pixels asks `ctx.targetPose()`, never the stack. What a recording decided
-> in the target's pixels stays as recorded (culling, layer regions, retained layers, backdrop captures).
+> in the target's pixels stays as recorded (culling, layer regions, backdrop captures).
 > `-Dcrystalgui.paint.nodes=false` records everything in the target's pixels.
 >
 > **A box's own paint is a segment** (render-graph G6): `BoxPainter` brackets what a box draws under its children and
@@ -1054,9 +1053,9 @@ did. Under a node the
   The curve half mirrors all of it — `curve()` applies the pose, `useCurveMaterial()` binds, and
   `flushQuads()`/`flushCurves()` exist so `CgUiPaintContext` can flush one path without the other when
   it switches between them.
-- **`ScissorStack`** — allocation-free nested clip stack (`int[64]`, 16 levels × 4 ints), applied via
-  CrystalGraphics' `CgGL` facade. **No LWJGL imports** — the old "V3.x legacy, raw GL11, scheduled for
-  deletion" note is obsolete.
+- **`ScissorStack`** — the paint context's allocation-free nested clip stack (16 levels), top-left rects
+  flipped per target. It touches no GL: each level becomes a whole-pixel clip entry or a link in the recorder's
+  scissor chain (`CgPassRecorder`), recorded in the node it was pushed under, so a moved node's clips move with it.
 - **`FontFamilyCache`** — `(font-family stack, target px)` → `CgFontFamily`, cached. Reference
   equality on the result is therefore meaningful and is relied on by `UIText`. An entry is a resource
   path (`crystalgui:ui/fonts/x.ttf` — it holds a `:` or `/`, or ends in a font extension), an installed

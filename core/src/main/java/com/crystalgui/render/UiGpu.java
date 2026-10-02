@@ -169,9 +169,9 @@ public final class UiGpu {
      * }</pre>
      *
      * <p>What a recording decided in the target's pixels stays as recorded: what was culled, a layer's region, a
-     * retained layer, a backdrop's capture. A move far enough to reach those wants a new frame.</p>
+     * backdrop's capture. A move far enough to reach those wants a new frame.</p>
      *
-     * @param keepRequested skip every pass that writes a requested texture -- a retained layer, a shader-graph
+     * @param keepRequested skip every pass that writes a requested texture -- a surface, a shader-graph
      *                      preview -- leaving it as the frame's first execution did. A move under property values
      *                      changes none of them; false paints them again
      */

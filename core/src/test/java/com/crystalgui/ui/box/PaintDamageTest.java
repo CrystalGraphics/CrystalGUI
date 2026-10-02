@@ -15,7 +15,7 @@ import com.crystalgui.widget.text.UIText;
 /**
  * <b>What changed since the last frame, which is the only thing that has to be drawn again.</b>
  *
- * <p>A subtree's revision is what lets a flattened layer be kept: same number, same picture, so the
+ * <p>A box's inner revision is what lets its surface be kept: same number, same picture, so the
  * frame owes it one composited quad instead of a clear, a walk and every draw underneath. The value
  * itself means nothing — these assert the two properties a cache depends on, that it moves when
  * something changed and <em>does not</em> when nothing did.</p>
@@ -31,10 +31,10 @@ public class PaintDamageTest extends UiDocumentTestBase {
         document.append(parent);
         document.update(W, H);
 
-        long was = parent.box().subtreeRevision();
+        long was = parent.box().innerRevision();
         document.update(W, H);
         document.update(W, H);
-        assertEquals(was, parent.box().subtreeRevision());
+        assertEquals(was, parent.box().innerRevision());
     }
 
     /** Moving a child reaches every ancestor, because a layer above it holds its picture. */
@@ -46,12 +46,12 @@ public class PaintDamageTest extends UiDocumentTestBase {
         document.append(parent);
         document.update(W, H);
 
-        long was = parent.box().subtreeRevision();
+        long was = parent.box().innerRevision();
         child.layout(l -> l.width(20));
         document.update(W, H);
 
         assertNotEquals("the parent still thinks it holds the old picture",
-                was, parent.box().subtreeRevision());
+                was, parent.box().innerRevision());
     }
 
     /** And reaches nothing else, or retention would be worth nothing. */
@@ -65,12 +65,12 @@ public class PaintDamageTest extends UiDocumentTestBase {
         document.append(root);
         document.update(W, H);
 
-        long wasRight = right.box().subtreeRevision();
+        long wasRight = right.box().innerRevision();
         left.generalStyle(g -> g.backgroundColor(0xFF00FF00));
         document.update(W, H);
 
-        assertEquals(wasRight, right.box().subtreeRevision());
-        assertNotEquals(wasRight, left.box().subtreeRevision());
+        assertEquals(wasRight, right.box().innerRevision());
+        assertNotEquals(wasRight, left.box().innerRevision());
     }
 
     /**
@@ -86,10 +86,10 @@ public class PaintDamageTest extends UiDocumentTestBase {
         document.append(parent);
         document.update(W, H);
 
-        long was = parent.box().subtreeRevision();
+        long was = parent.box().innerRevision();
         child.repaint();
         document.update(W, H);
-        assertNotEquals(was, parent.box().subtreeRevision());
+        assertNotEquals(was, parent.box().innerRevision());
     }
 
     /** A repaint refolds its own ancestry and nothing beside it. */
@@ -103,13 +103,13 @@ public class PaintDamageTest extends UiDocumentTestBase {
         document.append(root);
         document.update(W, H);
 
-        long wasRight = right.box().subtreeRevision();
-        long wasRoot = root.box().subtreeRevision();
+        long wasRight = right.box().innerRevision();
+        long wasRoot = root.box().innerRevision();
         left.repaint();
         document.update(W, H);
 
-        assertEquals(wasRight, right.box().subtreeRevision());
-        assertNotEquals(wasRoot, root.box().subtreeRevision());
+        assertEquals(wasRight, right.box().innerRevision());
+        assertNotEquals(wasRoot, root.box().innerRevision());
     }
 
     /** A repaint asked in the same frame as a move is taken by the full walk, not lost to it. */
@@ -123,12 +123,12 @@ public class PaintDamageTest extends UiDocumentTestBase {
         document.append(root);
         document.update(W, H);
 
-        long wasRight = right.box().subtreeRevision();
+        long wasRight = right.box().innerRevision();
         right.repaint();
         left.layout(l -> l.width(12));
         document.update(W, H);
 
-        assertNotEquals(wasRight, right.box().subtreeRevision());
+        assertNotEquals(wasRight, right.box().innerRevision());
     }
 
     /** Everything dirtied between two paints shares one tick, so a busy frame is still one comparison. */
@@ -145,7 +145,7 @@ public class PaintDamageTest extends UiDocumentTestBase {
         left.repaint();
         right.repaint();
         document.update(W, H);
-        assertEquals(left.box().subtreeRevision(), right.box().subtreeRevision());
+        assertEquals(left.box().innerRevision(), right.box().innerRevision());
     }
 
     /**
@@ -188,10 +188,10 @@ public class PaintDamageTest extends UiDocumentTestBase {
         document.append(parent);
         document.update(W, H);
 
-        long was = parent.box().subtreeRevision();
+        long was = parent.box().innerRevision();
         label.setText("abd");
         document.update(W, H);
-        assertNotEquals(was, parent.box().subtreeRevision());
+        assertNotEquals(was, parent.box().innerRevision());
     }
 
     /**
@@ -209,15 +209,15 @@ public class PaintDamageTest extends UiDocumentTestBase {
         document.append(root);
         document.update(W, H);
 
-        long wasFaded = faded.box().subtreeRevision();
-        long wasRoot = root.box().subtreeRevision();
+        long wasFaded = faded.box().innerRevision();
+        long wasRoot = root.box().innerRevision();
         faded.box().setOpacity(0.5f);
         document.update(W, H);
 
         assertEquals("the faded element's own picture is unchanged",
-                wasFaded, faded.box().subtreeRevision());
+                wasFaded, faded.box().innerRevision());
         assertNotEquals("what contains it composites it differently",
-                wasRoot, root.box().subtreeRevision());
+                wasRoot, root.box().innerRevision());
     }
 
     private static final class HandPainted extends UIElement {

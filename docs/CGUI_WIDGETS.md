@@ -1528,12 +1528,11 @@ raises — *why are there seventeen layers?* — and they account for every one:
 | `layers-opacity` · `layers-mask` | What the layer is **for**. A mask layer is two targets and a composite; an opacity layer is one, and the two are removed by different things. `layers-mask` counts only the masks that could not be a rounded clip |
 | `layers-elided` · `masks-elided` | A layer that was **not** opened — an opacity folded into the draw, a rounded box with no children to clip |
 | `clips-rounded` | A rounded `overflow: hidden` clipped with no layer at all: a `CgClipTable` entry its children's draws carry |
-| `layers-reused` | The picture was still good: one composited quad for a whole subtree |
-| `layers-repainted` | Retained, but the subtree changed or moved |
-| `retain-dynamic` | Never **asked**, because the subtree repaints itself (`backdrop-filter`, or a node overriding a paint hook). A readout showing many layers and no reuse usually means this, not a broken cache |
-| `retain-settling` | Not yet: a subtree must be seen unchanged once before it earns a texture |
-| `retain-resized` | It had one and its element changed size. Every frame means it never settles |
-| `retain-nobudget` | The 48MB retention budget is spent — the one refusal a bigger budget would fix |
+| `segments-replayed` · `segments-changed` | A box's own paint recorded again from what it kept, against painted anew |
+| `segments-dynamic` | Never kept, because the node repaints itself (`backdrop-filter`, or a node overriding a paint hook without `paintsDynamically()` false). A readout with many of these and few replayed usually means this, not a broken cache |
+| `surfaces-kept` · `surfaces-painted` | A window composited from its picture, against walked again |
+| `surface-miss-dynamic` · `surface-miss-revision` | Why a window was walked: something in it paints dynamically, or something in it changed |
+| `surface-damage-kpx` | What a walked window executed again, in kilopixels: a caret's blink is a few, a scrolled list most of it |
 | `svg-raster-draws` · `svg-direct` | An icon drawn as one tinted quad from the atlas, against one drawn cell-by-cell. A frame full of the second is a finding |
 | `layer-clear-kpx` · `layer-blit-kpx` | Kilopixels cleared and composited. Megapixels here beside a two-digit `drawcalls` is the shape of a frame that is layer-bound, not draw-bound |
 

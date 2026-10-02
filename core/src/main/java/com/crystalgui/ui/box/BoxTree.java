@@ -961,16 +961,13 @@ public final class BoxTree {
     private void foldSubtree(Box box) {
         composeInkBounds(box);
 
-        long revision = box.paintRevision;
         long inner = Math.max(box.contentRevision, box.hostedRevision);
         boolean retainable = box.selfRetainable;
         for (int ci = 0; ci < box.hosted.size(); ci++) {
             Box child = box.hosted.get(ci);
-            revision = Math.max(revision, child.subtreeRevision);
             inner = Math.max(inner, Math.max(child.placeRevision, child.innerRevision));
             retainable &= child.retainable;
         }
-        box.subtreeRevision = revision;
         box.innerRevision = inner;
         box.retainable = retainable;
     }
@@ -1033,7 +1030,6 @@ public final class BoxTree {
         box.wasM11 = m.m11();
         box.wasM30 = m.m30();
         box.wasM31 = m.m31();
-        box.paintRevision = paintEpoch;
 
         BoxPainter.localInk(box, inkLocal);
         box.localInkL = inkLocal[0];

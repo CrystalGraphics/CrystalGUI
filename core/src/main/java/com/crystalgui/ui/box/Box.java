@@ -111,23 +111,6 @@ public final class Box {
     float inkX0, inkY0, inkX1, inkY1;
 
     /**
-     * When anything in this box's subtree last painted differently, on the tree's own paint clock.
-     *
-     * <p>What lets a flattened subtree be kept between frames: a layer whose {@code subtreeRevision} is
-     * the one its texture was drawn at has nothing new to draw, so the texture is composited again and
-     * the walk under it is skipped. Chromium calls the equivalent damage, and keeps it for the same
-     * reason — the difference between two frames is the only thing that has to be redone.</p>
-     *
-     * <p>Composed in {@link BoxTree}, from {@link #paintRevision} and every child's. Rebuilt only when
-     * the tree recomposes, which is exactly when something changed: a frame in which nothing moved,
-     * restyled or asked to be repainted leaves every revision where it was.</p>
-     */
-    long subtreeRevision;
-
-    /** When THIS box last painted differently, ignoring what it hosts. @see #subtreeRevision */
-    long paintRevision;
-
-    /**
      * When this box's own content last changed -- its style, its size or a {@link UIElement#repaint} -- ignoring where
      * it is: what a replayed segment is keyed on, so a scroll or a move is not a change. @see BoxReplay
      */
@@ -145,7 +128,7 @@ public final class Box {
     /**
      * When anything under this box last painted differently relative to the box itself: its own content, what it
      * hosts, and where each of those sits inside it -- but not where the box is. What a surface keeps its picture
-     * against: a window that moves leaves it where it was. Composed in {@link BoxTree} with {@link #subtreeRevision}.
+     * against: a window that moves leaves it where it was. Composed bottom-up in {@link BoxTree}.
      */
     long innerRevision;
 
@@ -579,11 +562,6 @@ public final class Box {
         return inkX1 > inkX0 && inkY1 > inkY0;
     }
 
-    /** @see #subtreeRevision */
-    public long subtreeRevision() {
-        return subtreeRevision;
-    }
-
     /** @see #innerRevision */
     public long innerRevision() {
         return innerRevision;
@@ -781,8 +759,8 @@ public final class Box {
      * therefore paints its contents once and is re-composited at a new opacity every frame after, where
      * damaging itself would have repainted the whole window on every frame of the fade.</p>
      *
-     * <p>It reaches a layer either way: damage folds up through {@link #subtreeRevision}, so if the host
-     * is not itself flattened the nearest ancestor that is still hears about it — which is the case that
+     * <p>It reaches a surface either way: damage folds up through {@link #innerRevision}, so if the host
+     * is not itself a surface the nearest ancestor that is still hears about it — which is the case that
      * matters, since a descendant's opacity IS baked into the picture above it.</p>
      */
     public void setOpacity(@Nullable Float opacity) {
