@@ -272,6 +272,10 @@ abstract class ProdSmoke : DefaultTask() {
         if (logSays(target, "desktop painted: false")) {
             return "DID NOT PAINT: the capture is a stale frame, not this engine's" + logTail(target)
         }
+        // A MOD'S RENDERER ON crystalgui:screen never drew: the autotest registers one (StageProbe) and states it.
+        if (logSays(target, "screen stage drew: false")) {
+            return "STAGE DID NOT DRAW: no renderer on crystalgui:screen ran" + logTail(target)
+        }
         return null
     }
 

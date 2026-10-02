@@ -183,7 +183,7 @@ spells something; it decides nothing. The seams it answers, all in `core/`:
 | Seam | A loader answers |
 |---|---|
 | `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection, how to give the current screen a key the desktop left (`reinjectKey`), and the game's client and server threads (`clientThread`, `serverThread`: what `HostThread.CLIENT`/`SERVER` run work on; null where the client thread is the one the desktop is framed on, or there is no integrated server) |
-| `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, and whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides) |
+| `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides), and the `SCREEN`/`HUD` render stages each paint fires (`UiStages`) |
 | `desktop.host.HostSession.PaintHost` | whether a screen is up and whose, and how to bracket a draw |
 | `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |
 | `fs.server.WorkspaceRoles` | is this actor the single-player owner, and is it a connected operator |
@@ -1025,6 +1025,14 @@ did. Under a node the
 > frame; `-Dcrystalgui.paint.damageCheck=true` paints each window again, whole, beside its surface and logs
 > `[damage-check]` where the two differ.
 
+> **CrystalGUI draws at two render stages** (render-graph G8): `UiStages.SCREEN` over a screen, its own or another
+> mod's, and `UiStages.HUD` over the in-game HUD, fired once a frame by `HostSession.paint` from each host's screen and
+> HUD hooks. The compositor is a renderer on both at `UiStages.COMPOSITOR`, its frame executed in a callback at its
+> place, so a mod registers below it to draw under the windows and above it to draw over them
+> (`docs/CGUI_BUILDING_UIS.md` § 11b). `paintWithoutStage` paints an arm whose stage already fired this frame. In an
+> unattended run `StageProbe` draws a mark on both the way a mod does, and `prodSmoke` fails a client whose screen
+> stage never drew.
+
 > **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,
 > so the background never masks the children; nested up to four deep and under any pose. Only a `mask`
 > drawable, deeper nesting or a collapsed pose take the mask layers. `-Dcrystalgui.paint.roundedClip=false`
@@ -1633,7 +1641,9 @@ com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener Cry
                                CrystalGraphics; drives paint-context teardown + cache invalidation
 
 com.crystalgui.render          CgUiPaintContext (one per document: records), UiGpu (one per process: executes), UiFrame
-                               (a sealed frame), CgUiRenderer, ScissorStack,
+                               (a sealed frame), UiStages (SCREEN and HUD: where CrystalGUI draws in a game's frame,
+                               render stages a mod draws at too), Surface (a moved box's kept texture), CgUiRenderer,
+                               ScissorStack,
                                SvgRasterCache — icon fills rasterised once by additive accumulation into an
                                RGBA16F atlas and drawn as a tinted quad; sits beside the paint context and
                                reaches it through package-private members, as the backdrop does.
@@ -1910,7 +1920,8 @@ com.crystalgui.probe           WHAT A RUNNING GAME IS ASKED TO PROVE ABOUT ITSEL
                                that means nothing here is SKIPPED with its reason rather than silently
                                passed), DesktopProbe (a scripted run through the compositor), AutoTest
                                (open, photograph, quit -- the only one that also runs on a SHIPPED jar,
-                               which is what prodSmoke drives), ProbeReport (verdict on line 1; an
+                               which is what prodSmoke drives; StageProbe is its renderer on UiStages),
+                               ProbeReport (verdict on line 1; an
                                ABSENT FILE IS A FAILURE). Each takes a `Host` a loader implements and
                                decides everything else itself; they SHIP deliberately, one
                                Boolean.getBoolean each when off. See the package note for why a test

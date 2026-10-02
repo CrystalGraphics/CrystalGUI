@@ -153,7 +153,7 @@ public final class CgUiScreen extends GuiScreen {
             // run and stood down -- returning here leaves that frame painted by nobody at all. By this
             // point displayGuiScreen has run onGuiClosed and nulled the current screen, so the
             // presentation is already HUD and the pinned windows can simply be painted now.
-            session.paint(DesktopPresentation.HUD, delta, CgUiHud.HOST);
+            session.paintWithoutStage(DesktopPresentation.HUD, delta, CgUiHud.HOST);
             return;
         }
 

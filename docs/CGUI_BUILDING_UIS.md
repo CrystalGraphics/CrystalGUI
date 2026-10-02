@@ -25,6 +25,7 @@ beside this file. Nothing here assumes you have read them.
 9. [Remembering things](#9-remembering-things)
 10. [Owning a file type](#10-owning-a-file-type)
 11. [Writing your own widget](#11-writing-your-own-widget)
+11b. [Drawing under or over the UI](#11b-drawing-under-or-over-the-ui)
 12. [Cheat sheet](#12-cheat-sheet)
 
 ---
@@ -1349,6 +1350,42 @@ A widget that is neither contracted nor marked fails `WidgetContractCoverageTest
 the question gets answered while it is still cheap.
 
 ---
+
+## 11b. Drawing under or over the UI
+
+Something that is not a widget -- a badge over the HUD, a crosshair effect, a picture behind every screen -- draws
+at one of CrystalGUI's **render stages**, `UiStages.SCREEN` (over a screen, CrystalGUI's or any other) and
+`UiStages.HUD` (over the in-game HUD). CrystalGUI's own windows are a renderer on each at `UiStages.COMPOSITOR`, so the
+order you register at says which side of them you land on.
+
+```java
+CgPassRecorder recorder = new CgPassRecorder();
+CgQuadRenderer quads = CgQuadRenderer.create();
+quads.sink(recorder);
+CgMaterial material = CgMaterial.load("mymod:shaders/badge.shader");   // declares #pragma cg_use quad
+
+CgRenderStage.Registration badge = UiStages.HUD.register(UiStages.COMPOSITOR + 1, frame -> {   // over the windows
+    recorder.recordInto(frame.recording(), frame.target(), CgLoad.load(), frame.constants());
+    quads.useMaterial(material);
+    quads.begin();
+    quads.quad().at(8f, 8f).size(32f, 32f).color(0xFFFF8800).submit();
+    quads.flush();
+    quads.end();
+    recorder.stop();
+});
+badge.close();   // and it stops
+```
+
+- **Coordinates** are CrystalGUI's logical pixels, origin top left: `frame.constants()` is that camera.
+  `frame.host().width()`/`height()` are the surface's device pixels.
+- **Once a frame each**, on the render thread, from the game's own screen and HUD hooks, on every Minecraft version
+  CrystalGUI runs on. `SCREEN` fires once whoever's screen is up; neither fires on a server.
+- **Below `COMPOSITOR` is under the windows**, above it over them; ties draw in registration order.
+- **What you record executes at once**, onto the game's target, after the renderers before you. Nothing is kept:
+  record every frame.
+- A world-space effect belongs on CrystalGraphics' world stages instead (`CgRenderStage.WORLD_OPAQUE`, or
+  `CgWorldRenderer`); CrystalGraphics' [`docs/SETUP.md`](../CrystalGraphics/docs/SETUP.md) § *Drawing from your
+  mod*.
 
 ## 12. Cheat sheet
 

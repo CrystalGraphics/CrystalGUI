@@ -230,6 +230,8 @@ public final class AutoTest {
             CrystalGuiCore.LOGGER.info("CGUI AUTOTEST notification: {}{}", added,
                     added.getDetail().isEmpty() ? "" : " -- " + added.getDetail().replace((char) 10, ' '));
         });
+        // A mod's renderer on CrystalGUI's stages, which every capture states the draws of. @see StageProbe
+        StageProbe.start();
         host.openDesktop();
     }
 
@@ -257,6 +259,7 @@ public final class AutoTest {
         if (!capturedEarly && due && (settledSinceReady || waitedEnough)) {
             earlyAt = sinceOpen;
             capturedEarly = true;
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST {}", StageProbe.report());
             host.capture(earlyCapture());
             // NOTHING LEFT TO TAKE THE SECOND WITH, so the first must not quit when one is wanted.
             if (host.lateCaptureAt() <= 0) {
@@ -268,6 +271,7 @@ public final class AutoTest {
         if (capturedEarly && host.lateCaptureAt() > 0 && sinceOpen >= host.lateCaptureAt()
                 && sinceOpen >= earlyAt + host.captureAt()) {
             capturedLate = true;
+            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST {}", StageProbe.report());
             host.capture(lateCapture());
             host.quit();
         }
