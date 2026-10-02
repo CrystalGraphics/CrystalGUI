@@ -408,7 +408,8 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
             Matrix4f place = new Matrix4f(world).mul(recordedInverse);
             motions.add(new UiCommit.Motion(animation, moved, box.fadedNode(frame.frameId()), place,
                     place.invert(new Matrix4f()), recordedInverse, width, height, originX, originY,
-                    Math.round(world.m30()), Math.round(world.m31())));
+                    // AT REST: the node is the box's corner without its transform. @see Box#restToWorld
+                    Math.round(place.m30()), Math.round(place.m31())));
         }
         return motions;
     }

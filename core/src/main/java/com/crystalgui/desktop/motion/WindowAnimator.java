@@ -288,16 +288,12 @@ public final class WindowAnimator {
             then.run();
             return;
         }
-        // PHOTOGRAPHED BEFORE IT GOES. The flight ends by detaching the window, and a detached window
-        // has nothing left to draw -- so a taskbar preview of a minimised one has to be a picture taken
-        // while it was still whole. Requested here, taken on the next paint, which is still frame one of
-        // the animation and therefore still an untransformed, fully opaque window.
+        // Its preview once minimised is its surface, drawn at rest whatever the flight does to the composite.
         Transform into = towardTaskbar();
         if (into == null) {
             playClose(then);
             return;
         }
-        frame.requestSnapshot();
         start(NEUTRAL_MAPPING, into, 1f, 0f, CORNER, CORNER, MINIMIZE_NANOS, MOVING, then);
     }
 
@@ -536,8 +532,8 @@ public final class WindowAnimator {
         // the length of every gesture, having produced a whitened one, a blank one and an invisible one
         // on the way there.
         //
-        // WindowSnapshot itself stays -- a MINIMISED window is detached and has nothing left to draw, so
-        // its taskbar preview genuinely needs a picture taken while it was still whole. @see #playMinimize
+        // A surface is what moves now (render-graph G7): its picture is drawn at rest, and the flight is its
+        // composite's transform and opacity, so a minimise draws the window once.
         WindowAnimation animation = new WindowAnimation(frame, this::frameIsLive,
                 from, to, fromOpacity, toOpacity,
                 originX, originY, durationNanos, easing, () -> {

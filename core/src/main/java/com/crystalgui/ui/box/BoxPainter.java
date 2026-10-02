@@ -108,8 +108,10 @@ public final class BoxPainter {
         // content's node is one. @see #paintChildren
         if (box.willChangeTransform()) {
             Matrix4f origin = nodeOrigin.set(base).mul(box.localToWorld());
-            float x = Math.round(origin.m30()), y = Math.round(origin.m31());
             movedWorld.set(origin);
+            // AT ITS CORNER AT REST: its own transform is drawn over the node, so a flight leaves the node where it is.
+            if (box.isTransformed()) origin.set(base).mul(box.restToWorld());
+            float x = Math.round(origin.m30()), y = Math.round(origin.m31());
             int moved = ctx.addNode(origin.translation(x, y, 0f), true);
             if (moved != 0) {
                 box.noteMovedNode(moved, ctx.frameId(), movedWorld);
@@ -131,14 +133,29 @@ public final class BoxPainter {
      * compositor fade applied there (render-graph G7): false, having drawn nothing, where it has none.
      */
     private boolean paintSurface(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext, float opacity) {
-        LayerRegion region = regionOf(box, ctx, base);
-        Surface surface = ctx.surface(box, region);
+        // AT REST: its own transform goes into the composite, so a flight or a turn keeps the picture. Where it has
+        // one, `base` becomes base x turn^-1, turn being the transform in world space, and the composite base x turn x
+        // base^-1 in the draw space.
+        Matrix4f turn = null;
+        if (box.isTransformed()) {
+            // Fresh, not scratch: the walk below may reach another surface while these are still wanted.
+            Matrix4f world = new Matrix4f(box.restToWorld()).invert().mulLocal(box.localToWorld());
+            turn = new Matrix4f(base).mul(world).mul(surfaceScratch.set(base).invert());
+            base = new Matrix4f(base).mul(world.invert());
+        }
+        // The world ink carries the transform, and the rest base takes it back out.
+        inkThrough(box, targetOf(ctx, base));
+        LayerRegion region = ctx.surfaceRegion(ink[0], ink[1], ink[2], ink[3]);
+        // KEYED BY ITS NODE, so a window shown again finds its picture; a mirror's box is not its node's.
+        Object key = box.node().box() == box ? box.node() : box;
+        Surface surface = ctx.surface(key, region);
         if (surface == null) return false;
         // KEPT AGAINST ITS NODE: the region less the node's own place in the target, so a move keeps the picture.
         Matrix4f toTarget = ctx.drawToTarget();
         int nodeX = region.x() - Math.round(toTarget.m30()), nodeY = region.y() - Math.round(toTarget.m31());
         long epoch = ctx.replayEpoch(), stacking = box.tree().stackingEpoch();
-        boolean holds = box.retainable() && surface.holds(box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
+        boolean holds = box.retainable()
+                && surface.holds(box, box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
         if (holds && !CgUiPaintContext.DAMAGE_CHECK) {
             // NOTHING UNDER IT CHANGED: one composite, and none of its boxes paint to note themselves.
             CgTrace.add(UiTrace.FRAME, "surfaces-kept", 1);
@@ -147,9 +164,9 @@ public final class BoxPainter {
         } else {
             if (!holds) {
                 CgTrace.add(UiTrace.FRAME, !box.retainable() ? "surface-miss-dynamic"
-                        : surface.missed(box.innerRevision(), nodeX, nodeY, region, epoch, stacking), 1);
+                        : surface.missed(box, box.innerRevision(), nodeX, nodeY, region, epoch, stacking), 1);
             }
-            ctx.beginSurface(surface, region, !surface.drewAt(nodeX, nodeY, region));
+            ctx.beginSurface(surface, region, !surface.drewAt(box, nodeX, nodeY, region));
             paintBoxIn(box, ctx, layerBase(ctx, base, region), asContext, 1f, true);
             // CHECK MODE: a surface that would have been kept was walked, and must have found nothing to draw.
             if (ctx.endSurface() && holds) {
@@ -158,13 +175,26 @@ public final class BoxPainter {
                         layerLabel(box.node()));
             }
             if (CgUiPaintContext.DAMAGE_CHECK) checkDamage(box, ctx, base, region, surface, asContext);
-            surface.drew(box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
+            surface.drew(box, box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
+            // ITS PICTURE: the border box in the texture, what a thumbnail draws.
+            boundsThrough(0f, 0f, box.width(), box.height(), surfaceScratch.set(targetOf(ctx, base)).mul(box.localToWorld()));
+            surface.pictured(ink[0] - region.x(), ink[1] - region.y(), ink[2] - region.x(), ink[3] - region.y(),
+                    box.width(), box.height());
             CgTrace.add(UiTrace.FRAME, "surfaces-painted", 1);
         }
-        box.noteFadedNode(ctx.blitLayer(surface.target(), opacity, region, box.animatesOnCompositor()), ctx.frameId());
-        ctx.damageSurface(region);
+        box.noteFadedNode(ctx.blitLayer(surface.target(), opacity, region, box.animatesOnCompositor(), turn),
+                ctx.frameId());
+        if (turn == null) {
+            ctx.damageSurface(region);
+        } else {
+            boundsThrough(region.x(), region.y(), region.x() + region.width(), region.y() + region.height(),
+                    surfaceScratch.set(ctx.drawToTarget()).mul(turn).mul(ctx.targetToDraw()));
+            ctx.damageSurface(ctx.surfaceRegion(ink[0], ink[1], ink[2], ink[3]));
+        }
         return true;
     }
+
+    private final Matrix4f surfaceScratch = new Matrix4f();
 
     /**
      * Check mode: the box painted again, whole, into a texture beside its surface -- replaying, and placing nothing --
@@ -172,8 +202,9 @@ public final class BoxPainter {
      */
     private void checkDamage(Box box, CgUiPaintContext ctx, Matrix4f base, LayerRegion region, Surface surface,
                              boolean asContext) {
-        ctx.beginLayerFbo(ctx.damageCheckTarget(surface), region);
-        ctx.withoutRetention(() -> paintBoxIn(box, ctx, layerBase(ctx, base, region), asContext, 1f, true));
+        ctx.beginDamageCheck(surface, region);
+        Matrix4f at = new Matrix4f(base);
+        ctx.withoutRetention(() -> paintBoxIn(box, ctx, layerBase(ctx, at, region), asContext, 1f, true));
         ctx.endLayerFbo();
         ctx.compareSurface(surface, region, layerLabel(box.node()));
     }
