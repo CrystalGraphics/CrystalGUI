@@ -97,7 +97,10 @@ public final class CgUiRenderer {
         renderer.useMaterial(material);
     }
 
-    /** A texture bound to {@code unit} by hand for the quads queued next; wins over the material's sampler there. */
+    /**
+     * A texture bound to {@code unit} by hand for the quads queued next; wins over the material's sampler there. Null
+     * gives the unit back to the material.
+     */
     void bindTexture(int unit, CgTexture texture) {
         renderer.bindTexture(unit, texture);
     }

@@ -45,6 +45,9 @@ public final class Surface {
     /** Freed by its context: it holds nothing any more. */
     boolean released;
 
+    /** Its last walk drew text below the glyph tier it asked for: walked again until the glyphs land. */
+    private boolean walkAgain;
+
     /**
      * What a surface is keyed by, told of it each time it is drawn, and asked whether to keep it while nothing paints
      * it -- a minimised window, whose preview still shows its picture.
@@ -103,7 +106,7 @@ public final class Surface {
      */
     public boolean holds(Object box, long revision, int nodeX, int nodeY, LayerRegion region, long epoch,
                          long stacking) {
-        return this.box == box && this.revision == revision && this.nodeX == nodeX && this.nodeY == nodeY
+        return !walkAgain && this.box == box && this.revision == revision && this.nodeX == nodeX && this.nodeY == nodeY
                 && width == region.width() && height == region.height() && this.epoch == epoch
                 && this.stacking == stacking;
     }
@@ -113,6 +116,7 @@ public final class Surface {
                          long stacking) {
         if (this.revision == -1L) return "surface-miss-new";
         if (this.box != box) return "surface-miss-box";
+        if (walkAgain) return "surface-miss-degraded";
         if (this.revision != revision) return "surface-miss-revision";
         if (this.nodeX != nodeX || this.nodeY != nodeY || width != region.width() || height != region.height()) {
             return "surface-miss-region";
@@ -123,6 +127,7 @@ public final class Surface {
 
     /** Records that the box was just drawn into it, as {@link #holds} names. */
     public void drew(Object box, long revision, int nodeX, int nodeY, LayerRegion region, long epoch, long stacking) {
+        walkAgain = false;
         this.box = box;
         this.revision = revision;
         this.nodeX = nodeX;
@@ -241,6 +246,14 @@ public final class Surface {
         out[2] = damageX1;
         out[3] = damageY1;
         return true;
+    }
+
+    /**
+     * Walks it again next frame whatever {@link #holds} would answer, its picture standing: what was drawn below the
+     * glyph tier it asked for is painted again there, and the rest replays.
+     */
+    public void walkAgain() {
+        walkAgain = true;
     }
 
     /** Forgets what it holds: the next {@link #holds} answers false. */

@@ -25,9 +25,10 @@ final class BoxReplay implements Surface.Tenant {
     static final int BEFORE = 0, AFTER = 1;
     /**
      * The key's floats: the pose in the box's spatial node (six affine components), the part of the box's own ink
-     * the clip leaves (four), and the layer opacity folded into its colours (one).
+     * the clip leaves (four), the layer opacity folded into its colours (one), and the target's size (two) -- text
+     * keeps its own projection of the target, where every other draw takes the pass's.
      */
-    static final int KEY_FLOATS = 11;
+    static final int KEY_FLOATS = 13;
 
     private final float[] keys = new float[2 * KEY_FLOATS];
     private final long[] revisions = new long[2];

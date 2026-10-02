@@ -997,13 +997,16 @@ did. Under a node the
 > **A box's own paint is a segment** (render-graph G6): `BoxPainter` brackets what a box draws under its children and
 > what it draws over them with `ctx.beginSegment()`/`endSegment()`, which flush at both edges, so a segment is exactly
 > the chunks the recorder took between them. **A segment whose key holds is replayed, not painted** (G6.3): the key is
-> the box's content revision, its pose in its spatial node, the visible part of its ink and the folded opacity, under
-> `ctx.replayEpoch()` (a glyph page evicted or new glyphs, the icon atlas cleared, the kept snapshots dropped). `endSegment(stretch)`
+> the box's content revision, its pose in its spatial node, the visible part of its ink, the folded opacity and the
+> target's size (text carries its own projection of the target), under `ctx.replayEpoch()` (a glyph page evicted, the
+> text gamma changed, the icon atlas cleared, the kept snapshots dropped). A segment whose text drew while its glyphs
+> were still generating is not kept, and a surface that drew some is walked again until they land. `endSegment(stretch)`
 > keeps the chunks with the clip entries, shapes and snapshots they name (`CgReplay`), and `ctx.replay` adds them again,
 > renumbered into the new recording. **A widget whose picture changes while its box does not calls `repaint()` or
 > answers `paintsDynamically()`**; one that does neither shows its last picture, and
 > `-Dcrystalgui.paint.replayCheck=true` finds it: every keyed box painted anyway, compared with what it kept, and the
-> one that drew otherwise under an unchanged key named in the log. `-Dcrystalgui.paint.replay=false` paints every
+> one that drew otherwise under an unchanged key named in the log; run it apart from the damage check, which it would
+> defeat by painting every box. `-Dcrystalgui.paint.replay=false` paints every
 > box; `-Dcrystalgui.paint.segments=false` turns the edges off.
 >
 > **A box the compositor moves draws into a surface of its own** (render-graph G7): a `will-change: transform` box

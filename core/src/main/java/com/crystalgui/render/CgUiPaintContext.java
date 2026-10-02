@@ -702,15 +702,12 @@ public final class CgUiPaintContext {
         frameId++;
         if (frameActive) throw new IllegalStateException("recordFrame() called without matching seal()");
         CgGL.enterGlFree("ui recording");
-        // A text kept while its glyphs were still generating drew without them, and an atlas that grew binds
-        // another texture: new glyph content is a new epoch, read once a frame since a frame kept under the old one
-        // is painted again in the next.
+        // A page evicted names a layer another page now holds. New glyphs do not move an epoch: a segment whose text
+        // drew without its glyphs is not kept (endSegment), and growth keeps the atlas's texture and its id.
         long evicted = CgFontRegistry.get().getAtlasEvictionGeneration();
-        long content = CgFontRegistry.get().getAtlasContentGeneration();
-        if (evicted != seenFontGeneration || content != seenFontContent) {
-            CgTrace.add(UiTrace.FRAME, evicted != seenFontGeneration ? "replay-epoch-evicted" : "replay-epoch-glyphs", 1);
+        if (evicted != seenFontGeneration) {
+            CgTrace.add(UiTrace.FRAME, "replay-epoch-evicted", 1);
             seenFontGeneration = evicted;
-            seenFontContent = content;
             replayEpoch++;
         }
         if (keptBindings.size() > KEPT_SNAPSHOTS) {
@@ -957,11 +954,14 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * The coverage correction every label is drawn with. A kept segment or surface keeps the text it already holds
-     * until it repaints.
+     * The coverage correction every label is drawn with. A change paints every kept segment and surface again, since
+     * their text chunks keep the correction they were recorded with; setting the same one each frame costs nothing.
      */
     public void textGamma(CgTextGamma gamma) {
+        if (gamma.equals(textRenderer.gamma())) return;
         textRenderer.gamma(gamma);
+        CgTrace.add(UiTrace.FRAME, "replay-epoch-gamma", 1);
+        replayEpoch++;
     }
 
     public CgTextRenderer text() {
@@ -1495,12 +1495,12 @@ public final class CgUiPaintContext {
      * The standing scissor rule covers the INHERITED rect, which the snapshot already clears — this is
      * the rect pushed during the render, which has to be flipped against the buffer it lands in.</p>
      */
-    private int targetWidth() {
+    public int targetWidth() {
         return layerStack.isEmpty() ? screenWidth : layerStack.peek().target().getWidth();
     }
 
     /** @see #targetWidth() */
-    private int targetHeight() {
+    public int targetHeight() {
         return layerStack.isEmpty() ? screenHeight : layerStack.peek().target().getHeight();
     }
 
@@ -1674,6 +1674,8 @@ public final class CgUiPaintContext {
     private long[] segmentStarts = new long[8];
     /** Per open segment, the recorder's {@link CgPassRecorder#stateChanges} where it started. */
     private long[] segmentStates = new long[8];
+    /** Per open segment, {@link #textDegradedDrawCount} where it started. */
+    private long[] segmentDegraded = new long[8];
     /** Per open segment: the recording's operations and clip entries, then the clip entry and nodes it began under. */
     private int[] segmentMarks = new int[8 * SEGMENT_MARKS];
     private static final int SEGMENT_MARKS = 5;
@@ -1681,7 +1683,7 @@ public final class CgUiPaintContext {
 
     /** The snapshots kept segments bind, which outlive the recordings. @see CgReplay */
     private final CgBindingTable keptBindings = new CgBindingTable();
-    private long replayEpoch, seenFontGeneration, seenFontContent, seenEvictions;
+    private long replayEpoch, seenFontGeneration, seenEvictions;
     private int seenIconResets;
 
     /**
@@ -1703,11 +1705,13 @@ public final class CgUiPaintContext {
         if (segments == segmentStarts.length) {
             segmentStarts = Arrays.copyOf(segmentStarts, segments * 2);
             segmentStates = Arrays.copyOf(segmentStates, segments * 2);
+            segmentDegraded = Arrays.copyOf(segmentDegraded, segments * 2);
             segmentMarks = Arrays.copyOf(segmentMarks, segments * 2 * SEGMENT_MARKS);
         }
         int s = segments++, m = s * SEGMENT_MARKS;
         segmentStarts[s] = recorder.chunksTaken();
         segmentStates[s] = recorder.stateChanges();
+        segmentDegraded[s] = textDegradedDrawCount();
         segmentMarks[m] = recording.operations();
         segmentMarks[m + 1] = recording.clips().count();
         segmentMarks[m + 2] = clipEntry;
@@ -1723,7 +1727,8 @@ public final class CgUiPaintContext {
     /**
      * {@link #endSegment()}, keeping what the segment recorded in {@code keep} for {@link #replay}: answers whether it
      * did. Not kept: a segment that recorded anything but draws -- a request, a layer, a capture -- or changed pass or
-     * scissor, drew in another node, or binds a texture made for this frame alone. With replay off, nothing is kept.
+     * scissor, drew in another node, binds a texture made for this frame alone, or drew text below the glyph tier it
+     * asked for (still generating: it is painted again until its glyphs land). With replay off, nothing is kept.
      */
     public boolean endSegment(@Nullable CgReplay keep) {
         if (!SEGMENTS) return false;
@@ -1733,6 +1738,11 @@ public final class CgUiPaintContext {
         CgTrace.add(UiTrace.FRAME, "segments", 1);
         CgTrace.add(UiTrace.FRAME, "segment-chunks", recorder.chunksTaken() - segmentStarts[s]);
         if (keep == null || !REPLAY) return false;
+        if (textDegradedDrawCount() != segmentDegraded[s]) {
+            keep.clear();
+            CgTrace.add(UiTrace.FRAME, "segments-unkept-degraded", 1);
+            return false;
+        }
         boolean kept = recorder.stateChanges() == segmentStates[s] && recording.operations() == segmentMarks[m]
                 && keep.capture(recorder, segmentStarts[s], recording, keptBindings, segmentMarks[m + 1],
                         segmentMarks[m + 2], segmentMarks[m + 3], segmentMarks[m + 4]);
@@ -1817,8 +1827,8 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * What every kept segment was recorded under: moved when a glyph atlas evicts a page or gains glyphs, the icon
-     * raster clears its atlas, or the kept snapshots are dropped -- whatever changes what a kept record points at.
+     * What every kept segment was recorded under: moved when a glyph atlas evicts a page, the icon raster clears its
+     * atlas, or the kept snapshots are dropped -- whatever changes what a kept record points at.
      * Evictions and icon resets are read live, since they move a placement in the middle of a frame.
      */
     public long replayEpoch() {
@@ -2011,6 +2021,9 @@ public final class CgUiPaintContext {
         flush();
         currentMaterial = material;
         currentTexture = null;
+        // A unit the material leaves empty takes the last texture bound by hand: whichever box drew before, or none
+        // when that box replayed. Cleared, so a material without a sampler binds the same in every frame.
+        renderer.bindTexture(0, null);
         material.applyProperties(layerOpacityBinder);
 
         // useMaterial() is called TWICE around drawBody on purpose, and both calls are load-bearing.
