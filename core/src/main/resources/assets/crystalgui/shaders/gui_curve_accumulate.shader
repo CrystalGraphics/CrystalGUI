@@ -11,7 +11,7 @@
 // accumulator holds pure coverage and the composite applies opacity. No discard: a sliver's
 // 0.02 is exactly what has to add up.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use curve
 
 #include "crystalgraphics:shaders/lib/stroke.glsl"

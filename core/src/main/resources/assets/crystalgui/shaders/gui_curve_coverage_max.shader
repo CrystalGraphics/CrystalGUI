@@ -6,7 +6,7 @@
 // bead on each joint. The maximum is the union of the segments -- exact at a joint, and only under
 // where two strokes genuinely cross, which is where the direct path composites twice anyway.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use curve
 
 #include "crystalgraphics:shaders/lib/stroke.glsl"

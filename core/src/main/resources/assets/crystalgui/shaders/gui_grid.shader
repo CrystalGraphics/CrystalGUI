@@ -40,7 +40,7 @@
 // PREMULTIPLIED out, under ONE / ONE_MINUS_SRC_ALPHA -- gui_box's blend and gui_gradient's. A grid is nearly
 // always drawn translucent over something.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use quad
 #pragma cg_use clip
 #pragma cg_feature WITH_MASK

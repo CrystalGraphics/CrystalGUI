@@ -19,7 +19,7 @@
 // per-instance object-buffer record is needed. gl_Position comes straight from cg_ProjMatrix, set
 // once per frame by CgUiPaintContext.beginFrame().
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use curve
 #pragma cg_use clip
 

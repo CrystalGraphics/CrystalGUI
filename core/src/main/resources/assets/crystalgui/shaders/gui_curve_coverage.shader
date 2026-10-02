@@ -7,7 +7,7 @@
 // A fill whose colours are baked in cannot be stored straight (its channels are sums) and takes the
 // premultiplied material instead.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use curve
 
 #include "crystalgraphics:shaders/lib/stroke.glsl"
