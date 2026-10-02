@@ -7,8 +7,8 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
-import com.crystalgui.style.easing.Easing;
-import com.crystalgui.style.easing.ProgressFunctions;
+import com.crystalgraphics.easing.CgEasing;
+import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.ui.box.Box;
 import javax.annotation.Nullable;
 
@@ -81,7 +81,7 @@ final class TaskbarEntryMotion implements WindowMotion {
      * <p>The finding the window animations already record: an exit that speeds up is gone before the eye
      * follows it, and every production window manager decelerates everything.</p>
      */
-    private static final Easing CURVE = ProgressFunctions.Premade.OUT_QUAD;
+    private static final CgEasing CURVE = CgEasings.OUT_QUAD;
 
     private final UIElement entry;
     private final boolean opening;

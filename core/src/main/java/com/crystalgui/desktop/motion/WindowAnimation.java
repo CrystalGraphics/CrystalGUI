@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.motion;
 
-import com.crystalgui.style.easing.Easing;
+import com.crystalgraphics.easing.CgEasing;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.transition.ActiveTransition;
@@ -90,7 +90,7 @@ public final class WindowAnimation implements WindowMotion {
     private final float fromOpacity;
     private final float toOpacity;
     private final long durationNanos;
-    private final Easing easing;
+    private final CgEasing easing;
     private boolean clockStarted;
     private long virtualNow;
     private long lastRealNow;
@@ -136,7 +136,7 @@ public final class WindowAnimation implements WindowMotion {
      */
     WindowAnimation(UIElement target, BooleanSupplier alive, Transform from, Transform to,
                     float fromOpacity, float toOpacity, LengthPercent originX, LengthPercent originY,
-                    long durationNanos, Easing easing, @Nullable Runnable onDone) {
+                    long durationNanos, CgEasing easing, @Nullable Runnable onDone) {
         this.target = target;
         this.alive = alive;
         this.onDone = onDone;

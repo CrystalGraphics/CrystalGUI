@@ -1,6 +1,6 @@
 package com.crystalgui.style.transition;
 
-import com.crystalgui.style.easing.ProgressFunctions;
+import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.style.property.general.floats.FloatProperty;
 import org.junit.Test;
 
@@ -13,7 +13,7 @@ public class ActiveTransitionTest {
     @Test
     public void beforeDelayHoldsAtFromValue() {
         var property = new FloatProperty("test-float", 0f);
-        var transition = new ActiveTransition<>(property, 0f, 100f, START, 50_000_000L, 100_000_000L, ProgressFunctions.Premade.LINEAR);
+        var transition = new ActiveTransition<>(property, 0f, 100f, START, 50_000_000L, 100_000_000L, CgEasings.LINEAR);
 
         // Still within the delay window.
         assertEquals(0f, transition.currentValue(START + 25_000_000L), 0.0001f);
@@ -24,7 +24,7 @@ public class ActiveTransitionTest {
     @Test
     public void linearInterpolationAtMidpointIsHalfway() {
         var property = new FloatProperty("test-float", 0f);
-        var transition = new ActiveTransition<>(property, 0f, 100f, START, 0L, 100_000_000L, ProgressFunctions.Premade.LINEAR);
+        var transition = new ActiveTransition<>(property, 0f, 100f, START, 0L, 100_000_000L, CgEasings.LINEAR);
 
         assertEquals(50f, transition.currentValue(START + 50_000_000L), 0.001f);
         assertEquals(0.5, transition.progress(START + 50_000_000L), 0.001);
@@ -33,7 +33,7 @@ public class ActiveTransitionTest {
     @Test
     public void reachesToValueExactlyAtDuration() {
         var property = new FloatProperty("test-float", 0f);
-        var transition = new ActiveTransition<>(property, 10f, 20f, START, 0L, 100_000_000L, ProgressFunctions.Premade.LINEAR);
+        var transition = new ActiveTransition<>(property, 10f, 20f, START, 0L, 100_000_000L, CgEasings.LINEAR);
 
         assertEquals(20f, transition.currentValue(START + 100_000_000L), 0.0001f);
         assertTrue(transition.isFinished(START + 100_000_000L));
@@ -42,7 +42,7 @@ public class ActiveTransitionTest {
     @Test
     public void clampsPastDuration() {
         var property = new FloatProperty("test-float", 0f);
-        var transition = new ActiveTransition<>(property, 10f, 20f, START, 0L, 100_000_000L, ProgressFunctions.Premade.LINEAR);
+        var transition = new ActiveTransition<>(property, 10f, 20f, START, 0L, 100_000_000L, CgEasings.LINEAR);
 
         // Long after the transition should have ended — still clamps to toValue, doesn't overshoot.
         assertEquals(20f, transition.currentValue(START + 10_000_000_000L), 0.0001f);
@@ -52,7 +52,7 @@ public class ActiveTransitionTest {
     @Test
     public void zeroDurationFinishesImmediately() {
         var property = new FloatProperty("test-float", 0f);
-        var transition = new ActiveTransition<>(property, 0f, 1f, START, 0L, 0L, ProgressFunctions.Premade.LINEAR);
+        var transition = new ActiveTransition<>(property, 0f, 1f, START, 0L, 0L, CgEasings.LINEAR);
 
         assertTrue(transition.isFinished(START));
         assertEquals(1f, transition.currentValue(START), 0.0001f);
@@ -61,7 +61,7 @@ public class ActiveTransitionTest {
     @Test
     public void nonLinearEasingWarpsProgressButStillReachesEndpoints() {
         var property = new FloatProperty("test-float", 0f);
-        var easeIn = ProgressFunctions.cubicBezier(0.42, 0.0, 1.0, 1.0); // starts slow
+        var easeIn = CgEasings.cubicBezier(0.42, 0.0, 1.0, 1.0); // starts slow
         var transition = new ActiveTransition<>(property, 0f, 100f, START, 0L, 100_000_000L, easeIn);
 
         float atStart = transition.currentValue(START);

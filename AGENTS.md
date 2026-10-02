@@ -84,7 +84,7 @@ questions too.
 ./gradlew :core:compileJava                      # enforces the Minecraft/Forge/LWJGL import guard
 ./gradlew :core:test --tests "<Class>"           # CrystalGraphics ON the classpath; name classes --
                                                  # a `com.crystalgui.ui.*` wildcard never reports
-./gradlew :core:headlessTest                     # server-side tests, CrystalGraphics core deliberately absent
+./gradlew :core:headlessTest                     # server-side tests: no GL context, no fonts
 ./gradlew :core:trackedTest                      # every shipped shader and keyword variant, linked as on Vulkan
 ./gradlew :runtime:mc:1710:compileJava           # not in :core:check -- what a deletion from core/ breaks silently
 ```
@@ -317,29 +317,25 @@ build. There are currently **no exemptions** — the guard is clean.
 | Source set | CrystalGraphics on classpath? | What belongs there |
 |---|---|---|
 | `core/src/test/` | ✅ `testImplementation` | Anything needing `CgIO`, fonts, `StyleSheet`, sprites, drawables |
-| `core/src/headlessTest/` | ❌ **core deliberately absent**, `platform` present | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic, and **`text.lang` — the language SPIs, which run here precisely because no engine and no grammar is on this classpath** |
+| `core/src/headlessTest/` | ✅ `core` and `platform`, **no GL context and no fonts** | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic, and **`text.lang` — the language SPIs, which run here precisely because no engine and no grammar is on this classpath** |
 | `core/src/trackedTest/` | ✅ `core`, `platform` and `vulkan`, with LWJGL 3 | CrystalGUI's shaders on CrystalGraphics' tracked backend over shaderc: every `.shader`, pass and keyword variant, linked as a Vulkan device will link them. Its own task, `:core:trackedTest` — the backend it installs is process-wide |
 | `language/src/test/` | ✅ (plus the tree-sitter natives) | Grammars, queries, the tokenizer. Skips cleanly when a native will not load on the running platform |
 | harness scenes | ✅ full GL | Anything visual |
 
-**The absence is the assertion.** On a dedicated Minecraft server there is no GL context and no fonts.
-Anything in `core/` that reaches a CrystalGraphics **core** type *outside a paint-method body* fails in
-`headlessTest` with `NoClassDefFoundError` rather than in production.
-
-> **`com.crystalgraphics:platform` is the one CG module that stays**, and it is not an exception to the
-> rule — it is what the rule is actually modelling. `platform` is pure SPI (interfaces, key-code
-> constants, the `CgPlatform` registry) with no GL calls and no context requirement, and it ships inside
-> every loader jar, so a dedicated server genuinely has it. Excluding it would assert something untrue of
-> production, and `core/` reaches it for real: `Input` *implements* `CgSystemInput`, which is a
-> supertype and therefore resolves at class load, not in a method body.
+**The classpath is a dedicated server's.** A server ships CrystalGraphics `core` and `platform`, so both are here:
+`core` holds shared utilities the engine names in field and signature types (`com.crystalgraphics.easing`, which the
+style engine's transitions and the `Animation` service use). What a server lacks is a GL context and fonts, and no
+test here has either, so code that reaches the GPU outside a paint-method body fails here rather than in production.
+`HeadlessClasspathSanityTest` pins what must be present. *(Until 2026-10-02 `core` was excluded, and the guard was a
+`NoClassDefFoundError` on any core type; moving easing into core ended that.)*
 
 JOML and Taffy **must stay** on the headless classpath: `UINode` and `ElementStyle` have *fields*
 of those types (`Matrix4f`, `NodeId`, `TaffyStyle`), and field descriptors resolve at class load —
 unlike method-body references, which don't. Someone will eventually try to strip them; don't.
 
-> **The trap, found the hard way:** `StyleSheet.DEFAULT` is a `static final` that reads `default.css`
-> through `CgIO` at class-init, so the entire `StyleSheet` class is unloadable headlessly — even
-> `StyleSheet.parse()`. **If a test needs CSS text, it belongs in `test`, not `headlessTest`.**
+> **`StyleSheet` loads headlessly now.** `StyleSheet.DEFAULT` reads `default.css` through `CgIO` at class-init,
+> which made the whole class unloadable while `core` was off this classpath; `HeadlessClasspathSanityTest` now
+> asserts it loads.
 
 ---
 
@@ -712,8 +708,9 @@ ticks transitions.
 ## Transitions
 
 `transition: <prop> <dur> <easing>` on any property with `allowTransition`. `TransitionEngine` writes
-at `ANIMATION` origin via `startAnimationSlot`/`tickAnimationSlot`/`endAnimationSlot`. Easings:
-`Linear`, `CubicBezier`, `LinearPiecewise`, `ConstantEasing`, plus `ProgressFunctions`.
+at `ANIMATION` origin via `startAnimationSlot`/`tickAnimationSlot`/`endAnimationSlot`. Easings are CrystalGraphics'
+shared stack, `com.crystalgraphics.easing`: `CgEasing`, the library `CgEasings` (Penner's families, CSS's keywords,
+`cubicBezier`, `linear`, `bake`), `CgCubicBezier`, `CgPiecewiseLinear`, and `CgKeyframes` for eased keyframes.
 
 ## `transform`
 
@@ -1681,8 +1678,6 @@ com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGro
                                StyleSheetRegistry
   .selector                    Selector, CompoundSelector, SelectorType
   .transition                  TransitionEngine, TransitionSpec, ActiveTransition, TransitionValue
-  .easing                      Easing, Linear, CubicBezier, LinearPiecewise, ConstantEasing,
-                               ProgressFunctions
   .property                    StyleProperty<T>, StylePropertyRegistry, StyleSlot, StyleValue,
                                IValueInterpolator
     .general.{bools,enums,floats,ints,strings}   scalar StyleValue/StyleProperty flavors
