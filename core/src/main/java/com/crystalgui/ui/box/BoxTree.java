@@ -883,7 +883,9 @@ public final class BoxTree {
             hostScrollLeft = 0f;
             hostScrollTop = 0f;
         }
-        box.localToWorld.set(hostWorld).translate(box.x - hostScrollLeft, box.y - hostScrollTop, 0f);
+        box.composedLocalX = box.x - hostScrollLeft;
+        box.composedLocalY = box.y - hostScrollTop;
+        box.localToWorld.set(hostWorld).translate(box.composedLocalX, box.composedLocalY, 0f);
         Transform transform = box.transform();
         if (!transform.isIdentity()) {
             if (box.mirrorRoot) {
@@ -957,13 +959,16 @@ public final class BoxTree {
         composeInkBounds(box);
 
         long revision = box.paintRevision;
+        long inner = Math.max(box.contentRevision, box.hostedRevision);
         boolean retainable = box.selfRetainable;
         for (int ci = 0; ci < box.hosted.size(); ci++) {
             Box child = box.hosted.get(ci);
             revision = Math.max(revision, child.subtreeRevision);
+            inner = Math.max(inner, Math.max(child.placeRevision, child.innerRevision));
             retainable &= child.retainable;
         }
         box.subtreeRevision = revision;
+        box.innerRevision = inner;
         box.retainable = retainable;
     }
 
@@ -991,7 +996,18 @@ public final class BoxTree {
     private boolean damageCheck(Box box) {
         Matrix4f m = box.localToWorld;
         ComputedStyle style = box.node.computedStyle();
-        if (!box.repaintRequested
+        // WHERE IT SITS IN ITS HOST, apart from where the host is -- a box that stays put on screen while its window
+        // moves under it has moved within the window. @see Box#innerRevision
+        boolean placed = box.composedLocalX != box.wasLocalX || box.composedLocalY != box.wasLocalY
+                || box.transform() != box.wasTransform;
+        if (placed) {
+            box.placeRevision = paintEpoch;
+            box.wasLocalX = box.composedLocalX;
+            box.wasLocalY = box.composedLocalY;
+            box.wasTransform = box.transform();
+        }
+        if (box.wasChildCount != box.hosted.size()) box.hostedRevision = paintEpoch;
+        if (!placed && !box.repaintRequested
                 && box.wasStyle == style
                 && box.wasWidth == box.width && box.wasHeight == box.height
                 && box.wasChildCount == box.hosted.size()

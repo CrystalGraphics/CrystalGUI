@@ -8,6 +8,7 @@ import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.LayerRegion;
 import com.crystalgui.render.RetainedLayer;
+import com.crystalgui.render.Surface;
 import com.crystalgui.render.texture.*;
 import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.style.ComputedStyle;
@@ -114,18 +115,53 @@ public final class BoxPainter {
                 box.noteMovedNode(moved, ctx.frameId(), movedWorld);
                 int outer = ctx.enterNode(moved);
                 try {
-                    paintBoxIn(box, ctx, new Matrix4f(base).translateLocal(-x, -y, 0f), asContext, opacity);
+                    Matrix4f inner = new Matrix4f(base).translateLocal(-x, -y, 0f);
+                    if (!paintSurface(box, ctx, inner, asContext, opacity)) paintBoxIn(box, ctx, inner, asContext, opacity, false);
                 } finally {
                     ctx.enterNode(outer);
                 }
                 return;
             }
         }
-        paintBoxIn(box, ctx, base, asContext, opacity);
+        paintBoxIn(box, ctx, base, asContext, opacity, false);
     }
 
-    /** {@link #paintBox} once it is known to paint, in the node it draws in. */
-    private void paintBoxIn(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext, float opacity) {
+    /**
+     * A box the compositor moves, drawn into its surface and composited from it under its node, its opacity and any
+     * compositor fade applied there (render-graph G7): false, having drawn nothing, where it has none.
+     */
+    private boolean paintSurface(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext, float opacity) {
+        LayerRegion region = regionOf(box, ctx, base);
+        Surface surface = ctx.surface(box, region);
+        if (surface == null) return false;
+        // KEPT AGAINST ITS NODE: the region less the node's own place in the target, so a move keeps the picture.
+        Matrix4f toTarget = ctx.drawToTarget();
+        int nodeX = region.x() - Math.round(toTarget.m30()), nodeY = region.y() - Math.round(toTarget.m31());
+        long epoch = ctx.replayEpoch(), stacking = box.tree().stackingEpoch();
+        if (box.retainable() && surface.holds(box.innerRevision(), nodeX, nodeY, region, epoch, stacking)) {
+            // NOTHING UNDER IT CHANGED: one composite, and none of its boxes paint to note themselves.
+            CgTrace.add(UiTrace.FRAME, "surfaces-kept", 1);
+            ctx.notePainted(ctx.targetToDraw(), region.x(), region.y(), region.x() + region.width(),
+                    region.y() + region.height());
+        } else {
+            CgTrace.add(UiTrace.FRAME, !box.retainable() ? "surface-miss-dynamic"
+                    : surface.missed(box.innerRevision(), nodeX, nodeY, region, epoch, stacking), 1);
+            ctx.beginLayerFbo(surface.target(), region);
+            paintBoxIn(box, ctx, layerBase(ctx, base, region), asContext, 1f, true);
+            ctx.endLayerFbo();
+            surface.drew(box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
+            CgTrace.add(UiTrace.FRAME, "surfaces-painted", 1);
+        }
+        box.noteFadedNode(ctx.blitLayer(surface.target(), opacity, region, box.animatesOnCompositor()), ctx.frameId());
+        return true;
+    }
+
+    /**
+     * {@link #paintBox} once it is known to paint, in the node it draws in. {@code surface}: drawn into its own
+     * surface, whose composite takes its opacity and fade, so it opens no group layer for either.
+     */
+    private void paintBoxIn(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext, float opacity,
+                            boolean surface) {
         UIElement node = box.node();
         ComputedStyle style = node.computedStyle();
         PoseStack pose = ctx.getPoseStack();
@@ -149,7 +185,7 @@ public final class BoxPainter {
                 mask = false;
             }
             // A compositor fading the box needs its effect node even at full opacity.
-            boolean fades = box.animatesOnCompositor();
+            boolean fades = !surface && box.animatesOnCompositor();
             boolean needsLayer = opacity < 1f || mask || fades;
 
             // AND AN OPACITY THAT CANNOT SELF-OVERLAP folds into the draw instead of flattening a
