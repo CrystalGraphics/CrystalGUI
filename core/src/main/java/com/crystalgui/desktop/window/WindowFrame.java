@@ -288,6 +288,13 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
     /** Photograph this window on its next paint. @see WindowSnapshot */
     public void requestSnapshot() {
         snapshotPending = true;
+        repaint();
+    }
+
+    /** Only while a photograph is pending: otherwise its picture is its tree's, and its surface may be kept. */
+    @Override
+    public boolean paintsDynamically() {
+        return snapshotPending;
     }
 
     /** The last photograph of this window, valid only after a minimise. @see WindowSnapshot */
@@ -340,6 +347,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider {
         super.paintDecoration(ctx, box);
         if (!snapshotPending) return;
         snapshotPending = false;
+        repaint();
         UIDocument window = document();
         if (window == null) return;
 

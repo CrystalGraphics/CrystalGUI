@@ -136,6 +136,25 @@ public final class Box {
     /** What its own-paint segments were last recorded under; null until it first paints. */
     BoxReplay replay;
 
+    /** When this box last moved within its host -- its offset, the host's scroll, its transform. @see #innerRevision */
+    long placeRevision;
+
+    /** When this box last gained or lost a hosted box. @see #innerRevision */
+    long hostedRevision;
+
+    /**
+     * When anything under this box last painted differently relative to the box itself: its own content, what it
+     * hosts, and where each of those sits inside it -- but not where the box is. What a surface keeps its picture
+     * against: a window that moves leaves it where it was. Composed in {@link BoxTree} with {@link #subtreeRevision}.
+     */
+    long innerRevision;
+
+    /** Where {@link BoxTree#composeMatrix} last placed it in its host, and with which transform. */
+    float composedLocalX, composedLocalY;
+    float wasLocalX = Float.NaN, wasLocalY = Float.NaN;
+    @Nullable
+    Transform wasTransform;
+
     /**
      * Whether this box's subtree can be kept as a texture at all.
      *
@@ -545,6 +564,11 @@ public final class Box {
     /** @see #subtreeRevision */
     public long subtreeRevision() {
         return subtreeRevision;
+    }
+
+    /** @see #innerRevision */
+    public long innerRevision() {
+        return innerRevision;
     }
 
     /** @see #retainable */

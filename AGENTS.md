@@ -1006,6 +1006,14 @@ did. Under a node the
 > `-Dcrystalgui.paint.replayCheck=true` finds it: every keyed box painted anyway, compared with what it kept, and the
 > one that drew otherwise under an unchanged key named in the log. `-Dcrystalgui.paint.replay=false` paints every
 > box; `-Dcrystalgui.paint.segments=false` turns the edges off.
+>
+> **A box the compositor moves draws into a surface of its own** (render-graph G7): a `will-change: transform` box
+> (every window), one following the pointer and one the compositor animates paints its subtree into a kept texture
+> (`Surface`, `ctx.surface`), composited under its node with its opacity and fade -- so a move or a fade leaves the
+> texture as it is, and `UiGpu.redraw` executes none. **A surface nothing changed inside is composited and not
+> walked**: kept against the box's `innerRevision` (what changed or moved inside it, never where it is), its region in
+> its node and the replay and stacking epochs, and only while nothing in it paints dynamically.
+> `-Dcrystalgui.paint.surfaces=false` draws into the frame.
 
 > **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,
 > so the background never masks the children; nested up to four deep and under any pose. Only a `mask`

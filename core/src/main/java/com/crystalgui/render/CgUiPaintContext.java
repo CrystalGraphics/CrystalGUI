@@ -778,6 +778,7 @@ public final class CgUiPaintContext {
     public UiFrame seal() {
         if (!frameActive) throw new IllegalStateException("seal() without recordFrame()");
         sweepRetained();
+        sweepSurfaces();
         long timed = CgTrace.stamp(UiTrace.FRAME);
         textRenderer.endBatch();
         renderer.flush();
@@ -2164,6 +2165,62 @@ public final class CgUiPaintContext {
         return Math.max(1, Math.min(Math.max(1, screen), bucket));
     }
 
+    // ── Surfaces ─────────────────────────────────────────────────────────────
+
+    /** Off with {@code -Dcrystalgui.paint.surfaces=false}: a box the compositor moves draws into the frame's target. */
+    public static final boolean SURFACES = NODES && !"false".equals(System.getProperty("crystalgui.paint.surfaces"));
+
+    /** Frames a surface may go unasked-for before it is freed: a window hidden for a while. */
+    private static final long SURFACE_IDLE_FRAMES = 300L;
+
+    private final Map<Object, Surface> surfaces = new HashMap<>();
+    private int surfacesCreated;
+
+    /**
+     * The texture a box the compositor moves is drawn into, made on first use and kept; null where it draws into the
+     * target as any box -- inside a copy drawn elsewhere, with surfaces off, or with nothing to draw. @see Surface
+     *
+     * @param key    what the surface is kept under, by identity: the box
+     * @param region what the box's subtree covers in the target, as {@link #layerRegion} answers
+     */
+    @Nullable
+    public Surface surface(Object key, LayerRegion region) {
+        if (!SURFACES || retentionSuspended || LEGACY_LAYERS || region.isEmpty()) return null;
+        Surface surface = surfaces.get(key);
+        if (surface != null) {
+            int held = surface.target().getWidth(), tall = surface.target().getHeight();
+            if (held < region.width() || tall < region.height()
+                    || held > Math.max(64, region.width() * 2) || tall > Math.max(64, region.height() * 2)) {
+                CgTrace.add(UiTrace.FRAME, "surfaces-resized", 1);
+                surfaces.remove(key);
+                releaseTexture(surface.target());
+                surface = null;
+            }
+        }
+        if (surface == null) {
+            CgGraphTexture target = requestTexture("cgui_surface_" + surfacesCreated++, bucket(region.width()),
+                    bucket(region.height()), LAYER_FORMAT);
+            warmUpLayer(target);
+            surface = new Surface(target);
+            surfaces.put(key, surface);
+            CgTrace.add(UiTrace.FRAME, "surfaces-new", 1);
+        }
+        surface.lastFrame = frameId;
+        return surface;
+    }
+
+    /** Frees the surfaces nothing has asked for in a while. */
+    private void sweepSurfaces() {
+        if (surfaces.isEmpty() || (frameId & 15L) != 0L) return;
+        Iterator<Surface> each = surfaces.values().iterator();
+        while (each.hasNext()) {
+            Surface surface = each.next();
+            if (frameId - surface.lastFrame < SURFACE_IDLE_FRAMES) continue;
+            releaseTexture(surface.target());
+            each.remove();
+        }
+    }
+
     // ── Retained layers ──────────────────────────────────────────────────────
 
     /** Retained targets are owned outright, so this is the whole ceiling on what retention costs. */
@@ -2816,6 +2873,8 @@ public final class CgUiPaintContext {
         imported.clear();
         for (RetainedLayer layer : retained.values()) deleteNow(layer.target());
         retained.clear();
+        for (Surface surface : surfaces.values()) deleteNow(surface.target());
+        surfaces.clear();
         for (CgGraphTexture released : pendingReleases) deleteNow(released);
         pendingReleases.clear();
         candidates.clear();
