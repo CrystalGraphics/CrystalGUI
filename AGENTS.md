@@ -1366,7 +1366,7 @@ the backend here.
 
 > The full infrastructure ownership map (`CgStreamBuffer`, `CgStagingBuffer`, `CgVertexWriter`,
 > `CgBufferWriter`, `CgShaderBuffer`, `CgMesh`, `CgVertexArray`,
-> `CgAbstractShaderProgram`, and the decision tree for picking between them) lives in
+> `CgShaderProgram`, and the decision tree for picking between them) lives in
 > **`CrystalGraphics/AGENTS.md`**, which `CLAUDE.md` already loads every session. Read it there;
 > it is not duplicated here.
 
