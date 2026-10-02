@@ -40,7 +40,7 @@
 // element with a border-radius clips to it instead of squaring the corners; off for square boxes,
 // which is the taskbar's glow and costs the fragment nothing.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use quad
 #pragma cg_use clip
 #pragma cg_feature WITH_MASK

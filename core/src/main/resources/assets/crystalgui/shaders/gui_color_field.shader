@@ -21,7 +21,7 @@
 // swatches clip identically to every other rounded surface -- including against UIElement's
 // hit-test, which uses the same per-corner radii.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use quad
 #pragma cg_use clip
 

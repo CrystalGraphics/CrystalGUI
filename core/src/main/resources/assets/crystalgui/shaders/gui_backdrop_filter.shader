@@ -21,7 +21,7 @@
 // the map, its 127-sample radius and its R/G channel encoding are all artefacts of that pipeline
 // rather than of the technique.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use quad
 #pragma cg_use clip
 

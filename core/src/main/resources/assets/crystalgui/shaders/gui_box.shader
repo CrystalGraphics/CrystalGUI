@@ -11,7 +11,7 @@
 //
 // _LayerOpacity fades a whole draw (CgUiPaintContext.withLayerOpacity); an effect node fades it from the compositor.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use quad
 #pragma cg_use clip
 #pragma cg_use shape

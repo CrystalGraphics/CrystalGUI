@@ -1,7 +1,7 @@
 // The mark StageProbe draws on CrystalGUI's stages in an unattended run: a flat quad in its colour, the least a mod
 // draws at a stage with.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use quad
 
 Tags { "RenderType" = "Transparent" }

@@ -23,7 +23,7 @@
 // tap that would leave re-reads the nearest real pixel rather than the target's transparent clear.
 // Same premultiplied contract too -- alpha is averaged with the colour, never rewritten.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use quad
 
 Tags { "RenderType" = "Transparent" }

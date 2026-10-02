@@ -27,7 +27,7 @@
 // clamped into it, so a tap that would leave simply re-reads the nearest real pixel. That is what
 // CLAMP_TO_EDGE would do if the content filled the texture, and the content never does.
 
-#type pos2_uv2_col4ub
+#type none
 #pragma cg_use quad
 // The loop's bound is a CONSTANT and the radius breaks out of it: a uniform loop bound is legal
 // GLSL 3.30 but some drivers unroll nothing they cannot see the end of, and a constant bound with an
