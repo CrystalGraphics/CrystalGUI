@@ -4,7 +4,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.mc.legacy.client.CgUiScreen;
-import com.crystalgui.mc.legacy.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
 import com.crystalgui.mc.legacy.Game;
@@ -94,13 +94,13 @@ public final class CgUiConnectionProbe {
             MinecraftServer server = Game.server();
             if (server == null) return null;
             List<EntityPlayerMP> players = Game.players(server);
-            return players.isEmpty() ? null : CgUiConnections.forPlayer(players.get(0));
+            return players.isEmpty() ? null : CgNetwork.forPlayer(players.get(0).getGameProfile().getId());
         }
 
         @Override
         @Nullable
         public CgProtocolConnection<Object> clientConnection() {
-            return CgUiConnections.client();
+            return CgNetwork.client();
         }
 
         @Override

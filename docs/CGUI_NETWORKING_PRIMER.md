@@ -184,7 +184,7 @@ Without it, opening a large file visibly freezes the editor's own protocol behin
 > **Odd/even ids.** The two ends allocate stream ids from different halves of the number space —
 > the *initiator* takes one parity, the other end takes the other. HTTP/2's trick. It means both
 > ends can open streams concurrently without agreeing on anything or asking permission. In
-> `CgUiConnections`, the **client is the initiator and the server is not**.
+> `CgNetwork`, the **client is the initiator and the server is not**.
 
 ### 5.2 FIN fragmentation — from WebSocket
 
@@ -435,64 +435,63 @@ subsystem actually wired".
 
 # PART THREE — HOW A CONNECTION IS ESTABLISHED
 
-This is the part that's invisible from any single class. Nothing here is clever; it's just spread
-across three files.
+This is the part that's invisible from any single class. The connections are CrystalGraphics'
+(`com.crystalgraphics.net.CgNetwork`), so any mod on CrystalGraphics has them, with or without CrystalGUI;
+CrystalGUI only contributes protocols to them.
 
 ## 11. The sequence, start to finish
 
 ### Step 0 — registration, at mod init (once per process)
 
-Order matters, and `CommonProxy.init()` states it:
+CrystalGraphics' host, every era, both sides:
 
 ```java
-Mc1710NetworkChannel.register();   // 1. the channel exists and fills the CgPlatform slot
-CgUiWorkspaceHost.register();      // 2. contributors sign the sheet
-CgUiConnections.register();        // 3. the lifecycle starts watching for peers
+CgNetwork.install(channel, player -> profileIdOf(player));   // the channel fills the CgPlatform slot,
+                                                              // and both tables are built
 ```
 
-**Contributors before connections.** Nothing depends on it *today* — no peer can exist at init, so
-both orders bind the same set — but a contributor is only bound to connections opened **after** it
-registers. This is the order that stays correct if anything ever opens one earlier.
-
-> **Why `init` and not `preInit`:** the channel registered at preInit once and **no packet was ever
-> delivered, in either direction**, with every gate reporting healthy. CustomNPC+ builds its handler
-> at preInit and calls `registerChannels()` from `FMLInitializationEvent`. That was the one
-> structural difference from a mod that demonstrably works.
-
-`CgUiConnections.register()` then does two things:
+CrystalGUI's host, after it (CrystalGUI loads after CrystalGraphics):
 
 ```java
-channel.setInboundHandler(CgUiConnections::route);   // frames now have somewhere to go
-FMLCommonHandler.instance().bus().register(new Handler());   // watch for joins/leaves/ticks
+CgUiWorkspaceHost.register();                          // contributors sign the sheet
+WindowProtocol.register();
+CgNetwork.onPeerClosed(CgUiWorkspaceHost::forget);     // per-peer state dropped when a peer goes
 ```
+
+**Contributors before connections.** A contributor is only bound to connections opened **after** it
+registers. No peer can exist at mod init, so every contributor registered there is bound to every
+connection.
+
+> **`init`, not `preInit`, on 1.7.10 and legacy Forge:** a channel registered at preInit delivered **no
+> packet in either direction**, with every gate reporting healthy. CustomNPC+ builds its handler at
+> preInit and calls `registerChannels()` from `FMLInitializationEvent`.
+
+`install` hands the channel `CgNetwork::route`, so frames have somewhere to go, and the host subscribes
+its join, leave, tick and connection events.
 
 ### Step 1 — a peer appears
 
+What each host forwards (1.7.10's events shown; modern loaders have their own, in the same places):
+
 | | Opens on | Closes on | Ticks on |
 |---|---|---|---|
-| **Server** | `PlayerLoggedInEvent` | `PlayerLoggedOutEvent`, `FMLServerStoppingEvent` | `ServerTickEvent` |
-| **Client** | `ClientConnectedToServerEvent` | `ClientDisconnectionFromServerEvent` | `ClientTickEvent` |
+| **Server** | `PlayerLoggedInEvent` → `playerJoined` | `PlayerLoggedOutEvent` → `playerLeft`, `FMLServerStoppingEvent` → `closeAll` | `ServerTickEvent` → `serverTick` |
+| **Client** | `ClientConnectedToServerEvent` → `clientConnected` | `ClientDisconnectionFromServerEvent` → `clientDisconnected` | `ClientTickEvent` → `clientTick` |
 
-> A kick and a disconnect are the same event as a quit. FML doesn't distinguish them at this level
-> and neither should we: what matters is that the peer is gone and **every caller waiting on a reply
-> is told**, rather than waiting out a ten-second timeout for something that's never coming.
+> A kick and a disconnect are the same event as a quit. What matters is that the peer is gone and
+> **every caller waiting on a reply is told**, rather than waiting out a ten-second timeout for something
+> that's never coming.
 
 ### Step 2 — `open()` builds the stack
 
+`CgConnections.open`, per peer:
+
 ```java
-private static Peer open(CgNetworkChannel channel, boolean initiator, Object player) {
-    CgFrameMultiplexer frames = new CgFrameMultiplexer(
-            channel.maxFrameBytes(),
-            initiator,
-            player == null ? channel::sendToServer : frame -> channel.sendToPlayer(player, frame));
-
-    CgWireTransport transport = new CgWireTransport(frames);
-
-    CgProtocolConnection<Object> connection =
-            CgProtocols.open(transport, CgPlainOps.INSTANCE, transport::pump, player);
-
-    return new Peer(frames, connection);
-}
+CgFrameMultiplexer frames = new CgFrameMultiplexer(maxFrameBytes, initiator, outbound::send);
+CgWireTransport transport = new CgWireTransport(frames);
+CgProtocolConnection<Object> connection =
+        CgProtocols.open(transport, CgPlainOps.INSTANCE, transport::pump, peer);
+peers.put(key, new Held(frames, connection, peer));
 ```
 
 Four lines, and each one is a layer of §2 being stacked:
@@ -500,23 +499,22 @@ Four lines, and each one is a layer of §2 being stacked:
 1. the multiplexer learns the ceiling, its stream-id parity, and *where to put a finished frame*;
 2. the transport wraps it with the tree⇄bytes codec;
 3. `CgProtocols.open` builds the router **and binds every contributor onto it**;
-4. `Peer` keeps the two together, so closing one closes all of it.
+4. `Held` keeps the two together, so closing one closes all of it.
 
 > **The pump goes *in* here** rather than being left to a caller. That's what makes `tick()` the one
 > call — a subsystem that forgot to pump would receive nothing, silently.
 
 > **`initiator`** is `true` on the client, `false` on the server — the odd/even stream ids of §5.1.
 
-### Step 3 — `Peer` is what the loader actually keeps
+### Step 3 — keyed by profile, resolved at send time
+
+The server table is keyed by the player's **profile UUID**, never the entity: the game builds a new entity
+on every respawn and dimension change, and an entity-keyed table is orphaned by the first death. The
+peer, a `CgPeer`, carries the id, the name at join, and a supplier for the **live** player, which the
+outbound route asks on every send:
 
 ```java
-private static final class Peer {
-    final CgFrameMultiplexer frames;         // frames go IN here, from the Netty thread
-    final CgProtocolConnection<Object> connection;   // everything else comes OUT of here
-}
-
-private static final Map<Object, Peer> SERVER = new ConcurrentHashMap<>();  // keyed by player
-private static volatile Peer client;                                        // exactly one
+CgNetwork.playerJoined(id, name, () -> handler.playerEntity);   // the handler is re-pointed at the new body
 ```
 
 **Three threads, and the map is the only thing they share.** Frames arrive on Netty's thread; server
@@ -528,8 +526,8 @@ dispatches, and it's always called from the thread that owns whatever the handle
 
 ```java
 private static void route(Object sender, byte[] frame) {     // NETTY THREAD
-    Peer peer = (sender == null) ? client : SERVER.get(sender);
-    if (peer != null) peer.frames.onFrameReceived(frame);    // enqueue only
+    if (sender == null) client.route(CLIENT, frame);           // enqueue only
+    else server.route(idOf.apply(sender), frame);
 }
 ```
 
@@ -539,22 +537,14 @@ private static void route(Object sender, byte[] frame) {     // NETTY THREAD
 
 ### Step 5 — ticking
 
-```java
-@SubscribeEvent public void onServerTick(TickEvent.ServerTickEvent event) {
-    if (event.phase != TickEvent.Phase.START) return;
-    for (Peer peer : SERVER.values()) peer.connection.tick();
-}
-```
-
-**On `Phase.START`**, so a message that arrived since the last tick is applied *before* the world
-runs on it rather than a tick later. The UI's own `calculateStyle`-before-layout ordering is the
-same rule one layer up: state that arrived this frame must reach its consumer before the consumer
-runs.
+**On `Phase.START`** on 1.7.10 and legacy Forge, so a message that arrived since the last tick is applied
+*before* the world runs on it rather than a tick later. The modern hosts tick at the end of the tick.
+One peer's exception never stops the others being ticked.
 
 ### Step 6 — closing
 
 ```java
-peer.connection.close(reason);   // fails EVERYTHING outstanding, immediately
+connection.close(reason);   // fails EVERYTHING outstanding, immediately
 ```
 
 Rather than letting each caller wait out its own timeout. *A peer that is gone is knowable now; ten
@@ -563,16 +553,15 @@ seconds of silence per pending call is not information.*
 ### How you get hold of one
 
 ```java
-CgUiConnections.forPlayer(player);   // server side — null if they have none
-CgUiConnections.client();            // client side — null when not in a world
-CgUiConnections.openConnections();   // diagnostics; what a leak shows up in
-CgUiConnections.isRegistered();      // did the lifecycle actually install?
+CgNetwork.forPlayer(playerUuid);   // server side — null if they have none
+CgNetwork.client();                // client side — null when not in a world
+CgNetwork.openConnections();       // diagnostics; what a leak shows up in
+CgNetwork.isInstalled();           // did the host install the connections?
 ```
 
-> `isRegistered()` exists because **both** failure paths in `register()` are a `warn` and a `return`
-> rather than a throw — an unavailable channel, or the raw transport probe owning it. A server with
-> no networking at all boots perfectly happily and looks healthy. `CgUiServerSmoke` is what turns
-> that into an exit code.
+> `isInstalled()` exists because an unavailable channel is a `warn` and a `return` rather than a throw:
+> a server with no networking boots happily and looks healthy. CrystalGUI's `ServerSmoke` turns that
+> into an exit code.
 
 ---
 
@@ -938,10 +927,12 @@ The vocabulary: `fs/hello`, `fs/projects`, `fs/capabilities`, `fs/list`, `fs/sta
 
 # PART SIX — THE 1.7.10 WIRING
 
-## 18. `Mc1710NetworkChannel` — the whole of 1.7.10 networking
+## 18. `NetworkChannel1710` — the whole of 1.7.10 networking
+
+CrystalGraphics' (`com.crystalgraphics.mc.v1710.platform.net`); legacy Forge's `NetworkChannelLegacy` is its twin.
 
 ```java
-private static final String CHANNEL = "crystalgui";      // ≤20 chars — a hard ceiling
+private static final String CHANNEL = "crystalgraphics"; // ≤20 chars — a hard ceiling
 private static final int MAX_FRAME_BYTES = 32_766;
 ```
 
@@ -984,11 +975,10 @@ inside Forge mid-send with the connection already committed.
 
 > **FML does not fragment for us.** `CgFrameMultiplexer` does it instead, once, for every platform.
 
-## 19. `CgUiConnections` — the lifecycle
+## 19. `Network1710` — the lifecycle
 
-Covered in full in §11. In one line: **it owns the `Peer` map, opens one per player on join, routes
-inbound frames to the right multiplexer, ticks every connection on `Phase.START`, and closes them on
-leave.**
+CrystalGraphics' FML subscriptions, covered in full in §11. In one line: **it forwards join, leave, both
+ticks at `Phase.START` and the client's connect and disconnect into `CgNetwork`, which owns the tables.**
 
 ## 20. `CgUiWorkspaceHost` — the server actually serving files
 
@@ -1055,13 +1045,13 @@ CgFrameMultiplexer.send                                    [1] chunking
   ↓  (next pump)
 CgNetworkChannel.sendToServer(frame)                     [0] the road
   ↓
-    ═══════════ FMLProxyPacket, target=SERVER, channel "crystalgui" ═══════════
+    ═════════ FMLProxyPacket, target=SERVER, channel "crystalgraphics" ═════════
                                                                             ↓
-                                    Mc1710NetworkChannel.onServerPacket   [0]
+                                    NetworkChannel1710.onServerPacket     [0]
                                       (NETTY THREAD — extracts byte[])
                                                                             ↓
-                                    CgUiConnections.route(player, frame)
-                                      SERVER.get(player).frames.onFrameReceived
+                                    CgNetwork.route(player, frame)
+                                      server.route(profileId, frame)
                                       ↳ ENQUEUE ONLY. Nothing else happens here.
                                                                             ↓
                                     ─── tick boundary ────────────────────────
@@ -1142,19 +1132,17 @@ element from the network thread isn't a race to tune — it's a correctness bug.
 
 ```java
 // ── Speak a new protocol ──────────────────────────────────────────────────
-CgProtocols.contribute("mything", new Protocols.Contributor() {
-    @Override public <T> void bind(CgProtocolConnection<T> c) {
-        c.onRequest("mything.doIt", (args, respond) -> respond.ok(result));
-        c.onNotify ("mything/tick", args -> apply(args));
-    }
+CgProtocols.contribute("mything", c -> {
+    c.onRequest("mything/doIt", (args, respond) -> respond.ok(result));
+    c.onNotify ("mything/tick", args -> apply(args));
 });
 
 // ── Get a connection ──────────────────────────────────────────────────────
-CgProtocolConnection<Object> c = CgUiConnections.forPlayer(player);   // server
-CgProtocolConnection<Object> c = CgUiConnections.client();            // client
+CgProtocolConnection<Object> c = CgNetwork.forPlayer(playerUuid);     // server
+CgProtocolConnection<Object> c = CgNetwork.client();                  // client
 
 // ── Talk ──────────────────────────────────────────────────────────────────
-c.call("mything.doIt", args, onResult, onError);      // request — you get an answer
+c.call("mything/doIt", args, onResult, onError);      // request — you get an answer
 c.notify("mything/tick", args);                       // notification — you don't
 
 // ── Serve a UI ────────────────────────────────────────────────────────────
@@ -1230,7 +1218,7 @@ ClientWindows.of(c).setMount(myWindowMount);
 | `CgEnvelopeCodec.VERSION` | `1` |
 | Default flow-control window | 256 KB |
 | Default call timeout | 10 s |
-| 1.7.10 channel name | `crystalgui` (≤20 chars, hard limit) |
+| 1.7.10 and legacy channel name | `crystalgraphics` (≤20 chars, hard limit); modern `crystalgraphics:wire` |
 | Frame ceilings | 32,766 / 2,097,050 (1.7.10) · 32,767 / 1,048,576 (1.20.x) |
 | Protocol errors | `protocol/methodNotFound` · `handlerFailed` · `timeout` · `cancelled` |
 | UI window-id key | `w`, in the payload — never the envelope |

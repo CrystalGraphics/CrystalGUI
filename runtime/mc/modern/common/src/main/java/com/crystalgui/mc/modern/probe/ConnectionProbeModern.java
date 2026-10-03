@@ -4,7 +4,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.mc.modern.client.CgUiScreen;
-import com.crystalgui.mc.modern.net.Connections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
 import com.crystalgui.mc.modern.client.ClientGame;
@@ -74,13 +74,13 @@ public final class ConnectionProbeModern {
             if (server == null || server.getPlayerList() == null) return null;
             if (server.getPlayerList().getPlayers().isEmpty()) return null;
             ServerPlayer player = server.getPlayerList().getPlayers().get(0);
-            return Connections.forPlayer(player);
+            return CgNetwork.forPlayer(player.getGameProfile().getId());
         }
 
         @Override
         @Nullable
         public CgProtocolConnection<Object> clientConnection() {
-            return Connections.client();
+            return CgNetwork.client();
         }
 
         @Override

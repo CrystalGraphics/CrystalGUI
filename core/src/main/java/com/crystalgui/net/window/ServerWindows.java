@@ -33,7 +33,7 @@ import com.crystalgui.net.protocol.UiMethods;
  *
  * <h3>What it replaces</h3>
  *
- * <p>A tick handler per mod walking the player list to notice a peer that {@code CgUiConnections}
+ * <p>A tick handler per mod walking the player list to notice a peer that {@code CgNetwork}
  * noticed once, a name-keyed map per mod, a logout handler per mod, and a hard-coded window id per mod
  * that two mods would eventually both pick. All of it existed because there was no seat for "open a
  * window for this player <em>now</em>" — contributors bind when a connection opens, and a UI opens
@@ -462,7 +462,7 @@ public final class ServerWindows {
             } catch (RuntimeException failed) {
                 // One window's broken tick must not stop every other window on this connection --
                 // the frozen ones would show no error of their own, which is what gets diagnosed as a
-                // network fault. Same rule CgUiConnections.tickSafely applies one layer down.
+                // network fault. Same rule CgConnections.tick applies one layer down.
                 CrystalGuiCore.LOGGER.error("<{}>.tick failed: {}",
                         window.typeId(), failed.getMessage(), failed);
             }

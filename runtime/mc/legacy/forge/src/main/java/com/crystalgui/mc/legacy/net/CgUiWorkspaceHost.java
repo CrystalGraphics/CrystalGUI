@@ -1,5 +1,6 @@
 package com.crystalgui.mc.legacy.net;
 
+import com.crystalgraphics.net.CgPeer;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.protocol.ScriptingMode;
@@ -128,14 +129,14 @@ public final class CgUiWorkspaceHost {
         /**
          * A player's id, which is what a permission check and an audit line both need.
          *
-         * <p>Read off {@link PeerLegacy}, which is stable for the connection's life — an entity is not.
+         * <p>Read off {@link CgPeer}, which is stable for the connection's life — an entity is not.
          * The name rather than the UUID because that is what {@link OperatorsMayWrite} matches against
          * the live player list and what a log line has to be readable as.</p>
          */
         @Override
         public WorkspaceActor actorFor(Object peer) {
-            if (peer instanceof PeerLegacy) {
-                final String name = ((PeerLegacy) peer).name();
+            if (peer instanceof CgPeer) {
+                final String name = ((CgPeer) peer).name();
                 return () -> name;
             }
             if (peer instanceof EntityPlayerMP) {

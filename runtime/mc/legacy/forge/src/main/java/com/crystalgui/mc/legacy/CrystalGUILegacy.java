@@ -7,9 +7,8 @@ import com.crystalgraphics.mc.shared.FmlEvents;
 import com.crystalgraphics.mc.shared.VariantEntry;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.legacy.example.MachineExampleLegacy;
-import com.crystalgui.mc.legacy.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.mc.legacy.net.CgUiWorkspaceHost;
-import com.crystalgui.mc.legacy.net.NetworkChannelLegacy;
 import com.crystalgui.mc.legacy.probe.CgUiServerSmoke;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.text.syntax.LanguageRegistry;
@@ -42,21 +41,14 @@ public final class CrystalGUILegacy implements VariantEntry {
         events.on("FMLServerStartedEvent", event -> {
             if (CgUiServerSmoke.enabled()) CgUiServerSmoke.run();
         });
-        events.on("FMLServerStoppingEvent", event -> CgUiConnections.closeAll("server stopping"));
+        events.on("FMLServerStoppingEvent", event -> CgUiWorkspaceHost.reset());
     }
 
-    /**
-     * Networking, both sides. At init, not preInit: a channel registered at preInit on 1.7.10 delivered
-     * nothing in either direction.
-     */
+    /** CrystalGUI's protocols, both sides, contributed to CrystalGraphics' connections. */
     private static void init() {
-        NetworkChannelLegacy.register();
-        // After the channel, whose inbound handler it takes; contributors before connections, which bind
-        // only the contributors already registered.
         CgUiWorkspaceHost.register();
         WindowProtocol.register();
-        CgUiConnections.register();
-        // After connections: it opens a session per player on them.
+        CgNetwork.onPeerClosed(CgUiWorkspaceHost::forget);
         MachineExampleLegacy.registerCommon();
     }
 

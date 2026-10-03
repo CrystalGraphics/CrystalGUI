@@ -5,7 +5,7 @@ import com.crystalgui.app.machine.MachineExample;
 import com.crystalgui.mc.modern.client.CgUiInput;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.client.CgUiScreen;
-import com.crystalgui.mc.modern.net.Connections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 
 import net.minecraft.client.KeyMapping;
@@ -39,7 +39,7 @@ public final class MachineExampleClientModern {
         if (mc == null || ClientGame.screen(mc) != null) return;
         if (!OPEN_MACHINE.consumeClick()) return;
 
-        MachineExample.requestPanel(Connections.client());
+        MachineExample.requestPanel(CgNetwork.client());
         // The desktop is opened either way: it is where the window WILL land, and a screen that
         // appears only on success would flicker for anyone who is refused.
         CgUiScreen.openDesktop();

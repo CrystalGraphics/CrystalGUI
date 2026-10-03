@@ -22,8 +22,9 @@ examples) and `docs/CGUI_BUILD.md` (build, nodes, smoke tests).
 ## 2. Look before writing — in this order
 
 1. **The nearest existing feature** — copy its shape and its version boundaries:
-   network → `CgNetworkChannel` impls (`CrystalGUIForge.Network`, `CrystalGUINeoForge`,
-   `CrystalGUIFabricCommon`, `NetworkChannelLegacy`, `NetworkChannel1710`); game events →
+   network → CrystalGraphics' `CgNetworkChannel` impls (`CrystalGraphicsForge.Network`,
+   `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`,
+   `NetworkChannel1710`) and their lifecycles (`NetworkModern`, `NetworkLegacy`, `Network1710`); game events →
    `LifecycleCrystalGUI` + each loader's `Events`; permissions → `WorkspaceHostModern.McRoles`, legacy
    `Game`; client input/HUD → `mc.modern.client`. `grep -n "//? if" <that file>` shows its breaks.
 2. **Every node's API, in seconds**:
