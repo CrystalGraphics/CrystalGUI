@@ -553,7 +553,7 @@ uses the identical technique against the same resolved per-corner values, so ren
 never disagree about the element's shape. `sdf_coverage` turns a signed distance into an antialiased
 0–1 mask via `fwidth`.
 
-> **`sdf_coverage` is wrapped in `#ifndef CG_VERTEX_STAGE`, and that guard is load-bearing.**
+> **`sdf_coverage` is guarded out of the vertex and compute stages, and that guard is load-bearing.**
 > `gui_box.shader` includes `sdf.glsl` at *material* scope, and CrystalGraphics' compiler
 > hoists every material-scope `#`-line into **both** generated stages — so without the guard,
 > `fwidth`, a fragment-only derivative builtin, lands in the vertex shader. NVIDIA compiles that
