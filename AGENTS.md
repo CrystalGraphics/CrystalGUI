@@ -1985,11 +1985,11 @@ three-phase event types are in `ui/event/` — there is no `core/event/` package
 
 > **A `#include` in a `.shader` is compiled into the vertex stage as well as the fragment stage.**
 > The material compiler hoists every material-scope `#`-line into both. `gui_box.shader` is
-> one of several shipped shaders with an include, and its `sdf.glsl` needed `#ifndef CG_VERTEX_STAGE` around
+> one of several shipped shaders with an include, and its `sdf.glsl` needed a stage guard around
 > `sdf_coverage` — `fwidth` is fragment-only, NVIDIA accepted it anyway, and AMD's refusal made the
 > whole gallery unlaunchable on that hardware. Guard fragment-only code inside the lib, with
-> `#ifndef CG_VERTEX_STAGE` and never `#ifdef CG_FRAGMENT_STAGE` (raw `.vert`/`.frag` get neither
-> define). `ShippedShaderStagePurityTest` enforces it GL-free; `--mode=shader-compile-audit` checks it
+> `#if !defined(CG_VERTEX_STAGE) && !defined(CG_COMPUTE_STAGE)` and never `#ifdef CG_FRAGMENT_STAGE`
+> (raw `.vert`/`.frag` get no stage define; a kernel is the third stage). `ShippedShaderStagePurityTest` enforces it GL-free; `--mode=shader-compile-audit` checks it
 > against a real driver. See `CrystalGraphics/AGENTS.md` § *Stage defines*.
 
 ---
