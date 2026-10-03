@@ -19,6 +19,7 @@ private val BOM = 0xFEFF.toChar()
 /** The flag whose presence in a config IS the proof that arming took. */
 private const val ARMED_MARKER = "JvmArgs=-Dcrystalgui.autotest=true"
 private const val GPU_MARKER = "[crystalgraphics] gpu "
+private const val SELF_TEST_MARKER = "[crystalgraphics] compute self-test "
 
 /** How long the launcher gets to read every instance.cfg before the first launch is issued. */
 private const val LAUNCHER_READ_MS = 5000L
@@ -40,6 +41,7 @@ private const val POWERSHELL_TIMEOUT_SECONDS = 60L
  * ./gradlew prodSmoke                       # every instance in local.properties
  * ./gradlew prodSmoke -PcgTargets=1710      # one of them
  * ./gradlew prodSmoke -PcgBatch=3           # every instance, three clients at a time
+ * ./gradlew prodSmoke -PcgSmokeProps=crystalgraphics.compute.selfTest=true   # and the compute self-test on each
  * </pre>
  *
  * <p>EVERY INSTANCE IS ARMED FIRST, with the launcher closed. Prism serves a {@code --launch} from the
@@ -232,7 +234,8 @@ abstract class ProdSmoke : DefaultTask() {
                 }
 
                 batch.forEach { target ->
-                    gpus += "${target.name.padEnd(14)} ${gpuLine(target) ?: "(no gpu line)"}"
+                    val selfTest = lastLine(target, SELF_TEST_MARKER)?.let { " | self-test $it" } ?: ""
+                    gpus += "${target.name.padEnd(14)} ${lastLine(target, GPU_MARKER) ?: "(no gpu line)"}$selfTest"
                     val verdict = verdictFor(target, allExited, out)
                     if (verdict != null) failures += "${target.name}: $verdict"
                     else logger.lifecycle("[prodSmoke] {} drew", target.name)
@@ -283,6 +286,9 @@ abstract class ProdSmoke : DefaultTask() {
         if (logSays(target, "screen stage drew: false")) {
             return "STAGE DID NOT DRAW: no renderer on crystalgui:screen ran" + logTail(target)
         }
+        // The compute self-test, when -PcgSmokeProps asked for it: a stated FAIL fails the client.
+        val selfTest = lastLine(target, SELF_TEST_MARKER)
+        if (selfTest != null && selfTest.contains(": FAIL")) return "COMPUTE SELF-TEST FAILED: $selfTest"
         return null
     }
 
@@ -299,14 +305,15 @@ abstract class ProdSmoke : DefaultTask() {
     }
 
     /**
-     * The `[crystalgraphics] gpu` line the engine logs once per context: what this client's GPU gives it. FML before
-     * 1.13 writes mods' logging to `fml-client-latest.log`, not `latest.log`, so every log is searched.
+     * What follows `marker` on the last line carrying it: the `[crystalgraphics] gpu` report the engine logs once per
+     * context, or the compute self-test's verdict. FML before 1.13 writes mods' logging to `fml-client-latest.log`, not
+     * `latest.log`, so every log is searched.
      */
-    private fun gpuLine(target: Target): String? {
+    private fun lastLine(target: Target, marker: String): String? {
         val logs = File(target.dir, ".minecraft/logs")
         return listOf("latest.log", "fml-client-latest.log", "debug.log").map { File(logs, it) }.filter { it.isFile }
-            .firstNotNullOfOrNull { log -> runCatching { log.readLines().lastOrNull { it.contains(GPU_MARKER) } }.getOrNull() }
-            ?.substringAfter(GPU_MARKER)?.trim()
+            .firstNotNullOfOrNull { log -> runCatching { log.readLines().lastOrNull { it.contains(marker) } }.getOrNull() }
+            ?.substringAfter(marker)?.trim()
     }
 
     /** Whether the client's own log carries `needle`. */
