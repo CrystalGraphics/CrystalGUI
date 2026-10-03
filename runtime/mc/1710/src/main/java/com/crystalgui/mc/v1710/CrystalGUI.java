@@ -36,7 +36,8 @@ import cpw.mods.fml.common.event.FMLPreInitializationEvent;
     name = CrystalGUI.NAME,
     version = CrystalGUI.VERSION,
     dependencies = "required-after:crystalgraphics",
-    acceptedMinecraftVersions = "[1.7.10]"
+    acceptedMinecraftVersions = "[1.7.10]",
+    acceptableRemoteVersions = "*"
 )
 public class CrystalGUI {
 

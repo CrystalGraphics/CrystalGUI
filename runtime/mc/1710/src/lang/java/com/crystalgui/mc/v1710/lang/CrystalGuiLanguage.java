@@ -25,7 +25,8 @@ import cpw.mods.fml.relauncher.Side;
     name = CrystalGuiLanguage.NAME,
     version = CrystalGuiLanguage.VERSION,
     dependencies = "required-after:crystalgui",
-    acceptedMinecraftVersions = "[1.7.10]"
+    acceptedMinecraftVersions = "[1.7.10]",
+    acceptableRemoteVersions = "*"
 )
 public class CrystalGuiLanguage {
 

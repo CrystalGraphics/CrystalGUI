@@ -20,7 +20,8 @@ import net.minecraftforge.fml.common.event.FMLServerStoppingEvent;
  * each forwards to the variant. {@code dependencies} is legacy FML's ordering — modern Forge reads it
  * from {@code mods.toml}.</p>
  */
-@Mod(value = ForgeBootstrap.MODID, modid = ForgeBootstrap.MODID, dependencies = "required-after:crystalgraphics")
+@Mod(value = ForgeBootstrap.MODID, modid = ForgeBootstrap.MODID, dependencies = "required-after:crystalgraphics",
+        acceptableRemoteVersions = "*")
 public final class ForgeBootstrap {
 
     public static final String MODID = "crystalgui";
