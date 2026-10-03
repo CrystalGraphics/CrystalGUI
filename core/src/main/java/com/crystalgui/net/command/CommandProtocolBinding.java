@@ -1,13 +1,13 @@
 package com.crystalgui.net.command;
 
+import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.net.protocol.Protocols;
 
 import javax.annotation.Nullable;
 
 /**
- * Wires {@code command/*} onto every connection — the contributor {@link Protocols} invokes.
+ * Wires {@code command/*} onto every connection — the contributor {@link CgProtocols} invokes.
  *
  * <h3>The side is decided by whether there is a peer, exactly as the workspace decides it</h3>
  *
@@ -68,7 +68,7 @@ public final class CommandProtocolBinding {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        Protocols.contribute("command", connection -> {
+        CgProtocols.contribute("command", connection -> {
             if (connection.peer() == null) {
                 RemoteCommands.install(connection,
                         target == null ? CommandRegistry.global() : target, policy);

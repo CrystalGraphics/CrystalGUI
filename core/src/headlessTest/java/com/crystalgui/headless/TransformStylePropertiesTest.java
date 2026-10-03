@@ -1,13 +1,13 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -109,7 +109,7 @@ public class TransformStylePropertiesTest {
         element.getStyle().getGeneralGroup()
                 .transformOrigin(LengthPercent.px(4f), LengthPercent.percent(0f));
 
-        for (DynamicOps<?> ops : new DynamicOps<?>[]{JsonOps.INSTANCE, PlainOps.INSTANCE}) {
+        for (CgDynamicOps<?> ops : new CgDynamicOps<?>[]{JsonOps.INSTANCE, CgPlainOps.INSTANCE}) {
             UIElement clone = roundTrip(element, ops);
             assertEquals("the op list survives in order", element.getStyle().getGeneralGroup().transform(), clone.getStyle().getGeneralGroup().transform());
             assertEquals(LengthPercent.px(4f), clone.getStyle().getGeneralGroup().transformOriginX());
@@ -133,7 +133,7 @@ public class TransformStylePropertiesTest {
         assertEquals(LengthPercent.percent(0.1f), style.outlineWidth());
     }
 
-    private static <T> UIElement roundTrip(UIElement source, DynamicOps<T> ops) {
+    private static <T> UIElement roundTrip(UIElement source, CgDynamicOps<T> ops) {
         return new UIElementMirror<>(ops).decode(new UIElementMirror<>(ops).describe(source));
     }
 }

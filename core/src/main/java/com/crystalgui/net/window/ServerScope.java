@@ -7,27 +7,27 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.net.RowWindows;
-import com.crystalgui.fs.server.ServerWorkspace;
-import com.crystalgui.fs.server.WorkspaceBinding;
-import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.protocol.Call;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.net.protocol.CgCall;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.property.Property;
+import com.crystalgui.fs.server.ServerWorkspace;
+import com.crystalgui.fs.server.WorkspaceBinding;
+import com.crystalgui.net.RowWindows;
+import com.crystalgui.net.ServerUiSession;
+import com.crystalgui.net.SheetRef;
+import com.crystalgui.net.ViewCommand;
+import com.crystalgui.net.projection.AutoProjection;
+import com.crystalgui.net.projection.Projections;
+import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.net.projection.AutoProjection;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Supplier;
-import com.crystalgui.net.projection.Projections;
-import java.util.Objects;
-import com.crystalgui.net.ViewCommand;
-import com.crystalgui.ui.contract.Event;
 
 /**
  * What a panel's {@link Networked#serve} is handed — <b>its registration surface, namespaced to its
@@ -314,7 +314,7 @@ public final class ServerScope {
      * opened at no position lands wherever the layout happened to leave it.</p>
      */
     public ServerScope openMenu(UIElement menu, UIElement anchor) {
-        StateMap<Object> args = newMap();
+        CgStateMap<Object> args = newMap();
         args.putInt(ViewCommand.ANCHOR, session.idOf(anchor));
         session.viewOn(ViewCommand.OPEN_MENU, menu, args);
         return this;
@@ -327,7 +327,7 @@ public final class ServerScope {
      * arbitrary tree at a screen position would be a different feature with a different threat model.</p>
      */
     public ServerScope tooltip(UIElement widget, String text) {
-        StateMap<Object> args = newMap();
+        CgStateMap<Object> args = newMap();
         args.putString(ViewCommand.TEXT, text);
         session.viewOn(ViewCommand.TOOLTIP, widget, args);
         return this;
@@ -337,7 +337,7 @@ public final class ServerScope {
 
     /** Renames the window: what a caption shows and what a taskbar entry reads. */
     public ServerScope setTitle(String title) {
-        StateMap<Object> args = newMap();
+        CgStateMap<Object> args = newMap();
         args.putString(ViewCommand.TEXT, title);
         session.view(ViewCommand.SET_TITLE, args);
         return this;
@@ -345,7 +345,7 @@ public final class ServerScope {
 
     /** Changes the window's icon, named as a sprite is: {@code "namespace:name"}. */
     public ServerScope setIcon(String icon) {
-        StateMap<Object> args = newMap();
+        CgStateMap<Object> args = newMap();
         args.putString(ViewCommand.TEXT, icon);
         session.view(ViewCommand.SET_ICON, args);
         return this;
@@ -359,7 +359,7 @@ public final class ServerScope {
      * to clamp it, ignore it, or apply it only on first open.</p>
      */
     public ServerScope geometryHint(int width, int height) {
-        StateMap<Object> args = newMap();
+        CgStateMap<Object> args = newMap();
         args.putInt(ViewCommand.WIDTH, width);
         args.putInt(ViewCommand.HEIGHT, height);
         session.view(ViewCommand.GEOMETRY_HINT, args);
@@ -375,7 +375,7 @@ public final class ServerScope {
      * @param level one of {@code ViewCommand.LEVEL_INFO}, {@code LEVEL_WARN}, {@code LEVEL_ERROR}
      */
     public ServerScope notifyUser(String message, String level) {
-        StateMap<Object> args = newMap();
+        CgStateMap<Object> args = newMap();
         args.putString(ViewCommand.TEXT, message);
         args.putString(ViewCommand.LEVEL, level);
         session.view(ViewCommand.NOTIFY, args);
@@ -429,25 +429,25 @@ public final class ServerScope {
     // ── Wire methods ────────────────────────────────────────────────────────
 
     /** Serves a method the client may call, under this panel's name. */
-    public ServerScope onCall(String method, Call.Handler<Object> handler) {
+    public ServerScope onCall(String method, CgCall.Handler<Object> handler) {
         session.onCall(qualify(method), handler);
         return this;
     }
 
     /** Asks the client, under this panel's name. Two callbacks: refused and never-answered differ. */
-    public void call(String method, @Nullable StateMap<Object> args,
-                     @Nullable Consumer<StateMap<Object>> onResult, @Nullable Consumer<String> onError) {
+    public void call(String method, @Nullable CgStateMap<Object> args,
+                     @Nullable Consumer<CgStateMap<Object>> onResult, @Nullable Consumer<String> onError) {
         session.call(qualify(method), args, onResult, onError);
     }
 
     /** Listens for a notification on this window, under this panel's name. */
-    public ServerScope onNotify(String method, Consumer<StateMap<Object>> handler) {
+    public ServerScope onNotify(String method, Consumer<CgStateMap<Object>> handler) {
         session.onNotify(qualify(method), handler);
         return this;
     }
 
     /** Tells the client. Nothing comes back, and nothing may be waited on. */
-    public void notify(String method, @Nullable StateMap<Object> payload) {
+    public void notify(String method, @Nullable CgStateMap<Object> payload) {
         session.notify(qualify(method), payload);
     }
 
@@ -477,7 +477,7 @@ public final class ServerScope {
      */
     @Nullable
     public ServerWorkspace workspace() {
-        ProtocolConnection<Object> connection = session.connection();
+        CgProtocolConnection<Object> connection = session.connection();
         if (connection == null || !connection.hasAttachment(WorkspaceBinding.class)) return null;
         WorkspaceBinding<?> binding = connection.attachment(WorkspaceBinding.class, wire -> null);
         return binding == null ? null : binding.workspace();
@@ -582,12 +582,12 @@ public final class ServerScope {
     }
 
     /** The wire format — always the connection's own, never a hardcoded one. */
-    public DynamicOps<Object> ops() {
+    public CgDynamicOps<Object> ops() {
         return session.ops();
     }
 
     /** An empty payload in the connection's format, for a handler that is about to fill one in. */
-    public StateMap<Object> newMap() {
-        return new StateMap<>(session.ops());
+    public CgStateMap<Object> newMap() {
+        return new CgStateMap<>(session.ops());
     }
 }

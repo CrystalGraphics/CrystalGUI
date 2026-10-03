@@ -20,19 +20,19 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgui.app.WidgetCensus;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
-import com.crystalgui.app.WidgetCensus;
 
 /**
  * <b>Every contracted widget, over a loopback wire, at once.</b> {@code plan/engine-rewrite.md} M8.
@@ -61,9 +61,9 @@ public class ClientSmokeTest {
 
     private static final String NL = System.lineSeparator();
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
     private ServerUiSession<UIElement, Object> server;
     private ClientUiSession<UIElement, Object> client;
 
@@ -75,15 +75,15 @@ public class ClientSmokeTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         // THE CENSUS FIRST: it is what registers the contracts this walk enumerates, and the kinds
         // come from the registry's own bootstrap.
         WidgetCensus.register();
         UIElementRegistry.bootstrap();
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "player");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         root = new UIElement();
         for (Map.Entry<Class<?>, WidgetContract<?>> entry : WidgetContracts.all().entrySet()) {
@@ -99,7 +99,7 @@ public class ClientSmokeTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void settle() {

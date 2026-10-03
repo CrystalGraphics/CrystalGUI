@@ -1,22 +1,22 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.async.ReplyError;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.Document;
-import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentEditor;
+import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.document.TextDocumentModel;
-import com.crystalgui.fs.provider.CgFileEvent;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.server.WorkspaceActor;
-import com.crystalgui.fs.server.WorkspacePermission;
-import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.project.ProjectRegistry;
@@ -24,14 +24,14 @@ import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
+import com.crystalgui.fs.provider.CgFileEvent;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.server.WatchHub;
+import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.workbench.editor.EditorService;
 
 import org.junit.After;
@@ -69,9 +69,9 @@ public class EditorServiceTest {
     private static final Resource MAIN = file("src/Main.java");
     private static final CgPath MAIN_PATH = CgPath.parse("proj:src/Main.java");
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverSide;
-    private ProtocolConnection<Object> clientSide;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverSide;
+    private CgProtocolConnection<Object> clientSide;
     private WorkspaceService service;
     private WatchHub hub;
     private WorkspaceBinding<Object> binding;
@@ -82,7 +82,7 @@ public class EditorServiceTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         InMemoryFileSystem files = new InMemoryFileSystem()
                 .seed("proj:src/Main.java", "class Main {}\n")
                 .seed("proj:README.md", "# hi\n");
@@ -91,10 +91,10 @@ public class EditorServiceTest {
         service = new WorkspaceService(projects, files, WorkspacePermission.ALLOW_ALL);
         hub = new WatchHub(service);
 
-        link = InMemoryTransport.pair();
-        serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-        binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", PlainOps.INSTANCE);
+        link = CgInMemoryTransport.pair();
+        serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
+        binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
 
         workspace = Workspace.of(clientSide).setStorage(new InMemoryConfigStorage());
@@ -112,7 +112,7 @@ public class EditorServiceTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void pump() {
@@ -129,8 +129,8 @@ public class EditorServiceTest {
                 hub.tick(WorkspaceActor.LOCAL, List.of(CgFileEvent.of(kind, path)));
         List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
         if (!mine.isEmpty()) {
-            serverSide.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
-                    FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+            serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
+                    FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
                             new FsMessages.ChangedNotification(mine))));
         }
         pump();
@@ -338,8 +338,8 @@ public class EditorServiceTest {
         Map<Object, List<FsMessages.FileChange>> byPeer = Map.of("alice",
                 List.of(hub.noteRenamed(MAIN_PATH, renamed,
                         service.stat(WorkspaceActor.LOCAL, renamed).etag())));
-        serverSide.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
-                FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+        serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
+                FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
                         new FsMessages.ChangedNotification(byPeer.get("alice")))));
         pump();
 

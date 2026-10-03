@@ -4,11 +4,11 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
-import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.canvas.Placement;
+import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
@@ -86,12 +86,12 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
             }
 
             @Override
-            public void write(StateMap<JsonElement> into) {
+            public void write(CgStateMap<JsonElement> into) {
                 into.putList(KEY_EXPANDED, panel.expandedFolders(), (entry, key) -> entry.putString(KEY_FOLDER, key));
             }
 
             @Override
-            public void read(StateMap<JsonElement> from) {
+            public void read(CgStateMap<JsonElement> from) {
                 // A FIRST RUN HAS NOTHING, and keeps the panel's own default of opening Common.
                 if (!from.has(KEY_EXPANDED)) return;
                 panel.restoreExpanded(from.getList(KEY_EXPANDED, entry -> entry.getString(KEY_FOLDER, "")));

@@ -2,9 +2,10 @@
 
 > **Current-state reference** for `core/src/main/java/com/crystalgui/serialization/`,
 > `core/src/main/java/com/crystalgui/ui/contract/` and `core/src/main/java/com/crystalgui/net/` —
-> the last of which is five packages now: the sessions at its root, `mirror` (the edit script,
-> generic in the node type), `protocol` (envelopes and routing), `wire` (the byte transport) and
-> `window` (a window's lifetime, and what a panel is handed).
+> the last of which holds the sessions at its root, `mirror` (the edit script, generic in the node
+> type), `protocol` (`UiMethods`) and `window` (a window's lifetime, and what a panel is handed). The
+> codecs, envelopes, routing, connections and the byte transport under them are CrystalGraphics'
+> (`com.crystalgraphics.serialization`, `com.crystalgraphics.net`).
 >
 > Companions: `CGUI_BUILDING_UIS.md` (how to write one — start there if you are USING this),
 > `CGUI_NETWORKING_PRIMER.md` (the same ground bottom-up), `CGUI_WIDGETS.md` (what the widgets are)
@@ -40,20 +41,20 @@ Two consequences shape everything below:
 
 ## 1. Codecs
 
-`serialization/Codec.java`, `DynamicOps.java`, `Codecs.java`, `JsonOps.java`, `PlainOps.java`
+`serialization/Codec.java`, `CgDynamicOps.java`, `CgCodecs.java`, `JsonOps.java`, `CgPlainOps.java`
 
 A hand-rolled, DFU-shaped codec layer. Not Mojang's DataFixerUpper — no dependency on it — but the
 same two-interface idea:
 
 ```java
-public interface Codec<A> {
-    <T> T encode(DynamicOps<T> ops, A input);
-    <T> A decode(DynamicOps<T> ops, T input);
+public interface CgCodec<A> {
+    <T> T encode(CgDynamicOps<T> ops, A input);
+    <T> A decode(CgDynamicOps<T> ops, T input);
 }
 ```
 
-`DynamicOps<T>` is the format. It is a **tree** interface, not a streaming one: `createMap`,
-`createList`, `createString`, `getMap`, `getList`, … Every accessor throws `CodecException` on a type
+`CgDynamicOps<T>` is the format. It is a **tree** interface, not a streaming one: `createMap`,
+`createList`, `createString`, `getMap`, `getList`, … Every accessor throws `CgCodecException` on a type
 mismatch rather than returning null, so a malformed packet fails at the field that is wrong instead of
 several layers later.
 
@@ -62,18 +63,18 @@ Two implementations ship:
 | Ops | Backing | Used for |
 |---|---|---|
 | `JsonOps` | Gson `JsonElement` | debugging, tests, anything human-readable |
-| `PlainOps` | plain `Map`/`List`/`String`/`Number`/`Boolean` | the default — no Gson on the server path |
+| `CgPlainOps` | plain `Map`/`List`/`String`/`Number`/`Boolean` | the default — no Gson on the server path |
 
-`Codecs` holds the helpers: `STRING`/`INT`/`FLOAT`/`DOUBLE`/`LONG`/`BOOL`, `xmap` (transform a codec's
+`CgCodecs` holds the helpers: `STRING`/`INT`/`FLOAT`/`DOUBLE`/`LONG`/`BOOL`, `xmap` (transform a codec's
 type), `enumOf` (**by constant name, never ordinal** — inserting a constant mid-enum must not re-point
 an existing wire value), and the `MapCodecBuilder` / `MapCodecReader` pair for record-shaped encoding:
 
 ```java
-Codecs.map(ops).field("t", Codecs.STRING, tag)
+CgCodecs.map(ops).field("t", Codecs.STRING, tag)
                .field("v", Codecs.FLOAT, value)
                .build();
 
-var in = Codecs.read(ops, input);
+var in = CgCodecs.read(ops, input);
 String tag = in.field("t", Codecs.STRING);
 float v    = in.optional("v", Codecs.FLOAT, 0f);
 ```
@@ -81,11 +82,11 @@ float v    = in.optional("v", Codecs.FLOAT, 0f);
 **Everything is `LinkedHashMap`-ordered on purpose.** Insertion order is what makes the same tree
 encode to the same bytes twice, which is what makes hashing work at all (§4).
 
-## 2. Widget state — `StateMap` and the contract that fills it
+## 2. Widget state — `CgStateMap` and the contract that fills it
 
-`serialization/StateMap.java`, `ui/contract/`
+`serialization/CgStateMap.java`, `ui/contract/`
 
-A `StateMap` is a small typed key/value bag over any `DynamicOps`. **What goes in it is declared, not
+A `CgStateMap` is a small typed key/value bag over any `CgDynamicOps`. **What goes in it is declared, not
 written.** A widget states what kind of thing it is once, and the engine derives the encoding:
 
 ```java
@@ -167,13 +168,13 @@ Consequences worth internalising:
 - `calc()` values are rejected outright: a calc expression is a tree with no parser to rebuild it, and
   encoding its numeric fallback would ship a different layout than the author wrote.
 
-## 4. Content addressing — `ContentHash`
+## 4. Content addressing — `CgContentHash`
 
-`serialization/ContentHash.java`
+`serialization/CgContentHash.java`
 
 ```java
-String hash = ContentHash.of(ops, encodedDescription);   // lowercase hex SHA-256
-byte[] canon = ContentHash.canonicalBytes(ops, value);   // for tests / equality
+String hash = CgContentHash.of(ops, encodedDescription);   // lowercase hex SHA-256
+byte[] canon = CgContentHash.canonicalBytes(ops, value);   // for tests / equality
 ```
 
 The canonical form writes a type tag and an element count before each container, so two structurally
@@ -237,9 +238,9 @@ underneath.
 
 ## 7. The protocol, the transport, and sessions
 
-`net/protocol/` (`Envelope`, `EnvelopeCodec`, `MessageRouter`, `Call`, `UiMethods`, `ProtocolErrors`),
-`net/wire/` (`FrameCodec`, `FrameMultiplexer`, `WireTransport`, `CgNetworkChannel`),
-`net/UITransport.java`, `ServerUiSession.java`, `ClientUiSession.java`
+`net/protocol/` (`CgEnvelope`, `CgEnvelopeCodec`, `CgMessageRouter`, `CgCall`, `UiMethods`, `CgProtocolErrors`),
+`net/wire/` (`CgFrameCodec`, `CgFrameMultiplexer`, `CgWireTransport`, `CgNetworkChannel`),
+`net/CgTransport.java`, `ServerUiSession.java`, `ClientUiSession.java`
 
 ### A closed envelope over an open vocabulary
 
@@ -259,7 +260,7 @@ value of it is that the two axes move independently: **adding a message is addin
 one class, where it used to mean a record in the union, an arm in each of two codec switches, and an
 `instanceof` branch in whichever session handled it.
 
-`EnvelopeCodec.VERSION = 1`, carried in the `ui/openWindow` payload and checked on open.
+`CgEnvelopeCodec.VERSION = 1`, carried in the `ui/openWindow` payload and checked on open.
 
 Methods are namespaced with a slash, after LSP's `textDocument/hover` — `ui/*` here, `fs/*` for the
 file protocol, `script/*` for a runtime in `language/` that `core` never learns about. `UiMethods`
@@ -271,7 +272,7 @@ validates against them.
 > other — which is the difference between a protocol two ends implement and one two ends *agree* on.
 > The `ui/*` side is deliberately looser because a widget tree's content is not a fixed vocabulary;
 > a filesystem's twenty verbs are. See `com.crystalgui.fs.protocol`. A peer may send any string, and an unknown one is answered with
-`ProtocolErrors.METHOD_NOT_FOUND` rather than dropped. The moment that file becomes the list of legal
+`CgProtocolErrors.METHOD_NOT_FOUND` rather than dropped. The moment that file becomes the list of legal
 methods it is `UIPacket` again with different syntax.
 
 | Method | Kind | Direction |
@@ -305,23 +306,23 @@ is a fact about the UI protocol and the envelope is not allowed to know one. LDL
 packets against "whatever menu the player has open", so a packet in flight when a GUI closes lands on
 the *next* one. Four bytes makes that impossible.
 
-`MessageRouter<T>` owns correlation, the pending map, exactly-once responding (`OnceResponder`),
+`CgMessageRouter<T>` owns correlation, the pending map, exactly-once responding (`OnceResponder`),
 per-request deadlines, cancellation and `failAllPending` on a dropped link — for every method, rather
 than for RPC alone as `RpcRegistry` did.
 
 ### Getting bytes across
 
-`UITransport<T>` is unchanged: `send(T)` and `setReceiver(Consumer<T>)`, taking `T` rather than an
-`Envelope` so every implementation exercises the real codec on every hop. `InMemoryTransport.pair()`
+`CgTransport<T>` is unchanged: `send(T)` and `setReceiver(Consumer<T>)`, taking `T` rather than an
+`CgEnvelope` so every implementation exercises the real codec on every hop. `CgInMemoryTransport.pair()`
 gives two ends wired to each other, with `deliver()`, `dropNext(n)` and `corruptNext(mutator)`.
 
-`WireTransport` is the real one, and it is a stack:
+`CgWireTransport` is the real one, and it is a stack:
 
 ```
-session  →  Envelope  →  PlainOps tree  →  BinaryFormat bytes  →  FrameMultiplexer  →  CgNetworkChannel
+session  →  Envelope  →  CgPlainOps tree  →  CgBinaryFormat bytes  →  CgFrameMultiplexer  →  CgNetworkChannel
 ```
 
-`FrameMultiplexer` is HTTP/2's shape at Minecraft scale: many logical streams over one channel,
+`CgFrameMultiplexer` is HTTP/2's shape at Minecraft scale: many logical streams over one channel,
 `[u8 opcode][u8 flags][varint streamId][payload]` frames, FIN-terminated fragmentation (no chunk index —
 TCP already orders), `WINDOW_UPDATE` credit flow control, and `RESET` per stream. Credit is not
 optional here: `NetworkManager.outboundPacketsQueue` is an **unbounded** `ConcurrentLinkedQueue` shared

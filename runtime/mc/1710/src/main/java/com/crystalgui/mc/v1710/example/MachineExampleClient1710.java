@@ -2,7 +2,7 @@ package com.crystalgui.mc.v1710.example;
 
 import com.crystalgui.app.machine.MachineExample;
 import com.crystalgui.mc.v1710.client.CgUiScreen;
-import com.crystalgui.mc.v1710.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 
 import cpw.mods.fml.client.registry.ClientRegistry;
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -42,7 +42,7 @@ public final class MachineExampleClient1710 {
             if (Minecraft.getMinecraft().currentScreen != null) return;
             if (openPanel == null || !openPanel.isPressed()) return;
 
-            MachineExample.requestPanel(CgUiConnections.client());
+            MachineExample.requestPanel(CgNetwork.client());
             // The desktop is opened either way: it is where the window WILL land, and a screen that
             // appears only on success would flicker for anyone who is refused.
             CgUiScreen.openDesktop();

@@ -6,11 +6,11 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.mirror.ClientTreeMirror;
-import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.net.mirror.ServerTreeMirror;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -31,7 +31,7 @@ import org.junit.Test;
  */
 public class MirrorOverUIElementTreeTest {
 
-    private final UIElementMirror<Object> nodes = new UIElementMirror<>(PlainOps.INSTANCE);
+    private final UIElementMirror<Object> nodes = new UIElementMirror<>(CgPlainOps.INSTANCE);
 
     private UIDocument serverDocument;
     private UIElementTreeSource serverTree;
@@ -48,23 +48,23 @@ public class MirrorOverUIElementTreeTest {
     }
 
     private void open() {
-        server = new ServerTreeMirror<>(serverTree, nodes, PlainOps.INSTANCE);
+        server = new ServerTreeMirror<>(serverTree, nodes, CgPlainOps.INSTANCE);
         int count = server.describeAndNumber();
         serverTree.observe(server);
         clientRoot = nodes.decode(nodes.describe(serverDocument));
         clientTree = new UIElementTreeSource(clientRoot);
-        client = new ClientTreeMirror<>(clientTree, nodes, PlainOps.INSTANCE);
+        client = new ClientTreeMirror<>(clientTree, nodes, CgPlainOps.INSTANCE);
         assertEquals("both sides number the same pristine description alike",
                 count, client.number(clientRoot, 0));
     }
 
     private void pumpStructure() {
-        StateMap<Object> ops = server.drainStructure();
+        CgStateMap<Object> ops = server.drainStructure();
         if (ops != null) client.applyStructure(ops);
     }
 
     private void pumpState() {
-        Map<UIElement, StateMap<Object>> entries = server.drainState();
+        Map<UIElement, CgStateMap<Object>> entries = server.drainState();
         if (entries != null) client.applyState(server.pack(entries.values()), null);
     }
 

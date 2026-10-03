@@ -16,25 +16,25 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgui.app.machine.MachineModel;
 import com.crystalgui.app.machine.ui.EnginePanel;
 import com.crystalgui.app.machine.ui.MachinePanel;
-import com.crystalgui.app.machine.MachineModel;
-import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.app.machine.ui.MachineStyles;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.net.window.ClientWindowContext;
+import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.ServerWindows;
-import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.app.machine.ui.MachineStyles;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.display.ProgressBar;
 
 /**
  * The worked example in {@code com.crystalgui.example}, run end to end.
@@ -64,9 +64,9 @@ public class MachineExampleTest {
 
     /** Server end, client end, and the two transports between them. */
     private static final class Loopback {
-        final InMemoryTransport<Object>[] link;
-        final ProtocolConnection<Object> serverEnd;
-        final ProtocolConnection<Object> clientEnd;
+        final CgInMemoryTransport<Object>[] link;
+        final CgProtocolConnection<Object> serverEnd;
+        final CgProtocolConnection<Object> clientEnd;
 
         /** World state. Ticked by {@link #tickWorld}, never by the window. */
         final MachineModel machine = new MachineModel();
@@ -85,14 +85,14 @@ public class MachineExampleTest {
         Loopback() {
             // The contributor is what puts a ServerWindows on one end and a ClientWindows on the other,
             // decided by whether the connection names a peer. Reset first, because a suite shares
-            // statics and Protocols refuses a duplicate contributor outright.
-            Protocols.resetForTesting();
+            // statics and CgProtocols refuses a duplicate contributor outright.
+            CgProtocols.resetForTesting();
             WindowProtocol.resetForTesting();
             WindowProtocol.register();
 
-            link = InMemoryTransport.pair();
-            serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
-            clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+            link = CgInMemoryTransport.pair();
+            serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "player");
+            clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
 
             ClientWindows.of(clientEnd).setMount(new SilentMount());
         }
@@ -143,7 +143,7 @@ public class MachineExampleTest {
          * client half is a list this test drives rather than a view with a viewport.</p>
          */
         void showingRows(UIElement streamed, int from, int to) {
-            StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
             args.putInt(UiMethods.WINDOW, server.session().windowId());
             args.putInt("nid", server.session().idOf(streamed));
             args.putInt("from", from);
@@ -298,7 +298,7 @@ public class MachineExampleTest {
         String[] result = { null };
         String[] failure = { null };
         net.shown().session().call("machine/rename",
-                new StateMap<Object>(PlainOps.INSTANCE).putString("name", "   "),
+                new CgStateMap<Object>(CgPlainOps.INSTANCE).putString("name", "   "),
                 ok -> result[0] = "accepted",
                 error -> failure[0] = error);
         net.settle(2);
@@ -317,7 +317,7 @@ public class MachineExampleTest {
         String[] failure = { null };
         boolean[] accepted = { false };
         net.shown().session().call("machine/rename",
-                new StateMap<Object>(PlainOps.INSTANCE).putString("name", "Furnace"),
+                new CgStateMap<Object>(CgPlainOps.INSTANCE).putString("name", "Furnace"),
                 ok -> accepted[0] = true,
                 error -> failure[0] = error);
         net.settle(2);
@@ -609,7 +609,7 @@ public class MachineExampleTest {
         assertEquals("an idle window put traffic on the wire", List.of(), methodsSent(net));
     }
 
-    /** What the SERVER put on the wire since the last clear. A {@code PlainOps} envelope is a map. */
+    /** What the SERVER put on the wire since the last clear. A {@code CgPlainOps} envelope is a map. */
     private static List<String> methodsSent(Loopback net) {
         List<String> methods = new ArrayList<>();
         for (Object raw : net.link[0].sent()) {

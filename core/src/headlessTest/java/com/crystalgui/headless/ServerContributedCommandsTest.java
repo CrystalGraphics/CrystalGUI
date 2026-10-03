@@ -1,18 +1,18 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.command.CommandProtocol;
 import com.crystalgui.net.command.CommandProtocolBinding;
 import com.crystalgui.net.command.RemoteCommandPolicy;
 import com.crystalgui.net.command.RemoteCommands;
 import com.crystalgui.net.command.ServerCommands;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 
 import org.junit.After;
 import org.junit.Before;
@@ -46,9 +46,9 @@ import static org.junit.Assert.fail;
  */
 public class ServerContributedCommandsTest {
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverSide;
-    private ProtocolConnection<Object> clientSide;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverSide;
+    private CgProtocolConnection<Object> clientSide;
 
     private CommandRegistry registry;
     private ServerCommands<Object> server;
@@ -56,12 +56,12 @@ public class ServerContributedCommandsTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         CommandProtocolBinding.resetForTesting();
 
-        link = InMemoryTransport.pair();
-        serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         registry = new CommandRegistry();
         server = ServerCommands.forConnection(serverSide);
@@ -70,7 +70,7 @@ public class ServerContributedCommandsTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         CommandProtocolBinding.resetForTesting();
     }
 
@@ -174,7 +174,7 @@ public class ServerContributedCommandsTest {
     @Test
     public void invokingAWithdrawnCommandIsRefused() {
         AtomicReference<String> error = new AtomicReference<>();
-        StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
         args.putString(CommandProtocol.ID, "server.gone");
         clientSide.call(CommandProtocol.INVOKE, args,
                 result -> fail("a command that does not exist answered"), error::set);
@@ -241,7 +241,7 @@ public class ServerContributedCommandsTest {
     /** A refusal costs its own entry and not the batch around it. */
     @Test
     public void oneRefusedEntryDoesNotCostTheRest() {
-        StateMap<Object> payload = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> payload = new CgStateMap<>(CgPlainOps.INSTANCE);
         List<String[]> entries = new ArrayList<>();
         entries.add(new String[] {"server.first", "First"});
         entries.add(new String[] {"edit.save", "Hijack"});
@@ -303,11 +303,11 @@ public class ServerContributedCommandsTest {
     @Test
     public void aHostMayRefuseServerCommandsOutright() {
         CommandRegistry strict = new CommandRegistry();
-        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
-        ProtocolConnection<Object> theirServer =
-                Protocols.open(pair[0], PlainOps.INSTANCE, () -> { }, "bob");
-        ProtocolConnection<Object> theirClient =
-                Protocols.open(pair[1], PlainOps.INSTANCE, () -> { }, null);
+        CgInMemoryTransport<Object>[] pair = CgInMemoryTransport.pair();
+        CgProtocolConnection<Object> theirServer =
+                CgProtocols.open(pair[0], CgPlainOps.INSTANCE, () -> { }, "bob");
+        CgProtocolConnection<Object> theirClient =
+                CgProtocols.open(pair[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         RemoteCommands<Object> refusing =
                 RemoteCommands.install(theirClient, strict, RemoteCommandPolicy.REFUSE_ALL);
@@ -330,7 +330,7 @@ public class ServerContributedCommandsTest {
     public void aServerCannotWithdrawWhatItDidNotContribute() {
         registry.register(Command.of("edit.save", "Save").run(() -> { }));
 
-        StateMap<Object> payload = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> payload = new CgStateMap<>(CgPlainOps.INSTANCE);
         payload.putList(CommandProtocol.COMMANDS, List.of("edit.save"),
                 (entry, id) -> entry.putString(CommandProtocol.ID, id));
         serverSide.notify(CommandProtocol.WITHDRAW, payload);
@@ -343,7 +343,7 @@ public class ServerContributedCommandsTest {
 
     /** Contributes straight down the wire, bypassing {@link ServerCommands}' own check. */
     private void sendRawContribution(String id, String label) {
-        StateMap<Object> payload = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> payload = new CgStateMap<>(CgPlainOps.INSTANCE);
         payload.putList(CommandProtocol.COMMANDS,
                 Collections.singletonList(new String[] {id, label}),
                 (entry, pair) -> {

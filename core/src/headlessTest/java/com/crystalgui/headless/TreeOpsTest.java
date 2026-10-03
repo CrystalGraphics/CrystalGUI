@@ -1,12 +1,12 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgEnvelope;
+import com.crystalgraphics.net.protocol.CgEnvelopeCodec;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.protocol.Envelope;
-import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
@@ -34,8 +34,8 @@ import static org.junit.Assert.assertTrue;
 public class TreeOpsTest {
 
     private UIElement root;
-    private InMemoryTransport<Object> serverLink;
-    private InMemoryTransport<Object> clientLink;
+    private CgInMemoryTransport<Object> serverLink;
+    private CgInMemoryTransport<Object> clientLink;
     private ServerUiSession<UIElement, Object> server;
     private ClientUiSession<UIElement, Object> client;
 
@@ -46,7 +46,7 @@ public class TreeOpsTest {
         root.append(new UIText("first"));
         root.append(new Button("Press me"));
 
-        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        CgInMemoryTransport<Object>[] pair = CgInMemoryTransport.pair();
         serverLink = pair[0];
         clientLink = pair[1];
         server = Sessions.serve(1, root, serverLink);
@@ -62,10 +62,10 @@ public class TreeOpsTest {
         }
     }
 
-    private long countMethod(InMemoryTransport<Object> link, String method) {
+    private long countMethod(CgInMemoryTransport<Object> link, String method) {
         return link.sent().stream()
-                .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
-                .filter(e -> e instanceof Envelope.Notification<?> n && method.equals(n.method()))
+                .map(raw -> CgEnvelopeCodec.decode(CgPlainOps.INSTANCE, raw))
+                .filter(e -> e instanceof CgEnvelope.Notification<?> n && method.equals(n.method()))
                 .count();
     }
 

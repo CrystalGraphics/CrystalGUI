@@ -6,11 +6,11 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgCall;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.protocol.Call;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
 
 /**
  * What a panel's {@link Networked#client} is handed — <b>the client-side mirror of
@@ -43,25 +43,25 @@ public final class ClientScope {
     // ── Wire methods, under this panel's name ───────────────────────────────
 
     /** Serves a method the server may call on this panel. */
-    public ClientScope onCall(String method, Call.Handler<Object> handler) {
+    public ClientScope onCall(String method, CgCall.Handler<Object> handler) {
         session.onCall(qualify(method), handler);
         return this;
     }
 
     /** Asks the server. Two callbacks: refused and never-answered differ, and only one is worth retrying. */
-    public void call(String method, @Nullable StateMap<Object> args,
-                     @Nullable Consumer<StateMap<Object>> onResult, @Nullable Consumer<String> onError) {
+    public void call(String method, @Nullable CgStateMap<Object> args,
+                     @Nullable Consumer<CgStateMap<Object>> onResult, @Nullable Consumer<String> onError) {
         session.call(qualify(method), args, onResult, onError);
     }
 
     /** Listens for a notification aimed at this panel. */
-    public ClientScope onNotify(String method, Consumer<StateMap<Object>> handler) {
+    public ClientScope onNotify(String method, Consumer<CgStateMap<Object>> handler) {
         session.onNotify(qualify(method), handler);
         return this;
     }
 
     /** Tells the server. Nothing comes back, and nothing may be waited on. */
-    public void notify(String method, @Nullable StateMap<Object> payload) {
+    public void notify(String method, @Nullable CgStateMap<Object> payload) {
         session.notify(qualify(method), payload);
     }
 
@@ -133,12 +133,12 @@ public final class ClientScope {
     }
 
     /** The wire format — always the connection's own, never a hardcoded one. */
-    public DynamicOps<Object> ops() {
+    public CgDynamicOps<Object> ops() {
         return session.ops();
     }
 
     /** An empty payload in the connection's format, for a handler about to fill one in. */
-    public StateMap<Object> newMap() {
-        return new StateMap<>(session.ops());
+    public CgStateMap<Object> newMap() {
+        return new CgStateMap<>(session.ops());
     }
 }

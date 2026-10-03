@@ -1,17 +1,17 @@
 package com.crystalgui.net.mirror;
 
-import com.crystalgui.style.Styleable;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.serialization.style.InlineStyleCodec;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.*;
 
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgui.ui.dom.UIElement;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.Set;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.ui.dom.UIElement;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -71,15 +71,15 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
                 "kind", "id", "class", "attrs", "style", "state", "children", "nid", true);
     }
 
-    private final DynamicOps<T> ops;
+    private final CgDynamicOps<T> ops;
     private final Keys keys;
 
     /** The wire dialect. */
-    public UIElementMirror(DynamicOps<T> ops) {
+    public UIElementMirror(CgDynamicOps<T> ops) {
         this(ops, Keys.WIRE);
     }
 
-    public UIElementMirror(DynamicOps<T> ops, Keys keys) {
+    public UIElementMirror(CgDynamicOps<T> ops, Keys keys) {
         this.ops = ops;
         this.keys = keys;
     }
@@ -214,7 +214,7 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
     public T encodeState(UIElement node) {
         WidgetContract<UIElement> contract = WidgetContracts.of(node);
         if (contract == null || !contract.carriesState()) return null;
-        StateMap<T> state = new StateMap<>(ops);
+        CgStateMap<T> state = new CgStateMap<>(ops);
         contract.write(node, state);
         return state.encode();
     }
@@ -226,7 +226,7 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
         // DECLARATION ORDER IS APPLY ORDER, and four widgets depend on it -- a Slider takes its range
         // before its value, or the value is clamped against the range it is replacing. The contract
         // holds that order; this must not re-sort or filter.
-        contract.read(node, new StateMap<>(ops, value));
+        contract.read(node, new CgStateMap<>(ops, value));
     }
 
     // ── Attributes (identity) ────────────────────────────────────────────────

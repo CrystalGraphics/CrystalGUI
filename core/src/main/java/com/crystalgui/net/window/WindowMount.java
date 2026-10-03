@@ -1,6 +1,6 @@
 package com.crystalgui.net.window;
 
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -68,7 +68,7 @@ public interface WindowMount {
          * saying so by ignoring it is better than making every host implement four methods it has no
          * surface for. The keys are on {@code ViewCommand}.</p>
          */
-        default void viewCommand(String command, StateMap<Object> args) {
+        default void viewCommand(String command, CgStateMap<Object> args) {
         }
     }
 }

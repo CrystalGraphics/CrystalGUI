@@ -13,20 +13,20 @@ import com.google.gson.JsonPrimitive;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.document.AbstractDocumentModel;
 import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.template.UiTemplate;
 import com.crystalgui.template.UiTemplateException;
 import com.crystalgui.template.UiTemplates;
 import com.crystalgui.text.diagnostic.Diagnostic;
-import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
+import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementTreeSource;
@@ -150,7 +150,7 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
 
     /** The hash a window built from this tree would send. @see UiTemplate#contentHash() */
     public String contentHash() {
-        return ContentHash.of(JsonOps.INSTANCE,
+        return CgContentHash.of(JsonOps.INSTANCE,
                 new UIElementMirror<JsonElement>(JsonOps.INSTANCE).describe(root));
     }
 

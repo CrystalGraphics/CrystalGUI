@@ -1,7 +1,7 @@
 package com.crystalgui.net.mirror;
 
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.dom.TreeSource;
 import java.util.ArrayList;
@@ -50,7 +50,7 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
 
     private final TreeSource<N> source;
     private final NodeMirror<N, T> nodes;
-    private final DynamicOps<T> ops;
+    private final CgDynamicOps<T> ops;
 
     /**
      * Off until the far side has been told what the tree looks like.
@@ -71,7 +71,7 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
 
     private record PendingOp<N>(String kind, N node, @Nullable N parent, int index) { }
 
-    public ServerTreeMirror(TreeSource<N> source, NodeMirror<N, T> nodes, DynamicOps<T> ops) {
+    public ServerTreeMirror(TreeSource<N> source, NodeMirror<N, T> nodes, CgDynamicOps<T> ops) {
         this.source = source;
         this.nodes = nodes;
         this.ops = ops;
@@ -125,12 +125,12 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
      * renumbered one side of a conversation on its own. Drain only when you will send.</p>
      */
     @Nullable
-    public StateMap<T> drainStructure() {
+    public CgStateMap<T> drainStructure() {
         if (!live || pendingOps.isEmpty()) return null;
 
         List<T> encoded = new ArrayList<>(pendingOps.size());
         for (PendingOp<N> pending : pendingOps) {
-            StateMap<T> op = new StateMap<>(ops);
+            CgStateMap<T> op = new CgStateMap<>(ops);
             op.putString(TreeOps.OP, pending.kind());
 
             if (TreeOps.INSERT.equals(pending.kind())) {
@@ -164,7 +164,7 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
         if (encoded.isEmpty()) return null;
 
         reshaped = true;
-        StateMap<T> out = new StateMap<>(ops);
+        CgStateMap<T> out = new CgStateMap<>(ops);
         out.putRaw(TreeOps.OPS, ops.createList(encoded));
         return out;
     }
@@ -177,10 +177,10 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
      * the described tree, so there is nothing on the far side to address.</p>
      */
     @Nullable
-    public Map<N, StateMap<T>> drainState() {
+    public Map<N, CgStateMap<T>> drainState() {
         if (!live || (dirtyState.isEmpty() && dirtyIdentity.isEmpty())) return null;
 
-        Map<N, StateMap<T>> entries = new LinkedHashMap<>();
+        Map<N, CgStateMap<T>> entries = new LinkedHashMap<>();
         for (N node : dirtyState) {
             if (source.peekId(node) < 0) continue;
             T state = nodes.encodeState(node);
@@ -188,7 +188,7 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
         }
         for (N node : dirtyIdentity) {
             if (source.peekId(node) < 0) continue;
-            StateMap<T> entry = entryFor(entries, node);
+            CgStateMap<T> entry = entryFor(entries, node);
             T attributes = nodes.encodeAttributes(node);
             if (attributes != null) entry.putRaw("a", attributes);
             T style = nodes.encodeInlineStyle(node);
@@ -198,7 +198,7 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
         dirtyIdentity.clear();
         if (entries.isEmpty()) return null;
 
-        for (Map.Entry<N, StateMap<T>> entry : entries.entrySet()) {
+        for (Map.Entry<N, CgStateMap<T>> entry : entries.entrySet()) {
             entry.getValue().putInt("nid", source.idOf(entry.getKey()));
         }
         return entries;
@@ -211,16 +211,16 @@ public final class ServerTreeMirror<N, T> implements TreeObserver<N> {
      * a viewer may be owed everything except the one element it just changed itself, and the mirror
      * knows nothing about viewers. It hands back what changed; the session decides who hears about it.</p>
      */
-    public StateMap<T> pack(Collection<StateMap<T>> entries) {
+    public CgStateMap<T> pack(Collection<CgStateMap<T>> entries) {
         List<T> encoded = new ArrayList<>(entries.size());
-        for (StateMap<T> entry : entries) encoded.add(entry.encode());
-        StateMap<T> out = new StateMap<>(ops);
+        for (CgStateMap<T> entry : entries) encoded.add(entry.encode());
+        CgStateMap<T> out = new CgStateMap<>(ops);
         out.putRaw("entries", ops.createList(encoded));
         return out;
     }
 
-    private StateMap<T> entryFor(Map<N, StateMap<T>> entries, N node) {
-        return entries.computeIfAbsent(node, n -> new StateMap<>(ops));
+    private CgStateMap<T> entryFor(Map<N, CgStateMap<T>> entries, N node) {
+        return entries.computeIfAbsent(node, n -> new CgStateMap<>(ops));
     }
 
     // ── TreeObserver ─────────────────────────────────────────────────────────

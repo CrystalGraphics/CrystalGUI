@@ -511,11 +511,11 @@ public final class MyFeature implements WorkbenchExtension, SessionSlice {
 
     @Override public String id() { return ID; }        // the slice key IS the extension id
 
-    @Override public void write(StateMap<JsonElement> into) {
+    @Override public void write(CgStateMap<JsonElement> into) {
         into.putString("filter", currentFilter);
     }
 
-    @Override public void read(StateMap<JsonElement> from) {
+    @Override public void read(CgStateMap<JsonElement> from) {
         currentFilter = from.getString("filter", "");   // empty map = ordinary first run
     }
 

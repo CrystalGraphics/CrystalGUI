@@ -1,5 +1,10 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.Document;
@@ -21,11 +26,6 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 
 import org.junit.After;
 import org.junit.Before;
@@ -84,20 +84,20 @@ public class PresenceTest {
 
     /** One client, its connection and its binding — everything a person is on this wire. */
     private final class Peer {
-        final InMemoryTransport<Object>[] link;
-        final ProtocolConnection<Object> server;
-        final ProtocolConnection<Object> client;
+        final CgInMemoryTransport<Object>[] link;
+        final CgProtocolConnection<Object> server;
+        final CgProtocolConnection<Object> client;
         final WorkspaceBinding<Object> binding;
         final Workspace workspace;
         final WorkspaceDocuments documents;
 
         Peer(WorkspaceActor who) {
-            link = InMemoryTransport.pair();
-            server = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, who.id());
-            client = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-            binding = new WorkspaceBinding<>(service, hub, who, who, PlainOps.INSTANCE);
+            link = CgInMemoryTransport.pair();
+            server = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, who.id());
+            client = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
+            binding = new WorkspaceBinding<>(service, hub, who, who, CgPlainOps.INSTANCE);
             binding.installOn(server::onRequest);
-            workspace = Workspace.over(client::call, client::onNotify, PlainOps.INSTANCE)
+            workspace = Workspace.over(client::call, client::onNotify, CgPlainOps.INSTANCE)
                     .setStorage(new InMemoryConfigStorage());
             DocumentKinds kinds = new DocumentKinds();
             kinds.register(DocumentKind.of("test:text", "Text")
@@ -110,8 +110,8 @@ public class PresenceTest {
         void deliverPresence() {
             FsMessages.PresenceNotification mine = binding.presenceFor();
             if (mine == null) return;
-            server.notify(FsMethods.PRESENCE, new StateMap<>(PlainOps.INSTANCE,
-                    FsMessages.presenceNotification().encode(PlainOps.INSTANCE, mine)));
+            server.notify(FsMethods.PRESENCE, new CgStateMap<>(CgPlainOps.INSTANCE,
+                    FsMessages.presenceNotification().encode(CgPlainOps.INSTANCE, mine)));
         }
 
         Document open(CgPath path) {
@@ -124,7 +124,7 @@ public class PresenceTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         InMemoryFileSystem files = new InMemoryFileSystem()
                 .seed("p:a.txt", "one")
                 .seed("p:b.txt", "two");
@@ -140,7 +140,7 @@ public class PresenceTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void pump() {

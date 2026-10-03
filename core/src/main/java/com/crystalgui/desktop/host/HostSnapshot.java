@@ -1,12 +1,12 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.HostThread;
-import com.crystalgui.net.protocol.ProtocolConnection;
 
-import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.Locale;
+import javax.annotation.Nullable;
 
 /**
  * The host's answers as the render thread last read them, for a document that may run on another thread. A host's
@@ -21,7 +21,7 @@ final class HostSnapshot implements HostServices {
     private volatile int surfaceWidth;
     private volatile int surfaceHeight;
     @Nullable
-    private volatile ProtocolConnection<Object> connection;
+    private volatile CgProtocolConnection<Object> connection;
     private volatile Locale locale;
 
     HostSnapshot(HostServices host) {
@@ -70,7 +70,7 @@ final class HostSnapshot implements HostServices {
     }
 
     @Override
-    public ProtocolConnection<Object> connection() {
+    public CgProtocolConnection<Object> connection() {
         return connection;
     }
 

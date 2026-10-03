@@ -14,7 +14,11 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.DraggedResources;
 import com.crystalgui.document.EditorInput;
@@ -29,22 +33,18 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
-import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.editor.EditorService;
@@ -59,13 +59,13 @@ public class FloatingWindowsActLikeSplitsTest extends UiDocumentTestBase {
     private static final CgPath LAST = CgPath.of(PROJECT, "last.txt");
 
     private Workbench workbench;
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     @Before
     public void openWorkbench() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         InMemoryFileSystem files = new InMemoryFileSystem();
         for (CgPath path : List.of(TOP, BOTTOM, NEXT, LAST)) files.seed(path.toString(), path.toString());
         WorkspaceService service = new WorkspaceService(
@@ -73,11 +73,11 @@ public class FloatingWindowsActLikeSplitsTest extends UiDocumentTestBase {
                         new WorkspaceProject(PROJECT, "Scratch", Paths.get("/srv/scratch")))),
                 files, WorkspacePermission.ALLOW_ALL);
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "host");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
 
         workbench = new Workbench(Workspace.of(clientEnd));
         UIElement root = new UIElement().layout(l -> l.width(1200).height(800));
@@ -91,7 +91,7 @@ public class FloatingWindowsActLikeSplitsTest extends UiDocumentTestBase {
         workbench.dispose();
         clientEnd.close("test over");
         serverEnd.close("test over");
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void frames(int count) {

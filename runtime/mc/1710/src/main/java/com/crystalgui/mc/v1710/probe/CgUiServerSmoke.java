@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import com.crystalgui.mc.v1710.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ServerSmoke;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -58,7 +58,7 @@ public final class CgUiServerSmoke {
 
         @Override
         public boolean connectionsRegistered() {
-            return CgUiConnections.isRegistered();
+            return CgNetwork.isInstalled();
         }
 
         @Override

@@ -1,14 +1,14 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.ClientUiSessions;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.UiWindowMux;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
@@ -50,9 +50,9 @@ import static org.junit.Assert.fail;
  */
 public class TwoWindowsOnOneConnectionTest {
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverSide;
-    private ProtocolConnection<Object> clientSide;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverSide;
+    private CgProtocolConnection<Object> clientSide;
 
     private UIElement rootOne;
     private UIElement rootTwo;
@@ -69,12 +69,12 @@ public class TwoWindowsOnOneConnectionTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         UIElementRegistry.bootstrap();
 
-        link = InMemoryTransport.pair();
-        serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         rootOne = new UIElement();
         buttonOne = new Button("one");
@@ -100,7 +100,7 @@ public class TwoWindowsOnOneConnectionTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void settle() {
@@ -205,12 +205,12 @@ public class TwoWindowsOnOneConnectionTest {
         settle();
 
         clientWindow(1).onCall("app/ping", (args, respond) -> {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             out.putString("from", "one");
             respond.ok(out);
         });
         clientWindow(2).onCall("app/ping", (args, respond) -> {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             out.putString("from", "two");
             respond.ok(out);
         });
@@ -316,7 +316,7 @@ public class TwoWindowsOnOneConnectionTest {
         settle();
 
         AtomicReference<String> error = new AtomicReference<>();
-        StateMap<Object> ask = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> ask = new CgStateMap<>(CgPlainOps.INSTANCE);
         ask.putInt("w", 99);
         ask.putString("hash", "whatever");
         clientSide.call("ui/description", ask, r -> fail("a window that does not exist answered"),
@@ -336,11 +336,11 @@ public class TwoWindowsOnOneConnectionTest {
      */
     @Test
     public void oneWindowStillNeedsNoDemultiplexer() {
-        InMemoryTransport<Object>[] solo = InMemoryTransport.pair();
-        ProtocolConnection<Object> soloServer =
-                Protocols.open(solo[0], PlainOps.INSTANCE, () -> { }, "bob");
-        ProtocolConnection<Object> soloClient =
-                Protocols.open(solo[1], PlainOps.INSTANCE, () -> { }, null);
+        CgInMemoryTransport<Object>[] solo = CgInMemoryTransport.pair();
+        CgProtocolConnection<Object> soloServer =
+                CgProtocols.open(solo[0], CgPlainOps.INSTANCE, () -> { }, "bob");
+        CgProtocolConnection<Object> soloClient =
+                CgProtocols.open(solo[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         UIElement root = new UIElement();
         root.append(new Button("solo"));

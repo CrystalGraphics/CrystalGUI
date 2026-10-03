@@ -9,10 +9,10 @@ import javax.annotation.Nullable;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -243,7 +243,7 @@ public sealed interface BuilderEdit extends Edit {
             if (contract == null || value == null) return;
             JsonObject one = new JsonObject();
             one.add(key, value);
-            StateMap<JsonElement> map = new StateMap<>(JsonOps.INSTANCE, one);
+            CgStateMap<JsonElement> map = new CgStateMap<>(JsonOps.INSTANCE, one);
             for (State<UIElement, ?> state : contract.states()) {
                 if (state.key().equals(key)) state.apply(node, map);
             }

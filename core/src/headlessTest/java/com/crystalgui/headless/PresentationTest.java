@@ -18,34 +18,34 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.provider.InMemoryFileSystem;
-import com.crystalgui.fs.server.WorkspaceActor;
-import com.crystalgui.fs.server.WorkspacePermission;
-import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.server.ServerWorkspace;
 import com.crystalgui.fs.server.WatchHub;
+import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.Presentation;
 import com.crystalgui.net.window.ServerScope;
 import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.ServerWindows;
-import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.UiType;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowProtocol;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 
@@ -61,9 +61,9 @@ import com.crystalgui.ui.dom.UIElement;
  */
 public class PresentationTest {
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     /**
      * A SECOND viewer, on its own wire — built <b>only by the tests that need one</b>.
@@ -74,9 +74,9 @@ public class PresentationTest {
      * every {@code requestOpen} in this file would ask down the wrong wire — which is a property of the
      * fixture and not of anything being tested.</p>
      */
-    private InMemoryTransport<Object>[] linkB;
-    private ProtocolConnection<Object> serverEndB;
-    private ProtocolConnection<Object> clientEndB;
+    private CgInMemoryTransport<Object>[] linkB;
+    private CgProtocolConnection<Object> serverEndB;
+    private CgProtocolConnection<Object> clientEndB;
 
     /** Every context the second client's mount was handed. */
     private final List<ClientWindowContext> mountedB = new ArrayList<>();
@@ -86,29 +86,29 @@ public class PresentationTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
         WindowProtocol.register();
         ServerWindows.resetOpenableForTesting();
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "player");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         ClientWindows.of(clientEnd).setMount(new RecordingMount(mounted));
     }
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
         ServerWindows.resetOpenableForTesting();
     }
 
     /** Builds the second viewer's wire. @see #linkB */
     private void secondViewer() {
-        linkB = InMemoryTransport.pair();
-        serverEndB = Protocols.open(linkB[0], PlainOps.INSTANCE, () -> { }, "second");
-        clientEndB = Protocols.open(linkB[1], PlainOps.INSTANCE, () -> { }, null);
+        linkB = CgInMemoryTransport.pair();
+        serverEndB = CgProtocols.open(linkB[0], CgPlainOps.INSTANCE, () -> { }, "second");
+        clientEndB = CgProtocols.open(linkB[1], CgPlainOps.INSTANCE, () -> { }, null);
         ClientWindows.of(clientEndB).setMount(new RecordingMount(mountedB));
     }
 
@@ -239,7 +239,7 @@ public class PresentationTest {
                 Presentation.toolWindow("panel"));
 
         List<Boolean> answers = new ArrayList<>();
-        ClientWindows.requestOpen(TinyPanel.TYPE.id(), new StateMap<>(PlainOps.INSTANCE), answers::add);
+        ClientWindows.requestOpen(TinyPanel.TYPE.id(), new CgStateMap<>(CgPlainOps.INSTANCE), answers::add);
         settle();
 
         assertEquals(List.of(true), answers);
@@ -300,7 +300,7 @@ public class PresentationTest {
         secondViewer();
         WorkspaceService owners = workspace();
         new WorkspaceBinding<>(owners, new WatchHub(owners), WorkspaceActor.LOCAL, "player",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
         // A DIFFERENT workspace on the second viewer's wire, so "the owner's" is provable rather than
         // merely plausible: with one service on both, either answer looks correct.
         WorkspaceService others = new WorkspaceService(
@@ -308,7 +308,7 @@ public class PresentationTest {
                         new WorkspaceProject("other", "Other", Paths.get("/srv/other")))),
                 new InMemoryFileSystem().seed("other:z.txt", "z"), WorkspacePermission.ALLOW_ALL);
         new WorkspaceBinding<>(others, new WatchHub(others), WorkspaceActor.LOCAL, "second",
-                PlainOps.INSTANCE).installOn(serverEndB);
+                CgPlainOps.INSTANCE).installOn(serverEndB);
 
         List<String> projects = new ArrayList<>();
         TinyPanel.onServe = io -> {
@@ -340,7 +340,7 @@ public class PresentationTest {
     public void aPanelListsFilesThroughItsScopeNotTheMirror() {
         WorkspaceService service = workspace();
         WatchHub hub = new WatchHub(service);
-        new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "player", PlainOps.INSTANCE)
+        new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "player", CgPlainOps.INSTANCE)
                 .installOn(serverEnd);
 
         List<String> listed = new ArrayList<>();
@@ -383,7 +383,7 @@ public class PresentationTest {
     public void theBoundWorkspaceCarriesItsActor() {
         WorkspaceService service = workspace();
         WorkspaceBinding<Object> binding = new WorkspaceBinding<>(service, new WatchHub(service),
-                WorkspaceActor.LOCAL, "player", PlainOps.INSTANCE);
+                WorkspaceActor.LOCAL, "player", CgPlainOps.INSTANCE);
         ServerWorkspace fs = binding.workspace();
 
         assertSame(WorkspaceActor.LOCAL, fs.actor());

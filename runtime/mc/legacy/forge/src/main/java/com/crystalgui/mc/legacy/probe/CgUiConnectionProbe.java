@@ -2,20 +2,20 @@ package com.crystalgui.mc.legacy.probe;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.mc.legacy.net.CgUiConnections;
-import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.mc.legacy.client.CgUiScreen;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
-import net.minecraftforge.fml.common.FMLCommonHandler;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent;
-import net.minecraft.client.Minecraft;
-import net.minecraft.entity.player.EntityPlayerMP;
 import com.crystalgui.mc.legacy.Game;
 import com.crystalgui.mc.legacy.client.ClientGame;
 import java.util.List;
+import net.minecraft.client.Minecraft;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.server.MinecraftServer;
+import net.minecraftforge.fml.common.FMLCommonHandler;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 /**
  * The Forge 1.8–1.12.2 half of {@link ConnectionProbe}: six answers and two verbs.
@@ -90,17 +90,17 @@ public final class CgUiConnectionProbe {
 
         @Override
         @Nullable
-        public ProtocolConnection<Object> connectionToFirstPlayer() {
+        public CgProtocolConnection<Object> connectionToFirstPlayer() {
             MinecraftServer server = Game.server();
             if (server == null) return null;
             List<EntityPlayerMP> players = Game.players(server);
-            return players.isEmpty() ? null : CgUiConnections.forPlayer(players.get(0));
+            return players.isEmpty() ? null : CgNetwork.forPlayer(players.get(0).getGameProfile().getId());
         }
 
         @Override
         @Nullable
-        public ProtocolConnection<Object> clientConnection() {
-            return CgUiConnections.client();
+        public CgProtocolConnection<Object> clientConnection() {
+            return CgNetwork.client();
         }
 
         @Override

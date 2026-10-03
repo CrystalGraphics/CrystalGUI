@@ -9,9 +9,9 @@ import java.util.List;
 
 import org.junit.Test;
 
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 
 /** A typed record in a store: survives a re-read, announces only real changes, never destroys what it cannot read. */
 public class ConfigRecordTest {
@@ -19,15 +19,15 @@ public class ConfigRecordTest {
     record Shelf(boolean rows, String pinned) {
         static final Shelf EMPTY = new Shelf(false, "");
 
-        static final Codec<Shelf> CODEC = new Codec<>() {
+        static final CgCodec<Shelf> CODEC = new CgCodec<>() {
             @Override
-            public <T> T encode(DynamicOps<T> ops, Shelf shelf) {
-                return new StateMap<>(ops).putBool("rows", shelf.rows()).putString("pinned", shelf.pinned()).encode();
+            public <T> T encode(CgDynamicOps<T> ops, Shelf shelf) {
+                return new CgStateMap<>(ops).putBool("rows", shelf.rows()).putString("pinned", shelf.pinned()).encode();
             }
 
             @Override
-            public <T> Shelf decode(DynamicOps<T> ops, T input) {
-                StateMap<T> map = new StateMap<>(ops, input);
+            public <T> Shelf decode(CgDynamicOps<T> ops, T input) {
+                CgStateMap<T> map = new CgStateMap<>(ops, input);
                 return new Shelf(map.getBool("rows", false), map.getString("pinned", ""));
             }
         };

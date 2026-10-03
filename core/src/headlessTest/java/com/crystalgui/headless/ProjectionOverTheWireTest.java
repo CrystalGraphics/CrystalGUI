@@ -5,18 +5,18 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.app.machine.MachineModel;
 import com.crystalgui.app.machine.ui.MachinePanel;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowProtocol;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.dom.UIElement;
 import org.junit.After;
 import org.junit.Before;
@@ -37,27 +37,27 @@ import org.junit.Test;
  */
 public class ProjectionOverTheWireTest {
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
     private final MachineModel machine = new MachineModel();
     private ServerWindow<MachinePanel> window;
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
         WindowProtocol.register();
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "player");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         ClientWindows.of(clientEnd).setMount(new SilentMount());
     }
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
     }
 
@@ -217,9 +217,9 @@ public class ProjectionOverTheWireTest {
      */
     @Test
     public void oneViewersActionReachesEveryOtherViewer() {
-        InMemoryTransport<Object>[] second = InMemoryTransport.pair();
-        ProtocolConnection<Object> serverB = Protocols.open(second[0], PlainOps.INSTANCE, () -> { }, "other");
-        ProtocolConnection<Object> clientB = Protocols.open(second[1], PlainOps.INSTANCE, () -> { }, null);
+        CgInMemoryTransport<Object>[] second = CgInMemoryTransport.pair();
+        CgProtocolConnection<Object> serverB = CgProtocols.open(second[0], CgPlainOps.INSTANCE, () -> { }, "other");
+        CgProtocolConnection<Object> clientB = CgProtocols.open(second[1], CgPlainOps.INSTANCE, () -> { }, null);
         ClientWindows.of(clientB).setMount(new SilentMount());
 
         // The SAME model object, opened for two different players.

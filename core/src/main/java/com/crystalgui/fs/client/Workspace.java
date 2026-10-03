@@ -1,10 +1,10 @@
 package com.crystalgui.fs.client;
 
-import com.crystalgui.fs.protocol.ScriptingMode;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.async.UiBudget;
-import com.crystalgui.text.TextPoint;
-import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
@@ -14,9 +14,9 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsHello;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.fs.protocol.ScriptingMode;
+import com.crystalgui.text.TextPoint;
+import com.crystalgui.text.lang.SymbolInfo;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -73,7 +73,7 @@ public final class Workspace implements Disposable {
     /** The greeting arrived, so the server's own facts are now known. */
     public final Signal.Value<FsHello> onDidGreet = new Signal.Value<>();
 
-    private Workspace(FsCall.Caller<Object> caller, Subscriber subscriber, DynamicOps<Object> ops) {
+    private Workspace(FsCall.Caller<Object> caller, Subscriber subscriber, CgDynamicOps<Object> ops) {
         this.calls = new FsCall<>(caller, ops, health);
         this.files = new FileOperations(calls);
         subscribe(subscriber, ops);
@@ -94,7 +94,7 @@ public final class Workspace implements Disposable {
     }
 
     /** The workspace on this connection, created on first ask and shared by every later caller. */
-    public static Workspace of(ProtocolConnection<Object> connection) {
+    public static Workspace of(CgProtocolConnection<Object> connection) {
         return connection.attachment(Workspace.class, wire -> {
             Workspace workspace = new Workspace(wire::call,
                     (method, handler) -> wire.onNotify(method, handler),
@@ -106,7 +106,7 @@ public final class Workspace implements Disposable {
 
     /** For a test, or a host with its own transport. */
     public static Workspace over(FsCall.Caller<Object> caller, Subscriber subscriber,
-                                 DynamicOps<Object> ops) {
+                                 CgDynamicOps<Object> ops) {
         Workspace workspace = new Workspace(caller, subscriber, ops);
         workspace.greet();
         return workspace;
@@ -114,7 +114,7 @@ public final class Workspace implements Disposable {
 
     /** How this workspace hears what the server says without being asked. */
     public interface Subscriber {
-        void subscribe(String method, Consumer<StateMap<Object>> handler);
+        void subscribe(String method, Consumer<CgStateMap<Object>> handler);
     }
 
     // ── The facades ─────────────────────────────────────────────────────────────────────────────
@@ -445,11 +445,11 @@ public final class Workspace implements Disposable {
      * records promises the new peer never made — and change notifications then stop permanently for
      * exactly the files that were open, with no error and no log line.</p>
      */
-    public void rebind(ProtocolConnection<Object> connection) {
+    public void rebind(CgProtocolConnection<Object> connection) {
         rebind(connection::call, connection::onNotify, connection.ops());
     }
 
-    public void rebind(FsCall.Caller<Object> caller, Subscriber subscriber, DynamicOps<Object> ops) {
+    public void rebind(FsCall.Caller<Object> caller, Subscriber subscriber, CgDynamicOps<Object> ops) {
         // NOT A NEW OBJECT: the workbench, the index and every open document hold this one. What moves
         // is where its calls go and who it is listening to.
         this.calls.rebind(caller);
@@ -470,7 +470,7 @@ public final class Workspace implements Disposable {
         onDidReconnect.emit();
     }
 
-    private void subscribe(Subscriber subscriber, DynamicOps<Object> ops) {
+    private void subscribe(Subscriber subscriber, CgDynamicOps<Object> ops) {
         subscriber.subscribe(FsMethods.CHANGED, args ->
                 deliver(FsMessages.changedNotification().decode(ops, args.encode())));
         subscriber.subscribe(FsMethods.PRESENCE, args ->
