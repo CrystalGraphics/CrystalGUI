@@ -1,8 +1,8 @@
 package com.crystalgui.mc.legacy.net;
 
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.net.wire.CgNetworkChannel;
 
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.network.FMLEventChannel;
@@ -11,13 +11,13 @@ import net.minecraftforge.fml.common.network.NetworkRegistry;
 import net.minecraftforge.fml.common.network.internal.FMLProxyPacket;
 import net.minecraftforge.fml.relauncher.Side;
 
+import com.crystalgui.mc.legacy.Game;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import com.crystalgui.mc.legacy.Game;
-import net.minecraft.network.INetHandler;
-import net.minecraft.network.PacketBuffer;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.network.INetHandler;
 import net.minecraft.network.NetHandlerPlayServer;
+import net.minecraft.network.PacketBuffer;
 
 import java.util.function.BiConsumer;
 

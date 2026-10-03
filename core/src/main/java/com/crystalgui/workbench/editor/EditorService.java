@@ -1,6 +1,7 @@
 package com.crystalgui.workbench.editor;
 
-import java.util.Arrays;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.async.ReplyError;
@@ -9,25 +10,24 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.document.Document;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.document.DocumentEditor;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
-import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.workbench.Workbench;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Backup;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.protocol.FsError;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.config.inspector.InspectorRegistry;
+import com.crystalgui.workbench.Workbench;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -87,7 +87,7 @@ public final class EditorService implements Disposable {
      * outlives the document the way the session's own record does. The same shape {@code DockGroup}
      * already keeps for a retargeted pane.</p>
      */
-    private final Map<EditorInput, StateMap<?>> viewStates = new LinkedHashMap<>();
+    private final Map<EditorInput, CgStateMap<?>> viewStates = new LinkedHashMap<>();
 
     /** A tab opened. */
     public final Signal.Value<Tab> onDidOpen = new Signal.Value<>();
@@ -736,7 +736,7 @@ public final class EditorService implements Disposable {
             // WHERE THE FRONT VIEW IS, for a second pane: a split opens on the same place and then goes its own way,
             // as VS Code's fillActiveEditorViewState and IntelliJ's currentStateAsFileEntry do. Else what the file
             // showed when last closed in this session. @see #captureViewState
-            StateMap<?> seed = front != null ? stateOf(front) : viewStates.get(input);
+            CgStateMap<?> seed = front != null ? stateOf(front) : viewStates.get(input);
             if (seed != null) view.editor.readViewState(seed);
             views.add(view);
             if (front == null) front = view;
@@ -756,8 +756,8 @@ public final class EditorService implements Disposable {
             return view;
         }
 
-        private StateMap<?> stateOf(View view) {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+        private CgStateMap<?> stateOf(View view) {
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             view.editor.writeViewState(out);
             return out;
         }

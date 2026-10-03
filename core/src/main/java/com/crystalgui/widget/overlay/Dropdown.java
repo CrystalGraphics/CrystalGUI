@@ -1,23 +1,23 @@
 package com.crystalgui.widget.overlay;
 
-import javax.annotation.Nullable;
-import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.UIElement;
+import javax.annotation.Nullable;
 import lombok.Getter;
 
+import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.widget.control.Button;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import com.crystalgui.widget.control.Button;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.Attribute;
 
 /**
  * A select-style control: a button showing the current choice, which opens a {@link Menu} of options —
@@ -79,10 +79,10 @@ public class Dropdown extends Button {
     public static final Event<Dropdown, Integer> SELECTION = Event.<Dropdown, Integer>of("select",
             (dropdown, sink) -> dropdown.onSelectionChanged.connect(sink::accept),
             new Event.Payload<Integer>() {
-                @Override public <T> void write(StateMap<T> out, Integer value) {
+                @Override public <T> void write(CgStateMap<T> out, Integer value) {
                     out.putInt("index", value);
                 }
-                @Override public <T> Integer read(StateMap<T> in) {
+                @Override public <T> Integer read(CgStateMap<T> in) {
                     return in.getInt("index", -1);
                 }
             }, RatePolicy.IMMEDIATE)

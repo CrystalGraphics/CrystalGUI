@@ -1,5 +1,10 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
@@ -14,11 +19,6 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 
 import org.junit.After;
 import org.junit.Before;
@@ -53,15 +53,15 @@ public class WatcherReachesTheClientTest {
     private WorkspaceService service;
     private WatchHub hub;
     private WorkspaceBinding<Object> binding;
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverSide;
-    private ProtocolConnection<Object> clientSide;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverSide;
+    private CgProtocolConnection<Object> clientSide;
     private Workspace workspace;
     private final List<FsMessages.FileChange> heard = new ArrayList<>();
 
     @Before
     public void setUp() throws IOException {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         root = Files.createTempDirectory("cgui-watch-client");
         ProjectRegistry projects = new ProjectRegistry().register(() -> List.of(
                 new WorkspaceProject(PROJECT, "Proj", root)));
@@ -69,10 +69,10 @@ public class WatcherReachesTheClientTest {
                 WorkspacePermission.ALLOW_ALL);
         hub = new WatchHub(service);
 
-        link = InMemoryTransport.pair();
-        serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-        binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", PlainOps.INSTANCE);
+        link = CgInMemoryTransport.pair();
+        serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
+        binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
 
         workspace = Workspace.of(clientSide);
@@ -85,7 +85,7 @@ public class WatcherReachesTheClientTest {
     @After
     public void tearDown() {
         service.close();
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     /** One frame of the harness's own loop: deliver the wire, drain the watcher, fan out. */
@@ -110,8 +110,8 @@ public class WatcherReachesTheClientTest {
     private void fanOut(Map<Object, List<FsMessages.FileChange>> byPeer) {
         List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
         if (mine.isEmpty()) return;
-        serverSide.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
-                FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+        serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
+                FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
                         new FsMessages.ChangedNotification(mine))));
     }
 

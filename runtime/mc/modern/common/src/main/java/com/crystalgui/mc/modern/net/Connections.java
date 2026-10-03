@@ -1,14 +1,15 @@
 package com.crystalgui.mc.modern.net;
 
+import com.crystalgraphics.net.protocol.CgConnections;
 import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.net.wire.CgNetworkChannel;
 
 import net.minecraft.server.level.ServerPlayer;
 
@@ -16,7 +17,7 @@ import net.minecraft.server.level.ServerPlayer;
  * The peer table for the modern tree. Everything here is vanilla; each loader only forwards its join, leave,
  * connect, disconnect and tick events.
  *
- * <p>The table itself is {@link com.crystalgui.net.protocol.Connections} in {@code core/} -- open/close/route/tick and the rule that
+ * <p>The table itself is {@link CgConnections}, CrystalGraphics' -- open/close/route/tick and the rule that
  * one peer's failure must not stop the others. This is the identity and the outbound route.</p>
  */
 public final class Connections {
@@ -27,8 +28,8 @@ public final class Connections {
     private Connections() {}
 
     private static boolean registered;
-    private static com.crystalgui.net.protocol.Connections server;
-    private static com.crystalgui.net.protocol.Connections client;
+    private static CgConnections server;
+    private static CgConnections client;
 
     public static synchronized void register() {
         if (registered) return;
@@ -39,14 +40,14 @@ public final class Connections {
             return;
         }
 
-        server = new com.crystalgui.net.protocol.Connections("server", channel.maxFrameBytes(), false)
+        server = new CgConnections("server", channel.maxFrameBytes(), false)
                 .onPeerClosed(WorkspaceHostModern::forget);
-        client = new com.crystalgui.net.protocol.Connections("client", channel.maxFrameBytes(), true);
+        client = new CgConnections("client", channel.maxFrameBytes(), true);
         channel.setInboundHandler(Connections::route);
 
         registered = true;
         CrystalGuiCore.LOGGER.info("[cgui-net] connection lifecycle installed; contributors: {}",
-                Protocols.contributors());
+                CgProtocols.contributors());
     }
 
     public static synchronized boolean isRegistered() {
@@ -55,14 +56,14 @@ public final class Connections {
 
     /** The connection to this player, or null when they have none. */
     @Nullable
-    public static ProtocolConnection<Object> forPlayer(@Nullable ServerPlayer player) {
+    public static CgProtocolConnection<Object> forPlayer(@Nullable ServerPlayer player) {
         UUID id = idOf(player);
         return id == null || server == null ? null : server.get(id);
     }
 
     /** The connection to the server, or null when not in a world. Re-asked every frame by the host. */
     @Nullable
-    public static ProtocolConnection<Object> client() {
+    public static CgProtocolConnection<Object> client() {
         return client == null ? null : client.get(CLIENT);
     }
 

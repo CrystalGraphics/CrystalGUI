@@ -1,23 +1,23 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.server.WorkspaceActor;
-import com.crystalgui.fs.server.WorkspacePermission;
-import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.server.WatchHub;
+import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 
 import org.junit.After;
 import org.junit.Before;
@@ -54,9 +54,9 @@ public class WorkspaceReconnectTest {
 
     /** One server end, rebuildable — a reconnect is a second one of these. */
     private static final class Server {
-        final InMemoryTransport<Object>[] link;
-        final ProtocolConnection<Object> serverSide;
-        final ProtocolConnection<Object> clientSide;
+        final CgInMemoryTransport<Object>[] link;
+        final CgProtocolConnection<Object> serverSide;
+        final CgProtocolConnection<Object> clientSide;
         final WorkspaceService service;
         final WatchHub hub;
         final WorkspaceBinding<Object> binding;
@@ -66,11 +66,11 @@ public class WorkspaceReconnectTest {
                     new WorkspaceProject("p", "P", Paths.get("/srv/p"))));
             service = new WorkspaceService(projects, files, WorkspacePermission.ALLOW_ALL);
             hub = new WatchHub(service);
-            link = InMemoryTransport.pair();
-            serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-            clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+            link = CgInMemoryTransport.pair();
+            serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+            clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
             binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, PEER,
-                    PlainOps.INSTANCE);
+                    CgPlainOps.INSTANCE);
             binding.installOn(serverSide::onRequest);
         }
 
@@ -88,8 +88,8 @@ public class WorkspaceReconnectTest {
             Map<Object, List<FsMessages.FileChange>> byPeer = hub.poll(WorkspaceActor.LOCAL);
             List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
             if (mine.isEmpty()) return;
-            serverSide.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
-                    FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+            serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
+                    FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
                             new FsMessages.ChangedNotification(mine))));
         }
     }
@@ -98,7 +98,7 @@ public class WorkspaceReconnectTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         first = new Server(new InMemoryFileSystem().seed("p:a.txt", "one"));
         workspace = Workspace.of(first.clientSide);
         workspace.watch(Resource.of(FILE), false).onChanged.connect(heard::addAll);
@@ -107,12 +107,12 @@ public class WorkspaceReconnectTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     /** Moves this workspace onto a fresh server end and settles both. */
     private Server reconnect(InMemoryFileSystem files) {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         Server next = new Server(files);
         workspace.rebind(next.clientSide);
         next.pump();
@@ -169,8 +169,8 @@ public class WorkspaceReconnectTest {
     /** Pushed state describes a server nobody is talking to any more, so it goes. */
     @Test
     public void aReconnectForgetsWhatTheOldServerPushed() {
-        first.serverSide.notify(FsMethods.PRESENCE, new StateMap<>(PlainOps.INSTANCE,
-                FsMessages.presenceNotification().encode(PlainOps.INSTANCE,
+        first.serverSide.notify(FsMethods.PRESENCE, new CgStateMap<>(CgPlainOps.INSTANCE,
+                FsMessages.presenceNotification().encode(CgPlainOps.INSTANCE,
                         new FsMessages.PresenceNotification(List.of(
                                 new FsMessages.PresenceEntry(FILE.toString(), "bob", true))))));
         first.pump();

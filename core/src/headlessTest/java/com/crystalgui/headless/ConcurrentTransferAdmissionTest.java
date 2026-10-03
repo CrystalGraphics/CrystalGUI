@@ -1,6 +1,6 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.net.wire.FrameMultiplexer;
+import com.crystalgraphics.net.wire.CgFrameMultiplexer;
 
 import org.junit.Test;
 
@@ -19,7 +19,7 @@ import static org.junit.Assert.fail;
  * <p>{@code flush} round-robins across every queued message, so <b>all of them fragment
  * simultaneously</b> and the receiver must buffer all of them at once: reassembly demand is the
  * <em>sum</em> of what is in flight, not the largest of it. Against
- * {@link FrameMultiplexer#MAX_REASSEMBLY_BYTES} that is not a large-file problem at all —
+ * {@link CgFrameMultiplexer#MAX_REASSEMBLY_BYTES} that is not a large-file problem at all —
  * <b>forty 512 KB messages, none of them large, delivered zero</b> and the connection threw at the cap.
  * The plan expected several large transfers together to be the risk; the real one is many ordinary
  * ones, which is far likelier and reads as the connection dying under load.</p>
@@ -41,15 +41,15 @@ public class ConcurrentTransferAdmissionTest {
     private static final int MC_CLIENT_FRAME = 32_766;
 
     private static final class Pair {
-        final FrameMultiplexer a;
-        final FrameMultiplexer b;
+        final CgFrameMultiplexer a;
+        final CgFrameMultiplexer b;
         final List<byte[]> received = new ArrayList<>();
         int peakReassembly;
 
         Pair() {
-            FrameMultiplexer[] slot = new FrameMultiplexer[2];
-            slot[0] = new FrameMultiplexer(MC_CLIENT_FRAME, true, frame -> slot[1].onFrameReceived(frame));
-            slot[1] = new FrameMultiplexer(MC_CLIENT_FRAME, false, frame -> slot[0].onFrameReceived(frame));
+            CgFrameMultiplexer[] slot = new CgFrameMultiplexer[2];
+            slot[0] = new CgFrameMultiplexer(MC_CLIENT_FRAME, true, frame -> slot[1].onFrameReceived(frame));
+            slot[1] = new CgFrameMultiplexer(MC_CLIENT_FRAME, false, frame -> slot[0].onFrameReceived(frame));
             a = slot[0];
             b = slot[1];
             b.setMessageHandler(received::add);
@@ -97,7 +97,7 @@ public class ConcurrentTransferAdmissionTest {
 
         assertEquals("every message must arrive", 40, pair.received.size());
         assertTrue("and the receiver must never have exceeded its own bound: " + pair.peakReassembly,
-                pair.peakReassembly <= FrameMultiplexer.MAX_REASSEMBLY_BYTES);
+                pair.peakReassembly <= CgFrameMultiplexer.MAX_REASSEMBLY_BYTES);
         assertEquals("content must survive the interleaving",
                 512 * 1024, pair.received.get(0).length);
     }
@@ -109,7 +109,7 @@ public class ConcurrentTransferAdmissionTest {
 
         assertEquals(8, pair.received.size());
         assertTrue("peak " + pair.peakReassembly,
-                pair.peakReassembly <= FrameMultiplexer.MAX_REASSEMBLY_BYTES);
+                pair.peakReassembly <= CgFrameMultiplexer.MAX_REASSEMBLY_BYTES);
     }
 
     /** Three 4 MB messages, each individually under the cap and jointly well over it. */
@@ -119,7 +119,7 @@ public class ConcurrentTransferAdmissionTest {
 
         assertEquals(3, pair.received.size());
         assertTrue("peak " + pair.peakReassembly,
-                pair.peakReassembly <= FrameMultiplexer.MAX_REASSEMBLY_BYTES);
+                pair.peakReassembly <= CgFrameMultiplexer.MAX_REASSEMBLY_BYTES);
     }
 
     /** One message under the cap is unaffected — admission must not have introduced a stall. */
@@ -150,7 +150,7 @@ public class ConcurrentTransferAdmissionTest {
 
         assertEquals("exactly one stream refused", 1, pair.b.refusedStreams());
         assertTrue("the reason must name the bound: " + pair.b.lastRefusal(),
-                pair.b.lastRefusal().contains(String.valueOf(FrameMultiplexer.MAX_REASSEMBLY_BYTES)));
+                pair.b.lastRefusal().contains(String.valueOf(CgFrameMultiplexer.MAX_REASSEMBLY_BYTES)));
         assertEquals("and nothing must have been delivered from it", 0, pair.received.size());
     }
 

@@ -11,12 +11,18 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.document.Document;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.document.BytesDocumentModel;
+import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
-import com.crystalgui.document.EditorInput;
 import com.crystalgui.document.DocumentKind;
+import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.CgPath;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -26,11 +32,6 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -38,7 +39,6 @@ import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.editor.EditorService;
-import com.crystalgui.fs.Resource;
 
 /**
  * <b>Closing a tab and reopening it puts the editor back the way it was.</b>
@@ -72,28 +72,28 @@ public class ClosingKeepsViewStateTest extends UiDocumentTestBase {
         }
 
         @Override
-        public <T> void writeViewState(StateMap<T> out) {
+        public <T> void writeViewState(CgStateMap<T> out) {
             writes++;
             out.putString(KEY, value);
         }
 
         @Override
-        public <T> void readViewState(StateMap<T> in) {
+        public <T> void readViewState(CgStateMap<T> in) {
             reads++;
             value = in.getString(KEY, "");
         }
     }
 
     private Workbench workbench;
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     @Before
     public void openWorkbench() {
         ProbeEditor.writes = 0;
         ProbeEditor.reads = 0;
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         InMemoryFileSystem files =
                 new InMemoryFileSystem().seed(PROJECT + ":notes.probe", "nothing in particular");
         WorkspaceService service = new WorkspaceService(
@@ -101,11 +101,11 @@ public class ClosingKeepsViewStateTest extends UiDocumentTestBase {
                         new WorkspaceProject(PROJECT, "Scratch", Paths.get("/srv/scratch")))),
                 files, WorkspacePermission.ALLOW_ALL);
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "host");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
 
         Workspace workspace = Workspace.of(clientEnd);
         workbench = new Workbench(workspace);
@@ -129,7 +129,7 @@ public class ClosingKeepsViewStateTest extends UiDocumentTestBase {
         if (workbench != null) workbench.dispose();
         if (clientEnd != null) clientEnd.close("test over");
         if (serverEnd != null) serverEnd.close("test over");
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void pump() {

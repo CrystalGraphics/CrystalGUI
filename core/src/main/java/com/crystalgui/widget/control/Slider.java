@@ -1,25 +1,25 @@
 package com.crystalgui.widget.control;
 
-import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.service.Drag;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import com.crystalgui.ui.service.Drag;
-import com.crystalgui.ui.box.Box;
 
 /**
  * Continuous or stepped slider.
@@ -89,10 +89,10 @@ public class Slider extends UIElement {
     public static final Event<Slider, Float> VALUE_CHANGED = Event.<Slider, Float>of("value",
             (slider, sink) -> slider.attachListener(sink::accept),
             new Event.Payload<Float>() {
-                @Override public <T> void write(StateMap<T> out, Float value) {
+                @Override public <T> void write(CgStateMap<T> out, Float value) {
                     out.putFloat("value", value);
                 }
-                @Override public <T> Float read(StateMap<T> in) {
+                @Override public <T> Float read(CgStateMap<T> in) {
                     return in.getFloat("value", 0f);
                 }
             }, RatePolicy.DRAGGING)

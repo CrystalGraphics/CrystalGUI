@@ -1,17 +1,17 @@
 package com.crystalgui.net.command;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.serialization.StateMap;
 
-import javax.annotation.Nullable;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
+import javax.annotation.Nullable;
 
 /**
  * The client half of {@code command/*} — server-contributed commands, in this client's registry.
@@ -39,7 +39,7 @@ import java.util.function.Consumer;
  */
 public final class RemoteCommands<T> {
 
-    private final ProtocolConnection<T> connection;
+    private final CgProtocolConnection<T> connection;
     private final CommandRegistry registry;
     private final RemoteCommandPolicy policy;
 
@@ -52,7 +52,7 @@ public final class RemoteCommands<T> {
     @Nullable
     private Consumer<String> onFailure;
 
-    private RemoteCommands(ProtocolConnection<T> connection, CommandRegistry registry,
+    private RemoteCommands(CgProtocolConnection<T> connection, CommandRegistry registry,
                            RemoteCommandPolicy policy) {
         this.connection = connection;
         this.registry = registry;
@@ -71,13 +71,13 @@ public final class RemoteCommands<T> {
      * {@code CommandRegistry.global()} so a test — and a host that wants server commands quarantined —
      * can say where they land.</p>
      */
-    public static <T> RemoteCommands<T> install(ProtocolConnection<T> connection,
+    public static <T> RemoteCommands<T> install(CgProtocolConnection<T> connection,
                                                 CommandRegistry registry) {
         return install(connection, registry, RemoteCommandPolicy.DEFAULT);
     }
 
-    /** @see #install(ProtocolConnection, CommandRegistry) */
-    public static <T> RemoteCommands<T> install(ProtocolConnection<T> connection,
+    /** @see #install(CgProtocolConnection, CommandRegistry) */
+    public static <T> RemoteCommands<T> install(CgProtocolConnection<T> connection,
                                                 CommandRegistry registry,
                                                 RemoteCommandPolicy policy) {
         return new RemoteCommands<>(connection, registry, policy);
@@ -121,8 +121,8 @@ public final class RemoteCommands<T> {
 
     // ── Inbound ─────────────────────────────────────────────────────────────────────────────────
 
-    private void acceptContribution(StateMap<T> in) {
-        for (StateMap<T> entry : in.getList(CommandProtocol.COMMANDS, e -> e)) {
+    private void acceptContribution(CgStateMap<T> in) {
+        for (CgStateMap<T> entry : in.getList(CommandProtocol.COMMANDS, e -> e)) {
             String id = entry.getString(CommandProtocol.ID, "");
 
             String refusal = policy.refuse(id);
@@ -153,8 +153,8 @@ public final class RemoteCommands<T> {
         }
     }
 
-    private void acceptWithdrawal(StateMap<T> in) {
-        for (StateMap<T> entry : in.getList(CommandProtocol.COMMANDS, e -> e)) {
+    private void acceptWithdrawal(CgStateMap<T> in) {
+        for (CgStateMap<T> entry : in.getList(CommandProtocol.COMMANDS, e -> e)) {
             String id = entry.getString(CommandProtocol.ID, "");
             // Only what THIS connection contributed. A server naming an id it never registered must not
             // be able to unregister one of ours -- which the namespace floor already prevents, and this
@@ -165,8 +165,8 @@ public final class RemoteCommands<T> {
         }
     }
 
-    private void acceptEnablement(StateMap<T> in) {
-        for (StateMap<T> entry : in.getList(CommandProtocol.COMMANDS, e -> e)) {
+    private void acceptEnablement(CgStateMap<T> in) {
+        for (CgStateMap<T> entry : in.getList(CommandProtocol.COMMANDS, e -> e)) {
             String id = entry.getString(CommandProtocol.ID, "");
             if (!contributed.contains(id)) continue;
             enablement.put(id, entry.getBool(CommandProtocol.ENABLED, true));
@@ -176,7 +176,7 @@ public final class RemoteCommands<T> {
     // ── Outbound ────────────────────────────────────────────────────────────────────────────────
 
     private void invoke(String id) {
-        StateMap<T> args = new StateMap<>(connection.ops());
+        CgStateMap<T> args = new CgStateMap<>(connection.ops());
         args.putString(CommandProtocol.ID, id);
         connection.call(CommandProtocol.INVOKE, args, null, error -> {
             CrystalGuiCore.LOGGER.warn("[command] '{}' was refused: {}", id, error);

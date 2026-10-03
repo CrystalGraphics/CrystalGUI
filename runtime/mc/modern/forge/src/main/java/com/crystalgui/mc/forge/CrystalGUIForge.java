@@ -2,10 +2,10 @@ package com.crystalgui.mc.forge;
 
 import com.crystalgraphics.mc.modern.platform.ResourceIds;
 import com.crystalgraphics.mc.shared.CrashVariant;
+import com.crystalgraphics.mc.shared.VariantEntry;
+import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
-import com.crystalgraphics.mc.shared.VariantEntry;
-import com.crystalgui.net.wire.CgNetworkChannel;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
@@ -22,11 +22,9 @@ import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?} elif >=1.17 {
 /*import net.minecraftforge.fmlclient.registry.ClientRegistry;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?} else {
 /*import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.DeferredWorkQueue;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?}
 //? if >=1.21.8 {
 /*import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
@@ -86,9 +84,9 @@ import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.network.ChannelBuilder;
 import net.minecraftforge.network.SimpleChannel;
 *///?} elif >=1.18 {
-import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
+import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.network.simple.SimpleChannel;
 //?} elif >=1.17 {
 /*import net.minecraftforge.fmllegacy.network.PacketDistributor;

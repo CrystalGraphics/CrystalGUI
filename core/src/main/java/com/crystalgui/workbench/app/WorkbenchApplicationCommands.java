@@ -2,6 +2,7 @@ package com.crystalgui.workbench.app;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
@@ -9,7 +10,6 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.chrome.palette.CommandPalette;
@@ -88,7 +88,7 @@ public final class WorkbenchApplicationCommands {
                     UIDocument surface = context.data().get(CommandPalette.SURFACE);
                     Box box = surface == null ? null : surface.box();
                     if (box == null) return;
-                    applicationFor(context).saveLayout(PlainOps.INSTANCE,
+                    applicationFor(context).saveLayout(CgPlainOps.INSTANCE,
                             (int) box.width(), (int) box.height());
                 })
                 .enabledWhen(context -> applicationFor(context) != null
@@ -101,7 +101,7 @@ public final class WorkbenchApplicationCommands {
                     // THE REPORT IS THE COMMAND'S, not the application's. `restoreLayout` answers a
                     // boolean because "there is nothing saved yet" and "the blob was refused" are both
                     // ordinary outcomes; only a user who just pressed the key needs telling.
-                    if (!applicationFor(context).restoreLayout(PlainOps.INSTANCE)) {
+                    if (!applicationFor(context).restoreLayout(CgPlainOps.INSTANCE)) {
                         Notifications.show(Notification.info("No saved layout")
                                 .withDetail("nothing to restore yet"));
                     }

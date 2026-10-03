@@ -2,8 +2,8 @@ package com.crystalgui.app.machine;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.app.machine.ui.MachinePanel;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.Presentation;
 import com.crystalgui.net.window.ServerWindows;
@@ -66,7 +66,7 @@ public final class MachineExample {
      *
      * @param connection this client's connection, or null when it is not on a server
      */
-    public static void requestPanel(@Nullable ProtocolConnection<Object> connection) {
+    public static void requestPanel(@Nullable CgProtocolConnection<Object> connection) {
         if (connection == null) {
             MachineTrace.log(MachineTrace.CLIENT, "asked for a panel -- not connected to a server yet");
             return;

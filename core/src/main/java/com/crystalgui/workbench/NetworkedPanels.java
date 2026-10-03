@@ -1,24 +1,24 @@
 package com.crystalgui.workbench;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.Locale;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.Presentation;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
@@ -199,7 +199,7 @@ public final class NetworkedPanels implements WindowMount {
     private void askServerFor(DockPanelRef ref, String typeId, String windowKey) {
         if (asking.contains(typeId + "\0" + windowKey)) return;
         asking.add(typeId + "\0" + windowKey);
-        StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
         if (!windowKey.isEmpty()) args.putString(UiMethods.KEY, windowKey);
         ClientWindows.requestOpen(typeId, args, granted -> {
             asking.remove(typeId + "\0" + windowKey);

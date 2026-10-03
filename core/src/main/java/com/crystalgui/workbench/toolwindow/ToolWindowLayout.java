@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.toolwindow;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionSide;
 
@@ -165,7 +165,7 @@ public final class ToolWindowLayout {
     // ── Serialisation ───────────────────────────────────────────────────────────────────────────
 
     /** Writes every placement into {@code out} under {@code key}, as a list. */
-    public <T> void encodeInto(StateMap<T> out, String key) {
+    public <T> void encodeInto(CgStateMap<T> out, String key) {
         // BESIDE the list rather than in it: it describes the STRIPES, not any one tool window. Additive,
         // so an older record simply reads false and no version moves.
         out.putBool(KEY_SHOW_NAMES, showNames);
@@ -212,7 +212,7 @@ public final class ToolWindowLayout {
      * whole placement — losing a region costs one drag, losing the record costs the size, the order and
      * whether it was open.</p>
      */
-    public static <T> ToolWindowLayout decodeFrom(StateMap<T> in, String key) {
+    public static <T> ToolWindowLayout decodeFrom(CgStateMap<T> in, String key) {
         ToolWindowLayout layout = new ToolWindowLayout();
         layout.showNames = in.getBool(KEY_SHOW_NAMES, false);
         for (ToolWindowState state : in.getList(key, entry -> decodeOne(entry, layout.states.size()))) {
@@ -222,7 +222,7 @@ public final class ToolWindowLayout {
     }
 
     @Nullable
-    private static <T> ToolWindowState decodeOne(StateMap<T> entry, int fallbackOrder) {
+    private static <T> ToolWindowState decodeOne(CgStateMap<T> entry, int fallbackOrder) {
         String id = entry.getString(KEY_ID, "");
         if (id.isEmpty()) return null;
 
@@ -250,7 +250,7 @@ public final class ToolWindowLayout {
                     entry.getFloat(KEY_FLOAT_X, 0f), entry.getFloat(KEY_FLOAT_Y, 0f), width, height));
         }
         // A record written earlier still carries anchor/path/grouped/relative keys. They are simply not
-        // read: an unknown key is ignored by StateMap, and the version bump is what says the omission is
+        // read: an unknown key is ignored by CgStateMap, and the version bump is what says the omission is
         // deliberate rather than a reader that fell behind.
         return state;
     }

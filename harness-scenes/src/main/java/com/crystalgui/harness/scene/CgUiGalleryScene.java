@@ -1,26 +1,17 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.api.text.CgTextStroke;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
+import com.crystalgraphics.harness.FrameInfo;
+import com.crystalgraphics.harness.InteractiveSceneLifecycle;
+import com.crystalgraphics.harness.config.HarnessContext;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import java.util.function.BiConsumer;
-import java.util.Locale;
-import java.util.List;
-import java.util.ArrayList;
-import com.crystalgui.style.property.visual.transform.Transform;
-import com.crystalgui.render.texture.CgUiBackdropFilter;
-import com.crystalgui.style.StyleGroup;
-import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.input.keymap.KeyStroke;
-import com.crystalgui.ui.input.keymap.KeymapResolver;
-import com.crystalgui.ui.input.keymap.Keymap;
-import com.crystalgui.ui.service.Drag;
-import com.crystalgui.ui.box.Box;
+import com.crystalgraphics.render.CgFrameClock;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgui.app.shadergraph.ShaderGraphBridge;
 import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
@@ -31,58 +22,68 @@ import com.crystalgui.core.property.Property;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.port.PortType;
-import com.crystalgui.app.shadergraph.ShaderGraphBridge;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.style.property.visual.Resize;
-import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.style.sheet.StyleSheetRegistry;
-import com.crystalgui.text.syntax.KeywordTokenizer;
-import com.crystalgui.ui.service.AnchoredPlacement;
-import com.crystalgui.ui.dom.DocumentDriver;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.control.Checkbox;
-import com.crystalgui.widget.control.CheckboxGroup;
-import com.crystalgui.widget.composite.ColorSelector;
-import com.crystalgui.widget.overlay.Dialog;
-import com.crystalgui.widget.overlay.DialogManager;
-import com.crystalgui.widget.overlay.Dropdown;
-import com.crystalgui.widget.overlay.Menu;
-import com.crystalgui.widget.scroll.ScrollerView;
-import com.crystalgui.widget.control.Slider;
-import com.crystalgui.widget.layout.SplitView;
-import com.crystalgui.widget.control.Switch;
-import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.widget.layout.TabView;
-import com.crystalgui.widget.control.TextField;
-import com.crystalgui.widget.overlay.Tooltip;
-import com.crystalgui.widget.text.UIText;
-import com.crystalgui.style.property.visual.border.LengthPercent;
+import com.crystalgui.render.texture.CgUiBackdropFilter;
+import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.Resize;
+import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.shadow.Shadow;
 import com.crystalgui.style.property.visual.shadow.ShadowList;
 import com.crystalgui.style.property.visual.text.FontStyle;
 import com.crystalgui.style.property.visual.text.FontWeight;
 import com.crystalgui.style.property.visual.text.PaintOrder;
 import com.crystalgui.style.property.visual.text.StrokeAlign;
-import com.crystalgui.widget.config.ConfiguratorGroup;
-import com.crystalgui.widget.config.ConfiguratorPanel;
-import com.crystalgui.widget.texteditor.TextEditor;
-import com.crystalgui.widget.graph.GraphNode;
-import com.crystalgui.widget.graph.GraphView;
-import com.crystalgui.widget.graph.NodePort;
-import com.crystalgui.widget.graph.NodeWidgetFactory;
+import com.crystalgui.style.property.visual.transform.Transform;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.sheet.StyleSheetRegistry;
+import com.crystalgui.text.TextRange;
+import com.crystalgui.text.syntax.KeywordTokenizer;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.keymap.KeyEventType;
+import com.crystalgui.ui.input.keymap.KeyStroke;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.ui.input.keymap.KeymapResolver;
+import com.crystalgui.ui.service.AnchoredPlacement;
+import com.crystalgui.ui.service.Drag;
+import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeView;
-import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.input.keymap.KeyEventType;
-import com.crystalgui.text.TextRange;
+import com.crystalgui.widget.composite.ColorSelector;
+import com.crystalgui.widget.config.ConfiguratorGroup;
+import com.crystalgui.widget.config.ConfiguratorPanel;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.control.Checkbox;
+import com.crystalgui.widget.control.CheckboxGroup;
+import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.control.Switch;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.graph.GraphNode;
+import com.crystalgui.widget.graph.GraphView;
+import com.crystalgui.widget.graph.NodePort;
+import com.crystalgui.widget.graph.NodeWidgetFactory;
+import com.crystalgui.widget.layout.SplitView;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.overlay.Dialog;
+import com.crystalgui.widget.overlay.DialogManager;
+import com.crystalgui.widget.overlay.Dropdown;
+import com.crystalgui.widget.overlay.Menu;
+import com.crystalgui.widget.overlay.Tooltip;
+import com.crystalgui.widget.scroll.ScrollerView;
+import com.crystalgui.widget.text.UIText;
+import com.crystalgui.widget.texteditor.TextEditor;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
-import com.crystalgraphics.harness.config.HarnessContext;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.function.BiConsumer;
 
 /**
  * Every CrystalGUI widget, one page each, in one navigable window — the front door.
@@ -3369,14 +3370,14 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         });
 
         // 6.2.5's whole point, made visible: the graph on screen IS a document, and a document is bytes.
-        // Save encodes through PlainOps (the server path, no Gson), reload decodes and rebuilds the view
+        // Save encodes through CgPlainOps (the server path, no Gson), reload decodes and rebuilds the view
         // from scratch. Draw anything, save, move things about, reload -- you get the saved graph back,
         // including node ids, so the wires reattach to the ports they were on rather than by position.
         Button save = new Button("save");
         save.addClass("canvas-btn");
         save.attachListener(() -> {
             savedGraph = com.crystalgui.graph.GraphCodecs.DOCUMENT
-                    .encode(com.crystalgui.serialization.PlainOps.INSTANCE, graph.getDocument());
+                    .encode(CgPlainOps.INSTANCE, graph.getDocument());
             updateGraphStatus();
         });
 
@@ -3385,7 +3386,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         reload.attachListener(() -> {
             if (savedGraph == null) return;
             graph.load(com.crystalgui.graph.GraphCodecs.DOCUMENT
-                    .decode(com.crystalgui.serialization.PlainOps.INSTANCE, savedGraph));
+                    .decode(CgPlainOps.INSTANCE, savedGraph));
             updateGraphStatus();
         });
 

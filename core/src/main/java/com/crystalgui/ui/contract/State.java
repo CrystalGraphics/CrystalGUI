@@ -7,7 +7,7 @@ import java.util.function.UnaryOperator;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 
 /**
  * One piece of a widget's <b>authored</b> state, declared once as a {@code static final} on the widget
@@ -228,21 +228,21 @@ public final class State<W, V> {
      * Writes {@code value} straight onto {@code widget}, sanitizer applied.
      *
      * <p>The symmetric partner of {@link #read}, and what a projection uses: the wire path goes through
-     * {@link #apply} because it has a {@code StateMap} to decode, and a model has a value already.</p>
+     * {@link #apply} because it has a {@code CgStateMap} to decode, and a model has a value already.</p>
      */
     public void set(W widget, V value) {
         setter.accept(widget, sanitize == null ? value : sanitize.apply(value));
     }
 
     /** Writes this slot's value, unless it is the omitted-when value. */
-    public <T> void write(W widget, StateMap<T> out) {
+    public <T> void write(W widget, CgStateMap<T> out) {
         V value = getter.apply(widget);
         if (omitWhen != null && Objects.equals(omitWhen, value)) return;
         type.put(out, key, value);
     }
 
     /** Applies this slot from {@code in}, sanitizing first if this slot asked for it. */
-    public <T> void apply(W widget, StateMap<T> in) {
+    public <T> void apply(W widget, CgStateMap<T> in) {
         V value = type.get(in, key, fallback);
         if (sanitize != null) value = sanitize.apply(value);
         setter.accept(widget, value);

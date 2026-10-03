@@ -2,7 +2,7 @@ package com.crystalgui.workbench.extension;
 
 import com.google.gson.JsonElement;
 
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 
 /**
  * <b>An extension's own corner of the session record</b> - what your feature remembers between runs.
@@ -15,8 +15,8 @@ import com.crystalgui.serialization.StateMap;
  * <pre>{@code
  * Disposable slice = workbench.registerSessionSlice(new SessionSlice() {
  *     public String id() { return "crystalgui:explorer"; }
- *     public void write(StateMap<JsonElement> into) { into.putList("expanded", ...); }
- *     public void read(StateMap<JsonElement> from)  { ... }
+ *     public void write(CgStateMap<JsonElement> into) { into.putList("expanded", ...); }
+ *     public void read(CgStateMap<JsonElement> from)  { ... }
  * });
  * }</pre>
  *
@@ -43,11 +43,11 @@ public interface SessionSlice {
     String id();
 
     /** Called when the workbench's arrangement is saved. */
-    void write(StateMap<JsonElement> into);
+    void write(CgStateMap<JsonElement> into);
 
     /**
      * Called when it is restored, with whatever was written last time — <b>or an empty map</b>, which is
      * an ordinary first run and never an error.
      */
-    void read(StateMap<JsonElement> from);
+    void read(CgStateMap<JsonElement> from);
 }

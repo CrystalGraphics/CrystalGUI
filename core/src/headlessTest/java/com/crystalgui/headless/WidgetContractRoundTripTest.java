@@ -9,24 +9,24 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.config.ConfigDescriptor;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.widget.config.control.ArrayControl;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.composite.ColorSelector;
+import com.crystalgui.widget.config.control.ArrayControl;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
-import com.crystalgui.widget.composite.ColorSelector;
-import com.crystalgui.widget.overlay.Dropdown;
-import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.control.Slider;
-import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.control.Switch;
-import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.display.ProgressBar;
+import com.crystalgui.widget.layout.SplitView;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.overlay.Dropdown;
 import com.crystalgui.widget.text.UIText;
 import org.junit.Test;
 
@@ -46,9 +46,9 @@ public class WidgetContractRoundTripTest {
 
     /** Writes {@code from} through its contract and applies it to {@code to}. */
     private static <W extends UIElement> W roundTrip(WidgetContract<W> contract, W from, W to) {
-        StateMap<Object> wire = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> wire = new CgStateMap<>(CgPlainOps.INSTANCE);
         contract.write(from, wire);
-        contract.read(to, new StateMap<>(PlainOps.INSTANCE, wire.encode()));
+        contract.read(to, new CgStateMap<>(CgPlainOps.INSTANCE, wire.encode()));
         return to;
     }
 
@@ -118,9 +118,9 @@ public class WidgetContractRoundTripTest {
         // sanitizedBy. NaN fails every comparison, so a range check written the obvious way passes it
         // through, and it then poisons every layout it reaches.
         Slider to = new Slider();
-        StateMap<Object> wire = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> wire = new CgStateMap<>(CgPlainOps.INSTANCE);
         wire.putFloat("min", 0f).putFloat("max", 1f).putFloat("step", 0f).putFloat("value", Float.NaN);
-        Slider.CONTRACT.read(to, new StateMap<>(PlainOps.INSTANCE, wire.encode()));
+        Slider.CONTRACT.read(to, new CgStateMap<>(CgPlainOps.INSTANCE, wire.encode()));
         assertFalse("a NaN must not reach the widget", Float.isNaN(to.getValue()));
     }
 
@@ -140,9 +140,9 @@ public class WidgetContractRoundTripTest {
         // The guard the hand-written readState had: absent means "leave what is there", not "empty it".
         Dropdown to = new Dropdown("");
         to.addOptions("kept");
-        StateMap<Object> wire = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> wire = new CgStateMap<>(CgPlainOps.INSTANCE);
         wire.putInt("selected", 0);
-        Dropdown.CONTRACT.read(to, new StateMap<>(PlainOps.INSTANCE, wire.encode()));
+        Dropdown.CONTRACT.read(to, new CgStateMap<>(CgPlainOps.INSTANCE, wire.encode()));
         assertEquals(List.of("kept"), to.getOptions());
     }
 
@@ -196,7 +196,7 @@ public class WidgetContractRoundTripTest {
 
     @Test
     public void aDefaultValuedWidgetWritesNothing() {
-        StateMap<Object> wire = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> wire = new CgStateMap<>(CgPlainOps.INSTANCE);
         Button.CONTRACT.write(new Button(""), wire);
         assertTrue("an empty button must carry NO state, not state that happens to be empty -- the "
                 + "description is content-hashed, so present-and-default and absent are different bytes",
@@ -219,8 +219,8 @@ public class WidgetContractRoundTripTest {
 
         assertEquals(7f, heard.get(), 0.001f);
 
-        StateMap<Object> payload = event.encode(PlainOps.INSTANCE, heard.get());
-        assertEquals(7f, event.decode(new StateMap<>(PlainOps.INSTANCE, payload.encode())), 0.001f);
+        CgStateMap<Object> payload = event.encode(CgPlainOps.INSTANCE, heard.get());
+        assertEquals(7f, event.decode(new CgStateMap<>(CgPlainOps.INSTANCE, payload.encode())), 0.001f);
     }
 
     @Test
@@ -281,10 +281,10 @@ public class WidgetContractRoundTripTest {
                 .of("weights", "Weights", ConfigDescriptor.Kind.ARRAY)
                 .element(ConfigDescriptor.number("weights.entry", ""));
         ArrayControl to = new ArrayControl(numbers, null);
-        StateMap<Object> wire = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> wire = new CgStateMap<>(CgPlainOps.INSTANCE);
         wire.putList("entries", List.of("1.5", "not a number", "3"),
                 (entry, item) -> entry.putString("v", item));
-        ArrayControl.CONTRACT.read(to, new StateMap<>(PlainOps.INSTANCE, wire.encode()));
+        ArrayControl.CONTRACT.read(to, new CgStateMap<>(CgPlainOps.INSTANCE, wire.encode()));
 
         assertEquals("the list arrived whole", 3, to.size());
         assertEquals(List.of(1.5d, 0d, 3d), to.getValue());

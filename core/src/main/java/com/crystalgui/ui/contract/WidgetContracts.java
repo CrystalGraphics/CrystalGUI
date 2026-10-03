@@ -1,5 +1,6 @@
 package com.crystalgui.ui.contract;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -140,14 +141,14 @@ public final class WidgetContracts {
      * up the exact class.</p>
      */
     @SuppressWarnings("unchecked")
-    public static <W, T> void writeState(W widget, com.crystalgui.serialization.StateMap<T> out) {
+    public static <W, T> void writeState(W widget, CgStateMap<T> out) {
         WidgetContract<W> contract = (WidgetContract<W>) contracts.get(widget.getClass());
         if (contract != null) contract.write(widget, out);
     }
 
     /** Applies {@code widget}'s contracted state, or nothing if it has no contract. */
     @SuppressWarnings("unchecked")
-    public static <W, T> void readState(W widget, com.crystalgui.serialization.StateMap<T> in) {
+    public static <W, T> void readState(W widget, CgStateMap<T> in) {
         WidgetContract<W> contract = (WidgetContract<W>) contracts.get(widget.getClass());
         if (contract != null) contract.read(widget, in);
     }

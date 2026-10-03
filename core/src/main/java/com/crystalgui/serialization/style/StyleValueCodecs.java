@@ -1,15 +1,15 @@
 package com.crystalgui.serialization.style;
 
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.CodecException;
-import com.crystalgui.serialization.DynamicOps;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecException;
+import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.style.property.StyleProperty;
 
 /**
  * How a style value travels: <b>as the CSS that would produce it</b>.
  *
  * <pre>{@code
- * Codec<Integer> codec = StyleValueCodecs.forProperty(StylePropertyRegistry.COLOR);
+ * CgCodec<Integer> codec = StyleValueCodecs.forProperty(StylePropertyRegistry.COLOR);
  * JsonElement wire = codec.encode(JsonOps.INSTANCE, 0xFF3574F0);   // "#3574F0FF"
  * V value = codec.decode(JsonOps.INSTANCE, wire);
  * }</pre>
@@ -37,20 +37,20 @@ public final class StyleValueCodecs {
     /**
      * The codec for {@code property}, never null.
      *
-     * <p>Decoding throws {@link CodecException} when the text does not parse. That text came from this
+     * <p>Decoding throws {@link CgCodecException} when the text does not parse. That text came from this
      * engine's own writer, so it means the property's reader and its writer disagree — quietly
      * substituting the initial value would put a default where a real one was copied from.</p>
      */
-    public static <V> Codec<V> forProperty(StyleProperty<V> property) {
-        return new Codec<V>() {
+    public static <V> CgCodec<V> forProperty(StyleProperty<V> property) {
+        return new CgCodec<V>() {
 
             @Override
-            public <T> T encode(DynamicOps<T> ops, V value) {
+            public <T> T encode(CgDynamicOps<T> ops, V value) {
                 return ops.createString(property.write(value));
             }
 
             @Override
-            public <T> V decode(DynamicOps<T> ops, T encoded) {
+            public <T> V decode(CgDynamicOps<T> ops, T encoded) {
                 String text = ops.getStringValue(encoded);
                 V parsed = property.valueParser.parse(text).compute();
                 if (parsed == null) {
@@ -58,7 +58,7 @@ public final class StyleValueCodecs {
                     // rest of the page is worth rendering; this text came from our own writer, so null
                     // means the two halves of one property disagree, and quietly substituting a default
                     // would put it somewhere a real value was copied from.
-                    throw new CodecException("Style property '" + property.name
+                    throw new CgCodecException("Style property '" + property.name
                             + "' could not read back what it wrote: '" + text + "'. Its write() and its"
                             + " ValueParser disagree — see StyleValueRoundTripTest.");
                 }

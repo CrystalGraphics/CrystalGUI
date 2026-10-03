@@ -1,15 +1,15 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.Switch;
-import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.text.UIText;
 import com.google.gson.JsonElement;
 import org.junit.Test;
@@ -117,7 +117,7 @@ public class WidgetStateRoundTripTest {
         Slider slider = new Slider();
         slider.setRange(0f, 10f).setValue(7f);
         new UIElementMirror<>(JsonOps.INSTANCE)
-                .applyState(new StateMap<JsonElement>(JsonOps.INSTANCE).encode(), slider);
+                .applyState(new CgStateMap<JsonElement>(JsonOps.INSTANCE).encode(), slider);
         // Absent keys fall back to the documented defaults rather than throwing.
         assertEquals(0f, slider.getValue(), 0.001f);
     }

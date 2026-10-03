@@ -17,20 +17,20 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.protocol.FsMessages;
+import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceHost;
-import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
 
 import java.util.List;
 
@@ -53,20 +53,20 @@ public class WorkspaceHostTest {
 
     private static final String PROJECT = "test.workspace";
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
     private WorkspaceHost host;
 
     @Before
     public void openTheWire() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     @After
     public void closeTheWire() {
         if (host != null) host.reset();
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     /** What a host says about running this workspace's files. @see WorkspaceHost.Host#scripting */
@@ -102,11 +102,11 @@ public class WorkspaceHostTest {
         host = new WorkspaceHost(PROJECT, "Test", hostOver(root));
         host.contribute();
 
-        link = InMemoryTransport.pair();
-        // A PEER, because that is what makes this the server end: Protocols.server only binds where
+        link = CgInMemoryTransport.pair();
+        // A PEER, because that is what makes this the server end: CgProtocols.server only binds where
         // there is one, which is how a single-player process avoids serving itself from its client end.
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "peer");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "peer");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
     }
 
     private void pump() {
@@ -123,7 +123,7 @@ public class WorkspaceHostTest {
         Path root = folder.getRoot().toPath().resolve("crystalgui/workspace");
         serve(root);
 
-        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, PlainOps.INSTANCE);
+        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
         Reply<List<FsMessages.ProjectEntry>> projects = workspace.projects();
         pump();
 
@@ -156,9 +156,9 @@ public class WorkspaceHostTest {
         host = new WorkspaceHost(PROJECT, "Test", hostOver(null));
         host.contribute();
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "peer");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "peer");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         pump();
 
         assertEquals("nothing was bound", 0, host.boundPeerCount());
@@ -192,7 +192,7 @@ public class WorkspaceHostTest {
         scripting = WorkspaceService.ScriptingPolicy.AUTHORIZED_ONLY;
         serve(folder.getRoot().toPath().resolve("crystalgui/workspace"));
 
-        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, PlainOps.INSTANCE);
+        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
         workspace.greet();
         pump();
 
@@ -209,7 +209,7 @@ public class WorkspaceHostTest {
     @Test
     public void aWorkspaceNobodyHasSpokenForRunsLocally() throws IOException {
         serve(folder.getRoot().toPath().resolve("crystalgui/workspace"));
-        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, PlainOps.INSTANCE);
+        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
         workspace.greet();
         pump();
 

@@ -5,15 +5,15 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.UiLimits;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
@@ -31,9 +31,9 @@ import org.junit.Test;
  */
 public class UiLimitsTest {
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
     private ServerUiSession<UIElement, Object> server;
     private ClientUiSession<UIElement, Object> client;
     private UIElement root;
@@ -42,15 +42,15 @@ public class UiLimitsTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         UIElementRegistry.bootstrap();
         root = new UIElement();
         button = new Button("Press");
         root.append(button);
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         server = Sessions.serveOn(1, root, serverEnd);
         client = Sessions.viewOn(clientEnd);
         server.on(button, Button.ACTIVATE, ctx -> presses++);
@@ -60,7 +60,7 @@ public class UiLimitsTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void settle() {
@@ -73,7 +73,7 @@ public class UiLimitsTest {
     }
 
     private void press() {
-        StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
         out.putInt(UiMethods.WINDOW, 1);
         out.putInt("nid", 1);
         out.putString("kind", "activate");

@@ -4,8 +4,8 @@ import java.util.Map;
 
 import com.google.gson.JsonObject;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.UIElement;
@@ -34,6 +34,6 @@ final class TemplateOverrides {
             throw new UiTemplateException(template.origin(), null,
                     "<" + target.tagName() + "> carries no state, so there is nothing to override on it");
         }
-        contract.read(target, new StateMap<>(JsonOps.INSTANCE, state));
+        contract.read(target, new CgStateMap<>(JsonOps.INSTANCE, state));
     }
 }

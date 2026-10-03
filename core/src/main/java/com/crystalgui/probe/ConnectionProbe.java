@@ -12,6 +12,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -19,13 +24,8 @@ import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.server.WorkspaceHost;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.ui.dom.UIElementTreeSource;
@@ -169,11 +169,11 @@ public final class ConnectionProbe {
 
         /** The server-side connection to the first joined player, or null before anybody has. */
         @Nullable
-        ProtocolConnection<Object> connectionToFirstPlayer();
+        CgProtocolConnection<Object> connectionToFirstPlayer();
 
         /** This client's connection to whatever server it is on, or null before there is one. */
         @Nullable
-        ProtocolConnection<Object> clientConnection();
+        CgProtocolConnection<Object> clientConnection();
 
         /**
          * Ends the run.
@@ -293,9 +293,9 @@ public final class ConnectionProbe {
 
     private static Slider serverSlider;
 
-    private static InMemoryTransport<Object>[] extraLink;
-    private static ProtocolConnection<Object> extraServer;
-    private static ProtocolConnection<Object> extraClient;
+    private static CgInMemoryTransport<Object>[] extraLink;
+    private static CgProtocolConnection<Object> extraServer;
+    private static CgProtocolConnection<Object> extraClient;
 
     /** Set once the client's session is listening, so the server does not open into nothing. */
     private static volatile boolean clientReady;
@@ -424,7 +424,7 @@ public final class ConnectionProbe {
             // Waiting, not re-announcing: ServerUiSession.open() throws on a second call, by design --
             // a session is opened once and a reshape is a delta.
             if (!clientReady) return;
-            ProtocolConnection<Object> connection = host.connectionToFirstPlayer();
+            CgProtocolConnection<Object> connection = host.connectionToFirstPlayer();
             if (connection == null) return;
             openServer(connection);
             return;
@@ -445,7 +445,7 @@ public final class ConnectionProbe {
 
         if (!callSent) {
             callSent = true;
-            StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
             args.putString("from", "server");
             server.call("probe/ping", args,
                     result -> {
@@ -469,9 +469,9 @@ public final class ConnectionProbe {
         // world has one connection; the fan-out path itself is the real one.
         if (done(RESHAPE) && !fanoutStarted) {
             fanoutStarted = true;
-            extraLink = InMemoryTransport.pair();
-            extraServer = Protocols.open(extraLink[0], PlainOps.INSTANCE, () -> { }, "probe-viewer");
-            extraClient = Protocols.open(extraLink[1], PlainOps.INSTANCE, () -> { }, null);
+            extraLink = CgInMemoryTransport.pair();
+            extraServer = CgProtocols.open(extraLink[0], CgPlainOps.INSTANCE, () -> { }, "probe-viewer");
+            extraClient = CgProtocols.open(extraLink[1], CgPlainOps.INSTANCE, () -> { }, null);
             ClientUiSession<UIElement, Object> viewer =
                     new ClientUiSession<>(new UIElementMirror<>(extraClient.ops()), extraClient);
             viewer.onWindowOpened(root -> {
@@ -492,7 +492,7 @@ public final class ConnectionProbe {
     }
 
     /** A tree that exercises C3 and C4 as well as the basics. */
-    private static void openServer(ProtocolConnection<Object> connection) {
+    private static void openServer(CgProtocolConnection<Object> connection) {
         UIElement root = new UIElement();
         root.append(new UIText("hello from the server"));
 
@@ -587,7 +587,7 @@ public final class ConnectionProbe {
         }
 
         if (client == null) {
-            ProtocolConnection<Object> connection = host.clientConnection();
+            CgProtocolConnection<Object> connection = host.clientConnection();
             if (connection == null) {
                 if (++ticks % 100 == 0) {
                     CrystalGuiCore.LOGGER.info("[probe] in a world, waiting for a connection ({} ticks)",
@@ -631,7 +631,7 @@ public final class ConnectionProbe {
         else if (ticks > DEADLINE_TICKS) finish(host, false, "timed out");
     }
 
-    private static void openClient(ProtocolConnection<Object> connection) {
+    private static void openClient(CgProtocolConnection<Object> connection) {
         UIElementRegistry.bootstrap();
         ClientUiSession<UIElement, Object> session =
                 new ClientUiSession<>(new UIElementMirror<>(connection.ops()), connection);
@@ -641,7 +641,7 @@ public final class ConnectionProbe {
                     root == null ? -1 : root.children().size());
         });
         session.onCall("probe/ping", (args, respond) -> {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             out.putString("pong", args.getString("from", "?"));
             respond.ok(out);
         });
@@ -729,7 +729,7 @@ public final class ConnectionProbe {
     @Nullable
     private static Workspace workspace(Host host) {
         if (files != null) return files;
-        ProtocolConnection<Object> connection = host.clientConnection();
+        CgProtocolConnection<Object> connection = host.clientConnection();
         if (connection == null) return null;
         files = Workspace.of(connection);
         return files;

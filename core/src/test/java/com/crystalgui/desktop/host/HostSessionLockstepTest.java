@@ -1,11 +1,11 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.ui.dom.UIElement;
 import org.junit.After;
 import org.junit.Test;
@@ -74,7 +74,7 @@ public class HostSessionLockstepTest {
             @Override public int surfaceWidth() { return 1280; }
             @Override public int surfaceHeight() { return 720; }
             @Override public String desktopId() { return "lockstep"; }
-            @Override public ProtocolConnection<Object> connection() { return null; }
+            @Override public CgProtocolConnection<Object> connection() { return null; }
             @Override public Locale locale() { return Locale.getDefault(); }
             @Override public void reinjectKey(CgSystemInput.Keyboard.Event key) { }
             @Override public HostThread.Binding clientThread() { return null; }

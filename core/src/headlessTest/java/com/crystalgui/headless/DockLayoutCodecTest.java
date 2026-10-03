@@ -1,13 +1,14 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.serialization.PlainOps;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockOrientation;
-import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
+import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import org.junit.Test;
 
@@ -67,9 +68,9 @@ public class DockLayoutCodecTest {
         a.size(3f);
         layout.maximize(c);
 
-        Object encoded = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 1280f, 720f);
+        Object encoded = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 1280f, 720f);
         DockLayout restored =
-                DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("A", "B", "C"));
+                DockLayoutCodec.decode(encoded, CgPlainOps.INSTANCE, registryOf("A", "B", "C"));
 
         assertNotNull(restored);
         assertEquals("A,B,C", ids(restored));
@@ -87,8 +88,8 @@ public class DockLayoutCodecTest {
                 Map.of("file", "mymod.proj:src/main.glsl"));
         DockLayout layout = DockLayout.of(new DockLeaf(ref));
 
-        Object encoded = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f);
-        DockLayout restored = DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("editor"));
+        Object encoded = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f);
+        DockLayout restored = DockLayoutCodec.decode(encoded, CgPlainOps.INSTANCE, registryOf("editor"));
 
         assertNotNull(restored);
         assertEquals("mymod.proj:src/main.glsl",
@@ -104,8 +105,8 @@ public class DockLayoutCodecTest {
         leaf.activate(0);
         DockLayout layout = DockLayout.of(leaf);
 
-        Object encoded = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f);
-        DockLayout restored = DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("A", "B"));
+        Object encoded = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f);
+        DockLayout restored = DockLayoutCodec.decode(encoded, CgPlainOps.INSTANCE, registryOf("A", "B"));
 
         assertNotNull(restored);
         assertEquals(0, restored.leaves().get(0).activeIndex());
@@ -118,8 +119,8 @@ public class DockLayoutCodecTest {
         DockLayout layout = DockLayout.of(a);
         layout.drop(a, DockDropZone.SPLIT_RIGHT, leaf("B"));
 
-        Object first = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f);
-        Object second = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f);
+        Object first = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f);
+        Object second = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f);
 
         assertEquals(first.toString(), second.toString());
     }
@@ -136,25 +137,25 @@ public class DockLayoutCodecTest {
     @Test
     public void anUnknownVersionIsDiscarded() {
         DockLayout layout = DockLayout.of(leaf("A"));
-        String encoded = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f).toString();
+        String encoded = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f).toString();
 
         // Whatever the shape, a future version number must not be read by this build.
-        Object bumped = new com.crystalgui.serialization.StateMap<>(PlainOps.INSTANCE)
+        Object bumped = new CgStateMap<>(CgPlainOps.INSTANCE)
                 .putInt("version", DockLayoutCodec.VERSION + 1)
                 .putEnum("rootOrientation", DockOrientation.HORIZONTAL)
                 .encode();
 
-        assertNull(DockLayoutCodec.decode(bumped, PlainOps.INSTANCE, registryOf("A")));
+        assertNull(DockLayoutCodec.decode(bumped, CgPlainOps.INSTANCE, registryOf("A")));
         assertTrue("sanity: the real version does decode", encoded.contains("version"));
     }
 
     /** Nonsense in the version slot is the same case as a future version. */
     @Test
     public void aMissingVersionIsDiscarded() {
-        Object bare = new com.crystalgui.serialization.StateMap<>(PlainOps.INSTANCE)
+        Object bare = new CgStateMap<>(CgPlainOps.INSTANCE)
                 .putString("root", "nonsense")
                 .encode();
-        assertNull(DockLayoutCodec.decode(bare, PlainOps.INSTANCE, registryOf("A")));
+        assertNull(DockLayoutCodec.decode(bare, CgPlainOps.INSTANCE, registryOf("A")));
     }
 
     // ── Rule 2: an unknown panel type is dropped, the rest survives ─────────────────────────────
@@ -174,8 +175,8 @@ public class DockLayoutCodecTest {
         DockLeaf c = leaf("C");
         layout.drop(gone, DockDropZone.SPLIT_DOWN, c);
 
-        Object encoded = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f);
-        DockLayout restored = DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("A", "C"));
+        Object encoded = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f);
+        DockLayout restored = DockLayoutCodec.decode(encoded, CgPlainOps.INSTANCE, registryOf("A", "C"));
 
         assertNotNull("the restore must not fail", restored);
         assertEquals("A,C", ids(restored));
@@ -195,8 +196,8 @@ public class DockLayoutCodecTest {
         DockLeaf y = leaf("Y");
         layout.drop(x, DockDropZone.SPLIT_DOWN, y);   // a whole branch of X and Y, both unknown later
 
-        Object encoded = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f);
-        DockLayout restored = DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("A"));
+        Object encoded = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f);
+        DockLayout restored = DockLayoutCodec.decode(encoded, CgPlainOps.INSTANCE, registryOf("A"));
 
         assertNotNull(restored);
         assertEquals("A", ids(restored));
@@ -207,9 +208,9 @@ public class DockLayoutCodecTest {
     @Test
     public void aLayoutOfNothingButUnknownPanelsIsDiscarded() {
         DockLayout layout = DockLayout.of(leaf("gone"));
-        Object encoded = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f);
+        Object encoded = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f);
 
-        assertNull(DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("something-else")));
+        assertNull(DockLayoutCodec.decode(encoded, CgPlainOps.INSTANCE, registryOf("something-else")));
     }
 
     /** A central leaf emptied by rule 2 beside a sibling hands the role on rather than restoring a blank half. */
@@ -220,8 +221,8 @@ public class DockLayoutCodecTest {
         DockLayout layout = DockLayout.of(central);
         layout.drop(central, DockDropZone.SPLIT_RIGHT, leaf("side"));
 
-        Object encoded = DockLayoutCodec.encode(layout, PlainOps.INSTANCE, 800f, 600f);
-        DockLayout restored = DockLayoutCodec.decode(encoded, PlainOps.INSTANCE, registryOf("side"));
+        Object encoded = DockLayoutCodec.encode(layout, CgPlainOps.INSTANCE, 800f, 600f);
+        DockLayout restored = DockLayoutCodec.decode(encoded, CgPlainOps.INSTANCE, registryOf("side"));
 
         assertNotNull(restored);
         assertEquals("one leaf, and it is central", 1, restored.leaves().size());

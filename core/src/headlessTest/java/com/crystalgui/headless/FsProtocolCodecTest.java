@@ -1,13 +1,13 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsHello;
 import com.crystalgui.fs.protocol.FsMessages;
-import com.crystalgui.fs.CgFileError;
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.PlainOps;
 
 import org.junit.Test;
 
@@ -29,19 +29,19 @@ import static org.junit.Assert.assertTrue;
  * arrival, and every observable on both sides looks right — which is how identity deltas came to be
  * encoded and never applied (N27's sibling, one layer up).</p>
  *
- * <p>Both {@code JsonOps} and {@code PlainOps}, because the protocol is used over the binary transport
+ * <p>Both {@code JsonOps} and {@code CgPlainOps}, because the protocol is used over the binary transport
  * and read in a log, and a codec that only works over one of them is a codec that fails whenever
  * somebody looks at it.</p>
  */
 public class FsProtocolCodecTest {
 
     /** Encodes and decodes through both ops, asserting the value survives each. */
-    private static <A> void roundTrips(Codec<A> codec, A value) {
-        assertEquals("over PlainOps", value, through(codec, PlainOps.INSTANCE, value));
+    private static <A> void roundTrips(CgCodec<A> codec, A value) {
+        assertEquals("over CgPlainOps", value, through(codec, CgPlainOps.INSTANCE, value));
         assertEquals("over JsonOps", value, through(codec, JsonOps.INSTANCE, value));
     }
 
-    private static <A, T> A through(Codec<A> codec, DynamicOps<T> ops, A value) {
+    private static <A, T> A through(CgCodec<A> codec, CgDynamicOps<T> ops, A value) {
         return codec.decode(ops, codec.encode(ops, value));
     }
 
@@ -72,7 +72,7 @@ public class FsProtocolCodecTest {
         byte[] content = "class Main {}\n".getBytes(StandardCharsets.UTF_8);
         FsMessages.WriteRequest sent =
                 new FsMessages.WriteRequest("proj:a.java", content, "12:34", false, true, "op-2");
-        FsMessages.WriteRequest back = through(FsMessages.writeRequest(), PlainOps.INSTANCE, sent);
+        FsMessages.WriteRequest back = through(FsMessages.writeRequest(), CgPlainOps.INSTANCE, sent);
 
         assertEquals(sent.path(), back.path());
         assertArrayEquals(content, back.content());
@@ -98,17 +98,17 @@ public class FsProtocolCodecTest {
     public void aReadResponseRoundTripsInAllThreeOfItsShapes() {
         byte[] content = "hi".getBytes(StandardCharsets.UTF_8);
 
-        FsMessages.ReadResponse inline = through(FsMessages.readResponse(), PlainOps.INSTANCE,
+        FsMessages.ReadResponse inline = through(FsMessages.readResponse(), CgPlainOps.INSTANCE,
                 new FsMessages.ReadResponse("12:2", content, false, "", 2));
         assertArrayEquals(content, inline.content());
         assertEquals("12:2", inline.etag());
 
-        FsMessages.ReadResponse unchanged = through(FsMessages.readResponse(), PlainOps.INSTANCE,
+        FsMessages.ReadResponse unchanged = through(FsMessages.readResponse(), CgPlainOps.INSTANCE,
                 new FsMessages.ReadResponse("12:2", new byte[0], true, "", 2));
         assertTrue(unchanged.unchanged());
         assertEquals(0, unchanged.content().length);
 
-        FsMessages.ReadResponse chunked = through(FsMessages.readResponse(), PlainOps.INSTANCE,
+        FsMessages.ReadResponse chunked = through(FsMessages.readResponse(), CgPlainOps.INSTANCE,
                 new FsMessages.ReadResponse("12:900", new byte[0], false, "t-1", 900));
         assertEquals("t-1", chunked.transfer());
         assertEquals(900L, chunked.size());
@@ -165,7 +165,7 @@ public class FsProtocolCodecTest {
                 new FsMessages.FileChange("proj:to.txt", FsMessages.ChangeKind.RENAMED, "3:1",
                         "proj:from.txt")));
         FsMessages.ChangedNotification back =
-                through(FsMessages.changedNotification(), PlainOps.INSTANCE, sent);
+                through(FsMessages.changedNotification(), CgPlainOps.INSTANCE, sent);
 
         assertEquals(4, back.changes().size());
         assertEquals(FsMessages.ChangeKind.RENAMED, back.changes().get(3).kind());
@@ -204,11 +204,11 @@ public class FsProtocolCodecTest {
         // Built through the ops rather than parsed from text, because the property under test is the
         // READER's tolerance and not the parser's: a map with a field the record has no slot for.
         java.util.Map<Object, Object> raw = new java.util.LinkedHashMap<>();
-        raw.put(PlainOps.INSTANCE.createString("path"), PlainOps.INSTANCE.createString("proj:a.txt"));
-        raw.put(PlainOps.INSTANCE.createString("op"), PlainOps.INSTANCE.createString("op-1"));
-        raw.put(PlainOps.INSTANCE.createString("somethingNewer"), PlainOps.INSTANCE.createNumber(42));
+        raw.put(CgPlainOps.INSTANCE.createString("path"), CgPlainOps.INSTANCE.createString("proj:a.txt"));
+        raw.put(CgPlainOps.INSTANCE.createString("op"), CgPlainOps.INSTANCE.createString("op-1"));
+        raw.put(CgPlainOps.INSTANCE.createString("somethingNewer"), CgPlainOps.INSTANCE.createNumber(42));
         FsMessages.PathRequest back = FsMessages.pathRequest()
-                .decode(PlainOps.INSTANCE, PlainOps.INSTANCE.createMap(raw));
+                .decode(CgPlainOps.INSTANCE, CgPlainOps.INSTANCE.createMap(raw));
 
         assertEquals("proj:a.txt", back.path());
         assertEquals("op-1", back.op());

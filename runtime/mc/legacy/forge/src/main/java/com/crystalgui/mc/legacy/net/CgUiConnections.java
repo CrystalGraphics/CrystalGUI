@@ -4,24 +4,24 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgConnections;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.legacy.probe.CgUiServerSmoke;
-import com.crystalgui.net.protocol.Connections;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.net.wire.CgNetworkChannel;
 
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.entity.player.EntityPlayerMP;
 
 /**
- * <b>FML's lifecycle, turned into {@link Connections} calls</b> - and nothing else.
+ * <b>FML's lifecycle, turned into {@link CgConnections} calls</b> - and nothing else.
  *
  * <p>Four events, the channel, and the one translation only this platform can do: an entity into a
  * stable identity. The peer table, the multiplexers, the routing, the close semantics and the tick
@@ -60,10 +60,10 @@ public final class CgUiConnections {
     private static final Object CLIENT = "client";
 
     @Nullable
-    private static Connections server;
+    private static CgConnections server;
 
     @Nullable
-    private static volatile Connections client;
+    private static volatile CgConnections client;
 
     private static boolean registered;
 
@@ -86,14 +86,14 @@ public final class CgUiConnections {
             return;
         }
         // The SERVER is not the initiator: odd/even stream ids, as HTTP/2 splits them.
-        server = new Connections("server", channel.maxFrameBytes(), false)
+        server = new CgConnections("server", channel.maxFrameBytes(), false)
                 .onPeerClosed(CgUiWorkspaceHost::forget);
-        client = new Connections("client", channel.maxFrameBytes(), true);
+        client = new CgConnections("client", channel.maxFrameBytes(), true);
         channel.setInboundHandler(CgUiConnections::route);
         FMLCommonHandler.instance().bus().register(new Handler());
         registered = true;
         CrystalGuiCore.LOGGER.info("[cgui-net] connection lifecycle installed; contributors: {}",
-                Protocols.contributors());
+                CgProtocols.contributors());
     }
 
     /**
@@ -110,7 +110,7 @@ public final class CgUiConnections {
 
     /** The connection to this player, or {@code null} if they have none — they left, or never had one. */
     @Nullable
-    public static ProtocolConnection<Object> forPlayer(EntityPlayer player) {
+    public static CgProtocolConnection<Object> forPlayer(EntityPlayer player) {
         UUID id = idOf(player);
         return id == null || server == null ? null : server.get(id);
     }
@@ -124,8 +124,8 @@ public final class CgUiConnections {
 
     /** This client's connection to the server, or {@code null} when not in a world. */
     @Nullable
-    public static ProtocolConnection<Object> client() {
-        Connections table = client;
+    public static CgProtocolConnection<Object> client() {
+        CgConnections table = client;
         return table == null ? null : table.get(CLIENT);
     }
 
@@ -143,7 +143,7 @@ public final class CgUiConnections {
      */
     private static void route(@Nullable Object sender, byte[] frame) {
         if (sender == null) {
-            Connections table = client;
+            CgConnections table = client;
             if (table != null) table.route(CLIENT, frame);
             return;
         }
@@ -199,7 +199,7 @@ public final class CgUiConnections {
 
         @SubscribeEvent
         public void onClientDisconnected(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
-            Connections table = client;
+            CgConnections table = client;
             if (table != null && table.close(CLIENT, "disconnected")) {
                 CrystalGuiCore.LOGGER.info("[cgui-net] client connection closed");
             }
@@ -214,7 +214,7 @@ public final class CgUiConnections {
         @SubscribeEvent
         public void onClientTick(TickEvent.ClientTickEvent event) {
             if (event.phase != TickEvent.Phase.START) return;
-            Connections table = client;
+            CgConnections table = client;
             if (table != null) table.tick();
         }
     }
@@ -231,7 +231,7 @@ public final class CgUiConnections {
         int had = openConnections();
         CgUiWorkspaceHost.reset();
         if (server != null) server.closeAll(reason);
-        Connections table = client;
+        CgConnections table = client;
         if (table != null) table.closeAll(reason);
         if (had > 0) CrystalGuiCore.LOGGER.info("[cgui-net] closed {} connection(s): {}", had, reason);
     }

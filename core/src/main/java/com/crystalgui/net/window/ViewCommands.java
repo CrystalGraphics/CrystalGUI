@@ -1,11 +1,11 @@
 package com.crystalgui.net.window;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ViewCommand;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.TreeSource;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.overlay.Dialog;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.overlay.Tooltip;
@@ -36,7 +36,7 @@ final class ViewCommands {
     /**
      * @param window the host's handle, for the commands that are about the window rather than the tree
      */
-    static void apply(String command, StateMap<Object> in, TreeSource<UIElement> ids,
+    static void apply(String command, CgStateMap<Object> in, TreeSource<UIElement> ids,
                       UIElement root, @Nullable WindowMount.MountedWindow window) {
         try {
             switch (command) {
@@ -84,7 +84,7 @@ final class ViewCommands {
         }
     }
 
-    private static void onElement(StateMap<Object> in, TreeSource<UIElement> ids,
+    private static void onElement(CgStateMap<Object> in, TreeSource<UIElement> ids,
                                   java.util.function.Consumer<UIElement> body) {
         UIElement target = ids.byId(in.getInt(ViewCommand.NID, -1));
         // A command about an element that has since gone is not an error. The tree moves and messages
@@ -104,7 +104,7 @@ final class ViewCommands {
         if (window != null) window.focus().requestFocus(element);
     }
 
-    private static void openMenu(StateMap<Object> in, TreeSource<UIElement> ids) {
+    private static void openMenu(CgStateMap<Object> in, TreeSource<UIElement> ids) {
         UIElement target = ids.byId(in.getInt(ViewCommand.NID, -1));
         if (!(target instanceof Popover)) return;
         UIElement anchor = ids.byId(in.getInt(ViewCommand.ANCHOR, -1));
@@ -115,7 +115,7 @@ final class ViewCommands {
         ((Popover) target).showFor(anchor, null);
     }
 
-    private static void tooltip(StateMap<Object> in, TreeSource<UIElement> ids, String text) {
+    private static void tooltip(CgStateMap<Object> in, TreeSource<UIElement> ids, String text) {
         UIElement target = ids.byId(in.getInt(ViewCommand.NID, -1));
         if (target == null || text.isEmpty()) return;
         Tooltip.attach(target, text);

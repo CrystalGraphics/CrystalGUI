@@ -1,18 +1,18 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.ui.dom.UIElement;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.workbench.dock.panel.DockInput;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
+import com.crystalgui.workbench.dock.layout.DockPanelRef;
+import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.panel.DockPane;
 import com.crystalgui.workbench.dock.panel.DockPaneProvider;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
-import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import org.junit.Before;
@@ -58,12 +58,12 @@ public class DockPaneLifecycleTest extends UiDocumentTestBase {
         @Override public void onVisible() { events.add("onVisible"); }
         @Override public void onHidden() { events.add("onHidden"); }
 
-        @Override public void writeViewState(StateMap<?> out) {
+        @Override public void writeViewState(CgStateMap<?> out) {
             events.add("write");
             out.putString("caret", "at:" + (input == null ? "?" : input.resource()));
         }
 
-        @Override public void readViewState(StateMap<?> in) {
+        @Override public void readViewState(CgStateMap<?> in) {
             events.add("read");
             restored = in.getString("caret", "");
         }
