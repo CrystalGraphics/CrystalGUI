@@ -8,6 +8,7 @@ import java.util.TreeMap;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.probe.CgWorldProbe;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.core.notify.Notification;
@@ -192,6 +193,8 @@ public final class AutoTest {
     /** How long the first capture waits past its due point for the desktop to be ready. */
     private static final long PAINT_GRACE_NANOS = 15_000_000_000L;
     private static boolean capturedLate;
+    /** Captured and ready to quit, but held while the world probe runs. */
+    private static boolean quitPending;
     /** Calls to {@link #settled} since the desktop opened: the clock {@link #onFrame} counts on. */
     private static int settledSinceOpen;
 
@@ -241,7 +244,16 @@ public final class AutoTest {
      * <p>Called with a monotonic count — painted frames on one era, ticks on another. @see Host</p>
      */
     public static void settled(Host host, int sinceOpen) {
-        if (!ENABLED || !opened || capturedLate) return;
+        if (!ENABLED || !opened) return;
+        // CrystalGraphics' world probe reports on its own clock; quitting under it loses its result.
+        if (quitPending) {
+            if (!CgWorldProbe.running()) {
+                quitPending = false;
+                host.quit();
+            }
+            return;
+        }
+        if (capturedLate) return;
         runSteps(++settledSinceOpen);
 
         // READY IS WHAT THE CAPTURE PHOTOGRAPHS: the application launched and a frame painted. A desktop on its own
@@ -264,7 +276,7 @@ public final class AutoTest {
             // NOTHING LEFT TO TAKE THE SECOND WITH, so the first must not quit when one is wanted.
             if (host.lateCaptureAt() <= 0) {
                 capturedLate = true;
-                host.quit();
+                quitPending = true;
             }
             return;
         }
@@ -273,7 +285,7 @@ public final class AutoTest {
             capturedLate = true;
             CrystalGuiCore.LOGGER.info("CGUI AUTOTEST {}", StageProbe.report());
             host.capture(lateCapture());
-            host.quit();
+            quitPending = true;
         }
     }
 

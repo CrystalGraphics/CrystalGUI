@@ -10,14 +10,14 @@ import java.util.function.UnaryOperator;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.app.uibuilder.library.LibraryCatalog.Group;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigRecord;
 import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.Codecs;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.Name;
 
 /**
@@ -81,10 +81,10 @@ public final class UserLibrary {
             return List.copyOf(out);
         }
 
-        static final Codec<State> CODEC = new Codec<>() {
+        static final CgCodec<State> CODEC = new CgCodec<>() {
             @Override
-            public <T> T encode(DynamicOps<T> ops, State state) {
-                return new StateMap<>(ops)
+            public <T> T encode(CgDynamicOps<T> ops, State state) {
+                return new CgStateMap<>(ops)
                         .putBool("rows", state.rows())
                         .putList("groups", state.groups(), (entry, group) -> entry
                                 .putString("name", group.label())
@@ -93,26 +93,26 @@ public final class UserLibrary {
             }
 
             @Override
-            public <T> State decode(DynamicOps<T> ops, T input) {
-                StateMap<T> map = new StateMap<>(ops, input);
+            public <T> State decode(CgDynamicOps<T> ops, T input) {
+                CgStateMap<T> map = new CgStateMap<>(ops, input);
                 List<Group> groups = map.getList("groups", entry -> new Group(entry.getString("name", ""),
                         entry.has("kinds") ? KINDS.decode(ops, entry.getRaw("kinds")) : List.of(), true));
                 return new State(map.getBool("rows", false), groups);
             }
         };
 
-        private static final Codec<List<Name>> KINDS = new Codec<>() {
+        private static final CgCodec<List<Name>> KINDS = new CgCodec<>() {
             @Override
-            public <T> T encode(DynamicOps<T> ops, List<Name> kinds) {
+            public <T> T encode(CgDynamicOps<T> ops, List<Name> kinds) {
                 List<String> text = new ArrayList<>(kinds.size());
                 for (Name kind : kinds) text.add(kind.toString());
-                return Codecs.listOf(Codecs.STRING).encode(ops, text);
+                return CgCodecs.listOf(CgCodecs.STRING).encode(ops, text);
             }
 
             @Override
-            public <T> List<Name> decode(DynamicOps<T> ops, T input) {
+            public <T> List<Name> decode(CgDynamicOps<T> ops, T input) {
                 List<Name> kinds = new ArrayList<>();
-                for (String text : Codecs.listOf(Codecs.STRING).decode(ops, input)) kinds.add(Name.parse(text));
+                for (String text : CgCodecs.listOf(CgCodecs.STRING).decode(ops, input)) kinds.add(Name.parse(text));
                 return List.copyOf(kinds);
             }
         };

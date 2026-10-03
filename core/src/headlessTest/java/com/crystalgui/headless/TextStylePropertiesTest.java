@@ -1,9 +1,9 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.TextField;
@@ -100,7 +100,7 @@ public class TextStylePropertiesTest {
                 .caretWidth(4f)
                 .selectionColor(0x40FF00FF);
 
-        for (DynamicOps<?> ops : new DynamicOps<?>[]{JsonOps.INSTANCE, PlainOps.INSTANCE}) {
+        for (CgDynamicOps<?> ops : new CgDynamicOps<?>[]{JsonOps.INSTANCE, CgPlainOps.INSTANCE}) {
             var style = roundTrip(element, ops).getStyle().getGeneralGroup();
             assertEquals(1.75f, style.lineHeight(), 0.0001f);
             assertEquals(4f, style.caretWidth(), 0.0001f);
@@ -108,7 +108,7 @@ public class TextStylePropertiesTest {
         }
     }
 
-    private static <T> UIElement roundTrip(UIElement source, DynamicOps<T> ops) {
+    private static <T> UIElement roundTrip(UIElement source, CgDynamicOps<T> ops) {
         return new UIElementMirror<>(ops).decode(new UIElementMirror<>(ops).describe(source));
     }
 

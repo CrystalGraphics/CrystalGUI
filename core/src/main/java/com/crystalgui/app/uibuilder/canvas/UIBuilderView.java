@@ -4,30 +4,30 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgui.app.uibuilder.BuilderCommands;
 import com.crystalgui.app.uibuilder.BuilderOverlaysExtension;
 import com.crystalgui.app.uibuilder.BuilderSelection;
-import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.canvas.transform.TransformOptionsBar;
-import com.crystalgui.app.uibuilder.BuilderCommands;
+import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.app.uibuilder.style.SheetDocuments;
 import com.crystalgui.app.uibuilder.insert.BuilderInsert;
+import com.crystalgui.app.uibuilder.style.SheetDocuments;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.widget.layout.ContextToolbar;
-import com.crystalgui.widget.overlay.ContextMenu;
-import com.crystalgui.widget.surface.mode.ToolKind;
-import com.crystalgui.core.undo.CompositeEdit;
-import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgui.core.undo.CompositeEdit;
+import com.crystalgui.core.undo.Edit;
 import com.crystalgui.document.DocumentEditor;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.layout.ContextToolbar;
+import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.surface.mode.SelectExtension;
+import com.crystalgui.widget.surface.mode.ToolKind;
 
 /**
  * One pane onto a {@code .cgui}: an artboard on a pan-and-zoom surface, holding this pane's copy of the document's
@@ -382,7 +382,7 @@ public final class UIBuilderView implements DocumentEditor {
      * moved writes almost nothing.</p>
      */
     @Override
-    public <T> void writeViewState(StateMap<T> out) {
+    public <T> void writeViewState(CgStateMap<T> out) {
         out.putFloat(ZOOM, surface.surface().zoom());
         if (surface.surface().panX() != 0f) out.putFloat(PAN_X, surface.surface().panX());
         if (surface.surface().panY() != 0f) out.putFloat(PAN_Y, surface.surface().panY());
@@ -392,7 +392,7 @@ public final class UIBuilderView implements DocumentEditor {
     }
 
     @Override
-    public <T> void readViewState(StateMap<T> in) {
+    public <T> void readViewState(CgStateMap<T> in) {
         if (in.has(ZOOM)) surface.surface().setZoom(in.getFloat(ZOOM, 1f));
         surface.surface().setPan(in.getFloat(PAN_X, 0f), in.getFloat(PAN_Y, 0f));
         if (in.has(SCALE)) artboard.setUiScale(in.getFloat(SCALE, 1f));

@@ -5,8 +5,8 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.DynamicOps;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.transform.Transform;
 
@@ -54,7 +54,7 @@ public final class TransformParts implements StyleParts<Transform> {
     }
 
     /** The one path every style value travels by. @see StyleValueCodecs */
-    private static Codec<Transform> codec() {
+    private static CgCodec<Transform> codec() {
         return StyleValueCodecs.forProperty(StylePropertyRegistry.TRANSFORM);
     }
 
@@ -90,7 +90,7 @@ public final class TransformParts implements StyleParts<Transform> {
 
     @Nullable
     @Override
-    public <T> T encodePart(DynamicOps<T> ops, Transform value, String partId) {
+    public <T> T encodePart(CgDynamicOps<T> ops, Transform value, String partId) {
         Transform.Kind kind = kindOf(partId);
         if (kind == null) return null;
         List<Transform.Op> mine = new ArrayList<>();
@@ -121,7 +121,7 @@ public final class TransformParts implements StyleParts<Transform> {
     }
 
     @Override
-    public <T> Transform mergePart(DynamicOps<T> ops, Transform base, String partId, T encoded) {
+    public <T> Transform mergePart(CgDynamicOps<T> ops, Transform base, String partId, T encoded) {
         Transform.Kind kind = kindOf(partId);
         if (kind == null) return base;
         List<Transform.Op> incoming = codec().decode(ops, encoded).ops();

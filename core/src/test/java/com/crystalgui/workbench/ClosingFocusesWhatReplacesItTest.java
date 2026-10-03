@@ -11,6 +11,10 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
@@ -22,10 +26,6 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -53,13 +53,13 @@ public class ClosingFocusesWhatReplacesItTest extends UiDocumentTestBase {
     private static final String PROJECT = "scratch";
 
     private Workbench workbench;
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     @Before
     public void openWorkbench() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         InMemoryFileSystem files = new InMemoryFileSystem()
                 .seed(PROJECT + ":Main.java", "class Main { }")
                 .seed(PROJECT + ":Other.java", "class Other { }")
@@ -68,11 +68,11 @@ public class ClosingFocusesWhatReplacesItTest extends UiDocumentTestBase {
                 new ProjectRegistry().register(() -> List.of(
                         new WorkspaceProject(PROJECT, "Scratch", Paths.get("/srv/scratch")))),
                 files, WorkspacePermission.ALLOW_ALL);
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "host");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
 
         workbench = new Workbench(Workspace.of(clientEnd));
         UIElement root = new UIElement().layout(l -> l.width(1400).height(900));
@@ -85,7 +85,7 @@ public class ClosingFocusesWhatReplacesItTest extends UiDocumentTestBase {
 
     @After
     public void close() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void frameAndPump() {

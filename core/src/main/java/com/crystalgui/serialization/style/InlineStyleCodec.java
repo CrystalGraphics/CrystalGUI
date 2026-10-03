@@ -1,14 +1,14 @@
 package com.crystalgui.serialization.style;
 
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.CodecException;
-import com.crystalgui.serialization.DynamicOps;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecException;
+import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.style.CssComments;
 import com.crystalgui.style.StyleOrigin;
+import com.crystalgui.style.Styleable;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
-import com.crystalgui.style.Styleable;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -50,7 +50,7 @@ public final class InlineStyleCodec {
 
     /** Encodes {@code element}'s INLINE-origin candidates. Returns {@code null} when there are none,
      * so the caller can omit the field entirely rather than writing an empty map. */
-    public static <T> T encode(DynamicOps<T> ops, Styleable element) {
+    public static <T> T encode(CgDynamicOps<T> ops, Styleable element) {
         // Sorted by property name so the encoding is a function of the element alone. The cascade
         // stores candidates in a HashMap, whose iteration order varies between JVM runs — and these
         // descriptions are content-addressed, so an unstable order would produce an unstable hash
@@ -72,7 +72,7 @@ public final class InlineStyleCodec {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T, V> T encodeSlot(DynamicOps<T> ops, StyleSlot<V> slot) {
+    private static <T, V> T encodeSlot(CgDynamicOps<T> ops, StyleSlot<V> slot) {
         StyleProperty<V> property = slot.property();
         // EVERY property has one now: a codec is built from the property's own parser and writer, so
         // there is no longer a class of style that cannot be sent. @see StyleValueCodecs
@@ -92,23 +92,23 @@ public final class InlineStyleCodec {
      * InlineStyleCodec.replaceInto(JsonOps.INSTANCE, remembered, node);   // exactly `remembered`
      * }</pre>
      */
-    public static <T> void replaceInto(DynamicOps<T> ops, T encoded, Styleable element) {
+    public static <T> void replaceInto(CgDynamicOps<T> ops, T encoded, Styleable element) {
         element.getStyle().removeCandidates(slot -> slot.origin() == StyleOrigin.INLINE);
         element.getStyle().clearInlineTexts();
         decodeInto(ops, encoded, element);
     }
 
     /** Adds every property in the map at {@code INLINE} origin, leaving anything else untouched. */
-    public static <T> void decodeInto(DynamicOps<T> ops, T encoded, Styleable element) {
+    public static <T> void decodeInto(CgDynamicOps<T> ops, T encoded, Styleable element) {
         for (var entry : ops.getMapValue(encoded).entrySet()) {
             String name = ops.getStringValue(entry.getKey());
             StyleProperty<Object> property = StylePropertyRegistry.byName(name);
             if (property == null) {
-                throw new CodecException("Unknown style property '" + name + "' in an element description");
+                throw new CgCodecException("Unknown style property '" + name + "' in an element description");
             }
-            Codec<Object> codec = StyleValueCodecs.forProperty(property);
+            CgCodec<Object> codec = StyleValueCodecs.forProperty(property);
             if (codec == null) {
-                throw new CodecException("Style property '" + name + "' has no value codec — "
+                throw new CgCodecException("Style property '" + name + "' has no value codec — "
                         + "the sender should not have been able to encode it");
             }
             String written = writtenText(ops, entry.getValue());
@@ -133,7 +133,7 @@ public final class InlineStyleCodec {
 
     /** The value as a string when it is one; a codec may write a value some other way. */
     @Nullable
-    private static <T> String writtenText(DynamicOps<T> ops, T value) {
+    private static <T> String writtenText(CgDynamicOps<T> ops, T value) {
         try {
             return ops.getStringValue(value);
         } catch (RuntimeException notAString) {

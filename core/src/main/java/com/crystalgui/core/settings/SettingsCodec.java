@@ -1,11 +1,11 @@
 package com.crystalgui.core.settings;
 
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.DynamicOps;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgDynamicOps;
 
-import javax.annotation.Nullable;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 /**
  * One {@link SettingsModel} as a flat string map — what a document or a preferences file stores.
@@ -26,9 +26,9 @@ public final class SettingsCodec {
     private SettingsCodec() {
     }
 
-    public static final Codec<SettingsModel> MODEL = new Codec<>() {
+    public static final CgCodec<SettingsModel> MODEL = new CgCodec<>() {
         @Override
-        public <T> T encode(DynamicOps<T> ops, SettingsModel input) {
+        public <T> T encode(CgDynamicOps<T> ops, SettingsModel input) {
             Map<T, T> encoded = new LinkedHashMap<>();
             // Insertion order is preserved from the model, which is what keeps the bytes stable — and
             // byte-stability is the whole reason the model is a LinkedHashMap.
@@ -39,7 +39,7 @@ public final class SettingsCodec {
         }
 
         @Override
-        public <T> SettingsModel decode(DynamicOps<T> ops, T input) {
+        public <T> SettingsModel decode(CgDynamicOps<T> ops, T input) {
             SettingsModel model = new SettingsModel();
             Map<String, String> values = new LinkedHashMap<>();
             for (Map.Entry<T, T> entry : ops.getMapValue(input).entrySet()) {

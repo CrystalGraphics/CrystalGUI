@@ -1,14 +1,14 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.contract.WidgetContract;
 
-import javax.annotation.Nullable;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * Widget state that outlives the widget — a bag of contract payloads keyed by node id.
@@ -35,11 +35,11 @@ import java.util.Set;
  * carry it and a stylesheet-driven tool window keeps its divider across a restart without its panel
  * class knowing this class exists.</p>
  *
- * @param <T> the serialised form, whatever {@link DynamicOps} the host persists with
+ * @param <T> the serialised form, whatever {@link CgDynamicOps} the host persists with
  */
 public final class SessionState<T> {
 
-    private final DynamicOps<T> ops;
+    private final CgDynamicOps<T> ops;
     private final Map<String, T> stored = new LinkedHashMap<>();
 
     /**
@@ -50,7 +50,7 @@ public final class SessionState<T> {
      */
     private final Set<String> applied = new HashSet<>();
 
-    public SessionState(DynamicOps<T> ops) {
+    public SessionState(CgDynamicOps<T> ops) {
         this.ops = ops;
     }
 
@@ -76,7 +76,7 @@ public final class SessionState<T> {
         T payload = stored.get(id);
         if (payload == null) return;
         applied.add(id);
-        contract.read(node, new StateMap<>(ops, payload));
+        contract.read(node, new CgStateMap<>(ops, payload));
     }
 
     /**
@@ -116,7 +116,7 @@ public final class SessionState<T> {
         if (contract == null) return;
         String id = node.id();
         if (id.isEmpty()) return;
-        StateMap<T> out = new StateMap<>(ops);
+        CgStateMap<T> out = new CgStateMap<>(ops);
         contract.write(node, out);
         stored.put(id, out.encode());
     }

@@ -9,7 +9,7 @@ import java.util.Set;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.dom.NodeContract;
 
 /**
@@ -177,12 +177,12 @@ public final class WidgetContract<W> implements NodeContract {
     }
 
     /** Writes every slot, in declaration order. */
-    public <T> void write(W widget, StateMap<T> out) {
+    public <T> void write(W widget, CgStateMap<T> out) {
         for (State<W, ?> slot : states) slot.write(widget, out);
     }
 
     /** Applies every slot, <b>in declaration order</b>, which for several widgets is load-bearing. */
-    public <T> void read(W widget, StateMap<T> in) {
+    public <T> void read(W widget, CgStateMap<T> in) {
         for (State<W, ?> slot : states) slot.apply(widget, in);
     }
 

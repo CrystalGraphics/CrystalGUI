@@ -1,6 +1,6 @@
 package com.crystalgui.document;
 
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -63,11 +63,11 @@ public interface DocumentEditor {
     }
 
     /** Where you were looking — caret, scroll, folds, pan, zoom. Restored by the session. */
-    default <T> void writeViewState(StateMap<T> out) {
+    default <T> void writeViewState(CgStateMap<T> out) {
     }
 
     /** @see #writeViewState */
-    default <T> void readViewState(StateMap<T> in) {
+    default <T> void readViewState(CgStateMap<T> in) {
     }
 
     /**

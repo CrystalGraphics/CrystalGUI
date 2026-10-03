@@ -286,10 +286,27 @@ abstract class ProdSmoke : DefaultTask() {
         if (logSays(target, "screen stage drew: false")) {
             return "STAGE DID NOT DRAW: no renderer on crystalgui:screen ran" + logTail(target)
         }
+        // CRYSTALGRAPHICS' WORLD PROBE (-Dcrystalgraphics.worldprobe=true): every world seam, checked against the
+        // others. Armed and never finished is a failure: the run quit under it, or it never saw a world.
+        if (logSays(target, "world probe: false")) {
+            return "WORLD PROBE FAILED: " + probeFailures(target) + logTail(target)
+        }
+        if (logSays(target, "world probe: armed") && !logSays(target, "world probe: true")) {
+            return "WORLD PROBE NEVER FINISHED" + logTail(target)
+        }
         // The compute self-test, when -PcgSmokeProps asked for it: a stated FAIL fails the client.
         val selfTest = lastLine(target, SELF_TEST_MARKER)
         if (selfTest != null && selfTest.contains(": FAIL")) return "COMPUTE SELF-TEST FAILED: $selfTest"
         return null
+    }
+
+    /** The world probe's failed checks, by name. */
+    private fun probeFailures(target: Target): String {
+        val log = logFile(target) ?: return "(no log)"
+        val failed = runCatching { log.readLines() }.getOrDefault(emptyList())
+            .filter { it.contains("world probe ") && it.contains(": false") }
+            .map { it.substringAfter("world probe ").substringBefore(":") }
+        return failed.joinToString(", ").ifEmpty { "(none named)" }
     }
 
     /**
@@ -369,7 +386,10 @@ abstract class ProdSmoke : DefaultTask() {
     private fun lateFrame() = if (languageProbe()) 700 else 120
 
     /** And the extra seconds those frames take. */
-    private fun runTimeout() = runTimeoutSeconds.get() + if (languageProbe()) 90 else 0
+    private fun runTimeout() = runTimeoutSeconds.get() + (if (languageProbe()) 90 else 0) + (if (worldProbe()) 30 else 0)
+
+    /** CrystalGraphics' world probe: up to fifteen seconds past the late capture, which the autotest waits for. */
+    private fun worldProbe() = extraProperties.get().any { it == "crystalgraphics.worldprobe=true" }
 
     /**
      * Puts the two keys back as they were, and nothing else.

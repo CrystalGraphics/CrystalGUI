@@ -1,10 +1,10 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
@@ -26,7 +26,7 @@ import static org.junit.Assert.assertTrue;
  * all in flight together — and asks the question those cannot: <b>does the client's tree still agree with
  * the server's after all of it</b>, and did every call get an answer.</p>
  *
- * <p>It is deliberately headless and deterministic. The plan scoped it for {@code InMemoryTransport}
+ * <p>It is deliberately headless and deterministic. The plan scoped it for {@code CgInMemoryTransport}
  * precisely so it could land before a Minecraft transport existed and then be re-pointed at one; keeping
  * it here means a desync is found by {@code :core:headlessTest} in seconds rather than by watching a
  * client. There is no randomness — a soak that fails one run in twenty and cannot be replayed is worse
@@ -42,8 +42,8 @@ public class SessionSoakTest {
     private UIText label;
     private Button button;
 
-    private InMemoryTransport<Object> serverLink;
-    private InMemoryTransport<Object> clientLink;
+    private CgInMemoryTransport<Object> serverLink;
+    private CgInMemoryTransport<Object> clientLink;
     private ServerUiSession<UIElement, Object> server;
     private ClientUiSession<UIElement, Object> client;
 
@@ -60,7 +60,7 @@ public class SessionSoakTest {
         root.append(checkbox);
         root.append(slider);
 
-        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        CgInMemoryTransport<Object>[] pair = CgInMemoryTransport.pair();
         serverLink = pair[0];
         clientLink = pair[1];
         server = Sessions.serve(1, root, serverLink);
@@ -96,12 +96,12 @@ public class SessionSoakTest {
 
         server.on(button, Button.ACTIVATE, ctx -> presses.incrementAndGet());
         server.onCall("soak/echo", (args, respond) -> {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             out.putInt("n", args.getInt("n", -1));
             respond.ok(out);
         });
         client.onCall("soak/echo", (args, respond) -> {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             out.putInt("n", args.getInt("n", -1));
             respond.ok(out);
         });
@@ -120,7 +120,7 @@ public class SessionSoakTest {
 
             // A call in each direction, correlated independently.
             final int n = round;
-            StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
             args.putInt("n", n);
             server.call("soak/echo", args,
                     result -> {

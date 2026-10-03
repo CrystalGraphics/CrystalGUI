@@ -1,11 +1,11 @@
 package com.crystalgui.fs.client;
 
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.fs.protocol.FsError;
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -26,12 +26,12 @@ final class FsCall<T> {
 
     /** How a message reaches the far side. The connection's {@code call}, in production. */
     public interface Caller<T> {
-        void call(String method, @Nullable StateMap<T> args,
-                  Consumer<StateMap<T>> onResult, Consumer<String> onError);
+        void call(String method, @Nullable CgStateMap<T> args,
+                  Consumer<CgStateMap<T>> onResult, Consumer<String> onError);
     }
 
     private Caller<T> caller;
-    private final DynamicOps<T> ops;
+    private final CgDynamicOps<T> ops;
     private final Health health;
 
     /**
@@ -43,7 +43,7 @@ final class FsCall<T> {
      */
     private final Map<String, PendingReply<?>> inFlight = new LinkedHashMap<>();
 
-    FsCall(Caller<T> caller, DynamicOps<T> ops, Health health) {
+    FsCall(Caller<T> caller, CgDynamicOps<T> ops, Health health) {
         this.caller = caller;
         this.ops = ops;
         this.health = health;
@@ -65,7 +65,7 @@ final class FsCall<T> {
     }
 
     /** A call nothing else could be asking. Mutations, which must never coalesce. */
-    <A, R> Reply<R> send(String method, Codec<A> argsCodec, A args, Codec<R> resultCodec) {
+    <A, R> Reply<R> send(String method, CgCodec<A> argsCodec, A args, CgCodec<R> resultCodec) {
         PendingReply<R> reply = new PendingReply<>(null);
         dispatch(method, argsCodec, args, resultCodec, reply);
         return reply;
@@ -78,8 +78,8 @@ final class FsCall<T> {
      * two writes would be dropping one.</p>
      */
     @SuppressWarnings("unchecked")
-    <A, R> Reply<R> coalesced(String key, String method, Codec<A> argsCodec, A args,
-                              Codec<R> resultCodec) {
+    <A, R> Reply<R> coalesced(String key, String method, CgCodec<A> argsCodec, A args,
+                              CgCodec<R> resultCodec) {
         PendingReply<R> existing = (PendingReply<R>) inFlight.get(key);
         if (existing != null && !existing.isDone()) return existing;
 
@@ -90,10 +90,10 @@ final class FsCall<T> {
         return reply;
     }
 
-    private <A, R> void dispatch(String method, Codec<A> argsCodec, A args, Codec<R> resultCodec,
+    private <A, R> void dispatch(String method, CgCodec<A> argsCodec, A args, CgCodec<R> resultCodec,
                                  PendingReply<R> reply) {
-        StateMap<T> encoded = args == null ? null
-                : new StateMap<>(ops, argsCodec.encode(ops, args));
+        CgStateMap<T> encoded = args == null ? null
+                : new CgStateMap<>(ops, argsCodec.encode(ops, args));
         // TIMED HERE, at the one door every call goes through -- which is the whole reason there is one.
         long stamp = health.asked();
         caller.call(method, encoded,

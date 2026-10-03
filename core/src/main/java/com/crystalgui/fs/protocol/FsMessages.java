@@ -1,8 +1,8 @@
 package com.crystalgui.fs.protocol;
 
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.Codecs;
-import com.crystalgui.serialization.DynamicOps;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgDynamicOps;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -17,7 +17,7 @@ import java.util.List;
  *
  * <p>Records, so the fields are the type. One codec per record, so the encoding is stated once and both
  * halves use the same one. A required field that is missing throws naming itself, which is what
- * {@code Codecs.MapCodecReader.field} already does.</p>
+ * {@code CgCodecs.MapCodecReader.field} already does.</p>
  *
  * <h3>An unknown field is ignored, and that is a version policy</h3>
  *
@@ -57,21 +57,21 @@ public final class FsMessages {
         }
     }
 
-    public static <T> Codec<PathRequest> pathRequest() {
-        return new Codec<>() {
+    public static <T> CgCodec<PathRequest> pathRequest() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, PathRequest value) {
-                return Codecs.<U>map(ops)
-                        .field(PATH, Codecs.STRING, value.path())
-                        .optional(OP, Codecs.STRING, value.op(), "")
+            public <U> U encode(CgDynamicOps<U> ops, PathRequest value) {
+                return CgCodecs.<U>map(ops)
+                        .field(PATH, CgCodecs.STRING, value.path())
+                        .optional(OP, CgCodecs.STRING, value.op(), "")
                         .build();
             }
 
             @Override
-            public <U> PathRequest decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-                return new PathRequest(in.field(PATH, Codecs.STRING),
-                        in.optional(OP, Codecs.STRING, ""));
+            public <U> PathRequest decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+                return new PathRequest(in.field(PATH, CgCodecs.STRING),
+                        in.optional(OP, CgCodecs.STRING, ""));
             }
         };
     }
@@ -80,25 +80,25 @@ public final class FsMessages {
     public record MoveRequest(String from, String to, boolean overwrite, String op) {
     }
 
-    public static Codec<MoveRequest> moveRequest() {
-        return new Codec<>() {
+    public static CgCodec<MoveRequest> moveRequest() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, MoveRequest value) {
-                return Codecs.<U>map(ops)
-                        .field("from", Codecs.STRING, value.from())
-                        .field("to", Codecs.STRING, value.to())
-                        .optional("overwrite", Codecs.BOOL, value.overwrite(), false)
-                        .optional(OP, Codecs.STRING, value.op(), "")
+            public <U> U encode(CgDynamicOps<U> ops, MoveRequest value) {
+                return CgCodecs.<U>map(ops)
+                        .field("from", CgCodecs.STRING, value.from())
+                        .field("to", CgCodecs.STRING, value.to())
+                        .optional("overwrite", CgCodecs.BOOL, value.overwrite(), false)
+                        .optional(OP, CgCodecs.STRING, value.op(), "")
                         .build();
             }
 
             @Override
-            public <U> MoveRequest decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-                return new MoveRequest(in.field("from", Codecs.STRING),
-                        in.field("to", Codecs.STRING),
-                        in.optional("overwrite", Codecs.BOOL, false),
-                        in.optional(OP, Codecs.STRING, ""));
+            public <U> MoveRequest decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+                return new MoveRequest(in.field("from", CgCodecs.STRING),
+                        in.field("to", CgCodecs.STRING),
+                        in.optional("overwrite", CgCodecs.BOOL, false),
+                        in.optional(OP, CgCodecs.STRING, ""));
             }
         };
     }
@@ -112,21 +112,21 @@ public final class FsMessages {
     public record ReadRequest(String path, String ifNoneMatch) {
     }
 
-    public static Codec<ReadRequest> readRequest() {
-        return new Codec<>() {
+    public static CgCodec<ReadRequest> readRequest() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, ReadRequest value) {
-                return Codecs.<U>map(ops)
-                        .field(PATH, Codecs.STRING, value.path())
-                        .optional("ifNoneMatch", Codecs.STRING, value.ifNoneMatch(), "")
+            public <U> U encode(CgDynamicOps<U> ops, ReadRequest value) {
+                return CgCodecs.<U>map(ops)
+                        .field(PATH, CgCodecs.STRING, value.path())
+                        .optional("ifNoneMatch", CgCodecs.STRING, value.ifNoneMatch(), "")
                         .build();
             }
 
             @Override
-            public <U> ReadRequest decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-                return new ReadRequest(in.field(PATH, Codecs.STRING),
-                        in.optional("ifNoneMatch", Codecs.STRING, ""));
+            public <U> ReadRequest decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+                return new ReadRequest(in.field(PATH, CgCodecs.STRING),
+                        in.optional("ifNoneMatch", CgCodecs.STRING, ""));
             }
         };
     }
@@ -142,27 +142,27 @@ public final class FsMessages {
                                String transfer, long size) {
     }
 
-    public static Codec<ReadResponse> readResponse() {
-        return new Codec<>() {
+    public static CgCodec<ReadResponse> readResponse() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, ReadResponse value) {
-                return Codecs.<U>map(ops)
-                        .field(ETAG, Codecs.STRING, value.etag())
-                        .optional("unchanged", Codecs.BOOL, value.unchanged(), false)
-                        .optional("transfer", Codecs.STRING, value.transfer(), "")
-                        .optional("size", Codecs.LONG, value.size(), 0L)
+            public <U> U encode(CgDynamicOps<U> ops, ReadResponse value) {
+                return CgCodecs.<U>map(ops)
+                        .field(ETAG, CgCodecs.STRING, value.etag())
+                        .optional("unchanged", CgCodecs.BOOL, value.unchanged(), false)
+                        .optional("transfer", CgCodecs.STRING, value.transfer(), "")
+                        .optional("size", CgCodecs.LONG, value.size(), 0L)
                         .optional(CONTENT, BYTES, value.content(), null)
                         .build();
             }
 
             @Override
-            public <U> ReadResponse decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-                return new ReadResponse(in.optional(ETAG, Codecs.STRING, ""),
+            public <U> ReadResponse decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+                return new ReadResponse(in.optional(ETAG, CgCodecs.STRING, ""),
                         in.optional(CONTENT, BYTES, new byte[0]),
-                        in.optional("unchanged", Codecs.BOOL, false),
-                        in.optional("transfer", Codecs.STRING, ""),
-                        in.optional("size", Codecs.LONG, 0L));
+                        in.optional("unchanged", CgCodecs.BOOL, false),
+                        in.optional("transfer", CgCodecs.STRING, ""),
+                        in.optional("size", CgCodecs.LONG, 0L));
             }
         };
     }
@@ -171,23 +171,23 @@ public final class FsMessages {
     public record ChunkRequest(String transfer, long offset, int length) {
     }
 
-    public static Codec<ChunkRequest> chunkRequest() {
-        return new Codec<>() {
+    public static CgCodec<ChunkRequest> chunkRequest() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, ChunkRequest value) {
-                return Codecs.<U>map(ops)
-                        .field("transfer", Codecs.STRING, value.transfer())
-                        .field("offset", Codecs.LONG, value.offset())
-                        .field("length", Codecs.INT, value.length())
+            public <U> U encode(CgDynamicOps<U> ops, ChunkRequest value) {
+                return CgCodecs.<U>map(ops)
+                        .field("transfer", CgCodecs.STRING, value.transfer())
+                        .field("offset", CgCodecs.LONG, value.offset())
+                        .field("length", CgCodecs.INT, value.length())
                         .build();
             }
 
             @Override
-            public <U> ChunkRequest decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-                return new ChunkRequest(in.field("transfer", Codecs.STRING),
-                        in.field("offset", Codecs.LONG),
-                        in.field("length", Codecs.INT));
+            public <U> ChunkRequest decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+                return new ChunkRequest(in.field("transfer", CgCodecs.STRING),
+                        in.field("offset", CgCodecs.LONG),
+                        in.field("length", CgCodecs.INT));
             }
         };
     }
@@ -196,21 +196,21 @@ public final class FsMessages {
     public record ChunkResponse(byte[] content, boolean eof) {
     }
 
-    public static Codec<ChunkResponse> chunkResponse() {
-        return new Codec<>() {
+    public static CgCodec<ChunkResponse> chunkResponse() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, ChunkResponse value) {
-                return Codecs.<U>map(ops)
+            public <U> U encode(CgDynamicOps<U> ops, ChunkResponse value) {
+                return CgCodecs.<U>map(ops)
                         .field(CONTENT, BYTES, value.content())
-                        .optional("eof", Codecs.BOOL, value.eof(), false)
+                        .optional("eof", CgCodecs.BOOL, value.eof(), false)
                         .build();
             }
 
             @Override
-            public <U> ChunkResponse decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
+            public <U> ChunkResponse decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
                 return new ChunkResponse(in.field(CONTENT, BYTES),
-                        in.optional("eof", Codecs.BOOL, false));
+                        in.optional("eof", CgCodecs.BOOL, false));
             }
         };
     }
@@ -220,29 +220,29 @@ public final class FsMessages {
                                boolean overwrite, String op) {
     }
 
-    public static Codec<WriteRequest> writeRequest() {
-        return new Codec<>() {
+    public static CgCodec<WriteRequest> writeRequest() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, WriteRequest value) {
-                return Codecs.<U>map(ops)
-                        .field(PATH, Codecs.STRING, value.path())
+            public <U> U encode(CgDynamicOps<U> ops, WriteRequest value) {
+                return CgCodecs.<U>map(ops)
+                        .field(PATH, CgCodecs.STRING, value.path())
                         .field(CONTENT, BYTES, value.content())
-                        .optional(ETAG, Codecs.STRING, value.etag(), "")
-                        .optional("create", Codecs.BOOL, value.create(), false)
-                        .optional("overwrite", Codecs.BOOL, value.overwrite(), true)
-                        .optional(OP, Codecs.STRING, value.op(), "")
+                        .optional(ETAG, CgCodecs.STRING, value.etag(), "")
+                        .optional("create", CgCodecs.BOOL, value.create(), false)
+                        .optional("overwrite", CgCodecs.BOOL, value.overwrite(), true)
+                        .optional(OP, CgCodecs.STRING, value.op(), "")
                         .build();
             }
 
             @Override
-            public <U> WriteRequest decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-                return new WriteRequest(in.field(PATH, Codecs.STRING),
+            public <U> WriteRequest decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+                return new WriteRequest(in.field(PATH, CgCodecs.STRING),
                         in.field(CONTENT, BYTES),
-                        in.optional(ETAG, Codecs.STRING, ""),
-                        in.optional("create", Codecs.BOOL, false),
-                        in.optional("overwrite", Codecs.BOOL, true),
-                        in.optional(OP, Codecs.STRING, ""));
+                        in.optional(ETAG, CgCodecs.STRING, ""),
+                        in.optional("create", CgCodecs.BOOL, false),
+                        in.optional("overwrite", CgCodecs.BOOL, true),
+                        in.optional(OP, CgCodecs.STRING, ""));
             }
         };
     }
@@ -251,16 +251,16 @@ public final class FsMessages {
     public record EtagResponse(String etag) {
     }
 
-    public static Codec<EtagResponse> etagResponse() {
-        return new Codec<>() {
+    public static CgCodec<EtagResponse> etagResponse() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, EtagResponse value) {
-                return Codecs.<U>map(ops).field(ETAG, Codecs.STRING, value.etag()).build();
+            public <U> U encode(CgDynamicOps<U> ops, EtagResponse value) {
+                return CgCodecs.<U>map(ops).field(ETAG, CgCodecs.STRING, value.etag()).build();
             }
 
             @Override
-            public <U> EtagResponse decode(DynamicOps<U> ops, U input) {
-                return new EtagResponse(Codecs.read(ops, input).optional(ETAG, Codecs.STRING, ""));
+            public <U> EtagResponse decode(CgDynamicOps<U> ops, U input) {
+                return new EtagResponse(CgCodecs.read(ops, input).optional(ETAG, CgCodecs.STRING, ""));
             }
         };
     }
@@ -270,24 +270,24 @@ public final class FsMessages {
     public record Entry(String name, boolean directory, long size, long mtime) {
     }
 
-    public static final Codec<Entry> ENTRY = new Codec<>() {
+    public static final CgCodec<Entry> ENTRY = new CgCodec<>() {
         @Override
-        public <U> U encode(DynamicOps<U> ops, Entry value) {
-            return Codecs.<U>map(ops)
-                    .field(NAME, Codecs.STRING, value.name())
-                    .optional("dir", Codecs.BOOL, value.directory(), false)
-                    .optional("size", Codecs.LONG, value.size(), 0L)
-                    .optional("mtime", Codecs.LONG, value.mtime(), 0L)
+        public <U> U encode(CgDynamicOps<U> ops, Entry value) {
+            return CgCodecs.<U>map(ops)
+                    .field(NAME, CgCodecs.STRING, value.name())
+                    .optional("dir", CgCodecs.BOOL, value.directory(), false)
+                    .optional("size", CgCodecs.LONG, value.size(), 0L)
+                    .optional("mtime", CgCodecs.LONG, value.mtime(), 0L)
                     .build();
         }
 
         @Override
-        public <U> Entry decode(DynamicOps<U> ops, U input) {
-            Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-            return new Entry(in.field(NAME, Codecs.STRING),
-                    in.optional("dir", Codecs.BOOL, false),
-                    in.optional("size", Codecs.LONG, 0L),
-                    in.optional("mtime", Codecs.LONG, 0L));
+        public <U> Entry decode(CgDynamicOps<U> ops, U input) {
+            CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+            return new Entry(in.field(NAME, CgCodecs.STRING),
+                    in.optional("dir", CgCodecs.BOOL, false),
+                    in.optional("size", CgCodecs.LONG, 0L),
+                    in.optional("mtime", CgCodecs.LONG, 0L));
         }
     };
 
@@ -302,21 +302,21 @@ public final class FsMessages {
         }
     }
 
-    public static Codec<ListResponse> listResponse() {
-        return new Codec<>() {
+    public static CgCodec<ListResponse> listResponse() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, ListResponse value) {
-                return Codecs.<U>map(ops)
-                        .field("entries", Codecs.listOf(ENTRY), value.entries())
-                        .optional("cursor", Codecs.STRING, value.cursor(), "")
+            public <U> U encode(CgDynamicOps<U> ops, ListResponse value) {
+                return CgCodecs.<U>map(ops)
+                        .field("entries", CgCodecs.listOf(ENTRY), value.entries())
+                        .optional("cursor", CgCodecs.STRING, value.cursor(), "")
                         .build();
             }
 
             @Override
-            public <U> ListResponse decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
+            public <U> ListResponse decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
                 return new ListResponse(in.optionalList("entries", ENTRY),
-                        in.optional("cursor", Codecs.STRING, ""));
+                        in.optional("cursor", CgCodecs.STRING, ""));
             }
         };
     }
@@ -328,21 +328,21 @@ public final class FsMessages {
         }
     }
 
-    public static Codec<ListRequest> listRequest() {
-        return new Codec<>() {
+    public static CgCodec<ListRequest> listRequest() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, ListRequest value) {
-                return Codecs.<U>map(ops)
-                        .field(PATH, Codecs.STRING, value.path())
-                        .optional("cursor", Codecs.STRING, value.cursor(), "")
+            public <U> U encode(CgDynamicOps<U> ops, ListRequest value) {
+                return CgCodecs.<U>map(ops)
+                        .field(PATH, CgCodecs.STRING, value.path())
+                        .optional("cursor", CgCodecs.STRING, value.cursor(), "")
                         .build();
             }
 
             @Override
-            public <U> ListRequest decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-                return new ListRequest(in.field(PATH, Codecs.STRING),
-                        in.optional("cursor", Codecs.STRING, ""));
+            public <U> ListRequest decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+                return new ListRequest(in.field(PATH, CgCodecs.STRING),
+                        in.optional("cursor", CgCodecs.STRING, ""));
             }
         };
     }
@@ -351,27 +351,27 @@ public final class FsMessages {
                                boolean binary) {
     }
 
-    public static Codec<StatResponse> statResponse() {
-        return new Codec<>() {
+    public static CgCodec<StatResponse> statResponse() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, StatResponse value) {
-                return Codecs.<U>map(ops)
-                        .field(ETAG, Codecs.STRING, value.etag())
-                        .optional("dir", Codecs.BOOL, value.directory(), false)
-                        .optional("size", Codecs.LONG, value.size(), 0L)
-                        .optional("mtime", Codecs.LONG, value.mtime(), 0L)
-                        .optional("binary", Codecs.BOOL, value.binary(), false)
+            public <U> U encode(CgDynamicOps<U> ops, StatResponse value) {
+                return CgCodecs.<U>map(ops)
+                        .field(ETAG, CgCodecs.STRING, value.etag())
+                        .optional("dir", CgCodecs.BOOL, value.directory(), false)
+                        .optional("size", CgCodecs.LONG, value.size(), 0L)
+                        .optional("mtime", CgCodecs.LONG, value.mtime(), 0L)
+                        .optional("binary", CgCodecs.BOOL, value.binary(), false)
                         .build();
             }
 
             @Override
-            public <U> StatResponse decode(DynamicOps<U> ops, U input) {
-                Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-                return new StatResponse(in.optional(ETAG, Codecs.STRING, ""),
-                        in.optional("dir", Codecs.BOOL, false),
-                        in.optional("size", Codecs.LONG, 0L),
-                        in.optional("mtime", Codecs.LONG, 0L),
-                        in.optional("binary", Codecs.BOOL, false));
+            public <U> StatResponse decode(CgDynamicOps<U> ops, U input) {
+                CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+                return new StatResponse(in.optional(ETAG, CgCodecs.STRING, ""),
+                        in.optional("dir", CgCodecs.BOOL, false),
+                        in.optional("size", CgCodecs.LONG, 0L),
+                        in.optional("mtime", CgCodecs.LONG, 0L),
+                        in.optional("binary", CgCodecs.BOOL, false));
             }
         };
     }
@@ -392,28 +392,28 @@ public final class FsMessages {
                              boolean directory, long size) {
     }
 
-    public static final Codec<TrashEntry> TRASH_ENTRY = new Codec<>() {
+    public static final CgCodec<TrashEntry> TRASH_ENTRY = new CgCodec<>() {
         @Override
-        public <U> U encode(DynamicOps<U> ops, TrashEntry value) {
-            return Codecs.<U>map(ops)
-                    .field(ID, Codecs.STRING, value.id())
-                    .field(PATH, Codecs.STRING, value.path())
-                    .optional("actor", Codecs.STRING, value.actor(), "")
-                    .optional("at", Codecs.LONG, value.deletedAt(), 0L)
-                    .optional("dir", Codecs.BOOL, value.directory(), false)
-                    .optional("size", Codecs.LONG, value.size(), 0L)
+        public <U> U encode(CgDynamicOps<U> ops, TrashEntry value) {
+            return CgCodecs.<U>map(ops)
+                    .field(ID, CgCodecs.STRING, value.id())
+                    .field(PATH, CgCodecs.STRING, value.path())
+                    .optional("actor", CgCodecs.STRING, value.actor(), "")
+                    .optional("at", CgCodecs.LONG, value.deletedAt(), 0L)
+                    .optional("dir", CgCodecs.BOOL, value.directory(), false)
+                    .optional("size", CgCodecs.LONG, value.size(), 0L)
                     .build();
         }
 
         @Override
-        public <U> TrashEntry decode(DynamicOps<U> ops, U input) {
-            Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-            return new TrashEntry(in.field(ID, Codecs.STRING),
-                    in.field(PATH, Codecs.STRING),
-                    in.optional("actor", Codecs.STRING, ""),
-                    in.optional("at", Codecs.LONG, 0L),
-                    in.optional("dir", Codecs.BOOL, false),
-                    in.optional("size", Codecs.LONG, 0L));
+        public <U> TrashEntry decode(CgDynamicOps<U> ops, U input) {
+            CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+            return new TrashEntry(in.field(ID, CgCodecs.STRING),
+                    in.field(PATH, CgCodecs.STRING),
+                    in.optional("actor", CgCodecs.STRING, ""),
+                    in.optional("at", CgCodecs.LONG, 0L),
+                    in.optional("dir", CgCodecs.BOOL, false),
+                    in.optional("size", CgCodecs.LONG, 0L));
         }
     };
 
@@ -421,19 +421,19 @@ public final class FsMessages {
     public record TrashListResponse(List<TrashEntry> entries) {
     }
 
-    public static Codec<TrashListResponse> trashListResponse() {
-        return new Codec<>() {
+    public static CgCodec<TrashListResponse> trashListResponse() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, TrashListResponse value) {
-                return Codecs.<U>map(ops)
-                        .field("entries", Codecs.listOf(TRASH_ENTRY), value.entries())
+            public <U> U encode(CgDynamicOps<U> ops, TrashListResponse value) {
+                return CgCodecs.<U>map(ops)
+                        .field("entries", CgCodecs.listOf(TRASH_ENTRY), value.entries())
                         .build();
             }
 
             @Override
-            public <U> TrashListResponse decode(DynamicOps<U> ops, U input) {
+            public <U> TrashListResponse decode(CgDynamicOps<U> ops, U input) {
                 return new TrashListResponse(
-                        Codecs.read(ops, input).optionalList("entries", TRASH_ENTRY));
+                        CgCodecs.read(ops, input).optionalList("entries", TRASH_ENTRY));
             }
         };
     }
@@ -442,43 +442,43 @@ public final class FsMessages {
                                List<String> excludes) {
     }
 
-    public static final Codec<ProjectEntry> PROJECT = new Codec<>() {
+    public static final CgCodec<ProjectEntry> PROJECT = new CgCodec<>() {
         @Override
-        public <U> U encode(DynamicOps<U> ops, ProjectEntry value) {
-            return Codecs.<U>map(ops)
-                    .field(ID, Codecs.STRING, value.id())
-                    .field("displayName", Codecs.STRING, value.displayName())
-                    .optionalList("sourceRoots", Codecs.STRING, value.sourceRoots())
+        public <U> U encode(CgDynamicOps<U> ops, ProjectEntry value) {
+            return CgCodecs.<U>map(ops)
+                    .field(ID, CgCodecs.STRING, value.id())
+                    .field("displayName", CgCodecs.STRING, value.displayName())
+                    .optionalList("sourceRoots", CgCodecs.STRING, value.sourceRoots())
                     // THE IGNORE RULES TRAVEL, so the crawl, Go to File and the tree all skip what the
                     // PROJECT says to skip rather than each holding its own idea of it.
-                    .optionalList("excludes", Codecs.STRING, value.excludes())
+                    .optionalList("excludes", CgCodecs.STRING, value.excludes())
                     .build();
         }
 
         @Override
-        public <U> ProjectEntry decode(DynamicOps<U> ops, U input) {
-            Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-            return new ProjectEntry(in.field(ID, Codecs.STRING),
-                    in.optional("displayName", Codecs.STRING, ""),
-                    in.optionalList("sourceRoots", Codecs.STRING),
-                    in.optionalList("excludes", Codecs.STRING));
+        public <U> ProjectEntry decode(CgDynamicOps<U> ops, U input) {
+            CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+            return new ProjectEntry(in.field(ID, CgCodecs.STRING),
+                    in.optional("displayName", CgCodecs.STRING, ""),
+                    in.optionalList("sourceRoots", CgCodecs.STRING),
+                    in.optionalList("excludes", CgCodecs.STRING));
         }
     };
 
     public record ProjectsResponse(List<ProjectEntry> projects) {
     }
 
-    public static Codec<ProjectsResponse> projectsResponse() {
-        return new Codec<>() {
+    public static CgCodec<ProjectsResponse> projectsResponse() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, ProjectsResponse value) {
-                return Codecs.<U>map(ops)
-                        .field("projects", Codecs.listOf(PROJECT), value.projects()).build();
+            public <U> U encode(CgDynamicOps<U> ops, ProjectsResponse value) {
+                return CgCodecs.<U>map(ops)
+                        .field("projects", CgCodecs.listOf(PROJECT), value.projects()).build();
             }
 
             @Override
-            public <U> ProjectsResponse decode(DynamicOps<U> ops, U input) {
-                return new ProjectsResponse(Codecs.read(ops, input).optionalList("projects", PROJECT));
+            public <U> ProjectsResponse decode(CgDynamicOps<U> ops, U input) {
+                return new ProjectsResponse(CgCodecs.read(ops, input).optionalList("projects", PROJECT));
             }
         };
     }
@@ -527,28 +527,28 @@ public final class FsMessages {
         }
     }
 
-    public static final Codec<FileChange> FILE_CHANGE = new Codec<>() {
+    public static final CgCodec<FileChange> FILE_CHANGE = new CgCodec<>() {
         @Override
-        public <U> U encode(DynamicOps<U> ops, FileChange value) {
-            return Codecs.<U>map(ops)
-                    .field(PATH, Codecs.STRING, value.path())
-                    .field("kind", Codecs.enumOf(ChangeKind.class), value.kind())
-                    .optional(ETAG, Codecs.STRING, value.etag(), "")
-                    .optional("from", Codecs.STRING, value.from(), "")
-                    .optional("author", Codecs.STRING, value.author(), "")
-                    .optional("directory", Codecs.BOOL, value.directory(), false)
+        public <U> U encode(CgDynamicOps<U> ops, FileChange value) {
+            return CgCodecs.<U>map(ops)
+                    .field(PATH, CgCodecs.STRING, value.path())
+                    .field("kind", CgCodecs.enumOf(ChangeKind.class), value.kind())
+                    .optional(ETAG, CgCodecs.STRING, value.etag(), "")
+                    .optional("from", CgCodecs.STRING, value.from(), "")
+                    .optional("author", CgCodecs.STRING, value.author(), "")
+                    .optional("directory", CgCodecs.BOOL, value.directory(), false)
                     .build();
         }
 
         @Override
-        public <U> FileChange decode(DynamicOps<U> ops, U input) {
-            Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-            return new FileChange(in.field(PATH, Codecs.STRING),
-                    in.field("kind", Codecs.enumOf(ChangeKind.class)),
-                    in.optional(ETAG, Codecs.STRING, ""),
-                    in.optional("from", Codecs.STRING, ""),
-                    in.optional("author", Codecs.STRING, ""),
-                    in.optional("directory", Codecs.BOOL, false));
+        public <U> FileChange decode(CgDynamicOps<U> ops, U input) {
+            CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+            return new FileChange(in.field(PATH, CgCodecs.STRING),
+                    in.field("kind", CgCodecs.enumOf(ChangeKind.class)),
+                    in.optional(ETAG, CgCodecs.STRING, ""),
+                    in.optional("from", CgCodecs.STRING, ""),
+                    in.optional("author", CgCodecs.STRING, ""),
+                    in.optional("directory", CgCodecs.BOOL, false));
         }
     };
 
@@ -556,18 +556,18 @@ public final class FsMessages {
     public record ChangedNotification(List<FileChange> changes) {
     }
 
-    public static Codec<ChangedNotification> changedNotification() {
-        return new Codec<>() {
+    public static CgCodec<ChangedNotification> changedNotification() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, ChangedNotification value) {
-                return Codecs.<U>map(ops)
-                        .field("changes", Codecs.listOf(FILE_CHANGE), value.changes()).build();
+            public <U> U encode(CgDynamicOps<U> ops, ChangedNotification value) {
+                return CgCodecs.<U>map(ops)
+                        .field("changes", CgCodecs.listOf(FILE_CHANGE), value.changes()).build();
             }
 
             @Override
-            public <U> ChangedNotification decode(DynamicOps<U> ops, U input) {
+            public <U> ChangedNotification decode(CgDynamicOps<U> ops, U input) {
                 return new ChangedNotification(
-                        Codecs.read(ops, input).optionalList("changes", FILE_CHANGE));
+                        CgCodecs.read(ops, input).optionalList("changes", FILE_CHANGE));
             }
         };
     }
@@ -576,40 +576,40 @@ public final class FsMessages {
     public record PresenceEntry(String path, String who, boolean editing) {
     }
 
-    public static final Codec<PresenceEntry> PRESENCE_ENTRY = new Codec<>() {
+    public static final CgCodec<PresenceEntry> PRESENCE_ENTRY = new CgCodec<>() {
         @Override
-        public <U> U encode(DynamicOps<U> ops, PresenceEntry value) {
-            return Codecs.<U>map(ops)
-                    .field(PATH, Codecs.STRING, value.path())
-                    .field("who", Codecs.STRING, value.who())
-                    .optional("editing", Codecs.BOOL, value.editing(), false)
+        public <U> U encode(CgDynamicOps<U> ops, PresenceEntry value) {
+            return CgCodecs.<U>map(ops)
+                    .field(PATH, CgCodecs.STRING, value.path())
+                    .field("who", CgCodecs.STRING, value.who())
+                    .optional("editing", CgCodecs.BOOL, value.editing(), false)
                     .build();
         }
 
         @Override
-        public <U> PresenceEntry decode(DynamicOps<U> ops, U input) {
-            Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-            return new PresenceEntry(in.field(PATH, Codecs.STRING),
-                    in.field("who", Codecs.STRING),
-                    in.optional("editing", Codecs.BOOL, false));
+        public <U> PresenceEntry decode(CgDynamicOps<U> ops, U input) {
+            CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+            return new PresenceEntry(in.field(PATH, CgCodecs.STRING),
+                    in.field("who", CgCodecs.STRING),
+                    in.optional("editing", CgCodecs.BOOL, false));
         }
     };
 
     public record PresenceNotification(List<PresenceEntry> entries) {
     }
 
-    public static Codec<PresenceNotification> presenceNotification() {
-        return new Codec<>() {
+    public static CgCodec<PresenceNotification> presenceNotification() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, PresenceNotification value) {
-                return Codecs.<U>map(ops)
-                        .field("presence", Codecs.listOf(PRESENCE_ENTRY), value.entries()).build();
+            public <U> U encode(CgDynamicOps<U> ops, PresenceNotification value) {
+                return CgCodecs.<U>map(ops)
+                        .field("presence", CgCodecs.listOf(PRESENCE_ENTRY), value.entries()).build();
             }
 
             @Override
-            public <U> PresenceNotification decode(DynamicOps<U> ops, U input) {
+            public <U> PresenceNotification decode(CgDynamicOps<U> ops, U input) {
                 return new PresenceNotification(
-                        Codecs.read(ops, input).optionalList("presence", PRESENCE_ENTRY));
+                        CgCodecs.read(ops, input).optionalList("presence", PRESENCE_ENTRY));
             }
         };
     }
@@ -628,43 +628,43 @@ public final class FsMessages {
         }
     }
 
-    public static final Codec<ProjectCapability> CAPABILITY = new Codec<>() {
+    public static final CgCodec<ProjectCapability> CAPABILITY = new CgCodec<>() {
         @Override
-        public <U> U encode(DynamicOps<U> ops, ProjectCapability value) {
-            return Codecs.<U>map(ops)
-                    .field("project", Codecs.STRING, value.project())
-                    .optional("read", Codecs.BOOL, value.mayRead(), false)
-                    .optional("write", Codecs.BOOL, value.mayWrite(), false)
-                    .optional("run", Codecs.STRING, value.scripting().name(),
+        public <U> U encode(CgDynamicOps<U> ops, ProjectCapability value) {
+            return CgCodecs.<U>map(ops)
+                    .field("project", CgCodecs.STRING, value.project())
+                    .optional("read", CgCodecs.BOOL, value.mayRead(), false)
+                    .optional("write", CgCodecs.BOOL, value.mayWrite(), false)
+                    .optional("run", CgCodecs.STRING, value.scripting().name(),
                             ScriptingMode.LIVE.name())
                     .build();
         }
 
         @Override
-        public <U> ProjectCapability decode(DynamicOps<U> ops, U input) {
-            Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-            return new ProjectCapability(in.field("project", Codecs.STRING),
-                    in.optional("read", Codecs.BOOL, false),
-                    in.optional("write", Codecs.BOOL, false),
-                    ScriptingMode.parse(in.optional("run", Codecs.STRING, ScriptingMode.LIVE.name())));
+        public <U> ProjectCapability decode(CgDynamicOps<U> ops, U input) {
+            CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+            return new ProjectCapability(in.field("project", CgCodecs.STRING),
+                    in.optional("read", CgCodecs.BOOL, false),
+                    in.optional("write", CgCodecs.BOOL, false),
+                    ScriptingMode.parse(in.optional("run", CgCodecs.STRING, ScriptingMode.LIVE.name())));
         }
     };
 
     public record CapabilitiesNotification(List<ProjectCapability> capabilities) {
     }
 
-    public static Codec<CapabilitiesNotification> capabilitiesNotification() {
-        return new Codec<>() {
+    public static CgCodec<CapabilitiesNotification> capabilitiesNotification() {
+        return new CgCodec<>() {
             @Override
-            public <U> U encode(DynamicOps<U> ops, CapabilitiesNotification value) {
-                return Codecs.<U>map(ops)
-                        .field("caps", Codecs.listOf(CAPABILITY), value.capabilities()).build();
+            public <U> U encode(CgDynamicOps<U> ops, CapabilitiesNotification value) {
+                return CgCodecs.<U>map(ops)
+                        .field("caps", CgCodecs.listOf(CAPABILITY), value.capabilities()).build();
             }
 
             @Override
-            public <U> CapabilitiesNotification decode(DynamicOps<U> ops, U input) {
+            public <U> CapabilitiesNotification decode(CgDynamicOps<U> ops, U input) {
                 return new CapabilitiesNotification(
-                        Codecs.read(ops, input).optionalList("caps", CAPABILITY));
+                        CgCodecs.read(ops, input).optionalList("caps", CAPABILITY));
             }
         };
     }
@@ -672,21 +672,21 @@ public final class FsMessages {
     // ── Bytes ───────────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Base64, because a {@code DynamicOps} has no byte-array primitive and the JSON one has no way to
+     * Base64, because a {@code CgDynamicOps} has no byte-array primitive and the JSON one has no way to
      * grow one — a text encoding is what makes the same codec work over JSON and over the binary ops.
      *
      * <p>Nullable-tolerant on encode so {@code optional(..., null)} can omit it, which is what a
      * conditional read that matched sends instead of an empty array.</p>
      */
-    public static final Codec<byte[]> BYTES = new Codec<>() {
+    public static final CgCodec<byte[]> BYTES = new CgCodec<>() {
         @Override
-        public <U> U encode(DynamicOps<U> ops, byte[] value) {
+        public <U> U encode(CgDynamicOps<U> ops, byte[] value) {
             return ops.createString(value == null ? ""
                     : java.util.Base64.getEncoder().encodeToString(value));
         }
 
         @Override
-        public <U> byte[] decode(DynamicOps<U> ops, U input) {
+        public <U> byte[] decode(CgDynamicOps<U> ops, U input) {
             String text = ops.getStringValue(input);
             return text == null || text.isEmpty() ? new byte[0]
                     : java.util.Base64.getDecoder().decode(text);

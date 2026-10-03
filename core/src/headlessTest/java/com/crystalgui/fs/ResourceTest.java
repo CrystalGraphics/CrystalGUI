@@ -1,10 +1,10 @@
 package com.crystalgui.fs;
 
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.fs.client.Workspace;
 
 import org.junit.Test;
 
@@ -126,7 +126,7 @@ public class ResourceTest {
     /** A workspace with no wire behind it. Every test here asks about routing, never about content. */
     private static Workspace offline() {
         return Workspace.over((method, args, onResult, onError) -> { }, (method, handler) -> { },
-                PlainOps.INSTANCE);
+                CgPlainOps.INSTANCE);
     }
 
     @Test

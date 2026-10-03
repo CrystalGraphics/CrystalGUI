@@ -1,8 +1,8 @@
 package com.crystalgui.net;
 
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.Codecs;
-import com.crystalgui.serialization.DynamicOps;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgDynamicOps;
 
 import javax.annotation.Nullable;
 
@@ -34,19 +34,19 @@ public record SheetRef(String hash, @Nullable String id) {
      * longer one place that knows every type's encoding — and a type's encoding belongs with the type
      * rather than with whichever message happened to be the first to carry it.</p>
      */
-    public static final Codec<SheetRef> CODEC = new Codec<SheetRef>() {
+    public static final CgCodec<SheetRef> CODEC = new CgCodec<SheetRef>() {
         @Override
-        public <T> T encode(DynamicOps<T> ops, SheetRef input) {
-            return Codecs.map(ops)
-                    .field("hash", Codecs.STRING, input.hash())
-                    .optional("id", Codecs.STRING, input.id(), null)
+        public <T> T encode(CgDynamicOps<T> ops, SheetRef input) {
+            return CgCodecs.map(ops)
+                    .field("hash", CgCodecs.STRING, input.hash())
+                    .optional("id", CgCodecs.STRING, input.id(), null)
                     .build();
         }
 
         @Override
-        public <T> SheetRef decode(DynamicOps<T> ops, T input) {
-            var in = Codecs.read(ops, input);
-            return new SheetRef(in.field("hash", Codecs.STRING), in.optional("id", Codecs.STRING, null));
+        public <T> SheetRef decode(CgDynamicOps<T> ops, T input) {
+            var in = CgCodecs.read(ops, input);
+            return new SheetRef(in.field("hash", CgCodecs.STRING), in.optional("id", CgCodecs.STRING, null));
         }
     };
 

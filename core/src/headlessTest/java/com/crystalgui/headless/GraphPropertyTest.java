@@ -1,12 +1,12 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgContentHash;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.graph.GraphCodecs;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.PropertyEdits;
-import com.crystalgui.serialization.ContentHash;
-import com.crystalgui.serialization.PlainOps;
 import org.junit.Test;
 
 import java.util.List;
@@ -204,8 +204,8 @@ public class GraphPropertyTest {
         document.addProperty(new GraphProperty("p1", "Tint", "_Tint", "color", "(1,0,0,1)",
                 false, "Surface", java.util.Map.of("mode", "HDR")));
 
-        Object encoded = GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, document);
-        GraphDocument reloaded = GraphCodecs.DOCUMENT.decode(PlainOps.INSTANCE, encoded);
+        Object encoded = GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, document);
+        GraphDocument reloaded = GraphCodecs.DOCUMENT.decode(CgPlainOps.INSTANCE, encoded);
 
         assertEquals(1, reloaded.propertyCount());
         GraphProperty back = reloaded.property("p1");
@@ -227,8 +227,8 @@ public class GraphPropertyTest {
         for (String name : List.of("A", "B", "C", "D")) {
             document.addProperty(GraphProperty.of(name, "float", "0"));
         }
-        GraphDocument reloaded = GraphCodecs.DOCUMENT.decode(PlainOps.INSTANCE,
-                GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, document));
+        GraphDocument reloaded = GraphCodecs.DOCUMENT.decode(CgPlainOps.INSTANCE,
+                GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, document));
         assertEquals(List.of("A", "B", "C", "D"),
                 reloaded.properties().stream().map(GraphProperty::name).toList());
     }
@@ -236,7 +236,7 @@ public class GraphPropertyTest {
     /** A graph with no properties encodes exactly as it did before they existed. */
     @Test
     public void anUntouchedDocumentIsUnchangedByTheFeature() {
-        String encoded = String.valueOf(GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, doc()));
+        String encoded = String.valueOf(GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, doc()));
         assertFalse("an empty list must be omitted, not written as an empty array",
                 encoded.contains("props"));
     }
@@ -249,8 +249,8 @@ public class GraphPropertyTest {
         withOne.addProperty(new GraphProperty("p1", "Tint", "_Tint", "color", "", true, "", null));
 
         assertNotEquals(
-                ContentHash.of(PlainOps.INSTANCE, GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, bare)),
-                ContentHash.of(PlainOps.INSTANCE, GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, withOne)));
+                CgContentHash.of(CgPlainOps.INSTANCE, GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, bare)),
+                CgContentHash.of(CgPlainOps.INSTANCE, GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, withOne)));
     }
 
     /** Clearing a document drops its properties — they describe the graph, not the editor. */

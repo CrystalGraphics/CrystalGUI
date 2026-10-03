@@ -200,8 +200,7 @@ drifted across two loaders by the time anyone compared them.
 > site is the thing to avoid — so `WorkspaceHostModern` adapts `fs.server.WorkspaceHost`,
 > `ServerSmokeModern` adapts `probe.ServerSmoke`, `HostModern`/`Host1710` answer `HostServices`, and
 > `MachineExample1710` wires `app.machine.MachineExample`. **Never a prefix** — not `Mc1710Host`, and
-> not `ModernHost`. One instance is left: `mc.modern.net.Connections` still shadows
-> `net.protocol.Connections` and qualifies it four times.
+> not `ModernHost`.
 
 > **Packages: every loader tree owns a segment under `com.crystalgui.mc`, and none of them owns the
 > root.** `com.crystalgui.mc.v1710` (one per Minecraft version, so 1.12.2 becomes `.v1122` with no
@@ -552,7 +551,7 @@ entry is visible rather than merely absent: `backdrop-filter`, `background`, `ba
 > **One pair goes the other way: `text-stroke-width` and `text-stroke-color` ARE in the list above, and a sheet still may not write them.** `DeclarationParser` refuses any property whose `StyleProperty.getAuthoredThrough()` is set, so `text-stroke` is the only spelling — while `byName` keeps resolving both, which `InlineStyleCodec` requires, since it throws on a name it cannot resolve and would otherwise fail on every serialised tree carrying an outline. They remain two properties because a declaration stating only a colour has to leave the width alone, and a single combined value cannot express a partial override.
 
 > **Renaming one is a DATA migration, not a rename.** `InlineStyleCodec` refuses a document naming a
-> property it does not know — `CodecException: Unknown style property 'gap-all'` — rather than skipping
+> property it does not know — `CgCodecException: Unknown style property 'gap-all'` — rather than skipping
 > the declaration, which is right for a wire message and means a saved `.cgui` written before the rename
 > will not open at all. Sweep every `.cgui` in the same pass, and remember that a workspace's own
 > documents live outside `src/`: the scratch document at `gl-debug-harness/crystalgui/projects/` was
@@ -1238,17 +1237,17 @@ actually changes — never on a resize. Reference equality on the family is corr
 A dedicated MC server builds a UI tree with **no CrystalGraphics present**, ships a description, and
 talks to the client over RPC and bindings.
 
-- **`serialization/`** — `Codec<A>`/`DynamicOps<T>`/`Codecs` (DFU-shaped), `JsonOps`, `PlainOps`,
-  `StateMap` (widget state), `UIElementMirror`, `ContentHash`; `serialization/style/` holds
-  `StyleValueCodecs` and `InlineStyleCodec`.
-- **`net/`** — `UITransport`, `InMemoryTransport`, `ServerUiSession`, `ClientUiSession`, `SheetRef`;
-  `net/mirror/` holds **the mirror** — `ServerTreeMirror`/`ClientTreeMirror` (generic in the node type,
-  written against the `ui.dom` seam), the `NodeMirror` per-tree codec seam, `UIElementMirror` over
-  today's tree, and `TreeOps` (the `insert`/`remove`/`move` vocabulary); `net/protocol/` holds the
-  four-kind `Envelope`,
-  `EnvelopeCodec`, `MessageRouter`, `Call` and the `UiMethods` vocabulary; `net/wire/` holds the
-  multiplexed byte transport (`FrameCodec`, `FrameMultiplexer`, `WireTransport`) over the
-  four-method `CgNetworkChannel` platform seam.
+- **The engine under it is CrystalGraphics'** (`com.crystalgraphics.serialization` and `.net`, since
+  net-migration N2): `CgCodec<A>`/`CgDynamicOps<T>`/`CgCodecs` (DFU-shaped), `CgPlainOps`, `CgStateMap`,
+  `CgContentHash`, `CgBinaryFormat`; the transports `CgTransport`/`CgInMemoryTransport`/`CgWireTransport`;
+  the four-kind `CgEnvelope`, `CgMessageRouter`, `CgCall`, `CgProtocolConnection` and `CgProtocols`; the
+  multiplexed byte transport `CgFrameMultiplexer` over the `CgNetworkChannel` platform slot.
+- **`serialization/`** — `JsonOps` (Gson, for debugging), and `serialization/style/`: `StyleValueCodecs`
+  and `InlineStyleCodec`.
+- **`net/`** — `ServerUiSession`, `ClientUiSession`, `UiWindowMux`, `SheetRef`; `net/mirror/` holds **the
+  mirror** — `ServerTreeMirror`/`ClientTreeMirror` (generic in the node type, written against the `ui.dom`
+  seam), the `NodeMirror` per-tree codec seam, `UIElementMirror` over today's tree, and `TreeOps` (the
+  `insert`/`remove`/`move` vocabulary); `net/protocol/` holds the `UiMethods` vocabulary.
 
 Three design facts worth knowing before you touch it:
 
@@ -1881,21 +1880,20 @@ com.crystalgui.fs              FOUR classes, and each is vocabulary every tier b
                                decompiler, a generator; contributed statically, drained per workspace),
                                Backup (hot exit), LocalHistory (per-save, and the merge base), Health
 
-com.crystalgui.serialization   Codec<A>, DynamicOps<T>, Codecs, CodecException, JsonOps, PlainOps,
-                               StateMap, UIElementMirror, ContentHash
+com.crystalgui.serialization   JsonOps. The codecs themselves (CgCodec, CgDynamicOps, CgPlainOps,
+                               CgStateMap, CgContentHash) are CrystalGraphics' com.crystalgraphics.serialization
   .style                       StyleValueCodecs, InlineStyleCodec
 
-com.crystalgui.net             UITransport, InMemoryTransport, ServerUiSession, ClientUiSession,
-                               ClientUiSessions, UiWindowMux, SheetRef. Ids live in
+com.crystalgui.net             ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux, SheetRef,
+                               over CrystalGraphics' com.crystalgraphics.net (transports, the envelope,
+                               the router, connections, the wire). Ids live in
                                ui.dom.UIElementTreeSource, not here. -> Server layer
   .mirror                      ServerTreeMirror<N,T>, ClientTreeMirror<N,T>, NodeMirror<N,T> (the
                                per-tree seam -- BOTH halves on one interface, so an encode with no
                                matching apply is a compile error), UIElementMirror over today's tree,
                                TreeOps. It names no widget, no session and no transport: a second
                                engine supplies a TreeSource and a NodeMirror and nothing else.
-  .protocol                    The four-kind Envelope, EnvelopeCodec, MessageRouter, Call, UiMethods.
-  .wire                        FrameCodec, FrameMultiplexer, WireTransport, over the four-method
-                               CgNetworkChannel platform seam.
+  .protocol                    UiMethods, the ui/* vocabulary.
   .window                      A WINDOW'S LIFETIME, and the layer a mod actually uses: Networked<M>
                                (one class per UI, widgets as FIELDS), UiType, ServerScope/ClientScope,
                                ServerWindow<P>, ServerWindows/ClientWindows, WindowMount, Presentation,
@@ -2050,7 +2048,7 @@ better and does not go stale when it changes.
 | `CGUI_WIDGETS.md` | Per-widget API, `::part()` names, pseudo-classes, and the harness scene that covers each |
 | `CGUI_WORKBENCH_SERVICES.md` | What a widget may *ask* rather than reach through the application for: `Disposer`, `DataContext`, `Resource`, the document layer, `Workspace`, `EditorService`. **New service API is added here in the same commit** |
 | `CGUI_SERVER_AND_SERIALIZATION.md` | Codecs, descriptions, content hashing, sessions and RPC — and the headless contract underneath them |
-| `CGUI_NETWORKING_PRIMER.md` | Networking from the bottom up, ELI5 first: what a frame, a session and a peer each are, how a `ProtocolConnection` is established, and how to define a packet contract on both halves |
+| `CGUI_NETWORKING_PRIMER.md` | Networking from the bottom up, ELI5 first: what a frame, a session and a peer each are, how a `CgProtocolConnection` is established, and how to define a packet contract on both halves |
 | `CGUI_THEMING.md` | Themes, editor colour schemes, the token vocabulary. Its token table is generated and machine-checked — regenerate it from the failing test, never by hand |
 | `CGUI_COMMANDS.md` | Every command the codebase declares, by area, with its menus and keys — the sweep behind the menu-icon pass. **A snapshot, not a contract**: it is regenerated, not maintained, so trust the code where the two disagree |
 | `CGUI_NEW_ENGINE.md` | Reading a commit or a comment that still names the old engine: what replaced what, and the six habits that are now wrong |

@@ -1,6 +1,6 @@
 package com.crystalgui.widget.config;
 
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.State;
@@ -23,7 +23,7 @@ import com.crystalgui.ui.contract.WidgetContracts;
  * <p>{@link ConfigControl} already gives every control a uniform surface — {@code getValueObject},
  * {@code setValueObject}, and a {@code changed} signal — because the Inspector binds them generically.
  * So the only thing that differs between a {@code NumberControl} and a {@code ColorControl} is how
- * their value crosses a {@link StateMap}, which is precisely what a {@link StateType} is. Writing the
+ * their value crosses a {@link CgStateMap}, which is precisely what a {@link StateType} is. Writing the
  * same twelve-line declaration thirteen times would be thirteen places to get the event wiring subtly
  * different.</p>
  *
@@ -57,10 +57,10 @@ public final class ConfigControlContracts {
         return Event.of("change",
                 (control, sink) -> control.changed.connect(raw -> sink.accept((V) raw)),
                 new Event.Payload<V>() {
-                    @Override public <T> void write(StateMap<T> out, V raw) {
+                    @Override public <T> void write(CgStateMap<T> out, V raw) {
                         valueType.put(out, "value", raw);
                     }
-                    @Override public <T> V read(StateMap<T> in) {
+                    @Override public <T> V read(CgStateMap<T> in) {
                         return valueType.get(in, "value", fallback);
                     }
                 }, rate);
@@ -72,7 +72,7 @@ public final class ConfigControlContracts {
      * <p>{@link ConfigControl} already gives every control a uniform surface -- {@code getValueObject},
      * {@code setValueObject}, and a {@code changed} signal -- because the Inspector binds them
      * generically. So the only thing that differs between a {@code NumberControl} and a
-     * {@code ColorControl} is how its value crosses a {@link StateMap}, which is what a
+     * {@code ColorControl} is how its value crosses a {@link CgStateMap}, which is what a
      * {@link StateType} is. Writing the same declaration thirteen times would be thirteen places to
      * get the event wiring subtly different.</p>
      */

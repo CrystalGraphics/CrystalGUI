@@ -1,7 +1,7 @@
 package com.crystalgui.widget.config.control;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.config.ConfigDescriptor;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.StateType;
@@ -54,12 +54,12 @@ public class MaskControl extends ValueControl<Set<String>> {
      */
     private static final StateType<Set<String>> FLAGS =
             new StateType<Set<String>>() {
-                @Override public <T> void put(StateMap<T> out, String key,
+                @Override public <T> void put(CgStateMap<T> out, String key,
                                               Set<String> value) {
                     StateTypes.stringListUnder("f").put(out, key,
                             new ArrayList<>(value == null ? Set.of() : value));
                 }
-                @Override public <T> Set<String> get(StateMap<T> in,
+                @Override public <T> Set<String> get(CgStateMap<T> in,
                                                                String key, Set<String> fallback) {
                     List<String> read =
                             StateTypes.stringListUnder("f").get(in, key, List.of());

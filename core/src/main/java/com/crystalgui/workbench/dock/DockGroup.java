@@ -1,17 +1,27 @@
 package com.crystalgui.workbench.dock;
 
-import com.crystalgui.ui.input.keymap.KeyChord;
-import com.crystalgui.ui.input.keymap.Keymap;
-import com.crystalgui.widget.display.EmptyState;
-import com.crystalgui.render.texture.CgUiSvg;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.style.StyleGroup;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.style.StyleGroup;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.FocusEvent;
+import com.crystalgui.ui.event.MouseEvent;
+import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.input.keymap.KeyChord;
+import com.crystalgui.ui.input.keymap.Keymap;
+import com.crystalgui.widget.composite.ActionButton;
+import com.crystalgui.widget.display.EmptyState;
+import com.crystalgui.widget.dnd.InsertionMarker;
+import com.crystalgui.widget.layout.Tab;
+import com.crystalgui.widget.layout.TabView;
+import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.workbench.dock.banner.DockBannerBar;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.drag.DockDropZones;
@@ -21,26 +31,16 @@ import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.panel.DockPane;
 import com.crystalgui.workbench.dock.panel.DockPaneProvider;
 import dev.vfyjxf.taffy.style.FlexDirection;
-import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.event.FocusEvent;
-import com.crystalgui.ui.event.MouseEvent;
-import com.crystalgui.widget.composite.ActionButton;
-import com.crystalgui.widget.layout.Tab;
-import com.crystalgui.widget.overlay.ContextMenu;
-import com.crystalgui.widget.overlay.Tooltip;
-import com.crystalgui.widget.dnd.InsertionMarker;
-import com.crystalgui.widget.layout.TabView;
-import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
-import java.util.ArrayList;
 import com.crystalgui.core.dispose.Disposer;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
-import java.util.Set;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import javax.annotation.Nullable;
 
@@ -623,7 +623,7 @@ public class DockGroup extends UIElement {
     private final Map<String, DockInput> paneInputs = new LinkedHashMap<>();
 
     /** Per-input view state, keyed by the FRAMEWORK. A pane keying its own is the stacked-inspector bug. */
-    private final Map<DockPanelRef, StateMap<?>> viewStates = new LinkedHashMap<>();
+    private final Map<DockPanelRef, CgStateMap<?>> viewStates = new LinkedHashMap<>();
 
     /** Which input's pane is currently on screen here, so {@code onHidden}/{@code onVisible} fire once. */
     @Nullable
@@ -660,7 +660,7 @@ public class DockGroup extends UIElement {
         if (visibleInput != null && !visibleInput.matches(incoming)) {
             DockPane leaving = panes.get(visibleInput.typeId());
             if (leaving != null) {
-                StateMap<?> outgoing = new StateMap<>(PlainOps.INSTANCE, new LinkedHashMap<>());
+                CgStateMap<?> outgoing = new CgStateMap<>(CgPlainOps.INSTANCE, new LinkedHashMap<>());
                 leaving.writeViewState(outgoing);
                 viewStates.put(visibleInput.ref(), outgoing);
                 leaving.onHidden();
@@ -677,7 +677,7 @@ public class DockGroup extends UIElement {
         if (!incoming.matches(paneInputs.get(typeId))) {
             pane.setInput(incoming);
             paneInputs.put(typeId, incoming);
-            StateMap<?> stored = viewStates.get(active);
+            CgStateMap<?> stored = viewStates.get(active);
             if (stored != null) pane.readViewState(stored);
         }
         if (visibleInput == null) {

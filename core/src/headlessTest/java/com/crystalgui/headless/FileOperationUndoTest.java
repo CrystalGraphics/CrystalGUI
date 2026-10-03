@@ -1,22 +1,22 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.server.WorkspaceActor;
-import com.crystalgui.fs.server.WorkspacePermission;
-import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.fs.server.WorkspaceTrash;
 import com.crystalgui.fs.client.FileOperations;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.server.WatchHub;
+import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
+import com.crystalgui.fs.server.WorkspaceTrash;
 
 import org.junit.After;
 import org.junit.Before;
@@ -46,9 +46,9 @@ public class FileOperationUndoTest {
     private static final String PROJECT = "p";
     private static final Object PEER = new Object();
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverSide;
-    private ProtocolConnection<Object> clientSide;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverSide;
+    private CgProtocolConnection<Object> clientSide;
     private InMemoryFileSystem files;
     private WorkspaceService service;
     private Workspace workspace;
@@ -56,18 +56,18 @@ public class FileOperationUndoTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         files = new InMemoryFileSystem().seed("p:a.txt", "one").seed("p:dir/b.txt", "two");
         ProjectRegistry projects = new ProjectRegistry().register(() -> List.of(
                 new WorkspaceProject(PROJECT, "P", Paths.get("/srv/p"))));
         service = new WorkspaceService(projects, files, WorkspacePermission.ALLOW_ALL,
                 new WorkspaceTrash.InMemory());
 
-        link = InMemoryTransport.pair();
-        serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, PEER,
-                PlainOps.INSTANCE).installOn(serverSide::onRequest);
+                CgPlainOps.INSTANCE).installOn(serverSide::onRequest);
 
         workspace = Workspace.of(clientSide);
         ops = workspace.files();
@@ -76,7 +76,7 @@ public class FileOperationUndoTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void pump() {

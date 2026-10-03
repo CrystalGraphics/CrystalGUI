@@ -5,6 +5,7 @@ import java.nio.file.Paths;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.CgPeer;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.fs.server.OperatorsMayWrite;
 import com.crystalgui.fs.server.WorkspaceActor;
@@ -77,7 +78,7 @@ public final class WorkspaceHostModern {
         if (host != null) host.tick(deltaSeconds);
     }
 
-    /** Drops a peer's bindings. Wired to {@code Connections.onPeerClosed}. */
+    /** Drops a peer's bindings. Wired to {@code CgNetwork.onPeerClosed}. */
     public static void forget(Object peer) {
         if (host != null) host.forget(peer);
     }
@@ -135,8 +136,8 @@ public final class WorkspaceHostModern {
 
         @Override
         public WorkspaceActor actorFor(Object peer) {
-            if (peer instanceof Peer) {
-                final String name = ((Peer) peer).name();
+            if (peer instanceof CgPeer) {
+                final String name = ((CgPeer) peer).name();
                 return () -> name;
             }
             if (peer instanceof ServerPlayer) {

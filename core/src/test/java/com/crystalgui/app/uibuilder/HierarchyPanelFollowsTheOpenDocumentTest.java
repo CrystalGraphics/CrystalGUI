@@ -17,6 +17,12 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
@@ -34,20 +40,13 @@ import com.crystalgui.fs.server.WatchHub;
 import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
+import com.crystalgui.widget.display.EmptyState;
 import com.crystalgui.workbench.Workbench;
-import com.crystalgui.workbench.extension.InspectorExtension;
 import com.crystalgui.workbench.WorkbenchSession;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.DockWindow;
@@ -56,6 +55,7 @@ import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.panel.DockInput;
+import com.crystalgui.workbench.extension.InspectorExtension;
 
 /**
  * <b>The Hierarchy panel shows the tree of the {@code .cgui} in front.</b>
@@ -78,13 +78,13 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
             + "}\n";
 
     private Workbench workbench;
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     @Before
     public void openWorkbench() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         UIElementRegistry.bootstrap();
 
         InMemoryFileSystem files = new InMemoryFileSystem()
@@ -96,11 +96,11 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
                 files,
                 (actor, project, path, operation) -> true);
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "host");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
 
         // THE PRODUCT'S OWN LIST, not just the builder's id: the panel came up empty in the running
         // editor while a minimal fixture passed, and the only difference left was what else is on.
@@ -118,7 +118,7 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         // the inspector's section set is one -- so a fixture that walks away leaves them registered and
         // the next test in the JVM counts them.
         workbench.dispose();
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void frameAndPump() {

@@ -2,7 +2,7 @@
 
 **For an agent adding anything that touches Minecraft or a loader** — commands, permissions, entities,
 containers, events, a new platform service — so that it builds and runs on all of them: Forge 1.7.10,
-1.8.8–26.2, NeoForge 1.20.2–26.2, Fabric 1.14.4–26.2, one jar. The build itself:
+1.8.8–26.3, NeoForge 1.20.2–26.3, Fabric 1.14.4–26.3, one jar. The build itself:
 [`CGUI_BUILD.md`](CGUI_BUILD.md). The invocable version of this doc is the `cross-version` skill.
 
 ## The rule
@@ -15,7 +15,7 @@ others got wrong, and nothing detects it (`AGENTS.md` § *A loader defines wirin
 ```
 core (contract + logic, Java 25 → 8)      ←  the only place behaviour lives
   └─ seam: an interface, Minecraft-free
-       ├─ runtime/mc/modern/common   one class, Forge + NeoForge + Fabric, 1.13.2–26.2, //? directives
+       ├─ runtime/mc/modern/common   one class, Forge + NeoForge + Fabric, 1.13.2–26.3, //? directives
        │    └─ forge / neoforge / fabric branches: registration only, forward into common
        ├─ runtime/mc/legacy/forge    Forge 1.8.9 · 1.10.2 · 1.12.2, directives in Game / ClientGame
        └─ runtime/mc/1710            Forge 1.7.10, no directives
@@ -30,7 +30,7 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 
 | You need | Copy |
 |---|---|
-| traffic between client and server | `CgNetworkChannel` — `CrystalGUIForge.Network`, `CrystalGUINeoForge`, `CrystalGUIFabricCommon`, `legacy/net/NetworkChannelLegacy`, `v1710/net/NetworkChannel1710` |
+| traffic between client and server | CrystalGraphics' `CgNetworkChannel` — `CrystalGraphicsForge.Network`, `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`, `NetworkChannel1710` — and `CgNetwork`, the connections their lifecycles drive |
 | a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
 | a permission or "who is this player" | `WorkspaceHostModern.McRoles`; legacy `Game.canSendCommands`; 1.7.10 `CgUiWorkspaceHost` |
 | client input, HUD, a screen | `mc.modern.client` (`CgUiInput`, `CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
@@ -66,8 +66,35 @@ python CrystalGraphics/singlejar-logic/mcapi.py find Menu --in net/minecraft/wor
 `research_repos/mc1201_sources/` holds 1.20.1 with no setup. A loader's own behaviour: its sources jar in
 `~/.gradle/caches/modules-2/`.
 
+**Whether a hook reaches what is drawn, or happens when you think: the loader's own jar.** An event existing
+is not an event mattering. Forge 26.1.1–26.2 post their camera-angle event *after* `renderLevel` has copied
+the view, so no listener's angles reach the screen; Forge 26.3 posts it twice a frame. Neither shows in a
+signature, and each cost a sweep to find by symptom. Every installed client's patched Minecraft is in
+Prism's libraries, ready to disassemble — read the call order before writing the hook:
+
+```bash
+unzip -q -o "$PRISM/libraries/net/minecraftforge/forge/26.1.1-63.0.2/forge-26.1.1-63.0.2-client.jar" \
+    'net/minecraft/client/renderer/GameRenderer*.class' -d /tmp/f
+javap -c -p /tmp/f/net/minecraft/client/renderer/GameRenderer.class | grep -n "ComputeCameraAngles\|viewRotationMatrix\|setRotation"
+```
+
+Forge's client jar holds its patched classes; vanilla's differ only by the patches, so it answers for Fabric
+too. NeoForge's are under `libraries/net/neoforged/`.
+
 **4. Runtime names** — only for strings and mixin targets: a real node's `build/stubs/names.tsrg`
 (Mojang → SRG) or Loom's mappings (→ intermediary). Compiled code never needs them.
+
+**5. What each node compiles, branch by branch: `directives.py`.** After writing the directives, and before
+calling a feature done on every node:
+
+```bash
+python CrystalGraphics/singlejar-logic/directives.py runtime/mc/modern world/ mixin/   # every chain in these
+python CrystalGraphics/singlejar-logic/directives.py CrystalGraphics/runtime/mc/modern  # just the gaps
+```
+
+It evaluates every `//? if` chain for every node and lists the nodes **no** branch covers. An import or a
+helper only some versions need is a fine gap; behaviour is a decision to write down (§ *Plan it*) — the
+absent value, documented in the class, and a capability the host does not declare.
 
 Never run `generateStubDatabase` to read the API — it rewrites `stubs.zip` from whatever is on disk.
 
@@ -92,11 +119,22 @@ All of them are knowable from `mcapi.py` before writing a line.
    Each distinct spelling is a directive branch; each run boundary is its predicate. Where a node has
    **no** spelling, decide now: implement another way, or degrade to the contract's absent value — and
    write the reason down. Never drop a version silently.
-4. **Write each era in one pass** from the table: `modern/common` (the active node's spelling live, the
+
+   **Add a behaviour column for anything whose timing matters**: *where the value lands relative to its
+   consumer*. A camera hook — before or after the frame's view is taken (Forge 26.1.1–26.2: after)? A
+   polled state — does it outlive the poll (a lightning bolt can live less than one client tick when the
+   server catches up)? An enum — does a later version add a constant (1.21.11's `GraphicsPreset.CUSTOM`)?
+   An attribute — dimensional or positional (1.21.11's `water_evaporates` throws without a position)? Each
+   is a `javap` or a source read now, against a sweep later.
+4. **Write the probe now, with the contract** (§7) — which node proves which row of the table, and what
+   each host declares it delivers. Nodes with no dev run (legacy, Forge ≥1.20.2, NeoForge 1.20.2/1.20.3)
+   are proven only by an installed client, so their rows need a probe check from the start.
+5. **Write each era in one pass** from the table: `modern/common` (the active node's spelling live, the
    others in `/* */`), then the three loader branches' registration, then legacy, then 1.7.10.
-5. **Compile everything** (`checkAllTargets`) and fix by **family** — one directive fixes every node in a
-   run; a failure list sorted by node points at the run.
-6. **Runtime, cheapest first** (§7). A failure there that the break table did not predict belongs in the
+6. **Compile everything** (`checkAllTargets`) and fix by **family** — one directive fixes every node in a
+   run; a failure list sorted by node points at the run. Then `directives.py` over the touched files: no
+   node may fall through a chain you did not decide on.
+7. **Runtime, cheapest first** (§8). A failure there that the break table did not predict belongs in the
    table, and in `CGUI_INVARIANTS.md` if it is not a spelling.
 
 Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke` about a minute per node;
@@ -141,9 +179,10 @@ CrystalGraphics has the same shape (`runtime/mc/modern/common/…/PlatformServic
 
 Worked examples to copy — each is the complete pattern:
 
-- **A transport** — `CgNetworkChannel` (core `net.wire`): `CrystalGUIForge.Network`,
-  `CrystalGUINeoForge`, `CrystalGUIFabricCommon`, `legacy/net/NetworkChannelLegacy`,
-  `v1710/net/NetworkChannel1710`; logic (framing, routing, sessions) all in core.
+- **A transport** — CrystalGraphics' `CgNetworkChannel` (platform slot): `CrystalGraphicsForge.Network`,
+  `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`,
+  `NetworkChannel1710`, each with a lifecycle forwarding joins, ticks and connects into `CgNetwork`;
+  framing, routing and connections all in CrystalGraphics core, sessions in CrystalGUI's.
 - **A permission** — `WorkspaceRoles.isOperator(actorId)`: `WorkspaceHostModern.McRoles` (one class,
   directives for `isOp(GameProfile)` → `isOp(NameAndId)` at 1.21.9), legacy `CgUiWorkspaceHost` via
   `Game.canSendCommands`, 1.7.10 `CgUiWorkspaceHost`.
@@ -192,7 +231,42 @@ return server.getPlayerList().isOp(player.getGameProfile());
 | **Ticks, lifecycle, joins** | what happens | which event fires it — add a `LifecycleCrystalGUI` method and forward from each loader |
 | **Rendering, input, GL** | CrystalGraphics | loader events, or node mixins where no event exists (Forge 1.21.3+) — CrystalGraphics' `AGENTS.md` |
 
-## 7. Verify — in this order
+## 7. Prove it — a probe that is right the first time
+
+A runtime check of every node is a probe (`AutoTest` drives it in `prodSmoke` and in dev runs; the world
+seams have `CgWorldProbe`, `-Dcrystalgraphics.worldprobe=true`). Its design decides whether verification
+converges or goes round in circles: the world seams took eight sweeps, and most of their failures were the
+probe's, not the hosts'. Before the first run:
+
+1. **Every check is a cross-check of two independent sources** — the entity query against the host's
+   camera, the ground scan against a raycast, the sun against the day time — never one value against a
+   constant you assumed.
+2. **Measure invariants, not conventions.** A camera offset is the rotation *between* the views before and
+   after — an angle and an axis — not a world yaw read off a matrix: one host turns about the view's
+   vertical, another the world's, and both are right; reading world yaw passed the first and failed the
+   second for a player looking down. Apply one change per measurement (yaw, then roll), so each is one
+   rotation. Before blaming a host for a failed check, ask whether the check's assumption holds there
+   (1.7.10's player stands at `posY - yOffset`, its `posY` at eye level).
+3. **Declare, then skip.** A host declares what its hook *visibly* delivers (`CgHostCamera.capabilities()`,
+   `CgWorldEvents.declare`), and the probe skips the rest with a reason. A node that cannot deliver says so
+   in its declaration and its javadoc — it does not fail, and it does not declare a hook that changes
+   nothing seen.
+4. **Assume sweep conditions, not a dev run's.** Several clients at once: an unfocused window pauses on
+   lost focus and stops its server (turn that off — `CgWorldStimulus.keepRunning`); the world may still be
+   loading when the player appears (wait it out); the integrated server falls behind and catches up in
+   bursts; the server corrects the client's game time once a second (a window under a few seconds can step
+   backwards); an explosion throws what it hits (match within tens of blocks, not a few).
+5. **Events are hooked, never polled for.** A poll — per frame or per tick — misses anything shorter than
+   its period, and under a catching-up server a bolt's whole life, or a mob's death and removal, fits
+   between two client ticks. Report on the packet path (a mixin on the handler) or as the entity joins or
+   leaves the client level; a poll only supplements.
+6. **Every check that can fail for two reasons logs a line telling them apart** — "an entity at the bolt on
+   the client: true" (it arrived, the reporting missed it) against false (it never arrived). Add it
+   *before* the next run. **A rerun with no new diagnostic is the circle.**
+7. **Information lines never contain `: false`** — `prodSmoke` reads `<name>: false` as a failed check.
+   Write `<name> is <value>`.
+
+## 8. Verify — in this order
 
 1. `./gradlew checkAllTargets` — every node compiles (stub mode; minutes).
 2. The logic's tests: `:core:headlessTest` / `:core:test --tests "<Class>"`.
@@ -208,18 +282,45 @@ return server.getPlayerList().isOp(player.getGameProfile());
 6. A feature a smoke does not exercise (a command, an entity) needs its own probe or a manual run on
    the oldest and newest node of each loader — say which, in the commit.
 
+**Getting there in one pass:**
+
+- **Dev runs first, on every node with a new code path** — not only the oldest and newest — and read each
+  probe line before the next run. Quirks that look like bugs: a Fabric dev run reads CrystalGraphics' jar
+  while the build is configured, so **the first run after a change tests the old code — run Fabric twice**;
+  a NeoForge dev run applies none of CrystalGraphics' mixins (no `variants.json` outside the merged jar), so
+  mixin-backed checks fail there and mean nothing; NeoForge dev wraps every GPU texture
+  (`ValidationGpuTexture` — `LifecycleModern.hostTexture` unwraps it).
+- **Nodes with no dev run get a targeted `prodSmoke -PcgTargets=<labels>`** before the sweep: legacy
+  (1.8.9, 1.10.2, 1.12.2), Forge ≥1.20.2, NeoForge 1.20.2/1.20.3.
+- **One sweep, read whole.** Group every failure by family, fix them all, then confirm with
+  `-PcgTargets=` the failing labels — not another thirty clients.
+- **Prism is shared.** Check for running `javaw` and ask any other session before claiming it:
+  `prodSmoke` deploys into every instance and arms the targets, so two runs test each other's jars.
+  Cancelling one does not stop its Gradle client — find its PID and stop it, or its batches keep
+  launching. With IntelliJ open, `-PcgBatch=3`: four clients and the build ran the machine out of memory.
+
 **A failure prodSmoke or a player finds is fixed in that node's dev run, not in Prism.** Reproduce it
 with `runClient -Dcrystalgui.autotest=true ...` (or `runServer`/`serverSmoke`), iterate there, and run
 `prodSmoke` once more at the end. A cycle through the shipped jar is ten minutes; a dev client is two.
 `CGUI_BUILD.md` § *A failure on an installed client is fixed in a dev run* has the command.
 
-## 8. Traps
+## 9. Traps
 
 - **Strings are never remapped** — reflection by member name, `@Inject(method = "...")` without a
   refmap, `getMethod("...")` resolve on NeoForge and fail on Forge <1.20.6 (SRG) and Fabric
   (intermediary). Call Minecraft in compiled code.
 - **Mixins are the last resort**, and a mixin into a method Forge's patches add can compile against
   vanilla and fail only in game; use `require = 1`.
+- **A node mixin applies only where its node pins a plugin** (`variant.mixinPlugin` in
+  `versions/<v>/gradle.properties`), and only the names that plugin lists. A node without one silently runs
+  none — NeoForge 26.x reported no explosions until it pinned `CrystalGraphicsNeoForgeEventMixins`. A plugin
+  may list a mixin whose body a directive empties on some nodes; the class must still exist.
+- **A loader event fires for both levels in single player.** Forge's and NeoForge's entity, level and tick
+  events reach the integrated server's levels in the same JVM: filter `getLevel().isClientSide()`.
+- **Map an enum from what it sets, not from its constants** — a version adds one (`GraphicsPreset.CUSTOM`),
+  and a constant-by-constant mapping answers nothing for it.
+- **1.7.10's `/summon` spawns a lightning bolt the client is never sent**; `addWeatherEffect` is what
+  reaches it. Legacy and 1.7.10 tick events are on `FMLCommonHandler.instance().bus()`.
 - **A bootstrapper names no Minecraft class** — one copy serves every node of its loader.
 - **No JOML below 1.19.3** at runtime unless the companion jar is installed.
 - **Forge 1.15's ServiceLoader sees nothing** in a mod file — discover through `Providers`.

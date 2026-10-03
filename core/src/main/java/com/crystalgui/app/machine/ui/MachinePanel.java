@@ -1,23 +1,23 @@
 package com.crystalgui.app.machine.ui;
 
-import com.crystalgui.ui.dom.Name;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.app.machine.MachineModel;
 import com.crystalgui.app.machine.MachineTrace;
-import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.ClientScope;
+import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
 import com.crystalgui.net.window.UiType;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.dom.Name;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.Switch;
 import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -472,7 +472,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          * with -- a notification that could fail visibly would be a request.
          */
         io.on(announce, Button.ACTIVATE, ctx -> {
-            StateMap<Object> out = io.newMap();
+            CgStateMap<Object> out = io.newMap();
             out.putString("text", model.label() + " says hello");
             out.putInt("cycles", model.completedCycles());
             MachineTrace.log(MachineTrace.SERVER, "-> notifying machine/announce (no answer wanted)");
@@ -498,7 +498,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
 
         io.onCall("machine/stats", (args, respond) -> {
             MachineTrace.log(MachineTrace.SERVER, "<- answering machine/stats");
-            StateMap<Object> out = io.newMap();
+            CgStateMap<Object> out = io.newMap();
             out.putInt("cycles", model.completedCycles());
             out.putString("label", model.label());
             out.putInt("heartbeats", heartbeats);
@@ -659,7 +659,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
          */
         io.onCall("machine/clientInfo", (args, respond) -> {
             MachineTrace.log(MachineTrace.CLIENT, "-> answering machine/clientInfo");
-            StateMap<Object> out = io.newMap();
+            CgStateMap<Object> out = io.newMap();
             out.putString("renderer", "example-client");
             out.putBool("cachedDescription", io.session().cacheSize() > 0);
             respond.ok(out);
@@ -698,7 +698,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
      * visibly would be a request.</b></p>
      */
     private void sendHeartbeat() {
-        StateMap<Object> out = io.newMap();
+        CgStateMap<Object> out = io.newMap();
         out.putString("from", "example-client");
         MachineTrace.log(MachineTrace.CLIENT, "-> notifying machine/heartbeat (no answer expected)");
         io.notify("machine/heartbeat", out);
@@ -716,7 +716,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
      * "never came back", and only one of those is worth retrying.</p>
      */
     private void rename(String name) {
-        StateMap<Object> args = io.newMap();
+        CgStateMap<Object> args = io.newMap();
         args.putString("name", name);
         MachineTrace.log(MachineTrace.CLIENT, "-> asking the server machine/rename('" + name + "')");
         show("REQUEST sent to the server - waiting for an answer...");
