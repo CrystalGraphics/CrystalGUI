@@ -10,7 +10,7 @@ containers, events, a new platform service — so that it builds and runs on all
 **`core` decides; a loader answers facts and does wiring.** Anything two loaders would both decide goes
 in `core` (or CrystalGraphics `core`), is headless-testable, and names no Minecraft type. A loader module
 only says how *its* Minecraft spells a fact or a registration. A decision made in one loader is one the
-others got wrong, and nothing detects it (`AGENTS.md` § *A loader defines wiring*).
+others got wrong, and nothing detects it (`runtime/mc/CLAUDE.md`).
 
 ```
 core (contract + logic, Java 25 → 8)      ←  the only place behaviour lives

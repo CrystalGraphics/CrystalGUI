@@ -42,7 +42,7 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 | `runtime/mc/shared/`, `forge-bootstrap/`, `launchwrapper/` | Java 8 pieces merged once: mixin plugin, the Forge `@Mod` classes, LaunchWrapper helpers |
 | `runtime/mc/modern/build-logic/` | convention plugins (`cg-java`, `cg-modern-loader`, `cg-modern-common`, `cg-legacy-loader`, `cg-single-jar`, `cg-descriptors`) and `cgbuildlogic/` (`ProdSmoke`, `uniminedDevRun`, `DevRunDowngrade`, `ShadowUtils`) |
 | `gradle/module_integration/` | how CrystalGraphics is wired in: `composite.settings` (substitutions), `integration` (compile deps), `crystalgraphics-run` (ModDevGradle dev runs) |
-| `download/locations.json` | every runtime download address — see `AGENTS.md` § *Runtime downloads* |
+| `download/locations.json` | every runtime download address — see `download/CLAUDE.md` |
 | `samples/fieldnotes/` | **a build of its own**, not in this one: a CrystalGUI app shipped as one jar over three loaders on `singlejar { targets {} }` — the worked example for a platform-abstract project. Its README says how to build and drive it |
 
 **Two source sets per loader module**: `main` → the host jar, `lang` → the language jar. `:language` is

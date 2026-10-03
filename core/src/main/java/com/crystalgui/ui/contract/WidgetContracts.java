@@ -17,7 +17,7 @@ import javax.annotation.Nullable;
  * <b>local-only</b>, with a reason. There is no third state, and {@code WidgetContractCoverageTest}
  * enumerates the widget packages and fails on a class that is neither.</p>
  *
- * <p>That is the anti-rot shape {@code AGENTS.md} already prescribes for the CSS property registry,
+ * <p>That is the anti-rot shape {@code style/CLAUDE.md} already prescribes for the CSS property registry,
  * applied to the question it was invented for. The failure it prevents is silent: a stateful widget
  * with nothing declared does not throw, it <b>arrives blank</b> on the far side, and a blank widget
  * reads as a rendering fault in the client rather than a missing declaration on the server.</p>

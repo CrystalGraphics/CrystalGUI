@@ -564,7 +564,7 @@ never disagree about the element's shape. `sdf_coverage` turns a signed distance
 > Two things keep it that way: `ShippedShaderStagePurityTest` (GL-free, fails on any machine if a
 > fragment-only builtin becomes reachable in a generated vertex source) and the harness's
 > `--mode=shader-compile-audit` (real driver, every shipped shader and keyword variant, one report).
-> The full contract is in `CrystalGraphics/AGENTS.md` § *Stage defines*.
+> The full contract is in `CrystalGraphics/docs/SHADERS.md` § *Stage defines*.
 
 The shader is a genuine "canvas": interior filled by `_FillColor` or a sampled `_MainTex`
 (`WITH_TEXTURE_FILL` keyword), an optional `_BorderColor` stroke band (`WITH_BORDER` keyword) along the
@@ -620,7 +620,7 @@ folded label would ignore the fade.
 open, and what did not change inside it is replayed from its kept chunks rather than painted (render-graph
 G6). A picture kept across frames belongs to a box the compositor moves -- a window, a pointer follower, a
 compositor animation -- whose surface is composited again while nothing in it changed and repainted only
-where something did (G7, `AGENTS.md` § *Stack 5*). Neither is kept for a subtree containing a node whose
+where something did (G7, `core/src/main/java/com/crystalgui/render/CLAUDE.md`). Neither is kept for a subtree containing a node whose
 `paintsDynamically()` is true (the default for anything overriding a paint hook) or a `backdrop-filter`,
 whose subject is not in this tree at all. `UIElement.repaint()` is the door for a widget whose picture
 changes without moving a box.
