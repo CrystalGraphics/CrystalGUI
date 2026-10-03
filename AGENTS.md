@@ -34,6 +34,12 @@ shell that you have not Read**: a shell edit loads nothing, and the guide holds 
 | Touching anything in `core/src/main/resources/assets/crystalgui/` — a shader, a sheet, an icon, a font | [`docs/CGUI_SHIPPED_ASSETS.md`](docs/CGUI_SHIPPED_ASSETS.md), and for a shader `CrystalGraphics/docs/SHADERS.md` |
 | Finding where something lives | [`docs/CGUI_ARCHITECTURE.md`](docs/CGUI_ARCHITECTURE.md) — every module and the package map of `core/` |
 
+## Where documentation goes
+
+`AGENTS.md` holds only what every session needs — rules and routing. New reference material goes to the doc that
+owns the subject (`docs/`), a package's rule to that package's `CLAUDE.md`, and a new invariant to
+`docs/CGUI_INVARIANTS.md`. Never append a section here; add a routing row if a new doc needs one.
+
 ## No re-delegation
 
 **A subagent does its assigned work itself** with Read, Edit, Write, Bash, Glob and Grep — it never spawns
