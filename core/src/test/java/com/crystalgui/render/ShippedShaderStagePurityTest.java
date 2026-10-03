@@ -2,6 +2,7 @@ package com.crystalgui.render;
 
 import com.crystalgraphics.api.material.CgAttachedBuffer;
 import com.crystalgraphics.api.shader.CgShaderPreprocessor;
+import com.crystalgraphics.api.shader.CgShaderStages;
 import com.crystalgraphics.gl.material.parse.CgMaterialShaderCompiler;
 import com.crystalgraphics.gl.material.parse.CgParsedPass;
 import com.crystalgraphics.gl.material.parse.CgParsedShader;
@@ -15,10 +16,8 @@ import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URL;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Deque;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -108,7 +107,8 @@ public class ShippedShaderStagePurityTest {
                 String offender = firstFragmentOnlyBuiltinInVertexStage(cs.vertexSource(), resourcePath);
                 assertNull(resourcePath + " pass '" + pass.name() + "' (" + path + "): the generated"
                         + " VERTEX stage uses the fragment-only builtin '" + offender + "'."
-                        + " Guard it with #ifndef CG_VERTEX_STAGE in the lib that defines it.",
+                        + " Guard it with #if !defined(CG_VERTEX_STAGE) && !defined(CG_COMPUTE_STAGE) in the lib"
+                        + " that defines it.",
                         offender);
             }
         }
@@ -221,61 +221,9 @@ public class ShippedShaderStagePurityTest {
         return out.toString();
     }
 
-    /**
-     * Drops text the driver's preprocessor would discard for the vertex stage. Only
-     * {@code CG_VERTEX_STAGE} / {@code CG_FRAGMENT_STAGE} are resolved; every other conditional
-     * keeps <b>both</b> branches, so an inactive keyword cannot hide a banned builtin.
-     */
+    /** Drops what the driver discards for the vertex stage, or the fragment stage. */
     static String stripInactiveStageBlocks(String src, boolean vertexStage) {
-        StringBuilder out = new StringBuilder(src.length());
-        // frame[0] = is this a resolved stage conditional, frame[1] = is this branch emitting
-        Deque<boolean[]> stack = new ArrayDeque<>();
-
-        for (String line : src.split("\n", -1)) {
-            String t = line.trim();
-            if (t.startsWith("#ifdef ") || t.startsWith("#ifndef ")) {
-                boolean negated = t.startsWith("#ifndef ");
-                String name = t.substring(negated ? 8 : 7).trim();
-                Boolean defined = stageMacroValue(name, vertexStage);
-                if (defined == null) {
-                    stack.push(new boolean[]{false, true});
-                } else {
-                    stack.push(new boolean[]{true, negated != defined});
-                }
-                continue;
-            }
-            if (t.startsWith("#if")) {                 // #if / #if defined(...) — unresolved
-                stack.push(new boolean[]{false, true});
-                continue;
-            }
-            if (t.startsWith("#elif")) {               // give up on this frame; keep everything
-                if (!stack.isEmpty()) { stack.peek()[0] = false; stack.peek()[1] = true; }
-                continue;
-            }
-            if (t.equals("#else")) {
-                if (!stack.isEmpty()) {
-                    boolean[] f = stack.peek();
-                    f[1] = f[0] ? !f[1] : true;
-                }
-                continue;
-            }
-            if (t.startsWith("#endif")) {
-                if (!stack.isEmpty()) stack.pop();
-                continue;
-            }
-            boolean emitting = true;
-            for (boolean[] f : stack) {
-                if (!f[1]) { emitting = false; break; }
-            }
-            if (emitting) out.append(line).append('\n');
-        }
-        return out.toString();
-    }
-
-    private static Boolean stageMacroValue(String name, boolean vertexStage) {
-        if ("CG_VERTEX_STAGE".equals(name)) return vertexStage;
-        if ("CG_FRAGMENT_STAGE".equals(name)) return !vertexStage;
-        return null;
+        return CgShaderStages.reachable(src, vertexStage ? CgShaderStages.Stage.VERTEX : CgShaderStages.Stage.FRAGMENT);
     }
 
     static List<String> shippedShaderPaths(String namespace) throws Exception {
