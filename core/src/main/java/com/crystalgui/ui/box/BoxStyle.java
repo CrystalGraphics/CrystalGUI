@@ -37,7 +37,7 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * scene met the same thing three times in one sitting, and each looked like a different bug.</p>
  *
  * <p>So the defaults are the registry's, which is what the OLD engine writes and what every shipped
- * sheet was authored against. The divergences are documented in {@code AGENTS.md} with their
+ * sheet was authored against. The divergences are documented in {@code style/CLAUDE.md} with their
  * reasoning — {@code border-box} matching the common UI-framework convention, {@code flex-shrink: 0}
  * so content is not compressed below its own size — and they are project decisions rather than
  * accidents. <b>Both engines now answer the same question the same way</b>, which is what makes a

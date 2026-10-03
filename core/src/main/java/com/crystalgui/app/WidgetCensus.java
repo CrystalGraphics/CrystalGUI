@@ -69,7 +69,7 @@ import com.crystalgui.workbench.Workbench;
  *
  * <p>A widget class is either contracted or listed here. There is no third state, and
  * {@code WidgetContractCoverageTest} enumerates the widget packages and fails on a class that is
- * neither — which is the same anti-rot shape {@code AGENTS.md} prescribes for the CSS property
+ * neither — which is the same anti-rot shape {@code style/CLAUDE.md} prescribes for the CSS property
  * registry, applied to the question it was invented for. Adding a widget fails that test until
  * somebody writes down which side of the line it is on, <b>which is the only moment the question is
  * cheap to answer.</b></p>

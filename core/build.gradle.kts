@@ -173,6 +173,7 @@ sourceSets.main {
     resources {
         srcDir("src/main/java")
         exclude("**/*.java")
+        exclude("**/AGENTS.md", "**/CLAUDE.md")    // agent guides beside the code, never shipped
     }
 }
 
