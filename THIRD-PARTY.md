@@ -215,7 +215,7 @@ travel in any jar we build.
 
 The source is Eclipse Adoptium's published `sources` artifact for the running feature version, listed as
 `jdk-sources/{java}` in `download/locations.json` — which a pack's own file of locations can extend, see
-[Runtime downloads](AGENTS.md#runtime-downloads-one-file-repairable-after-release). `crystalgui.jdk.sources`
+[Runtime downloads](download/CLAUDE.md). `crystalgui.jdk.sources`
 points straight at a `src.zip` for anyone who would rather supply their own and fetch nothing.
 
 > **Never automatic**, and that is a licence decision as much as a bandwidth one. The engine bands and the

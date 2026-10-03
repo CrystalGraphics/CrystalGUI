@@ -36,7 +36,7 @@
  * {@code localToWorld}, through {@code com.crystalgui.render} — the paint context, the drawables, the
  * layer FBOs — which is the backend and stays as it is. This package is the tree that records into it.
  * {@link com.crystalgui.ui.box.BoxStyle} is the only place the project's layout defaults are stated,
- * and they diverge from CSS on purpose: see the table in {@code AGENTS.md}.</p>
+ * and they diverge from CSS on purpose: see the table in {@code style/CLAUDE.md}.</p>
  *
  * <h3>What governs this package</h3>
  *
