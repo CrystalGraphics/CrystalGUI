@@ -20,6 +20,7 @@ private val BOM = 0xFEFF.toChar()
 private const val ARMED_MARKER = "JvmArgs=-Dcrystalgui.autotest=true"
 private const val GPU_MARKER = "[crystalgraphics] gpu "
 private const val SELF_TEST_MARKER = "[crystalgraphics] compute self-test "
+private const val OPS_CHECK_MARKER = "[crystalgraphics] gpu ops check "
 
 /** How long the launcher gets to read every instance.cfg before the first launch is issued. */
 private const val LAUNCHER_READ_MS = 5000L
@@ -41,7 +42,7 @@ private const val POWERSHELL_TIMEOUT_SECONDS = 60L
  * ./gradlew prodSmoke                       # every instance in local.properties
  * ./gradlew prodSmoke -PcgTargets=1710      # one of them
  * ./gradlew prodSmoke -PcgBatch=3           # every instance, three clients at a time
- * ./gradlew prodSmoke -PcgSmokeProps=crystalgraphics.compute.selfTest=true   # and the compute self-test on each
+ * ./gradlew prodSmoke -PcgSmokeProps=crystalgraphics.compute.selfTest=true   # and the compute self-test and ops check on each
  * </pre>
  *
  * <p>EVERY INSTANCE IS ARMED FIRST, with the launcher closed. Prism serves a {@code --launch} from the
@@ -235,7 +236,8 @@ abstract class ProdSmoke : DefaultTask() {
 
                 batch.forEach { target ->
                     val selfTest = lastLine(target, SELF_TEST_MARKER)?.let { " | self-test $it" } ?: ""
-                    gpus += "${target.name.padEnd(14)} ${lastLine(target, GPU_MARKER) ?: "(no gpu line)"}$selfTest"
+                    val ops = lastLine(target, OPS_CHECK_MARKER)?.let { " | ops $it" } ?: ""
+                    gpus += "${target.name.padEnd(14)} ${lastLine(target, GPU_MARKER) ?: "(no gpu line)"}$selfTest$ops"
                     val verdict = verdictFor(target, allExited, out)
                     if (verdict != null) failures += "${target.name}: $verdict"
                     else logger.lifecycle("[prodSmoke] {} drew", target.name)
@@ -297,6 +299,8 @@ abstract class ProdSmoke : DefaultTask() {
         // The compute self-test, when -PcgSmokeProps asked for it: a stated FAIL fails the client.
         val selfTest = lastLine(target, SELF_TEST_MARKER)
         if (selfTest != null && selfTest.contains(": FAIL")) return "COMPUTE SELF-TEST FAILED: $selfTest"
+        val ops = lastLine(target, OPS_CHECK_MARKER)
+        if (ops != null && ops.contains(": FAIL")) return "GPU OPS CHECK FAILED: $ops"
         return null
     }
 
