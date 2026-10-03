@@ -13,7 +13,7 @@ import cpw.mods.fml.common.SidedProxy;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 
-import com.crystalgui.mc.v1710.net.CgUiConnections;
+import com.crystalgui.mc.v1710.net.CgUiWorkspaceHost;
 import com.crystalgui.mc.v1710.probe.CgUiServerSmoke;
 
 import java.util.List;
@@ -136,15 +136,9 @@ public class CrystalGUI {
         if (CgUiServerSmoke.enabled()) CgUiServerSmoke.run();
     }
 
-    /**
-     * Phase 4 A4 — every connection is closed before the server goes away.
-     *
-     * <p>A mod-lifecycle event rather than something {@code CgUiConnections} subscribes itself, because
-     * it arrives on a different bus. Without it a stop leaves every pending call unanswered and every
-     * {@code onError} unrun; on a reload-in-place that reads as the next session inheriting ghosts.</p>
-     */
+    /** The workspace host forgets its server. CrystalGraphics closes the connections. */
     @Mod.EventHandler
     public void serverStopping(FMLServerStoppingEvent event) {
-        CgUiConnections.closeAll("server stopping");
+        CgUiWorkspaceHost.reset();
     }
 }

@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import com.crystalgui.mc.modern.net.Connections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ServerSmoke;
 
 import javax.annotation.Nullable;
@@ -56,7 +56,7 @@ public final class ServerSmokeModern {
 
         @Override
         public boolean connectionsRegistered() {
-            return Connections.isRegistered();
+            return CgNetwork.isInstalled();
         }
 
         @Override

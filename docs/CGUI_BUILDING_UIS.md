@@ -467,12 +467,13 @@ field debounces its typing, and both always deliver the value you ended on.
 
 ### Opening it — where the connection comes from
 
-A networked window needs a **connection to one player**. On 1.7.10 you get it from the player:
+A networked window needs a **connection to one player**, by their profile id — CrystalGraphics' `CgNetwork`
+holds one per player on every version:
 
 ```java
 // Server side — e.g. from a block's onBlockActivated, or a command, or a tick
-CgProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);   // EntityPlayer
-if (connection == null) return;                 // that player has no CrystalGUI channel
+CgProtocolConnection<Object> connection = CgNetwork.forPlayer(player.getGameProfile().getId());
+if (connection == null) return;                 // that player has no connection
 
 ServerWindows.of(connection).open(FurnacePanel.TYPE, myFurnace);
 ```
@@ -480,7 +481,7 @@ ServerWindows.of(connection).open(FurnacePanel.TYPE, myFurnace);
 ```java
 public boolean onBlockActivated(World world, int x, int y, int z, EntityPlayer player, ...) {
     if (world.isRemote) return true;            // server decides; the client just gets the window
-    CgProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);
+    CgProtocolConnection<Object> connection = CgNetwork.forPlayer(player.getGameProfile().getId());
     if (connection != null) {
         ServerWindows.of(connection).open(FurnacePanel.TYPE, furnaceAt(x, y, z)); // FurnaceData in world  at (x,y,z) 
     }
@@ -493,7 +494,7 @@ names the panel class on the wire and the client builds it.
 
 A connection exists **for as long as the player is on the server** — it is created when they join and
 closed when they leave, so `forPlayer` answers `null` before and after. On the client, the mirror of
-this is `CgUiConnections.client()`, which is `null` when you are not in a world.
+this is `CgNetwork.client()`, which is `null` when you are not in a world.
 
 > **One trap, and it only shows up in single-player.** If you open a `GuiScreen` to host the window,
 > its `doesGuiPauseGame()` must return **`false`**. Pausing stops the integrated server ticking, which
@@ -762,8 +763,8 @@ connection underneath is public, so it can send anyway. This is the third row of
 [§1](#1-which-kind-of-ui-do-i-want): open instantly, act on the server.
 
 ```java
-CgProtocolConnection<Object> io = CgUiConnections.client();          // client side
-CgProtocolConnection<Object> io = CgUiConnections.forPlayer(player); // server side
+CgProtocolConnection<Object> io = CgNetwork.client();                 // client side
+CgProtocolConnection<Object> io = CgNetwork.forPlayer(playerUuid);     // server side
 
 io.notify("mymod:setThroughput", args);          // fire and forget
 io.onNotify("mymod:setThroughput", args -> ...); // the other end
@@ -991,7 +992,7 @@ CgProtocols.server("furnace", wire ->
                 ServerWindows.of(wire).open(FurnacePanel.TYPE, furnace)));
 
 // Client — the player pressed a key, or clicked a block
-CgProtocolConnection<Object> connection = CgUiConnections.client();
+CgProtocolConnection<Object> connection = CgNetwork.client();
 if (connection != null) {
     connection.notify("furnace/open", null);      // nobody waits; the window arriving IS the answer
 }
@@ -1410,7 +1411,7 @@ client(io)     → widget.attachListener(...)          client, on mount AND
 ServerWindows.of(connection).open(TYPE, model);
 
 // ── client-only, but the server does the work ──────────────────────────────
-CgProtocolConnection<Object> io = CgUiConnections.client();
+CgProtocolConnection<Object> io = CgNetwork.client();
 RateGate<Float> gate = new RateGate<>((w, kind, v) -> io.notify("mymod:set", args(v)));
 gate.attach(slider, Slider.VALUE_CHANGED);       // the widget's own rate
 io.onTick(gate::flush);                          // or a held value never leaves

@@ -11,7 +11,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.HostThread;
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.mc.legacy.Game;
-import com.crystalgui.mc.legacy.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -78,7 +78,7 @@ final class HostLegacy implements HostServices {
     @Override
     @Nullable
     public CgProtocolConnection<Object> connection() {
-        return CgUiConnections.client();
+        return CgNetwork.client();
     }
 
     /** The game's language setting, {@code "ja_JP"} before 1.11, {@code "ja_jp"} from it. */

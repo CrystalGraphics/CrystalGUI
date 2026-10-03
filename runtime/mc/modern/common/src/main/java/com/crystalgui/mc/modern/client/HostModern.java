@@ -11,7 +11,7 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.core.async.HostThread;
 import com.crystalgui.desktop.host.HostServices;
-import com.crystalgui.mc.modern.net.Connections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 
 import net.minecraft.client.Minecraft;
@@ -83,7 +83,7 @@ final class HostModern implements HostServices {
     public CgProtocolConnection<Object> connection() {
         // Re-asked every frame, so a reconnect is a different object carrying the same workspace and
         // DesktopHost rebinds rather than rebuilds. Null means no server right now: supported.
-        return Connections.client();
+        return CgNetwork.client();
     }
 
     /** The game's language setting, {@code "ja_jp"} on 1.20.x. */

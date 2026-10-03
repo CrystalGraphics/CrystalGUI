@@ -3,18 +3,9 @@ package com.crystalgui.mc.forge;
 import com.crystalgraphics.mc.modern.platform.ResourceIds;
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgraphics.mc.shared.VariantEntry;
-import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.api.distmarker.Dist;
-//? if >=1.14.4 {
-import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
-//?} else {
-/*import net.minecraft.client.Minecraft;
-*///?}
 //? if >=1.19 {
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 //?} elif >=1.18 {
@@ -22,9 +13,11 @@ import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?} elif >=1.17 {
 /*import net.minecraftforge.fmlclient.registry.ClientRegistry;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?} else {
 /*import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.DeferredWorkQueue;
+import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?}
 //? if >=1.21.8 {
 /*import net.minecraftforge.client.event.AddGuiOverlayLayersEvent;
@@ -42,13 +35,11 @@ import net.minecraftforge.client.event.ScreenEvent;
 //?} else {
 /*import net.minecraftforge.client.event.GuiScreenEvent;
 *///?}
-// Forge 25-27 keep ticks and logins in FML's own package.
+// Forge 25-27 keep ticks in FML's own package.
 //? if >=1.14.4 {
 import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.entity.player.PlayerEvent;
 //?} else {
 /*import net.minecraftforge.fml.common.gameevent.TickEvent;
-import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 *///?}
 //? if >=1.18 {
 import net.minecraftforge.event.server.ServerStartedEvent;
@@ -79,31 +70,6 @@ import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 *///?}
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
-//? if >=1.20.2 {
-/*import net.minecraftforge.network.PacketDistributor;
-import net.minecraftforge.network.ChannelBuilder;
-import net.minecraftforge.network.SimpleChannel;
-*///?} elif >=1.18 {
-import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.network.NetworkRegistry;
-import net.minecraftforge.network.PacketDistributor;
-import net.minecraftforge.network.simple.SimpleChannel;
-//?} elif >=1.17 {
-/*import net.minecraftforge.fmllegacy.network.PacketDistributor;
-import net.minecraftforge.fmllegacy.network.NetworkEvent;
-import net.minecraftforge.fmllegacy.network.NetworkRegistry;
-import net.minecraftforge.fmllegacy.network.simple.SimpleChannel;
-*///?} else {
-/*import net.minecraftforge.fml.network.PacketDistributor;
-import net.minecraftforge.fml.network.NetworkEvent;
-import net.minecraftforge.fml.network.NetworkRegistry;
-import net.minecraftforge.fml.network.simple.SimpleChannel;
-*///?}
-
-import java.util.function.BiConsumer;
-//? if <1.20.2 {
-import java.util.function.Supplier;
-//?}
 //? if <1.17 {
 /*import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.provider.Providers;
@@ -120,8 +86,8 @@ import static com.crystalgui.mc.modern.platform.CrystalGUI.MODID;
 import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
 
 /**
- * Everything Forge — the mod entry point, its {@link Network} transport and its {@link Events}
- * subscriptions.
+ * Everything Forge — the mod entry point and its {@link Events} subscriptions. The connections are
+ * CrystalGraphics'.
  *
  * <p>The engine is deliberately absent: CrystalGraphics loads as its own mod and owns the render,
  * reload and shutdown hooks. What is left is CrystalGUI's own, and every event body is one forward
@@ -166,7 +132,7 @@ public final class CrystalGUIForge implements VariantEntry {
         /*// ModLauncher 5 lists no resource inside a mod file, so ServiceLoader finds no provider there.
         CgPlatform.provide(Providers.Copies.SERVICE, CrystalGUIForge::resourceCopies);
         *///?}
-        LifecycleCrystalGUI.bootstrap(Network.register());
+        LifecycleCrystalGUI.bootstrap();
         Events.register((FMLJavaModLoadingContext) context);
     }
 
@@ -180,116 +146,6 @@ public final class CrystalGUIForge implements VariantEntry {
         return copies;
     }
     *///?}
-
-    // -- Network ----------------------------------------------------------------
-
-    /** The Forge transport: bytes in, bytes out. Framing and routing are {@code net.wire}'s. */
-    public static final class Network implements CgNetworkChannel {
-
-        //? if >=1.20.2 {
-        /*// Forge 48+ rewrote networking and no payload split is measured there, so a frame stays under
-        // vanilla's 32767-byte serverbound cap.
-        private static final int MAX_FRAME_BYTES = 32_000;
-
-        private static final SimpleChannel CHANNEL = ChannelBuilder
-                .named(ResourceIds.of(MODID, "wire"))
-                .networkProtocolVersion(1)
-                .simpleChannel();
-        *///?} else {
-        private static final String VERSION = "1";
-
-        /**
-         * Forge splits a payload across partials above ~1 MB. Staying under it keeps one frame one packet,
-         * which is what the multiplexer above assumes when it sizes its chunks.
-         */
-        private static final int MAX_FRAME_BYTES = 900_000;
-
-        private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
-                .named(ResourceIds.of(MODID, "wire"))
-                .networkProtocolVersion(() -> VERSION)
-                .clientAcceptedVersions(VERSION::equals)
-                .serverAcceptedVersions(VERSION::equals)
-                .simpleChannel();
-        //?}
-
-        private static final Network INSTANCE = new Network();
-
-        private volatile BiConsumer<Object, byte[]> inbound = (sender, frame) -> { };
-
-        private Network() {}
-
-        public static Network get() {
-            return INSTANCE;
-        }
-
-        /** Called once from the mod entry point, before anything can send. */
-        public static Network register() {
-            //? if >=1.20.2 {
-            /*// consumerMainThread: the tree is the frame thread's. getSender() is null on the client.
-            CHANNEL.messageBuilder(byte[].class, 0)
-                    .encoder((frame, buf) -> buf.writeByteArray(frame))
-                    .decoder(buf -> buf.readByteArray())
-                    .consumerMainThread((frame, ctx) -> INSTANCE.inbound.accept(ctx.getSender(), frame))
-                    .add();
-            *///?} else {
-            CHANNEL.registerMessage(0, byte[].class,
-                    (frame, buf) -> buf.writeByteArray(frame),
-                    FriendlyByteBuf::readByteArray,
-                    Network::receive);
-            //?}
-            //? if >=1.20.6 {
-            /*CHANNEL.build();
-            *///?}
-
-            return INSTANCE;
-        }
-
-        //? if <1.20.2 {
-        private static void receive(byte[] frame, Supplier<NetworkEvent.Context> context) {
-            NetworkEvent.Context ctx = context.get();
-            // enqueueWork: the handler runs on the network thread, and the tree is the frame thread's.
-            ctx.enqueueWork(() -> {
-                ServerPlayer sender = ctx.getSender();   // null on the client
-                INSTANCE.inbound.accept(sender, frame);
-            });
-            ctx.setPacketHandled(true);
-        }
-        //?}
-
-        @Override
-        public int maxFrameBytes() {
-            return MAX_FRAME_BYTES;
-        }
-
-        @Override
-        public void sendToServer(byte[] frame) {
-            //? if >=1.20.2 {
-            /*CHANNEL.send(frame, PacketDistributor.SERVER.noArg());
-            *///?} else {
-            CHANNEL.sendToServer(frame);
-            //?}
-        }
-
-        @Override
-        public void sendToPlayer(Object player, byte[] frame) {
-            if (!(player instanceof ServerPlayer)) return;
-            //? if >=1.20.2 {
-            /*CHANNEL.send(frame, PacketDistributor.PLAYER.with((ServerPlayer) player));
-            *///?} else {
-            CHANNEL.send(PacketDistributor.PLAYER.with(() -> (ServerPlayer) player), frame);
-            //?}
-        }
-
-        @Override
-        public void setInboundHandler(BiConsumer<Object, byte[]> handler) {
-            inbound = handler == null ? (sender, frame) -> { } : handler;
-        }
-
-        @Override
-        public boolean isAvailable() {
-            return true;
-        }
-    }
 
     // -- Events -----------------------------------------------------------------
 
@@ -312,8 +168,6 @@ public final class CrystalGUIForge implements VariantEntry {
             ServerStartedEvent.BUS.addListener(Events::onServerStarted);
             ServerStoppingEvent.BUS.addListener(Events::onServerStopping);
             TickEvent.ServerTickEvent.Post.BUS.addListener(event -> LifecycleCrystalGUI.serverTick());
-            PlayerEvent.PlayerLoggedInEvent.BUS.addListener(Events::onPlayerJoin);
-            PlayerEvent.PlayerLoggedOutEvent.BUS.addListener(Events::onPlayerLeave);
             BusGroup modBus = context.getModBusGroup();
             *///?} else {
             IEventBus forgeBus = MinecraftForge.EVENT_BUS;
@@ -321,8 +175,6 @@ public final class CrystalGUIForge implements VariantEntry {
             forgeBus.addListener(Events::onServerStarted);
             forgeBus.addListener(Events::onServerStopping);
             forgeBus.addListener(Events::onServerTick);
-            forgeBus.addListener(Events::onPlayerJoin);
-            forgeBus.addListener(Events::onPlayerLeave);
             IEventBus modBus = context.getModEventBus();
             //?}
 
@@ -363,25 +215,6 @@ public final class CrystalGUIForge implements VariantEntry {
         }
         //?}
 
-        // Forge 41 (1.19) renamed getPlayer to getEntity.
-        //? if >=1.19 {
-        private static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-            if (event.getEntity() instanceof ServerPlayer player) LifecycleCrystalGUI.playerJoined(player);
-        }
-
-        private static void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
-            if (event.getEntity() instanceof ServerPlayer player) LifecycleCrystalGUI.playerLeft(player);
-        }
-        //?} else {
-        /*private static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-            if (event.getPlayer() instanceof ServerPlayer player) LifecycleCrystalGUI.playerJoined(player);
-        }
-
-        private static void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
-            if (event.getPlayer() instanceof ServerPlayer player) LifecycleCrystalGUI.playerLeft(player);
-        }
-        *///?}
-
         /** Client-only, and a class of its own so a dedicated server never links one of these types. */
         public static final class ClientBus {
 
@@ -394,8 +227,6 @@ public final class CrystalGUIForge implements VariantEntry {
                 registerKeyMappings(modBus);
                 registerHud(modBus);
                 TickEvent.ClientTickEvent.Post.BUS.addListener(event -> LifecycleCrystalGUI.clientTick());
-                ClientPlayerNetworkEvent.LoggingIn.BUS.addListener(ClientBus::onClientLoggedIn);
-                ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(ClientBus::onClientLoggedOut);
                 ScreenEvent.Render.Post.BUS.addListener(ClientBus::onScreenRender);
                 ScreenEvent.MouseButtonPressed.Pre.BUS.addListener(ClientBus::onMousePressed);
                 ScreenEvent.MouseButtonReleased.Pre.BUS.addListener(ClientBus::onMouseReleased);
@@ -410,8 +241,6 @@ public final class CrystalGUIForge implements VariantEntry {
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
                 registerHud(modBus);
                 forgeBus.addListener(ClientBus::onClientTick);
-                forgeBus.addListener(ClientBus::onClientLoggedIn);
-                forgeBus.addListener(ClientBus::onClientLoggedOut);
                 forgeBus.addListener(ClientBus::onScreenRender);
                 forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseButtonPressed.Pre.class,
                         e -> { if (onMousePressed(e)) e.setCanceled(true); });
@@ -433,8 +262,6 @@ public final class CrystalGUIForge implements VariantEntry {
                 modBus.addListener(ClientBus::onClientSetup);
                 registerHud(modBus);
                 forgeBus.addListener(ClientBus::onClientTick);
-                forgeBus.addListener(ClientBus::onClientLoggedIn);
-                forgeBus.addListener(ClientBus::onClientLoggedOut);
                 forgeBus.addListener(ClientBus::onScreenRender);
                 forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseClickedEvent.Pre.class,
                         e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
@@ -456,7 +283,6 @@ public final class CrystalGUIForge implements VariantEntry {
                 modBus.addListener(ClientBus::onClientSetup);
                 registerHud(modBus);
                 forgeBus.addListener(ClientBus::onClientTick);
-                registerConnection(forgeBus);
                 forgeBus.addListener(ClientBus::onScreenRender);
                 forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseClickedEvent.Pre.class,
                         e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
@@ -473,36 +299,11 @@ public final class CrystalGUIForge implements VariantEntry {
             }
             *///?}
 
-            //? if >=1.14.4 <1.18 {
-            /*private static void registerConnection(IEventBus forgeBus) {
-                forgeBus.addListener(ClientBus::onClientLoggedIn);
-                forgeBus.addListener(ClientBus::onClientLoggedOut);
-            }
-            *///?} elif <1.14.4 {
-            /*// Forge 25-27 have no ClientPlayerNetworkEvent: onClientTick sees the connection come and go.
-            private static void registerConnection(IEventBus forgeBus) {
-            }
-            *///?}
-
-            //? if >=1.14.4 <1.21.6 {
+            //? if <1.21.6 {
             private static void onClientTick(TickEvent.ClientTickEvent event) {
                 if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.clientTick();
             }
-            //?} elif <1.14.4 {
-            /*private static boolean connected;
-
-            // getConnection() is the player's, so it appears where LoggedInEvent would fire.
-            private static void onClientTick(TickEvent.ClientTickEvent event) {
-                if (event.phase != TickEvent.Phase.END) return;
-                boolean now = Minecraft.getInstance().getConnection() != null;
-                if (now != connected) {
-                    connected = now;
-                    if (now) LifecycleCrystalGUI.clientConnected();
-                    else LifecycleCrystalGUI.clientDisconnected();
-                }
-                LifecycleCrystalGUI.clientTick();
-            }
-            *///?}
+            //?}
 
             // The HUD: a layer where Forge offers one. Forge 56-57 (1.21.6-1.21.7) offer none, and a
             // node mixin paints it there. @see com.crystalgui.mc.forge.mixin.HudHook
@@ -559,24 +360,6 @@ public final class CrystalGUIForge implements VariantEntry {
             /*private static void registerKeys() {
                 LifecycleCrystalGUI.bootstrapClient();
                 CgUiKeybinds.all().forEach(ClientRegistry::registerKeyBinding);
-            }
-            *///?}
-
-            //? if >=1.19 {
-            private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggingIn event) {
-                LifecycleCrystalGUI.clientConnected();
-            }
-
-            private static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggingOut event) {
-                LifecycleCrystalGUI.clientDisconnected();
-            }
-            //?} elif >=1.14.4 {
-            /*private static void onClientLoggedIn(ClientPlayerNetworkEvent.LoggedInEvent event) {
-                LifecycleCrystalGUI.clientConnected();
-            }
-
-            private static void onClientLoggedOut(ClientPlayerNetworkEvent.LoggedOutEvent event) {
-                LifecycleCrystalGUI.clientDisconnected();
             }
             *///?}
 

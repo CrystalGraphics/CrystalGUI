@@ -10,7 +10,7 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.HostThread;
 import com.crystalgui.desktop.host.HostServices;
-import com.crystalgui.mc.v1710.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.mc.v1710.net.CgUiWorkspaceHost;
 
 import net.minecraft.client.Minecraft;
@@ -80,7 +80,7 @@ final class Host1710 implements HostServices {
     @Override
     @Nullable
     public CgProtocolConnection<Object> connection() {
-        return CgUiConnections.client();
+        return CgNetwork.client();
     }
 
     /** The game's language setting, {@code "ja_JP"} on 1.7.10. */

@@ -4,7 +4,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.mc.v1710.client.CgUiScreen;
-import com.crystalgui.mc.v1710.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -95,13 +95,13 @@ public final class CgUiConnectionProbe {
             if (server.getConfigurationManager().playerEntityList.isEmpty()) return null;
             EntityPlayerMP player =
                     (EntityPlayerMP) server.getConfigurationManager().playerEntityList.get(0);
-            return CgUiConnections.forPlayer(player);
+            return CgNetwork.forPlayer(player.getGameProfile().getId());
         }
 
         @Override
         @Nullable
         public CgProtocolConnection<Object> clientConnection() {
-            return CgUiConnections.client();
+            return CgNetwork.client();
         }
 
         @Override

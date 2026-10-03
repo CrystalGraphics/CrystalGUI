@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import com.crystalgui.mc.legacy.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ServerSmoke;
 
 import net.minecraftforge.fml.common.FMLCommonHandler;
@@ -60,7 +60,7 @@ public final class CgUiServerSmoke {
 
         @Override
         public boolean connectionsRegistered() {
-            return CgUiConnections.isRegistered();
+            return CgNetwork.isInstalled();
         }
 
         /** This node's shipped root, {@code ...mc.v1122}, read off the class: the jar relocates it. */
