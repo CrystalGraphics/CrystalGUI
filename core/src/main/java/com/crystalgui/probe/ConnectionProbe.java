@@ -12,9 +12,15 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.CgAudience;
 import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.CgMessage;
+import com.crystalgraphics.net.CgPeer;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.service.CgServerPlayers;
+import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
@@ -232,6 +238,7 @@ public final class ConnectionProbe {
     private static final String WRITE = "conditional write and the etag cache (C5)";
     private static final String LOOP_ALIVE = "the game loop turns with the desktop up";
     private static final String WATCH = "a write reaches a SECOND client";
+    private static final String AUDIENCES = "a message near the player arrives, one to another dimension does not";
 
     private static final List<Check> CHECKS = Arrays.asList(
             // INTEGRATED, all eight of them: the session checks need the SERVER half of this probe,
@@ -245,6 +252,7 @@ public final class ConnectionProbe {
             new Check(CALL, Topology.INTEGRATED, Role.NONE),
             new Check(RESHAPE, Topology.INTEGRATED, Role.NONE),
             new Check(FANOUT, Topology.INTEGRATED, Role.NONE),
+            new Check(AUDIENCES, Topology.INTEGRATED, Role.NONE),
             // ON A DEDICATED SERVER THESE TWO ARE THE PROOF THE FILES ARE THE SERVER'S. In single player
             // they still check the protocol; what they cannot check there is location, because there is
             // only one machine.
@@ -287,6 +295,13 @@ public final class ConnectionProbe {
     private static final int BETWEEN_WRITES = 40;
 
     private static final String SHARED_FILE = "two-client-probe.txt";
+
+    /** Declared with the class, which loads at the first client tick: before the hello names the namespaces. */
+    private static final CgMessage<String> AUDIENCE = CgMessage.toClients("crystalgui:probe/audience", CgCodecs.STRING);
+
+    private static boolean audienceSent;
+    private static boolean audienceListening;
+    private static volatile boolean elsewhereArrived;
 
     private static volatile ServerUiSession<UIElement, Object> server;
     private static volatile ClientUiSession<UIElement, Object> client;
@@ -413,6 +428,7 @@ public final class ConnectionProbe {
     /** Once per server tick. */
     public static void serverTick(Host host) {
         if (!enabled() || reported) return;
+        if (!audienceSent && clientReady) sendAudiences(host);
 
         if (server == null) {
             // THE CLIENT HAS TO BE LISTENING FIRST. `ui/openWindow` is a notification, so a client with
@@ -482,6 +498,26 @@ public final class ConnectionProbe {
         }
     }
 
+    /**
+     * One message to the dimension the player is not in, then one near them. A connection is in order, so the near one
+     * arriving with nothing before it is the proof. Waits until the host can place the player: a host that never fills
+     * {@link CgServerPlayers} never sends, and the check stays unrun.
+     */
+    private static void sendAudiences(Host host) {
+        CgProtocolConnection<Object> connection = host.connectionToFirstPlayer();
+        Object player = connection != null && connection.peer() instanceof CgPeer
+                ? ((CgPeer) connection.peer()).player() : null;
+        CgServerPlayers players = CgPlatform.get(CgServerPlayers.SERVICE);
+        double[] at = new double[3];
+        String here = player == null ? null : players.dimension(player);
+        if (here == null || !players.position(player, at)) return;
+        audienceSent = true;
+        String elsewhere = "minecraft:the_nether".equals(here) ? "minecraft:overworld" : "minecraft:the_nether";
+        AUDIENCE.send(CgAudience.dimension(elsewhere), "elsewhere");
+        AUDIENCE.send(CgAudience.near(player, at[0], at[1], at[2], 16), "near");
+        CrystalGuiCore.LOGGER.info("[probe] sent near ({}) and to {}", here, elsewhere);
+    }
+
     /** Both ends of the synthetic viewer's link, on the thread that owns the tree. */
     private static void pumpExtraViewer() {
         if (extraLink == null) return;
@@ -537,6 +573,17 @@ public final class ConnectionProbe {
     /** Once per client tick. */
     public static void clientTick(Host host) {
         if (!enabled() || reported) return;
+        if (!audienceListening) {
+            audienceListening = true;
+            AUDIENCE.onReceive(which -> {
+                if ("elsewhere".equals(which)) {
+                    elsewhereArrived = true;
+                    CrystalGuiCore.LOGGER.error("[probe] a message to another dimension arrived");
+                } else if (!elsewhereArrived) {
+                    pass(AUDIENCES);
+                }
+            });
+        }
 
         // COUNTED BEFORE THE WORLD, so a run that never gets into one SAYS SO. Returning early on
         // "not in a world yet" without a clock is how the probes this replaces sat at a main menu
