@@ -1,35 +1,35 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.dom.UIElementTreeSource;
-import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.text.syntax.LanguageRegistry;
-import com.crystalgui.language.java.JavaLanguage;
-import com.crystalgui.language.js.JsLanguage;
-import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.provider.LocalFileSystem;
-import com.crystalgui.fs.project.ProjectRegistry;
-import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.client.FileOperations;
 import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
+import com.crystalgui.fs.provider.LocalFileSystem;
 import com.crystalgui.fs.server.WatchHub;
+import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
+import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
+import com.crystalgui.language.java.JavaLanguage;
+import com.crystalgui.language.js.JsLanguage;
+import com.crystalgui.language.run.ScriptPolicy;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.net.mirror.UIElementMirror;
+import com.crystalgui.text.syntax.LanguageRegistry;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UIElementTreeSource;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -62,8 +62,8 @@ final class HarnessWorkspace {
 
     static final String PROJECT_ID = "harness.scratch";
 
-    private final InMemoryTransport<Object> fromServer;
-    private final InMemoryTransport<Object> fromClient;
+    private final CgInMemoryTransport<Object> fromServer;
+    private final CgInMemoryTransport<Object> fromClient;
     private final ServerUiSession<UIElement, Object> server;
     private final WorkspaceBinding<Object> binding;
     private final WatchHub hub;
@@ -97,19 +97,19 @@ final class HarnessWorkspace {
                 registry, new LocalFileSystem(registry), WorkspacePermission.ALLOW_ALL);
         hub = new WatchHub(service);
 
-        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        CgInMemoryTransport<Object>[] pair = CgInMemoryTransport.pair();
         fromServer = pair[0];
         fromClient = pair[1];
 
         server = new ServerUiSession<>(1, new UIElementTreeSource(new UIElement()),
-                new UIElementMirror<>(PlainOps.INSTANCE), fromServer, PlainOps.INSTANCE);
-        binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, PEER, PlainOps.INSTANCE);
+                new UIElementMirror<>(CgPlainOps.INSTANCE), fromServer, CgPlainOps.INSTANCE);
+        binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, PEER, CgPlainOps.INSTANCE);
         binding.installOn(server::onCall);
         server.open();
 
-        session = new ClientUiSession<>(new UIElementMirror<>(PlainOps.INSTANCE), fromClient,
-                PlainOps.INSTANCE);
-        workspace = Workspace.over(session::call, session::onNotify, PlainOps.INSTANCE);
+        session = new ClientUiSession<>(new UIElementMirror<>(CgPlainOps.INSTANCE), fromClient,
+                CgPlainOps.INSTANCE);
+        workspace = Workspace.over(session::call, session::onNotify, CgPlainOps.INSTANCE);
     }
 
     /** The one peer this process has. A hub keys its subscriptions by it, so it only has to be stable. */
@@ -165,8 +165,8 @@ final class HarnessWorkspace {
         // nothing there listens to and was dropped -- silently, since onError was null. Every file
         // watch in the harness was dead: no reload of an open file, no tree refresh, and a conflict
         // discovered only at save time by the etag check. WorkspaceHost fans out with notify too.
-        server.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
-                FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+        server.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
+                FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
                         new FsMessages.ChangedNotification(mine))));
     }
 

@@ -5,9 +5,9 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiLayers;
-import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.style.property.visual.texture.DrawableKinds;
 import com.crystalgui.style.property.visual.texture.TextureValue;
 
@@ -105,7 +105,7 @@ public final class DrawableParts implements StyleParts<CgUiDrawable> {
 
     @Nullable
     @Override
-    public <T> T encodePart(DynamicOps<T> ops, CgUiDrawable value, String partId) {
+    public <T> T encodePart(CgDynamicOps<T> ops, CgUiDrawable value, String partId) {
         List<CgUiDrawable> layers = layersOf(value);
         if (layers != null) {
             int index = indexOf(partId);
@@ -119,7 +119,7 @@ public final class DrawableParts implements StyleParts<CgUiDrawable> {
     }
 
     @Override
-    public <T> CgUiDrawable mergePart(DynamicOps<T> ops, CgUiDrawable base, String partId, T encoded) {
+    public <T> CgUiDrawable mergePart(CgDynamicOps<T> ops, CgUiDrawable base, String partId, T encoded) {
         String text = ops.getStringValue(encoded);
         CgUiDrawable parsed = new TextureValue(text).compute();
         if (parsed == null) return base;

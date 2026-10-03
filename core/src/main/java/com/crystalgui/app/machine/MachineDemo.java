@@ -3,17 +3,17 @@ package com.crystalgui.app.machine;
 import java.util.List;
 import java.util.Map;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.app.machine.ui.MachinePanel;
-import com.crystalgui.net.InMemoryTransport;
+import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ServerWindow;
-import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ServerWindows;
-import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Switch;
@@ -65,7 +65,7 @@ public final class MachineDemo {
          * network channel; this is the same interface with a queue instead of a socket, which is why
          * every session test in the repository runs against it.
          *
-         * A ProtocolConnection is a transport plus a router: correlation, per-request deadlines,
+         * A CgProtocolConnection is a transport plus a router: correlation, per-request deadlines,
          * cancellation, and failing everything pending when the link drops. Several subsystems ride
          * one -- the UI here, plus the workspace file protocol and a script runtime on a real
          * server -- which is why a session takes a connection rather than a transport.
@@ -74,11 +74,11 @@ public final class MachineDemo {
         // sits beside CgUiWorkspaceHost.register() in CommonProxy.init().
         WindowProtocol.register();
 
-        InMemoryTransport<Object>[] link = InMemoryTransport.pair();
-        ProtocolConnection<Object> serverEnd =
-                Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "a-player-handle");
-        ProtocolConnection<Object> clientEnd =
-                Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        CgInMemoryTransport<Object>[] link = CgInMemoryTransport.pair();
+        CgProtocolConnection<Object> serverEnd =
+                CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "a-player-handle");
+        CgProtocolConnection<Object> clientEnd =
+                CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         // THE MACHINE, which is world state and belongs to no window. It is ticked below, in this
         // method, exactly as a TileEntity ticks with the world -- so closing the panel does not stop it
@@ -217,8 +217,8 @@ public final class MachineDemo {
      * game tick per round, which is why an open takes a couple of ticks to appear rather than
      * arriving instantly — worth knowing before treating that as a bug.</p>
      */
-    private static void pump(InMemoryTransport<Object>[] link, ProtocolConnection<Object> serverEnd,
-            ProtocolConnection<Object> clientEnd, int rounds) {
+    private static void pump(CgInMemoryTransport<Object>[] link, CgProtocolConnection<Object> serverEnd,
+            CgProtocolConnection<Object> clientEnd, int rounds) {
         for (int i = 0; i < rounds; i++) {
             tap("S->C", link[0]);
             tap("C->S", link[1]);
@@ -230,8 +230,8 @@ public final class MachineDemo {
     }
 
     /** The same, without the commentary — for the twenty ticks in step 3. */
-    private static void pumpQuietly(InMemoryTransport<Object>[] link,
-            ProtocolConnection<Object> serverEnd, ProtocolConnection<Object> clientEnd) {
+    private static void pumpQuietly(CgInMemoryTransport<Object>[] link,
+            CgProtocolConnection<Object> serverEnd, CgProtocolConnection<Object> clientEnd) {
         link[0].clearSent();
         link[1].clearSent();
         link[0].deliver();
@@ -243,12 +243,12 @@ public final class MachineDemo {
     /**
      * Prints what one end put on the wire, then forgets it.
      *
-     * <p>Under {@code PlainOps} an encoded envelope is an ordinary {@code Map}, so this needs no
+     * <p>Under {@code CgPlainOps} an encoded envelope is an ordinary {@code Map}, so this needs no
      * decoder: {@code k} is the kind and {@code m} the method. There is real value in seeing that —
      * the protocol is legible without tooling, which is most of why the debugging story is
      * "print it".</p>
      */
-    private static void tap(String direction, InMemoryTransport<Object> end) {
+    private static void tap(String direction, CgInMemoryTransport<Object> end) {
         List<Object> messages = end.sent();
         for (Object raw : messages) {
             if (!(raw instanceof Map)) continue;
@@ -279,7 +279,7 @@ public final class MachineDemo {
     }
 
     /** The one window this client is showing. */
-    private static ClientWindowContext mounted(ProtocolConnection<Object> clientEnd) {
+    private static ClientWindowContext mounted(CgProtocolConnection<Object> clientEnd) {
         return ClientWindows.of(clientEnd).windows().get(0);
     }
 

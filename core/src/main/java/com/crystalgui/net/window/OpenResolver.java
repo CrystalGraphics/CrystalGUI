@@ -1,6 +1,6 @@
 package com.crystalgui.net.window;
 
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 import javax.annotation.Nullable;
 
 /**
@@ -54,5 +54,5 @@ public interface OpenResolver<M> {
      * @return the model to open with, or {@code null} to refuse
      */
     @Nullable
-    M resolve(@Nullable Object viewer, StateMap<Object> args);
+    M resolve(@Nullable Object viewer, CgStateMap<Object> args);
 }

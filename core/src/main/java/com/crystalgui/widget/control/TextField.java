@@ -1,46 +1,46 @@
 package com.crystalgui.widget.control;
 
-import com.crystalgui.ui.service.PlatformPort;
-import javax.annotation.Nullable;
-import org.joml.Vector3f;
-import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.api.font.CgFontFamily;
-import com.crystalgui.render.text.FontFamilyCache;
-import com.crystalgraphics.text.render.CgTextRenderer;
-import com.crystalgui.render.text.TextShadowStyle;
-import com.crystalgui.render.text.TextStrokeStyle;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.input.CgKeyCodes;
-import com.crystalgui.text.Rope;
-import com.crystalgui.text.WordClassifier;
-import com.crystalgui.text.WordOperations;
 import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.render.text.FontFamilyCache;
+import com.crystalgui.render.text.TextShadowStyle;
+import com.crystalgui.render.text.TextStrokeStyle;
 import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
+import com.crystalgui.text.Rope;
+import com.crystalgui.text.WordClassifier;
+import com.crystalgui.text.WordOperations;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.CompositionEvent;
 import com.crystalgui.ui.event.FocusEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.service.PlatformPort;
+import javax.annotation.Nullable;
+import org.joml.Vector3f;
 
+import com.crystalgui.render.InkOverflow;
+import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.box.Measurable;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.service.Drag;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
-import com.crystalgui.ui.box.Box;
-import com.crystalgui.render.InkOverflow;
-import com.crystalgui.ui.service.Drag;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.box.Measurable;
 
 /**
  * A single-line editable text field.
@@ -125,10 +125,10 @@ public class TextField extends UIElement implements Measurable {
     public static final Event<TextField, String> TEXT_CHANGED = Event.<TextField, String>of("text",
             (field, sink) -> field.attachListener(sink::accept),
             new Event.Payload<String>() {
-                @Override public <T> void write(StateMap<T> out, String value) {
+                @Override public <T> void write(CgStateMap<T> out, String value) {
                     out.putString("text", value == null ? "" : value);
                 }
-                @Override public <T> String read(StateMap<T> in) {
+                @Override public <T> String read(CgStateMap<T> in) {
                     return in.getString("text", "");
                 }
             }, RatePolicy.TYPING)
@@ -144,10 +144,10 @@ public class TextField extends UIElement implements Measurable {
     public static final Event<TextField, String> COMMITTED = Event.<TextField, String>of("commit",
             (field, sink) -> field.onSubmit.connect(sink::accept),
             new Event.Payload<String>() {
-                @Override public <T> void write(StateMap<T> out, String value) {
+                @Override public <T> void write(CgStateMap<T> out, String value) {
                     out.putString("text", value == null ? "" : value);
                 }
-                @Override public <T> String read(StateMap<T> in) {
+                @Override public <T> String read(CgStateMap<T> in) {
                     return in.getString("text", "");
                 }
             }, RatePolicy.IMMEDIATE)

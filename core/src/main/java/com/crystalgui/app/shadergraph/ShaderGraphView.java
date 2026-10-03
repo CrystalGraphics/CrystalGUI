@@ -1,13 +1,14 @@
 package com.crystalgui.app.shadergraph;
 
-import com.crystalgui.ui.service.Animation;
-import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgui.ui.service.Animation;
 import java.util.List;
 import java.util.Map;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgShaderEmitter;
 import com.crystalgraphics.shadergraph.CgShaderProblem;
@@ -37,7 +38,6 @@ import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
@@ -315,7 +315,7 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
      * in the file: with the camera in the document, whoever saved last would impose their view on everyone else.
      */
     @Override
-    public <T> void writeViewState(StateMap<T> out) {
+    public <T> void writeViewState(CgStateMap<T> out) {
         out.putFloat(VIEW_ZOOM, graph.getZoom());
         out.putFloat(VIEW_PAN_X, graph.getPanX());
         out.putFloat(VIEW_PAN_Y, graph.getPanY());
@@ -329,7 +329,7 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
 
     /** @see #writeViewState */
     @Override
-    public <T> void readViewState(StateMap<T> in) {
+    public <T> void readViewState(CgStateMap<T> in) {
         float zoom = in.getFloat(VIEW_ZOOM, 0f);
         if (zoom > 0f) graph.setZoom(zoom);
         // BOTH OR NEITHER: a pan is a point, and applying one axis moves the camera somewhere nobody left it.

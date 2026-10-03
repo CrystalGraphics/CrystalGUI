@@ -2,19 +2,19 @@ package com.crystalgui.desktop.host;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.net.ViewCommand;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ScopedSheets;
 import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
@@ -55,7 +55,7 @@ public final class DesktopWindowMount implements WindowMount {
 
     /** The connection currently carrying it, so rebinding to the same one is free. */
     @Nullable
-    private ProtocolConnection<Object> boundTo;
+    private CgProtocolConnection<Object> boundTo;
 
     /**
      * Where a window's own sheets are held, refcounted and scoped.
@@ -99,7 +99,7 @@ public final class DesktopWindowMount implements WindowMount {
      *                  Null on a host with no application, where every window opens on the desktop,
      *                  which is the hint working rather than failing
      */
-    public void bind(@Nullable ProtocolConnection<Object> connection, @Nullable WindowMount preferred) {
+    public void bind(@Nullable CgProtocolConnection<Object> connection, @Nullable WindowMount preferred) {
         if (connection == null || connection == boundTo) return;
         boundTo = connection;
         WindowMount mount = preferred == null ? this : preferred;
@@ -219,7 +219,7 @@ public final class DesktopWindowMount implements WindowMount {
          * the user made outranks a hint, and nothing here yet knows whether one was applied.</p>
          */
         @Override
-        public void viewCommand(String command, StateMap<Object> args) {
+        public void viewCommand(String command, CgStateMap<Object> args) {
             if (frame.state() == WindowState.DESTROYED) return;
             switch (command) {
                 case ViewCommand.SET_TITLE:

@@ -1,22 +1,22 @@
 package com.crystalgui.workbench.toolwindow;
 
-import com.crystalgui.workbench.dock.DockArea;
-import com.crystalgui.workbench.region.RegionHost;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
 import com.crystalgui.workbench.dock.layout.DockPath;
 import com.crystalgui.workbench.region.DockRegion;
+import com.crystalgui.workbench.region.RegionHost;
 import com.crystalgui.workbench.region.RegionSide;
 import com.crystalgui.workbench.toolwindow.ToolWindowLayout;
 import com.crystalgui.workbench.toolwindow.ToolWindowState;
 import com.crystalgui.workbench.toolwindow.ToolWindowType;
 
-import com.google.gson.JsonElement;
 import com.crystalgui.desktop.Desktop;
+import com.google.gson.JsonElement;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -218,14 +218,14 @@ public class ToolWindowPlacementTest {
      */
     @Test
     public void theHalfOfARegionSurvivesTheRecord() {
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
         ToolWindowLayout source = new ToolWindowLayout();
         source.put(ToolWindowState.initial("terminal", DockRegion.PANEL, 0)
                 .withSide(RegionSide.SECONDARY).withVisible(true));
         source.encodeInto(out, "toolWindows");
 
         ToolWindowState read = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("terminal");
+                new CgStateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("terminal");
         assertNotNull(read);
         assertEquals(DockRegion.PANEL, read.region());
         assertEquals(RegionSide.SECONDARY, read.side());
@@ -243,7 +243,7 @@ public class ToolWindowPlacementTest {
      */
     @Test
     public void theModeAndItsFramesGeometrySurviveTheRecord() {
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
         ToolWindowLayout source = new ToolWindowLayout();
         source.put(ToolWindowState.initial("inspector", DockRegion.AUXILIARY, 0)
                 .withType(ToolWindowType.FLOATING)
@@ -251,7 +251,7 @@ public class ToolWindowPlacementTest {
         source.encodeInto(out, "toolWindows");
 
         ToolWindowState read = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("inspector");
+                new CgStateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("inspector");
         assertNotNull(read);
         assertEquals(ToolWindowType.FLOATING, read.type());
         assertNotNull("the rect went missing", read.floatingBounds());
@@ -273,13 +273,13 @@ public class ToolWindowPlacementTest {
      */
     @Test
     public void aToolWindowThatNeverFloatedCarriesNoRect() {
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
         ToolWindowLayout source = new ToolWindowLayout();
         source.put(ToolWindowState.initial("project", DockRegion.SIDEBAR, 0));
         source.encodeInto(out, "toolWindows");
 
         ToolWindowState read = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("project");
+                new CgStateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows").get("project");
         assertNotNull(read);
         assertEquals(ToolWindowType.DOCKED, read.type());
         assertNull(read.floatingBounds());
@@ -303,14 +303,14 @@ public class ToolWindowPlacementTest {
      */
     @Test
     public void aMalformedEntryIsDroppedRatherThanTakingTheRecordWithIt() {
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
         ToolWindowLayout source = new ToolWindowLayout();
         source.put(ToolWindowState.initial("", DockRegion.SIDEBAR, 0));   // no id
         source.put(ToolWindowState.initial("good", DockRegion.PANEL, 1).withWeight(0.3f));
         source.encodeInto(out, "toolWindows");
 
         ToolWindowLayout read = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows");
+                new CgStateMap<>(JsonOps.INSTANCE, out.encode()), "toolWindows");
         assertNull("an entry with no id was kept", read.get(""));
         assertNotNull("a good entry was lost with a bad one", read.get("good"));
         assertEquals(0.3f, read.get("good").weight(), 1e-6f);
@@ -320,7 +320,7 @@ public class ToolWindowPlacementTest {
      * A region this build does not know costs one drag, not the whole placement.
      *
      * <p>Written as raw JSON, because that is what a newer build's record <em>is</em> — and because
-     * {@code StateMap.getEnum} throws for an unknown constant, which is exactly the behaviour this decoder
+     * {@code CgStateMap.getEnum} throws for an unknown constant, which is exactly the behaviour this decoder
      * must not inherit.</p>
      */
     @Test
@@ -330,7 +330,7 @@ public class ToolWindowPlacementTest {
                         + "\"weight\":0.42,\"visible\":true,\"order\":3}]}");
 
         ToolWindowLayout read = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE, record), "toolWindows");
+                new CgStateMap<>(JsonOps.INSTANCE, record), "toolWindows");
         ToolWindowState state = read.get("future");
         assertNotNull("an unreadable region dropped the whole placement", state);
         assertEquals(DockRegion.SIDEBAR, state.region());
@@ -353,7 +353,7 @@ public class ToolWindowPlacementTest {
                 "{\"toolWindows\":[{\"id\":\"greedy\",\"region\":\"EDITOR\",\"order\":0}]}");
 
         ToolWindowState state = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE, record), "toolWindows").get("greedy");
+                new CgStateMap<>(JsonOps.INSTANCE, record), "toolWindows").get("greedy");
         assertNotNull(state);
         assertEquals(DockRegion.SIDEBAR, state.region());
     }
@@ -362,7 +362,7 @@ public class ToolWindowPlacementTest {
     @Test
     public void anAbsentSectionDecodesToAnEmptyLayout() {
         ToolWindowLayout read = ToolWindowLayout.decodeFrom(
-                new StateMap<>(JsonOps.INSTANCE), "toolWindows");
+                new CgStateMap<>(JsonOps.INSTANCE), "toolWindows");
         assertTrue(read.isEmpty());
         assertNull(read.get("anything"));
     }

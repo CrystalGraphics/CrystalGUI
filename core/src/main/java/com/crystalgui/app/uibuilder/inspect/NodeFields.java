@@ -12,6 +12,7 @@ import javax.annotation.Nullable;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.NodeIds;
@@ -20,12 +21,9 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.property.StyleProperty;
 
-import dev.vfyjxf.taffy.style.LengthPercentageAuto;
-import dev.vfyjxf.taffy.style.TaffyDimension;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -35,6 +33,8 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.input.DragScrub;
 import com.crystalgui.widget.config.ConfigControl;
+import dev.vfyjxf.taffy.style.LengthPercentageAuto;
+import dev.vfyjxf.taffy.style.TaffyDimension;
 
 /**
  * What an inspector section binds a control to when it edits a node of an open {@code .cgui}: a
@@ -388,7 +388,7 @@ public final class NodeFields {
     /** A value in its wire form, as {@code SetState} carries it. */
     @Nullable
     private static JsonElement encode(State<Object, Object> state, Object value) {
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
         state.type().put(out, state.key(), value);
         JsonElement encoded = out.encode();
         return encoded instanceof JsonObject object ? object.get(state.key()) : null;

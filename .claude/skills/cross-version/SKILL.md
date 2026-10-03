@@ -1,6 +1,6 @@
 ---
 name: cross-version
-description: Add a feature, platform service or Minecraft-facing code (commands, permissions, entities, containers, events, networking, a new service) to CrystalGUI/CrystalGraphics so it builds and runs on EVERY supported Minecraft version and loader (Forge 1.7.10, 1.8.8-26.2, NeoForge 1.20.2-26.2, Fabric 1.14.4-26.2) without breaking any. Use whenever a change touches runtime/mc/**, a loader, a platform seam, or needs Minecraft API.
+description: Add a feature, platform service or Minecraft-facing code (commands, permissions, entities, containers, events, networking, a new service) to CrystalGUI/CrystalGraphics so it builds and runs on EVERY supported Minecraft version and loader (Forge 1.7.10, 1.8.8-26.3, NeoForge 1.20.2-26.3, Fabric 1.14.4-26.3) without breaking any. Use whenever a change touches runtime/mc/**, a loader, a platform seam, or needs Minecraft API.
 ---
 
 # Cross-version change
@@ -22,8 +22,9 @@ examples) and `docs/CGUI_BUILD.md` (build, nodes, smoke tests).
 ## 2. Look before writing — in this order
 
 1. **The nearest existing feature** — copy its shape and its version boundaries:
-   network → `CgNetworkChannel` impls (`CrystalGUIForge.Network`, `CrystalGUINeoForge`,
-   `CrystalGUIFabricCommon`, `NetworkChannelLegacy`, `NetworkChannel1710`); game events →
+   network → CrystalGraphics' `CgNetworkChannel` impls (`CrystalGraphicsForge.Network`,
+   `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`,
+   `NetworkChannel1710`) and their lifecycles (`NetworkModern`, `NetworkLegacy`, `Network1710`); game events →
    `LifecycleCrystalGUI` + each loader's `Events`; permissions → `WorkspaceHostModern.McRoles`, legacy
    `Game`; client input/HUD → `mc.modern.client`. `grep -n "//? if" <that file>` shows its breaks.
 2. **Every node's API, in seconds**:
@@ -36,6 +37,10 @@ examples) and `docs/CGUI_BUILD.md` (build, nodes, smoke tests).
    Forge's API — never call loader API from common.
 3. **Behaviour**, when signatures are not enough: a real node's `extractMcSources` (`build/mc-src`), or
    `research_repos/mc1201_sources/`.
+4. **Whether a hook reaches what is drawn, and when it fires**: `javap -c -p` on the installed client's
+   patched classes in Prism's `libraries/` (Forge's `forge-<v>-client.jar`; it answers for vanilla too). An
+   event that exists may fire after the frame took its value (Forge 26.1.1-26.2's camera event), or twice
+   (26.3's). Read the call order before writing the hook — `docs/CGUI_CROSS_VERSION.md` § *Where to look*.
 
 Never run `generateStubDatabase` to read APIs; it rewrites `stubs.zip`.
 
@@ -47,7 +52,24 @@ implementing.** Each spelling is one directive branch, each run boundary its pre
 spelling gets an explicit decision: another route, or the absent value, with the reason. Never drop a
 version silently.
 
-## 4. Choose the seam
+Add a **behaviour column** wherever timing matters, from §2.4: does the hook run before its consumer reads
+the value? Does a polled state outlive the poll (it may not, under a catching-up server)? Does a later
+version add an enum constant, or make an attribute positional? One `javap` now saves a sweep later.
+
+## 4. The probe — written with the contract, before the hosts
+
+`docs/CGUI_CROSS_VERSION.md` § 7. Most failed sweeps were the probe's fault, not the hosts':
+
+- Each check cross-checks two independent sources; it measures an invariant (the rotation between two
+  views, angle and axis), never a convention (world yaw) one host legitimately differs on.
+- Hosts declare what their hook *visibly* delivers; the probe skips the rest with a reason.
+- Assume sweep conditions: unfocused clients pause (keep them running), worlds still loading, a server
+  catching up in bursts, game time corrected once a second, explosions throwing their targets.
+- Events are hooked (packet path, entity join/leave), never only polled.
+- A check that can fail two ways logs a line telling them apart. **Never rerun without a new diagnostic.**
+- Info lines read `<name> is <value>`: `prodSmoke` takes `<name>: false` for a failure.
+
+## 5. Choose the seam
 
 | Need | Seam |
 |---|---|
@@ -58,7 +80,7 @@ version silently.
 
 Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) for server-driven UI.
 
-## 5. Implement every era, in one pass, from the table
+## 6. Implement every era, in one pass, from the table
 
 | Era | Where |
 |---|---|
@@ -75,10 +97,11 @@ Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) 
 - No reflection or strings naming Minecraft members (not remapped). Mixins only without an event, `require = 1`.
 - A decision in a loader file is a bug: move it to core.
 
-## 6. Verify — cheapest first, report each result
+## 7. Verify — cheapest first, report each result
 
 1. `./gradlew checkAllTargets` (and `-p CrystalGraphics` if touched). Fix by family: one directive
-   fixes a whole run.
+   fixes a whole run. Then `python CrystalGraphics/singlejar-logic/directives.py <tree> <touched paths>`:
+   every node falling through a chain is either an import or a decision you wrote down.
 2. The core tests.
 3. `serverSmoke -PcgAcceptEula` on `forge:1.16.5`, `forge:1.20.1`, `neoforge:1.20.4`, `fabric:1.20.1`,
    `neoforge:1.21.11`, and `:runtime:mc:1710:serverSmoke`. Run in the background; "Done" with no
@@ -89,6 +112,13 @@ Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) 
    1.20 and 1.21 on all three loaders: twenty-four, four at a time. Never every instance (`-PcgTargets=all`, 104) for a routine check. Open the captures in
    `build/prodSmoke/`, grep each instance's `logs/latest.log` (`fml-client-latest.log` below 1.13) for errors.
 6. Anything no smoke exercises: run it on the oldest and newest node of each loader, and say which.
+
+**The order that converges:** dev runs on every node with a new code path (Fabric **twice** — its first run
+after a change uses the previous CrystalGraphics jar; NeoForge dev runs apply no CrystalGraphics mixins, so
+mixin checks there mean nothing) → a targeted `prodSmoke -PcgTargets=` for nodes with no dev run (legacy,
+Forge >=1.20.2, NeoForge 1.20.2/1.20.3) → **one** sweep, every failure read and fixed by family → a
+confirm run on just the failing labels. Prism is shared: check for `javaw` and ask other sessions first,
+stop a cancelled run's Gradle client by PID, and use `-PcgBatch=3` with IntelliJ open.
 
 **Something crashes or misbehaves on a Prism client?** Do not iterate through `prodSmoke` (~10 min a
 cycle). Reproduce it in that node's dev run — `:runtime:mc:modern:<loader>:<version>:runClient

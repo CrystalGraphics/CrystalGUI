@@ -1,17 +1,17 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.text.UIText;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.text.UIText;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -40,12 +40,12 @@ public class MultiViewerTest {
     private Slider slider;
     private Button button;
 
-    private InMemoryTransport<Object>[] linkA;
-    private InMemoryTransport<Object>[] linkB;
-    private ProtocolConnection<Object> serverA;
-    private ProtocolConnection<Object> serverB;
-    private ProtocolConnection<Object> clientA;
-    private ProtocolConnection<Object> clientB;
+    private CgInMemoryTransport<Object>[] linkA;
+    private CgInMemoryTransport<Object>[] linkB;
+    private CgProtocolConnection<Object> serverA;
+    private CgProtocolConnection<Object> serverB;
+    private CgProtocolConnection<Object> clientA;
+    private CgProtocolConnection<Object> clientB;
     private ServerUiSession<UIElement, Object> server;
     private ClientUiSession<UIElement, Object> viewerA;
     private ClientUiSession<UIElement, Object> viewerB;
@@ -53,7 +53,7 @@ public class MultiViewerTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         UIElementRegistry.bootstrap();
 
         root = new UIElement();
@@ -63,12 +63,12 @@ public class MultiViewerTest {
         root.append(button);
         root.append(slider);
 
-        linkA = InMemoryTransport.pair();
-        linkB = InMemoryTransport.pair();
-        serverA = Protocols.open(linkA[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientA = Protocols.open(linkA[1], PlainOps.INSTANCE, () -> { }, null);
-        serverB = Protocols.open(linkB[0], PlainOps.INSTANCE, () -> { }, "bob");
-        clientB = Protocols.open(linkB[1], PlainOps.INSTANCE, () -> { }, null);
+        linkA = CgInMemoryTransport.pair();
+        linkB = CgInMemoryTransport.pair();
+        serverA = CgProtocols.open(linkA[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientA = CgProtocols.open(linkA[1], CgPlainOps.INSTANCE, () -> { }, null);
+        serverB = CgProtocols.open(linkB[0], CgPlainOps.INSTANCE, () -> { }, "bob");
+        clientB = CgProtocols.open(linkB[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         server = Sessions.serveOn(1, root, serverA);
         clock = 10_000L;
@@ -78,7 +78,7 @@ public class MultiViewerTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void settle() {
@@ -379,7 +379,7 @@ public class MultiViewerTest {
     @Test
     public void aLateViewerGetsMethodsRegisteredBeforeItJoined() {
         server.onCall("probe/echo", (args, respond) -> {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             out.putString("said", args.getString("say", ""));
             respond.ok(out);
         });
@@ -391,7 +391,7 @@ public class MultiViewerTest {
 
         AtomicReference<String> answer = new AtomicReference<>();
         AtomicReference<String> error = new AtomicReference<>();
-        StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
         args.putString("say", "hello");
         viewerB.call("probe/echo", args, result -> answer.set(result.getString("said", "")), error::set);
         settle();

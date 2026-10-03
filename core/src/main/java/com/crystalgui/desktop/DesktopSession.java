@@ -1,10 +1,10 @@
 package com.crystalgui.desktop;
 
+import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.StateMap;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -98,7 +98,7 @@ public final class DesktopSession {
 
     /** The record as text, without writing it — what a test asserts on. */
     public String toJson() {
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
         out.putInt(KEY_VERSION, VERSION);
 
         List<WindowFrame> keyed = new ArrayList<>();
@@ -156,7 +156,7 @@ public final class DesktopSession {
      * much. Size has no equivalent hazard: nothing stores a wanted size, and a size clamped up to a
      * minimum is idempotent, so asking for it again gives the same answer rather than compounding.</p>
      */
-    private static void writeWindow(StateMap<JsonElement> entry, WindowFrame frame) {
+    private static void writeWindow(CgStateMap<JsonElement> entry, WindowFrame frame) {
         entry.putString(KEY_KEY, frame.key());
         boolean maximized = frame.isMaximized();
         entry.putFloat(KEY_LEFT, maximized ? frame.restoreLeft() : frame.getWantedLeft());
@@ -202,9 +202,9 @@ public final class DesktopSession {
     public List<Placement> read(String desktopId) {
         String raw = storage.read(fileNameFor(desktopId));
         if (raw == null || raw.isEmpty()) return List.of();
-        StateMap<JsonElement> in;
+        CgStateMap<JsonElement> in;
         try {
-            in = new StateMap<>(JsonOps.INSTANCE, new JsonParser().parse(raw));
+            in = new CgStateMap<>(JsonOps.INSTANCE, new JsonParser().parse(raw));
         } catch (RuntimeException malformed) {
             // A record that will not parse is a record that describes nothing. Discarded rather than
             // reported: there is no user action, and the desktop simply opens at its defaults.
@@ -224,8 +224,8 @@ public final class DesktopSession {
         String raw = storage.read(fileNameFor(desktopId));
         if (raw == null || raw.isEmpty()) return List.of();
         try {
-            StateMap<JsonElement> in =
-                    new StateMap<>(JsonOps.INSTANCE, new JsonParser().parse(raw));
+            CgStateMap<JsonElement> in =
+                    new CgStateMap<>(JsonOps.INSTANCE, new JsonParser().parse(raw));
             if (in.getInt(KEY_VERSION, -1) != VERSION) return List.of();
             return in.getList(KEY_MRU, entry -> entry.getString(KEY_KEY, ""));
         } catch (RuntimeException malformed) {
@@ -234,7 +234,7 @@ public final class DesktopSession {
     }
 
     @Nullable
-    private static Placement readWindow(StateMap<JsonElement> entry) {
+    private static Placement readWindow(CgStateMap<JsonElement> entry) {
         String key = entry.getString(KEY_KEY, "");
         if (key.isEmpty()) return null;
         return new Placement(key,

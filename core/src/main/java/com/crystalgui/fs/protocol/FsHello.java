@@ -1,8 +1,8 @@
 package com.crystalgui.fs.protocol;
 
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.Codecs;
-import com.crystalgui.serialization.DynamicOps;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgDynamicOps;
 
 import java.util.List;
 import java.util.Locale;
@@ -75,7 +75,7 @@ public record FsHello(int protocolVersion,
     /**
      * Bumped only for a change a client that has not been rebuilt cannot survive.
      *
-     * <p>Additive fields do not bump it: {@code Codecs.MapCodecReader} reads by name, so a field a
+     * <p>Additive fields do not bump it: {@code CgCodecs.MapCodecReader} reads by name, so a field a
      * client has never heard of costs it nothing. What bumps it is a field changing meaning or a method
      * changing shape — the things a tolerant reader cannot absorb.</p>
      */
@@ -153,37 +153,37 @@ public record FsHello(int protocolVersion,
                 DEFAULT_SERVICES_TIER, DEFAULT_READ_ONLY_TIER, 100L * 1024 * 1024);
     }
 
-    public static final Codec<FsHello> CODEC = new Codec<>() {
+    public static final CgCodec<FsHello> CODEC = new CgCodec<>() {
         @Override
-        public <U> U encode(DynamicOps<U> ops, FsHello value) {
-            return Codecs.<U>map(ops)
-                    .field("version", Codecs.INT, value.protocolVersion())
-                    .optional("caseSensitive", Codecs.BOOL, value.caseSensitive(), true)
-                    .optionalList("reserved", Codecs.STRING, value.reservedNames())
-                    .optional("maxName", Codecs.INT, value.maxNameLength(), 255)
-                    .optional("servicesTier", Codecs.LONG, value.servicesTierBytes(),
+        public <U> U encode(CgDynamicOps<U> ops, FsHello value) {
+            return CgCodecs.<U>map(ops)
+                    .field("version", CgCodecs.INT, value.protocolVersion())
+                    .optional("caseSensitive", CgCodecs.BOOL, value.caseSensitive(), true)
+                    .optionalList("reserved", CgCodecs.STRING, value.reservedNames())
+                    .optional("maxName", CgCodecs.INT, value.maxNameLength(), 255)
+                    .optional("servicesTier", CgCodecs.LONG, value.servicesTierBytes(),
                             DEFAULT_SERVICES_TIER)
-                    .optional("readOnlyTier", Codecs.LONG, value.readOnlyTierBytes(),
+                    .optional("readOnlyTier", CgCodecs.LONG, value.readOnlyTierBytes(),
                             DEFAULT_READ_ONLY_TIER)
-                    .optional("maxFile", Codecs.LONG, value.maxFileBytes(), 0L)
-                    .optional("workspaceId", Codecs.STRING, value.workspaceId(), "")
-                    .optional("actor", Codecs.STRING, value.actor(), "")
+                    .optional("maxFile", CgCodecs.LONG, value.maxFileBytes(), 0L)
+                    .optional("workspaceId", CgCodecs.STRING, value.workspaceId(), "")
+                    .optional("actor", CgCodecs.STRING, value.actor(), "")
                     .build();
         }
 
         @Override
-        public <U> FsHello decode(DynamicOps<U> ops, U input) {
-            Codecs.MapCodecReader<U> in = Codecs.read(ops, input);
-            List<String> reserved = in.optionalList("reserved", Codecs.STRING);
-            return new FsHello(in.field("version", Codecs.INT),
-                    in.optional("caseSensitive", Codecs.BOOL, true),
+        public <U> FsHello decode(CgDynamicOps<U> ops, U input) {
+            CgCodecs.MapCodecReader<U> in = CgCodecs.read(ops, input);
+            List<String> reserved = in.optionalList("reserved", CgCodecs.STRING);
+            return new FsHello(in.field("version", CgCodecs.INT),
+                    in.optional("caseSensitive", CgCodecs.BOOL, true),
                     reserved.isEmpty() ? WINDOWS_RESERVED : reserved,
-                    in.optional("maxName", Codecs.INT, 255),
-                    in.optional("servicesTier", Codecs.LONG, DEFAULT_SERVICES_TIER),
-                    in.optional("readOnlyTier", Codecs.LONG, DEFAULT_READ_ONLY_TIER),
-                    in.optional("maxFile", Codecs.LONG, 100L * 1024 * 1024),
-                    in.optional("workspaceId", Codecs.STRING, ""),
-                    in.optional("actor", Codecs.STRING, ""));
+                    in.optional("maxName", CgCodecs.INT, 255),
+                    in.optional("servicesTier", CgCodecs.LONG, DEFAULT_SERVICES_TIER),
+                    in.optional("readOnlyTier", CgCodecs.LONG, DEFAULT_READ_ONLY_TIER),
+                    in.optional("maxFile", CgCodecs.LONG, 100L * 1024 * 1024),
+                    in.optional("workspaceId", CgCodecs.STRING, ""),
+                    in.optional("actor", CgCodecs.STRING, ""));
         }
     };
 }

@@ -1,9 +1,9 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgContentHash;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
@@ -16,7 +16,7 @@ import java.util.function.Supplier;
 import static org.junit.Assert.*;
 
 /**
- * {@link ContentHash} — the identity a client caches descriptions under.
+ * {@link CgContentHash} — the identity a client caches descriptions under.
  *
  * <p>Every property here is load-bearing for the cache. If the hash of an unchanged UI ever varies,
  * the cache silently never hits and every open re-transfers the tree; if two different UIs ever
@@ -42,7 +42,7 @@ public class ContentHashTest {
     }
 
     private String hashOfJson(UIElement element) {
-        return ContentHash.of(JsonOps.INSTANCE, new UIElementMirror<>(JsonOps.INSTANCE).describe(element));
+        return CgContentHash.of(JsonOps.INSTANCE, new UIElementMirror<>(JsonOps.INSTANCE).describe(element));
     }
 
     // ── Stability ───────────────────────────────────────────────────────────
@@ -69,10 +69,10 @@ public class ContentHashTest {
     @Test
     public void theSameTreeHashesTheSameThroughDifferentOps() {
         UIElement tree = sampleTree().get();
-        String viaJson = ContentHash.of(JsonOps.INSTANCE,
+        String viaJson = CgContentHash.of(JsonOps.INSTANCE,
                 new UIElementMirror<>(JsonOps.INSTANCE).describe(tree));
-        String viaPlain = ContentHash.of(PlainOps.INSTANCE,
-                new UIElementMirror<>(PlainOps.INSTANCE).describe(tree));
+        String viaPlain = CgContentHash.of(CgPlainOps.INSTANCE,
+                new UIElementMirror<>(CgPlainOps.INSTANCE).describe(tree));
         assertEquals(viaJson, viaPlain);
     }
 
@@ -132,40 +132,6 @@ public class ContentHashTest {
         UIElement a = new UIElement();
         a.addClass("a").addClass("bc");
         assertNotEquals(hashOfJson(ab), hashOfJson(a));
-    }
-
-    /** Map key order must not matter — this is the belt to the codec's braces. */
-    @Test
-    public void mapKeyOrderDoesNotAffectTheHash() {
-        var first = new java.util.LinkedHashMap<Object, Object>();
-        first.put("alpha", "1");
-        first.put("beta", "2");
-
-        var second = new java.util.LinkedHashMap<Object, Object>();
-        second.put("beta", "2");
-        second.put("alpha", "1");
-
-        assertEquals(ContentHash.of(PlainOps.INSTANCE, first), ContentHash.of(PlainOps.INSTANCE, second));
-    }
-
-    /** An int and a float of the same value are the same value, and must not re-transfer. */
-    @Test
-    public void numericRepresentationDoesNotAffectTheHash() {
-        var asInt = new java.util.LinkedHashMap<Object, Object>();
-        asInt.put("n", 3);
-        var asFloat = new java.util.LinkedHashMap<Object, Object>();
-        asFloat.put("n", 3.0f);
-        assertEquals(ContentHash.of(PlainOps.INSTANCE, asInt), ContentHash.of(PlainOps.INSTANCE, asFloat));
-    }
-
-    /** A string "3" is not the number 3 — type tags keep them apart. */
-    @Test
-    public void aStringIsNotItsNumber() {
-        var asString = new java.util.LinkedHashMap<Object, Object>();
-        asString.put("n", "3");
-        var asNumber = new java.util.LinkedHashMap<Object, Object>();
-        asNumber.put("n", 3);
-        assertNotEquals(ContentHash.of(PlainOps.INSTANCE, asString), ContentHash.of(PlainOps.INSTANCE, asNumber));
     }
 
     @Test

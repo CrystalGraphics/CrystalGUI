@@ -16,9 +16,10 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
@@ -29,7 +30,6 @@ import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.UiType;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowProtocol;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
@@ -51,29 +51,29 @@ import com.crystalgui.widget.text.UIText;
  */
 public class LocalChildTest {
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     private final List<ClientWindowContext> mounted = new ArrayList<>();
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
         WindowProtocol.register();
         ServerWindows.resetOpenableForTesting();
         RowPanel.copies.clear();
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "player");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         ClientWindows.of(clientEnd).setMount(new SilentMount());
     }
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
         ServerWindows.resetOpenableForTesting();
     }
@@ -237,9 +237,9 @@ public class LocalChildTest {
      */
     @Test
     public void aLocalChildBelongsToOneViewerAndNotTheOther() {
-        InMemoryTransport<Object>[] linkB = InMemoryTransport.pair();
-        ProtocolConnection<Object> serverB = Protocols.open(linkB[0], PlainOps.INSTANCE, () -> { }, "bob");
-        ProtocolConnection<Object> clientB = Protocols.open(linkB[1], PlainOps.INSTANCE, () -> { }, null);
+        CgInMemoryTransport<Object>[] linkB = CgInMemoryTransport.pair();
+        CgProtocolConnection<Object> serverB = CgProtocols.open(linkB[0], CgPlainOps.INSTANCE, () -> { }, "bob");
+        CgProtocolConnection<Object> clientB = CgProtocols.open(linkB[1], CgPlainOps.INSTANCE, () -> { }, null);
         List<ClientWindowContext> mountedB = new ArrayList<>();
         ClientWindows.of(clientB).setMount(context -> {
             mountedB.add(context);

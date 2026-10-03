@@ -6,12 +6,12 @@ import java.util.Locale;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.HostThread;
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.mc.legacy.Game;
-import com.crystalgui.mc.legacy.net.CgUiConnections;
-import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgraphics.net.CgNetwork;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -77,8 +77,8 @@ final class HostLegacy implements HostServices {
 
     @Override
     @Nullable
-    public ProtocolConnection<Object> connection() {
-        return CgUiConnections.client();
+    public CgProtocolConnection<Object> connection() {
+        return CgNetwork.client();
     }
 
     /** The game's language setting, {@code "ja_JP"} before 1.11, {@code "ja_jp"} from it. */

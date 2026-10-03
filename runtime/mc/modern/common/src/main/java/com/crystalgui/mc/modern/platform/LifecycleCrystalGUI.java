@@ -3,31 +3,27 @@ package com.crystalgui.mc.modern.platform;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.core.CrystalGuiCore;
 
 import com.crystalgui.mc.modern.client.CgUiHud;
-import com.crystalgui.mc.modern.example.MachineExampleModern;
-import com.crystalgui.mc.modern.example.MachineExampleClientModern;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
+import com.crystalgui.mc.modern.client.CgUiScreen;
+import com.crystalgui.mc.modern.example.MachineExampleClientModern;
+import com.crystalgui.mc.modern.example.MachineExampleModern;
+import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.mc.modern.probe.CgUiAutoTest;
 import com.crystalgui.mc.modern.probe.ClientProbe;
-import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.mc.modern.probe.ConnectionProbeModern;
-import com.crystalgui.mc.modern.net.Connections;
 import com.crystalgui.mc.modern.probe.ServerSmokeModern;
-import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.probe.ConnectionProbe;
-import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
 
 /**
  * <b>The one class a 1.20.x loader talks to.</b> One method per lifecycle moment; a loader subscribes
@@ -46,15 +42,13 @@ public final class LifecycleCrystalGUI {
     private static final float SERVER_TICK_SECONDS = 1f / 20f;
 
     /**
-     * Mod init. The transport is the one thing only a loader can build -- three different networking
-     * APIs -- so it is passed in; everything else is the same on all three.
+     * Mod init. The connections are CrystalGraphics' ({@link CgNetwork}); CrystalGUI contributes its protocols to
+     * them, which bind onto every connection opened after they register.
      */
-    public static void bootstrap(CgNetworkChannel channel) {
-        CgPlatform.provide(CgNetworkChannel.SERVICE, channel);
-        // Before the connections: a contributor binds only to connections opened after it registers.
+    public static void bootstrap() {
         // Without it a client has no ClientWindows, and every requestOpen is refused locally.
         WindowProtocol.register();
-        Connections.register();
+        CgNetwork.onPeerClosed(WorkspaceHostModern::forget);
         MachineExampleModern.registerCommon();
     }
 
@@ -131,12 +125,10 @@ public final class LifecycleCrystalGUI {
     }
 
     public static void serverStopping() {
-        Connections.closeAll("server stopping");
         WorkspaceHostModern.setServer(null);
     }
 
     public static void serverTick() {
-        Connections.onServerTick();
         WorkspaceHostModern.tick(SERVER_TICK_SECONDS);
         run(serverTickHooks);
     }
@@ -170,14 +162,6 @@ public final class LifecycleCrystalGUI {
         }
     }
 
-    public static void playerJoined(@Nullable ServerPlayer player) {
-        if (player != null) Connections.onPlayerJoin(player);
-    }
-
-    public static void playerLeft(@Nullable ServerPlayer player) {
-        if (player != null) Connections.onPlayerLeave(player);
-    }
-
     // ── Client ──────────────────────────────────────────────────────────────────────────────────
 
     public static void clientTick() {
@@ -188,21 +172,12 @@ public final class LifecycleCrystalGUI {
         CgUiAutoTest.tick();
         ClientProbe.tick();
         CgUiKeybinds.tick();
-        Connections.onClientTick();
         run(clientTickHooks);
     }
 
     /** Whether the loading overlay is gone -- mod setup included. 1.13 has none and sets up before ticking. */
     private static boolean loadingFinished() {
         return !ClientGame.overlayUp(Minecraft.getInstance());
-    }
-
-    public static void clientConnected() {
-        Connections.onClientConnected();
-    }
-
-    public static void clientDisconnected() {
-        Connections.onClientDisconnected();
     }
 
     // ── Pinned windows. ScreenOverlay in core/ makes every decision; these only carry it. ────────

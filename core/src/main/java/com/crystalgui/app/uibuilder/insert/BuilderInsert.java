@@ -11,6 +11,7 @@ import org.joml.Vector2f;
 
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 
+import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgui.app.uibuilder.canvas.BuilderSurface;
 import com.crystalgui.app.uibuilder.canvas.CanvasRects;
 import com.crystalgui.app.uibuilder.canvas.DropResolver;
@@ -21,7 +22,6 @@ import com.crystalgui.app.uibuilder.library.LibraryCatalog;
 import com.crystalgui.app.uibuilder.library.UserLibrary;
 import com.crystalgui.core.storage.ConfigRecord;
 import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.serialization.Codecs;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -84,7 +84,7 @@ public final class BuilderInsert implements InsertSource {
     public BuilderInsert(BuilderSurface surface, @Nullable ConfigStorage store) {
         this.surface = surface;
         this.store = store;
-        this.recents = ConfigRecord.in(store, RECENTS_FILE, Codecs.listOf(Codecs.STRING), List.of());
+        this.recents = ConfigRecord.in(store, RECENTS_FILE, CgCodecs.listOf(CgCodecs.STRING), List.of());
         relation.addClass(RELATION_CLASS);
         target.addClass(TARGET_CLASS);
         keycap.addClass(KEYCAP_CLASS);

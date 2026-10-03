@@ -14,6 +14,10 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.uibuilder.UiBuilderContribution;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
@@ -27,10 +31,6 @@ import com.crystalgui.fs.server.WatchHub;
 import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -46,29 +46,29 @@ import com.crystalgui.workbench.Workbench;
 public class LibraryToolWindowStoreTest extends UiDocumentTestBase {
 
     private Workbench workbench;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     @Before
     public void openWorkbench() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         UIElementRegistry.bootstrap();
         WorkspaceService service = new WorkspaceService(
                 new ProjectRegistry().register(() -> List.of(
                         new WorkspaceProject("scratch", "Scratch", Paths.get("/srv/scratch")))),
                 new InMemoryFileSystem(), (actor, project, path, operation) -> true);
-        InMemoryTransport<Object>[] link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        CgInMemoryTransport<Object>[] link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "host");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
         workbench = new Workbench(Workspace.of(clientEnd), CrystalEditor.EXTENSIONS);
     }
 
     @After
     public void closeWorkbench() {
         workbench.dispose();
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     @Rule

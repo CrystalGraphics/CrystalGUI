@@ -5,8 +5,8 @@ import static org.junit.Assert.assertNotEquals;
 
 import org.junit.Test;
 
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -41,12 +41,12 @@ public class ShaderPanelViewStateTest extends UiDocumentTestBase {
     public void aPlacedPanelIsWrittenIntoTheSessionState() {
         ShaderGraphView editor = open();
 
-        StateMap<Object> placed = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> placed = new CgStateMap<>(CgPlainOps.INSTANCE);
         placed.putString(ShaderGraphView.VIEW_PREVIEW_RECT, RECT);
         editor.readViewState(placed);
         document.update(W, H);
 
-        StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
         editor.writeViewState(out);
 
         assertNotEquals("the panel's rectangle reached the session state",
@@ -58,19 +58,19 @@ public class ShaderPanelViewStateTest extends UiDocumentTestBase {
     public void aSecondEditorOpensWherePanelsWereLeft() {
         ShaderGraphView first = open();
 
-        StateMap<Object> placed = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> placed = new CgStateMap<>(CgPlainOps.INSTANCE);
         placed.putString(ShaderGraphView.VIEW_PREVIEW_RECT, RECT);
         first.readViewState(placed);
         document.update(W, H);
 
-        StateMap<Object> saved = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> saved = new CgStateMap<>(CgPlainOps.INSTANCE);
         first.writeViewState(saved);
 
         ShaderGraphView reopened = open();
         reopened.readViewState(saved);
         document.update(W, H);
 
-        StateMap<Object> after = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> after = new CgStateMap<>(CgPlainOps.INSTANCE);
         reopened.writeViewState(after);
         assertEquals("the reopened editor put its preview back where the first one left it",
                 saved.getString(ShaderGraphView.VIEW_PREVIEW_RECT, "?"),

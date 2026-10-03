@@ -13,9 +13,9 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 
+import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -81,8 +81,8 @@ public class ReadableKeysTest {
         UIElement built = tree();
         UIElement fromDocument = document().decode(document().describe(built));
 
-        assertEquals(ContentHash.of(JsonOps.INSTANCE, wire().describe(built)),
-                ContentHash.of(JsonOps.INSTANCE, wire().describe(fromDocument)));
+        assertEquals(CgContentHash.of(JsonOps.INSTANCE, wire().describe(built)),
+                CgContentHash.of(JsonOps.INSTANCE, wire().describe(fromDocument)));
     }
 
     /**
@@ -98,7 +98,7 @@ public class ReadableKeysTest {
                 + "\"v\":{\"text\":\"Status\"}}]}";
 
         assertEquals("30897677676211abc0ee43e9318cbdbc5f4df4d023f9faa10ddb6b835baf2784",
-                ContentHash.of(JsonOps.INSTANCE, new JsonParser().parse(recorded)));
+                CgContentHash.of(JsonOps.INSTANCE, new JsonParser().parse(recorded)));
     }
 
     @Test

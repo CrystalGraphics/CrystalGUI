@@ -1,16 +1,16 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.RowWindows;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.net.projection.Projections;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.net.window.RowSource;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.text.UIText;
@@ -46,12 +46,12 @@ public class RowStreamTest {
     private UIElement root;
     private UIElement list;
 
-    private InMemoryTransport<Object>[] linkA;
-    private InMemoryTransport<Object>[] linkB;
-    private ProtocolConnection<Object> serverA;
-    private ProtocolConnection<Object> serverB;
-    private ProtocolConnection<Object> clientA;
-    private ProtocolConnection<Object> clientB;
+    private CgInMemoryTransport<Object>[] linkA;
+    private CgInMemoryTransport<Object>[] linkB;
+    private CgProtocolConnection<Object> serverA;
+    private CgProtocolConnection<Object> serverB;
+    private CgProtocolConnection<Object> clientA;
+    private CgProtocolConnection<Object> clientB;
     private ServerUiSession<UIElement, Object> server;
     private ClientUiSession<UIElement, Object> viewerA;
     private ClientUiSession<UIElement, Object> viewerB;
@@ -64,7 +64,7 @@ public class RowStreamTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         UIElementRegistry.bootstrap();
         for (int i = 0; i < TOTAL; i++) all.add(i);
 
@@ -72,12 +72,12 @@ public class RowStreamTest {
         list = new UIElement();
         root.append(list);
 
-        linkA = InMemoryTransport.pair();
-        linkB = InMemoryTransport.pair();
-        serverA = Protocols.open(linkA[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientA = Protocols.open(linkA[1], PlainOps.INSTANCE, () -> { }, null);
-        serverB = Protocols.open(linkB[0], PlainOps.INSTANCE, () -> { }, "bob");
-        clientB = Protocols.open(linkB[1], PlainOps.INSTANCE, () -> { }, null);
+        linkA = CgInMemoryTransport.pair();
+        linkB = CgInMemoryTransport.pair();
+        serverA = CgProtocols.open(linkA[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientA = CgProtocols.open(linkA[1], CgPlainOps.INSTANCE, () -> { }, null);
+        serverB = CgProtocols.open(linkB[0], CgPlainOps.INSTANCE, () -> { }, "bob");
+        clientB = CgProtocols.open(linkB[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         server = Sessions.serveOn(1, root, serverA);
         viewerA = Sessions.viewOn(clientA);
@@ -115,7 +115,7 @@ public class RowStreamTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void settle() {
@@ -134,8 +134,8 @@ public class RowStreamTest {
     }
 
     /** A viewer says which rows it is looking at, exactly as {@code RemoteRows} does. */
-    private void showing(ProtocolConnection<Object> client, int from, int to) {
-        StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+    private void showing(CgProtocolConnection<Object> client, int from, int to) {
+        CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
         args.putInt(UiMethods.WINDOW, 1);
         args.putInt("nid", 1);
         args.putInt("from", from);

@@ -2,9 +2,9 @@ package com.crystalgui.mc.modern.probe;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.mc.modern.net.Connections;
-import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.mc.modern.client.CgUiScreen;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
 import com.crystalgui.mc.modern.client.ClientGame;
@@ -68,19 +68,19 @@ public final class ConnectionProbeModern {
 
         @Override
         @Nullable
-        public ProtocolConnection<Object> connectionToFirstPlayer() {
+        public CgProtocolConnection<Object> connectionToFirstPlayer() {
             Minecraft mc = Minecraft.getInstance();
             MinecraftServer server = mc == null ? null : mc.getSingleplayerServer();
             if (server == null || server.getPlayerList() == null) return null;
             if (server.getPlayerList().getPlayers().isEmpty()) return null;
             ServerPlayer player = server.getPlayerList().getPlayers().get(0);
-            return Connections.forPlayer(player);
+            return CgNetwork.forPlayer(player.getGameProfile().getId());
         }
 
         @Override
         @Nullable
-        public ProtocolConnection<Object> clientConnection() {
-            return Connections.client();
+        public CgProtocolConnection<Object> clientConnection() {
+            return CgNetwork.client();
         }
 
         @Override

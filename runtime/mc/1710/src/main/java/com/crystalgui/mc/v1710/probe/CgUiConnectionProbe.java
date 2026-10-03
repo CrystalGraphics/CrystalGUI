@@ -2,9 +2,9 @@ package com.crystalgui.mc.v1710.probe;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.mc.v1710.net.CgUiConnections;
-import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.mc.v1710.client.CgUiScreen;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -89,19 +89,19 @@ public final class CgUiConnectionProbe {
 
         @Override
         @Nullable
-        public ProtocolConnection<Object> connectionToFirstPlayer() {
+        public CgProtocolConnection<Object> connectionToFirstPlayer() {
             MinecraftServer server = MinecraftServer.getServer();
             if (server == null || server.getConfigurationManager() == null) return null;
             if (server.getConfigurationManager().playerEntityList.isEmpty()) return null;
             EntityPlayerMP player =
                     (EntityPlayerMP) server.getConfigurationManager().playerEntityList.get(0);
-            return CgUiConnections.forPlayer(player);
+            return CgNetwork.forPlayer(player.getGameProfile().getId());
         }
 
         @Override
         @Nullable
-        public ProtocolConnection<Object> clientConnection() {
-            return CgUiConnections.client();
+        public CgProtocolConnection<Object> clientConnection() {
+            return CgNetwork.client();
         }
 
         @Override
