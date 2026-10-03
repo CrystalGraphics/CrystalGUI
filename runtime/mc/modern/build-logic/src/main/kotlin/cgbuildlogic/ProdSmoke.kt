@@ -298,10 +298,14 @@ abstract class ProdSmoke : DefaultTask() {
             .map { File(logs, it) }.firstOrNull { it.isFile }
     }
 
-    /** The `[crystalgraphics] gpu` line the engine logs once per context: what this client's GPU gives it. */
+    /**
+     * The `[crystalgraphics] gpu` line the engine logs once per context: what this client's GPU gives it. FML before
+     * 1.13 writes mods' logging to `fml-client-latest.log`, not `latest.log`, so every log is searched.
+     */
     private fun gpuLine(target: Target): String? {
-        val log = logFile(target) ?: return null
-        return runCatching { log.readLines().lastOrNull { it.contains(GPU_MARKER) } }.getOrNull()
+        val logs = File(target.dir, ".minecraft/logs")
+        return listOf("latest.log", "fml-client-latest.log", "debug.log").map { File(logs, it) }.filter { it.isFile }
+            .firstNotNullOfOrNull { log -> runCatching { log.readLines().lastOrNull { it.contains(GPU_MARKER) } }.getOrNull() }
             ?.substringAfter(GPU_MARKER)?.trim()
     }
 
