@@ -36,3 +36,19 @@ still move by one character.
 > trailing newline to take and must swallow the one before it instead. The widget test never caught it:
 > it only ever deleted a middle line. **Porting the algorithms without the boundaries keeps the
 > algorithms and throws away the testability that keeps them correct.**
+
+---
+
+## Conventions, not derivable answers
+
+From `AGENTS.md` § *Port, don't reinvent*.
+
+These behaviours are *conventions, not derivable answers*. Each is one line, each is invisible when
+wrong, and each was learned by shipping to millions of users. Four from `text/cursor/` alone:
+
+| Rule | What happens without it |
+|---|---|
+| Auto-close fires on an **allowlist** (`;:.,=}])> \n\t`), never a denylist | "suppress before a letter" still opens a pair before `$foo` and `#define` |
+| A plain arrow collapses a selection to its **edge**, regardless of which way the gesture went | Left-then-right on a backwards selection walks the caret instead of collapsing |
+| A partly-commented block **comments out**, it does not half-toggle | Selecting a block with one commented line inverts half of it |
+| A backwards word-drag **unions with the anchor word** | Word-granularity drag eats into the word it started on and stops feeling like words |

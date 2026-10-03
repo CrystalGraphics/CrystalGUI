@@ -12,11 +12,11 @@ every version: [`CGUI_CROSS_VERSION.md`](CGUI_CROSS_VERSION.md).
 
 | Artifact | Task | Notes |
 |---|---|---|
-| `build/libs/crystalgui-<v>.jar` | `singleJar` · `checkSingleJar` | the engine, the workbench and every loader host. **Requires `crystalgraphics-<v>.jar` beside it** |
-| `build/libs/crystalgui-language-<v>.jar` | `languageJar` · `checkLanguageJar` | optional second mod (`crystalgui_language`): grammars, ECJ, Rhino. The host jar never names it |
+| `build/libs/crystalgui-<v>.jar` (~13 MB) | `singleJar` · `checkSingleJar` | the engine, the workbench and every loader host. **Requires `crystalgraphics-<v>.jar` beside it** |
+| `build/libs/crystalgui-language-<v>.jar` (~50 MB) | `languageJar` · `checkLanguageJar` | optional second mod (`crystalgui_language`): tree-sitter grammars and natives, ECJ and Rhino per Java band, `language/`. The host jar never names it |
 
 Both install unchanged on every supported loader and version (the list, and the refused versions with
-their reasons, are in `AGENTS.md` § *Supported versions*).
+their reasons, are in § *Supported versions* below).
 
 ## Requirements
 
@@ -46,7 +46,12 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 | `samples/fieldnotes/` | **a build of its own**, not in this one: a CrystalGUI app shipped as one jar over three loaders on `singlejar { targets {} }` — the worked example for a platform-abstract project. Its README says how to build and drive it |
 
 **Two source sets per loader module**: `main` → the host jar, `lang` → the language jar. `:language` is
-on `langCompileOnly` only, so a host class naming it is a compile error.
+on `langCompileOnly` only, so a host class naming it is a compile error. Where the host needs the other
+jar, it publishes a seam it cannot name (`CgUiAutoTest.onFrame`).
+
+**Java levels are CrystalGraphics'** (its `docs/BUILD.md` § *Layout*). Never lower an abstract module's Java
+to suit a consumer — and javac does not check the API: a Java 9+ call fails on a Java 8 instance unless
+jvmdg stubs it.
 
 **Included by another build** (`gradle.parent != null`): only the loader and common node of ONE target —
 the node claiming what a consumer's `com.crystalgui.settings` names in the `singlejar.checkout.target`
@@ -58,8 +63,12 @@ resolves the same property, so both builds pick the same node.
 ## Commands
 
 ```bash
+./gradlew :taffy:test                                       # the vendored layout engine's own regression tests
+./gradlew :core:compileJava                                 # enforces the Minecraft/Forge/LWJGL import guard
+./gradlew :runtime:mc:1710:compileJava                      # not in :core:check -- what a deletion from core/ breaks silently
 ./gradlew checkAllTargets                                   # every node compiles -- before every commit
 ./gradlew singleJar languageJar checkSingleJar checkLanguageJar
+./gradlew deploySingleJars                                  # both, plus CrystalGraphics', into every Prism instance
 ./gradlew :core:headlessTest                                # server-side tests, no CrystalGraphics core
 ./gradlew :core:trackedTest                                 # every shipped shader and keyword variant, linked as on Vulkan
 ./gradlew :core:test --tests "<Class>"                      # name classes: `com.crystalgui.ui.*` never reports
@@ -162,6 +171,25 @@ an included build, Java so any consumer Gradle loads it). Their use is `CGUI_SET
 log4j-api 2.0-beta9 and two annotation packages — each the oldest any target ships. `language` is not
 published: nothing outside CrystalGUI compiles against it.
 
+## Running Minecraft
+
+A loader module is the only thing that sees what crosses the loader seam — networking, the workspace
+over a wire, platform services, class loading on a server. `headlessTest` reaches no loader and the
+harness is a client by design.
+
+```bash
+./gradlew :runtime:mc:modern:<branch>:<version>:serverSmoke -PcgAcceptEula   # boot a server, assert, stop
+./gradlew :runtime:mc:1710:serverSmoke
+./gradlew :runtime:mc:modern:<branch>:<version>:runClient                    # a dev client
+./gradlew :runtime:mc:1710:runClient -PcgProbe -PcgJoin=localhost:25565      # the connection probe, two processes
+./gradlew :runtime:mc:modern:<branch>:<version>:connectionProbe              # the same, driven to a verdict file
+./gradlew prodSmoke                                                          # THE SWEEP: the shipped jars on 30 real clients
+./gradlew prodSmoke -PcgTargets=<label>,<label>                             # just these
+```
+
+Every flag, which nodes have a dev run, and how to read a run: § *Commands* above and § *Verification*
+below.
+
 ## Verification, and what each check can see
 
 | Check | Sees | Blind to |
@@ -172,6 +200,12 @@ published: nothing outside CrystalGUI compiles against it.
 | `serverSmoke` (dev) | a real server boots, the stack comes up, no client-only class loaded | packaging, remapping, relocation |
 | `server_smoke.py` | the same on the SHIPPED jars, legacy Forge | clients |
 | `prodSmoke` | the shipped jars on real clients: load a world, open the editor, capture | behaviour past the first screen |
+
+**`serverSmoke` first** for anything that is a runtime property — a client-only class constructed on a
+server, a service built eagerly.
+
+**A probe that never ran is not a pass.** The driven tasks delete their verdict file first and require it
+after; its first line is the verdict.
 
 **Read every new target's capture.** "drew" has passed over garbled text. `desktop painted: false` in the
 log fails the run; a capture alone proves nothing (a frame can be the previous screen's).
@@ -211,6 +245,33 @@ its first and last in the sweep.
 
 ---
 
+## Supported versions
+
+A node per (loader, Minecraft version); a node claims the versions it was booted on (`variant.minecraft`
+in the pin catalog).
+
+| Loader | Versions | Not supported, and why |
+|---|---|---|
+| Forge | 1.7.10 · 1.8.8–1.12.2 (legacy tree) · 1.13.2–1.21.11 · 26.1.1–26.3 | 1.8 (no MixinBooter boots it) · 1.21 (Forge 51 has no HUD event) · 26.1 (Forge 62 fails in Minecraft's own bootstrap, before any mod loads) · never published: 1.14, 1.14.1, 1.16, 1.17, 1.20.5, 1.21.2 |
+| NeoForge | 1.20.2–1.21.11 · 26.1–26.3 | nothing for 1.20.1; 1.21.2, 1.21.6, 1.21.7, 1.21.9, 26.1, 26.1.1 and 26.3 run its only builds, betas |
+| Fabric | 1.14.4–1.21.11 · 26.1–26.3 | 1.14–1.14.3, 1.16, 1.16.1, 1.21.9 — their only Fabric APIs lack a module the hosts use |
+
+- **Java 8** runs Forge 1.13–1.16, legacy Forge and 1.7.10, dev runs included (`uniminedDevRun` swaps in
+  the Java 8 copies). Below 1.17 the nodes are built by Loom and Unimined, above by ModDevGradle.
+- **26.x is Java 25 and unobfuscated**: every loader runs Mojang's names, so a Fabric node from 26.1 ships
+  as compiled, with no intermediary. On 26.2 Blaze3D may run on Vulkan, and CrystalGraphics then draws
+  through its own Vulkan device hosted on Minecraft's (`Blaze3dVulkanHost`); a dev client picks the API
+  with `-PcgGraphics=vulkan|opengl`. 26.3 under Vulkan still stands down (`CgGraphicsLifecycle.standDown`).
+- **26.3 windows through SDL3, and ships no GLFW**: its keys are SDL scancodes and its mouse buttons SDL's.
+  A 26.3 node registers CrystalGraphics' `runtime/lwjgl/sdl` services instead of the GLFW ones, a host
+  names a key through `CgUiInput.hostKey`, and Fabric's input chain is SDL's event filter. Blaze3D's GPU
+  layer moved to `com.mojang.renderpearl`, a `replacements.string` in both Stonecutter scripts.
+- **Below 1.19.3 Minecraft ships no JOML**, and those instances take CrystalGraphics' `crystalgraphics-joml`
+  companion (`prismInstanceJoml` in `local.properties`).
+- **Forge 1.13.2 and 1.14.2–1.14.3 compile against Mojang names carried back from 1.14.4**, since Mojang
+  published none; their scripts resolve through MCP's.
+- The per-loader node lists: `runtime/mc/modern/{forge,neoforge,fabric}/CLAUDE.md`.
+
 ## Adding a Minecraft version
 
 **CrystalGraphics first** — its `docs/BUILD.md` § *Adding a Minecraft version*, steps 0–3. Then here:
@@ -236,7 +297,7 @@ its first and last in the sweep.
    whose own version is not pinned, and `verifyScriptingCoverage` (online, run by the Release workflow)
    every release in its range. A version Mojang published nothing for takes MCP's names from the tables
    in `ScriptServiceModern.mcpStable` and `ScriptServiceLegacy.MCP_STABLE`, which both checks read.
-7. **Docs**: the range in `AGENTS.md` § *Supported versions* (and a refused version's reason), and the
+7. **Docs**: the range in § *Supported versions* above and its one-line summary in `AGENTS.md` (and a refused version's reason), and the
    node list in that loader branch's `AGENTS.md` — in both repos.
 
 Nothing else is edited: descriptors, variant tables, thin-jar lists and `requiredEntries` follow the tree.
@@ -265,4 +326,7 @@ A new **loader** or **entry class** is different: entry-class names are strings 
   discovery goes through `core.provider.Providers`, whose copies that host fills.
 - **Logs**: 1.7.10 stamps its log an hour behind the clock (match by file time); 1.8.9 writes
   `logs/fml-client-latest.log`; ModLauncher 9+ clients keep stderr lines out of `latest.log`.
+- **Nodes compile from `CrystalGraphics/singlejar-logic/stubs.zip` by default.** Code changes never touch
+  it; a node added or re-pinned means regenerating it. A run task makes its node real.
+- **Switching the active Stonecutter node rewrites `src/` in place.** Switch back before committing.
 - **Never commit the `gl-debug-harness` pointer** unless the harness change is the point.
