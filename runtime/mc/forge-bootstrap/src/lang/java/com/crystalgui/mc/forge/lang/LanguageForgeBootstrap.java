@@ -11,7 +11,8 @@ import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
  * The language mod's one {@code @Mod} class for every Forge, as {@code com.crystalgui.mc.forge.ForgeBootstrap}
  * is the host's: its own mod id and variant table, and the same selector.
  */
-@Mod(value = LanguageForgeBootstrap.MODID, modid = LanguageForgeBootstrap.MODID, dependencies = "required-after:crystalgui")
+@Mod(value = LanguageForgeBootstrap.MODID, modid = LanguageForgeBootstrap.MODID, dependencies = "required-after:crystalgui",
+        acceptableRemoteVersions = "*")
 public final class LanguageForgeBootstrap {
 
     public static final String MODID = "crystalgui_language";
