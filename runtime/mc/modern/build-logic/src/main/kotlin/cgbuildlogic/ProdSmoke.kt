@@ -18,6 +18,7 @@ private val BOM = 0xFEFF.toChar()
 
 /** The flag whose presence in a config IS the proof that arming took. */
 private const val ARMED_MARKER = "JvmArgs=-Dcrystalgui.autotest=true"
+private const val GPU_MARKER = "[crystalgraphics] gpu "
 
 /** How long the launcher gets to read every instance.cfg before the first launch is issued. */
 private const val LAUNCHER_READ_MS = 5000L
@@ -175,6 +176,7 @@ abstract class ProdSmoke : DefaultTask() {
         if (only.isNotEmpty()) targets.sortBy { only.indexOf(it.name) }
 
         val failures = mutableListOf<String>()
+        val gpus = mutableListOf<String>()
         // The launcher must be down while the configs are written, and the sleep is the second half of
         // that: Prism is single-instance, so a `--launch` issued while the previous process is still
         // shutting down is handed to the dying one and dropped.
@@ -230,6 +232,7 @@ abstract class ProdSmoke : DefaultTask() {
                 }
 
                 batch.forEach { target ->
+                    gpus += "${target.name.padEnd(14)} ${gpuLine(target) ?: "(no gpu line)"}"
                     val verdict = verdictFor(target, allExited, out)
                     if (verdict != null) failures += "${target.name}: $verdict"
                     else logger.lifecycle("[prodSmoke] {} drew", target.name)
@@ -242,6 +245,10 @@ abstract class ProdSmoke : DefaultTask() {
             Thread.sleep(1000)
             targets.forEach { disarm(it.cfg, it.original) }
         }
+
+        val gpuReport = File(out, "gpu-report.txt")
+        gpuReport.writeText(gpus.joinToString(System.lineSeparator(), postfix = System.lineSeparator()))
+        logger.lifecycle("[prodSmoke] each client's GPU report: {}", gpuReport)
 
         if (failures.isNotEmpty()) {
             throw GradleException("prodSmoke failed on ${failures.size} of ${targets.size}:\n"
@@ -306,6 +313,17 @@ abstract class ProdSmoke : DefaultTask() {
         val logs = File(target.dir, ".minecraft/logs")
         return listOf("latest.log", "fml-client-latest.log")
             .map { File(logs, it) }.firstOrNull { it.isFile }
+    }
+
+    /**
+     * The `[crystalgraphics] gpu` line the engine logs once per context: what this client's GPU gives it. FML before
+     * 1.13 writes mods' logging to `fml-client-latest.log`, not `latest.log`, so every log is searched.
+     */
+    private fun gpuLine(target: Target): String? {
+        val logs = File(target.dir, ".minecraft/logs")
+        return listOf("latest.log", "fml-client-latest.log", "debug.log").map { File(logs, it) }.filter { it.isFile }
+            .firstNotNullOfOrNull { log -> runCatching { log.readLines().lastOrNull { it.contains(GPU_MARKER) } }.getOrNull() }
+            ?.substringAfter(GPU_MARKER)?.trim()
     }
 
     /** Whether the client's own log carries `needle`. */
