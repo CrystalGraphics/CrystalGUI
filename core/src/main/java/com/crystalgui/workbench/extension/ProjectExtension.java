@@ -8,12 +8,12 @@ import javax.annotation.Nullable;
 
 import com.google.gson.JsonElement;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.widget.collection.tree.TreeEditing;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.WorkbenchSettings;
@@ -179,14 +179,14 @@ public final class ProjectExtension implements WorkbenchExtension {
         }
 
         @Override
-        public void write(StateMap<JsonElement> into) {
+        public void write(CgStateMap<JsonElement> into) {
             if (tree == null) return;
             into.putList(KEY_EXPANDED, tree.treeView().expandedItems(),
                     (entry, path) -> entry.putString(KEY_PATH, path.toString()));
         }
 
         @Override
-        public void read(StateMap<JsonElement> from) {
+        public void read(CgStateMap<JsonElement> from) {
             pending.clear();
             // THE SAME KEY THE SESSION USED TO OWN AT THE TOP LEVEL, which is why a slice with an empty
             // corner is handed the whole record: one arrangement per user, against ten lines.

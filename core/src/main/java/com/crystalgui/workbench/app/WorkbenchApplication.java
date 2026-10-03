@@ -7,20 +7,19 @@ import java.util.Locale;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCodec;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsModel;
-import com.crystalgui.core.notify.Notification;
-import com.crystalgui.document.Document;
 import com.crystalgui.core.signal.ConnectionGroup;
-import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.window.WindowPolicy;
@@ -31,11 +30,11 @@ import com.crystalgui.desktop.app.LaunchContext;
 import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.document.Document;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.serialization.DynamicOps;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.Name;
@@ -49,6 +48,7 @@ import com.crystalgui.workbench.chrome.menu.ChromeCommands;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
+import com.crystalgui.workbench.editor.EditorService;
 
 /**
  * <b>The runtime every workbench-shaped application shares</b> - a {@link Workbench}, the window it
@@ -676,7 +676,7 @@ public class WorkbenchApplication extends UIElement
      * <p>Reads the divider positions back out of the widgets first, or the blob records the weights the
      * layout was <em>built</em> with rather than the ones on screen.</p>
      */
-    public <T> T saveLayout(DynamicOps<T> ops, int screenWidth, int screenHeight) {
+    public <T> T saveLayout(CgDynamicOps<T> ops, int screenWidth, int screenHeight) {
         workbench.dock().pullWeightsIntoLayout();
         T encoded = DockLayoutCodec.encode(workbench.dock().layout(), ops, screenWidth, screenHeight);
         savedLayout = encoded;
@@ -686,7 +686,7 @@ public class WorkbenchApplication extends UIElement
     /** Restores whatever {@link #saveLayout} last produced. False when there is nothing to restore or
      * the codec refuses the blob — a normal outcome, not an error path. */
     @SuppressWarnings("unchecked")
-    public <T> boolean restoreLayout(DynamicOps<T> ops) {
+    public <T> boolean restoreLayout(CgDynamicOps<T> ops) {
         if (savedLayout == null) return false;
         DockLayout restored = DockLayoutCodec.decode((T) savedLayout, ops, workbench.panels());
         if (restored == null) return false;

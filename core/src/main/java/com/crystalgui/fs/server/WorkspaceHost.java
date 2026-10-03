@@ -1,9 +1,8 @@
 package com.crystalgui.fs.server;
 
-import java.util.UUID;
-import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -11,10 +10,15 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.ProjectRegistry;
@@ -22,10 +26,6 @@ import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
 import com.crystalgui.fs.provider.LocalFileSystem;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 
 /**
  * <b>A server serving its workspace over the wire</b> - bind a connection to it and that peer can list,
@@ -123,7 +123,7 @@ public final class WorkspaceHost {
     private final Host host;
 
     private final Map<Object, WorkspaceBinding<Object>> boundPeers = new ConcurrentHashMap<>();
-    private final Map<Object, ProtocolConnection<Object>> connections = new ConcurrentHashMap<>();
+    private final Map<Object, CgProtocolConnection<Object>> connections = new ConcurrentHashMap<>();
 
     private volatile WorkspaceService service;
     private WatchHub hub;
@@ -159,17 +159,17 @@ public final class WorkspaceHost {
      * client end as well, both ends answering {@code fs.*} on one wire.</p>
      */
     public void contribute() {
-        Protocols.server("workspace", this::bind);
+        CgProtocols.server("workspace", this::bind);
         CrystalGuiCore.LOGGER.info("[cgui-fs] workspace contributed to the protocol");
     }
 
-    private void bind(ProtocolConnection<Object> connection) {
-        Object peer = connection.peer();   // non-null: Protocols.server only binds where there is one
+    private void bind(CgProtocolConnection<Object> connection) {
+        Object peer = connection.peer();   // non-null: CgProtocols.server only binds where there is one
         WorkspaceService live = service();
         if (live == null) return;
 
         WorkspaceBinding<Object> binding = new WorkspaceBinding<>(
-                live, hub, host.actorFor(peer), peer, PlainOps.INSTANCE);
+                live, hub, host.actorFor(peer), peer, CgPlainOps.INSTANCE);
         binding.installOn(connection);
         boundPeers.put(peer, binding);
         connections.put(peer, connection);
@@ -236,13 +236,13 @@ public final class WorkspaceHost {
     /** Sends each peer its own list. A peer with nothing to hear about is absent from the map. */
     private void fanOut(Map<Object, List<FsMessages.FileChange>> byPeer) {
         for (Map.Entry<Object, WorkspaceBinding<Object>> entry : boundPeers.entrySet()) {
-            ProtocolConnection<Object> connection = connections.get(entry.getKey());
+            CgProtocolConnection<Object> connection = connections.get(entry.getKey());
             if (connection == null) continue;
             List<FsMessages.FileChange> mine = entry.getValue().changesFor(byPeer);
             if (mine.isEmpty()) continue;
             try {
-                connection.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
-                        FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+                connection.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
+                        FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
                                 new FsMessages.ChangedNotification(mine))));
             } catch (RuntimeException failed) {
                 // One player's dispatch must not stop every other player hearing about the change.
@@ -261,13 +261,13 @@ public final class WorkspaceHost {
      */
     private void fanOutPresence() {
         for (Map.Entry<Object, WorkspaceBinding<Object>> entry : boundPeers.entrySet()) {
-            ProtocolConnection<Object> connection = connections.get(entry.getKey());
+            CgProtocolConnection<Object> connection = connections.get(entry.getKey());
             if (connection == null) continue;
             FsMessages.PresenceNotification mine = entry.getValue().presenceFor();
             if (mine == null) continue;
             try {
-                connection.notify(FsMethods.PRESENCE, new StateMap<>(PlainOps.INSTANCE,
-                        FsMessages.presenceNotification().encode(PlainOps.INSTANCE, mine)));
+                connection.notify(FsMethods.PRESENCE, new CgStateMap<>(CgPlainOps.INSTANCE,
+                        FsMessages.presenceNotification().encode(CgPlainOps.INSTANCE, mine)));
             } catch (RuntimeException failed) {
                 // One player's dispatch must not stop every other player hearing who is here.
                 CrystalGuiCore.LOGGER.error("[cgui-fs] presence dispatch failed: {}",

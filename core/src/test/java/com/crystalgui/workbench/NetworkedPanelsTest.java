@@ -17,17 +17,18 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.fs.provider.InMemoryFileSystem;
-import com.crystalgui.fs.server.WorkspacePermission;
-import com.crystalgui.fs.server.WorkspaceService;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.server.WatchHub;
 import com.crystalgui.fs.server.WorkspaceBinding;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.Networked;
@@ -38,7 +39,6 @@ import com.crystalgui.net.window.ServerWindows;
 import com.crystalgui.net.window.UiType;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.net.window.WindowProtocol;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.Name;
@@ -69,23 +69,23 @@ public class NetworkedPanelsTest extends UiDocumentTestBase {
     private Workbench workbench;
     private NetworkedPanels panels;
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     /** Where a {@link Presentation#WINDOW} would have gone. Counted, never built. */
     private final List<ClientWindowContext> onDesktop = new ArrayList<>();
 
     @Before
     public void openWorkbench() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
         WindowProtocol.register();
         ServerWindows.resetOpenableForTesting();
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "player");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "player");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         WorkspaceService service = new WorkspaceService(
                 new ProjectRegistry().register(() -> List.of(
@@ -93,7 +93,7 @@ public class NetworkedPanelsTest extends UiDocumentTestBase {
                 new InMemoryFileSystem().seed("demo:a.txt", "a"),
                 WorkspacePermission.ALLOW_ALL);
         new WorkspaceBinding<>(service, new WatchHub(service),
-                WorkspaceActor.LOCAL, "player", PlainOps.INSTANCE)
+                WorkspaceActor.LOCAL, "player", CgPlainOps.INSTANCE)
                 .installOn(serverEnd);
 
         workbench = new Workbench(Workspace.of(clientEnd));
@@ -109,7 +109,7 @@ public class NetworkedPanelsTest extends UiDocumentTestBase {
 
     @After
     public void closeWorkbench() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
         ServerWindows.resetOpenableForTesting();
     }

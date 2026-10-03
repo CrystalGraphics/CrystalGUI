@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.editor;
 
-import com.crystalgui.ui.data.UiDataKeys;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
@@ -8,10 +8,10 @@ import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgui.core.notify.StatusBarEntryAccessor;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.document.DocumentEditor;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.text.LineEnding;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.texteditor.TextEditor;
 
@@ -177,7 +177,7 @@ public final class TextEditorView implements DocumentEditor {
     // ── Where you were looking ──────────────────────────────────────────────────────────────────
 
     @Override
-    public <T> void writeViewState(StateMap<T> out) {
+    public <T> void writeViewState(CgStateMap<T> out) {
         out.putInt(CARET, editor.getCaret());
         // The anchor as well as the head, so a selection comes back as a selection rather than as a
         // collapsed caret at one of its ends. Omitted when they are equal -- most files have no
@@ -198,7 +198,7 @@ public final class TextEditorView implements DocumentEditor {
      * last because collapsing rows changes the projection every scroll offset is measured against.</p>
      */
     @Override
-    public <T> void readViewState(StateMap<T> in) {
+    public <T> void readViewState(CgStateMap<T> in) {
         int length = editor.buffer().length();
         int caret = Math.max(0, Math.min(length, in.getInt(CARET, 0)));
         int anchor = Math.max(0, Math.min(length, in.getInt(ANCHOR, caret)));

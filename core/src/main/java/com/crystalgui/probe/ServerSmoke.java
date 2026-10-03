@@ -21,14 +21,16 @@ import java.util.zip.ZipFile;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.CgReplicated;
+import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.gl.CgGL;
+import com.crystalgraphics.platform.service.CgNetworkChannel;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgContentHash;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.net.wire.CgNetworkChannel;
-import com.crystalgui.serialization.ContentHash;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
@@ -193,7 +195,7 @@ public final class ServerSmoke {
 
         // A connection binds only contributors registered BEFORE it opens, and no peer exists yet -- so
         // this is the last moment the set can still be wrong and the first at which it certainly is not.
-        Set<String> contributors = Protocols.contributors();
+        Set<String> contributors = CgProtocols.contributors();
         check(lines, failures, "protocol contributors bound " + contributors,
                 contributors.contains("workspace"),
                 "expected 'workspace'; the workspace host must register before the connection lifecycle");
@@ -201,6 +203,7 @@ public final class ServerSmoke {
         checkDescriptionRoundTrip(lines, failures);
         checkNothingClientSideLoaded(host, lines, failures);
         checkNoGlBackend(lines, failures);
+        checkPersistence(lines, failures);
 
         String report = render(host, lines, failures);
         print(report);
@@ -227,12 +230,12 @@ public final class ServerSmoke {
             child.setId("smoke-child");
             root.append(child);
 
-            Object encoded = new UIElementMirror<>(PlainOps.INSTANCE).describe(root);
-            String hashA = ContentHash.of(PlainOps.INSTANCE, encoded);
-            String hashB = ContentHash.of(PlainOps.INSTANCE,
-                    new UIElementMirror<>(PlainOps.INSTANCE).describe(root));
+            Object encoded = new UIElementMirror<>(CgPlainOps.INSTANCE).describe(root);
+            String hashA = CgContentHash.of(CgPlainOps.INSTANCE, encoded);
+            String hashB = CgContentHash.of(CgPlainOps.INSTANCE,
+                    new UIElementMirror<>(CgPlainOps.INSTANCE).describe(root));
 
-            UIElement decoded = new UIElementMirror<>(PlainOps.INSTANCE).decode(encoded);
+            UIElement decoded = new UIElementMirror<>(CgPlainOps.INSTANCE).decode(encoded);
 
             boolean stable = hashA.equals(hashB);
             boolean shape = decoded != null
@@ -497,6 +500,31 @@ public final class ServerSmoke {
     private static void checkNoGlBackend(List<String> lines, List<String> failures) {
         check(lines, failures, "no GL backend installed", !CgGL.isInstalled(),
                 "something opened CgGL.fromHost, probed CgCapabilities or called CgGL.init on a server");
+    }
+
+    /** Saved when this server stops, so the first run of a fresh world makes one and every run after finds it. */
+    private static final CgReplicated<String> KEPT =
+            CgReplicated.define("crystalgui:probe/kept", CgCodecs.STRING).persisted();
+
+    /** A persisted object outlives the server that made it. Needs two runs on one world; the first says so. */
+    private static void checkPersistence(List<String> lines, List<String> failures) {
+        int found = KEPT.size();
+        if (found == 0) {
+            KEPT.create("minecraft:overworld", 0, 64, 0, "kept");
+            lines.add("SKIP  a persisted object survives a restart -- made one; the next run on this world checks it");
+            return;
+        }
+        boolean ok = found == 1 && "kept".equals(firstValue());
+        check(lines, failures, "a persisted object survives a restart", ok,
+                found + " found, expected the one this probe saved");
+    }
+
+    private static String firstValue() {
+        String[] value = new String[1];
+        KEPT.forEach(handle -> {
+            if (value[0] == null) value[0] = handle.value();
+        });
+        return value[0];
     }
 
     // ── reporting and shutdown ──────────────────────────────────────────────────────────────────

@@ -6,9 +6,9 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 
+import com.crystalgraphics.serialization.CgContentHash;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.serialization.ContentHash;
-import com.crystalgui.serialization.PlainOps;
 
 /**
  * <b>Step 3 — where the sizes and colours went.</b>
@@ -138,10 +138,10 @@ public final class MachineStyles {
      * What the server announces.
      *
      * <p>The hash is of the sheet's own bytes, so it changes exactly when the text does. Any stable
-     * digest would do; this reuses {@link ContentHash} because it is already on the server path and
-     * already hashes a {@code PlainOps} value, which a bare string is.</p>
+     * digest would do; this reuses {@link CgContentHash} because it is already on the server path and
+     * already hashes a {@code CgPlainOps} value, which a bare string is.</p>
      */
-    public static final SheetRef SHEET = SheetRef.anonymous(ContentHash.of(PlainOps.INSTANCE, CSS));
+    public static final SheetRef SHEET = SheetRef.anonymous(CgContentHash.of(CgPlainOps.INSTANCE, CSS));
 
     private MachineStyles() {
     }

@@ -11,6 +11,10 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
@@ -22,19 +26,15 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
+import com.crystalgui.text.diagnostic.ProblemNode;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.Workbench;
-import com.crystalgui.text.diagnostic.ProblemNode;
 import com.crystalgui.workbench.chrome.problems.ProblemsPanel;
 
 /**
@@ -57,13 +57,13 @@ public class ProblemsFollowsTheActiveFileTest extends UiDocumentTestBase {
     private static final CgPath TWO = CgPath.of(PROJECT, "Two.java");
 
     private Workbench workbench;
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
 
     @Before
     public void openWorkbench() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         InMemoryFileSystem files = new InMemoryFileSystem()
                 .seed(PROJECT + ":One.java", "class One { }")
                 .seed(PROJECT + ":Two.java", "class Two { }");
@@ -72,11 +72,11 @@ public class ProblemsFollowsTheActiveFileTest extends UiDocumentTestBase {
                         new WorkspaceProject(PROJECT, "Scratch", Paths.get("/srv/scratch")))),
                 files, WorkspacePermission.ALLOW_ALL);
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "host");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
 
         // EVERY EXTENSION, because the subject is one of them and how it is wired is the question.
         workbench = new Workbench(Workspace.of(clientEnd));
@@ -96,7 +96,7 @@ public class ProblemsFollowsTheActiveFileTest extends UiDocumentTestBase {
         if (workbench != null) workbench.dispose();
         if (clientEnd != null) clientEnd.close("test over");
         if (serverEnd != null) serverEnd.close("test over");
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void frameAndPump() {

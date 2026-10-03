@@ -11,17 +11,17 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.ClientUiSessions;
-import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.protocol.ProtocolConnection;
+import com.crystalgui.net.mirror.UIElementMirror;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
-import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 
 /**
  * Every window this client is showing over one connection — <b>the mirror of {@link ServerWindows}</b>.
@@ -56,7 +56,7 @@ public final class ClientWindows {
         ClientUiSessions.setMirrorFactory(UIElementMirror::new);
     }
 
-    private final ProtocolConnection<Object> connection;
+    private final CgProtocolConnection<Object> connection;
 
     /**
      * Session → what is on screen for it. Insertion-ordered so teardown is reproducible.
@@ -78,7 +78,7 @@ public final class ClientWindows {
     @Nullable
     private SheetSupply sheets;
 
-    private ClientWindows(ProtocolConnection<Object> connection) {
+    private ClientWindows(CgProtocolConnection<Object> connection) {
         this.connection = connection;
         // A description addresses widgets by tag, and an unregistered tag THROWS on decode rather than
         // degrading to a styleless div. Idempotent, and every lookup would trigger it anyway; it is here
@@ -116,12 +116,12 @@ public final class ClientWindows {
     }
 
     /** The host for this connection, created on first use. */
-    public static ClientWindows of(ProtocolConnection<Object> connection) {
+    public static ClientWindows of(CgProtocolConnection<Object> connection) {
         return connection.attachment(ClientWindows.class, ClientWindows::new);
     }
 
     /** Builds the host so it starts listening for windows. @see WindowProtocol */
-    static void install(ProtocolConnection<Object> connection) {
+    static void install(CgProtocolConnection<Object> connection) {
         ClientWindows windows = of(connection);
         // RECORDED, and this is the one place it can be: Protocols.client binds only where a connection
         // has no peer, which is the client's own end. So whatever arrives here IS the client's
@@ -193,7 +193,7 @@ public final class ClientWindows {
      * queues the window before it answers, so both leave in the same flush.</p>
      *
      * <pre>{@code
-     * StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+     * CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
      * args.putInt("x", pos.getX());   // a CLAIM; the server re-derives from it
      * ClientWindows.requestOpen(FurnacePanel.TYPE, args, granted -> {
      *     if (!granted) player.addChatMessage(new ChatComponentText("You are too far away."));
@@ -215,7 +215,7 @@ public final class ClientWindows {
      *                  unanswered, or this client is not connected to anything
      */
     public static <P extends UIElement & Networked<M>, M> void requestOpen(
-            UiType<P, M> type, @Nullable StateMap<Object> args,
+            UiType<P, M> type, @Nullable CgStateMap<Object> args,
             @Nullable Consumer<Boolean> onGranted) {
         ClientWindows windows = CLIENT;
         if (windows == null) {
@@ -229,14 +229,14 @@ public final class ClientWindows {
     }
 
     /**
-     * As {@link #requestOpen(UiType, StateMap, Consumer)}, naming the type by <b>id</b>.
+     * As {@link #requestOpen(UiType, CgStateMap, Consumer)}, naming the type by <b>id</b>.
      *
      * <p>For a caller that holds only what a session recorded: a restored layout has a type id string
      * and no {@code UiType} object, and loading the panel class to get one would defeat the point of a
      * lazy tab. It grants nothing extra — the id is what travels either way, and the server's
      * {@link #openable} declaration is the authority in both cases.</p>
      */
-    public static void requestOpen(String typeId, @Nullable StateMap<Object> args,
+    public static void requestOpen(String typeId, @Nullable CgStateMap<Object> args,
                                    @Nullable Consumer<Boolean> onGranted) {
         ClientWindows windows = CLIENT;
         if (windows == null) {
@@ -248,22 +248,22 @@ public final class ClientWindows {
     }
 
     private <P extends UIElement & Networked<M>, M> void ask(
-            UiType<P, M> type, @Nullable StateMap<Object> args,
+            UiType<P, M> type, @Nullable CgStateMap<Object> args,
             @Nullable java.util.function.Consumer<Boolean> onGranted) {
         ask(type.id(), args, onGranted);
     }
 
-    private void ask(String typeId, @Nullable StateMap<Object> args,
+    private void ask(String typeId, @Nullable CgStateMap<Object> args,
                      @Nullable java.util.function.Consumer<Boolean> onGranted) {
-        StateMap<Object> out = new StateMap<>(connection.ops());
+        CgStateMap<Object> out = new CgStateMap<>(connection.ops());
         out.putString(UiMethods.TYPE, typeId);
         if (args != null) out.putRaw("args", args.encode());
         connection.router().request(UiMethods.REQUEST_OPEN, out.encode(),
                 answer -> {
                     if (onGranted == null) return;
-                    StateMap<Object> in = answer == null
-                            ? new StateMap<>(connection.ops())
-                            : new StateMap<>(connection.ops(), answer);
+                    CgStateMap<Object> in = answer == null
+                            ? new CgStateMap<>(connection.ops())
+                            : new CgStateMap<>(connection.ops(), answer);
                     onGranted.accept(in.getBool("ok", false));
                 },
                 error -> {
@@ -307,7 +307,7 @@ public final class ClientWindows {
         session.onWindowOpened(root -> present(session));
         session.onWindowClosed((code, detail) -> closedByServer(session, code, detail));
         session.onCall(UiMethods.REQUEST_CLOSE, (args, respond) -> {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             out.putBool("ok", mayClose(session));
             respond.ok(out);
         });
@@ -574,7 +574,7 @@ public final class ClientWindows {
         }
 
         @Override
-        public ProtocolConnection<Object> connection() {
+        public CgProtocolConnection<Object> connection() {
             return connection;
         }
 

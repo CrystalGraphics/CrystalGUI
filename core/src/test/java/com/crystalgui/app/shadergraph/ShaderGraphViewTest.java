@@ -1,18 +1,18 @@
 package com.crystalgui.app.shadergraph;
 
-import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UIElement;
-import com.google.gson.JsonElement;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
-import com.crystalgui.widget.graph.GraphNode;
+import com.crystalgui.graph.GraphIds;
+import com.crystalgui.graph.GraphProperty;
+import com.crystalgui.graph.NodeData;
+import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.diagnostic.Diagnostic;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.graph.GraphNode;
+import com.google.gson.JsonElement;
 import java.util.List;
-import com.crystalgui.graph.GraphProperty;
-import com.crystalgui.graph.NodeData;
-import com.crystalgui.graph.GraphIds;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -258,7 +258,7 @@ public class ShaderGraphViewTest extends UiDocumentTestBase {
         editor.graph().setPan(-120f, 64f);
 
         byte[] saved = editor.model().encode();
-        StateMap<JsonElement> view = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> view = new CgStateMap<>(JsonOps.INSTANCE);
         editor.writeViewState(view);
 
         ShaderGraphView reopened = new ShaderGraphView();
@@ -267,7 +267,7 @@ public class ShaderGraphViewTest extends UiDocumentTestBase {
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         reopened.model().adopt(saved);
-        reopened.readViewState(new StateMap<>(JsonOps.INSTANCE, view.encode()));
+        reopened.readViewState(new CgStateMap<>(JsonOps.INSTANCE, view.encode()));
 
         assertEquals(2.5f, reopened.graph().getZoom(), 0.001f);
         assertEquals(-120f, reopened.graph().getPanX(), 0.001f);

@@ -18,6 +18,10 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.example.notes.NotesKind;
@@ -30,10 +34,6 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
 
 /**
  * <b>A feature attaches itself to a workbench, and lets go with it.</b>
@@ -53,24 +53,24 @@ public class WorkbenchExtensionsTest {
 
     @Before
     public void openWorkspace() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         InMemoryFileSystem files = new InMemoryFileSystem().seed(PROJECT + ":Main.java", "class Main { }");
         WorkspaceService service = new WorkspaceService(
                 new ProjectRegistry().register(() -> List.of(
                         new WorkspaceProject(PROJECT, "Scratch", Paths.get("/srv/scratch")))),
                 files, WorkspacePermission.ALLOW_ALL);
-        InMemoryTransport<Object>[] link = InMemoryTransport.pair();
-        ProtocolConnection<Object> serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
-        ProtocolConnection<Object> clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        CgInMemoryTransport<Object>[] link = CgInMemoryTransport.pair();
+        CgProtocolConnection<Object> serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "host");
+        CgProtocolConnection<Object> clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
         workspace = Workspace.of(clientEnd);
     }
 
     @After
     public void closeWorkspace() {
         WorkbenchExtensions.resetForTesting();
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     /**

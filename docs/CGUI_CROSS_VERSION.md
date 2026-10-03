@@ -30,7 +30,7 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 
 | You need | Copy |
 |---|---|
-| traffic between client and server | `CgNetworkChannel` — `CrystalGUIForge.Network`, `CrystalGUINeoForge`, `CrystalGUIFabricCommon`, `legacy/net/NetworkChannelLegacy`, `v1710/net/NetworkChannel1710` |
+| traffic between client and server | CrystalGraphics' `CgNetworkChannel` — `CrystalGraphicsForge.Network`, `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`, `NetworkChannel1710` — and `CgNetwork`, the connections their lifecycles drive |
 | a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
 | a permission or "who is this player" | `WorkspaceHostModern.McRoles`; legacy `Game.canSendCommands`; 1.7.10 `CgUiWorkspaceHost` |
 | client input, HUD, a screen | `mc.modern.client` (`CgUiInput`, `CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
@@ -179,9 +179,10 @@ CrystalGraphics has the same shape (`runtime/mc/modern/common/…/PlatformServic
 
 Worked examples to copy — each is the complete pattern:
 
-- **A transport** — `CgNetworkChannel` (core `net.wire`): `CrystalGUIForge.Network`,
-  `CrystalGUINeoForge`, `CrystalGUIFabricCommon`, `legacy/net/NetworkChannelLegacy`,
-  `v1710/net/NetworkChannel1710`; logic (framing, routing, sessions) all in core.
+- **A transport** — CrystalGraphics' `CgNetworkChannel` (platform slot): `CrystalGraphicsForge.Network`,
+  `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`,
+  `NetworkChannel1710`, each with a lifecycle forwarding joins, ticks and connects into `CgNetwork`;
+  framing, routing and connections all in CrystalGraphics core, sessions in CrystalGUI's.
 - **A permission** — `WorkspaceRoles.isOperator(actorId)`: `WorkspaceHostModern.McRoles` (one class,
   directives for `isOp(GameProfile)` → `isOp(NameAndId)` at 1.21.9), legacy `CgUiWorkspaceHost` via
   `Game.canSendCommands`, 1.7.10 `CgUiWorkspaceHost`.

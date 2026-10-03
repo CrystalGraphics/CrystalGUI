@@ -1,24 +1,30 @@
 package com.crystalgui.net;
 
-import com.crystalgui.ui.dom.TreeSource;
-import com.crystalgui.style.Styleable;
+import com.crystalgraphics.net.CgTransport;
+import com.crystalgraphics.net.protocol.CgCall;
+import com.crystalgraphics.net.protocol.CgEnvelope;
+import com.crystalgraphics.net.protocol.CgEnvelopeCodec;
+import com.crystalgraphics.net.protocol.CgMessageRouter;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.mirror.ClientTreeMirror;
 import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.protocol.*;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.style.Styleable;
+import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RateGate;
 import com.crystalgui.ui.contract.RatePolicy;
-import java.util.LinkedHashMap;
-import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.dom.TreeSource;
+import java.util.LinkedHashMap;
 
-import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import javax.annotation.Nullable;
 
 /**
  * The client's half: rebuilds the tree a server described, and holds a content-addressed cache of
@@ -34,7 +40,7 @@ import java.util.function.Consumer;
  */
 public final class ClientUiSession<N extends Styleable, T> {
 
-    private final DynamicOps<T> ops;
+    private final CgDynamicOps<T> ops;
 
     /** hash → encoded description. Encoded, not decoded: a decoded tree is live elements, and a live
      * element can only be attached in one place, so a cache of them would be a cache of things that
@@ -44,9 +50,9 @@ public final class ClientUiSession<N extends Styleable, T> {
     private final Deque<T> mailbox = new ArrayDeque<>();
 
     /** Everything inbound goes through here; nothing is dispatched by type. @see #registerUiMethods */
-    private final MessageRouter<T> router;
+    private final CgMessageRouter<T> router;
 
-    /** False when a {@link ProtocolConnection} drains and expires for us. @see #tick() */
+    /** False when a {@link CgProtocolConnection} drains and expires for us. @see #tick() */
     private final boolean ownsConnection;
 
     /** How long a call waits before its error handler is told. @see ServerUiSession */
@@ -117,11 +123,11 @@ public final class ClientUiSession<N extends Styleable, T> {
     private java.util.function.BiConsumer<String, String> onWindowClosed;
 
     /** Owns its own transport, router and mailbox — the shape every test and the in-memory pair use. */
-    public ClientUiSession(NodeMirror<N, T> nodes, UITransport<T> transport, DynamicOps<T> ops) {
+    public ClientUiSession(NodeMirror<N, T> nodes, CgTransport<T> transport, CgDynamicOps<T> ops) {
         this.ops = ops;
         this.nodes = nodes;
         this.ownsConnection = true;
-        this.router = new MessageRouter<>(envelope -> transport.send(EnvelopeCodec.encode(ops, envelope)));
+        this.router = new CgMessageRouter<>(envelope -> transport.send(CgEnvelopeCodec.encode(ops, envelope)));
         registerUiMethods();
         transport.setReceiver(packet -> {
             synchronized (mailbox) {
@@ -134,7 +140,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * Rides a connection somebody else owns, so this window shares one wire with every other subsystem.
      *
      * <p>The other constructor is still correct and is what a test uses: it owns its transport, its
-     * router and its mailbox. This one owns none of them — {@link ProtocolConnection#tick()} drains and
+     * router and its mailbox. This one owns none of them — {@link CgProtocolConnection#tick()} drains and
      * expires, and {@link #tick()} here only flushes what the tree changed.</p>
      *
      * <p><b>The only window on this connection.</b> Registrations go straight on the router, exactly as
@@ -145,7 +151,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * <p>Kept rather than folded into the host because it is genuinely the common case and costs a
      * lookup less: a client with one window has nothing to demultiplex.</p>
      */
-    public ClientUiSession(NodeMirror<N, T> nodes, ProtocolConnection<T> connection) {
+    public ClientUiSession(NodeMirror<N, T> nodes, CgProtocolConnection<T> connection) {
         this.ops = connection.ops();
         this.nodes = nodes;
         // A held report must still leave when nothing else is happening, and this session
@@ -165,7 +171,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * a client learns one from the wire — so on this side the bootstrap message cannot itself be
      * window-scoped, and something has to own it.</p>
      */
-    ClientUiSession(NodeMirror<N, T> nodes, ProtocolConnection<T> connection, int windowId) {
+    ClientUiSession(NodeMirror<N, T> nodes, CgProtocolConnection<T> connection, int windowId) {
         this.ops = connection.ops();
         this.nodes = nodes;
         // A held report must still leave when nothing else is happening, and this session
@@ -233,7 +239,7 @@ public final class ClientUiSession<N extends Styleable, T> {
     }
 
     /** The wire format — always the connection's own. @see ServerUiSession#ops() */
-    public DynamicOps<T> ops() {
+    public CgDynamicOps<T> ops() {
         return ops;
     }
 
@@ -276,9 +282,9 @@ public final class ClientUiSession<N extends Styleable, T> {
             mailbox.clear();
         }
         for (T raw : batch) {
-            Envelope envelope;
+            CgEnvelope envelope;
             try {
-                envelope = EnvelopeCodec.decode(ops, raw);
+                envelope = CgEnvelopeCodec.decode(ops, raw);
             } catch (RuntimeException malformed) {
                 CrystalGuiCore.LOGGER.warn("Dropping an undecodable message: {}", malformed.getMessage());
                 continue;
@@ -290,7 +296,7 @@ public final class ClientUiSession<N extends Styleable, T> {
 
     /** The UI half of the vocabulary. RPC methods register themselves through {@link #onCall}. */
     private void registerUiMethods() {
-        MessageRouter.NotificationHandler<T> open = payload -> acceptOpenWindow(read(payload));
+        CgMessageRouter.NotificationHandler<T> open = payload -> acceptOpenWindow(read(payload));
         router.onNotify(UiMethods.OPEN_WINDOW, open);
         onRouter.add(new AbstractMap.SimpleEntry<>(UiMethods.OPEN_WINDOW, open));
         registerWindowMethods();
@@ -301,7 +307,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      *
      * <p>Empty in the bound shape, where registrations go through the mux instead.</p>
      */
-    private final List<Map.Entry<String, MessageRouter.NotificationHandler<T>>> onRouter =
+    private final List<Map.Entry<String, CgMessageRouter.NotificationHandler<T>>> onRouter =
             new ArrayList<>();
 
     /**
@@ -322,7 +328,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * It does not close the window server-side — {@link #closeFromClient} is that.</p>
      */
     public void detach() {
-        for (Map.Entry<String, MessageRouter.NotificationHandler<T>> entry : onRouter) {
+        for (Map.Entry<String, CgMessageRouter.NotificationHandler<T>> entry : onRouter) {
             router.offNotify(entry.getKey(), entry.getValue());
         }
         onRouter.clear();
@@ -336,16 +342,16 @@ public final class ClientUiSession<N extends Styleable, T> {
      * for the whole connection, because the bootstrap message is the one thing in the vocabulary that
      * cannot be routed by a window id — it is what <em>announces</em> the id.</p>
      */
-    void acceptOpenWindow(StateMap<T> in) {
+    void acceptOpenWindow(CgStateMap<T> in) {
         {
             int protocol = in.getInt("protocol", -1);
             int id = in.getInt(UiMethods.WINDOW, -1);
-            if (protocol != EnvelopeCodec.VERSION) {
+            if (protocol != CgEnvelopeCodec.VERSION) {
                 // Refuse rather than open something we will misread. A version mismatch that opens
                 // anyway shows up as a UI that is subtly wrong, which is far harder to trace than a
                 // window that plainly did not appear.
                 CrystalGuiCore.LOGGER.error("Refusing window {}: server protocol {} but this client "
-                        + "speaks {}", id, protocol, EnvelopeCodec.VERSION);
+                        + "speaks {}", id, protocol, CgEnvelopeCodec.VERSION);
                 return;
             }
             this.windowId = id;
@@ -367,12 +373,12 @@ public final class ClientUiSession<N extends Styleable, T> {
             }
             // A REQUEST now, where it used to be a bare RequestDescription with nothing tying the answer
             // back to it. The id correlates, so two opens in flight cannot cross their descriptions.
-            StateMap<T> ask = new StateMap<>(ops);
+            CgStateMap<T> ask = new CgStateMap<>(ops);
             ask.putInt(UiMethods.WINDOW, id);
             ask.putString("hash", hash);
             router.request(UiMethods.DESCRIPTION, ask.encode(),
                     answer -> {
-                        StateMap<T> body = read(answer);
+                        CgStateMap<T> body = read(answer);
                         T encoded = body.getRaw("root");
                         if (encoded == null) return;
                         descriptionCache.put(body.getString("hash", hash), encoded);
@@ -398,7 +404,7 @@ public final class ClientUiSession<N extends Styleable, T> {
          * because every id past the divergence would be off by one.
          */
         bindNotify(UiMethods.TREE_OPS, payload -> {
-            StateMap<T> in = read(payload);
+            CgStateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
             // Queued, never dropped, if it beats the description: the open carries a hash, so a
             // client without the tree has to ask for it, and nothing tells the server the far side is
@@ -409,7 +415,7 @@ public final class ClientUiSession<N extends Styleable, T> {
         });
 
         bindNotify(UiMethods.STATE_DELTA, payload -> {
-            StateMap<T> in = read(payload);
+            CgStateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
             if (defer(() -> applyStateDelta(in))) return;
             applyStateDelta(in);
@@ -419,7 +425,7 @@ public final class ClientUiSession<N extends Styleable, T> {
         // re-sent ui/openWindow would work and would throw away exactly the state the window was kept
         // for. @see UiMethods#FOCUS_WINDOW
         bindNotify(UiMethods.VIEW, payload -> {
-            StateMap<T> in = read(payload);
+            CgStateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
             String command = in.getString(ViewCommand.CMD, "");
             if (!ViewCommand.ALL.contains(command)) {
@@ -434,13 +440,13 @@ public final class ClientUiSession<N extends Styleable, T> {
         });
 
         bindNotify(UiMethods.FOCUS_WINDOW, payload -> {
-            StateMap<T> in = read(payload);
+            CgStateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId || root == null) return;
             if (onFocusRequested != null) onFocusRequested.run();
         });
 
         bindNotify(UiMethods.CLOSE_WINDOW, payload -> {
-            StateMap<T> in = read(payload);
+            CgStateMap<T> in = read(payload);
             if (in.getInt(UiMethods.WINDOW, windowId) != windowId) return;
             // THE CODE, not the sentence. The detail is a human-readable string for a log; what a
             // panel branches on has to mean the same thing on both sides, which is what it did not
@@ -471,7 +477,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * {@code ui.elements}. {@code ClientWindows} installs the applier.</p>
      */
     @Nullable
-    private java.util.function.BiConsumer<String, StateMap<T>> onViewCommand;
+    private java.util.function.BiConsumer<String, CgStateMap<T>> onViewCommand;
 
     /**
      * This window's id table, for a caller that has to resolve an id the server sent.
@@ -486,7 +492,7 @@ public final class ClientUiSession<N extends Styleable, T> {
 
     /** @see #onViewCommand */
     public ClientUiSession<N, T> onViewCommand(
-            @Nullable java.util.function.BiConsumer<String, StateMap<T>> handler) {
+            @Nullable java.util.function.BiConsumer<String, CgStateMap<T>> handler) {
         this.onViewCommand = handler;
         return this;
     }
@@ -498,7 +504,7 @@ public final class ClientUiSession<N extends Styleable, T> {
     private boolean applyingDelta;
 
     /** @see #registerWindowMethods */
-    private void applyStateDelta(StateMap<T> in) {
+    private void applyStateDelta(CgStateMap<T> in) {
         /*
          * NOTHING APPLIED HERE IS A USER INTERACTION, and saying so is the whole of the guard.
          *
@@ -532,11 +538,11 @@ public final class ClientUiSession<N extends Styleable, T> {
      * <p>The three kinds an entry can carry, and what each is for, are on {@link NodeMirror}.</p>
      */
     /** @see ClientTreeMirror#applyStructure */
-    private void applyTreeOps(StateMap<T> in) {
+    private void applyTreeOps(CgStateMap<T> in) {
         if (mirror != null) mirror.applyStructure(in);
     }
 
-    private void applyEntries(StateMap<T> in) {
+    private void applyEntries(CgStateMap<T> in) {
         if (mirror != null) mirror.applyState(in, this::shouldSuppress);
     }
 
@@ -548,7 +554,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * that was in flight when the window closed, and a check that costs an int comparison is not worth
      * making conditional on which shape built the session.</p>
      */
-    private void bindNotify(String method, MessageRouter.NotificationHandler<T> handler) {
+    private void bindNotify(String method, CgMessageRouter.NotificationHandler<T> handler) {
         if (mux != null) {
             mux.onNotify(windowId, method, handler);
             return;
@@ -631,8 +637,8 @@ public final class ClientUiSession<N extends Styleable, T> {
         if (onReleased != null) onReleased.run();
     }
 
-    private StateMap<T> read(@Nullable T payload) {
-        return payload == null ? new StateMap<>(ops) : new StateMap<>(ops, payload);
+    private CgStateMap<T> read(@Nullable T payload) {
+        return payload == null ? new CgStateMap<>(ops) : new CgStateMap<>(ops, payload);
     }
 
     /**
@@ -779,7 +785,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * <p>Driven by the connection's tick, so a value held by a debounce still leaves when nothing else
      * is happening — a throttle clears itself only while the user keeps moving.</p>
      */
-    private final RateGate<N, StateMap<T>> rates = new RateGate<>(this::report);
+    private final RateGate<N, CgStateMap<T>> rates = new RateGate<>(this::report);
 
     /**
      * Where "now" comes from, for the rate policies. Replaceable so a test can step it rather than
@@ -798,7 +804,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * WHEN a report leaves; this decides whether it is a report at all.</p>
      */
     private void reportRated(N element, String kind, RatePolicy policy,
-                             @Nullable StateMap<T> payload) {
+                             @Nullable CgStateMap<T> payload) {
         if (applyingDelta) return;
         rates.offer(element, kind, policy, payload);
     }
@@ -813,11 +819,11 @@ public final class ClientUiSession<N extends Styleable, T> {
         rates.commit();
     }
 
-    private void report(N element, String kind, @Nullable StateMap<T> payload) {
+    private void report(N element, String kind, @Nullable CgStateMap<T> payload) {
         // A report means "the user did this". A write we were just handed by the server is the one
         // thing that certainly is not. @see #applyStateDelta
         if (applyingDelta) return;
-        StateMap<T> out = new StateMap<>(ops);
+        CgStateMap<T> out = new CgStateMap<>(ops);
         out.putInt(UiMethods.WINDOW, windowId);
         out.putInt("nid", ids.idOf(element));
         out.putString("kind", kind);
@@ -830,7 +836,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      *
      * <p>Window-scoped when this session is one of several, so two windows of the same application may
      * each offer the same method name. A method that belongs to the <em>connection</em> rather than to a
-     * window — a workspace, a script runtime — registers on {@link ProtocolConnection} directly and is
+     * window — a workspace, a script runtime — registers on {@link CgProtocolConnection} directly and is
      * shared by every window, which is what it wants.</p>
      */
     /**
@@ -848,18 +854,18 @@ public final class ClientUiSession<N extends Styleable, T> {
      * qualified method is by construction the same panel rebinding itself, since nested panels are
      * prefixed by ids {@code ServerScope.attach} keeps unique.</p>
      */
-    private final Map<String, Call.Handler<T>> callHandlers = new LinkedHashMap<>();
+    private final Map<String, CgCall.Handler<T>> callHandlers = new LinkedHashMap<>();
 
-    private final Map<String, Consumer<StateMap<T>>> notifyHandlers = new LinkedHashMap<>();
+    private final Map<String, Consumer<CgStateMap<T>>> notifyHandlers = new LinkedHashMap<>();
 
-    public ClientUiSession<N, T> onCall(String method, Call.Handler<T> handler) {
+    public ClientUiSession<N, T> onCall(String method, CgCall.Handler<T> handler) {
         if (callHandlers.put(method, handler) != null) return this;   // already routed; delegate swapped
         // Same handler type, so nothing that calls this moves; underneath, an RPC is now an ordinary
         // REQUEST and its correlation is the router's rather than a second id space of its own.
-        MessageRouter.RequestHandler<T> bound = (payload, respond) ->
-                callHandlers.get(method).invoke(read(payload), new Call.Responder<T>() {
+        CgMessageRouter.RequestHandler<T> bound = (payload, respond) ->
+                callHandlers.get(method).invoke(read(payload), new CgCall.Responder<T>() {
                     @Override
-                    public void ok(@Nullable StateMap<T> value) {
+                    public void ok(@Nullable CgStateMap<T> value) {
                         respond.ok(value == null ? null : value.encode());
                     }
 
@@ -878,12 +884,12 @@ public final class ClientUiSession<N extends Styleable, T> {
      *
      * <p>Stamped with this session's window on the way out, so the far side's {@link UiWindowMux} can
      * route it. The key is additive and a handler that does not read it is unaffected — which matters,
-     * because a connection-scoped method registered straight on {@link ProtocolConnection} will receive
+     * because a connection-scoped method registered straight on {@link CgProtocolConnection} will receive
      * one of these unchanged and correctly ignore it.</p>
      */
-    public void call(String method, @Nullable StateMap<T> args,
-                     @Nullable Consumer<StateMap<T>> onResult, @Nullable Consumer<String> onError) {
-        StateMap<T> stamped = args == null ? new StateMap<>(ops) : args;
+    public void call(String method, @Nullable CgStateMap<T> args,
+                     @Nullable Consumer<CgStateMap<T>> onResult, @Nullable Consumer<String> onError) {
+        CgStateMap<T> stamped = args == null ? new CgStateMap<>(ops) : args;
         stamped.putInt(UiMethods.WINDOW, windowId);
         router.request(method, stamped.encode(),
                 value -> {
@@ -897,20 +903,20 @@ public final class ClientUiSession<N extends Styleable, T> {
      * Listens for a notification <b>on this window</b> — the mirror of
      * {@link ServerUiSession#onNotify}.
      *
-     * <p>Registering on {@link ProtocolConnection#onNotify} instead is keyed by method name alone, so a
+     * <p>Registering on {@link CgProtocolConnection#onNotify} instead is keyed by method name alone, so a
      * second window of the same application listening for the same thing is refused outright by the
      * router. Through here two windows may each name {@code app/announce} and each hear only their
      * own.</p>
      */
-    public ClientUiSession<N, T> onNotify(String method, Consumer<StateMap<T>> handler) {
+    public ClientUiSession<N, T> onNotify(String method, Consumer<CgStateMap<T>> handler) {
         if (notifyHandlers.put(method, handler) != null) return this;   // already routed
         bindNotify(method, payload -> notifyHandlers.get(method).accept(read(payload)));
         return this;
     }
 
     /** Tells the server, stamped with this window. Nothing comes back. */
-    public void notify(String method, @Nullable StateMap<T> payload) {
-        StateMap<T> stamped = payload == null ? new StateMap<>(ops) : payload;
+    public void notify(String method, @Nullable CgStateMap<T> payload) {
+        CgStateMap<T> stamped = payload == null ? new CgStateMap<>(ops) : payload;
         stamped.putInt(UiMethods.WINDOW, windowId);
         router.notify(method, stamped.encode());
     }
@@ -925,7 +931,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      */
     public void closeFromClient(String reason) {
         if (windowId < 0) return;
-        StateMap<T> out = new StateMap<>(ops);
+        CgStateMap<T> out = new CgStateMap<>(ops);
         out.putString("reason", reason == null ? "" : reason);
         notify(UiMethods.CLOSE, out);
         root = null;
@@ -936,7 +942,7 @@ public final class ClientUiSession<N extends Styleable, T> {
     /** Tells the server whether this window is on screen. @see UiMethods#VISIBILITY */
     public void reportVisibility(boolean visible) {
         if (windowId < 0) return;
-        StateMap<T> out = new StateMap<>(ops);
+        CgStateMap<T> out = new CgStateMap<>(ops);
         out.putBool("visible", visible);
         notify(UiMethods.VISIBILITY, out);
     }
@@ -948,7 +954,7 @@ public final class ClientUiSession<N extends Styleable, T> {
      * need never ask. Both callbacks run on the thread that ticked the connection.</p>
      */
     public void requestSheet(String hash, Consumer<String> onCss, Consumer<String> onError) {
-        StateMap<T> ask = new StateMap<>(ops);
+        CgStateMap<T> ask = new CgStateMap<>(ops);
         ask.putString("hash", hash);
         call(UiMethods.SHEET, ask,
                 answer -> onCss.accept(answer.getString("css", "")),

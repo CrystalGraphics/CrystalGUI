@@ -1,6 +1,6 @@
 package com.crystalgui.widget.graph;
 
-import com.crystalgui.ui.dom.UIElement;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphCodecs;
 import com.crystalgui.graph.GraphDocument;
@@ -8,12 +8,12 @@ import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.PortRef;
-import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.graph.port.BasicPortType;
+import com.crystalgui.graph.port.PortType;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgui.graph.port.BasicPortType;
-import com.crystalgui.graph.port.PortType;
+import com.crystalgui.ui.dom.UIElement;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -234,8 +234,8 @@ public class GraphDocumentViewTest extends UiDocumentTestBase {
         assertEquals("the factory bound it to the library type, not to the widget pseudo-type",
                 "shader.Position", graph.getDocument().node(widget.getNodeId()).typeId());
 
-        var encoded = GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, graph.getDocument());
-        graph.load(GraphCodecs.DOCUMENT.decode(PlainOps.INSTANCE, encoded));
+        var encoded = GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, graph.getDocument());
+        graph.load(GraphCodecs.DOCUMENT.decode(CgPlainOps.INSTANCE, encoded));
         frame();
 
         assertEquals(1, graph.nodes().size());
@@ -262,8 +262,8 @@ public class GraphDocumentViewTest extends UiDocumentTestBase {
         assertEquals("the document learned about the late port",
                 1, graph.getDocument().node(widget.getNodeId()).ports().size());
 
-        graph.load(GraphCodecs.DOCUMENT.decode(PlainOps.INSTANCE,
-                GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, graph.getDocument())));
+        graph.load(GraphCodecs.DOCUMENT.decode(CgPlainOps.INSTANCE,
+                GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, graph.getDocument())));
         frame();
 
         assertEquals("Hand Built", graph.nodes().get(0).getTitle());
@@ -493,7 +493,7 @@ public class GraphDocumentViewTest extends UiDocumentTestBase {
      * <b>What the view built can be saved and reopened.</b>
      *
      * <p>The end-to-end claim of 6.2.5: a graph drawn with the mouse is a document, and a document is
-     * bytes. Round-tripped through {@code PlainOps} rather than JSON, because that is the server path.</p>
+     * bytes. Round-tripped through {@code CgPlainOps} rather than JSON, because that is the server path.</p>
      */
     @Test
     public void aGraphBuiltInTheViewRoundTripsThroughBytes() {
@@ -502,8 +502,8 @@ public class GraphDocumentViewTest extends UiDocumentTestBase {
         graph.connect(from.addOutput(VEC3, "Out"), to.addInput(VEC3, "In"));
         frame();
 
-        var encoded = GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, graph.getDocument());
-        GraphDocument reloaded = GraphCodecs.DOCUMENT.decode(PlainOps.INSTANCE, encoded);
+        var encoded = GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, graph.getDocument());
+        GraphDocument reloaded = GraphCodecs.DOCUMENT.decode(CgPlainOps.INSTANCE, encoded);
 
         assertEquals(2, reloaded.nodeCount());
         assertEquals(1, reloaded.edges().size());

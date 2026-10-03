@@ -2,9 +2,8 @@ package com.crystalgui.mc.v1710;
 
 import com.crystalgui.mc.v1710.ClientProxy;
 import com.crystalgui.mc.v1710.example.MachineExample1710;
-import com.crystalgui.mc.v1710.net.CgUiConnections;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.mc.v1710.net.CgUiWorkspaceHost;
-import com.crystalgui.mc.v1710.net.NetworkChannel1710;
 import com.crystalgui.net.window.WindowProtocol;
 
 /**
@@ -18,12 +17,10 @@ import com.crystalgui.net.window.WindowProtocol;
  * <p>{@code core/} is headless-clean by construction (its build fails on a {@code net.minecraft.*}
  * import), and that property is worth not undoing at the loader.</p>
  *
- * <h3>Except networking, which is exactly the server's half</h3>
+ * <h3>Except the protocols, which are exactly the server's half</h3>
  *
- * <p>The class comment above was true for as long as CrystalGUI was only ever a screen. It stops being
- * true the moment a workspace is hosted rather than local: a dedicated server holds the files and answers
- * the protocol, and it does that with no screen anywhere. So the channel registers <em>here</em> rather
- * than in {@code ClientProxy} — both sides need it, and the server needs it more.</p>
+ * <p>A dedicated server holds the workspace and answers its protocol with no screen anywhere, so the
+ * contributors register <em>here</em>. The channel and the connections are CrystalGraphics'.</p>
  */
 public class CommonProxy {
 
@@ -32,21 +29,10 @@ public class CommonProxy {
     }
 
     /**
-     * FML init. Registers the network channel, which both sides need.
-     *
-     * <p><b>init and not preInit, following CustomNPC+</b>, which builds its {@code PacketHandler} at
-     * preInit but calls {@code registerChannels()} from {@code FMLInitializationEvent}. Ours registered
-     * at preInit and no packet was ever delivered, in either direction, with every gate reporting
-     * healthy — channel present on both sides, connection open, dispatcher live, sends accepted. This is
-     * the one structural difference from a mod that demonstrably works.</p>
-     *
-     * <p>Registration is pure wiring — no GL, no screen, no world — which is what lets it sit in common
-     * code without undoing the headless property above.</p>
+     * FML init: CrystalGUI's protocols, contributed to CrystalGraphics' connections. Pure wiring — no GL, no
+     * screen, no world — so it sits in common code without undoing the headless property above.
      */
     public void init() {
-        NetworkChannel1710.register();
-        // Phase 4 A4. Must follow the channel: it takes the channel's inbound handler, and a handler
-        // installed onto an unavailable channel is silently discarded.
         // CONTRIBUTORS BEFORE CONNECTIONS. Nothing depends on it here -- no peer can exist at init, so
         // both orders bind the same set -- but a contributor is only bound to connections opened AFTER
         // it registers, so this is the order that stays correct if anything ever opens one earlier. It
@@ -56,9 +42,8 @@ public class CommonProxy {
         // ClientWindows on every client one, so a mod opens a UI with one call and never writes a tick
         // handler, a player map or a logout hook for it. @see com.crystalgui.net.window.WindowProtocol
         WindowProtocol.register();
-        CgUiConnections.register();
-        // The worked example's SERVER half. After connections, because it opens a session per player
-        // on the connection that class holds -- registered earlier it would simply find none.
+        CgNetwork.onPeerClosed(CgUiWorkspaceHost::forget);
+        // The worked example's SERVER half.
         // Common code on purpose: it imports no screen, which is the property that lets it run on a
         // dedicated server. @see MachineExample1710
         MachineExample1710.registerCommon();

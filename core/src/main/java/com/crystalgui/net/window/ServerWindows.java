@@ -11,12 +11,12 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.UiLimits;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.serialization.StateMap;
 
 /**
  * Every window one peer is being shown — <b>the server host, and the whole server side of showing a
@@ -33,7 +33,7 @@ import com.crystalgui.serialization.StateMap;
  *
  * <h3>What it replaces</h3>
  *
- * <p>A tick handler per mod walking the player list to notice a peer that {@code CgUiConnections}
+ * <p>A tick handler per mod walking the player list to notice a peer that {@code CgNetwork}
  * noticed once, a name-keyed map per mod, a logout handler per mod, and a hard-coded window id per mod
  * that two mods would eventually both pick. All of it existed because there was no seat for "open a
  * window for this player <em>now</em>" — contributors bind when a connection opens, and a UI opens
@@ -56,13 +56,13 @@ import com.crystalgui.serialization.StateMap;
  *
  * <h3>Threading</h3>
  *
- * <p>Everything runs from {@link ProtocolConnection#tick()} — the server thread in game — so a handler
+ * <p>Everything runs from {@link CgProtocolConnection#tick()} — the server thread in game — so a handler
  * may touch the world, and the tick hook sees this tick's input already delivered because hooks run
  * after the drain.</p>
  */
 public final class ServerWindows {
 
-    private final ProtocolConnection<Object> connection;
+    private final CgProtocolConnection<Object> connection;
 
     /** Insertion-ordered, so ticking and closing are both reproducible. */
     private final Map<Integer, ServerWindow<?>> windows = new LinkedHashMap<>();
@@ -82,15 +82,15 @@ public final class ServerWindows {
 
     private boolean closing;
 
-    private ServerWindows(ProtocolConnection<Object> connection) {
+    private ServerWindows(CgProtocolConnection<Object> connection) {
         this.connection = connection;
         connection.router().onRequest(UiMethods.REQUEST_OPEN, (payload, respond) -> {
-            StateMap<Object> in = payload == null
-                    ? new StateMap<>(connection.ops()) : new StateMap<>(connection.ops(), payload);
+            CgStateMap<Object> in = payload == null
+                    ? new CgStateMap<>(connection.ops()) : new CgStateMap<>(connection.ops(), payload);
             respond.ok(requestOpen(in).encode());
         });
         // AFTER the drain, so a window's tick runs against messages that have already arrived rather
-        // than against the previous tick's. @see ProtocolConnection#onTick
+        // than against the previous tick's. @see CgProtocolConnection#onTick
         connection.onTick(this::tick);
         connection.onClosed(this::onConnectionClosed);
     }
@@ -159,7 +159,7 @@ public final class ServerWindows {
     }
 
     /** The host for this connection, created on first use. */
-    public static ServerWindows of(ProtocolConnection<Object> connection) {
+    public static ServerWindows of(CgProtocolConnection<Object> connection) {
         return connection.attachment(ServerWindows.class, ServerWindows::new);
     }
 
@@ -174,8 +174,8 @@ public final class ServerWindows {
      * probing for windows exactly what to change; "no" is the whole answer a legitimate caller needs,
      * and the server's log has the detail for whoever is actually debugging it.</p>
      */
-    private StateMap<Object> requestOpen(StateMap<Object> in) {
-        StateMap<Object> out = new StateMap<>(connection.ops());
+    private CgStateMap<Object> requestOpen(CgStateMap<Object> in) {
+        CgStateMap<Object> out = new CgStateMap<>(connection.ops());
         String typeId = in.getString(UiMethods.TYPE, "");
         Openable<?, ?> declared = OPENABLE.get(typeId);
         if (declared == null) {
@@ -194,11 +194,11 @@ public final class ServerWindows {
 
     @SuppressWarnings("unchecked")
     private <P extends UIElement & Networked<M>, M> boolean grant(Openable<P, M> declared,
-                                                                  StateMap<Object> in) {
+                                                                  CgStateMap<Object> in) {
         // Never null, so a resolver need not check: a client that sends nothing sends an empty map.
         Object raw = in.getRaw("args");
-        StateMap<Object> args = raw == null
-                ? new StateMap<>(connection.ops()) : new StateMap<>(connection.ops(), raw);
+        CgStateMap<Object> args = raw == null
+                ? new CgStateMap<>(connection.ops()) : new CgStateMap<>(connection.ops(), raw);
         M model;
         try {
             model = declared.resolver().resolve(connection.peer(), args);
@@ -222,7 +222,7 @@ public final class ServerWindows {
     }
 
     /** Builds the host so its tick and close hooks are installed. @see WindowProtocol */
-    static void install(ProtocolConnection<Object> connection) {
+    static void install(CgProtocolConnection<Object> connection) {
         of(connection);
     }
 
@@ -232,7 +232,7 @@ public final class ServerWindows {
         return connection.peer();
     }
 
-    public ProtocolConnection<Object> connection() {
+    public CgProtocolConnection<Object> connection() {
         return connection;
     }
 
@@ -462,7 +462,7 @@ public final class ServerWindows {
             } catch (RuntimeException failed) {
                 // One window's broken tick must not stop every other window on this connection --
                 // the frozen ones would show no error of their own, which is what gets diagnosed as a
-                // network fault. Same rule CgUiConnections.tickSafely applies one layer down.
+                // network fault. Same rule CgConnections.tick applies one layer down.
                 CrystalGuiCore.LOGGER.error("<{}>.tick failed: {}",
                         window.typeId(), failed.getMessage(), failed);
             }

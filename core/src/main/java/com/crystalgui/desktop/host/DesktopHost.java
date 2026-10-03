@@ -5,13 +5,13 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -65,7 +65,7 @@ public final class DesktopHost implements Disposable {
 
     /** Which wire the workspace is bound to, so a rebind can be told from a no-op. */
     @Nullable
-    private ProtocolConnection<Object> bound;
+    private CgProtocolConnection<Object> bound;
 
     /** What should be offered a server's window before the desktop. @see #setWindowMount */
     @Nullable
@@ -158,7 +158,7 @@ public final class DesktopHost implements Disposable {
     public void frame(float deltaSeconds) {
         // Re-asked like the connection: a change of the game's language reaches this frame's text.
         FontFamilyCache.useLocale(services.locale());
-        ProtocolConnection<Object> live = services.connection();
+        CgProtocolConnection<Object> live = services.connection();
         if (live != null) {
             if (workspace == null) {
                 // AN ATTACHMENT ON THE CONNECTION, not a constructor: this wire is shared, and a second

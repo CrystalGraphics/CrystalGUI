@@ -1,26 +1,26 @@
 package com.crystalgui.workbench;
 
-import com.crystalgui.workbench.extension.SessionSlice;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.document.EditorInput;
 import com.crystalgui.document.DocumentEditor;
-import com.crystalgui.workbench.editor.EditorService;
+import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.workbench.dock.layout.DockLeaf;
-import com.crystalgui.workbench.dock.DockWindow;
-import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
-import com.crystalgui.workbench.dock.panel.DockPanelKind;
-import com.crystalgui.workbench.dock.layout.DockPanelRef;
-import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.ui.dom.SessionState;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
+import com.crystalgui.workbench.dock.layout.DockLeaf;
+import com.crystalgui.workbench.dock.layout.DockPanelRef;
+import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
+import com.crystalgui.workbench.dock.panel.DockPanelKind;
+import com.crystalgui.workbench.editor.EditorService;
+import com.crystalgui.workbench.extension.SessionSlice;
+import com.crystalgui.workbench.region.DockRegion;
 
 import com.crystalgui.workbench.toolwindow.ToolWindowLayout;
 import com.crystalgui.workbench.toolwindow.ToolWindowState;
@@ -307,7 +307,7 @@ public final class WorkbenchSession {
     /** The record as text, without writing it — what a test asserts on. */
     public String toJson(float viewportWidth, float viewportHeight) {
         installWidgetState();
-        StateMap<JsonElement> out = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
         out.putInt(KEY_VERSION, VERSION);
 
         // Read the divider positions back out of the widgets first, or the record keeps the weights the
@@ -354,9 +354,9 @@ public final class WorkbenchSession {
         // WHAT THE EXTENSIONS REMEMBER, each in its own corner. The expanded folders were written
         // here, by name, off `fileTree().treeView()` -- which is the reach that stopped the explorer
         // being an extension at all. @see SessionSlice
-        StateMap<JsonElement> extensions = new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> extensions = new CgStateMap<>(JsonOps.INSTANCE);
         for (SessionSlice slice : workbench.sessionSlices()) {
-            StateMap<JsonElement> corner = new StateMap<>(JsonOps.INSTANCE);
+            CgStateMap<JsonElement> corner = new CgStateMap<>(JsonOps.INSTANCE);
             slice.write(corner);
             if (!corner.isEmpty()) extensions.putRaw(slice.id(), corner.encode());
         }
@@ -370,7 +370,7 @@ public final class WorkbenchSession {
             if (path == null) continue;
             DocumentEditor view = tab.editor();
             if (view == null) continue;
-            StateMap<JsonElement> state = new StateMap<>(JsonOps.INSTANCE);
+            CgStateMap<JsonElement> state = new CgStateMap<>(JsonOps.INSTANCE);
             view.writeViewState(state);
             files.put(path, state.encode());
         }
@@ -428,7 +428,7 @@ public final class WorkbenchSession {
      * torn out with and does not track what is in it afterwards, so there is nothing to derive it from —
      * picking "the first panel" would rename the window on every restore.</p>
      */
-    private static void writeDockWindow(StateMap<JsonElement> out, DockWindow frame) {
+    private static void writeDockWindow(CgStateMap<JsonElement> out, DockWindow frame) {
         out.putString(KEY_TITLE, frame.getTitle());
         out.putFloat(KEY_LEFT, frame.getWantedLeft());
         out.putFloat(KEY_TOP, frame.getWantedTop());
@@ -453,7 +453,7 @@ public final class WorkbenchSession {
     /** Windows the record named that have not been opened yet. @see #reopenTornOutWindows */
     private final List<TornOutWindow> pendingWindows = new ArrayList<>();
 
-    private void readTornOutWindows(StateMap<JsonElement> in) {
+    private void readTornOutWindows(CgStateMap<JsonElement> in) {
         pendingWindows.clear();
         for (TornOutWindow parsed : in.getList(KEY_WINDOWS, this::readTornOutWindow)) {
             if (parsed != null && parsed.isUsable()) pendingWindows.add(parsed);
@@ -461,7 +461,7 @@ public final class WorkbenchSession {
     }
 
     @Nullable
-    private TornOutWindow readTornOutWindow(StateMap<JsonElement> entry) {
+    private TornOutWindow readTornOutWindow(CgStateMap<JsonElement> entry) {
         JsonElement dock = entry.getRaw(KEY_DOCK);
         if (dock == null) return null;
         DockLayout layout = DockLayoutCodec.decode(dock, JsonOps.INSTANCE, workbench.panels());
@@ -580,9 +580,9 @@ public final class WorkbenchSession {
 
     /** Restores from text. Returns false when the record is unusable, having changed nothing. */
     public boolean fromJson(String json) {
-        StateMap<JsonElement> in;
+        CgStateMap<JsonElement> in;
         try {
-            in = new StateMap<>(JsonOps.INSTANCE, new JsonParser().parse(json));
+            in = new CgStateMap<>(JsonOps.INSTANCE, new JsonParser().parse(json));
         } catch (RuntimeException malformed) {
             CrystalGuiCore.LOGGER.warn("Session record could not be read; opening with the defaults",
                     malformed);
@@ -663,13 +663,13 @@ public final class WorkbenchSession {
 
         // AND EACH EXTENSION'S OWN CORNER, or an empty map -- which is an ordinary first run and is
         // handed over rather than skipped, so a slice has one code path instead of two.
-        StateMap<JsonElement> extensions = in.has(KEY_EXTENSIONS)
-                ? new StateMap<>(JsonOps.INSTANCE, in.getRaw(KEY_EXTENSIONS))
-                : new StateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> extensions = in.has(KEY_EXTENSIONS)
+                ? new CgStateMap<>(JsonOps.INSTANCE, in.getRaw(KEY_EXTENSIONS))
+                : new CgStateMap<>(JsonOps.INSTANCE);
         for (SessionSlice slice : workbench.sessionSlices()) {
-            StateMap<JsonElement> corner = extensions.has(slice.id())
-                    ? new StateMap<>(JsonOps.INSTANCE, extensions.getRaw(slice.id()))
-                    : new StateMap<>(JsonOps.INSTANCE);
+            CgStateMap<JsonElement> corner = extensions.has(slice.id())
+                    ? new CgStateMap<>(JsonOps.INSTANCE, extensions.getRaw(slice.id()))
+                    : new CgStateMap<>(JsonOps.INSTANCE);
             // THE WHOLE RECORD IS PASSED WHEN THE CORNER IS EMPTY, so a slice can read a key this
             // session used to own at the top level. @see #KEY_EXPANDED
             slice.read(corner.isEmpty() ? in : corner);
@@ -695,12 +695,12 @@ public final class WorkbenchSession {
      * <p>An entry missing its type is skipped rather than refused: a manifest is a convenience for the
      * dock, and one bad row should cost that row's tab and nothing else. @see #KEY_NETWORKED</p>
      */
-    private void restoreNetworkedManifest(StateMap<JsonElement> in) {
+    private void restoreNetworkedManifest(CgStateMap<JsonElement> in) {
         JsonElement listed = in.getRaw(KEY_NETWORKED);
         if (listed == null || !listed.isJsonArray()) return;
         List<NetworkedPanels.Entry> entries = new ArrayList<>();
         for (JsonElement element : listed.getAsJsonArray()) {
-            StateMap<JsonElement> entry = new StateMap<>(JsonOps.INSTANCE, element);
+            CgStateMap<JsonElement> entry = new CgStateMap<>(JsonOps.INSTANCE, element);
             String type = entry.getString(KEY_TYPE, "");
             if (type.isEmpty()) continue;
             entries.add(new NetworkedPanels.Entry(type,
@@ -712,12 +712,12 @@ public final class WorkbenchSession {
         workbench.windowMount(null).restoreManifest(entries);
     }
 
-    private void restoreWidgetState(StateMap<JsonElement> in) {
+    private void restoreWidgetState(CgStateMap<JsonElement> in) {
         Map<String, JsonElement> entries = new LinkedHashMap<>();
         JsonElement widgets = in.getRaw(KEY_WIDGETS);
         if (widgets != null && widgets.isJsonArray()) {
             for (JsonElement element : widgets.getAsJsonArray()) {
-                StateMap<JsonElement> entry = new StateMap<>(JsonOps.INSTANCE, element);
+                CgStateMap<JsonElement> entry = new CgStateMap<>(JsonOps.INSTANCE, element);
                 String id = entry.getString(KEY_ID, "");
                 JsonElement view = entry.getRaw(KEY_VIEW);
                 if (!id.isEmpty() && view != null) entries.put(id, view);
@@ -730,16 +730,16 @@ public final class WorkbenchSession {
     /**
      * The per-file view states, read straight off the array.
      *
-     * <p>Not through {@code getList}: that hands its mapper a {@link StateMap} and keeps only what the
+     * <p>Not through {@code getList}: that hands its mapper a {@link CgStateMap} and keeps only what the
      * mapper returns, and what is wanted here is the nested element <em>itself</em> — an opaque payload
      * belonging to whichever document kind wrote it, which this class must not interpret.</p>
      */
-    private Map<CgPath, JsonElement> viewStatesIn(StateMap<JsonElement> in) {
+    private Map<CgPath, JsonElement> viewStatesIn(CgStateMap<JsonElement> in) {
         Map<CgPath, JsonElement> found = new LinkedHashMap<>();
         JsonElement files = in.getRaw(KEY_FILES);
         if (files == null || !files.isJsonArray()) return found;
         for (JsonElement element : files.getAsJsonArray()) {
-            StateMap<JsonElement> entry = new StateMap<>(JsonOps.INSTANCE, element);
+            CgStateMap<JsonElement> entry = new CgStateMap<>(JsonOps.INSTANCE, element);
             CgPath path = parseOrNull(entry.getString(KEY_PATH, ""));
             JsonElement view = entry.getRaw(KEY_VIEW);
             if (path != null && view != null) found.put(path, view);
@@ -761,7 +761,7 @@ public final class WorkbenchSession {
         DocumentEditor editor = tab == null ? null : tab.editor();
         if (editor == null) return;
         try {
-            editor.readViewState(new StateMap<>(JsonOps.INSTANCE, view));
+            editor.readViewState(new CgStateMap<>(JsonOps.INSTANCE, view));
         } catch (RuntimeException refused) {
             CrystalGuiCore.LOGGER.warn("Could not restore where {} was left; opening it at the top",
                     path, refused);

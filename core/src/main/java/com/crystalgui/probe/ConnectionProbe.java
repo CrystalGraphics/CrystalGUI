@@ -12,6 +12,18 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.CgAudience;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.CgMessage;
+import com.crystalgraphics.net.CgPeer;
+import com.crystalgraphics.net.CgRequest;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.service.CgServerPlayers;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -19,13 +31,8 @@ import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.server.WorkspaceHost;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.ui.dom.UIElementTreeSource;
@@ -169,11 +176,11 @@ public final class ConnectionProbe {
 
         /** The server-side connection to the first joined player, or null before anybody has. */
         @Nullable
-        ProtocolConnection<Object> connectionToFirstPlayer();
+        CgProtocolConnection<Object> connectionToFirstPlayer();
 
         /** This client's connection to whatever server it is on, or null before there is one. */
         @Nullable
-        ProtocolConnection<Object> clientConnection();
+        CgProtocolConnection<Object> clientConnection();
 
         /**
          * Ends the run.
@@ -232,6 +239,8 @@ public final class ConnectionProbe {
     private static final String WRITE = "conditional write and the etag cache (C5)";
     private static final String LOOP_ALIVE = "the game loop turns with the desktop up";
     private static final String WATCH = "a write reaches a SECOND client";
+    private static final String AUDIENCES = "a message near the player arrives, one to another dimension does not";
+    private static final String REQUEST = "a typed request is answered by the server, naming who asked";
 
     private static final List<Check> CHECKS = Arrays.asList(
             // INTEGRATED, all eight of them: the session checks need the SERVER half of this probe,
@@ -245,6 +254,8 @@ public final class ConnectionProbe {
             new Check(CALL, Topology.INTEGRATED, Role.NONE),
             new Check(RESHAPE, Topology.INTEGRATED, Role.NONE),
             new Check(FANOUT, Topology.INTEGRATED, Role.NONE),
+            new Check(AUDIENCES, Topology.INTEGRATED, Role.NONE),
+            new Check(REQUEST, Topology.INTEGRATED, Role.NONE),
             // ON A DEDICATED SERVER THESE TWO ARE THE PROOF THE FILES ARE THE SERVER'S. In single player
             // they still check the protocol; what they cannot check there is location, because there is
             // only one machine.
@@ -288,14 +299,26 @@ public final class ConnectionProbe {
 
     private static final String SHARED_FILE = "two-client-probe.txt";
 
+    /** Declared with the class, which loads at the first client tick: before the hello names the namespaces. */
+    private static final CgMessage<String> AUDIENCE = CgMessage.toClients("crystalgui:probe/audience", CgCodecs.STRING);
+
+    private static final CgRequest<String, String> ASK =
+            CgRequest.toServer("crystalgui:probe/ask", CgCodecs.STRING, CgCodecs.STRING);
+
+    private static boolean audienceSent;
+    private static boolean askAnswering;
+    private static boolean asked;
+    private static boolean audienceListening;
+    private static volatile boolean elsewhereArrived;
+
     private static volatile ServerUiSession<UIElement, Object> server;
     private static volatile ClientUiSession<UIElement, Object> client;
 
     private static Slider serverSlider;
 
-    private static InMemoryTransport<Object>[] extraLink;
-    private static ProtocolConnection<Object> extraServer;
-    private static ProtocolConnection<Object> extraClient;
+    private static CgInMemoryTransport<Object>[] extraLink;
+    private static CgProtocolConnection<Object> extraServer;
+    private static CgProtocolConnection<Object> extraClient;
 
     /** Set once the client's session is listening, so the server does not open into nothing. */
     private static volatile boolean clientReady;
@@ -413,6 +436,11 @@ public final class ConnectionProbe {
     /** Once per server tick. */
     public static void serverTick(Host host) {
         if (!enabled() || reported) return;
+        if (!askAnswering) {
+            askAnswering = true;
+            ASK.onServer((peer, text, reply) -> reply.ok(text + " from " + peer.id()));
+        }
+        if (!audienceSent && clientReady) sendAudiences(host);
 
         if (server == null) {
             // THE CLIENT HAS TO BE LISTENING FIRST. `ui/openWindow` is a notification, so a client with
@@ -424,7 +452,7 @@ public final class ConnectionProbe {
             // Waiting, not re-announcing: ServerUiSession.open() throws on a second call, by design --
             // a session is opened once and a reshape is a delta.
             if (!clientReady) return;
-            ProtocolConnection<Object> connection = host.connectionToFirstPlayer();
+            CgProtocolConnection<Object> connection = host.connectionToFirstPlayer();
             if (connection == null) return;
             openServer(connection);
             return;
@@ -445,7 +473,7 @@ public final class ConnectionProbe {
 
         if (!callSent) {
             callSent = true;
-            StateMap<Object> args = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> args = new CgStateMap<>(CgPlainOps.INSTANCE);
             args.putString("from", "server");
             server.call("probe/ping", args,
                     result -> {
@@ -469,9 +497,9 @@ public final class ConnectionProbe {
         // world has one connection; the fan-out path itself is the real one.
         if (done(RESHAPE) && !fanoutStarted) {
             fanoutStarted = true;
-            extraLink = InMemoryTransport.pair();
-            extraServer = Protocols.open(extraLink[0], PlainOps.INSTANCE, () -> { }, "probe-viewer");
-            extraClient = Protocols.open(extraLink[1], PlainOps.INSTANCE, () -> { }, null);
+            extraLink = CgInMemoryTransport.pair();
+            extraServer = CgProtocols.open(extraLink[0], CgPlainOps.INSTANCE, () -> { }, "probe-viewer");
+            extraClient = CgProtocols.open(extraLink[1], CgPlainOps.INSTANCE, () -> { }, null);
             ClientUiSession<UIElement, Object> viewer =
                     new ClientUiSession<>(new UIElementMirror<>(extraClient.ops()), extraClient);
             viewer.onWindowOpened(root -> {
@@ -480,6 +508,26 @@ public final class ConnectionProbe {
             server.addViewer(extraServer);
             CrystalGuiCore.LOGGER.info("[probe] added a second viewer; count={}", server.viewerCount());
         }
+    }
+
+    /**
+     * One message to the dimension the player is not in, then one near them. A connection is in order, so the near one
+     * arriving with nothing before it is the proof. Waits until the host can place the player: a host that never fills
+     * {@link CgServerPlayers} never sends, and the check stays unrun.
+     */
+    private static void sendAudiences(Host host) {
+        CgProtocolConnection<Object> connection = host.connectionToFirstPlayer();
+        Object player = connection != null && connection.peer() instanceof CgPeer
+                ? ((CgPeer) connection.peer()).player() : null;
+        CgServerPlayers players = CgPlatform.get(CgServerPlayers.SERVICE);
+        double[] at = new double[3];
+        String here = player == null ? null : players.dimension(player);
+        if (here == null || !players.position(player, at)) return;
+        audienceSent = true;
+        String elsewhere = "minecraft:the_nether".equals(here) ? "minecraft:overworld" : "minecraft:the_nether";
+        AUDIENCE.send(CgAudience.dimension(elsewhere), "elsewhere");
+        AUDIENCE.send(CgAudience.near(player, at[0], at[1], at[2], 16), "near");
+        CrystalGuiCore.LOGGER.info("[probe] sent near ({}) and to {}", here, elsewhere);
     }
 
     /** Both ends of the synthetic viewer's link, on the thread that owns the tree. */
@@ -492,7 +540,7 @@ public final class ConnectionProbe {
     }
 
     /** A tree that exercises C3 and C4 as well as the basics. */
-    private static void openServer(ProtocolConnection<Object> connection) {
+    private static void openServer(CgProtocolConnection<Object> connection) {
         UIElement root = new UIElement();
         root.append(new UIText("hello from the server"));
 
@@ -537,6 +585,24 @@ public final class ConnectionProbe {
     /** Once per client tick. */
     public static void clientTick(Host host) {
         if (!enabled() || reported) return;
+        if (!asked && host.clientConnection() != null) {
+            asked = true;
+            ASK.ask("ping", answer -> {
+                if (answer.startsWith("ping from ")) pass(REQUEST);
+                else CrystalGuiCore.LOGGER.error("[probe] a request came back as {}", answer);
+            }, error -> CrystalGuiCore.LOGGER.error("[probe] a request failed: {}", error));
+        }
+        if (!audienceListening) {
+            audienceListening = true;
+            AUDIENCE.onReceive(which -> {
+                if ("elsewhere".equals(which)) {
+                    elsewhereArrived = true;
+                    CrystalGuiCore.LOGGER.error("[probe] a message to another dimension arrived");
+                } else if (!elsewhereArrived) {
+                    pass(AUDIENCES);
+                }
+            });
+        }
 
         // COUNTED BEFORE THE WORLD, so a run that never gets into one SAYS SO. Returning early on
         // "not in a world yet" without a clock is how the probes this replaces sat at a main menu
@@ -587,7 +653,7 @@ public final class ConnectionProbe {
         }
 
         if (client == null) {
-            ProtocolConnection<Object> connection = host.clientConnection();
+            CgProtocolConnection<Object> connection = host.clientConnection();
             if (connection == null) {
                 if (++ticks % 100 == 0) {
                     CrystalGuiCore.LOGGER.info("[probe] in a world, waiting for a connection ({} ticks)",
@@ -631,7 +697,7 @@ public final class ConnectionProbe {
         else if (ticks > DEADLINE_TICKS) finish(host, false, "timed out");
     }
 
-    private static void openClient(ProtocolConnection<Object> connection) {
+    private static void openClient(CgProtocolConnection<Object> connection) {
         UIElementRegistry.bootstrap();
         ClientUiSession<UIElement, Object> session =
                 new ClientUiSession<>(new UIElementMirror<>(connection.ops()), connection);
@@ -641,7 +707,7 @@ public final class ConnectionProbe {
                     root == null ? -1 : root.children().size());
         });
         session.onCall("probe/ping", (args, respond) -> {
-            StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+            CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
             out.putString("pong", args.getString("from", "?"));
             respond.ok(out);
         });
@@ -729,7 +795,7 @@ public final class ConnectionProbe {
     @Nullable
     private static Workspace workspace(Host host) {
         if (files != null) return files;
-        ProtocolConnection<Object> connection = host.clientConnection();
+        CgProtocolConnection<Object> connection = host.clientConnection();
         if (connection == null) return null;
         files = Workspace.of(connection);
         return files;

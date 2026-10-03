@@ -1,6 +1,10 @@
 package com.crystalgui.fs.server;
 
-import com.crystalgui.fs.provider.CgFileEntry;
+import com.crystalgraphics.net.protocol.CgCall;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.CgFileSystemException;
 import com.crystalgui.fs.CgPath;
@@ -9,11 +13,7 @@ import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsHello;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
-import com.crystalgui.net.protocol.Call;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.serialization.Codec;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.fs.provider.CgFileEntry;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -53,7 +53,7 @@ public final class WorkspaceBinding<T> {
     private final WatchHub hub;
     private final WorkspaceActor actor;
     private final Object peer;
-    private final DynamicOps<T> ops;
+    private final CgDynamicOps<T> ops;
     private final WorkspaceAudit audit;
     private final RecentOperations operations = new RecentOperations();
 
@@ -72,12 +72,12 @@ public final class WorkspaceBinding<T> {
     }
 
     public WorkspaceBinding(WorkspaceService service, WatchHub hub, WorkspaceActor actor,
-                            Object peer, DynamicOps<T> ops) {
+                            Object peer, CgDynamicOps<T> ops) {
         this(service, hub, actor, peer, ops, new WorkspaceAudit());
     }
 
     public WorkspaceBinding(WorkspaceService service, WatchHub hub, WorkspaceActor actor,
-                            Object peer, DynamicOps<T> ops, WorkspaceAudit audit) {
+                            Object peer, CgDynamicOps<T> ops, WorkspaceAudit audit) {
         this.service = Objects.requireNonNull(service, "service");
         this.hub = Objects.requireNonNull(hub, "hub");
         this.actor = Objects.requireNonNull(actor, "actor");
@@ -97,7 +97,7 @@ public final class WorkspaceBinding<T> {
      * wire gets the filesystem bound to the same peer, with the actor already decided, rather than
      * re-shipping a listing through the UI mirror.</p>
      */
-    public void installOn(ProtocolConnection<T> connection) {
+    public void installOn(CgProtocolConnection<T> connection) {
         installOn(connection::onRequest);
         // A factory that ignores the connection, because this binding cannot be built from one: it needs
         // the service, the hub and the actor, all of which are the host's to decide.
@@ -443,13 +443,13 @@ public final class WorkspaceBinding<T> {
 
     /** Where a handler is registered. The connection's {@code onRequest}, in production. */
     public interface Registrar<T> {
-        void register(String method, Call.Handler<T> handler);
+        void register(String method, CgCall.Handler<T> handler);
     }
 
     @FunctionalInterface
     private interface Answering<T> {
         @Nullable
-        StateMap<T> answer();
+        CgStateMap<T> answer();
     }
 
     @FunctionalInterface
@@ -457,15 +457,15 @@ public final class WorkspaceBinding<T> {
         String perform();
     }
 
-    private <A> StateMap<T> encode(Codec<A> codec, A value) {
-        return new StateMap<>(ops, codec.encode(ops, value));
+    private <A> CgStateMap<T> encode(CgCodec<A> codec, A value) {
+        return new CgStateMap<>(ops, codec.encode(ops, value));
     }
 
-    private <A> A decode(Codec<A> codec, StateMap<T> args) {
+    private <A> A decode(CgCodec<A> codec, CgStateMap<T> args) {
         return codec.decode(ops, args.encode());
     }
 
-    private <A> void answer(Call.Responder<T> respond, Codec<A> codec, A value) {
+    private <A> void answer(CgCall.Responder<T> respond, CgCodec<A> codec, A value) {
         respond.ok(encode(codec, value));
     }
 
@@ -475,7 +475,7 @@ public final class WorkspaceBinding<T> {
      * <p>Every failure carries a code, and a conflict carries the etag the file actually holds — which
      * is the only actionable thing in the only failure that needs action.</p>
      */
-    private void guard(Call.Responder<T> respond, Answering<T> work) {
+    private void guard(CgCall.Responder<T> respond, Answering<T> work) {
         try {
             respond.ok(work.answer());
         } catch (WorkspaceConflictException conflict) {
@@ -494,7 +494,7 @@ public final class WorkspaceBinding<T> {
      * <p>The limit is checked <b>before</b> the work, so a refusal costs nothing, and a refusal is
      * audited so a flood leaves a record of itself rather than only of what got through.</p>
      */
-    private void mutate(Call.Responder<T> respond, Mutating work) {
+    private void mutate(CgCall.Responder<T> respond, Mutating work) {
         if (!audit.allow(actor)) {
             audit.refused(actor, WorkspaceOperation.WRITE, null, "rate limit");
             respond.fail(FsError.RATE_LIMITED + " too many changes; slow down");

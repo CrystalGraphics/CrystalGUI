@@ -1,10 +1,10 @@
 package com.crystalgui.widget.composite;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.render.texture.CgUiColorField;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
@@ -100,10 +100,10 @@ public class ColorSelector extends UIElement {
     public static final Event<ColorSelector, Integer> CHANGED = Event.of("change",
             (selector, sink) -> selector.onColorChanged.connect(sink::accept),
             new Event.Payload<Integer>() {
-                @Override public <T> void write(StateMap<T> out, Integer value) {
+                @Override public <T> void write(CgStateMap<T> out, Integer value) {
                     out.putInt("color", value);
                 }
-                @Override public <T> Integer read(StateMap<T> in) {
+                @Override public <T> Integer read(CgStateMap<T> in) {
                     return in.getInt("color", 0xFFFFFFFF);
                 }
             }, RatePolicy.DRAGGING);

@@ -1,9 +1,8 @@
 package com.crystalgui.widget.control;
 
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
@@ -16,6 +15,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.service.PlatformPort;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
 
@@ -59,10 +59,10 @@ public class Switch extends UIElement {
     public static final Event<Switch, Boolean> TOGGLE = Event.of("toggle",
             (toggle, sink) -> toggle.attachListener(sink::accept),
             new Event.Payload<Boolean>() {
-                @Override public <T> void write(StateMap<T> out, Boolean value) {
+                @Override public <T> void write(CgStateMap<T> out, Boolean value) {
                     out.putBool("checked", value);
                 }
-                @Override public <T> Boolean read(StateMap<T> in) {
+                @Override public <T> Boolean read(CgStateMap<T> in) {
                     return in.getBool("checked", false);
                 }
             }, RatePolicy.IMMEDIATE);

@@ -8,9 +8,9 @@ import javax.annotation.Nullable;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParser;
 
+import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.JsonOps;
 
 /**
@@ -18,7 +18,7 @@ import com.crystalgui.serialization.JsonOps;
  * each change.
  *
  * <pre>{@code
- * record Shelf(boolean rows, List<String> pinned) { static final Codec<Shelf> CODEC = ...; }
+ * record Shelf(boolean rows, List<String> pinned) { static final CgCodec<Shelf> CODEC = ...; }
  *
  * ConfigRecord<Shelf> shelf = ConfigRecord.in(workbench.extensionStore("mymod:shelf"), "shelf.json",
  *         Shelf.CODEC, new Shelf(false, List.of()));
@@ -46,10 +46,10 @@ public final class ConfigRecord<T> {
 
     private final ConfigStorage store;
     private final String file;
-    private final Codec<T> codec;
+    private final CgCodec<T> codec;
     private T value;
 
-    private ConfigRecord(ConfigStorage store, String file, Codec<T> codec, T empty) {
+    private ConfigRecord(ConfigStorage store, String file, CgCodec<T> codec, T empty) {
         this.store = store;
         this.file = file;
         this.codec = codec;
@@ -61,7 +61,7 @@ public final class ConfigRecord<T> {
      *
      * @param store where it is kept, or null for the session alone
      */
-    public static <T> ConfigRecord<T> in(@Nullable ConfigStorage store, String file, Codec<T> codec, T empty) {
+    public static <T> ConfigRecord<T> in(@Nullable ConfigStorage store, String file, CgCodec<T> codec, T empty) {
         Objects.requireNonNull(file, "file");
         Objects.requireNonNull(codec, "codec");
         Objects.requireNonNull(empty, "empty");

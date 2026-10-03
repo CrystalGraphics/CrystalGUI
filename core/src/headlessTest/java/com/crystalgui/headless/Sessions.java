@@ -1,11 +1,11 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.UITransport;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementTreeSource;
 
@@ -28,26 +28,26 @@ final class Sessions {
 
     /** A server session over {@code root}, on a raw transport. */
     static ServerUiSession<UIElement, Object> serve(int windowId, UIElement root,
-                                                    UITransport<Object> transport) {
+                                                    CgTransport<Object> transport) {
         return new ServerUiSession<>(windowId, new UIElementTreeSource(root),
-                new UIElementMirror<>(PlainOps.INSTANCE), transport, PlainOps.INSTANCE);
+                new UIElementMirror<>(CgPlainOps.INSTANCE), transport, CgPlainOps.INSTANCE);
     }
 
     /** A server session over {@code root}, on a connection. */
     static ServerUiSession<UIElement, Object> serveOn(int windowId, UIElement root,
-                                                      ProtocolConnection<Object> connection) {
+                                                      CgProtocolConnection<Object> connection) {
         return new ServerUiSession<>(windowId, new UIElementTreeSource(root),
                 new UIElementMirror<>(connection.ops()), connection);
     }
 
     /** A client session on a raw transport. */
-    static ClientUiSession<UIElement, Object> view(UITransport<Object> transport) {
-        return new ClientUiSession<>(new UIElementMirror<>(PlainOps.INSTANCE), transport,
-                PlainOps.INSTANCE);
+    static ClientUiSession<UIElement, Object> view(CgTransport<Object> transport) {
+        return new ClientUiSession<>(new UIElementMirror<>(CgPlainOps.INSTANCE), transport,
+                CgPlainOps.INSTANCE);
     }
 
     /** A client session on a connection. */
-    static ClientUiSession<UIElement, Object> viewOn(ProtocolConnection<Object> connection) {
+    static ClientUiSession<UIElement, Object> viewOn(CgProtocolConnection<Object> connection) {
         return new ClientUiSession<>(new UIElementMirror<>(connection.ops()), connection);
     }
 }

@@ -3,7 +3,7 @@ package com.crystalgui.widget.surface;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.widget.surface.overlay.FloatingPanel;
 
 /**
@@ -14,8 +14,8 @@ import com.crystalgui.widget.surface.overlay.FloatingPanel;
  *         .track("preview", previewPanel)
  *         .track("blackboard", board);
  *
- * public <T> void writeViewState(StateMap<T> out) { view.write(out); }
- * public <T> void readViewState(StateMap<T> in)   { view.read(in); }
+ * public <T> void writeViewState(CgStateMap<T> out) { view.write(out); }
+ * public <T> void readViewState(CgStateMap<T> in)   { view.read(in); }
  * }</pre>
  *
  * <p><b>Per session, never in the file.</b> A shared workspace has one document and several people
@@ -45,7 +45,7 @@ public final class SurfaceViewState {
     }
 
     /** Records the camera and every tracked panel. */
-    public <T> void write(StateMap<T> out) {
+    public <T> void write(CgStateMap<T> out) {
         out.putFloat(ZOOM, surface.zoom());
         out.putFloat(PAN_X, surface.panX());
         out.putFloat(PAN_Y, surface.panY());
@@ -58,7 +58,7 @@ public final class SurfaceViewState {
     }
 
     /** Puts it all back. Anything the record does not carry is left as it is. */
-    public <T> void read(StateMap<T> in) {
+    public <T> void read(CgStateMap<T> in) {
         float zoom = in.getFloat(ZOOM, 0f);
         if (zoom > 0f) surface.setZoom(zoom);
         // BOTH OR NEITHER: a pan is a point, and applying one axis from a record that carries only the

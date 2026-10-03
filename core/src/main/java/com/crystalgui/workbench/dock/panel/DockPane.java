@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.dock.panel;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -54,10 +54,10 @@ public interface DockPane extends Disposable {
     }
 
     /** Caret, scroll, folds — whatever must survive being pointed elsewhere and back. */
-    default void writeViewState(StateMap<?> out) {
+    default void writeViewState(CgStateMap<?> out) {
     }
 
-    default void readViewState(StateMap<?> in) {
+    default void readViewState(CgStateMap<?> in) {
     }
 
     @Override
