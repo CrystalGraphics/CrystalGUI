@@ -16,6 +16,7 @@ import com.crystalgraphics.net.CgAudience;
 import com.crystalgraphics.net.CgInMemoryTransport;
 import com.crystalgraphics.net.CgMessage;
 import com.crystalgraphics.net.CgPeer;
+import com.crystalgraphics.net.CgRequest;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.CgPlatform;
@@ -239,6 +240,7 @@ public final class ConnectionProbe {
     private static final String LOOP_ALIVE = "the game loop turns with the desktop up";
     private static final String WATCH = "a write reaches a SECOND client";
     private static final String AUDIENCES = "a message near the player arrives, one to another dimension does not";
+    private static final String REQUEST = "a typed request is answered by the server, naming who asked";
 
     private static final List<Check> CHECKS = Arrays.asList(
             // INTEGRATED, all eight of them: the session checks need the SERVER half of this probe,
@@ -253,6 +255,7 @@ public final class ConnectionProbe {
             new Check(RESHAPE, Topology.INTEGRATED, Role.NONE),
             new Check(FANOUT, Topology.INTEGRATED, Role.NONE),
             new Check(AUDIENCES, Topology.INTEGRATED, Role.NONE),
+            new Check(REQUEST, Topology.INTEGRATED, Role.NONE),
             // ON A DEDICATED SERVER THESE TWO ARE THE PROOF THE FILES ARE THE SERVER'S. In single player
             // they still check the protocol; what they cannot check there is location, because there is
             // only one machine.
@@ -299,7 +302,12 @@ public final class ConnectionProbe {
     /** Declared with the class, which loads at the first client tick: before the hello names the namespaces. */
     private static final CgMessage<String> AUDIENCE = CgMessage.toClients("crystalgui:probe/audience", CgCodecs.STRING);
 
+    private static final CgRequest<String, String> ASK =
+            CgRequest.toServer("crystalgui:probe/ask", CgCodecs.STRING, CgCodecs.STRING);
+
     private static boolean audienceSent;
+    private static boolean askAnswering;
+    private static boolean asked;
     private static boolean audienceListening;
     private static volatile boolean elsewhereArrived;
 
@@ -428,6 +436,10 @@ public final class ConnectionProbe {
     /** Once per server tick. */
     public static void serverTick(Host host) {
         if (!enabled() || reported) return;
+        if (!askAnswering) {
+            askAnswering = true;
+            ASK.onServer((peer, text, reply) -> reply.ok(text + " from " + peer.id()));
+        }
         if (!audienceSent && clientReady) sendAudiences(host);
 
         if (server == null) {
@@ -573,6 +585,13 @@ public final class ConnectionProbe {
     /** Once per client tick. */
     public static void clientTick(Host host) {
         if (!enabled() || reported) return;
+        if (!asked && host.clientConnection() != null) {
+            asked = true;
+            ASK.ask("ping", answer -> {
+                if (answer.startsWith("ping from ")) pass(REQUEST);
+                else CrystalGuiCore.LOGGER.error("[probe] a request came back as {}", answer);
+            }, error -> CrystalGuiCore.LOGGER.error("[probe] a request failed: {}", error));
+        }
         if (!audienceListening) {
             audienceListening = true;
             AUDIENCE.onReceive(which -> {
