@@ -65,3 +65,18 @@ no second pass.
 
 A hook is OWNED by a node and stops when the node leaves the tree, which is what the old
 the old one-way ticker registration could never guarantee.
+
+---
+
+## The frame's hover pass, and settling
+
+From `AGENTS.md` § *Frame lifecycle*.
+
+**`beginFrame()` only INVALIDATES the hover cache; it must never read it.** A mouse-move already
+invalidated it before `beginFrame` ran, so reading there is an eager recompute against the NEW position
+mislabelled as the old one. That was the original stuck-hover bug; the baseline is a plain field
+snapshotted at the end of the dispatch.
+
+**Settling is bounded** (`MAX_SETTLE_PASSES`), which is the whole difference from the old engine's
+`while (isLayoutDirty())`: a post-layout pass that keeps dirtying layout terminates instead of
+converging by luck.

@@ -522,3 +522,110 @@ under `core/`. There is **no `core/input/` or `core/sound/` package any more** �
 layer moved wholesale to `com.crystalgraphics.platform`, and `com.crystalgui.core` is now the logger plus
 three small utility packages. Dispatch and focus were always in `ui/input/` and stayed there. The
 three-phase event types are in `ui/event/` — there is no `core/event/` package.
+
+---
+
+## The headless classpath
+
+**The classpath is a dedicated server's.** A server ships CrystalGraphics `core` and `platform`, so both are here:
+`core` holds shared utilities the engine names in field and signature types (`com.crystalgraphics.easing`, which the
+style engine's transitions and the `Animation` service use). What a server lacks is a GL context and fonts, and no
+test here has either, so code that reaches the GPU outside a paint-method body fails here rather than in production.
+`HeadlessClasspathSanityTest` pins what must be present. *(Until 2026-10-02 `core` was excluded, and the guard was a
+`NoClassDefFoundError` on any core type; moving easing into core ended that.)*
+
+JOML and Taffy **must stay** on the headless classpath: `UINode` and `ElementStyle` have *fields*
+of those types (`Matrix4f`, `NodeId`, `TaffyStyle`), and field descriptors resolve at class load —
+unlike method-body references, which don't. Someone will eventually try to strip them; don't.
+
+> **`StyleSheet` loads headlessly now.** `StyleSheet.DEFAULT` reads `default.css` through `CgIO` at class-init,
+> which made the whole class unloadable while `core` was off this classpath; `HeadlessClasspathSanityTest` now
+> asserts it loads.
+
+---
+
+## The platform seam: a closed bundle and open slots
+
+A loader registers exactly one `CgPlatformService` bundle (**closed** — nine methods, no defaults) and fills any
+number of `CgService` **slots** (**open** — contracts the rendering framework must not name, each with its own
+absent-value).
+
+| Need | Reached via | Lives in |
+|---|---|---|
+| Modifier, key and button state, the clipboard, UI sounds, the cursor — **from UI code** | `PlatformPort.current()` | `ui/service/PlatformPort`: the running document's port, which a document on its own thread routes to the render thread (plan engine-threaded-ui). Calling the services below directly from a widget bypasses that |
+| Key/mouse codes, modifier state, **and the clipboard** | `CgPlatform.input()` — hosts and `PlatformPort.INLINE` only | `platform/service/CgInputService` |
+| UI sounds | `CgPlatform.sound()` — hosts and `PlatformPort.INLINE` only | `platform/service/CgSoundService` |
+| Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
+| Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
+| **Presenting a cursor** | `CursorService.setCursor(...)` | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
+
+> **The clipboard is on `CgInputService`, not a service of its own.** It is not conceptually input, but it
+> is reached the same way and needed by exactly the code that handles keys — two methods do not earn a
+> registration slot. Both are abstract, like everything in the bundle.
+
+**No method in the BUNDLE has a default, and `CgSoundService` ships no `NOOP` constant.** A default is
+an answer chosen for someone who never saw the question: a new platform compiles cleanly while silently
+inheriting "no sound, no clipboard", and inheriting a no-op is indistinguishable from deciding on one.
+Abstract methods make the compiler the reminder — and a platform with nothing to offer still says so, with
+an empty body in its own source.
+
+**A `CgService` slot is the deliberate opposite**, and the cursor is why the distinction exists: an
+unpresented cursor is *cosmetic*, and the engine runs where there is nothing to present to — a dedicated
+server, a headless test, a fixture with no window. Those must not register a stub to stay silent, so the
+slot answers `CursorService.NONE` and `CgService` logs the absence once, on first read.
+
+> **Why this stopped being CrystalGUI's own registry.** `CrystalGuiCore` used to hold four static fields
+> with setters. CrystalGraphics is the parent project and is always present, so two registries meant a
+> loader had to find both — and could wire up one, leaving a UI with a working GL backend and no keyboard.
+> One bundle makes a platform either registered or not. `CrystalGuiCore` now holds only `LOGGER`.
+
+---
+
+## Docs, and when to read each
+
+`ls docs/*.md` is the list; this says which one to open. Each is written to be read on its own, so a
+row here says what a doc is **for** and nothing about what it contains — the doc's own header does that
+better and does not go stale when it changes.
+
+| Doc | For |
+|---|---|
+| **`CGUI_SETUP.md`** | **Setting up a mod on CrystalGUI**: one Minecraft version (the `com.crystalgui` plugin) or one jar across many (`targets {}`), against Maven or a checkout. What a consumer reads first |
+| **`CGUI_BUILDING_UIS.md`** | **Using CrystalGUI rather than building it.** A client-only UI, a networked one, and how to choose. The whole `Networked` authoring surface by example, ending in a symptom→cause table for the failures that are silent |
+| **`CGUI_BUILD.md`** | The build: layout, commands, what each check can see, and adding a Minecraft version |
+| **`CGUI_CROSS_VERSION.md`** | Code against every Minecraft version and loader — seams, eras, directives, verification. The `cross-version` skill is its checklist |
+| **`CGUI_PROFILING.md`** | Profiling CrystalGUI in one run: its channels, what a frame records, the Frame Profiler, scenes and the game, what is not yet instrumented. Read after CrystalGraphics' `docs/PROFILING.md`; the `profiling` skill is its checklist |
+| **`CGUI_WORKBENCH_EXTENSIONS.md`** | The other user-facing guide: getting a panel, a file type, a command or a status entry into somebody else's workbench |
+| **`CGUI_ARCHITECTURE.md`** | Where everything lives: each module, and the package map of `core/` |
+| `CGUI_SHIPPED_ASSETS.md` | Everything under `assets/crystalgui/`: sheets, themes, icons, fonts, shaders |
+| **`CGUI_INVARIANTS.md`** | What is invisible from any single class and expensive to rediscover, by subsystem. **Read the section for what you are touching** |
+| `CGUI_STYLE_RENDER_PIPELINE.md` | The cascade and the paint path in full — origins, selectors, transitions, drawables, compositing, `background:` grammar, the visual-layer FBO pass |
+| `CGUI_WIDGETS.md` | Per-widget API, `::part()` names, pseudo-classes, and the harness scene that covers each |
+| `CGUI_WORKBENCH_SERVICES.md` | What a widget may *ask* rather than reach through the application for: `Disposer`, `DataContext`, `Resource`, the document layer, `Workspace`, `EditorService`. **New service API is added here in the same commit** |
+| `CGUI_SERVER_AND_SERIALIZATION.md` | Codecs, descriptions, content hashing, sessions and RPC — and the headless contract underneath them |
+| `CGUI_NETWORKING_PRIMER.md` | Networking from the bottom up, ELI5 first: what a frame, a session and a peer each are, how a `CgProtocolConnection` is established, and how to define a packet contract on both halves |
+| `CGUI_THEMING.md` | Themes, editor colour schemes, the token vocabulary. Its token table is generated and machine-checked — regenerate it from the failing test, never by hand |
+| `CGUI_COMMANDS.md` | Every command the codebase declares, by area, with its menus and keys — the sweep behind the menu-icon pass. **A snapshot, not a contract**: it is regenerated, not maintained, so trust the code where the two disagree |
+| `CGUI_NEW_ENGINE.md` | Reading a commit or a comment that still names the old engine: what replaced what, and the six habits that are now wrong |
+| `CGUI_MODERN_UI_RENDERING_RESEARCH.md` | The primary sources behind glass, blur, gradients and the taskbar, with their exact numbers. **Read the relevant section before touching any of them** — each was first built from memory and each was wrong in a way only the source showed |
+
+---
+
+## External references
+
+- **LDLib2** — pattern prior art for widgets and the Ore theme. An **in-repo checkout** at
+  `research_repos/LDLib2`, never a dependency. Stylesheets at
+  `research_repos/LDLib2/src/main/resources/assets/ldlib2/lss/` (`gdp.lss`, `mc.lss`, `modern.lss`).
+  Java sources under `src/main/java/com/lowdragmc/lowdraglib2/`; note `bin/` also holds compiled
+  `.class` files, so search `src/` explicitly. *(Was documented as a sibling checkout at `../LDLib2`,
+  which does not exist.)*
+- **Taffy** — consumed as the Gradle artifact `dev.vfyjxf:taffy` (version in `gradle.properties`), but
+  **extracted Java sources are checked in** at `research_repos/taffy/dev/vfyjxf/taffy/`. Read them
+  directly — there is no need to decompile through the IDE, and no need to guess at layout semantics
+  (containing blocks, absolute positioning, flex-wrap cross-sizing) that the engine's own behaviour
+  depends on. *(Previously documented as "no source checkout"; it exists.)*
+- **Monaco** — an in-repo checkout at `research_repos/monaco`, which is where every "VS Code does
+  X" claim in `com.crystalgui.text.cursor` was read rather than remembered. See *Port, don't reinvent*.
+- **Minecraft sources** — not extracted at the paths the MC modules would produce
+  (`runtime/mc/modern/*/build/mc-src/`, `build/rfg/minecraft-src/java`), since neither MC module is in the build.
+  **But an extracted 1.20.1 tree is checked in** at `research_repos/mc1201_sources/`
+  (`com/`, `mcp/`, `net/`). Cite that path, not the build ones.
