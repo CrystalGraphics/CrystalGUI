@@ -1,27 +1,27 @@
 package com.crystalgui.widget.composite;
 
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
-import dev.vfyjxf.taffy.style.AlignItems;
-import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.style.StyleGroup;
-import javax.annotation.Nullable;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
+import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UISlot;
-import dev.vfyjxf.taffy.style.TaffyDisplay;
-import com.crystalgui.widget.overlay.Tooltip;
-import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.ui.dom.ShadowRoot;
-import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.dom.Attribute;
+import com.crystalgui.widget.control.TextField;
+import com.crystalgui.widget.overlay.Tooltip;
+import dev.vfyjxf.taffy.style.AlignItems;
+import dev.vfyjxf.taffy.style.FlexDirection;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
+import javax.annotation.Nullable;
 
 /**
  * A search box: an icon, a {@link TextField}, and a clear button that appears once there is something to
@@ -71,10 +71,10 @@ public class SearchField extends UIElement {
             // onQueryChanged is a bare Action, so the text is read at emit time rather than carried.
             (field, sink) -> field.onQueryChanged.connect(() -> sink.accept(field.getText())),
             new Event.Payload<String>() {
-                @Override public <T> void write(StateMap<T> out, String value) {
+                @Override public <T> void write(CgStateMap<T> out, String value) {
                     out.putString("text", value == null ? "" : value);
                 }
-                @Override public <T> String read(StateMap<T> in) {
+                @Override public <T> String read(CgStateMap<T> in) {
                     return in.getString("text", "");
                 }
             }, RatePolicy.TYPING);

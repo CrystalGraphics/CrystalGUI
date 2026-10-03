@@ -1,24 +1,25 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.fs.provider.CgFileEvent;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgMessageRouter;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.server.WorkspaceActor;
-import com.crystalgui.fs.server.WorkspacePermission;
-import com.crystalgui.fs.server.WorkspaceService;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
+import com.crystalgui.fs.provider.CgFileEvent;
+import com.crystalgui.fs.provider.InMemoryFileSystem;
 import com.crystalgui.fs.server.WatchHub;
+import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.fs.server.WorkspacePermission;
+import com.crystalgui.fs.server.WorkspaceService;
 
 import org.junit.After;
 import org.junit.Before;
@@ -40,7 +41,7 @@ import static org.junit.Assert.assertTrue;
  * occupy a pending slot and a timeout until the far side replied with nothing — one per watched file
  * per change per peer.</p>
  *
- * <p>Asserted on {@link com.crystalgui.net.protocol.MessageRouter#pendingRequests()}, because the
+ * <p>Asserted on {@link CgMessageRouter#pendingRequests()}, because the
  * payload arrives either way: a test that only checks the client heard the change passes whichever
  * shape was used.</p>
  */
@@ -65,9 +66,9 @@ public class PushIsANotificationTest {
     private static final CgPath FILE = CgPath.parse("p:a.txt");
     private static final Object PEER = new Object();
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverSide;
-    private ProtocolConnection<Object> clientSide;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverSide;
+    private CgProtocolConnection<Object> clientSide;
     private WorkspaceService service;
     private WatchHub hub;
     private WorkspaceBinding<Object> binding;
@@ -76,7 +77,7 @@ public class PushIsANotificationTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         InMemoryFileSystem files = new InMemoryFileSystem().seed("p:a.txt", "one");
         ProjectRegistry projects = new ProjectRegistry().register(() -> List.of(
                 new WorkspaceProject("p", "P", Paths.get("/srv/p"))));
@@ -84,10 +85,10 @@ public class PushIsANotificationTest {
         service.attachEvents(new Scripted());
         hub = new WatchHub(service);
 
-        link = InMemoryTransport.pair();
-        serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
-        binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, PEER, PlainOps.INSTANCE);
+        link = CgInMemoryTransport.pair();
+        serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
+        binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, PEER, CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
         workspace = Workspace.of(clientSide);
         workspace.watch(Resource.of(FILE), false).onChanged.connect(heard::addAll);
@@ -98,7 +99,7 @@ public class PushIsANotificationTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void pump() {
@@ -115,8 +116,8 @@ public class PushIsANotificationTest {
         Map<Object, List<FsMessages.FileChange>> byPeer = hub.poll(WorkspaceActor.LOCAL);
         List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
         if (mine.isEmpty()) return;
-        serverSide.notify(FsMethods.CHANGED, new StateMap<>(PlainOps.INSTANCE,
-                FsMessages.changedNotification().encode(PlainOps.INSTANCE,
+        serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
+                FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
                         new FsMessages.ChangedNotification(mine))));
     }
 
@@ -157,8 +158,8 @@ public class PushIsANotificationTest {
     @Test
     public void presenceIsANotificationToo() {
         binding.setEditing(FILE, true);
-        serverSide.notify(FsMethods.PRESENCE, new StateMap<>(PlainOps.INSTANCE,
-                FsMessages.presenceNotification().encode(PlainOps.INSTANCE,
+        serverSide.notify(FsMethods.PRESENCE, new CgStateMap<>(CgPlainOps.INSTANCE,
+                FsMessages.presenceNotification().encode(CgPlainOps.INSTANCE,
                         new FsMessages.PresenceNotification(List.of(
                                 new FsMessages.PresenceEntry(FILE.toString(), "alice", true))))));
         pump();

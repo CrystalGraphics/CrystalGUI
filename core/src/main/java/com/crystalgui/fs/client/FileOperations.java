@@ -1,5 +1,6 @@
 package com.crystalgui.fs.client;
 
+import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgui.core.async.PendingReply;
 import com.crystalgui.core.async.PendingStream;
 import com.crystalgui.core.async.Reply;
@@ -12,7 +13,6 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
-import com.crystalgui.serialization.Codec;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -372,7 +372,7 @@ public final class FileOperations {
      * operation id so a retry after a timeout is answered rather than performed again.
      */
     private <A> Reply<String> mutate(Resource resource, String method,
-                                     Codec<A> codec,
+                                     CgCodec<A> codec,
                                      Function<String, A> args) {
         String op = "op-" + operationIds.incrementAndGet();
         return after(resource, () -> {

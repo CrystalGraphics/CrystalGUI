@@ -1,18 +1,14 @@
 package com.crystalgui.widget.config.control;
 
+import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.config.ConfigControl;
 import com.crystalgui.widget.config.ConfigControls;
-import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
+import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.text.UIText;
 
-import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.RatePolicy;
 import com.crystalgui.ui.contract.State;
@@ -20,6 +16,10 @@ import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import javax.annotation.Nullable;
 
 /**
  * A repeated value: a header, a body of rows, and {@code +} / {@code −} at the bottom right.
@@ -78,10 +78,10 @@ public class ArrayControl extends ValueControl<List<Object>> {
     public static final Event<ArrayControl, List<String>> CHANGED = Event.of("change",
             (control, sink) -> control.changed.connect(raw -> sink.accept(control.entriesAsText())),
             new Event.Payload<List<String>>() {
-                @Override public <T> void write(StateMap<T> out, List<String> raw) {
+                @Override public <T> void write(CgStateMap<T> out, List<String> raw) {
                     StateTypes.stringListUnder("v").put(out, "value", raw);
                 }
-                @Override public <T> List<String> read(StateMap<T> in) {
+                @Override public <T> List<String> read(CgStateMap<T> in) {
                     return StateTypes.stringListUnder("v").get(in, "value", List.of());
                 }
             }, RatePolicy.IMMEDIATE);

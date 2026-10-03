@@ -1,5 +1,7 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgContentHash;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphCodecs;
 import com.crystalgui.graph.GraphDocument;
@@ -9,9 +11,7 @@ import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.PortRef;
 import com.crystalgui.graph.PortSpec;
 import com.crystalgui.graph.TypeCompatibility;
-import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
-import com.crystalgui.serialization.PlainOps;
 import org.junit.Test;
 
 import java.util.List;
@@ -183,11 +183,11 @@ public class GraphDocumentTest {
         GraphDocument doc = chain("alpha", "beta", "gamma");
         doc.replaceNode(doc.node("beta").withProperty("space", "world").withProperty("scale", "0.9"));
 
-        Object once = GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, doc);
-        GraphDocument decoded = GraphCodecs.DOCUMENT.decode(PlainOps.INSTANCE, once);
-        Object twice = GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, decoded);
+        Object once = GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, doc);
+        GraphDocument decoded = GraphCodecs.DOCUMENT.decode(CgPlainOps.INSTANCE, once);
+        Object twice = GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, decoded);
 
-        assertEquals(ContentHash.of(PlainOps.INSTANCE, once), ContentHash.of(PlainOps.INSTANCE, twice));
+        assertEquals(CgContentHash.of(CgPlainOps.INSTANCE, once), CgContentHash.of(CgPlainOps.INSTANCE, twice));
         assertEquals(doc.nodeCount(), decoded.nodeCount());
         assertEquals(doc.edges(), decoded.edges());
         assertEquals("world", decoded.node("beta").properties().get("space"));
@@ -222,15 +222,15 @@ public class GraphDocumentTest {
         doc.setTypeCompatibility(TypeCompatibility.ANY);
         doc.connect(new PortRef("alpha", "out"), new PortRef("beta", "in"));
 
-        Object encoded = GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, doc);
-        GraphDocument reopened = GraphCodecs.DOCUMENT.decode(PlainOps.INSTANCE, encoded);
+        Object encoded = GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, doc);
+        GraphDocument reopened = GraphCodecs.DOCUMENT.decode(CgPlainOps.INSTANCE, encoded);
 
         assertEquals(2, reopened.nodeCount());
         assertEquals("the edge must survive a build that knows neither type", 1, reopened.edges().size());
         assertEquals("some.mod.NotInstalled", reopened.node("alpha").typeId());
         assertEquals("v", reopened.node("alpha").properties().get("k"));
-        assertEquals(ContentHash.of(PlainOps.INSTANCE, encoded),
-                ContentHash.of(PlainOps.INSTANCE, GraphCodecs.DOCUMENT.encode(PlainOps.INSTANCE, reopened)));
+        assertEquals(CgContentHash.of(CgPlainOps.INSTANCE, encoded),
+                CgContentHash.of(CgPlainOps.INSTANCE, GraphCodecs.DOCUMENT.encode(CgPlainOps.INSTANCE, reopened)));
     }
 
     // ── Copy, paste, ids ────────────────────────────────────────────────────

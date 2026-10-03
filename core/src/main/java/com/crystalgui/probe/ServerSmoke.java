@@ -21,14 +21,14 @@ import java.util.zip.ZipFile;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.gl.CgGL;
+import com.crystalgraphics.platform.service.CgNetworkChannel;
+import com.crystalgraphics.serialization.CgContentHash;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.net.wire.CgNetworkChannel;
-import com.crystalgui.serialization.ContentHash;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 
@@ -193,7 +193,7 @@ public final class ServerSmoke {
 
         // A connection binds only contributors registered BEFORE it opens, and no peer exists yet -- so
         // this is the last moment the set can still be wrong and the first at which it certainly is not.
-        Set<String> contributors = Protocols.contributors();
+        Set<String> contributors = CgProtocols.contributors();
         check(lines, failures, "protocol contributors bound " + contributors,
                 contributors.contains("workspace"),
                 "expected 'workspace'; the workspace host must register before the connection lifecycle");
@@ -227,12 +227,12 @@ public final class ServerSmoke {
             child.setId("smoke-child");
             root.append(child);
 
-            Object encoded = new UIElementMirror<>(PlainOps.INSTANCE).describe(root);
-            String hashA = ContentHash.of(PlainOps.INSTANCE, encoded);
-            String hashB = ContentHash.of(PlainOps.INSTANCE,
-                    new UIElementMirror<>(PlainOps.INSTANCE).describe(root));
+            Object encoded = new UIElementMirror<>(CgPlainOps.INSTANCE).describe(root);
+            String hashA = CgContentHash.of(CgPlainOps.INSTANCE, encoded);
+            String hashB = CgContentHash.of(CgPlainOps.INSTANCE,
+                    new UIElementMirror<>(CgPlainOps.INSTANCE).describe(root));
 
-            UIElement decoded = new UIElementMirror<>(PlainOps.INSTANCE).decode(encoded);
+            UIElement decoded = new UIElementMirror<>(CgPlainOps.INSTANCE).decode(encoded);
 
             boolean stable = hashA.equals(hashB);
             boolean shape = decoded != null

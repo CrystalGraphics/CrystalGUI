@@ -4,7 +4,7 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.serialization.DynamicOps;
+import com.crystalgraphics.serialization.CgDynamicOps;
 
 /**
  * How a composite style value comes apart, so its pieces can be copied one at a time.
@@ -26,7 +26,7 @@ import com.crystalgui.serialization.DynamicOps;
  *
  * <p>A part is handed about in its encoded form because that is the only shape every part of every value
  * has in common: a transform's rotation is a {@code Transform}, a gradient's stops are a list of colours,
- * and no one Java type covers both without becoming {@code Object}. Going through {@link DynamicOps}
+ * and no one Java type covers both without becoming {@code Object}. Going through {@link CgDynamicOps}
  * means each part chooses its own representation and the caller never needs to know what it chose.</p>
  *
  * <h3>Absent is null, and it is not the same as identity</h3>
@@ -75,7 +75,7 @@ public interface StyleParts<V> {
 
     /** The part's value on its own, or null when {@code value} does not carry it. */
     @Nullable
-    <T> T encodePart(DynamicOps<T> ops, V value, String partId);
+    <T> T encodePart(CgDynamicOps<T> ops, V value, String partId);
 
     /**
      * {@code base} with one part replaced by {@code encoded}.
@@ -83,5 +83,5 @@ public interface StyleParts<V> {
      * <p><b>Merges into a base rather than building from nothing</b>, because pasting one part must
      * leave the rest of the target alone — the whole promise of choosing which attributes land.</p>
      */
-    <T> V mergePart(DynamicOps<T> ops, V base, String partId, T encoded);
+    <T> V mergePart(CgDynamicOps<T> ops, V base, String partId, T encoded);
 }

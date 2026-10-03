@@ -3,18 +3,18 @@ package com.crystalgui.app.machine.ui;
 import com.crystalgui.ui.dom.Name;
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.app.machine.EngineModel;
 import com.crystalgui.app.machine.MachineTrace;
-import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.ClientScope;
+import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
 import com.crystalgui.net.window.UiType;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.control.Slider;
+import com.crystalgui.widget.display.ProgressBar;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -197,7 +197,7 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
             MachineTrace.log(MachineTrace.SERVER,
                     String.format("<- answering %s (load %.2f)", io.qualify("tune"), wanted));
             engine.setLoad(wanted);
-            StateMap<Object> out = io.newMap();
+            CgStateMap<Object> out = io.newMap();
             out.putFloat("temperature", engine.temperature());
             respond.ok(out);
         });
@@ -239,7 +239,7 @@ public final class EnginePanel extends UIElement implements Networked<EngineMode
 
     /** ── C → S REQUEST, on this panel's own method ── */
     private void tuneToFull() {
-        StateMap<Object> args = io.newMap();
+        CgStateMap<Object> args = io.newMap();
         args.putFloat("load", 1f);
         MachineTrace.log(MachineTrace.CLIENT, "-> asking the server " + io.qualify("tune"));
         result.setText("REQUEST sent on " + io.qualify("tune") + " - waiting for an answer...");

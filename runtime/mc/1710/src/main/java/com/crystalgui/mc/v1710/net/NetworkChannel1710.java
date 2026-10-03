@@ -1,8 +1,8 @@
 package com.crystalgui.mc.v1710.net;
 
 import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.net.wire.CgNetworkChannel;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.network.FMLEventChannel;

@@ -1,12 +1,12 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.async.Reply;
 import com.crystalgui.core.async.UiBudget;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.client.Workspace;
-import com.crystalgui.serialization.PlainOps;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 
@@ -71,7 +71,7 @@ public class ProviderCallsAreBudgetedTest {
         // that did not claim it would time nothing and pass against an unwired guard.
         UiThread.markCurrent();
         workspace = Workspace.over((method, args, onResult, onError) -> { },
-                (method, handler) -> { }, PlainOps.INSTANCE);
+                (method, handler) -> { }, CgPlainOps.INSTANCE);
         workspace.registerScheme(Resource.SCHEME_LIBRARY, new Slow());
     }
 

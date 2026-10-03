@@ -8,20 +8,20 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
 
+import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgui.mc.modern.client.CgUiHud;
-import com.crystalgui.mc.modern.example.MachineExampleModern;
-import com.crystalgui.mc.modern.example.MachineExampleClientModern;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
+import com.crystalgui.mc.modern.client.CgUiScreen;
+import com.crystalgui.mc.modern.example.MachineExampleClientModern;
+import com.crystalgui.mc.modern.example.MachineExampleModern;
+import com.crystalgui.mc.modern.net.Connections;
+import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.mc.modern.probe.CgUiAutoTest;
 import com.crystalgui.mc.modern.probe.ClientProbe;
-import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.mc.modern.probe.ConnectionProbeModern;
-import com.crystalgui.mc.modern.net.Connections;
 import com.crystalgui.mc.modern.probe.ServerSmokeModern;
-import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.probe.ConnectionProbe;
-import com.crystalgui.net.wire.CgNetworkChannel;
 import com.crystalgui.text.syntax.LanguageRegistry;
 
 import com.crystalgui.mc.modern.client.ClientGame;

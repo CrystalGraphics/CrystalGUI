@@ -471,7 +471,7 @@ A networked window needs a **connection to one player**. On 1.7.10 you get it fr
 
 ```java
 // Server side — e.g. from a block's onBlockActivated, or a command, or a tick
-ProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);   // EntityPlayer
+CgProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);   // EntityPlayer
 if (connection == null) return;                 // that player has no CrystalGUI channel
 
 ServerWindows.of(connection).open(FurnacePanel.TYPE, myFurnace);
@@ -480,7 +480,7 @@ ServerWindows.of(connection).open(FurnacePanel.TYPE, myFurnace);
 ```java
 public boolean onBlockActivated(World world, int x, int y, int z, EntityPlayer player, ...) {
     if (world.isRemote) return true;            // server decides; the client just gets the window
-    ProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);
+    CgProtocolConnection<Object> connection = CgUiConnections.forPlayer(player);
     if (connection != null) {
         ServerWindows.of(connection).open(FurnacePanel.TYPE, furnaceAt(x, y, z)); // FurnaceData in world  at (x,y,z) 
     }
@@ -522,7 +522,7 @@ ServerWindows.openable(FurnacePanel.TYPE, (viewer, args) -> {
 **On the client, ask:**
 
 ```java
-StateMap<Object> args = new StateMap<>(connection.ops());
+CgStateMap<Object> args = new CgStateMap<>(connection.ops());
 args.putInt("x", pos.getX());   // …y, z
 ClientWindows.requestOpen(FurnacePanel.TYPE, args, granted -> {
     if (!granted) player.addChatMessage(new ChatComponentText("You are too far away."));
@@ -727,7 +727,7 @@ For anything that is not a widget interaction, both sides have a small RPC surfa
 ```java
 @Override public void serve(FurnaceData model, ServerScope io) {
     io.onCall("history", (args, respond) -> {
-        StateMap<Object> out = io.newMap();
+        CgStateMap<Object> out = io.newMap();
         out.putInt("burns", model.burnCount());
         respond.ok(out);
     });
@@ -762,8 +762,8 @@ connection underneath is public, so it can send anyway. This is the third row of
 [§1](#1-which-kind-of-ui-do-i-want): open instantly, act on the server.
 
 ```java
-ProtocolConnection<Object> io = CgUiConnections.client();          // client side
-ProtocolConnection<Object> io = CgUiConnections.forPlayer(player); // server side
+CgProtocolConnection<Object> io = CgUiConnections.client();          // client side
+CgProtocolConnection<Object> io = CgUiConnections.forPlayer(player); // server side
 
 io.notify("mymod:setThroughput", args);          // fire and forget
 io.onNotify("mymod:setThroughput", args -> ...); // the other end
@@ -775,7 +775,7 @@ slider sends a packet on every frame you hold it. `RateGate` is the same gate th
 
 ```java
 RateGate<Float> gate = new RateGate<>((widget, kind, value) -> {
-    StateMap<Object> args = new StateMap<>(io.ops());
+    CgStateMap<Object> args = new CgStateMap<>(io.ops());
     args.putFloat("value", value);
     io.notify("mymod:setThroughput", args);
 });
@@ -986,12 +986,12 @@ If you want the *client* to trigger it, send a message and let the server decide
 
 ```java
 // Server — once, at init
-Protocols.server("furnace", wire ->
+CgProtocols.server("furnace", wire ->
         wire.onNotify("furnace/open", payload ->
                 ServerWindows.of(wire).open(FurnacePanel.TYPE, furnace)));
 
 // Client — the player pressed a key, or clicked a block
-ProtocolConnection<Object> connection = CgUiConnections.client();
+CgProtocolConnection<Object> connection = CgUiConnections.client();
 if (connection != null) {
     connection.notify("furnace/open", null);      // nobody waits; the window arriving IS the answer
 }
@@ -1124,8 +1124,8 @@ it — it is disposed when the last holder lets go, which may be later than your
 ### Where somebody was looking is theirs
 
 ```java
-@Override public <T> void writeViewState(StateMap<T> out) { out.putFloat("zoom", zoom); }
-@Override public <T> void readViewState(StateMap<T> in)   { zoom = in.getFloat("zoom", 1f); }
+@Override public <T> void writeViewState(CgStateMap<T> out) { out.putFloat("zoom", zoom); }
+@Override public <T> void readViewState(CgStateMap<T> in)   { zoom = in.getFloat("zoom", 1f); }
 ```
 
 Caret, scroll, folds, pan, zoom, which panel was open — these go here, and the session stores them per
@@ -1232,10 +1232,10 @@ public class Dial extends UINode {
             "value",                                             // the kind, on the wire
             (dial, sink) -> dial.onTurned.connect(sink::accept), // HOW A CLIENT LISTENS
             new Event.Payload<Float>() {                         // how the value crosses
-                @Override public <T> void write(StateMap<T> out, Float v) {
+                @Override public <T> void write(CgStateMap<T> out, Float v) {
                     out.putFloat("value", v);
                 }
-                @Override public <T> Float read(StateMap<T> in) {
+                @Override public <T> Float read(CgStateMap<T> in) {
                     return in.getFloat("value", 0f);
                 }
             },
@@ -1410,7 +1410,7 @@ client(io)     → widget.attachListener(...)          client, on mount AND
 ServerWindows.of(connection).open(TYPE, model);
 
 // ── client-only, but the server does the work ──────────────────────────────
-ProtocolConnection<Object> io = CgUiConnections.client();
+CgProtocolConnection<Object> io = CgUiConnections.client();
 RateGate<Float> gate = new RateGate<>((w, kind, v) -> io.notify("mymod:set", args(v)));
 gate.attach(slider, Slider.VALUE_CHANGED);       // the widget's own rate
 io.onTick(gate::flush);                          // or a held value never leaves

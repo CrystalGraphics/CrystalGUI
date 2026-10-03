@@ -8,25 +8,25 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.net.InMemoryTransport;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.window.CloseReason;
-import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.net.window.ClientScope;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
+import com.crystalgui.net.window.CloseReason;
 import com.crystalgui.net.window.Networked;
 import com.crystalgui.net.window.ServerScope;
 import com.crystalgui.net.window.ServerWindow;
 import com.crystalgui.net.window.ServerWindows;
+import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.window.UiType;
-import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
@@ -71,9 +71,9 @@ public class WindowLifecycleTest {
     private static final String TYPE = "test:panel";
     private static final String OTHER_TYPE = "test:other";
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverSide;
-    private ProtocolConnection<Object> clientSide;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverSide;
+    private CgProtocolConnection<Object> clientSide;
     private ServerWindows server;
     private ClientWindows client;
     private RecordingMount mount;
@@ -81,16 +81,16 @@ public class WindowLifecycleTest {
     @Before
     public void setUp() {
         UIElementRegistry.bootstrap();
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
         WindowProtocol.register();
 
-        link = InMemoryTransport.pair();
+        link = CgInMemoryTransport.pair();
         // A peer that is non-null is what makes one end the SERVER; null is what makes the other the
         // client. Same discriminator the workspace contributor reads, and the reason single player
         // ends up with one of each rather than two of either.
-        serverSide = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "a-player");
-        clientSide = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "a-player");
+        clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         server = ServerWindows.of(serverSide);
         client = ClientWindows.of(clientSide);
         mount = new RecordingMount();
@@ -99,15 +99,15 @@ public class WindowLifecycleTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowProtocol.resetForTesting();
     }
 
     /**
      * Moves everything both ways until the conversation runs out of things to say.
      *
-     * <p>{@code deliver()} is what an {@code InMemoryTransport} needs in place of a socket — the pump
-     * handed to {@code Protocols.open} is a no-op here, so nothing crosses without it.</p>
+     * <p>{@code deliver()} is what an {@code CgInMemoryTransport} needs in place of a socket — the pump
+     * handed to {@code CgProtocols.open} is a no-op here, so nothing crosses without it.</p>
      */
     private void settle() {
         for (int i = 0; i < 8; i++) {
@@ -392,7 +392,7 @@ public class WindowLifecycleTest {
 
     /**
      * Two windows of one type, both listening for the same notification. On
-     * {@code ProtocolConnection.onNotify} — where the example taught this — the second registration is
+     * {@code CgProtocolConnection.onNotify} — where the example taught this — the second registration is
      * refused by the router and the second window <b>throws at open</b>.
      */
     @Test
@@ -401,7 +401,7 @@ public class WindowLifecycleTest {
         ServerWindow<NotifyingPanel> two = server.open(NotifyingPanel.TYPE, null);
         settle();
 
-        StateMap<Object> payload = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> payload = new CgStateMap<>(CgPlainOps.INSTANCE);
         payload.putString("from", "the client");
         mount.mounted.get(1).session().notify("ping", payload);
         settle();
@@ -883,7 +883,7 @@ public class WindowLifecycleTest {
             servedWith = slice;
             io.onCall("save", (args, respond) -> {
                 saves.incrementAndGet();
-                StateMap<Object> out = io.newMap();
+                CgStateMap<Object> out = io.newMap();
                 out.putString("by", "the child");
                 respond.ok(out);
             });

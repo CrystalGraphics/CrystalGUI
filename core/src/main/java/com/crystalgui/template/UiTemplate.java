@@ -15,9 +15,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.ContentHash;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
@@ -171,7 +171,7 @@ public final class UiTemplate {
     public String contentHash() {
         if (contentHash == null) {
             UIElement tree = inflate();
-            contentHash = ContentHash.of(JsonOps.INSTANCE,
+            contentHash = CgContentHash.of(JsonOps.INSTANCE,
                     new UIElementMirror<JsonElement>(JsonOps.INSTANCE).describe(tree));
         }
         return contentHash;

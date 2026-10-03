@@ -1,20 +1,20 @@
 package com.crystalgui.net;
 
-import com.crystalgui.style.Styleable;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.style.Styleable;
 
-import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import javax.annotation.Nullable;
 
 /**
  * Every UI window a client is showing over one connection — one {@link ClientUiSession} per window id.
@@ -39,11 +39,11 @@ import java.util.function.Function;
  * attach {@link ClientUiSession#onWindowOpened} and its own RPC methods and be sure of hearing the first
  * one. Attaching afterwards would silently miss exactly the window that prompted the callback.</p>
  *
- * @param <T> the encoded representation, matching the connection's {@code DynamicOps}
+ * @param <T> the encoded representation, matching the connection's {@code CgDynamicOps}
  */
 public final class ClientUiSessions<N extends Styleable, T> {
 
-    private final ProtocolConnection<T> connection;
+    private final CgProtocolConnection<T> connection;
     private final Map<Integer, ClientUiSession<N, T>> sessions = new LinkedHashMap<>();
 
     @Nullable
@@ -65,10 +65,10 @@ public final class ClientUiSessions<N extends Styleable, T> {
      * because this package may not name an engine; {@code net.window} installs the one we ship.
      */
     @Nullable
-    private static Function<DynamicOps<?>, ? extends NodeMirror<?, ?>> mirrorFactory;
+    private static Function<CgDynamicOps<?>, ? extends NodeMirror<?, ?>> mirrorFactory;
 
     /** Installs the mirror factory. One factory; the window layer owns it. */
-    public static void setMirrorFactory(@Nullable Function<DynamicOps<?>, ? extends NodeMirror<?, ?>> factory) {
+    public static void setMirrorFactory(@Nullable Function<CgDynamicOps<?>, ? extends NodeMirror<?, ?>> factory) {
         mirrorFactory = factory;
     }
 
@@ -77,11 +77,11 @@ public final class ClientUiSessions<N extends Styleable, T> {
         uiClassLoader = loader;
     }
 
-    private ClientUiSessions(ProtocolConnection<T> connection) {
+    private ClientUiSessions(CgProtocolConnection<T> connection) {
         this.connection = connection;
         connection.router().onNotify(UiMethods.OPEN_WINDOW, payload -> accept(
-                payload == null ? new StateMap<>(connection.ops())
-                        : new StateMap<>(connection.ops(), payload)));
+                payload == null ? new CgStateMap<>(connection.ops())
+                        : new CgStateMap<>(connection.ops(), payload)));
     }
 
     /**
@@ -93,9 +93,9 @@ public final class ClientUiSessions<N extends Styleable, T> {
      * so keeps one statement of the rule.</p>
      */
     @SuppressWarnings("unchecked")
-    public static <N extends Styleable, T> ClientUiSessions<N, T> forConnection(ProtocolConnection<T> connection) {
+    public static <N extends Styleable, T> ClientUiSessions<N, T> forConnection(CgProtocolConnection<T> connection) {
         // Held by the connection rather than in a static WeakHashMap here — one statement of
-        // "the X for this connection", and it dies with the connection. @see ProtocolConnection#attachment
+        // "the X for this connection", and it dies with the connection. @see CgProtocolConnection#attachment
         return (ClientUiSessions<N, T>) connection.attachment(
                 ClientUiSessions.class, c -> new ClientUiSessions<>(c));
     }
@@ -127,7 +127,7 @@ public final class ClientUiSessions<N extends Styleable, T> {
 
     // ── The bootstrap ───────────────────────────────────────────────────────────────────────────
 
-    private void accept(StateMap<T> in) {
+    private void accept(CgStateMap<T> in) {
         int id = in.getInt(UiMethods.WINDOW, -1);
         if (id < 0) {
             CrystalGuiCore.LOGGER.warn("Ignoring an openWindow with no window id");
@@ -140,7 +140,7 @@ public final class ClientUiSessions<N extends Styleable, T> {
 
         ClientUiSession<N, T> session = sessions.get(id);
         if (session == null) {
-            Function<DynamicOps<?>, ? extends NodeMirror<?, ?>> factory = mirrorFactory;
+            Function<CgDynamicOps<?>, ? extends NodeMirror<?, ?>> factory = mirrorFactory;
             if (factory == null) {
                 CrystalGuiCore.LOGGER.error(
                         "Ignoring an openWindow: no mirror factory is installed, so there is nothing "

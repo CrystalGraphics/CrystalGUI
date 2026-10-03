@@ -4,9 +4,9 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.net.ClientUiSession;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.protocol.ProtocolConnection;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -57,7 +57,7 @@ public interface ClientWindowContext {
     ClientUiSession<UIElement, Object> session();
 
     /** The wire everything on this client shares. For connection-scoped things, never window ones. */
-    ProtocolConnection<Object> connection();
+    CgProtocolConnection<Object> connection();
 
     /**
      * <b>May this window be taken away?</b> — the content's answer, for a host that is about to.

@@ -5,9 +5,9 @@ import java.util.Locale;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.HostThread;
-import com.crystalgui.net.protocol.ProtocolConnection;
 
 /**
  * <b>The four things a platform knows and the engine cannot</b> - implement it to run CrystalGUI on a
@@ -22,7 +22,7 @@ import com.crystalgui.net.protocol.ProtocolConnection;
  *     public Path installationDirectory() { return gameDir; }
  *     public float uiScale()        { return currentGuiScale(); }
  *     public String desktopId()     { return "client"; }
- *     public ProtocolConnection<Object> connection() { return liveConnectionOrNull(); }
+ *     public CgProtocolConnection<Object> connection() { return liveConnectionOrNull(); }
  *     public Locale locale()        { return HostServices.gameLocale(options.languageCode); }
  * });
  * }</pre>
@@ -120,7 +120,7 @@ public interface HostServices {
 
     /** The connection to a server, or null when there is none. Re-asked per frame; see the class note. */
     @Nullable
-    ProtocolConnection<Object> connection();
+    CgProtocolConnection<Object> connection();
 
     /**
      * The language the player reads — Minecraft's language setting. It settles the one thing about text

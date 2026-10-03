@@ -1,5 +1,7 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.serialization.CgContentHash;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.settings.SetSettingEdit;
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
@@ -10,14 +12,12 @@ import com.crystalgui.core.settings.SettingsModel;
 import com.crystalgui.core.settings.SettingsRegistry;
 import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.core.undo.UndoStack;
-import com.crystalgui.serialization.ContentHash;
-import com.crystalgui.serialization.PlainOps;
 import org.junit.Test;
 
-import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
 
 import static org.junit.Assert.*;
 
@@ -321,9 +321,9 @@ public class SettingsTest {
         settings.set(SettingsLayer.DOCUMENT, QUEUE, "Transparent");
         settings.set(SettingsLayer.DOCUMENT, FONT_SIZE, 18);
 
-        Object encoded = SettingsCodec.MODEL.encode(PlainOps.INSTANCE,
+        Object encoded = SettingsCodec.MODEL.encode(CgPlainOps.INSTANCE,
                 settings.layer(SettingsLayer.DOCUMENT));
-        SettingsModel decoded = SettingsCodec.MODEL.decode(PlainOps.INSTANCE, encoded);
+        SettingsModel decoded = SettingsCodec.MODEL.decode(CgPlainOps.INSTANCE, encoded);
 
         assertEquals("Transparent", decoded.get("shader.queue"));
         assertEquals("18", decoded.get("editor.fontSize"));
@@ -344,8 +344,8 @@ public class SettingsTest {
         transparent.set("shader.queue", "Transparent");
 
         assertNotEquals(
-                ContentHash.of(PlainOps.INSTANCE, SettingsCodec.MODEL.encode(PlainOps.INSTANCE, geometry)),
-                ContentHash.of(PlainOps.INSTANCE, SettingsCodec.MODEL.encode(PlainOps.INSTANCE, transparent)));
+                CgContentHash.of(CgPlainOps.INSTANCE, SettingsCodec.MODEL.encode(CgPlainOps.INSTANCE, geometry)),
+                CgContentHash.of(CgPlainOps.INSTANCE, SettingsCodec.MODEL.encode(CgPlainOps.INSTANCE, transparent)));
     }
 
     /** An empty layer is not worth writing, so a hash is not disturbed by a layer nobody touched. */

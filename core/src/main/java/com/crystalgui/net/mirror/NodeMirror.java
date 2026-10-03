@@ -1,7 +1,8 @@
 package com.crystalgui.net.mirror;
 
-import java.util.Set;
+import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.ui.dom.TreeSource;
+import java.util.Set;
 import java.util.function.ObjIntConsumer;
 import java.util.function.ToIntFunction;
 import javax.annotation.Nullable;
@@ -35,7 +36,7 @@ import javax.annotation.Nullable;
  * this seam exists to make true.</p>
  *
  * @param <N> the tree's node type
- * @param <T> the serialization form (see {@link com.crystalgui.serialization.DynamicOps})
+ * @param <T> the serialization form (see {@link CgDynamicOps})
  */
 public interface NodeMirror<N, T> {
 

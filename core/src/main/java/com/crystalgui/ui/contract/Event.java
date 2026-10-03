@@ -6,8 +6,8 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 
 /**
  * One interaction a widget can report, declared once as a {@code static final} on the widget class.
@@ -45,9 +45,9 @@ public final class Event<W, P> {
      * needs to be generic in the ops type, and a generic method cannot be a lambda.</p>
      */
     public interface Payload<P> {
-        <T> void write(StateMap<T> out, P value);
+        <T> void write(CgStateMap<T> out, P value);
 
-        <T> P read(StateMap<T> in);
+        <T> P read(CgStateMap<T> in);
     }
 
     private Event(String kind, BiConsumer<W, Consumer<P>> attach, @Nullable Payload<P> payload,
@@ -123,16 +123,16 @@ public final class Event<W, P> {
 
     /** Encodes an occurrence, or answers null for a kind that carries nothing. */
     @Nullable
-    public <T> StateMap<T> encode(DynamicOps<T> ops, P value) {
+    public <T> CgStateMap<T> encode(CgDynamicOps<T> ops, P value) {
         if (payload == null) return null;
-        StateMap<T> out = new StateMap<>(ops);
+        CgStateMap<T> out = new CgStateMap<>(ops);
         payload.write(out, value);
         return out;
     }
 
     /** Decodes an occurrence. Server side. */
     @Nullable
-    public <T> P decode(@Nullable StateMap<T> in) {
+    public <T> P decode(@Nullable CgStateMap<T> in) {
         if (payload == null || in == null) return null;
         return payload.read(in);
     }

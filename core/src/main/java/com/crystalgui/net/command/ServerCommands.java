@@ -1,9 +1,9 @@
 package com.crystalgui.net.command;
 
+import com.crystalgraphics.net.protocol.CgCall;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.net.protocol.Call;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.serialization.StateMap;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,11 +22,11 @@ import java.util.WeakHashMap;
  * does. So contribution is a property of the connection rather than of the server, which also means the
  * enablement push has somewhere obvious to live — the same object already knows who it is talking to.</p>
  *
- * <h3>The handler is a {@link Call.Handler}, deliberately</h3>
+ * <h3>The handler is a {@link CgCall.Handler}, deliberately</h3>
  *
- * <p>The same shape {@code ProtocolConnection.onRequest} and {@code ServerUiSession.onCall} take, so an
+ * <p>The same shape {@code CgProtocolConnection.onRequest} and {@code ServerUiSession.onCall} take, so an
  * action is written once and installed against whichever of the three suits it. That interchangeability
- * is why {@code Call.Handler} exists at all rather than each surface having its own functional type.</p>
+ * is why {@code CgCall.Handler} exists at all rather than each surface having its own functional type.</p>
  *
  * @param <T> the encoded representation, matching the connection's {@code DynamicOps}
  */
@@ -39,16 +39,16 @@ public final class ServerCommands<T> {
      * and same reason as a workspace attachment, which was itself written after two
      * clients on one connection threw on a duplicate {@code fs.changed}.</p>
      */
-    private static final Map<ProtocolConnection<?>, ServerCommands<?>> BY_CONNECTION = new WeakHashMap<>();
+    private static final Map<CgProtocolConnection<?>, ServerCommands<?>> BY_CONNECTION = new WeakHashMap<>();
 
-    private final ProtocolConnection<T> connection;
-    private final Map<String, Call.Handler<T>> handlers = new LinkedHashMap<>();
+    private final CgProtocolConnection<T> connection;
+    private final Map<String, CgCall.Handler<T>> handlers = new LinkedHashMap<>();
 
-    private ServerCommands(ProtocolConnection<T> connection) {
+    private ServerCommands(CgProtocolConnection<T> connection) {
         this.connection = connection;
         connection.onRequest(CommandProtocol.INVOKE, (args, respond) -> {
             String id = args.getString(CommandProtocol.ID, "");
-            Call.Handler<T> handler = handlers.get(id);
+            CgCall.Handler<T> handler = handlers.get(id);
             if (handler == null) {
                 // ANSWERED, not dropped. A command withdrawn between the menu opening and the user
                 // clicking is an ordinary race, and the client has to be told it lost -- otherwise the
@@ -62,7 +62,7 @@ public final class ServerCommands<T> {
 
     /** The commands offered to this connection, created on first use. */
     @SuppressWarnings("unchecked")
-    public static synchronized <T> ServerCommands<T> forConnection(ProtocolConnection<T> connection) {
+    public static synchronized <T> ServerCommands<T> forConnection(CgProtocolConnection<T> connection) {
         ServerCommands<?> existing = BY_CONNECTION.get(connection);
         if (existing != null) return (ServerCommands<T>) existing;
         ServerCommands<T> created = new ServerCommands<>(connection);
@@ -80,7 +80,7 @@ public final class ServerCommands<T> {
      * well, and thrown rather than logged, because a server author's typo should fail where it was typed
      * rather than as a command that mysteriously never appears on somebody else's machine.</p>
      */
-    public ServerCommands<T> contribute(String id, String label, Call.Handler<T> handler) {
+    public ServerCommands<T> contribute(String id, String label, CgCall.Handler<T> handler) {
         String refusal = RemoteCommandPolicy.DEFAULT.refuse(id);
         if (refusal != null) throw new IllegalArgumentException(refusal);
         handlers.put(id, handler);
@@ -115,8 +115,8 @@ public final class ServerCommands<T> {
         return new java.util.LinkedHashSet<>(handlers.keySet());
     }
 
-    private void send(String method, List<String> ids, java.util.function.Consumer<StateMap<T>> fill) {
-        StateMap<T> payload = new StateMap<>(connection.ops());
+    private void send(String method, List<String> ids, java.util.function.Consumer<CgStateMap<T>> fill) {
+        CgStateMap<T> payload = new CgStateMap<>(connection.ops());
         payload.putList(CommandProtocol.COMMANDS, new ArrayList<>(ids), (entry, id) -> {
             entry.putString(CommandProtocol.ID, id);
             fill.accept(entry);

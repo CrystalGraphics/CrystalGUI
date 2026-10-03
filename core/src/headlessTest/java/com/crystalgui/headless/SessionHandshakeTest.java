@@ -1,14 +1,14 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgEnvelope;
+import com.crystalgraphics.net.protocol.CgEnvelopeCodec;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
 import com.crystalgui.net.SheetRef;
-import com.crystalgui.net.protocol.Envelope;
-import com.crystalgui.net.protocol.EnvelopeCodec;
 import com.crystalgui.net.protocol.UiMethods;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
@@ -30,8 +30,8 @@ import static org.junit.Assert.*;
  */
 public class SessionHandshakeTest {
 
-    private InMemoryTransport<Object> serverLink;
-    private InMemoryTransport<Object> clientLink;
+    private CgInMemoryTransport<Object> serverLink;
+    private CgInMemoryTransport<Object> clientLink;
     private ServerUiSession<UIElement, Object> server;
     private ClientUiSession<UIElement, Object> client;
 
@@ -59,7 +59,7 @@ public class SessionHandshakeTest {
 
     @Before
     public void setUp() {
-        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        CgInMemoryTransport<Object>[] pair = CgInMemoryTransport.pair();
         serverLink = pair[0];
         clientLink = pair[1];
         server = Sessions.serve(7, buildUi(), serverLink);
@@ -87,24 +87,24 @@ public class SessionHandshakeTest {
      * {@code packet.type()}. The assertions are the same questions — how many description requests, how
      * many bodies — asked of the vocabulary rather than of a union of record types.</p>
      */
-    private long countMethod(InMemoryTransport<Object> link, String method) {
+    private long countMethod(CgInMemoryTransport<Object> link, String method) {
         return link.sent().stream()
-                .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
+                .map(raw -> CgEnvelopeCodec.decode(CgPlainOps.INSTANCE, raw))
                 .filter(e -> methodOf(e).equals(method))
                 .count();
     }
 
     /** Counts answers to a request method — a RESPONSE carries an id, not a method. */
-    private long countResponses(InMemoryTransport<Object> link) {
+    private long countResponses(CgInMemoryTransport<Object> link) {
         return link.sent().stream()
-                .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
-                .filter(e -> e instanceof Envelope.Response)
+                .map(raw -> CgEnvelopeCodec.decode(CgPlainOps.INSTANCE, raw))
+                .filter(e -> e instanceof CgEnvelope.Response)
                 .count();
     }
 
-    private static String methodOf(Envelope envelope) {
-        if (envelope instanceof Envelope.Request<?> request) return request.method();
-        if (envelope instanceof Envelope.Notification<?> notification) return notification.method();
+    private static String methodOf(CgEnvelope envelope) {
+        if (envelope instanceof CgEnvelope.Request<?> request) return request.method();
+        if (envelope instanceof CgEnvelope.Notification<?> notification) return notification.method();
         return "";
     }
     // ── The handshake ───────────────────────────────────────────────────────
@@ -207,7 +207,7 @@ public class SessionHandshakeTest {
     /** The same UI built twice hashes the same, which is what makes a cache hit possible at all. */
     @Test
     public void anIdenticalUiProducesAnIdenticalHash() {
-        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        CgInMemoryTransport<Object>[] pair = CgInMemoryTransport.pair();
         ServerUiSession<UIElement, Object> other = Sessions.serve(9, buildUi(), pair[0]);
         server.open();
         other.open();
@@ -219,7 +219,7 @@ public class SessionHandshakeTest {
         UIElement changed = buildUi();
         ((Checkbox) changed.children().get(1)).setChecked(false);
 
-        InMemoryTransport<Object>[] pair = InMemoryTransport.pair();
+        CgInMemoryTransport<Object>[] pair = CgInMemoryTransport.pair();
         ServerUiSession<UIElement, Object> other = Sessions.serve(9, changed, pair[0]);
         server.open();
         other.open();
@@ -231,13 +231,13 @@ public class SessionHandshakeTest {
     /** A protocol mismatch must refuse the window rather than open one it will misread. */
     @Test
     public void aProtocolMismatchRefusesTheWindow() {
-        StateMap<Object> open = new StateMap<>(PlainOps.INSTANCE);
-        open.putInt("protocol", EnvelopeCodec.VERSION + 99);
+        CgStateMap<Object> open = new CgStateMap<>(CgPlainOps.INSTANCE);
+        open.putInt("protocol", CgEnvelopeCodec.VERSION + 99);
         open.putInt(UiMethods.WINDOW, 7);
         open.putString("hash", "somehash");
         open.putInt("count", 1);
-        Object bogus = EnvelopeCodec.encode(PlainOps.INSTANCE,
-                new Envelope.Notification<>(UiMethods.OPEN_WINDOW, open.encode()));
+        Object bogus = CgEnvelopeCodec.encode(CgPlainOps.INSTANCE,
+                new CgEnvelope.Notification<>(UiMethods.OPEN_WINDOW, open.encode()));
         clientLink.setReceiver(raw -> { });
         ClientUiSession<UIElement, Object> isolated = Sessions.view(clientLink);
         serverLink.send(bogus);
@@ -253,11 +253,11 @@ public class SessionHandshakeTest {
         server.open();
         settle();
 
-        StateMap<Object> ask = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> ask = new CgStateMap<>(CgPlainOps.INSTANCE);
         ask.putInt(UiMethods.WINDOW, 999);
         ask.putString("hash", server.descHash());
-        Object foreign = EnvelopeCodec.encode(PlainOps.INSTANCE,
-                new Envelope.Request<>(1, UiMethods.DESCRIPTION, ask.encode()));
+        Object foreign = CgEnvelopeCodec.encode(CgPlainOps.INSTANCE,
+                new CgEnvelope.Request<>(1, UiMethods.DESCRIPTION, ask.encode()));
         serverLink.clearSent();
         clientLink.send(foreign);
         serverLink.deliver();
@@ -268,8 +268,8 @@ public class SessionHandshakeTest {
         // What must not happen is a description body going out.
         assertEquals("no description body for a different window", 0,
                 serverLink.sent().stream()
-                        .map(raw -> EnvelopeCodec.decode(PlainOps.INSTANCE, raw))
-                        .filter(e -> e instanceof Envelope.Response<?> r && r.ok())
+                        .map(raw -> CgEnvelopeCodec.decode(CgPlainOps.INSTANCE, raw))
+                        .filter(e -> e instanceof CgEnvelope.Response<?> r && r.ok())
                         .count());
     }
 

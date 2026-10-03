@@ -1,8 +1,8 @@
 package com.crystalgui.net.mirror;
 
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.TreeSource;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -28,7 +28,7 @@ public final class ClientTreeMirror<N, T> {
 
     private final TreeSource<N> source;
     private final NodeMirror<N, T> nodes;
-    private final DynamicOps<T> ops;
+    private final CgDynamicOps<T> ops;
 
     /** Told about each subtree that arrives, so an owner can bind what came in rather than re-walking. */
     @Nullable private Consumer<N> onSubtreeInserted;
@@ -36,7 +36,7 @@ public final class ClientTreeMirror<N, T> {
     /** Told when the two sides have been proven to disagree and this mirror is no longer usable. */
     @Nullable private Runnable onIrrecoverable;
 
-    public ClientTreeMirror(TreeSource<N> source, NodeMirror<N, T> nodes, DynamicOps<T> ops) {
+    public ClientTreeMirror(TreeSource<N> source, NodeMirror<N, T> nodes, CgDynamicOps<T> ops) {
         this.source = source;
         this.nodes = nodes;
         this.ops = ops;
@@ -95,8 +95,8 @@ public final class ClientTreeMirror<N, T> {
      *
      * @return false when the two sides were proven to disagree and the window must be torn down
      */
-    public boolean applyStructure(StateMap<T> in) {
-        for (StateMap<T> op : in.getList(TreeOps.OPS, e -> e)) {
+    public boolean applyStructure(CgStateMap<T> in) {
+        for (CgStateMap<T> op : in.getList(TreeOps.OPS, e -> e)) {
             String kind = op.getString(TreeOps.OP, "");
 
             if (TreeOps.INSERT.equals(kind)) {
@@ -162,8 +162,8 @@ public final class ClientTreeMirror<N, T> {
      * @param skip nodes to leave alone, whatever the delta says about them. A focused text field is the
      *             case: applying a value the user is in the middle of editing resets the caret.
      */
-    public void applyState(StateMap<T> in, @Nullable java.util.function.Predicate<N> skip) {
-        for (StateMap<T> entry : in.getList("entries", e -> e)) {
+    public void applyState(CgStateMap<T> in, @Nullable java.util.function.Predicate<N> skip) {
+        for (CgStateMap<T> entry : in.getList("entries", e -> e)) {
             int nid = entry.getInt("nid", -1);
             N target = source.byId(nid);
             if (target == null) {
@@ -192,7 +192,7 @@ public final class ClientTreeMirror<N, T> {
     }
 
     /** The ops this mirror speaks, for a caller routing raw payloads. */
-    public DynamicOps<T> ops() {
+    public CgDynamicOps<T> ops() {
         return ops;
     }
 }

@@ -1,29 +1,29 @@
 package com.crystalgui.widget.layout;
 
-import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 
-import javax.annotation.Nullable;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
-import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.service.Drag;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDimension;
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -122,13 +122,13 @@ public class SplitView extends UIElement implements MinimumSize {
     public static final Event<SplitView, float[]> RESIZED = Event.of("value",
             (split, sink) -> split.attachListener(percentage -> sink.accept(split.getWeights())),
             new Event.Payload<float[]>() {
-                @Override public <T> void write(StateMap<T> out, float[] value) {
+                @Override public <T> void write(CgStateMap<T> out, float[] value) {
                     List<Float> boxed = new ArrayList<>();
                     if (value != null) for (float weight : value) boxed.add(weight);
                     out.putList("weights", boxed,
                             (entry, weight) -> entry.putFloat(KEY_WEIGHT, weight));
                 }
-                @Override public <T> float[] read(StateMap<T> in) {
+                @Override public <T> float[] read(CgStateMap<T> in) {
                     List<Float> boxed =
                             in.getList("weights", entry -> entry.getFloat(KEY_WEIGHT, 0f));
                     float[] out = new float[boxed.size()];

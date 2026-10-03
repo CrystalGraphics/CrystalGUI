@@ -6,12 +6,12 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.mirror.ClientTreeMirror;
 import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.mirror.ServerTreeMirror;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
 import com.crystalgui.ui.dom.NodeContract;
 import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.dom.TreeSource;
@@ -20,9 +20,9 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.Set;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.ObjIntConsumer;
 import java.util.function.ToIntFunction;
 import javax.annotation.Nullable;
@@ -182,7 +182,7 @@ public class MirrorIsEngineAgnosticTest {
 
     /** How a {@link Node} is described. The whole of what the mirror needs to know about this tree. */
     private static final class Nodes implements NodeMirror<Node, Object> {
-        private final DynamicOps<Object> ops = PlainOps.INSTANCE;
+        private final CgDynamicOps<Object> ops = CgPlainOps.INSTANCE;
 
         @Override public Object describe(Node node) {
             return write(node, null);
@@ -298,24 +298,24 @@ public class MirrorIsEngineAgnosticTest {
     /** Opens: number the server's tree, ship the description, number the client's the same way. */
     private void open() {
         Node serverRoot = serverTree.root();
-        server = new ServerTreeMirror<>(serverTree, nodes, PlainOps.INSTANCE);
+        server = new ServerTreeMirror<>(serverTree, nodes, CgPlainOps.INSTANCE);
         int count = server.describeAndNumber();
         serverTree.observe(server);
 
         Node clientRoot = nodes.decode(nodes.describe(serverRoot));
         clientTree = new Tree(clientRoot);
-        client = new ClientTreeMirror<>(clientTree, nodes, PlainOps.INSTANCE);
+        client = new ClientTreeMirror<>(clientTree, nodes, CgPlainOps.INSTANCE);
         assertEquals("both sides number the same pristine description alike",
                 count, client.number(clientRoot, 0));
     }
 
     private void pumpStructure() {
-        StateMap<Object> ops = server.drainStructure();
+        CgStateMap<Object> ops = server.drainStructure();
         if (ops != null) client.applyStructure(ops);
     }
 
     private void pumpState() {
-        java.util.Map<Node, StateMap<Object>> entries = server.drainState();
+        java.util.Map<Node, CgStateMap<Object>> entries = server.drainState();
         if (entries != null) client.applyState(server.pack(entries.values()), null);
     }
 
@@ -429,7 +429,7 @@ public class MirrorIsEngineAgnosticTest {
 
         Tree lateTree = new Tree(late);
         ClientTreeMirror<Node, Object> lateMirror =
-                new ClientTreeMirror<>(lateTree, nodes, PlainOps.INSTANCE);
+                new ClientTreeMirror<>(lateTree, nodes, CgPlainOps.INSTANCE);
         for (Map.Entry<Node, Integer> entry : carried.entrySet()) {
             lateTree.assignAt(entry.getKey(), entry.getValue());
         }

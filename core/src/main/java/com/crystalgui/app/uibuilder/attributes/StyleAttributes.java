@@ -11,12 +11,12 @@ import javax.annotation.Nullable;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.attribute.AttributeCarrier;
 import com.crystalgui.core.attribute.AttributeSet;
 import com.crystalgui.core.attribute.AttributeSlot;
-import com.crystalgui.serialization.Codec;
 import com.crystalgui.serialization.JsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.serialization.style.StylePartRegistry;
@@ -109,7 +109,7 @@ public final class StyleAttributes implements AttributeCarrier {
     private static <V> boolean addParts(List<Pending> into, String property, JsonElement value,
                                         StyleProperty<V> declared) {
         StyleParts<V> parts = StylePartRegistry.forProperty(declared);
-        Codec<V> codec = StyleValueCodecs.forProperty(declared);
+        CgCodec<V> codec = StyleValueCodecs.forProperty(declared);
         if (parts == null || codec == null) return false;
 
         V decoded = codec.decode(JsonOps.INSTANCE, value);
@@ -179,7 +179,7 @@ public final class StyleAttributes implements AttributeCarrier {
     private static <V> JsonElement mergePart(StyleProperty<V> declared, @Nullable JsonElement base,
                                              String part, JsonElement value) {
         StyleParts<V> parts = StylePartRegistry.forProperty(declared);
-        Codec<V> codec = StyleValueCodecs.forProperty(declared);
+        CgCodec<V> codec = StyleValueCodecs.forProperty(declared);
         if (parts == null || codec == null) return null;
         // THE TARGET'S OWN VALUE IS THE BASE, and the property's INITIAL when it holds none: merging a
         // rotation onto an element with no transform at all has to start from something, and the initial

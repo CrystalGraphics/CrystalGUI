@@ -15,15 +15,17 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.style.theme.UiThemeManager;
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.dispose.Disposer;
+import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.app.Application;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -33,11 +35,9 @@ import com.crystalgui.fs.server.WorkspaceActor;
 import com.crystalgui.fs.server.WorkspaceBinding;
 import com.crystalgui.fs.server.WorkspacePermission;
 import com.crystalgui.fs.server.WorkspaceService;
-import com.crystalgui.net.InMemoryTransport;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
+import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.text.lang.ProjectSourcesRegistry;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 
 /**
@@ -84,9 +84,9 @@ public class ApplicationRetentionTest {
     private Desktop desktop;
     private ConfigStorage storage;
     private boolean animationsWere;
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
     private Workspace workspace;
 
     /**
@@ -98,7 +98,7 @@ public class ApplicationRetentionTest {
      */
     @Before
     public void openWorkspace() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
 
         InMemoryFileSystem files = new InMemoryFileSystem().seed(PROJECT + ":Main.java", "class Main { }");
         WorkspaceService service = new WorkspaceService(
@@ -106,11 +106,11 @@ public class ApplicationRetentionTest {
                         new WorkspaceProject(PROJECT, "Scratch", Paths.get("/srv/scratch")))),
                 files, WorkspacePermission.ALLOW_ALL);
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "host");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "host");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
-                PlainOps.INSTANCE).installOn(serverEnd);
+                CgPlainOps.INSTANCE).installOn(serverEnd);
 
         workspace = Workspace.of(clientEnd);
 
@@ -152,7 +152,7 @@ public class ApplicationRetentionTest {
         InspectorRegistry.resetForTesting();
         ProjectSourcesRegistry.resetForTesting();
         Disposer.resetForTesting();
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         WindowAnimator.setEnabled(animationsWere);
     }
 

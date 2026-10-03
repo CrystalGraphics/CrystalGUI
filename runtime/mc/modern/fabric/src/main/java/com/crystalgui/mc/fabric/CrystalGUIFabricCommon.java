@@ -1,13 +1,13 @@
 package com.crystalgui.mc.fabric;
 
-import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgraphics.mc.modern.platform.ResourceIds;
+import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgraphics.mc.shared.CrashVariant;
+import com.crystalgraphics.mc.shared.VariantEntry;
+import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
-import com.crystalgui.net.wire.CgNetworkChannel;
-import com.crystalgraphics.mc.shared.VariantEntry;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 //? if >=26.1 {

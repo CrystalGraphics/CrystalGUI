@@ -1,8 +1,8 @@
 package com.crystalgui.workbench.dock.layout;
 
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.serialization.DynamicOps;
-import com.crystalgui.serialization.StateMap;
 
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import java.util.ArrayList;
@@ -79,8 +79,8 @@ public final class DockLayoutCodec {
 
     // ── Encode ──────────────────────────────────────────────────────────────────────────────────
 
-    public static <T> T encode(DockLayout layout, DynamicOps<T> ops, float viewportWidth, float viewportHeight) {
-        StateMap<T> out = new StateMap<>(ops);
+    public static <T> T encode(DockLayout layout, CgDynamicOps<T> ops, float viewportWidth, float viewportHeight) {
+        CgStateMap<T> out = new CgStateMap<>(ops);
         out.putInt(KEY_VERSION, VERSION);
         out.putFloat(KEY_VIEWPORT_W, viewportWidth);
         out.putFloat(KEY_VIEWPORT_H, viewportHeight);
@@ -89,7 +89,7 @@ public final class DockLayoutCodec {
         return out.encode();
     }
 
-    private static <T> void writeNode(StateMap<T> out, DockNode node) {
+    private static <T> void writeNode(CgStateMap<T> out, DockNode node) {
         out.putFloat(KEY_SIZE, node.size());
         if (node.isLeaf()) {
             DockLeaf leaf = (DockLeaf) node;
@@ -108,7 +108,7 @@ public final class DockLayoutCodec {
         }
     }
 
-    private static <T> void writePanel(StateMap<T> out, DockPanelRef panel) {
+    private static <T> void writePanel(CgStateMap<T> out, DockPanelRef panel) {
         out.putString(KEY_TYPE_ID, panel.typeId());
         List<Map.Entry<String, String>> entries = new ArrayList<>(panel.state().entrySet());
         out.putList(KEY_STATE, entries, (entry, pair) -> {
@@ -126,10 +126,10 @@ public final class DockLayoutCodec {
      * unknown version and a structurally impossible tree both land here. The caller is expected to have a
      * default, because it needs one on first run anyway.</p>
      */
-    public static <T> DockLayout decode(T encoded, DynamicOps<T> ops, DockPanelRegistry<?> registry) {
-        StateMap<T> in;
+    public static <T> DockLayout decode(T encoded, CgDynamicOps<T> ops, DockPanelRegistry<?> registry) {
+        CgStateMap<T> in;
         try {
-            in = new StateMap<>(ops, encoded);
+            in = new CgStateMap<>(ops, encoded);
         } catch (RuntimeException e) {
             CrystalGuiCore.LOGGER.warn("Dock layout could not be read; falling back to the default", e);
             return null;
@@ -166,7 +166,7 @@ public final class DockLayoutCodec {
         return layout;
     }
 
-    private static <T> DockNode readNode(StateMap<T> in, DockPanelRegistry<?> registry) {
+    private static <T> DockNode readNode(CgStateMap<T> in, DockPanelRegistry<?> registry) {
         String type = in.getString(KEY_TYPE, "");
         float size = in.getFloat(KEY_SIZE, 1f);
 
@@ -195,7 +195,7 @@ public final class DockLayoutCodec {
         return null;
     }
 
-    private static <T> DockPanelRef readPanel(StateMap<T> in, DockPanelRegistry<?> registry) {
+    private static <T> DockPanelRef readPanel(CgStateMap<T> in, DockPanelRegistry<?> registry) {
         String typeId = in.getString(KEY_TYPE_ID, "");
         if (typeId.isEmpty()) return null;
         if (!registry.isRegistered(typeId)) {

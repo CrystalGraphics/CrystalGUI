@@ -5,19 +5,19 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
+import com.crystalgraphics.net.CgInMemoryTransport;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.net.protocol.CgProtocols;
+import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.ClientUiSession;
-import com.crystalgui.net.InMemoryTransport;
 import com.crystalgui.net.ServerUiSession;
-import com.crystalgui.net.protocol.ProtocolConnection;
-import com.crystalgui.net.protocol.Protocols;
-import com.crystalgui.serialization.PlainOps;
-import com.crystalgui.serialization.StateMap;
+import com.crystalgui.net.protocol.UiMethods;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.TextField;
-import com.crystalgui.net.protocol.UiMethods;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.After;
@@ -37,9 +37,9 @@ import org.junit.Test;
  */
 public class EventValidationTest {
 
-    private InMemoryTransport<Object>[] link;
-    private ProtocolConnection<Object> serverEnd;
-    private ProtocolConnection<Object> clientEnd;
+    private CgInMemoryTransport<Object>[] link;
+    private CgProtocolConnection<Object> serverEnd;
+    private CgProtocolConnection<Object> clientEnd;
     private ServerUiSession<UIElement, Object> server;
     private ClientUiSession<UIElement, Object> client;
 
@@ -54,7 +54,7 @@ public class EventValidationTest {
 
     @Before
     public void setUp() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
         UIElementRegistry.bootstrap();
 
         root = new UIElement();
@@ -67,9 +67,9 @@ public class EventValidationTest {
         root.append(button);
         root.append(field);
 
-        link = InMemoryTransport.pair();
-        serverEnd = Protocols.open(link[0], PlainOps.INSTANCE, () -> { }, "alice");
-        clientEnd = Protocols.open(link[1], PlainOps.INSTANCE, () -> { }, null);
+        link = CgInMemoryTransport.pair();
+        serverEnd = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
+        clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
 
         server = Sessions.serveOn(1, root, serverEnd);
         client = Sessions.viewOn(clientEnd);
@@ -83,7 +83,7 @@ public class EventValidationTest {
 
     @After
     public void tearDown() {
-        Protocols.resetForTesting();
+        CgProtocols.resetForTesting();
     }
 
     private void settle() {
@@ -96,12 +96,12 @@ public class EventValidationTest {
     }
 
     /** Sends a raw event, bypassing the client widgets — which is what a forged packet is. */
-    private void forge(int nid, String kind, java.util.function.Consumer<StateMap<Object>> payload) {
-        StateMap<Object> out = new StateMap<>(PlainOps.INSTANCE);
+    private void forge(int nid, String kind, java.util.function.Consumer<CgStateMap<Object>> payload) {
+        CgStateMap<Object> out = new CgStateMap<>(CgPlainOps.INSTANCE);
         out.putInt(UiMethods.WINDOW, 1);
         out.putInt("nid", nid);
         out.putString("kind", kind);
-        StateMap<Object> carried = new StateMap<>(PlainOps.INSTANCE);
+        CgStateMap<Object> carried = new CgStateMap<>(CgPlainOps.INSTANCE);
         payload.accept(carried);
         out.putRaw("p", carried.encode());
         clientEnd.router().notify(UiMethods.EVENT, out.encode());

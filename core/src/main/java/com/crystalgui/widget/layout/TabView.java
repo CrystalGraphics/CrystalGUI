@@ -1,26 +1,26 @@
 package com.crystalgui.widget.layout;
 
-import com.crystalgui.ui.contract.RatePolicy;
-import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.WidgetContracts;
-import com.crystalgui.ui.contract.WidgetContract;
-import com.crystalgui.ui.contract.StateTypes;
-import com.crystalgui.ui.contract.State;
-import com.crystalgui.serialization.StateMap;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.scroll.Scroller;
-import com.crystalgui.widget.scroll.ScrollerView;
-import javax.annotation.Nullable;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.contract.Event;
+import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgui.ui.contract.State;
+import com.crystalgui.ui.contract.StateTypes;
+import com.crystalgui.ui.contract.WidgetContract;
+import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
+import com.crystalgui.widget.scroll.Scroller;
+import com.crystalgui.widget.scroll.ScrollerView;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -72,10 +72,10 @@ public class TabView extends UIElement {
     public static final Event<TabView, Integer> SELECTION = Event.<TabView, Integer>of("select",
             (view, sink) -> view.onTabSelected.connect(tab -> sink.accept(view.getSelectedIndex())),
             new Event.Payload<Integer>() {
-                @Override public <T> void write(StateMap<T> out, Integer value) {
+                @Override public <T> void write(CgStateMap<T> out, Integer value) {
                     out.putInt("index", value);
                 }
-                @Override public <T> Integer read(StateMap<T> in) {
+                @Override public <T> Integer read(CgStateMap<T> in) {
                     return in.getInt("index", -1);
                 }
             }, RatePolicy.IMMEDIATE)
