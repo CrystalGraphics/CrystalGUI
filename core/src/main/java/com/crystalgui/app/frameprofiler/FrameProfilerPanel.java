@@ -121,6 +121,7 @@ public class FrameProfilerPanel extends UIElement {
     private final ChainsTab chains = new ChainsTab();
     private final CompareTab compare = new CompareTab(model);
     private final ScreenTab screen = new ScreenTab();
+    private final BuffersTab buffers = new BuffersTab();
 
     /** What the strip's hovered frame looked like, floating under the pointer. @see #showPreview */
     private final UIElement preview = new UIElement();
@@ -511,6 +512,7 @@ public class FrameProfilerPanel extends UIElement {
         compareTab.content().append(compare);
         screenTab = tabs.addTab("Screen");
         screenTab.content().append(screen);
+        tabs.addTab("Buffers").content().append(buffers);
         // The counter series are built only while their tab shows, so selecting it builds them now.
         tabs.onTabSelected.connect(tab -> {
             if (tab == countersTab) render();
@@ -529,6 +531,10 @@ public class FrameProfilerPanel extends UIElement {
 
     public ScreenTab screen() {
         return screen;
+    }
+
+    public BuffersTab buffers() {
+        return buffers;
     }
 
     public UIElement preview() {
