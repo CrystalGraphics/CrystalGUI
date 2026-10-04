@@ -127,7 +127,7 @@ public final class UiGpu {
         // (Minecraft 1.21.5+ leaves three bound). Off until the composite, which samples too.
         CgHostSamplers.park();
         samplersParked = true;
-        sceneFboId = CgGL.glGetInteger(CgGL.GL_DRAW_FRAMEBUFFER_BINDING);
+        sceneFboId = CgGlState.drawFramebuffer();   // the scope above just read it: no glGet
         int w = Math.max(1, width), h = Math.max(1, height);
         if (frameFbo.getWidth() != w || frameFbo.getHeight() != h) frameFbo.resize(w, h);
     }
