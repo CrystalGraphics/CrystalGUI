@@ -337,7 +337,8 @@ counterstab,
 hintstab,
 chainstab,
 comparetab,
-screentab {
+screentab,
+bufferstab {
     flex-direction: column;
     width: 100%;
     height: 100%;
@@ -440,28 +441,53 @@ zonestab tableview {
     flex-grow: 1;
 }
 
+/* The sites above, a third of the height; the page of elements below, the rest. */
+bufferstab .__buffers-sites__ {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+bufferstab .__buffers-elements__ {
+    width: 100%;
+    height: 0px;
+    flex-grow: 2;
+}
+
+bufferstab .__buffers-status__ {
+    flex-shrink: 0;
+    padding: 4px 6px;
+    color: var(--profiler-caption-fg);
+    font-size: 11;
+}
+
 /* THE SELECTED ROW, scoped to this panel as every list here must be: `ListView` marks the row and
  * leaves the painting to whoever owns it, so a panel with no rule selects perfectly and shows nothing.
  * Selection wins over hover where both apply, or the pointer resting on the selected row repaints it as
  * merely hovered. */
 zonestab tableview .__row__:hover,
+bufferstab tableview .__row__:hover,
 calltreetab treeview .__row__:hover {
     background-color: var(--profiler-row-hover-bg);
 }
 
 zonestab tableview .__row__.__selected__,
 zonestab tableview .__row__.__selected__:hover,
+bufferstab tableview .__row__.__selected__,
+bufferstab tableview .__row__.__selected__:hover,
 calltreetab treeview .__row__.__selected__,
 calltreetab treeview .__row__.__selected__:hover {
     background-color: var(--profiler-row-selected-bg);
 }
 
-zonestab tableview .__cell__ {
+zonestab tableview .__cell__,
+bufferstab tableview .__cell__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
     font-size: 10;
 }
 
-zonestab tableview .__header-cell__ {
+zonestab tableview .__header-cell__,
+bufferstab tableview .__header-cell__ {
     color: var(--profiler-caption-fg);
     font-size: 10;
 }

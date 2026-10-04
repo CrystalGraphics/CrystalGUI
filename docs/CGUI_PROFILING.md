@@ -146,7 +146,11 @@ opens that frame in the profiler.
 - **The gear**: ring size, frames kept from the start, *Record from launch*, *stop after a hitch*, frame
   images. Saved to `apps/crystalgui.frameprofiler/settings.json`.
 - **Tabs**: Hints, Zones, Call tree (callers beside it), Counters, Chains (the `flow` spans), Compare,
-  Screen (the frame's picture, with `images` on).
+  Screen (the frame's picture, with `images` on), Buffers.
+- **Buffers** is live, not the selected frame's: every buffer a compute pass binds, a row per buffer and pass. Pick one
+  and a page of its elements is read after that pass next runs, each field decoded by the kernel's declaration
+  (CrystalGraphics' `CgBufferInspector`); **Follow** reads it again at the refresh rate. It watches from when it first
+  shows until the window closes, and while it watches every compute pass notes what it binds.
 - **Export** writes the selected range, or every frame held, to `<cache>/trace-exports/` and copies the
   path — `ui.perfetto.dev` opens it, and Compare's **Load trace as B** reads it back, across restarts.
 - The footer states what the viewer itself costs and hides its own work (`trace.viewer`) unless asked.
