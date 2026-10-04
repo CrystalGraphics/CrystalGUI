@@ -599,7 +599,8 @@ public final class ProfilerModel {
         Map<String, long[]> series = new LinkedHashMap<>();
         if (frames.isEmpty()) return series;
 
-        // THE FRAME'S GPU TOTAL, beside the per-zone figures it is the sum of — absent until it lands.
+        // THE FRAME'S GPU TOTAL, beside the per-zone figures it is the sum of — absent until it lands. A zone's
+        // groups (gpu:<zone>/<label>) split it rather than add to it, and sort beneath it by name.
         long[] gpu = absentSeries(frames.size());
         boolean anyGpu = false;
         for (int i = 0; i < frames.size(); i++) {
