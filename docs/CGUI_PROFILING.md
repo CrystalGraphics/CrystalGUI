@@ -53,7 +53,9 @@ A `UIDocument` frame, and what each part records. Use this as the skeleton of th
 | GPU | `gpu:ui` (the whole paint, composite included) | — | — |
 
 **Who brackets the frame**: `UIDocument.frame` calls `UiTrace.frameBegin()` (committing the previous
-frame) and the paint context's `endFrame` calls `UiTrace.frameEnd()` (the CPU mark). **One document per
+frame) and the paint context's `endFrame` calls `UiTrace.frameEnd()` (the CPU mark). A host frame no document
+framed — a Minecraft world with no CrystalGUI screen open — is framed by CrystalGraphics' `tickFrame`, so it
+records too, its cpu the whole host frame. **One document per
 frame**: a second `UIDocument` framed in the same real frame splits every frame in two, halving the wall
 times with no error — frames on a host with two documents are not comparable. Parked as P1 in
 `plan/crystalgraphics/platform-trace-engine.md`.
@@ -132,6 +134,10 @@ A desktop scene gives the trace a run directory too: `gl-debug-harness/crystalgu
   recording) and `trace.log` (a line per slow frame).
 - A repeatable in-game workload is the autotest: `-Dcrystalgui.autotest=true` loads a world, opens the
   editor, photographs it and quits (`docs/CGUI_BUILD.md`). Profile that rather than a hand-driven session.
+- **Two phases of one run**: `-Dcrystalgraphics.trace.splitAt=<marker>` also writes `report-before.txt`,
+  `report-after.txt` and `report-compare.txt` (per zone): the frames either side of the first such marker after 60
+  frames without one, `-Dcrystalgraphics.trace.splitFrames` (300) each at most. The VFX showcase's beams against
+  its blasts: `splitAt=vfx.blast` with `-Dcrystalgraphics.trace.frames=1500`, so the ring holds a whole cycle.
 - `-Dcrystalgui.frameprofile=true` (1.7.10: `-PcgFrameProfile`) echoes each slow frame's line to the
   console too, and turns the frame channel on; `.floor=<ms>` (8) and `.every=<ms>` (1000) tune it.
 

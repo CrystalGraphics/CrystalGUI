@@ -1,9 +1,11 @@
 package com.crystalgui.core.trace;
 
+import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgraphics.trace.CgTraceReport;
+import com.crystalgraphics.trace.CgTraceSnapshot;
 import com.crystalgui.core.CrystalGuiCore;
 import com.sun.management.ThreadMXBean;
 
@@ -248,8 +250,47 @@ public final class UiTrace {
             String asked = System.getProperty("crystalgraphics.trace.report");
             if (asked == null || asked.isEmpty()) writeReport(CgTraceReport.Tier.BREAKDOWN);
             else writeReportIfAsked();
+            writeSplitIfAsked();
         }
         CgTraceLog.stop();
+    }
+
+    /** Frames without the marker that must come before the one a split is made at: a new burst, not one going on. */
+    private static final int SPLIT_QUIET = 60;
+
+    /**
+     * {@code -Dcrystalgraphics.trace.splitAt=<marker>}: the run either side of the first such marker after
+     * {@value #SPLIT_QUIET} frames without one, as {@code report-before.txt}, {@code report-after.txt} and their
+     * per-zone {@code report-compare.txt}; {@code -Dcrystalgraphics.trace.splitFrames} (300) frames each at most.
+     *
+     * <pre>{@code
+     * -Dcrystalgraphics.trace.splitAt=vfx.blast    // the beams before the first blast, against the blast
+     * }</pre>
+     */
+    private static void writeSplitIfAsked() {
+        String marker = System.getProperty("crystalgraphics.trace.splitAt");
+        if (marker == null || marker.isEmpty()) return;
+        int most = Integer.getInteger("crystalgraphics.trace.splitFrames", 300);
+        CgTraceSnapshot snap = CgTrace.snapshot();
+        List<CgFrameRecord> frames = snap.frames();
+        if (frames.isEmpty()) return;
+        long previous = frames.get(0).index() - 1, last = frames.get(frames.size() - 1).index(), split = -1L;
+        for (long at : snap.markerFrames(marker)) {
+            if (at - previous > SPLIT_QUIET) {
+                split = at;
+                break;
+            }
+            previous = at;
+        }
+        if (split < 0L) {
+            CgTraceLog.line("trace.splitAt: no '" + marker + "' after " + SPLIT_QUIET + " frames without one; nothing split");
+            return;
+        }
+        long from = Math.max(previous + 1, split - most), to = Math.min(last + 1, split + most);
+        double budget = FrameStats.get().budgetMs();
+        CgTraceLog.write("report-before.txt", CgTraceReport.of(snap.between(from, split)).budget(budget).breakdown());
+        CgTraceLog.write("report-after.txt", CgTraceReport.of(snap.between(split, to)).budget(budget).breakdown());
+        CgTraceLog.write("report-compare.txt", CgTraceReport.of(snap).budget(budget).compare(from, split - 1, split, to - 1));
     }
 
     /**
