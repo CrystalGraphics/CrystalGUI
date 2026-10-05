@@ -201,7 +201,7 @@ touch, never front to back. The nine that bite most often:
 | `font-size` does **not** effectively inherit | `default.css` opens with `* { font-size: 10 }`, which is a candidate on every element |
 | A listener on a shadow host can **never see its own parts** | `getTarget()` is retargeted before it runs. Attach inside the shadow tree |
 | A subscription held by hand dies on the first detach | `disconnected()` drops what a node holds and nothing remakes it. Use `whileConnected` |
-| What GL permits is **not** what the host tolerates | Blaze3D models twelve texture units; binding above it corrupts unit 0 for whoever samples it next |
+| A host's state cache sees only what goes through it | `GlStateManager` caches the active texture unit; a unit above its table is set raw, and the switch back must be raw too, or the next bind meant for unit 0 lands on the high unit |
 
 # Global coding rules
 
