@@ -222,6 +222,7 @@ only witness for what a dev run cannot see: relocation, remapping, downgrading a
 ./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgui.autotest=true "-Dcrystalgui.autotest.world=*"
 # ...plus a probe: -Dcrystalgui.autotest.script=Probe.java, -Dcrystalgui.autotest.complete=true
 # ...and where the captures go: -Dcrystalgui.autotest.out=build/devSmoke/1171forge.png
+# ...or only the world, for a profile (no desktop, no capture, no quit): -Dcrystalgui.autotest.desktop=false
 # 26.2+: which API Minecraft renders through, and its Vulkan validation layer over ours too:
 #   -PcgGraphics=vulkan -PcgVulkanValidation    (NeoForge: earlyWindowControl = false in the run's config/fml.toml)
 ```

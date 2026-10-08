@@ -80,6 +80,12 @@ public final class AutoTest {
     private static final String WORLD = emptyToNull(System.getProperty("crystalgui.autotest.world"));
 
     /**
+     * {@code -Dcrystalgui.autotest.desktop=false}: load the world and stay in it, never opening the desktop, taking a
+     * capture or quitting -- a world to profile with nothing of CrystalGUI's in the frame.
+     */
+    private static final boolean DESKTOP = !"false".equals(System.getProperty("crystalgui.autotest.desktop"));
+
+    /**
      * Extra work another jar wants run on a painted frame, keyed by frame number.
      *
      * <p><b>The seam the language mod's own probes arrive through</b>, and the reason this class names
@@ -217,6 +223,7 @@ public final class AutoTest {
                 if (!worldRequested) worldRequested = host.enterWorld();
                 return;
             }
+            if (!DESKTOP) return;
             // Let it settle, so the pipeline has really run some frames.
             if (++inWorldWaited < host.openAfter()) return;
         } else {
