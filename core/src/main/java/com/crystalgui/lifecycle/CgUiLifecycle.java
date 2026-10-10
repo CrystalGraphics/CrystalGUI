@@ -13,6 +13,7 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
+import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
@@ -130,13 +131,11 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     }
 
     /**
-     * Nothing to eagerly build.
+     * Installs the GL gate for disposals and warms the paint context: now inside a host section, else at
+     * the next {@link #onFrame}, which is inside one.
      *
-     * <p>Deliberately empty rather than pre-warming: every CrystalGUI GL resource is created lazily
-     * on the first paint, and {@link CgUiPaintContext}'s laziness is load-bearing — constructing it
-     * here would trigger material compilation and font loading in every process that merely touches
-     * this class, including a dedicated server that will never draw a frame. The hook is implemented
-     * so the intent is on the record: this is "nothing to do", not "nobody wired it up".</p>
+     * <p>Only a process that paints gets here: registration is the paint context's first use, so a
+     * dedicated server never warms anything.</p>
      *
      * <p><b>This does fire.</b> Because registration happens from a class initializer on the first
      * paint — after {@code initContext} has already run — this arrives via
@@ -160,8 +159,23 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
 
-        // Warmup the paint context, around 1000ms on first init done before world frame time. Every domain:
-        // a material bind applies its pass's whole render state, and this runs inside the host's world pass.
+        // Warmup the paint context, around 1000ms on first init done before world frame time. Its GPU work needs a
+        // host section: a late registrant arrives from wherever it registered (26.x's GUI extraction is outside one),
+        // so the warm then waits for onFrame, which is inside one.
+        if (CgGL.inHostSection()) warm(width, height);
+        else {
+            warmWaiting = true;
+            warmWidth = width;
+            warmHeight = height;
+        }
+    }
+
+    /** A warm onInit deferred to the next onFrame, and its size. */
+    private boolean warmWaiting;
+    private int warmWidth, warmHeight;
+
+    /** Every domain saved: a material bind applies its pass's whole render state, inside the host's world pass. */
+    private static void warm(int width, int height) {
         try (CgGlScope ignored = CgGlState.saveAll()) {
             CgUiPaintContext.warm(width, height);
         }
@@ -189,6 +203,10 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     public void onFrame(long frame) {
         Runnable due;
         while ((due = pending.poll()) != null) due.run();
+        if (warmWaiting) {
+            warmWaiting = false;
+            warm(warmWidth, warmHeight);
+        }
 
         if (atFrameEnd.isEmpty()) return;
         Runnable[] paints = atFrameEnd.values().toArray(new Runnable[0]);
