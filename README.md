@@ -4,8 +4,9 @@ A platform-agnostic UI engine shaped like a lightweight web browser: a DOM-like 
 roots, flexbox and grid layout through Taffy, a real CSS cascade with selectors and transitions, and a
 widget set that runs up to a code editor and a node graph. It ships for Minecraft:
 
-- **One jar** for Forge 1.7.10–26.2, NeoForge 1.20.2–26.2 and Fabric 1.14.4–26.2, beside
-  [CrystalGraphics](https://github.com/CrystalGraphics/CrystalGraphics), which renders it.
+- **One jar** for Forge 1.7.10–26.3, NeoForge 1.20.2–26.3 and Fabric 1.14.4–26.3, plus an optional
+  language jar, beside [CrystalGraphics](https://github.com/CrystalGraphics/CrystalGraphics), the Vulkan-first
+  engine that renders it.
 - **Loader-blind.** The engine names no Minecraft type; each loader only wires it in.
 - **Server-safe.** A dedicated server builds and sends UI trees with no GL and no fonts; the client
   lays them out and draws them.
