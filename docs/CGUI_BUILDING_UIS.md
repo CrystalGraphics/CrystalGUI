@@ -742,7 +742,7 @@ For anything that is not a widget interaction, both sides have a small RPC surfa
     io.onNotify("flash", payload -> status.addClass("flashing"));
 
     history.attachListener(() ->
-            io.call("history", null, reply -> log.setText(reply.getInt("burns", 0) + " burns")));
+            io.call("history", null, reply -> log.setText(reply.getInt("burns", 0) + " burns"), null));
 }
 ```
 
