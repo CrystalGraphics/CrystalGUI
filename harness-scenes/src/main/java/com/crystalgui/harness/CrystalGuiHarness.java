@@ -1,6 +1,7 @@
 package com.crystalgui.harness;
 
 import com.crystalgraphics.harness.HarnessExtension;
+import com.crystalgraphics.harness.HarnessDesktop;
 import com.crystalgraphics.harness.SceneRegistry;
 import com.crystalgraphics.harness.config.SceneDescriptor;
 import com.crystalgui.harness.scene.CgGpuTraceProbeScene;
@@ -16,6 +17,7 @@ import com.crystalgui.harness.scene.CgUiTextStressScene;
 import com.crystalgui.harness.scene.CgUiTimelineScene;
 import com.crystalgui.harness.scene.CgUiVisualLayersScene;
 import com.crystalgui.harness.scene.RpgConsoleScene;
+import com.crystalgui.harness.scene.VfxLabScene;
 import com.crystalgui.style.theme.UiThemeManager;
 
 import java.util.List;
@@ -32,6 +34,11 @@ public final class CrystalGuiHarness implements HarnessExtension {
     private static final Logger LOGGER = Logger.getLogger(CrystalGuiHarness.class.getName());
 
     @Override
+    public HarnessDesktop desktop() {
+        return new CrystalGuiDesktop();
+    }
+
+    @Override
     public void registerScenes(SceneRegistry reg) {
         reg.register(
             SceneDescriptor.builder("cgui-styling")
@@ -43,6 +50,17 @@ public final class CrystalGuiHarness implements HarnessExtension {
                 .clearColor(0.1f, 0.1f, 0.1f, 1.0f)
                 .build(),
             () -> new CgUiStylingScene()
+        );
+
+        reg.register(
+            SceneDescriptor.builder("vfx-lab")
+                .description("VFX Lab over an empty world: search effects, spawn in front of the camera, drag parameters live (F6 in any 3D scene)")
+                .lifecycleMode(SceneDescriptor.LifecycleMode.INTERACTIVE)
+                .category(SceneDescriptor.Category.SCENE)
+                .needsFbo(false)
+                .needsDepthBuffer(true)
+                .build(),
+            () -> new VfxLabScene()
         );
 
         reg.register(
