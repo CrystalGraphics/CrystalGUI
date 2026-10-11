@@ -85,8 +85,12 @@ public final class DrawableKinds {
         register(Kind.function("asset", "Asset", "asset", TextureValue::parseAsset));
         register(Kind.function("shape", "Shape", "shape", TextureValue::parseShape));
         register(Kind.function("icon", "Icon", "icon", TextureValue::parseIcon));
-        register(Kind.function("gradient", "Gradient", "linear-gradient",
-                TextureValue::parseLinearGradient));
+        // Linear and radial share one section: both are "a gradient" to whoever is copying one.
+        Kind linear = Kind.function("gradient", "Gradient", "linear-gradient", TextureValue::parseLinearGradient);
+        Kind radial = Kind.function("gradient", "Gradient", "radial-gradient", TextureValue::parseRadialGradient);
+        register(new Kind("gradient", "Gradient",
+                css -> linear.matches().test(css) || radial.matches().test(css),
+                css -> (linear.matches().test(css.toLowerCase(Locale.ROOT)) ? linear : radial).parse().apply(css)));
         register(Kind.function("grid", "Grid", "grid", TextureValue::parseGrid));
     }
 

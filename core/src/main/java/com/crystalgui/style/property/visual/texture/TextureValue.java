@@ -48,6 +48,8 @@ import java.util.WeakHashMap;
  *       {@code assets/{namespace}/ui/icons/{name}.svg}. Optional trailing args are type-sniffed the same
  *       way {@code image(...)}'s are: a colour literal is what {@code currentColor} resolves to, and the
  *       keyword {@code monochrome} forces the file's own palette to that colour as well.</li>
+ *   <li>{@code linear-gradient(...)} and {@code radial-gradient(...)} — CSS's ({@link CgUiGradient}); see
+ *       {@link #parseLinearGradient} and {@link #parseRadialGradient}.</li>
  * </ul>
  *
  * <p><b>{@code icon()} and {@code image()} are not two spellings of one thing.</b> An icon is resolution-
@@ -258,8 +260,122 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
                 first = 1;
             }
         }
+        List<CgUiGradient.Stop> stops = parseStops(parts, first);
+        if (stops == null) return null;
+        return corner != null ? new CgUiGradient(corner, stops) : new CgUiGradient(angle, stops);
+    }
+
+    /**
+     * {@code radial-gradient(...)} — CSS's, circles and ellipses:
+     *
+     * <pre>
+     *   radial-gradient(#FFF, #000)                            ellipse, farthest-corner, at the centre
+     *   radial-gradient(circle at 25% 15%, #B8FFE8, transparent 80%)
+     *   radial-gradient(closest-side, red, blue)
+     *   radial-gradient(circle 40px at top left, red, transparent)
+     *   radial-gradient(ellipse 60% 30% at 50% 100%, red, transparent)
+     * </pre>
+     *
+     * <p>A first part that is not a stop is the configuration, {@code [circle | ellipse] [<extent> |
+     * <length>{1,2}] [at <position>]}, in CSS's rules: one length alone is a circle and two an ellipse,
+     * a circle's radius may not be a percentage, and the position is one or two of {@code left},
+     * {@code center}, {@code right}, {@code top}, {@code bottom}, {@code <n>%} and {@code <n>px}.
+     * Anything else is a parse failure (null), as are fewer than two stops.</p>
+     */
+    static @Nullable CgUiDrawable parseRadialGradient(String args) {
+        List<String> parts = CssParsingUtil.splitTopLevelCommas(args);
+        if (parts.isEmpty()) return null;
+        CgUiGradient.Radial radial = new CgUiGradient.Radial(false, CgUiGradient.Extent.FARTHEST_CORNER,
+                null, null, CgUiGradient.Length.CENTRE, CgUiGradient.Length.CENTRE);
+        int first = 0;
+        if (parseStops(parts.subList(0, 1), 0, 1) == null) {
+            radial = parseRadialShape(parts.get(0).trim().toLowerCase(Locale.ROOT));
+            if (radial == null) return null;
+            first = 1;
+        }
+        List<CgUiGradient.Stop> stops = parseStops(parts, first);
+        return stops == null ? null : new CgUiGradient(radial, stops);
+    }
+
+    private static @Nullable CgUiGradient.Radial parseRadialShape(String head) {
+        String[] tokens = head.split("\\s+");
+        int at = -1;
+        for (int i = 0; i < tokens.length; i++) if (tokens[i].equals("at")) { at = i; break; }
+        int sizeEnd = at < 0 ? tokens.length : at;
+
+        Boolean circle = null;
+        CgUiGradient.Extent extent = null;
+        List<CgUiGradient.Length> sizes = new ArrayList<>(2);
+        for (int i = 0; i < sizeEnd; i++) {
+            String token = tokens[i];
+            switch (token) {
+                case "circle", "ellipse" -> {
+                    if (circle != null) return null;
+                    circle = token.equals("circle");
+                }
+                case "closest-side", "closest-corner", "farthest-side", "farthest-corner" -> {
+                    if (extent != null || !sizes.isEmpty()) return null;
+                    extent = CgUiGradient.Extent.valueOf(token.replace('-', '_').toUpperCase(Locale.ROOT));
+                }
+                default -> {
+                    CgUiGradient.Length length = parseLength(token);
+                    if (length == null || extent != null || sizes.size() == 2) return null;
+                    sizes.add(length);
+                }
+            }
+        }
+        if (circle == null) circle = sizes.size() == 1;
+        if (circle && (sizes.size() == 2 || (sizes.size() == 1 && sizes.get(0).percent()))) return null;
+        if (!circle && sizes.size() == 1) return null;
+
+        CgUiGradient.Length centreX = CgUiGradient.Length.CENTRE, centreY = CgUiGradient.Length.CENTRE;
+        if (at >= 0) {
+            int count = tokens.length - at - 1;
+            if (count < 1 || count > 2) return null;
+            String a = tokens[at + 1], b = count == 2 ? tokens[at + 2] : "center";
+            // `top left` and `top` alone name the vertical first; CSS reads either order of keywords.
+            if (a.equals("top") || a.equals("bottom") || b.equals("left") || b.equals("right")) {
+                String swap = a; a = b; b = swap;
+            }
+            centreX = parsePosition(a, "left", "right");
+            centreY = parsePosition(b, "top", "bottom");
+            if (centreX == null || centreY == null) return null;
+        }
+        return new CgUiGradient.Radial(circle,
+                extent != null ? extent : CgUiGradient.Extent.FARTHEST_CORNER,
+                sizes.isEmpty() ? null : sizes.get(0), sizes.size() == 2 ? sizes.get(1) : null,
+                centreX, centreY);
+    }
+
+    /** One position coordinate: its axis's two keywords, {@code center}, or a length. */
+    private static @Nullable CgUiGradient.Length parsePosition(String token, String start, String end) {
+        if (token.equals(start)) return new CgUiGradient.Length(0f, true);
+        if (token.equals("center")) return CgUiGradient.Length.CENTRE;
+        if (token.equals(end)) return new CgUiGradient.Length(1f, true);
+        return parseLength(token);
+    }
+
+    /** {@code <n>%} as a fraction, or {@code <n>px} / a bare number as pixels; negative is refused. */
+    private static @Nullable CgUiGradient.Length parseLength(String token) {
+        boolean percent = token.endsWith("%");
+        Float value = parseFloatOrNull(percent ? token.substring(0, token.length() - 1) : token);
+        if (value == null || value < 0f) return null;
+        return new CgUiGradient.Length(percent ? value / 100f : value, percent);
+    }
+
+    /** The stops from {@code parts[first]} on: at least two, or null. */
+    private static @Nullable List<CgUiGradient.Stop> parseStops(List<String> parts, int first) {
+        List<CgUiGradient.Stop> stops = parseStops(parts, first, parts.size());
+        return stops == null || stops.size() < 2 ? null : stops;
+    }
+
+    /**
+     * Each part a colour with an optional {@code <n>%}. The position is read off the END of the stop
+     * rather than by splitting on whitespace, because an {@code rgba(...)} colour may carry spaces.
+     */
+    private static @Nullable List<CgUiGradient.Stop> parseStops(List<String> parts, int first, int end) {
         List<CgUiGradient.Stop> stops = new ArrayList<>();
-        for (int i = first; i < parts.size(); i++) {
+        for (int i = first; i < end; i++) {
             String stop = parts.get(i).trim();
             float position = Float.NaN;
             int lastSpace = stop.lastIndexOf(' ');
@@ -273,8 +389,7 @@ public class TextureValue extends StyleValue<CgUiDrawable> {
             if (color == null) return null;
             stops.add(new CgUiGradient.Stop(position, color));
         }
-        if (stops.size() < 2) return null;
-        return corner != null ? new CgUiGradient(corner, stops) : new CgUiGradient(angle, stops);
+        return stops;
     }
 
     private static @Nullable Float parseFloatOrNull(String raw) {

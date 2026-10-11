@@ -39,11 +39,16 @@
 // MASKED by the same rounded-box SDF gui_box's shapes use, under WITH_MASK, so a gradient on an
 // element with a border-radius clips to it instead of squaring the corners; off for square boxes,
 // which is the taskbar's glow and costs the fragment nothing.
+//
+// RADIAL, under the RADIAL keyword: t is the distance from _Centre over the ending shape's radii, so
+// 0 is the centre and 1 the ending shape (CSS Images 3 section 3.5). CgUiGradient resolves the shape
+// and extent to px per box; everything after t is shared.
 
 #type none
 #pragma cg_use quad
 #pragma cg_use clip
 #pragma cg_feature WITH_MASK
+#pragma cg_feature RADIAL
 
 #include "crystalgraphics:shaders/lib/noise.glsl"
 #include "crystalgraphics:shaders/lib/sdf.glsl"
@@ -67,6 +72,9 @@ Properties {
     _Count        ("Stops in this draw (2-8)",     float) = 2.0
     // The gradient line: t = 0.5 + dot(uv - 0.5, _Axis). (1, 0) is `to right`, (0, 1) is `to bottom`.
     _Axis         ("Gradient line",                vec2)  = (1.0, 0.0)
+    // RADIAL only: the centre and the ending shape's radii, in px from the box's top-left.
+    _Centre       ("Radial centre (px)",           vec2)  = (0.0, 0.0)
+    _Radii        ("Radial radii (px)",            vec2)  = (1.0, 1.0)
     // The half-open range of t this draw owns, [x, y). A single draw owns everything.
     _Window       ("Owned range of t",             vec2)  = (-1.0, 2.0)
     // WITH_MASK only: the element's resolved radii, CSS order, one vec4 per axis (elliptical corners).
@@ -108,7 +116,11 @@ Pass {
         // The ramp reads a CLAMPED uv, so the half-pixel pad holds the end colours rather than falling
         // outside _Window.
         vec2 uv = CG_QUAD_EDGE_UV(i.param);
+#ifdef RADIAL
+        float t = length((uv * _BoxSize - _Centre) / _Radii);
+#else
         float t = 0.5 + dot(uv - 0.5, _Axis);
+#endif
 
         // The unrolled ramp. Before the first stop every fraction is 0 and the colour is stop 0;
         // after the last every fraction is 1 and it is the last stop -- CSS pads with the end colours.

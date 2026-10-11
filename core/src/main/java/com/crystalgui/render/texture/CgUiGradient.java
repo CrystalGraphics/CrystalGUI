@@ -8,7 +8,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A linear gradient — CSS's {@code linear-gradient(direction, stop, stop, ...)} as a drawable.
+ * A CSS gradient as a drawable: {@code linear-gradient(direction, stop, ...)} or
+ * {@code radial-gradient(shape at position, stop, ...)}.
+ *
+ * <pre>{@code
+ * List<Stop> stops = List.of(new Stop(Float.NaN, 0xFF7CF5D0), new Stop(Float.NaN, 0xFF5B2A86));
+ * new CgUiGradient(90f, stops);                                         // to right
+ * new CgUiGradient(Corner.BOTTOM_RIGHT, stops);                         // to bottom right
+ * new CgUiGradient(new Radial(true, Extent.FARTHEST_CORNER, null, null,
+ *         new Length(0.25f, true), new Length(0.15f, true)), stops);    // circle at 25% 15%
+ * }</pre>
+ *
+ * <p>A radial's {@code t} is the distance from the centre over the ending shape's radii, which
+ * {@link #radiiFor} resolves per box (CSS Images 3 §3.5.2); everything below holds for both.</p>
  *
  * <h3>One draw, evaluated per fragment</h3>
  *
@@ -63,9 +75,36 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
      */
     public enum Corner { TOP_LEFT, TOP_RIGHT, BOTTOM_RIGHT, BOTTOM_LEFT }
 
+    /** CSS's {@code <radial-extent>}: which side or corner the ending shape reaches. */
+    public enum Extent { CLOSEST_SIDE, CLOSEST_CORNER, FARTHEST_SIDE, FARTHEST_CORNER }
+
+    /** A length that is pixels, or a fraction of the box's width or height. */
+    public record Length(float value, boolean percent) {
+        public static final Length CENTRE = new Length(0.5f, true);
+
+        public float resolve(float reference) {
+            return percent ? value * reference : value;
+        }
+    }
+
+    /**
+     * A radial gradient's ending shape and centre.
+     *
+     * @param circle  a circle rather than an ellipse
+     * @param extent  the keyword size, used when {@code sizeX} is null
+     * @param sizeX   an explicit radius, or null; a circle's only radius
+     * @param sizeY   an ellipse's explicit vertical radius, or null
+     * @param centreX the centre, from the box's left
+     * @param centreY the centre, from the box's top
+     */
+    public record Radial(boolean circle, Extent extent, Length sizeX, Length sizeY,
+                         Length centreX, Length centreY) {}
+
     /** The angle, when the direction is not a corner. */
     private final float angleDeg;
     private final Corner corner;
+    /** Null for a linear gradient. */
+    private final Radial radial;
     private final List<Stop> stops;
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
@@ -84,6 +123,8 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
     private int drawTint, drawFirst, drawEnd;
     private float drawWindowFrom, drawWindowTo;
     private final float[] axis = new float[2];
+    private final float[] centre = new float[2];
+    private final float[] radii = new float[2];
     private final float[] positions = new float[STOPS_PER_DRAW];
     private final Runnable quadBody = this::quadBody;
     // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
@@ -103,6 +144,7 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
     public CgUiGradient(float angleDeg, List<Stop> stops) {
         this.angleDeg = ((angleDeg % 360f) + 360f) % 360f;
         this.corner = null;
+        this.radial = null;
         this.stops = resolvePositions(stops);
     }
 
@@ -110,6 +152,15 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
     public CgUiGradient(Corner corner, List<Stop> stops) {
         this.angleDeg = Float.NaN;
         this.corner = corner;
+        this.radial = null;
+        this.stops = resolvePositions(stops);
+    }
+
+    /** {@code radial-gradient(...)}: the stops run from the centre (0) out to the ending shape (1). */
+    public CgUiGradient(Radial radial, List<Stop> stops) {
+        this.angleDeg = Float.NaN;
+        this.corner = null;
+        this.radial = radial;
         this.stops = resolvePositions(stops);
     }
 
@@ -150,6 +201,69 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
 
     public Corner corner() {
         return corner;
+    }
+
+    /** The ending shape and centre, or null for a linear gradient. */
+    public Radial radial() {
+        return radial;
+    }
+
+    /** The radial centre over a {@code width}×{@code height} box, in pixels from its top-left. */
+    public float[] centreFor(float width, float height) {
+        float[] out = new float[2];
+        centreInto(width, height, out);
+        return out;
+    }
+
+    private void centreInto(float width, float height, float[] out) {
+        out[0] = radial.centreX().resolve(width);
+        out[1] = radial.centreY().resolve(height);
+    }
+
+    /**
+     * The ending shape's radii over a box, in pixels — CSS Images 3 §3.5.2's sizing.
+     *
+     * <p>A side extent measures from the centre to the box's sides: a circle takes the nearest or farthest
+     * of all four, an ellipse each axis's own. A corner extent passes through that corner: a circle is the
+     * distance to it, an ellipse keeps the aspect ratio its side extent would have had, which puts the
+     * radii at {@code √2} times the side distances.</p>
+     */
+    public float[] radiiFor(float width, float height) {
+        float[] out = new float[2];
+        radiiInto(width, height, out);
+        return out;
+    }
+
+    private void radiiInto(float width, float height, float[] out) {
+        float cx = radial.centreX().resolve(width), cy = radial.centreY().resolve(height);
+        if (radial.sizeX() != null) {
+            out[0] = radial.sizeX().resolve(width);
+            out[1] = radial.circle() || radial.sizeY() == null ? out[0] : radial.sizeY().resolve(height);
+            return;
+        }
+        float left = Math.abs(cx), right = Math.abs(width - cx);
+        float top = Math.abs(cy), bottom = Math.abs(height - cy);
+        boolean closest = radial.extent() == Extent.CLOSEST_SIDE || radial.extent() == Extent.CLOSEST_CORNER;
+        float sideX = closest ? Math.min(left, right) : Math.max(left, right);
+        float sideY = closest ? Math.min(top, bottom) : Math.max(top, bottom);
+        boolean corner = radial.extent() == Extent.CLOSEST_CORNER || radial.extent() == Extent.FARTHEST_CORNER;
+        if (radial.circle()) {
+            float r = corner ? (float) Math.hypot(sideX, sideY)
+                             : closest ? Math.min(sideX, sideY) : Math.max(sideX, sideY);
+            out[0] = r;
+            out[1] = r;
+        } else if (!corner) {
+            out[0] = sideX;
+            out[1] = sideY;
+        } else if (sideX <= 0f || sideY <= 0f) {
+            out[0] = sideX;
+            out[1] = sideY;
+        } else {
+            // Through (sideX, sideY) with rx / ry = sideX / sideY.
+            float rx = (float) Math.sqrt(2.0) * sideX;
+            out[0] = rx;
+            out[1] = rx * sideY / sideX;
+        }
     }
 
     /**
@@ -223,10 +337,16 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
         if (width <= 0f || height <= 0f) return;
         int tint = ctx.getColor();
         if ((tint >>> 24) == 0) return;
-        axisInto(width, height, axis);
+        if (radial != null) {
+            centreInto(width, height, centre);
+            radiiInto(width, height, radii);
+        } else {
+            axisInto(width, height, axis);
+        }
         boolean rounded = rxTL > 0f || ryTL > 0f || rxTR > 0f || ryTR > 0f
                 || rxBR > 0f || ryBR > 0f || rxBL > 0f || ryBL > 0f;
         MATERIAL.toggleKeyword("WITH_MASK", rounded);
+        MATERIAL.toggleKeyword("RADIAL", radial != null);
 
         // Windows of eight, each sharing its first stop with the previous window's last so the ramp is
         // continuous across the seam, and each owning [first stop, last stop) of t -- the first from
@@ -282,6 +402,9 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
         b.vec4("_Positions1", positions[4], positions[5], positions[6], positions[7]);
         b.set1f("_Count", drawEnd - drawFirst + 1);
         b.vec2("_Axis", axis[0], axis[1]);
+        b.vec2("_Centre", centre[0], centre[1]);
+        // A zero radius is a point: every fragment is past it and takes the last stop, as CSS draws it.
+        b.vec2("_Radii", Math.max(radii[0], 1e-4f), Math.max(radii[1], 1e-4f));
         b.vec2("_Window", drawWindowFrom, drawWindowTo);
         b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
         b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
