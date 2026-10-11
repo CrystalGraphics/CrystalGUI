@@ -202,6 +202,7 @@ public class UIElement extends UINode implements EventTarget, Styleable {
             UINode old = parent;
             TreeObserver<UIElement> before = observer;
             UIDocument oldDocument = document;
+            Styleable hostBefore = shadowHost();
             old.children.remove(this);
             old.childRevision++;
             int at = clampIndex(index, newParent.children.size());
@@ -214,6 +215,9 @@ public class UIElement extends UINode implements EventTarget, Styleable {
                 attachedTo(newParent);
             } else {
                 relinked(newParent);
+                // Which sheets reach a node depends on its tree scope: a popover leaving its widget's shadow tree
+                // for the top layer kept the match it made inside, where no ordinary rule could reach it.
+                if (shadowHost() != hostBefore) invalidateStyleMatch();
             }
             slotsChanged(old);
             slotsChanged(newParent);
