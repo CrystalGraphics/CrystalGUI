@@ -1,0 +1,6 @@
+<!-- Drawn for CrystalGUI to Feather's geometry and stroke conventions, not copied from any icon set.
+     Filled, as stop.svg is: a transport control reads as a solid mark. -->
+<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"
+     stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
+  <polygon points="6 4 19 12 6 20 6 4"/>
+</svg>

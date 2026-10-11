@@ -97,6 +97,7 @@ one file tree is the cost.
 
 `folder.svg`, `file-text.svg`, `image.svg`, `code.svg`, `package.svg`, `x.svg`, `more-vertical.svg`,
 `activity.svg` (the frame profiler's mark),
+`rotate-ccw.svg`, `repeat.svg`, `copy.svg`, `crosshair.svg` (the VFX Lab's toolbar),
 `general/action/link-2.svg` (the Free Transform bar's W/H chain, filed with the actions it sits among —
 Feather's geometry, with its relative commands written out absolute and its `<line>` as a path, as
 `x.svg`'s are),
@@ -108,6 +109,9 @@ they are kept around as chrome marks even though the file tree now uses the Inte
 The severity three are drawn to Feather's own geometry and stroke conventions rather than copied byte for
 byte, which changes nothing about the obligation: the notice travels with the distribution either way, and
 guessing at where the line falls is a worse bet than naming the source.
+
+`play.svg` and `pause.svg` (the VFX Lab's transport) are ours too, filled as `stop.svg` is, on Feather's
+geometry.
 
 **The three `window-*.svg` marks are ours**, on the same footing as `stop.svg` and `toolwindows/run.svg`:
 drawn to Feather's geometry and stroke conventions because the set has no window-control marks to take.
