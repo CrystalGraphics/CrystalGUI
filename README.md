@@ -2,7 +2,7 @@
 
 <img src="docs/images/crystalgui-banner.png" alt="Crystal GUI: a web-inspired UI engine for Java" width="100%">
 
-<sub>The music player in the banner, with its frosted glass backdrop and surrounding spheres, is a real Crystal GUI interface, built in its UI Builder: open <a href="docs/banner/banner.cgui"><code>banner.cgui</code></a> to see how it's made.</sub>
+<sub>The music player in the banner, with its frosted glass backdrop and surrounding circles, is a real Crystal GUI interface, built in its UI Builder: open <a href="docs/banner/banner.cgui"><code>banner.cgui</code></a> to see how it's made.</sub>
 
 DOM and shadow roots · A real CSS cascade · Flexbox and grid · Server-driven UI · A code editor and workbench
 
