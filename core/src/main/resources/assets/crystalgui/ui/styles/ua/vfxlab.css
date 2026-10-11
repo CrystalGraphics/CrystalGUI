@@ -1,0 +1,367 @@
+/* The VFX Lab (app.vfxlab): a toolbar, the effect tree | viewport | inspector split, and a status bar.
+ * Every rule states its own font-size: ua/core.css sets `* { font-size: 10 }`. */
+
+vfxlab {
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    font-size: 11;
+}
+
+/* ── toolbar: the transport as icons, then the values it plays with ──────── */
+
+vfxlab .lab-toolbar {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    width: 100%;
+    min-width: 0px;
+    height: 34px;
+    flex-shrink: 0;
+    padding-left: 6px;
+    padding-right: 6px;
+    font-size: 11;
+}
+
+/* A textless button: its icon fills the content box and takes `color`. */
+vfxlab .lab-icon {
+    width: 28px;
+    height: 26px;
+    min-width: 0px;
+    min-height: 0px;
+    padding: 5px;
+    flex-shrink: 0;
+    border-radius: var(--radius-control, 4px);
+    background: none;
+    color: var(--fg-secondary, #B4B8BF);
+    overlay-origin: content-box;
+    overlay-size: contain;
+}
+
+vfxlab .lab-icon:hover {
+    background: none;
+    background-color: var(--hover-bg, #FFFFFF14);
+    color: var(--fg, #FFFFFF);
+}
+
+vfxlab .lab-icon:active {
+    background: none;
+    background-color: var(--pressed-bg, #FFFFFF22);
+}
+
+/* Pause and Loop while on: a soft accent face, outlined, as an IDE's toggled tool. */
+vfxlab .lab-icon.lab-on,
+vfxlab .lab-icon.lab-on:hover {
+    background: none;
+    background-color: var(--accent-soft, #2E436E);
+    outline: 1px var(--accent, #3574F0);
+    color: var(--fg, #FFFFFF);
+}
+
+vfxlab .lab-play,
+vfxlab .lab-play:hover {
+    overlay: icon("crystalgui:play");
+    color: var(--run-live-fg, #5FAD65);
+}
+
+vfxlab .lab-stop,
+vfxlab .lab-stop:hover {
+    overlay: icon("crystalgui:stop");
+    color: var(--error, #DB5C5C);
+}
+
+vfxlab .lab-pause { overlay: icon("crystalgui:pause"); }
+vfxlab .lab-restart { overlay: icon("crystalgui:rotate-ccw"); }
+vfxlab .lab-loop { overlay: icon("crystalgui:repeat"); }
+vfxlab .lab-copy { overlay: icon("crystalgui:copy"); }
+vfxlab .lab-clear { overlay: icon("crystalgui:trash"); }
+vfxlab .lab-camera { overlay: icon("crystalgui:crosshair"); }
+
+vfxlab .lab-separator {
+    width: 1px;
+    height: 18px;
+    flex-shrink: 0;
+    margin-left: 5px;
+    margin-right: 5px;
+    background-color: var(--statusbar-sep, #3C3F41);
+}
+
+/* Speed, Hold and Target: a dim caption, then its field. */
+vfxlab .lab-speed {
+    flex-direction: row;
+    align-items: center;
+    height: 26px;
+    flex-shrink: 0;
+    margin-right: 10px;
+    font-size: 11;
+}
+
+vfxlab .lab-speed .__label__ {
+    margin-right: 6px;
+    color: var(--fg-secondary, #9DA0A8);
+    white-space: nowrap;
+    font-size: 11;
+}
+
+vfxlab .lab-speed numbercontrol {
+    width: 58px;
+}
+
+vfxlab .lab-slack {
+    width: 0px;
+    flex-grow: 1;
+}
+
+/* Under the toolbar and over the status bar. */
+vfxlab .lab-rule {
+    width: 100%;
+    height: 1px;
+    flex-shrink: 0;
+    background-color: var(--statusbar-sep, #3C3F41);
+}
+
+/* ── panes ─────────────────────────────────────────────────────────────── */
+
+/* The fill idiom: flex-shrink is 0 here. */
+vfxlab .lab-panes {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+vfxlab .lab-effects,
+vfxlab .lab-inspector {
+    width: 100%;
+    height: 100%;
+    background-color: var(--panel-bg, #2B2D30);
+}
+
+vfxlab .lab-effects {
+    gap: 4px;
+    padding: 4px;
+}
+
+/* An inset well, darker than the panel: --field-bg alone is the panel's own grey. */
+vfxlab .lab-effects searchfield {
+    height: 24px;
+    flex-shrink: 0;
+    gap: 4px;
+    padding-left: 6px;
+    border-radius: var(--radius-control, 4px);
+    background-color: var(--surface-base, #1E1F22);
+    outline: 1px var(--button-border, #FFFFFF24);
+    font-size: 11;
+}
+
+vfxlab .lab-effects searchfield .__field__,
+vfxlab .lab-effects searchfield::part(field) {
+    background: none;
+    font-size: 11;
+}
+
+vfxlab .lab-tree {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+    background: none;
+}
+
+vfxlab .lab-tree-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    border-radius: var(--radius-control, 4px);
+    color: var(--tree-fg, #DFE1E5);
+    font-size: 11;
+}
+
+vfxlab .lab-tree-row.lab-category {
+    color: var(--fg-secondary, #9DA0A8);
+}
+
+vfxlab .lab-tree-row:hover {
+    background-color: var(--list-hover-bg, #FFFFFF10);
+}
+
+/* The effect being edited, whatever holds focus: the lab's one selection, not a list's keyboard cursor. */
+vfxlab .lab-tree-row.__selected__,
+vfxlab .lab-tree-row.__selected__:hover {
+    background-color: var(--accent, #3574F0);
+    color: var(--fg, #FFFFFF);
+}
+
+vfxlab .lab-tree-row .__twisty__ {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    color: var(--tree-twisty-fg, #A8ADB5);
+}
+
+vfxlab .lab-tree-row .__twisty__:hover {
+    color: var(--tree-twisty-hover-fg, #FFFFFF);
+}
+
+vfxlab .lab-tree-row.__collapsed__ .__twisty__ {
+    overlay: shape("chevron-right");
+}
+
+vfxlab .lab-tree-row.__expanded__ .__twisty__ {
+    overlay: shape("chevron-down");
+}
+
+/* A leaf keeps the slot, so every name starts at one x. */
+vfxlab .lab-tree-row.__leaf__ .__twisty__ {
+    overlay: none;
+}
+
+vfxlab .lab-tree-label {
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 11;
+}
+
+/* ── viewport ──────────────────────────────────────────────────────────── */
+
+vfxlab vfxviewport {
+    width: 100%;
+    height: 100%;
+}
+
+vfxlab .lab-hint {
+    position: absolute;
+    right: 8px;
+    bottom: 6px;
+    color: var(--fg-secondary, #FFFFFF99);
+    white-space: nowrap;
+    font-size: 10;
+}
+
+vfxlab .lab-stats {
+    position: absolute;
+    left: 8px;
+    top: 6px;
+    color: var(--fg, #FFFFFF);
+    white-space: nowrap;
+    font-size: 11;
+}
+
+/* ── inspector ─────────────────────────────────────────────────────────── */
+
+/* The right pane: the Effect and Rendering tabs, each page the panel's colour. */
+vfxlab .lab-side {
+    width: 100%;
+    height: 100%;
+}
+
+vfxlab .lab-side .__panes__ {
+    background-color: var(--panel-bg, #2B2D30);
+}
+
+vfxlab .lab-head {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    flex-shrink: 0;
+    padding: 8px var(--cfg-pad-x, 8px) 6px var(--cfg-pad-x, 8px);
+}
+
+vfxlab .lab-names {
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
+    gap: 2px;
+}
+
+/* The header's reset-all, larger than a row's. */
+vfxlab .lab-reset-all {
+    width: 16px;
+    height: 16px;
+}
+
+vfxlab .lab-title {
+    color: var(--fg, #FFFFFF);
+    font-size: 13;
+}
+
+vfxlab .lab-id {
+    color: var(--fg-hint, #7A7E85);
+    font-size: 10;
+}
+
+vfxlab .lab-params {
+    width: 100%;
+    height: 0px;
+    flex-grow: 1;
+}
+
+vfxlab .lab-intensity {
+    width: 52px;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+/* Unreal's reset-to-default arrow, on a row whose value is not the look's. */
+vfxlab .lab-reset {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    margin-left: 4px;
+    margin-right: 4px;
+    overlay: shape("arrow-left");
+    color: var(--accent, #3574F0);
+}
+
+vfxlab .lab-reset:hover {
+    color: var(--fg, #FFFFFF);
+}
+
+/* ── status bar: state on the left, the effect and speed on the right ──────── */
+
+vfxlab .lab-status {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 24px;
+    flex-shrink: 0;
+    padding-left: 10px;
+    padding-right: 10px;
+    background-color: var(--statusbar-bg, #2B2B2B);
+    color: var(--statusbar-item-fg, #C9CCD1);
+    white-space: nowrap;
+    font-size: 11;
+}
+
+vfxlab .lab-state-dot {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+    border-radius: 4px;
+    background-color: var(--statusbar-item-dim-fg, #6F737A);
+}
+
+vfxlab .lab-state-dot.lab-live {
+    background-color: var(--run-live-fg, #5FAD65);
+}
+
+vfxlab .lab-state-dot.lab-held {
+    background-color: var(--statusbar-warning-fg, #E0A84E);
+}
+
+vfxlab .lab-status-sep {
+    width: 1px;
+    height: 12px;
+    flex-shrink: 0;
+    background-color: var(--statusbar-sep, #3C3F41);
+}
+
+vfxlab .lab-message {
+    color: var(--fg, #FFFFFF);
+}
+
+vfxlab .lab-status-effect {
+    color: var(--statusbar-item-dim-fg, #9DA0A8);
+}

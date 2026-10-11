@@ -176,6 +176,7 @@ dockarea:focus-visible,
 dockgroup:focus-visible,
 graphview:focus-visible,
 canvasview:focus-visible,
+vfxviewport:focus-visible,
 /* A Name is per class and a subclass that declares one does not answer to its parent's, so a surface
  * is not caught by `canvasview` however plainly it is one. Both tags, since either can be the pane. */
 surface:focus-visible,
