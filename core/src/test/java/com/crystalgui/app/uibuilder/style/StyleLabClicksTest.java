@@ -82,6 +82,22 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         assertEquals("the press changed the value", "linear-gradient(180deg, #C86AFF, #8A8AFF 50%, #6AA9FF)", css.get());
     }
 
+    /** A layered background is edited a layer at a time: the press changes the picked layer and leaves the rest. */
+    @Test
+    public void anEditChangesOnlyThePickedLayer() {
+        css.set("radial-gradient(circle at 25% 15%, #FF0000, #0000FF), linear-gradient(90deg, #000000, #FFFFFF)");
+        for (int i = 0; i < 4; i++) frame();
+
+        // THE RADIAL ROWS AND THE LAYER LIST make the form taller than this window's lab: it scrolls.
+        keyword("Reverse").box().scrollIntoView();
+        for (int i = 0; i < 4; i++) frame();
+        clickCentre(keyword("Reverse").box());
+        frame();
+
+        assertEquals("radial-gradient(circle at 25% 15%, #0000FF, #FF0000), linear-gradient(90deg, #000000, #FFFFFF)",
+                css.get());
+    }
+
     /**
      * <b>Choosing from a dropdown leaves the lab open.</b>
      *

@@ -10,6 +10,7 @@ import com.google.gson.JsonElement;
 
 import com.crystalgui.style.sheet.source.CssSourceModel;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -209,6 +210,42 @@ public class StyleLabsTest {
         Gradient ramp = Gradient.parse("linear-gradient(90deg, #FF0000, #0000FF)");
         assertEquals("linear-gradient(90deg, #FF0000 17.6%, #0000FF)",
                 ramp.withStop(0, ramp.stops().get(0).withPosition(0.17596f)).toString());
+    }
+
+    /** A radial layer reads and writes back as written, and an edit to its stops keeps its shape. */
+    @Test
+    public void aRadialGradientKeepsItsShape() {
+        Gradient glow = Gradient.parse("radial-gradient(circle 51.2px at 25% 15%, #B8FFE847, #B8FFE800)");
+        assertTrue(glow.radial().circle());
+        assertEquals("51.2px", glow.radial().size());
+        assertEquals("radial-gradient(circle 51.2px at 25% 15%, #B8FFE847, #B8FFE800)", glow.toString());
+        assertEquals("radial-gradient(circle 51.2px at 25% 15%, #B8FFE847 40%, #B8FFE800)",
+                glow.withStop(0, glow.stops().get(0).withPosition(0.4f)).toString());
+        assertEquals("CSS's defaults are not written", "radial-gradient(#FF0000, #0000FF)",
+                Gradient.parse("radial-gradient(#FF0000, #0000FF)").toString());
+        assertArrayEquals(new double[]{0.25d, 0.15d}, glow.radial().centre(), 1e-6d);
+        assertArrayEquals("keywords in either order", new double[]{1d, 0d},
+                Gradient.parse("radial-gradient(at top right, #000, #FFF)").radial().centre(), 1e-6d);
+    }
+
+    /** Switching to radial and back restores the direction; the shape's rows convert as CSS allows. */
+    @Test
+    public void aGradientSwitchesBetweenLinearAndRadial() {
+        Gradient linear = Gradient.parse("linear-gradient(45deg, #FF0000, #0000FF)");
+        Gradient radial = linear.withRadial(linear.shape());
+        assertEquals("radial-gradient(#FF0000, #0000FF)", radial.toString());
+        assertEquals("linear-gradient(45deg, #FF0000, #0000FF)", radial.withDirection(radial.direction()).toString());
+
+        Gradient.Radial shape = Gradient.Radial.ELLIPSE.withExtent(Gradient.Radial.LENGTH);
+        assertEquals("50% 50%", shape.size());
+        assertEquals("a circle's radius is never a percentage", "", shape.withCircle(true).size());
+        Gradient.Radial circle = Gradient.Radial.ELLIPSE.withCircle(true).withExtent(Gradient.Radial.LENGTH);
+        assertEquals("circle 30px", circle.withRadius(0, 30d).toString());
+        assertEquals("an ellipse doubles a circle's one length", "50px 50px", circle.withCircle(false).size());
+        assertEquals("closest-side at 10% 90%",
+                Gradient.Radial.ELLIPSE.withExtent("closest-side").withCentre(new double[]{0.1d, 0.9d}).toString());
+        assertEquals("the middle is not written", "",
+                Gradient.Radial.ELLIPSE.withCentre(new double[]{0.5d, 0.5d}).toString());
     }
 
     @Test
