@@ -2904,6 +2904,7 @@ public final class CgUiPaintContext {
      *   <li>The region is in the target's pixels, drawn in the current node, so the composite moves with it.</li>
      *   <li>Below full opacity it is drawn under an effect node holding {@code opacity}, which a compositor may change.
      *       Answers that node, or 0.</li>
+     *   <li>Never tinted: {@link #getColor()} does not reach it, so {@code opacity} is the only way to fade one.</li>
      * </ul>
      */
     public int blitLayer(CgGraphTexture layer, float opacity, LayerRegion region) {
@@ -2941,9 +2942,10 @@ public final class CgUiPaintContext {
                 poseStack.pushPose();
                 if (turn != null) poseStack.last().pose().set(turn).mul(targetToDraw());
                 else poseStack.last().pose().set(targetToDraw());
+                // Untinted: getColor() is whatever the last painter left, and a segment replayed after it resets nothing.
                 quad().at(region.x(), region.y()).size(region.width(), region.height())
                       .uv(0f, 1f, u1, v1)
-                      .color(getColor()).submit();
+                      .color(0xFFFFFFFF).submit();
                 flush();
                 poseStack.popPose();
             }));
