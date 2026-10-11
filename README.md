@@ -97,8 +97,8 @@ jar for several loaders and building against a checkout are all in [Setup](docs/
 
 ## At a glance
 
-A furnace's control panel: a power switch, a burn bar and a purge button. The whole UI is one class, run on the
-server; `FurnaceData` is your own furnace object, which the panel is a view of.
+A furnace's control panel: a power switch, a burn bar and a purge button. The whole UI is one class, its server half
+and its client half; `FurnaceData` is your own furnace object, which the panel is a view of.
 
 ```java
 public final class FurnacePanel extends UIElement implements Networked<FurnaceData> {
@@ -126,12 +126,40 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceDa
         // Switch.TOGGLE is an event that carries the switch's new state, so `on` arrives as a Boolean;
         // ctx says who did it (ctx.viewer() is the player).
         io.on(power, Switch.TOGGLE, (ctx, on) -> furnace.setRunning(on));
-        io.on(purge, Button.ACTIVATE, ctx -> furnace.purge());          // a press carries nothing
+        io.on(purge, Button.ACTIVATE, ctx -> {                          // a press carries nothing
+            furnace.purge();
+            io.notify("purged", null);                                  // a message of your own to the client
+        });
 
         // What the player sees: io.project(widget, which of its values, where it comes from).
         // The engine reads furnace.burnFraction() each tick and sends it only when it changed.
         io.project(power, Switch.CHECKED, furnace::isRunning);
         io.project(burn, ProgressBar.FRACTION, furnace::burnFraction);
+
+        // A question the client may ask, answered here: io.onCall(name, (args, respond) -> ...).
+        io.onCall("history", (args, respond) -> respond.ok(io.newMap().putInt("burns", furnace.burnCount())));
+    }
+
+    // Runs on the client, each time the panel is built: anything local to this player's screen.
+    // A server re-describe builds a fresh panel and runs this again, so set everything up every time.
+    @Override
+    public void client(ClientScope io) {
+        // A control of this player's own: io.addLocal shows it, and the server never sees it.
+        Button history = new Button("History");
+        io.addLocal(this, history);
+
+        // Ask the server, and show its answer when it arrives: io.call(name, args, onResult, onError).
+        history.attachListener(() -> io.call("history", null,
+                reply -> history.setText(reply.getInt("burns", 0) + " burns"), null));
+
+        // A purely local reaction, at once, with no round trip.
+        purge.attachListener(() -> purge.setText("Purging…"));
+
+        // The server's own messages, here its word that the purge is done: style, sound, animation.
+        io.onNotify("purged", payload -> {
+            purge.setText("Purge");
+            burn.addClass("purged");
+        });
     }
 }
 ```
@@ -154,8 +182,14 @@ furnacepanel button {
 furnacepanel button:hover { background-color: #FFB4472F; }
 ```
 
-The client needs no code at all: the open names the panel, and the client builds it. Stylesheets, client-only UIs,
-nesting, long lists and widgets of your own are in [Building UIs](docs/CGUI_BUILDING_UIS.md).
+**Every player looking at the furnace stays in sync, automatically.** Say three players have the panel open and one
+flips the power switch. `io.on` runs on the server and changes the furnace itself; on the next tick, `io.project` sees
+`isRunning()` has changed and sends the new state to all three clients, so the switch flips on every screen at once.
+Your code never tracks who has the panel open or sends anything to anyone: the furnace is the single source of truth,
+and every open panel is a live view of it.
+
+`client()` is optional: without it, the open alone names the panel and the client builds it. Stylesheets, client-only
+UIs, nesting, long lists and widgets of your own are in [Building UIs](docs/CGUI_BUILDING_UIS.md).
 
 ## Documentation
 
