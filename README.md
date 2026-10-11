@@ -1,14 +1,12 @@
 <div align="center">
 
-<img src="core/src/main/resources/assets/crystalgui/ui/icons/logo.svg" alt="CrystalGUI logo" width="128">
+<img src="docs/images/crystalgui-banner.png" alt="Crystal GUI: a web-inspired UI engine for Java" width="100%">
 
-# CrystalGUI
-
-A retained-mode UI engine for Java, shaped like a web browser
+<sub>The music player in the banner, with its frosted glass backdrop and surrounding spheres, is a real Crystal GUI interface, built in its UI Builder: open <a href="docs/banner/banner.cgui"><code>banner.cgui</code></a> to see how it's made.</sub>
 
 DOM and shadow roots · A real CSS cascade · Flexbox and grid · Server-driven UI · A code editor and workbench
 
-[![CrystalGraphics](https://img.shields.io/badge/Rendered%20by-CrystalGraphics-1E40C8?style=flat-square)](https://github.com/CrystalGraphics/CrystalGraphics)
+[![Crystal Graphics](https://img.shields.io/badge/Rendered%20by-Crystal%20Graphics-1E40C8?style=flat-square)](https://github.com/CrystalGraphics/CrystalGraphics)
 [![Java](https://img.shields.io/badge/Java-8%2B-E76F00?style=flat-square&logo=openjdk&logoColor=white)](docs/CGUI_BUILD.md)
 [![Minecraft](https://img.shields.io/badge/Minecraft-1.7.10%20to%2026.3-3C8527?style=flat-square)](docs/CGUI_SETUP.md)
 [![License](https://img.shields.io/badge/License-LGPL--3.0-blue?style=flat-square)](COPYING.LESSER)
@@ -22,10 +20,11 @@ and transitions, flexbox and grid layout, and a widget set that runs all the way
 windowed desktop. Build a UI for your own application or your Minecraft mod, style it with CSS, and serve it from a
 server to every player who opens it.
 
-Under the hood, the engine names no Minecraft, loader or GL type: it draws through
-[Crystal Graphics](https://github.com/CrystalGraphics/CrystalGraphics), on Vulkan or OpenGL, and a dedicated server
-builds and sends UI trees with no graphics and no fonts at all. It ships for Minecraft as **one jar** for every
-loader and version, plus an optional language jar.
+Under the hood, each frame cascades styles, lays the tree out once and records its painting off the render thread,
+drawn through [Crystal Graphics](https://github.com/CrystalGraphics/CrystalGraphics) on Vulkan or OpenGL, which also
+renders all of its text and fonts. A server builds and sends UI trees with no graphics and no fonts at all. The core
+names no Minecraft, loader or GL type, and it ships for Minecraft as **one jar** for every loader and version, plus an
+optional language jar.
 
 ## Features
 
@@ -34,8 +33,10 @@ loader and version, plus an optional language jar.
 - **DOM** — a node tree with shadow roots, events that capture and bubble, focus, and a top layer for menus and popovers.
 - **CSS** — a real cascade: tag, class, id and pseudo-class selectors, custom properties, transitions and transforms.
 - **Layout** — flexbox and grid through [Taffy](https://github.com/DioxusLabs/taffy), the layout engine behind Dioxus and Bevy.
-- **Painting** — rounded boxes and borders, nine-slice sprites, a full SVG renderer and MSDF text, recorded off the
+- **Painting** — rounded boxes and borders, gradients, nine-slice sprites and a full SVG renderer, recorded off the
   render thread.
+- **Text** — fonts and text rendered by [Crystal Graphics](https://github.com/CrystalGraphics/CrystalGraphics):
+  shaped by HarfBuzz, drawn as MSDF glyphs that stay sharp at any size, generated off-thread, with system font fallback.
 - **Themes** — a theme and an editor colour scheme, chosen independently, built from one token vocabulary.
 
 ### Widgets
@@ -147,7 +148,7 @@ And style it with CSS:
 ```css
 furnacepanel { padding: 12px; gap: 8px; }        /* a panel's tag is its class name, lowercased */
 furnacepanel button {
-    background-color: #FF8A3324;                 /* colours are #AARRGGBB */
+    background-color: #FF8A3324;                 /* colours are #RRGGBBAA */
     transition: background-color 150ms;          /* fade between colours rather than snap */
 }
 furnacepanel button:hover { background-color: #FFB4472F; }

@@ -1,0 +1,7 @@
+/* The widgets' own parts in the logo tile's ramp. Colours are #RRGGBBAA. */
+switch:checked { background: linear-gradient(to right, #7CF5D0FF, #0F8F82FF 38%, #5B2A86FF 75%, #F472B6FF); }
+switch::part(knob) { background-color: #FFFFFF; }
+slider::part(fill) { background: linear-gradient(to right, #7CF5D0FF, #0F8F82FF 38%, #5B2A86FF 75%, #F472B6FF); }
+slider::part(thumb) { background-color: #FFFFFF; }
+/* By id: the theme's own `progressbar .__fill__` outranks a bare part selector. */
+#position .__fill__, #position::part(fill) { background-color: #7CF5D0; background: linear-gradient(to right, #7CF5D0FF, #0F8F82FF 38%, #5B2A86FF 75%, #F472B6FF); }
