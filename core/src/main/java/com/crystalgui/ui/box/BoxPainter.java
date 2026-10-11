@@ -380,6 +380,8 @@ public final class BoxPainter {
             return;
         }
         ctx.beginSegment();
+        // From white, never from the last box painted: a segment replayed before this one resets nothing.
+        ctx.setColor(WHITE);
         paintSelf(box, style, ctx, radii);
         node.paintContent(ctx, box);
         endSegment(box, node, ctx, BoxReplay.BEFORE, key);
@@ -394,6 +396,7 @@ public final class BoxPainter {
             return;
         }
         ctx.beginSegment();
+        ctx.setColor(WHITE);
         node.paintDecoration(ctx, box);
         paintOverlay(box, style, ctx);
         paintOutline(box, style, ctx);
