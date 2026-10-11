@@ -174,12 +174,24 @@ if (connection != null) ServerWindows.of(connection).open(FurnacePanel.TYPE, fur
 And style it with CSS:
 
 ```css
-furnacepanel { padding: 12px; gap: 8px; }        /* a panel's tag is its class name, lowercased */
-furnacepanel button {
-    background-color: #FF8A3324;                 /* colours are #RRGGBBAA */
-    transition: background-color 150ms;          /* fade between colours rather than snap */
+/* Over the shipped Ore theme (crystalgui:ore), which draws the switch and buttons as Minecraft sprites. */
+furnacepanel {                                    /* a panel's tag is its class name, lowercased */
+    background: asset("crystalgui:ore", "panel"); /* a sprite from a theme's sheet */
+    padding: 8px;
+    gap: 6px;
 }
-furnacepanel button:hover { background-color: #FFB4472F; }
+furnacepanel text { color: #3F3F3F; }             /* Minecraft's GUI label grey */
+
+/* Each widget's id is its field name. The burn bar: Ore's sunken track, filled in Minecraft's flame colours. */
+#burn {
+    height: 7px;
+    border-radius: 0;
+    background: asset("crystalgui:ore", "slider-track");
+}
+#burn::part(fill) {
+    border-radius: 0;
+    background: linear-gradient(to bottom, #FFE15A 14%, #FF9A1F 14%, #FF9A1F 86%, #C8360E 86%);   /* hard bands */
+}
 ```
 
 **Every player looking at the furnace stays in sync, automatically.** Say three players have the panel open and one
