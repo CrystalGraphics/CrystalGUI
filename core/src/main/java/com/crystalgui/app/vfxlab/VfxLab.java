@@ -93,6 +93,8 @@ public class VfxLab extends UIElement {
     private static final String SKY_SHADER = "crystalgraphics:shaders/demo/editor_sky.shader";
     private static final Matrix4fc SKY_SCALE = new Matrix4f().scale(600f);
     private static final float MAX_SPEED = 10f;
+    /** Metres the floor's grid fades out by, from a quarter of it; the plane spans past it, so its edge never shows. */
+    private static final float FLOOR_FADE = 500f;
     /** Seconds a status message stays. */
     private static final double MESSAGE_SECONDS = 3.0;
 
@@ -100,7 +102,7 @@ public class VfxLab extends UIElement {
     private final Queue<Runnable> pending = new ConcurrentLinkedQueue<>();
     private final List<CgVfxEffect> live = new ArrayList<>();
     private final VfxViewport viewport = new VfxViewport();
-    private final CgMesh floor = CgMesh.build(CgVertexFormat.SPATIAL, m -> CgMeshShapes.plane(m, 1, 1, 400f, 400f));
+    private final CgMesh floor = CgMesh.build(CgVertexFormat.SPATIAL, m -> CgMeshShapes.plane(m, 1, 1, FLOOR_FADE * 2.5f, FLOOR_FADE * 2.5f));
     private final CgMesh sky = CgMeshShapes.sphere(24, 32);
     @Nullable
     private CgMaterial floorMaterial, skyMaterial;
@@ -283,7 +285,7 @@ public class VfxLab extends UIElement {
         vfx.submit(world);
         playing = live.size();
         if (floorMaterial == null) {
-            floorMaterial = CgMaterial.newInstance(FLOOR_SHADER);
+            floorMaterial = CgMaterial.newInstance(FLOOR_SHADER).applyProperties(b -> b.set1f("_Fade", FLOOR_FADE));
             skyMaterial = CgMaterial.newInstance(SKY_SHADER);
         }
         easeNight((float) elapsed);
