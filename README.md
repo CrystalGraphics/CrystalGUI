@@ -191,6 +191,12 @@ and every open panel is a live view of it.
 `client()` is optional: without it, the open alone names the panel and the client builds it. Stylesheets, client-only
 UIs, nesting, long lists and widgets of your own are in [Building UIs](docs/CGUI_BUILDING_UIS.md).
 
+<p align="center">
+  <img src="docs/furnace/furnace-panel.png" alt="The furnace panel in Minecraft's style: a power switch, a burn bar, and Purge and History buttons" width="450">
+  <br>
+  <sub>A furnace panel like the one above, built in the UI Builder on the shipped Ore theme with Minecraft's font: <a href="docs/furnace/furnace.cgui"><code>furnace.cgui</code></a> and <a href="docs/furnace/furnace.css"><code>furnace.css</code></a></sub>
+</p>
+
 ## Documentation
 
 [Setup](docs/CGUI_SETUP.md) · [Building UIs](docs/CGUI_BUILDING_UIS.md) · [Widgets](docs/CGUI_WIDGETS.md) ·

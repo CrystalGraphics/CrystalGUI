@@ -1,0 +1,145 @@
+{
+  "cgui": 1,
+  "stylesheets": [
+    "crystalgui:ore",
+    "furnace.css"
+  ],
+  "root": {
+    "kind": "element",
+    "id": "root",
+    "style": {
+      "align-items": "center",
+      "justify-content": "center",
+      "width": "640.0px",
+      "height": "480.0px",
+      "background": "radial-gradient(260px 150px at 50% 88%, #FF7A2E59, #FF7A2E00), linear-gradient(to bottom, #262626, #121212)"
+    },
+    "children": [
+      {
+        "kind": "element",
+        "id": "furnace",
+        "class": "panel",
+        "style": {
+          "width": "150.0px",
+          "flex-direction": "column",
+          "transform": "scale(3, 3)",
+          "transform-origin-x": "50.0%",
+          "transform-origin-y": "50.0%"
+        },
+        "children": [
+          {
+            "kind": "element",
+            "id": "header",
+            "class": "row",
+            "children": [
+              {
+                "kind": "text",
+                "id": "title",
+                "state": {
+                  "text": "Furnace"
+                }
+              },
+              {
+                "kind": "text",
+                "id": "status",
+                "state": {
+                  "text": "Smelting"
+                }
+              }
+            ]
+          },
+          {
+            "kind": "element",
+            "class": "divider"
+          },
+          {
+            "kind": "element",
+            "id": "power-row",
+            "class": "row",
+            "children": [
+              {
+                "kind": "text",
+                "state": {
+                  "text": "Power"
+                }
+              },
+              {
+                "kind": "switch",
+                "id": "power",
+                "attrs": {
+                  "focus-policy": "CLICK"
+                },
+                "state": {
+                  "checked": true
+                }
+              }
+            ]
+          },
+          {
+            "kind": "element",
+            "id": "burn-row",
+            "class": "row",
+            "children": [
+              {
+                "kind": "text",
+                "state": {
+                  "text": "Burn"
+                }
+              },
+              {
+                "kind": "text",
+                "class": "muted",
+                "state": {
+                  "text": "62%"
+                }
+              }
+            ]
+          },
+          {
+            "kind": "progressbar",
+            "id": "burn",
+            "attrs": {
+              "hit-test": "false"
+            },
+            "style": {
+              "width": "100.0%"
+            },
+            "state": {
+              "fraction": 0.62
+            }
+          },
+          {
+            "kind": "element",
+            "id": "actions",
+            "class": "row",
+            "style": {
+              "margin-top": "2.0px"
+            },
+            "children": [
+              {
+                "kind": "button",
+                "id": "purge",
+                "attrs": {
+                  "focus-policy": "CLICK"
+                },
+                "state": {
+                  "text": "Purge"
+                }
+              },
+              {
+                "kind": "button",
+                "id": "history",
+                "attrs": {
+                  "focus-policy": "CLICK"
+                },
+                "state": {
+                  "text": "History"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
