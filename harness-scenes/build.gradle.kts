@@ -42,10 +42,6 @@ tasks.withType<JavaCompile>().configureEach {
 evaluationDependsOn(":gl-debug-harness")
 val harness = project(":gl-debug-harness")
 
-(harness.extra["hostAssetRoots"] as ConfigurableFileCollection).from(
-    file("src/main/resources"),
-    project(":core").file("src/main/resources"))
-
 harness.tasks.named<JavaExec>("runHarness") {
     classpath += sourceSets.main.get().runtimeClasspath
 
