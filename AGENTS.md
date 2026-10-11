@@ -276,6 +276,10 @@ Each doc in `docs/` is written to be read on its own; [`docs/CGUI_ARCHITECTURE.m
 
 `plan/` is a separate **private** repository, absent from most checkouts; `plan/README.md` is its generated index. A citation like `plan/engine-port.md` §2.6 resolves inside it, and `PlanCitationsResolveTest` checks every one under `:core:check` (by hand: `python plan/tools/verify.py --repo .`).
 
+**Every plan names its `owner`, your session's name, in its front matter.** Your open plans for a period:
+`python plan/tools/index.py --open --owner "<session name>" --since 2026-10-01 --until 2026-10-08` (both dates optional).
+`status:` can lag the step table, so check a plan's steps before acting on it.
+
 ## External references
 
 In-repo checkouts under `research_repos/`, never dependencies: **LDLib2** (widget and Ore-theme prior art), **taffy** (the layout engine's extracted sources — read them rather than guess), **monaco** (where every "VS Code does X" in `text.cursor` was read), **mc1201_sources** (an extracted 1.20.1 tree — cite it). Paths and what to search: [`docs/CGUI_ARCHITECTURE.md`](docs/CGUI_ARCHITECTURE.md) § *External references*.
