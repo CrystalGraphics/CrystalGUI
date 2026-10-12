@@ -450,6 +450,7 @@ tasks.named<JavaExec>("runServer") {
     for (prefix in listOf("crystalgui.", "crystalgraphics.")) {
         providers.systemPropertiesPrefixedBy(prefix).get().forEach { (key, value) -> systemProperty(key, value) }
     }
+    providers.gradleProperty("cgJvmArgs").orNull?.let { jvmArgs(it.trim().split(Regex("\\s+"))) }
 
     // -PcgLiveServer: a server dev clients can join, on -PcgSmokePort. run/server's server.properties is
     // already offline mode, and its eula.txt written by hand (RFG's runServer reads no -PcgAcceptEula).
