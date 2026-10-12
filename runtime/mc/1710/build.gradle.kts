@@ -1,4 +1,5 @@
 import java.util.zip.ZipFile
+import com.gtnewhorizons.retrofuturagradle.minecraft.RunMinecraftTask
 import xyz.wagyourtail.jvmdg.gradle.task.DowngradeJar
 import java.time.Duration
 
@@ -370,6 +371,10 @@ tasks.named<JavaExec>(runTask) {
         val port = target.substringAfter(':', "25565")
         args("--server", host, "--port", port)
     }
+    // -PcgUser and -PcgClientDir, as on the modern nodes: a second client needs its own directory, or two
+    // clients share options, saves and the log. RFG passes --gameDir from the working directory.
+    providers.gradleProperty("cgUser").orNull?.let { (this as RunMinecraftTask).username.set(it) }
+    providers.gradleProperty("cgClientDir").orNull?.let { workingDir = layout.projectDirectory.dir(it).asFile }
 
     if (providers.gradleProperty("cgAutoTest").isPresent) {
         systemProperty("crystalgui.autotest", "true")
@@ -440,6 +445,19 @@ val serverSmokeRequested = gradle.startParameter.taskNames.any {
 val serverSmokeReport = layout.buildDirectory.file("serverSmoke/result.txt")
 
 tasks.named<JavaExec>("runServer") {
+    for (prefix in listOf("crystalgui.", "crystalgraphics.")) {
+        providers.systemPropertiesPrefixedBy(prefix).get().forEach { (key, value) -> systemProperty(key, value) }
+    }
+
+    // -PcgLiveServer: a server dev clients can join, on -PcgSmokePort. run/server's server.properties is
+    // already offline mode, and its eula.txt written by hand (RFG's runServer reads no -PcgAcceptEula).
+    //   ./gradlew :runtime:mc:1710:runServer -PcgLiveServer
+    //   ./gradlew :runtime:mc:1710:runClient -PcgJoin=localhost:25599 -PcgUser=Alice
+    //   ./gradlew :runtime:mc:1710:runClient -PcgJoin=localhost:25599 -PcgUser=Bob -PcgClientDir=run/client-bob
+    if (providers.gradleProperty("cgLiveServer").isPresent) {
+        args("--port", providers.gradleProperty("cgSmokePort").orNull ?: "25599")
+    }
+
     if (serverSmokeRequested || providers.gradleProperty("cgServerSmoke").isPresent) {
         systemProperty("crystalgui.server.smoke", "true")
         systemProperty("crystalgui.server.smoke.report", serverSmokeReport.get().asFile.absolutePath)

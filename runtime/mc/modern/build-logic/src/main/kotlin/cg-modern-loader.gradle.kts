@@ -589,6 +589,50 @@ fun gameDirOf(task: JavaExec): File = runCatching {
     (task.javaClass.getMethod("getGameDirectory").invoke(task) as DirectoryProperty).get().asFile
 }.getOrNull() ?: task.project.file("runs/server")
 
+/**
+ * Points a run task at another game directory: ModDevGradle's `gameDirectory`, or Loom's protected
+ * `internalRunDir`, which its exec() copies over `workingDir` -- so setting `workingDir` is lost.
+ * Call at configuration: both are final by execution.
+ */
+fun setGameDir(task: JavaExec, dir: File) {
+    dir.mkdirs()
+    val property = runCatching { task.javaClass.getMethod("getGameDirectory").invoke(task) }.getOrNull()
+        ?: generateSequence<Class<*>>(task.javaClass) { it.superclass }
+            .firstNotNullOfOrNull { runCatching { it.getDeclaredMethod("getInternalRunDir") }.getOrNull() }
+            ?.apply { isAccessible = true }?.invoke(task)
+        ?: throw GradleException("${task.path} has no game directory property to point at $dir")
+    (property as DirectoryProperty).set(dir)
+}
+
+/**
+ * A dedicated server's run directory made ready to start: the port, any further server.properties
+ * entries, and Mojang's EULA -- detected rather than written unless -PcgAcceptEula says so, so the task
+ * never agrees to a licence on someone's behalf.
+ */
+fun prepareServerDir(runDir: File, port: String, acceptEula: Boolean, extra: Map<String, String> = emptyMap()) {
+    runDir.mkdirs()
+    // A port of its own: on a taken 25565 the bind fails, no started event fires, and the JVM exits 0
+    // having checked nothing. 1.20.x parses no --port, so it goes in the file.
+    val set = mapOf("server-port" to port) + extra
+    val properties = File(runDir, "server.properties")
+    val lines = if (properties.isFile) properties.readLines() else emptyList()
+    properties.writeText(
+        (lines.filterNot { line -> set.keys.any { line.startsWith("$it=") } } + set.map { "${it.key}=${it.value}" })
+            .joinToString(System.lineSeparator(), postfix = System.lineSeparator()))
+
+    val eula = File(runDir, "eula.txt")
+    val accepted = eula.isFile && eula.readLines().any { it.replace(" ", "") == "eula=true" }
+    if (!accepted) {
+        if (!acceptEula) {
+            throw GradleException(
+                "The dedicated server needs Mojang's EULA accepted before it will start.\n" +
+                    "Re-run with -PcgAcceptEula to write eula=true to " + eula.absolutePath + ",\n" +
+                    "or write it yourself. https://aka.ms/MinecraftEULA")
+        }
+        eula.writeText("eula=true" + System.lineSeparator())
+    }
+}
+
 // ── Dedicated-server smoke ────────────────────────────────────────────────────────────────────────
 //
 // Wired to `runServer` rather than being its own JavaExec: reproducing that task's classpath, JVM args
@@ -647,33 +691,49 @@ tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
         // Deleted BEFORE the run, so a stale report from a previous run cannot pass for this one.
         serverSmokeReport.get().asFile.delete()
         classLoadLog.get().asFile.also { it.parentFile.mkdirs(); it.delete() }
-
-        val runDir = gameDirOf(exec)
-        runDir.mkdirs()
-
-        // A PORT OF ITS OWN. On 1.7.10 this check's first run caught it about itself: 25565 was in use,
-        // the bind failed, the started event never fired so not one assertion ran, and the JVM exited 0
-        // -- BUILD SUCCESSFUL having checked nothing. 1.20.x parses no --port, so it goes in the file.
-        val properties = File(runDir, "server.properties")
-        val lines = if (properties.isFile) properties.readLines() else emptyList()
-        properties.writeText(
-            (lines.filterNot { it.startsWith("server-port=") } + "server-port=$smokePort")
-                .joinToString(System.lineSeparator(), postfix = System.lineSeparator()))
-
-        // Accepting Mojang's EULA is the developer's to do, not the build's. Detected rather than
-        // written, so the task never agrees to a licence on someone's behalf.
-        val eula = File(runDir, "eula.txt")
-        val accepted = eula.isFile && eula.readLines().any { it.replace(" ", "") == "eula=true" }
-        if (!accepted) {
-            if (!acceptEula) {
-                throw GradleException(
-                    "The dedicated server needs Mojang's EULA accepted before it will start.\n" +
-                        "Re-run with -PcgAcceptEula to write eula=true to " + eula.absolutePath + ",\n" +
-                        "or write it yourself. https://aka.ms/MinecraftEULA")
-            }
-            eula.writeText("eula=true" + System.lineSeparator())
-        }
+        prepareServerDir(gameDirOf(exec), smokePort, acceptEula)
     }
+}
+
+// ── A live server and clients that join it ───────────────────────────────────────────────────────
+//
+// A dedicated server players can join from dev clients, for anything that needs real connections and
+// a human watching: offline mode, so dev clients' made-up names are let in.
+//
+//   ./gradlew :runtime:mc:modern:fabric:26.2:runServer -PcgLiveServer -PcgAcceptEula
+//   ./gradlew :runtime:mc:modern:fabric:26.2:runClient -PcgJoin=localhost:25599 -PcgUser=Alice
+//   ./gradlew :runtime:mc:modern:fabric:26.2:runClient -PcgJoin=localhost:25599 -PcgUser=Bob -PcgClientDir=runs/client-bob
+//
+// A second client needs its own -PcgClientDir: two clients in one directory share options, saves and
+// logs/latest.log.
+tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
+    if (!providers.gradleProperty("cgLiveServer").isPresent) return@configureEach
+    val exec = this
+    argumentProviders.add(CommandLineArgumentProvider { listOf("nogui") })
+    doFirst { prepareServerDir(gameDirOf(exec), smokePort, acceptEula, mapOf("online-mode" to "false")) }
+}
+
+val joinServer = providers.gradleProperty("cgJoin").orNull
+val clientUser = providers.gradleProperty("cgUser").orNull
+val clientDir = providers.gradleProperty("cgClientDir").orNull
+// 1.20 replaced --server/--port with --quickPlayMultiplayer.
+val quickPlay = project.name.split('.').map { it.toIntOrNull() ?: 0 }.let { v ->
+    v[0] > 1 || v.getOrElse(1) { 0 } >= 20
+}
+tasks.withType<JavaExec>().matching { it.name == "runClient" }.configureEach {
+    val exec = this
+    if (joinServer != null || clientUser != null) {
+        argumentProviders.add(CommandLineArgumentProvider {
+            val join = when {
+                joinServer == null -> emptyList()
+                quickPlay -> listOf("--quickPlayMultiplayer", joinServer)
+                else -> listOf("--server", joinServer.substringBefore(':'), "--port", joinServer.substringAfter(':', "25565"))
+            }
+            join + (if (clientUser != null) listOf("--username", clientUser) else emptyList())
+        })
+    }
+    // At configuration: Loom finalizes internalRunDir before a doFirst could set it.
+    if (clientDir != null) setGameDir(exec, exec.project.file(clientDir))
 }
 
 tasks.register("serverSmoke") {

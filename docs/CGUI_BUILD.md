@@ -89,7 +89,9 @@ python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # l
 | `-PcgNoLanguage` | leave the language mod out of a dev run or deploy — the degraded path |
 | `-PcgRealNodes=`, `-PcgStubs=false` | real toolchains (CrystalGraphics' doc) |
 | `-PcgSmokePort=` | when 25599 is taken |
-| `-PcgJoin=host:port`, `-PcgProbe`, `-PcgProbeRole=watcher` | two-process runs and the connection probe |
+| `-PcgJoin=host:port`, `-PcgProbe`, `-PcgProbeRole=watcher` | two-process runs and the connection probe; on a modern `runClient`, `-PcgJoin` joins that server |
+| `-PcgLiveServer` | `runServer` as a server dev clients can join: no console window, offline mode, port `-PcgSmokePort`. On 1.7.10 the port only: `run/server` is already offline and its `eula.txt` is written by hand |
+| `-PcgUser=<name>`, `-PcgClientDir=<dir>` | a `runClient`'s player name, and its own game directory for a second client (copy the first client's `options.txt` in, or a modern first-launch screen stops it joining) |
 | `-PcgExtraMods=<jar>,…` | deploy another mod beside ours — into the `-PcgTargets` instances only, and removed by the next deploy |
 
 ## Releasing
@@ -183,6 +185,11 @@ harness is a client by design.
 ./gradlew :runtime:mc:modern:<branch>:<version>:runClient                    # a dev client
 ./gradlew :runtime:mc:1710:runClient -PcgProbe -PcgJoin=localhost:25565      # the connection probe, two processes
 ./gradlew :runtime:mc:modern:<branch>:<version>:connectionProbe              # the same, driven to a verdict file
+./gradlew :runtime:mc:modern:fabric:26.2:runServer -PcgLiveServer -PcgAcceptEula -PcgNoLanguage     # a server and two
+./gradlew :runtime:mc:modern:fabric:26.2:runClient -PcgJoin=localhost:25599 -PcgUser=Alice -PcgNoLanguage   # clients
+./gradlew :runtime:mc:modern:fabric:26.2:runClient -PcgJoin=localhost:25599 -PcgUser=Bob -PcgClientDir=runs/client-bob -PcgNoLanguage
+./gradlew :runtime:mc:1710:runServer -PcgLiveServer                          # the same on 1.7.10
+./gradlew :runtime:mc:1710:runClient -PcgJoin=localhost:25599 -PcgUser=Bob -PcgClientDir=run/client-bob
 ./gradlew prodSmoke                                                          # THE SWEEP: the shipped jars on 30 real clients
 ./gradlew prodSmoke -PcgTargets=<label>,<label>                             # just these
 ```
