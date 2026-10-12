@@ -4,7 +4,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -135,7 +135,7 @@ public class SplitView extends UIElement implements MinimumSize {
                     for (int i = 0; i < out.length; i++) out[i] = boxed.get(i);
                     return out;
                 }
-            }, RatePolicy.DRAGGING);
+            }, CgRatePolicy.DRAGGING);
 
     public static final WidgetContract<SplitView> CONTRACT = WidgetContracts.register(
             WidgetContract.of(SplitView.class, "splitview")

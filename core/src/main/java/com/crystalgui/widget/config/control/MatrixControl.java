@@ -4,7 +4,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
@@ -47,7 +47,7 @@ public class MatrixControl extends ValueControl<double[]> {
 
     /** As the vector control, with more cells. */
     public static final Event<MatrixControl, double[]> CHANGED =
-            ConfigControlContracts.changed(StateTypes.doubleArrayUnder("v"), new double[0], RatePolicy.TYPING);
+            ConfigControlContracts.changed(StateTypes.doubleArrayUnder("v"), new double[0], CgRatePolicy.TYPING);
 
     public static final WidgetContract<MatrixControl> CONTRACT = ConfigControlContracts.register(
             MatrixControl.class, "matrixcontrol", StateTypes.doubleArrayUnder("v"), new double[0], CHANGED);

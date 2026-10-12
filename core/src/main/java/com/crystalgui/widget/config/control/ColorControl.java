@@ -5,7 +5,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.ui.service.AnchoredPlacement;
@@ -42,7 +42,7 @@ public class ColorControl extends ValueControl<Integer> {
 
     /** A colour wheel has a drag behind it, so it is throttled and the released colour always travels. */
     public static final Event<ColorControl, Integer> CHANGED =
-            ConfigControlContracts.changed(StateTypes.INT, 0xFFFFFFFF, RatePolicy.DRAGGING);
+            ConfigControlContracts.changed(StateTypes.INT, 0xFFFFFFFF, CgRatePolicy.DRAGGING);
 
     public static final WidgetContract<ColorControl> CONTRACT = ConfigControlContracts.register(
             ColorControl.class, "colorcontrol", StateTypes.INT, 0xFFFFFFFF, CHANGED);

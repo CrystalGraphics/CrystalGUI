@@ -298,7 +298,7 @@ ui/dom/        UINode, UIDocument, ShadowRoot, UISlot, Name, Attribute, UINodeRe
                UINodeTreeSource — and the generic seam: TreeSource, TreeObserver, NodeContract
 ui/box/        Box, BoxTree, BoxStyle, Measurable, BoxPainter, TextNode
 ui/service/    Input, InputMode, Drag, Focus, Animation, Lifecycle
-ui/contract/   WidgetContract, State, Event, RatePolicy — what a KIND of widget carries
+ui/contract/   WidgetContract, State, Event (rates: CrystalGraphics' CgRatePolicy) — what a KIND of widget carries
 ui/projection/ Projections, AutoProjection — the model reaching the widgets
 net/mirror/    UINodeMirror, ServerTreeMirror, ClientTreeMirror, TreeOps
 style/         the cascade, shared behind Styleable

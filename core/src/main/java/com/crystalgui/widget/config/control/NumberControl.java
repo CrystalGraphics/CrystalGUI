@@ -6,7 +6,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
@@ -50,7 +50,7 @@ public class NumberControl extends ValueControl<Double> {
 
     /** Typed into, and scrubbed. Debounced like any field; the scrub commits on release. */
     public static final Event<NumberControl, Double> CHANGED =
-            ConfigControlContracts.changed(StateTypes.DOUBLE, 0d, RatePolicy.TYPING);
+            ConfigControlContracts.changed(StateTypes.DOUBLE, 0d, CgRatePolicy.TYPING);
 
     public static final WidgetContract<NumberControl> CONTRACT = ConfigControlContracts.register(
             NumberControl.class, "numbercontrol", StateTypes.DOUBLE, 0d, CHANGED);

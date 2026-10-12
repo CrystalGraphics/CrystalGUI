@@ -6,7 +6,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -85,7 +85,7 @@ public class Slider extends UIElement {
                     .described(State.Hint.spanOf("min", "max"))
                     .describedAs("Where the thumb is, between min and max.");
 
-    /** A drag. Throttled, and the released value always travels. @see RatePolicy */
+    /** A drag. Throttled, and the released value always travels. @see CgRatePolicy */
     public static final Event<Slider, Float> VALUE_CHANGED = Event.<Slider, Float>of("value",
             (slider, sink) -> slider.attachListener(sink::accept),
             new Event.Payload<Float>() {
@@ -95,7 +95,7 @@ public class Slider extends UIElement {
                 @Override public <T> Float read(CgStateMap<T> in) {
                     return in.getFloat("value", 0f);
                 }
-            }, RatePolicy.DRAGGING)
+            }, CgRatePolicy.DRAGGING)
             .sanitizedBy((slider, value) -> slider.clampAndSnap(
                     value == null || Float.isNaN(value) ? slider.getMin() : value));
 

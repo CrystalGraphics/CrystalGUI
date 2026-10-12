@@ -4,7 +4,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.core.config.ConfigDescriptor;
@@ -43,7 +43,7 @@ public class BooleanControl extends ValueControl<Boolean> {
 
     /** A checkbox: discrete, so every flip travels. */
     public static final Event<BooleanControl, Boolean> CHANGED =
-            ConfigControlContracts.changed(StateTypes.BOOL, Boolean.FALSE, RatePolicy.IMMEDIATE);
+            ConfigControlContracts.changed(StateTypes.BOOL, Boolean.FALSE, CgRatePolicy.IMMEDIATE);
 
     public static final WidgetContract<BooleanControl> CONTRACT = ConfigControlContracts.register(
             BooleanControl.class, "booleancontrol", StateTypes.BOOL, Boolean.FALSE, CHANGED);

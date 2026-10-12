@@ -4,7 +4,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.widget.overlay.Dropdown;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
@@ -40,7 +40,7 @@ public class SelectControl extends ValueControl<String> {
 
     /** A discrete choice from a list. */
     public static final Event<SelectControl, String> CHANGED =
-            ConfigControlContracts.changed(StateTypes.STRING, "", RatePolicy.IMMEDIATE);
+            ConfigControlContracts.changed(StateTypes.STRING, "", CgRatePolicy.IMMEDIATE);
 
     public static final WidgetContract<SelectControl> CONTRACT = ConfigControlContracts.register(
             SelectControl.class, "selectcontrol", StateTypes.STRING, "", CHANGED);

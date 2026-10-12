@@ -7,7 +7,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -78,7 +78,7 @@ public class TabView extends UIElement {
                 @Override public <T> Integer read(CgStateMap<T> in) {
                     return in.getInt("index", -1);
                 }
-            }, RatePolicy.IMMEDIATE)
+            }, CgRatePolicy.IMMEDIATE)
             .sanitizedBy((tabs, index) -> tabs.clampTabIndex(index));
 
     /** An index no legal gesture could have produced is pulled back to one that could. */

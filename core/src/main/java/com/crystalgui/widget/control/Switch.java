@@ -5,7 +5,7 @@ import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -65,7 +65,7 @@ public class Switch extends UIElement {
                 @Override public <T> Boolean read(CgStateMap<T> in) {
                     return in.getBool("checked", false);
                 }
-            }, RatePolicy.IMMEDIATE);
+            }, CgRatePolicy.IMMEDIATE);
 
     /** Registered by {@link com.crystalgui.widget.Widgets} — never by a static block here. */
     public static final WidgetContract<Switch> CONTRACT = WidgetContracts.register(

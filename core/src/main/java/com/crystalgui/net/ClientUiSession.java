@@ -14,8 +14,8 @@ import com.crystalgui.net.mirror.NodeMirror;
 import com.crystalgui.net.protocol.*;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RateGate;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRateGate;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.WidgetContracts;
 import com.crystalgui.ui.dom.TreeSource;
@@ -780,12 +780,12 @@ public final class ClientUiSession<N extends Styleable, T> {
     }
 
     /**
-     * A widget's own {@link RatePolicy}, applied on the way out.
+     * A widget's own {@link CgRatePolicy}, applied on the way out.
      *
      * <p>Driven by the connection's tick, so a value held by a debounce still leaves when nothing else
      * is happening — a throttle clears itself only while the user keeps moving.</p>
      */
-    private final RateGate<N, CgStateMap<T>> rates = new RateGate<>(this::report);
+    private final CgRateGate<N, CgStateMap<T>> rates = new CgRateGate<>(this::report);
 
     /**
      * Where "now" comes from, for the rate policies. Replaceable so a test can step it rather than
@@ -803,13 +803,13 @@ public final class ClientUiSession<N extends Styleable, T> {
      * the server just handed us is not a user gesture, and only a session knows that. The gate decides
      * WHEN a report leaves; this decides whether it is a report at all.</p>
      */
-    private void reportRated(N element, String kind, RatePolicy policy,
+    private void reportRated(N element, String kind, CgRatePolicy policy,
                              @Nullable CgStateMap<T> payload) {
         if (applyingDelta) return;
         rates.offer(element, kind, policy, payload);
     }
 
-    /** @see RateGate#flush() */
+    /** @see CgRateGate#flush() */
     void flushRates() {
         rates.flush();
     }

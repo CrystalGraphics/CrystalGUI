@@ -7,7 +7,7 @@ import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.render.texture.CgUiColorField;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -106,7 +106,7 @@ public class ColorSelector extends UIElement {
                 @Override public <T> Integer read(CgStateMap<T> in) {
                     return in.getInt("color", 0xFFFFFFFF);
                 }
-            }, RatePolicy.DRAGGING);
+            }, CgRatePolicy.DRAGGING);
 
     /**
      * MODE, then ORIGINAL, then COLOR -- the order the hand-written readState used, in statement order

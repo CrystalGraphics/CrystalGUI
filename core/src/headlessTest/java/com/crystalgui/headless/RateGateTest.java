@@ -6,8 +6,8 @@ import static org.junit.Assert.assertTrue;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
-import com.crystalgui.ui.contract.RateGate;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRateGate;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Slider;
 import com.crystalgui.widget.control.TextField;
@@ -45,15 +45,15 @@ public class RateGateTest {
         now = 1_000L;
     }
 
-    private <P> RateGate<UIElement, P> gate() {
-        return new RateGate<UIElement, P>((widget, kind, payload) -> sent.add(kind + "=" + payload))
+    private <P> CgRateGate<UIElement, P> gate() {
+        return new CgRateGate<UIElement, P>((widget, kind, payload) -> sent.add(kind + "=" + payload))
                 .setClock(() -> now);
     }
 
     @Test
     public void anImmediatePolicyGoesStraightThrough() {
-        RateGate<UIElement, Float> gate = gate();
-        gate.offer(slider, "value", RatePolicy.IMMEDIATE, 0.5f);
+        CgRateGate<UIElement, Float> gate = gate();
+        gate.offer(slider, "value", CgRatePolicy.IMMEDIATE, 0.5f);
         gate.offer(slider, "value", null, 0.6f);
         assertEquals(List.of("value=0.5", "value=0.6"), sent);
         assertFalse(gate.isHolding());
@@ -61,8 +61,8 @@ public class RateGateTest {
 
     @Test
     public void attachTakesTheEventsOwnRate() {
-        RateGate<UIElement, Float> gate = gate();
-        gate.attach(slider, Slider.VALUE_CHANGED);   // DRAGGING: throttled to 50ms
+        CgRateGate<UIElement, Float> gate = gate();
+        Slider.VALUE_CHANGED.attach(slider, gate);   // DRAGGING: throttled to 50ms
 
         slider.setValue(0.1f);
         slider.setValue(0.2f);
@@ -76,8 +76,8 @@ public class RateGateTest {
 
     @Test
     public void aThrottleSendsTheLastValueAndNotTheOnesPassedThrough() {
-        RateGate<UIElement, Float> gate = gate();
-        gate.attach(slider, Slider.VALUE_CHANGED);
+        CgRateGate<UIElement, Float> gate = gate();
+        Slider.VALUE_CHANGED.attach(slider, gate);
 
         slider.setValue(0.1f);            // through
         slider.setValue(0.2f);            // held
@@ -93,8 +93,8 @@ public class RateGateTest {
 
     @Test
     public void aDebounceHoldsUntilTypingStops() {
-        RateGate<UIElement, String> gate = gate();
-        gate.attach(field, TextField.TEXT_CHANGED);   // TYPING: 150ms debounce
+        CgRateGate<UIElement, String> gate = gate();
+        TextField.TEXT_CHANGED.attach(field, gate);   // TYPING: 150ms debounce
 
         field.setText("a");
         now += 100;
@@ -113,8 +113,8 @@ public class RateGateTest {
 
     @Test
     public void aDebouncedValueNeedsSomethingToDriveTheFlush() {
-        RateGate<UIElement, String> gate = gate();
-        gate.attach(field, TextField.TEXT_CHANGED);
+        CgRateGate<UIElement, String> gate = gate();
+        TextField.TEXT_CHANGED.attach(field, gate);
 
         field.setText("query");
         now += 10_000;                    // time passes and nothing calls flush
@@ -129,8 +129,8 @@ public class RateGateTest {
 
     @Test
     public void commitSendsWhatIsHeldWhateverThePolicySays() {
-        RateGate<UIElement, String> gate = gate();
-        gate.attach(field, TextField.TEXT_CHANGED);
+        CgRateGate<UIElement, String> gate = gate();
+        TextField.TEXT_CHANGED.attach(field, gate);
 
         field.setText("half-typed");
         gate.commit();
@@ -141,8 +141,8 @@ public class RateGateTest {
 
     @Test
     public void forgettingAWidgetSendsWhatItStillHeld() {
-        RateGate<UIElement, Float> gate = gate();
-        gate.attach(slider, Slider.VALUE_CHANGED);
+        CgRateGate<UIElement, Float> gate = gate();
+        Slider.VALUE_CHANGED.attach(slider, gate);
 
         slider.setValue(0.1f);            // through
         slider.setValue(0.9f);            // held
@@ -164,11 +164,11 @@ public class RateGateTest {
     @Test
     public void aSignalHeldAtClockZeroIsNotSilentlyDropped() {
         now = 0L;
-        RateGate<UIElement, Void> gate = gate();
-        gate.offer(button, "activate", RatePolicy.throttle(50), null);
+        CgRateGate<UIElement, Void> gate = gate();
+        gate.offer(button, "activate", CgRatePolicy.throttle(50), null);
         assertEquals("the first one is due immediately", List.of("activate=null"), sent);
 
-        gate.offer(button, "activate", RatePolicy.throttle(50), null);
+        gate.offer(button, "activate", CgRatePolicy.throttle(50), null);
         assertTrue("held by the throttle", gate.isHolding());
         now += 50;
         gate.flush();
@@ -177,10 +177,10 @@ public class RateGateTest {
 
     @Test
     public void twoWidgetsAreThrottledIndependently() {
-        RateGate<UIElement, Float> gate = gate();
+        CgRateGate<UIElement, Float> gate = gate();
         Slider other = new Slider();
-        gate.attach(slider, Slider.VALUE_CHANGED);
-        gate.attach(other, Slider.VALUE_CHANGED);
+        Slider.VALUE_CHANGED.attach(slider, gate);
+        Slider.VALUE_CHANGED.attach(other, gate);
 
         slider.setValue(0.1f);
         other.setValue(0.2f);
@@ -191,12 +191,12 @@ public class RateGateTest {
 
     @Test
     public void aWidgetsTwoEventsAreThrottledIndependently() {
-        RateGate<UIElement, String> gate = gate();
-        gate.attach(field, TextField.TEXT_CHANGED);
-        gate.attach(field, TextField.COMMITTED);
+        CgRateGate<UIElement, String> gate = gate();
+        TextField.TEXT_CHANGED.attach(field, gate);
+        TextField.COMMITTED.attach(field, gate);
 
         field.setText("a");
-        gate.offer(field, "commit", RatePolicy.IMMEDIATE, "a");
+        gate.offer(field, "commit", CgRatePolicy.IMMEDIATE, "a");
 
         assertEquals("a commit is not held behind the typing debounce", List.of("commit=a"), sent);
         assertTrue(gate.isHolding());

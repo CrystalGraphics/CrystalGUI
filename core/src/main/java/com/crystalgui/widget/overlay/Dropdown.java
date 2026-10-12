@@ -3,7 +3,7 @@ package com.crystalgui.widget.overlay;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -85,7 +85,7 @@ public class Dropdown extends Button {
                 @Override public <T> Integer read(CgStateMap<T> in) {
                     return in.getInt("index", -1);
                 }
-            }, RatePolicy.IMMEDIATE)
+            }, CgRatePolicy.IMMEDIATE)
             .sanitizedBy((dropdown, index) -> dropdown.clampIndex(index));
 
     /** Options before the index, or the index is one into a list that is not there yet. */

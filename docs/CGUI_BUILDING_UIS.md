@@ -772,16 +772,16 @@ io.call("mymod:history", null, reply -> ...);    // if you need an answer
 ```
 
 **Rate-limit what a drag sends.** A networked panel gets this for free; here you do it yourself, or a
-slider sends a packet on every frame you hold it. `RateGate` is the same gate the session uses:
+slider sends a packet on every frame you hold it. `CgRateGate` (CrystalGraphics' `net.rate`) is the same gate the session uses:
 
 ```java
-RateGate<Float> gate = new RateGate<>((widget, kind, value) -> {
+CgRateGate<UIElement, Float> gate = new CgRateGate<>((widget, kind, value) -> {
     CgStateMap<Object> args = new CgStateMap<>(io.ops());
     args.putFloat("value", value);
     io.notify("mymod:setThroughput", args);
 });
 
-gate.attach(throughput, Slider.VALUE_CHANGED);   // takes the widget's own rate: 20/s while dragging
+Slider.VALUE_CHANGED.attach(throughput, gate);   // takes the widget's own rate: 20/s while dragging
 io.onTick(gate::flush);                          // a held value needs something to let it go
 ```
 
@@ -1240,7 +1240,7 @@ public class Dial extends UINode {
                     return in.getFloat("value", 0f);
                 }
             },
-            RatePolicy.DRAGGING);                                // throttle the drag
+            CgRatePolicy.DRAGGING);                                // throttle the drag
 
     public static final WidgetContract<Dial> CONTRACT = WidgetContracts.register(
             WidgetContract.of(Dial.class, "dial")
@@ -1412,8 +1412,8 @@ ServerWindows.of(connection).open(TYPE, model);
 
 // ── client-only, but the server does the work ──────────────────────────────
 CgProtocolConnection<Object> io = CgNetwork.client();
-RateGate<Float> gate = new RateGate<>((w, kind, v) -> io.notify("mymod:set", args(v)));
-gate.attach(slider, Slider.VALUE_CHANGED);       // the widget's own rate
+CgRateGate<UIElement, Float> gate = new CgRateGate<>((w, kind, v) -> io.notify("mymod:set", args(v)));
+Slider.VALUE_CHANGED.attach(slider, gate);       // the widget's own rate
 io.onTick(gate::flush);                          // or a held value never leaves
 
 // ── layout ─────────────────────────────────────────────────────────────────
@@ -1431,5 +1431,5 @@ l.flexDirection(FlexDirection.ROW).gapAll(8)     // a row
 | Nothing on screen ever updates | no projections at all, or you wrote a `tick` that copies and expected the engine to call something else |
 | Listeners stop working after an update | they were attached somewhere other than `client(io)`, which is the only thing re-run when the tree is rebuilt |
 | A widget arrives blank over the wire | it has no contract — see §10 |
-| A client-only UI floods the server while you drag | no `RateGate` — a networked panel has one, this does not |
-| The last thing typed never arrives | nothing is driving `RateGate.flush()`; a debounce holds until something lets it go |
+| A client-only UI floods the server while you drag | no `CgRateGate` — a networked panel has one, this does not |
+| The last thing typed never arrives | nothing is driving `CgRateGate.flush()`; a debounce holds until something lets it go |

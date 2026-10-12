@@ -4,7 +4,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
@@ -34,7 +34,7 @@ public class AssetControl extends ValueControl<String> {
 
     /** An asset id -- picked, not typed. */
     public static final Event<AssetControl, String> CHANGED =
-            ConfigControlContracts.changed(StateTypes.STRING, "", RatePolicy.IMMEDIATE);
+            ConfigControlContracts.changed(StateTypes.STRING, "", CgRatePolicy.IMMEDIATE);
 
     public static final WidgetContract<AssetControl> CONTRACT = ConfigControlContracts.register(
             AssetControl.class, "assetcontrol", StateTypes.STRING, "", CHANGED);

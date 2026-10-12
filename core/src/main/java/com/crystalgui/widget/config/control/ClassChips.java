@@ -13,7 +13,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.dom.Attribute;
@@ -67,7 +67,7 @@ public class ClassChips extends ValueControl<List<String>> implements Refillable
 
     /** Every change travels as it happens: an add or a remove is one discrete act. */
     public static final Event<ClassChips, List<String>> CHANGED =
-            ConfigControlContracts.changed(StateTypes.stringListUnder("c"), List.of(), RatePolicy.IMMEDIATE);
+            ConfigControlContracts.changed(StateTypes.stringListUnder("c"), List.of(), CgRatePolicy.IMMEDIATE);
 
     public static final WidgetContract<ClassChips> CONTRACT = ConfigControlContracts.register(
             ClassChips.class, "classchips", StateTypes.stringListUnder("c"), List.of(), CHANGED);

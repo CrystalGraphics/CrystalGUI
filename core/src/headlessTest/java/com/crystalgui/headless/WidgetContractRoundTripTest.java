@@ -13,7 +13,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ColorSelector;
@@ -296,9 +296,9 @@ public class WidgetContractRoundTripTest {
     public void aWidgetDeclaresItsOwnTempo() {
         // The right answer is a property of the interaction, not of the application: a handler author
         // has no way to know a TextField fires per keystroke without reading the widget.
-        assertEquals(RatePolicy.TYPING, TextField.CONTRACT.event("text").rate());
-        assertEquals(RatePolicy.DRAGGING, Slider.CONTRACT.event("value").rate());
-        assertEquals(RatePolicy.IMMEDIATE, Button.CONTRACT.event("activate").rate());
+        assertEquals(CgRatePolicy.TYPING, TextField.CONTRACT.event("text").rate());
+        assertEquals(CgRatePolicy.DRAGGING, Slider.CONTRACT.event("value").rate());
+        assertEquals(CgRatePolicy.IMMEDIATE, Button.CONTRACT.event("activate").rate());
 
         assertTrue("a throttled event must always deliver its FINAL value -- dropping intermediates is "
                         + "fine, dropping the last one is data loss",

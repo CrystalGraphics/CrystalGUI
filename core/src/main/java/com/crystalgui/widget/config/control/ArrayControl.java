@@ -10,7 +10,7 @@ import com.crystalgui.widget.text.UIText;
 
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -84,7 +84,7 @@ public class ArrayControl extends ValueControl<List<Object>> {
                 @Override public <T> List<String> read(CgStateMap<T> in) {
                     return StateTypes.stringListUnder("v").get(in, "value", List.of());
                 }
-            }, RatePolicy.IMMEDIATE);
+            }, CgRatePolicy.IMMEDIATE);
 
     public static final WidgetContract<ArrayControl> CONTRACT = WidgetContracts.register(
             WidgetContract.of(ArrayControl.class, "arraycontrol")

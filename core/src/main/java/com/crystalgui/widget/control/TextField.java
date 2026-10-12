@@ -19,7 +19,7 @@ import com.crystalgui.text.Rope;
 import com.crystalgui.text.WordClassifier;
 import com.crystalgui.text.WordOperations;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -121,7 +121,7 @@ public class TextField extends UIElement implements Measurable {
                     .omittedWhen("")
                     .describedAs("The text as the mode reads it. Set Text instead: this one is only reported.");
 
-    /** Every keystroke, debounced. @see RatePolicy#TYPING */
+    /** Every keystroke, debounced. @see CgRatePolicy#TYPING */
     public static final Event<TextField, String> TEXT_CHANGED = Event.<TextField, String>of("text",
             (field, sink) -> field.attachListener(sink::accept),
             new Event.Payload<String>() {
@@ -131,7 +131,7 @@ public class TextField extends UIElement implements Measurable {
                 @Override public <T> String read(CgStateMap<T> in) {
                     return in.getString("text", "");
                 }
-            }, RatePolicy.TYPING)
+            }, CgRatePolicy.TYPING)
             .sanitizedBy((field, text) -> field.truncateToMaxLength(text));
 
     /**
@@ -150,7 +150,7 @@ public class TextField extends UIElement implements Measurable {
                 @Override public <T> String read(CgStateMap<T> in) {
                     return in.getString("text", "");
                 }
-            }, RatePolicy.IMMEDIATE)
+            }, CgRatePolicy.IMMEDIATE)
             .sanitizedBy((field, text) -> field.truncateToMaxLength(text));
 
     /** Mode first: it decides how the text is parsed, so text applied before it is parsed by the old one. */

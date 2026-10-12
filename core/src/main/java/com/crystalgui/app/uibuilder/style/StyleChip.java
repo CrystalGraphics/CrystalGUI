@@ -16,7 +16,7 @@ import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.color.ColorValue;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.dom.Attribute;
@@ -54,7 +54,7 @@ public class StyleChip extends ValueControl<String> {
 
     /** Changed when the lab writes: one act, like a color picked. */
     public static final Event<StyleChip, String> CHANGED =
-            ConfigControlContracts.changed(StateTypes.STRING, "", RatePolicy.IMMEDIATE);
+            ConfigControlContracts.changed(StateTypes.STRING, "", CgRatePolicy.IMMEDIATE);
 
     public static final WidgetContract<StyleChip> CONTRACT = ConfigControlContracts.register(
             StyleChip.class, "stylechip", StateTypes.STRING, "", CHANGED);

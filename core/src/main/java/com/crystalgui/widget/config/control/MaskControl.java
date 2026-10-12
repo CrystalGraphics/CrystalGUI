@@ -3,7 +3,7 @@ package com.crystalgui.widget.config.control;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.StateType;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -80,7 +80,7 @@ public class MaskControl extends ValueControl<Set<String>> {
 
     /** A discrete set of flags: every change travels. */
     public static final Event<MaskControl, Set<String>> CHANGED =
-            ConfigControlContracts.changed(FLAGS, Set.of(), RatePolicy.IMMEDIATE);
+            ConfigControlContracts.changed(FLAGS, Set.of(), CgRatePolicy.IMMEDIATE);
 
     public static final WidgetContract<MaskControl> CONTRACT = ConfigControlContracts.register(
             MaskControl.class, "maskcontrol", FLAGS, Set.of(), CHANGED);

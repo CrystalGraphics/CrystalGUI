@@ -2,7 +2,7 @@ package com.crystalgui.widget.config;
 
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateType;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -46,14 +46,14 @@ public final class ConfigControlContracts {
      * subscription unusable for the one family of widgets a served settings panel is entirely made
      * of.</p>
      *
-     * @param rate {@link RatePolicy#DRAGGING} for anything with a drag behind it (a slider, a colour
-     *             wheel), {@link RatePolicy#TYPING} for something typed into,
-     *             {@link RatePolicy#IMMEDIATE} for a discrete choice. The control knows its own tempo;
+     * @param rate {@link CgRatePolicy#DRAGGING} for anything with a drag behind it (a slider, a colour
+     *             wheel), {@link CgRatePolicy#TYPING} for something typed into,
+     *             {@link CgRatePolicy#IMMEDIATE} for a discrete choice. The control knows its own tempo;
      *             a handler cannot.
      */
     @SuppressWarnings("unchecked")
     public static <C extends ConfigControl, V> Event<C, V> changed(
-            StateType<V> valueType, V fallback, RatePolicy rate) {
+            StateType<V> valueType, V fallback, CgRatePolicy rate) {
         return Event.of("change",
                 (control, sink) -> control.changed.connect(raw -> sink.accept((V) raw)),
                 new Event.Payload<V>() {

@@ -6,6 +6,8 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.rate.CgRateGate;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgStateMap;
 
@@ -33,7 +35,7 @@ public final class Event<W, P> {
     private final BiConsumer<W, Consumer<P>> attach;
     @Nullable
     private final Payload<P> payload;
-    private final RatePolicy rate;
+    private final CgRatePolicy rate;
 
     @Nullable
     private final java.util.function.BiFunction<W, P, P> sanitize;
@@ -51,7 +53,7 @@ public final class Event<W, P> {
     }
 
     private Event(String kind, BiConsumer<W, Consumer<P>> attach, @Nullable Payload<P> payload,
-                  RatePolicy rate,
+                  CgRatePolicy rate,
                   @Nullable java.util.function.BiFunction<W, P, P> sanitize) {
         this.kind = Objects.requireNonNull(kind, "kind");
         this.attach = Objects.requireNonNull(attach, "attach");
@@ -67,14 +69,14 @@ public final class Event<W, P> {
      *               occurrence hands the sink its payload
      */
     public static <W, P> Event<W, P> of(
-            String kind, BiConsumer<W, Consumer<P>> attach, Payload<P> payload, RatePolicy rate) {
+            String kind, BiConsumer<W, Consumer<P>> attach, Payload<P> payload, CgRatePolicy rate) {
         return new Event<>(kind, attach, Objects.requireNonNull(payload, "payload"), rate, null);
     }
 
     /** An event carrying nothing — a press, a focus change. */
     public static <W> Event<W, Void> signal(String kind, BiConsumer<W, Runnable> attach) {
         return new Event<>(kind, (widget, sink) -> attach.accept(widget, () -> sink.accept(null)),
-                null, RatePolicy.IMMEDIATE, null);
+                null, CgRatePolicy.IMMEDIATE, null);
     }
 
     /**
@@ -86,7 +88,7 @@ public final class Event<W, P> {
      * session.</p>
      *
      * <pre>{@code
-     * Event.of("value", …, RatePolicy.DRAGGING).sanitizedBy((slider, v) -> slider.clampAndSnap(v));
+     * Event.of("value", …, CgRatePolicy.DRAGGING).sanitizedBy((slider, v) -> slider.clampAndSnap(v));
      * }</pre>
      *
      * <p><b>Sanitize, do not reject.</b> A clamped value is a value the user could have produced with a
@@ -108,7 +110,7 @@ public final class Event<W, P> {
         return kind;
     }
 
-    public RatePolicy rate() {
+    public CgRatePolicy rate() {
         return rate;
     }
 
@@ -119,6 +121,17 @@ public final class Event<W, P> {
     /** Subscribes {@code sink} to this event on {@code widget}. Client side. */
     public void attach(W widget, Consumer<P> sink) {
         attach.accept(widget, sink);
+    }
+
+    /**
+     * Subscribes {@code gate} to this event on {@code widget}, at the event's own {@link #rate()}. Client side.
+     *
+     * <pre>{@code
+     * Slider.VALUE_CHANGED.attach(throughput, gate);   // dragging: at most every 50 ms, and where it was released
+     * }</pre>
+     */
+    public void attach(W widget, CgRateGate<? super W, P> gate) {
+        attach.accept(widget, value -> gate.offer(widget, kind, rate, value));
     }
 
     /** Encodes an occurrence, or answers null for a kind that carries nothing. */

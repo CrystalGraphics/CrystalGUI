@@ -4,7 +4,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
@@ -67,7 +67,7 @@ public class TextControl extends ValueControl<String> {
 
     /** Debounced, and committed on blur or Enter. */
     public static final Event<TextControl, String> CHANGED =
-            ConfigControlContracts.changed(StateTypes.STRING, "", RatePolicy.TYPING);
+            ConfigControlContracts.changed(StateTypes.STRING, "", CgRatePolicy.TYPING);
 
     public static final WidgetContract<TextControl> CONTRACT = ConfigControlContracts.register(
             TextControl.class, "textcontrol", StateTypes.STRING, "", CHANGED);

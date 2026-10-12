@@ -5,7 +5,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.widget.config.ValueControl;
@@ -46,7 +46,7 @@ public class VectorControl extends ValueControl<double[]> {
 
     /** Components typed or scrubbed independently, so it debounces as a field does. */
     public static final Event<VectorControl, double[]> CHANGED =
-            ConfigControlContracts.changed(StateTypes.doubleArrayUnder("v"), new double[0], RatePolicy.TYPING);
+            ConfigControlContracts.changed(StateTypes.doubleArrayUnder("v"), new double[0], CgRatePolicy.TYPING);
 
     public static final WidgetContract<VectorControl> CONTRACT = ConfigControlContracts.register(
             VectorControl.class, "vectorcontrol", StateTypes.doubleArrayUnder("v"), new double[0], CHANGED);

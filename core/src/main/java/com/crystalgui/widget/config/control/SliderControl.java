@@ -4,7 +4,7 @@ import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.widget.control.Slider;
@@ -47,7 +47,7 @@ public class SliderControl extends ValueControl<Double> {
 
     /** A drag from end to end would otherwise be a packet per pixel. */
     public static final Event<SliderControl, Double> CHANGED =
-            ConfigControlContracts.changed(StateTypes.DOUBLE, 0d, RatePolicy.DRAGGING);
+            ConfigControlContracts.changed(StateTypes.DOUBLE, 0d, CgRatePolicy.DRAGGING);
 
     public static final WidgetContract<SliderControl> CONTRACT = ConfigControlContracts.register(
             SliderControl.class, "slidercontrol", StateTypes.DOUBLE, 0d, CHANGED);

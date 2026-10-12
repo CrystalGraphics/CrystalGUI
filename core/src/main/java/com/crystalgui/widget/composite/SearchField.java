@@ -4,7 +4,7 @@ import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -77,7 +77,7 @@ public class SearchField extends UIElement {
                 @Override public <T> String read(CgStateMap<T> in) {
                     return in.getString("text", "");
                 }
-            }, RatePolicy.TYPING);
+            }, CgRatePolicy.TYPING);
 
     public static final WidgetContract<SearchField> CONTRACT = WidgetContracts.register(
             WidgetContract.of(SearchField.class, "searchfield")

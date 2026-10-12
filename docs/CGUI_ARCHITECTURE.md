@@ -296,7 +296,7 @@ com.crystalgui.ui.contract     WHAT A KIND OF WIDGET IS — one declaration, fou
                                an optional sanitizer — DECLARATION ORDER IS APPLY ORDER, which several
                                widgets depend on), Event<W,P> (a kind, a payload codec, and HOW A
                                CLIENT LISTENS — which is what deleted the instanceof switch),
-                               StateType/StateTypes, RatePolicy (immediate/typing/dragging; a widget
+                               StateType/StateTypes, and CrystalGraphics' CgRatePolicy (immediate/typing/dragging; a widget
                                knows its own tempo and a handler cannot), WidgetContracts (the
                                registry, and the local-only list with reasons). NOTE there is no kind
                                vocabulary class: a kind is a string an Event declares, unique only

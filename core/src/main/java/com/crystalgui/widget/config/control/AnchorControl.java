@@ -3,7 +3,7 @@ package com.crystalgui.widget.config.control;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.Event;
-import com.crystalgui.ui.contract.RatePolicy;
+import com.crystalgraphics.net.rate.CgRatePolicy;
 import com.crystalgui.ui.contract.StateTypes;
 import com.crystalgui.ui.contract.WidgetContract;
 import com.crystalgui.ui.dom.Name;
@@ -40,7 +40,7 @@ public class AnchorControl extends ValueControl<double[]> {
 
     /** A discrete choice of nine. */
     public static final Event<AnchorControl, double[]> CHANGED =
-            ConfigControlContracts.changed(StateTypes.doubleArrayUnder("v"), new double[0], RatePolicy.IMMEDIATE);
+            ConfigControlContracts.changed(StateTypes.doubleArrayUnder("v"), new double[0], CgRatePolicy.IMMEDIATE);
 
     public static final WidgetContract<AnchorControl> CONTRACT = ConfigControlContracts.register(
             AnchorControl.class, "anchorcontrol", StateTypes.doubleArrayUnder("v"), new double[0], CHANGED);

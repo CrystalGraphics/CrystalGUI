@@ -161,7 +161,7 @@ public class MultiViewerTest {
         // The proof that alice was SKIPPED rather than merely sent something harmless: with the echo
         // suppressed there is nothing for her in the batch at all.
         // Past the slider's own 50ms throttle first, or the second change is held rather than sent --
-        // Slider.VALUE_CHANGED is RatePolicy.DRAGGING.
+        // Slider.VALUE_CHANGED is CgRatePolicy.DRAGGING.
         clock += 200;
         linkA[0].clearSent();
         onAlice.setValue(3f);
