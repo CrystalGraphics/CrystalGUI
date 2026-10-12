@@ -21,7 +21,9 @@ import java.util.zip.ZipFile;
 
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.net.CgReplicated;
+import com.crystalgraphics.net.object.CgAnchor;
+import com.crystalgraphics.net.object.CgNetField;
+import com.crystalgraphics.net.object.CgNetType;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.gl.CgGL;
@@ -503,14 +505,14 @@ public final class ServerSmoke {
     }
 
     /** Saved when this server stops, so the first run of a fresh world makes one and every run after finds it. */
-    private static final CgReplicated<String> KEPT =
-            CgReplicated.define("crystalgui:probe/kept", CgCodecs.STRING).persisted();
+    private static final CgNetField<String> KEPT_VALUE = CgNetField.of("value", CgCodecs.STRING);
+    private static final CgNetType KEPT = CgNetType.define("crystalgui:probe/kept").fields(KEPT_VALUE).persisted().build();
 
     /** A persisted object outlives the server that made it. Needs two runs on one world; the first says so. */
     private static void checkPersistence(List<String> lines, List<String> failures) {
         int found = KEPT.size();
         if (found == 0) {
-            KEPT.create("minecraft:overworld", 0, 64, 0, "kept");
+            KEPT.spawn(CgAnchor.at("minecraft:overworld", 0, 64, 0)).set(KEPT_VALUE, "kept").start();
             lines.add("SKIP  a persisted object survives a restart -- made one; the next run on this world checks it");
             return;
         }
@@ -521,8 +523,8 @@ public final class ServerSmoke {
 
     private static String firstValue() {
         String[] value = new String[1];
-        KEPT.forEach(handle -> {
-            if (value[0] == null) value[0] = handle.value();
+        KEPT.forEach(obj -> {
+            if (value[0] == null) value[0] = obj.get(KEPT_VALUE);
         });
         return value[0];
     }
