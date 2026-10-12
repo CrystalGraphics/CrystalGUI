@@ -13,8 +13,8 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 
 | Moment | What CrystalGUI does |
 |---|---|
-| `onInit` | The disposal GL gate, and `CgUiPaintContext.warm`. The warm needs a host section, and a late registrant arrives from wherever it registered (26.x's GUI extraction is outside one), so outside a section it waits for the next `onFrame` |
-| `onFrame` | Drains queued GL disposals, runs a deferred warm, then the `atFrameEnd` paints. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
+| `onInit` | The disposal GL gate, and starts `CgUiPaintContext.warm()` |
+| `onFrame` | Drains queued GL disposals, steps the warm-up (inside a host section, which `onInit` from a late registrant is not: 26.x's GUI extraction is outside one; its compiles spread over frames within `CgWarmBudget`), then the `atFrameEnd` paints. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
 | `onDestroy` | `UiGpu.destroy()`, and nothing else |
 
 > **`onInit` reaches late registrants.** CrystalGUI registers from a class initializer on the *first

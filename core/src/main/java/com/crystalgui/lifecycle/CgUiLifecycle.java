@@ -13,7 +13,6 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
-import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
@@ -131,8 +130,8 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     }
 
     /**
-     * Installs the GL gate for disposals and warms the paint context: now inside a host section, else at
-     * the next {@link #onFrame}, which is inside one.
+     * Installs the GL gate for disposals and starts the paint context's warm-up, which each {@link #onFrame}
+     * steps.
      *
      * <p>Only a process that paints gets here: registration is the paint context's first use, so a
      * dedicated server never warms anything.</p>
@@ -159,25 +158,22 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
 
-        // Warmup the paint context, around 1000ms on first init done before world frame time. Its GPU work needs a
-        // host section: a late registrant arrives from wherever it registered (26.x's GUI extraction is outside one),
-        // so the warm then waits for onFrame, which is inside one.
-        if (CgGL.inHostSection()) warm(width, height);
-        else {
-            warmWaiting = true;
-            warmWidth = width;
-            warmHeight = height;
-        }
+        // The paint context's warm-up, about a second of compiles on first init: stepped from onFrame, inside a host
+        // section, a budget of it a frame, so the title screen keeps drawing while it runs.
+        if (warm != null) warm.cancel();
+        warm = CgUiPaintContext.warm();
+        warmWidth = width;
+        warmHeight = height;
     }
 
-    /** A warm onInit deferred to the next onFrame, and its size. */
-    private boolean warmWaiting;
+    /** The paint context's warm-up, until it finishes, and the size onInit gave. */
+    private CgUiPaintContext.Warm warm;
     private int warmWidth, warmHeight;
 
-    /** Every domain saved: a material bind applies its pass's whole render state, inside the host's world pass. */
-    private static void warm(int width, int height) {
+    /** Every domain saved: a compile's commit may bind, and the warm frame applies render state. */
+    private void stepWarm() {
         try (CgGlScope ignored = CgGlState.saveAll()) {
-            CgUiPaintContext.warm(width, height);
+            if (warm.step(warmWidth, warmHeight)) warm = null;
         }
     }
     
@@ -203,10 +199,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     public void onFrame(long frame) {
         Runnable due;
         while ((due = pending.poll()) != null) due.run();
-        if (warmWaiting) {
-            warmWaiting = false;
-            warm(warmWidth, warmHeight);
-        }
+        if (warm != null) stepWarm();
 
         if (atFrameEnd.isEmpty()) return;
         Runnable[] paints = atFrameEnd.values().toArray(new Runnable[0]);

@@ -148,31 +148,55 @@ public final class CgUiPaintContext {
     };
 
     /**
-     * Compiles the shipped materials and builds everything a first frame would, so the first real frame does not.
+     * A warm-up of the shipped materials and of everything a first frame builds, so the first real frame does not:
+     * polled once a frame, its compiles spread over frames within CrystalGraphics' {@code CgWarmBudget}.
      *
-     * <p>{@code CgMaterial.load} only parses; binding each material once is what pays for the GLSL — measured, a
-     * first-frame material bind fell from 300 ms to 286 by construction alone and to nothing once bound. An empty
-     * frame then builds the executor's buffers, the ring and the GL state save, which were most of a first frame.
-     * Called from {@link com.crystalgui.lifecycle.CgUiLifecycle#onInit}, on the GL thread with a live context.
-     * Failures are swallowed: a warm-up must not be what fails a context, and the first real frame reports them.</p>
+     * <pre>{@code
+     * CgUiPaintContext.Warm warm = CgUiPaintContext.warm();   // once a context exists
+     * if (warm != null && warm.step(w, h)) warm = null;        // each frame, inside a host section
+     * warm.cancel();                                           // the context going first
+     * }</pre>
+     *
+     * <ul>
+     *   <li>{@code CgMaterial.load} only parses; the GLSL is paid for here, by polling each material's
+     *       {@code prepare()}. Once all are built, one empty frame builds the executor's buffers, the ring and the GL
+     *       state save, which were most of a first frame.</li>
+     *   <li>A real frame painted before it finishes compiles what is left itself.</li>
+     *   <li>Failures are swallowed: a warm-up must not be what fails a context, and the first real frame reports
+     *       them.</li>
+     * </ul>
      */
-    public static void warm(int width, int height) {
-        CgUiPaintContext context = create();
-        try {
-            // Leaks the Pass RenderState of every material below — doBind applies it, unbind() restores none of
-            // it. Scoped by CgUiLifecycle.onInit; no scope here.
-            for (CgMaterial material : new CgMaterial[] {
-                    context.boxModelMaterial, context.curveMaterial, context.layerBlitMaterial }) {
+    public static Warm warm() {
+        return new Warm();
+    }
+
+    /** {@link #warm()}'s state: one per context. Render thread. */
+    public static final class Warm {
+
+        @Nullable
+        private CgUiPaintContext context;
+        private CgMaterial[] materials;
+
+        private Warm() {}
+
+        /** One frame of it; true once it has finished. Inside a host section, with the GL state saved. */
+        public boolean step(int width, int height) {
+            if (context == null) {
+                context = create();
+                materials = new CgMaterial[] {context.boxModelMaterial, context.curveMaterial, context.layerBlitMaterial};
+                // The two asset caches, both off the render thread and neither needing GL.
+                preloadIcons();
+                warmGlyphs(WARM_UI_SCALE);
+            }
+            boolean ready = true;
+            for (CgMaterial material : materials) {
                 try {
-                    material.bind();
-                    material.unbind();
+                    ready &= material.prepare();
                 } catch (RuntimeException | LinkageError ignored) {
                     // An optimisation that fails is silent.
                 }
             }
-            // AND THE TWO ASSET CACHES, both off the render thread and neither needing GL.
-            preloadIcons();
-            warmGlyphs(WARM_UI_SCALE);
+            if (!ready) return false;
             try {
                 context.beginFrame(Math.max(1, width), Math.max(1, height));
                 context.endFrame();
@@ -180,9 +204,16 @@ public final class CgUiPaintContext {
                 // Not silent: a frame left open would refuse every later one.
                 context.abortFrame();
                 CrystalGuiCore.LOGGER.warn("[cgui] paint warm-up failed; the first real frame builds it instead", e);
+            } finally {
+                cancel();
             }
-        } finally {
-            context.release();
+            return true;
+        }
+
+        /** Releases what it holds, finished or not. */
+        public void cancel() {
+            if (context != null) context.release();
+            context = null;
         }
     }
 
