@@ -261,6 +261,8 @@ tasks.named<JavaExec>(runTask) {
     if (providers.gradleProperty("cgStateVerify").isPresent) {
         systemProperty("crystalgraphics.state.verify", "true")
     }
+    // -PcgJvmArgs="-XX:StartFlightRecording=duration=60s,filename=build/client.jfr": JVM flags for the game, space-separated.
+    providers.gradleProperty("cgJvmArgs").orNull?.let { jvmArgs(it.trim().split(Regex("\\s+"))) }
 
     // THE ENGINE BANDS, staged for the dev run exactly as runHarness does it.
     //
