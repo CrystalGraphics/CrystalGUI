@@ -167,7 +167,7 @@ public final class FurnacePanel extends UIElement implements Networked<FurnaceDa
 Open it from the server, when a player right-clicks the furnace:
 
 ```java
-CgProtocolConnection<Object> connection = CgNetwork.forPlayer(player.getUUID());   // null if they're not connected
+CgProtocolConnection<Object> connection = CgNetwork.forPlayer(player);   // the player object; null if they're not connected
 if (connection != null) ServerWindows.of(connection).open(FurnacePanel.TYPE, furnace);
 ```
 

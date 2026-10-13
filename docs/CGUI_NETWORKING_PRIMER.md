@@ -553,7 +553,7 @@ seconds of silence per pending call is not information.*
 ### How you get hold of one
 
 ```java
-CgNetwork.forPlayer(playerUuid);   // server side — null if they have none
+CgNetwork.forPlayer(serverPlayer); // server side, the player object (or its profile UUID) — null if they have none
 CgNetwork.client();                // client side — null when not in a world
 CgNetwork.openConnections();       // diagnostics; what a leak shows up in
 CgNetwork.isInstalled();           // did the host install the connections?
@@ -1138,7 +1138,7 @@ CgProtocols.contribute("mything", c -> {
 });
 
 // ── Get a connection ──────────────────────────────────────────────────────
-CgProtocolConnection<Object> c = CgNetwork.forPlayer(playerUuid);     // server
+CgProtocolConnection<Object> c = CgNetwork.forPlayer(serverPlayer);   // server: the player, or their UUID
 CgProtocolConnection<Object> c = CgNetwork.client();                  // client
 
 // ── Talk ──────────────────────────────────────────────────────────────────

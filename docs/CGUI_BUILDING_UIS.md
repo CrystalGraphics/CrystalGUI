@@ -467,12 +467,12 @@ field debounces its typing, and both always deliver the value you ended on.
 
 ### Opening it — where the connection comes from
 
-A networked window needs a **connection to one player**, by their profile id — CrystalGraphics' `CgNetwork`
-holds one per player on every version:
+A networked window needs a **connection to one player** — CrystalGraphics' `CgNetwork` holds one per player on
+every version, found from the player object itself (or their profile UUID):
 
 ```java
 // Server side — e.g. from a block's onBlockActivated, or a command, or a tick
-CgProtocolConnection<Object> connection = CgNetwork.forPlayer(player.getGameProfile().getId());
+CgProtocolConnection<Object> connection = CgNetwork.forPlayer(player);
 if (connection == null) return;                 // that player has no connection
 
 ServerWindows.of(connection).open(FurnacePanel.TYPE, myFurnace);
@@ -481,7 +481,7 @@ ServerWindows.of(connection).open(FurnacePanel.TYPE, myFurnace);
 ```java
 public boolean onBlockActivated(World world, int x, int y, int z, EntityPlayer player, ...) {
     if (world.isRemote) return true;            // server decides; the client just gets the window
-    CgProtocolConnection<Object> connection = CgNetwork.forPlayer(player.getGameProfile().getId());
+    CgProtocolConnection<Object> connection = CgNetwork.forPlayer(player);
     if (connection != null) {
         ServerWindows.of(connection).open(FurnacePanel.TYPE, furnaceAt(x, y, z)); // FurnaceData in world  at (x,y,z) 
     }
@@ -764,7 +764,7 @@ connection underneath is public, so it can send anyway. This is the third row of
 
 ```java
 CgProtocolConnection<Object> io = CgNetwork.client();                 // client side
-CgProtocolConnection<Object> io = CgNetwork.forPlayer(playerUuid);     // server side
+CgProtocolConnection<Object> io = CgNetwork.forPlayer(serverPlayer);   // server side: the player, or their UUID
 
 io.notify("mymod:setThroughput", args);          // fire and forget
 io.onNotify("mymod:setThroughput", args -> ...); // the other end
