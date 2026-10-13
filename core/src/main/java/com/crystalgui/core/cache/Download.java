@@ -1,6 +1,6 @@
 package com.crystalgui.core.cache;
 
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 
 import java.io.Closeable;
 import java.io.FilterInputStream;
@@ -25,7 +25,7 @@ import java.util.function.BooleanSupplier;
  * <h3>Announce before connecting, then retarget</h3>
  *
  * <p>The size is not known until the server has answered, and <b>the connect is the part most likely to
- * hang</b>. A downloader that waits for the length before calling {@link Progress#begin} shows nothing at
+ * hang</b>. A downloader that waits for the length before calling {@link CgProgress#begin} shows nothing at
  * all for as long as the network takes to refuse — which is exactly the stall the progress channel exists
  * to report. Reported from a real client as "I ran the command and nothing happened", twice. So: begin
  * indeterminate, connect, then begin again with the total.</p>
@@ -38,7 +38,7 @@ import java.util.function.BooleanSupplier;
  *
  * <h3>Reports are rate-limited at the source</h3>
  *
- * <p>{@link com.crystalgui.core.async.ProgressState} allocates per report and its javadoc asks callers to
+ * <p>{@link com.crystalgraphics.job.progress.CgProgressState} allocates per report and its javadoc asks callers to
  * accumulate rather than report per chunk. An 8 KB read loop over 50 MB is six thousand allocations
  * feeding a bar that redraws sixty times a second. {@link #REPORT_EVERY_BYTES} is where that is paid
  * once, so no consumer has to remember it.</p>
@@ -70,7 +70,7 @@ public final class Download implements Closeable {
      * <p>Reached through {@code Downloads.from(url).named(what).reporting(progress).open()}, which is the
      * described form and the one a call site should read as. This is what that resolves to.</p>
      */
-    static Download start(String url, String what, Progress progress,
+    static Download start(String url, String what, CgProgress progress,
                           BooleanSupplier cancelled) throws IOException {
         return start(url, what, progress, cancelled, 0L);
     }
@@ -82,15 +82,15 @@ public final class Download implements Closeable {
      * last one stopped instead of appearing to start again — which is the whole point of resuming and
      * would otherwise be invisible to the person watching it.</p>
      */
-    static Download start(String url, String what, Progress progress,
+    static Download start(String url, String what, CgProgress progress,
                           BooleanSupplier cancelled, long from) throws IOException {
         // BEFORE THE CONNECT, and indeterminate because nothing knows the size yet. This ordering is the
         // whole reason the class exists -- see the header.
-        progress.begin(what, -1, Progress.Unit.BYTES);
+        progress.begin(what, -1, CgProgress.Unit.BYTES);
         Downloads.Body body = Downloads.fetch(url, from);
         long already = body.resumed() ? from : 0L;
         if (body.length() > 0) {
-            progress.begin(what, body.length(), Progress.Unit.BYTES);
+            progress.begin(what, body.length(), CgProgress.Unit.BYTES);
             if (already > 0) progress.advance(already);
         }
         return new Download(url, body, new Counting(body.stream(), progress, cancelled, already));
@@ -124,22 +124,22 @@ public final class Download implements Closeable {
     /**
      * Counts bytes past and reports on a threshold.
      *
-     * <p>Absolute, because {@link Progress#advance} is absolute — a delta here and a total there is the
+     * <p>Absolute, because {@link CgProgress#advance} is absolute — a delta here and a total there is the
      * shape that produces a bar reading 4% of a finished download.</p>
      */
     private static final class Counting extends FilterInputStream {
 
-        private final Progress progress;
+        private final CgProgress progress;
         private final BooleanSupplier cancelled;
         private long read;
         private long reportedAt;
 
-        Counting(InputStream in, Progress progress, BooleanSupplier cancelled,
+        Counting(InputStream in, CgProgress progress, BooleanSupplier cancelled,
                  long already) {
             super(in);
             this.progress = progress;
             this.cancelled = cancelled;
-            // WHAT WAS ALREADY ON DISK. `Progress.advance` is absolute, so a resumed transfer that
+            // WHAT WAS ALREADY ON DISK. `CgProgress.advance` is absolute, so a resumed transfer that
             // counted only its own bytes would report a bar running backwards to the fraction it is
             // resuming from.
             this.read = already;

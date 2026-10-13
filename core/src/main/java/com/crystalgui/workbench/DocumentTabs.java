@@ -2,7 +2,7 @@ package com.crystalgui.workbench;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.core.async.ReplyError;
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
@@ -146,7 +146,7 @@ public final class DocumentTabs {
      */
     private boolean closeIfTheFileIsGone(EditorService.Tab tab, DockPanelRef ref) {
         if (tab.state() != DocumentState.FAILED) return false;
-        ReplyError why = tab.failure();
+        CgReplyError why = tab.failure();
         if (why == null || !why.is(FsError.NOT_FOUND)) return false;
         workbench.placeholders.remove(ref);
         workbench.editors.close(tab);
@@ -176,7 +176,7 @@ public final class DocumentTabs {
             Resource about = Resource.parse(path);
             EditorService.Tab tab = workbench.editors.tabFor(EditorInput.of(about));
             if (tab == null || tab.state() != DocumentState.FAILED) return null;
-            ReplyError why = tab.failure();
+            CgReplyError why = tab.failure();
             return Notification.error(about.name() + " could not be opened")
                     .withDetail(why == null ? "the read failed" : why.detail())
                     .withAction("Retry", tab::retry);

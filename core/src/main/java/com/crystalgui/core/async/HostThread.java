@@ -1,5 +1,8 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.reply.CgPendingReply;
+import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgui.core.CrystalGuiCore;
 
 import javax.annotation.Nullable;
@@ -14,7 +17,7 @@ import java.util.function.Supplier;
  * <pre>{@code
  * HostThread.CLIENT.run(() -> player.drop(stack, false));                  // fire and forget, on the client thread
  *
- * HostThread.SERVER.call(() -> level.getBlockState(pos))                   // a Reply...
+ * HostThread.SERVER.call(() -> level.getBlockState(pos))                   // a CgReply...
  *         .then(state -> label.setText(state.getBlock().getName()));      // ...answered on the UI's own thread
  * }</pre>
  *
@@ -163,23 +166,23 @@ public enum HostThread {
      * Runs {@code work} on this thread and answers its result on the calling thread -- where a document runs, so its
      * {@code then} may touch the tree. Answered before it returns when called from the thread itself.
      */
-    public <T> Reply<T> call(Supplier<T> work) {
-        if (!isAvailable()) return Reply.failed(new ReplyError(UNAVAILABLE, name() + " has no thread here"));
+    public <T> CgReply<T> call(Supplier<T> work) {
+        if (!isAvailable()) return CgReply.failed(new CgReplyError(UNAVAILABLE, name() + " has no thread here"));
         if (isCurrent()) {
             try {
-                return Reply.of(work.get());
+                return CgReply.of(work.get());
             } catch (RuntimeException failed) {
-                return Reply.failed(ReplyError.failed(failed));
+                return CgReply.failed(CgReplyError.failed(failed));
             }
         }
-        PendingReply<T> reply = new PendingReply<>(null);
+        CgPendingReply<T> reply = new CgPendingReply<>(null);
         Binding back = answerTo();
         resolved().execute(() -> {
             T value;
             try {
                 value = work.get();
             } catch (RuntimeException failed) {
-                back.execute(() -> reply.fail(ReplyError.failed(failed)));
+                back.execute(() -> reply.fail(CgReplyError.failed(failed)));
                 return;
             }
             back.execute(() -> reply.resolve(value));
@@ -189,7 +192,7 @@ public enum HostThread {
 
     private static final HostThread[] GAME_THREADS = {CLIENT, SERVER};
 
-    /** A {@link ReplyError} code: the thread does not exist here, a server that is not running. */
+    /** A {@link CgReplyError} code: the thread does not exist here, a server that is not running. */
     public static final String UNAVAILABLE = "UNAVAILABLE";
 
     /**

@@ -2,8 +2,8 @@ package com.crystalgui.language.grammar;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.Change;
 import com.crystalgui.text.ChangeSet;
@@ -912,7 +912,7 @@ public final class TreeSitterTokenizer
      */
     private boolean deferInitialParse(Rope document) {
         if (tree != null || scheduler == null) return false;
-        // SINGLE-FLIGHT IS WHY THIS NEEDS A FLAG. scheduleReparse keys on JobKey.of(this, "reparse"), and
+        // SINGLE-FLIGHT IS WHY THIS NEEDS A FLAG. scheduleReparse keys on CgJobKey.of(this, "reparse"), and
         // that key's contract is that a new submission REPLACES the queued job and asks the running one to
         // stop -- which is exactly right for a burst of keystrokes and fatal here, because this runs from
         // a paint. Re-submitting every frame would cancel the parse every frame and it would never finish:
@@ -943,7 +943,7 @@ public final class TreeSitterTokenizer
         // one, so the worker's snapshot cannot be edited underneath it. The tree, which is NOT persistent,
         // is copied instead.
         TSTree snapshot = tree == null ? null : tree.copy();
-        scheduler.job(JobKey.of(this, "reparse"), JobLane.LATENCY, context -> {
+        scheduler.job(CgJobKey.of(this, "reparse"), CgJobLane.LATENCY, context -> {
             if (workerParser == null) {
                 workerParser = new TSParser();
                 workerParser.setLanguage(language);

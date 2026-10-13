@@ -184,7 +184,7 @@ final class HarnessWorkspace {
         workspace.files().write(Resource.of(path), text.getBytes(StandardCharsets.UTF_8), etag)
                 .then(written -> onSaved.run())
                 .onError(failure -> onFailure.accept(
-                        failure instanceof FsError problem && problem.is(FsError.CONFLICT)));
+                        failure.is(FsError.CONFLICT)));
     }
 
     /** Overrides the default filter — a prefix list, or {@code none} to switch it off. @see #applyScriptPolicy */

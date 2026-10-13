@@ -1,8 +1,9 @@
 package com.crystalgui.style.sheet;
 
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
@@ -459,7 +460,7 @@ public final class StyleSheet {
     private static final boolean WARM = !"false".equals(System.getProperty("crystalgui.style.warm"));
 
     /**
-     * Parses every declared value on the shared worker pool, once, so the first style pass to match a rule finds its
+     * Parses every declared value on the job pool, once, so the first style pass to match a rule finds its
      * values ready: on a window's first frame half of matching was parsing values (a sprite decoded, an icon read).
      * Returns at once; a value a pass needs before its worker reaches it is computed by the pass, and only once.
      */
@@ -471,7 +472,7 @@ public final class StyleSheet {
         }
         for (int from = 0; from < values.size(); from += WARM_CHUNK) {
             List<StyleValue<?>> chunk = values.subList(from, Math.min(values.size(), from + WARM_CHUNK));
-            JobScheduler.sharedPool().execute(() -> {
+            CgJob.executor(CgJobLane.LATENCY).execute(() -> {
                 try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "style:warmValues")) {
                     for (StyleValue<?> value : chunk) value.compute();
                 }

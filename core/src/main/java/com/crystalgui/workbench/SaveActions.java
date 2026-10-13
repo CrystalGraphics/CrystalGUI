@@ -1,6 +1,6 @@
 package com.crystalgui.workbench;
 
-import com.crystalgui.core.async.ReplyError;
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.document.Document;
@@ -198,7 +198,7 @@ public final class SaveActions {
         workbench.documents.save(document)
                 .then(ok -> saved(target))
                 .onError(failure -> {
-                    if (failure instanceof FsError problem && problem.is(FsError.CONFLICT)) {
+                    if (failure.is(FsError.CONFLICT)) {
                         askWhichVersionSurvives(target, written);
                         return;
                     }
@@ -378,13 +378,13 @@ public final class SaveActions {
      * <p>Returned rather than shown, so a caller can add the action it knows about — retrying an open
      * means something different from retrying a save.</p>
      */
-    public static Notification openFailed(Resource resource, ReplyError failure) {
+    public static Notification openFailed(Resource resource, CgReplyError failure) {
         return Notification.error("Open failed")
                 .withDetail(resource.name() + " — " + failure.detail());
     }
 
     /** @see #openFailed */
-    private static Notification saveFailed(CgPath path, ReplyError failure) {
+    private static Notification saveFailed(CgPath path, CgReplyError failure) {
         return Notification.error("Save failed").withDetail(path.name() + " — " + failure.detail());
     }
 

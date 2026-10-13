@@ -11,8 +11,8 @@ import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.core.async.PendingReply;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgPendingReply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.document.Document;
@@ -357,8 +357,8 @@ public class StyleEditingTest {
         };
     }
 
-    private static <T> Reply<T> reply(T value) {
-        PendingReply<T> settled = new PendingReply<>(null);
+    private static <T> CgReply<T> reply(T value) {
+        CgPendingReply<T> settled = new CgPendingReply<>(null);
         settled.resolve(value);
         return settled;
     }

@@ -3,8 +3,8 @@ package com.crystalgui.language.run.view;
 import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.extension.WorkbenchExtension;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandContext;
@@ -304,10 +304,10 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
      */
     private final AtomicBoolean promptShown = new AtomicBoolean();
 
-    private final JobKey promptKey = JobKey.of(ScriptWorkbench.class, "run-input-prompt");
+    private final CgJobKey promptKey = CgJobKey.of(ScriptWorkbench.class, "run-input-prompt");
 
     /** @see #compileForAsync */
-    private final JobKey compileKey = JobKey.of(ScriptWorkbench.class, "run-compile");
+    private final CgJobKey compileKey = CgJobKey.of(ScriptWorkbench.class, "run-compile");
 
     /**
      * Brings the console up when something blocks reading {@code System.in}.
@@ -326,7 +326,7 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
         }
         if (!promptShown.compareAndSet(false, true)) return;
         JobScheduler.shared()
-                .<Boolean>job(promptKey, JobLane.LATENCY, context -> Boolean.TRUE)
+                .<Boolean>job(promptKey, CgJobLane.LATENCY, context -> Boolean.TRUE)
                 .onDone(ignored -> showConsole(workbench))
                 .submit();
     }
@@ -446,7 +446,7 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
             return;
         }
         JobScheduler.shared()
-                .<ScriptRuntime.Compiled>job(compileKey, JobLane.LATENCY,
+                .<ScriptRuntime.Compiled>job(compileKey, CgJobLane.LATENCY,
                         context -> snapshot.runtime.compileScript(
                                 snapshot.name, snapshot.source, snapshot.bindings))
                 .onDone(compiled -> onReady.accept(finish(snapshot, compiled)))

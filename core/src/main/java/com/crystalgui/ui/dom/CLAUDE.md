@@ -63,7 +63,7 @@ capture or script counts `driver.presentedFrames()`, not frame numbers: async pr
 first frame is recorded.
 
 **UI code reaches the game through `HostThread`** (`core.async`), never directly: `HostThread.CLIENT.run(...)`,
-`HostThread.SERVER.call(...)` answering a `Reply` on the UI's thread, and `UINode.extract(read, use)` for a value read
+`HostThread.SERVER.call(...)` answering a `CgReply` on the UI's thread, and `UINode.extract(read, use)` for a value read
 every frame and used when it changes. Instant where the named thread is the one framing the document; otherwise one
 hop, the answer landing at the next frame. Each loader answers the threads through `HostServices`; the guide is
 `docs/CGUI_BUILDING_UIS.md` §7c.

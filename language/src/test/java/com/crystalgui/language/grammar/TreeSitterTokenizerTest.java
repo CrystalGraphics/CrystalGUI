@@ -317,7 +317,7 @@ public class TreeSitterTokenizerTest {
     @Test
     public void withASchedulerAnEditDefersTheParseAndLandsItOnADrain() {
         List<Runnable> pending = new ArrayList<>();
-        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L, 2);
+        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L);
         TreeSitterTokenizer tokenizer;
         try {
             tokenizer = Grammar.JAVA.newTokenizer(scheduler);
@@ -337,10 +337,9 @@ public class TreeSitterTokenizerTest {
         Rope after = change.apply(document);
         tokenizer.edited(after, change);
 
-        // The edit interpolated and queued; nothing has parsed.
-        assertTrue("the edit must not have parsed on the calling thread", pending.isEmpty());
+        // The edit interpolated and queued the reparse on the executor; nothing has parsed.
+        assertFalse("a reparse should have been queued, not run", pending.isEmpty());
         scheduler.drain();
-        assertFalse("a reparse should have been scheduled", pending.isEmpty());
         assertTrue("and it must not have landed yet", invalidations.isEmpty());
 
         // Queries meanwhile still answer -- from the interpolated tree, in bounds of the NEW text.
@@ -365,7 +364,7 @@ public class TreeSitterTokenizerTest {
     @Test
     public void aBurstOfEditsCollapsesToASingleReparse() {
         List<Runnable> pending = new ArrayList<>();
-        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L, 2);
+        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L);
         TreeSitterTokenizer tokenizer;
         try {
             tokenizer = Grammar.JAVA.newTokenizer(scheduler);
@@ -377,17 +376,18 @@ public class TreeSitterTokenizerTest {
         Rope document = Rope.of("class A {}");
         tokenizer.tokenize(document, 0, document.length());
 
+        List<String> invalidations = new ArrayList<>();
+        tokenizer.setInvalidationListener((from, to) -> invalidations.add(from + ".." + to));
         for (int i = 0; i < 20; i++) {
             ChangeSet change = ChangeSet.of(document.length(), Change.insert(9, "int f" + i + "; "));
             document = change.apply(document);
             tokenizer.edited(document, change);
         }
 
-        scheduler.drain();
-        assertEquals("twenty keystrokes must leave one parse, not twenty", 1, pending.size());
-
+        // A superseded job's queued run does nothing, so only the last edit parses and lands.
         pending.forEach(Runnable::run);
         scheduler.drain();
+        assertEquals("twenty keystrokes must land one parse, not twenty", 1, invalidations.size());
 
         String text = document.toString();
         List<SyntaxToken> tokens = tokenizer.tokenize(document, 0, text.length());
@@ -453,7 +453,7 @@ public class TreeSitterTokenizerTest {
     @Test
     public void replacingTheWholeDocumentParsesTheNewTextRatherThanReusingTheOldTree() {
         List<Runnable> pending = new ArrayList<>();
-        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L, 2);
+        JobScheduler scheduler = new JobScheduler(pending::add, () -> 0L);
         TreeSitterTokenizer tokenizer;
         try {
             tokenizer = Grammar.JAVA.newTokenizer(scheduler);

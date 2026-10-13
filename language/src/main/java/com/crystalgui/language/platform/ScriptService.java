@@ -2,7 +2,7 @@ package com.crystalgui.language.platform;
 
 import com.crystalgui.language.map.ReadableView;
 
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 
 import java.nio.file.Path;
 import java.util.function.BooleanSupplier;
@@ -45,7 +45,7 @@ public interface ScriptService {
      * @see ScriptService#runInBackground
      */
     interface BackgroundWork {
-        void run(Progress progress, BooleanSupplier cancelled);
+        void run(CgProgress progress, BooleanSupplier cancelled);
     }
 
     /**
@@ -71,7 +71,7 @@ public interface ScriptService {
      * <p>Daemon, because acquiring data must never be the reason a game cannot exit.</p>
      */
     default void runInBackground(String title, BackgroundWork work) {
-        Thread worker = new Thread(() -> work.run(Progress.NONE, () -> false),
+        Thread worker = new Thread(() -> work.run(CgProgress.NONE, () -> false),
                 "crystalgui-" + title.toLowerCase().replace(' ', '-'));
         worker.setDaemon(true);
         worker.start();

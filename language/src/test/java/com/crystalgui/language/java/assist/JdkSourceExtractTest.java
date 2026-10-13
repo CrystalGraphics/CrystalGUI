@@ -1,6 +1,6 @@
 package com.crystalgui.language.java.assist;
 
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.core.cache.TarArchive;
 import org.junit.Assume;
@@ -292,7 +292,7 @@ public class JdkSourceExtractTest {
      *
      * <p>Reported from the harness as "I ran the command and nothing happened", and it was two defects
      * stacked. {@code acquire} asked the server for the download's <em>size</em> before calling
-     * {@code Progress.begin}, so no bar existed until a request had completed — fifteen seconds of
+     * {@code CgProgress.begin}, so no bar existed until a request had completed — fifteen seconds of
      * nothing against a host that does not answer. And the scheduler only draws a job after 400 ms, so a
      * fetch that failed <em>fast</em> was never drawn either. Between them, every failure was silent.</p>
      *
@@ -303,9 +303,9 @@ public class JdkSourceExtractTest {
     @Test
     public void aFetchAnnouncesItselfBeforeItCanBlock() throws Exception {
         List<String> announced = new ArrayList<>();
-        Progress recorder = new Progress() {
+        CgProgress recorder = new CgProgress() {
             @Override
-            public void begin(String what, long total, Progress.Unit unit) {
+            public void begin(String what, long total, CgProgress.Unit unit) {
                 announced.add("begin:" + what);
             }
 
@@ -337,7 +337,7 @@ public class JdkSourceExtractTest {
     @Test
     public void aJvmWithNoListedSourcesIsNotConfigured() throws Exception {
         Path cache = Files.createTempDirectory("cgui-jdk-unlisted");
-        JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, Progress.NONE, () -> false,
+        JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, CgProgress.NONE, () -> false,
                 DownloadLocations.of("{}", null, null, false));
         assertEquals(JdkSourceExtract.State.NOT_CONFIGURED, result.state());
     }
@@ -358,7 +358,7 @@ public class JdkSourceExtractTest {
 
     private static byte[] buildFrom(byte[] targz) throws IOException {
         try (TarArchive archive = TarArchive.gzip(new ByteArrayInputStream(targz))) {
-            return JdkSourceExtract.buildToBytes(archive, Progress.NONE);
+            return JdkSourceExtract.buildToBytes(archive, CgProgress.NONE);
         }
     }
 

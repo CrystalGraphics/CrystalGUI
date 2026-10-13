@@ -62,7 +62,7 @@ import com.crystalgui.workbench.editor.EditorService;
  * <h3>Why no existing test saw it</h3>
  *
  * <p>Every other fixture opens a file whose document is already in the store, where {@code open}
- * answers a resolved {@link com.crystalgui.core.async.Reply} on the spot and the view exists before the
+ * answers a resolved {@link com.crystalgraphics.job.reply.CgReply} on the spot and the view exists before the
  * dock asks. A read that genuinely takes a round trip is the case a wire has and a fixture does not —
  * so this one puts a real transport in the middle and pumps it, which is what the harness does.</p>
  */

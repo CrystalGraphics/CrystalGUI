@@ -1,7 +1,7 @@
 package com.crystalgui.language.js.host;
 
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
@@ -429,8 +429,8 @@ public final class JsHost implements ScriptRuntime {
                 js.setLiveScope(snapshot);
                 return;
             }
-            scheduler.<LiveScopeSnapshot>job(JobKey.of(JsHost.this, "js-live-scope"),
-                            JobLane.LATENCY, context -> snapshot)
+            scheduler.<LiveScopeSnapshot>job(CgJobKey.of(JsHost.this, "js-live-scope"),
+                            CgJobLane.LATENCY, context -> snapshot)
                     .onDone(js::setLiveScope)
                     .submit();
         }
@@ -455,8 +455,8 @@ public final class JsHost implements ScriptRuntime {
                 services.reportRuntimeProblems(problems, sourceAsRun);
                 return;
             }
-            scheduler.<List<Diagnostic>>job(JobKey.of(JsHost.this, "js-runtime-problems"),
-                            JobLane.LATENCY, context -> problems)
+            scheduler.<List<Diagnostic>>job(CgJobKey.of(JsHost.this, "js-runtime-problems"),
+                            CgJobLane.LATENCY, context -> problems)
                     .onDone(reported -> services.reportRuntimeProblems(reported, sourceAsRun))
                     .submit();
         }

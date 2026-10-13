@@ -1,6 +1,6 @@
 package com.crystalgui.fs.client;
 
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsError;
@@ -17,14 +17,14 @@ import org.jetbrains.annotations.Nullable;
  * one server or {@link ContentProviders#contribute} for one that belongs to the process. The client
  * then routes on the scheme and no caller above ever asks which side answered.</p>
  *
- * <p><b>Every answer is a {@link Reply}</b>, because the work can be real: reading a source archive is
+ * <p><b>Every answer is a {@link CgReply}</b>, because the work can be real: reading a source archive is
  * I/O and decompiling a class is hundreds of milliseconds, and neither may land on a frame. A provider
  * that already holds the bytes answers immediately.</p>
  */
 public interface ContentProvider {
 
     /** The resource's bytes. */
-    Reply<byte[]> read(Resource resource);
+    CgReply<byte[]> read(Resource resource);
 
     /**
      * Whether this resource may be written.
@@ -38,8 +38,8 @@ public interface ContentProvider {
     }
 
     /** Writes it back. Only ever called when {@link #isReadOnly} said false. */
-    default Reply<String> write(Resource resource, byte[] content) {
-        return Reply.failed(new FsError(
+    default CgReply<String> write(Resource resource, byte[] content) {
+        return CgReply.failed(FsError.of(
                 FsError.NOT_PERMITTED, resource + " is read-only"));
     }
 
@@ -75,11 +75,11 @@ public interface ContentProvider {
      * the engine that answered "where is this declared" could only name the type. The text does not
      * exist at that moment and does here: this provider generated it and holds it cached.</p>
      *
-     * <p>A {@link Reply}, because an exact answer means parsing the generated text — the same order of
+     * <p>A {@link CgReply}, because an exact answer means parsing the generated text — the same order of
      * cost as producing it, which must not land on a frame.</p>
      */
-    default Reply<TextPoint> locate(Resource resource, String member) {
-        return Reply.of(null);
+    default CgReply<TextPoint> locate(Resource resource, String member) {
+        return CgReply.of(null);
     }
 
     /**

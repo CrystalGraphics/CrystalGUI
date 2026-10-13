@@ -38,17 +38,19 @@ looks like a needed helper is the symptom of one that does not — see
 
 ## Background work
 
-`com.crystalgui.core.async` — `JobScheduler`, `JobKey`, `JobLane`, `JobContext`.
+`com.crystalgui.core.async.JobScheduler`, over CrystalGraphics' jobs: `CgJob`, `CgJobKey`, `CgJobLane`,
+`CgJobContext` (`com.crystalgraphics.job`) and `CgReply` (`job.reply`).
 
-Runs work off the UI thread and hands the answers back on it. Until this landed, the only executor in
-`core/` was SVG preloading and everything else ran on the frame — which is fine until something wants
-to compile a script, scan a classpath or reparse a file, all of which are far past a frame budget.
+Runs work off the UI thread and hands the answers back on it. Keys, debounce, lanes, supersession and the
+pool are CrystalGraphics' — its `job/CLAUDE.md` is the reference. What the scheduler adds is the UI's half:
+a loop the document drains, the rows the chrome draws for long work, and a notification when announced work
+fails.
 
 ```java
-scheduler.job(JobKey.of(document, "diagnostics"), JobLane.LATENCY, context -> compile(snapshot, context))
+scheduler.job(CgJobKey.of(document, "diagnostics"), CgJobLane.LATENCY, context -> compile(snapshot, context))
         .debounce(300)
         .onDone(result -> install(result))
-        .submit();
+        .submit();                     // a CgJob: a CgReply you may compose or cancel
 
 scheduler.drain();                     // once per frame, on the UI thread
 scheduler.cancelAll(document);         // closing a document
@@ -56,79 +58,60 @@ scheduler.cancelAll(document);         // closing a document
 
 ### The frame tick is the heartbeat
 
-**Every decision the scheduler makes happens on the UI thread inside `drain()`** — debounce windows are
-evaluated there against an injected clock, jobs are promoted there, results are delivered there. Only
-the job body runs elsewhere.
-
-That is what makes it testable: no timer threads, no scheduled futures, no sleeping, so a test with a
-same-thread executor and a hand-cranked clock exercises the identical code path the editor does. It is
-also what keeps the concurrency surface to exactly one object (the completion queue) — nothing else is
-touched by two threads, so no widget ever needs a lock.
-
-The cost is that a job starts on a frame boundary, up to ~16ms at 60fps. That is inside every budget in
-`plan/lang-stack.md` §7.3, and it buys determinism.
-
-`drain()` is **deliver → promote → deliver**. The second delivery catches a job that finished *during*
-promotion (always, on a same-thread executor; sometimes, on a real pool with short work) which would
-otherwise wait a whole extra frame. Deliberately two passes rather than a loop to quiescence: a
-completion handler that re-submits an undebounced job is an ordinary shape, and a loop would let it spin
-the frame instead of settling on the next one.
+**Every decision is made on the UI thread inside `drain()`** — debounce against the scheduler's clock,
+delivery, the chrome's rows. Only the job body runs elsewhere. A test hands a same-thread executor and a
+hand-cranked clock (`new JobScheduler(Runnable::run, clock::get)`) and exercises the code path the editor
+does.
 
 ### Single-flight is keyed, and both halves of the key matter
 
-A `JobKey` is `(owner, kind)`. Re-submitting a key that is **waiting** replaces it; re-submitting one
-that is **running** supersedes it — the runner is asked to stop and its result is dropped when it
-arrives. So a burst of keystrokes leaves one live job per key rather than one per keystroke, and the
-last submission always wins.
+A `CgJobKey` is `(owner, kind)`. Re-submitting a key that is **waiting** replaces it; re-submitting one that
+is **running** supersedes it — the runner is asked to stop, its `onDone` never runs and its reply never
+settles. So a burst of keystrokes leaves one live job per key, and the last submission wins.
 
 - Keying on **kind alone** makes two open documents fight, and one editor of a split pair never updates.
 - Keying on **owner alone** makes a document's reparse cancel its own diagnostics.
 - The owner is compared by **identity**, never `equals` — two documents holding identical text are not
   the same document.
 
-> **A superseded job's result is discarded even if the job never polled for cancellation.** Correctness
-> therefore does not depend on well-behaved job bodies; only responsiveness does.
-
-### Lanes, and the starvation guard
+### Lanes
 
 `INTERACTIVE` (a human is blocked — completion) > `LATENCY` (visible, tolerates a few frames — reparse,
-semantic tokens) > `BACKGROUND` (nobody is watching — indexing, first compile).
-
-Strict priority **plus** a guard: a job that has waited past `DEFAULT_STARVATION_GUARD_MILLIS` is
-promoted regardless of lane. Without it, a document being typed in produces a steady stream of
-higher-lane work and a `BACKGROUND` index queued behind it is never built — and the symptom is not a
-hang but completion quietly never learning about unimported types, which reads as a missing feature
-rather than a scheduling bug.
+semantic tokens) > `BACKGROUND` (nobody is watching — indexing, first compile). A job waiting past two
+seconds goes first whatever its lane, and `BACKGROUND` never takes the last worker.
 
 ### Cancellation is cooperative
 
-`JobContext.isCancelled()` / `throwIfCancelled()`, polled at loop heads and between phases.
-`Thread.stop` is gone and interrupting a compiler mid-run leaves its state undefined, so there is no
-honest alternative. `throwIfCancelled` is control flow, not failure: the scheduler drops it silently
-without logging.
+`CgJobContext.isCancelled()` / `throwIfCancelled()`, polled at loop heads and between phases.
+`throwIfCancelled` is control flow, not failure: nothing is logged.
+
+### What the chrome sees
+
+`active()` lists the jobs whose work called `context.progress().begin(...)` and has run 400 ms, newest
+first; a shown row stays 500 ms however soon it finishes, and `cancel(key)` marks it rather than removing
+it. A job that announced itself and then fails raises a notification; an unannounced one is only logged,
+since it may run per keystroke.
 
 ### What it deliberately does not know
 
-**Document versions.** `TextBuffer.version()` is a monotonic counter bumped by every applied edit —
-*including undo and redo*, which move the text as surely as typing does. Staleness policy belongs to the
-consumer, because there are three legitimate answers (discard / keep-and-adjust / keep-per-line, see
-`plan/lang-stack.md` §8) and a scheduler deciding centrally would have to understand every consumer. It
-guarantees only that a superseded job's result never lands; comparing the stamp is the caller's job.
+**Document versions.** Staleness policy belongs to the consumer — discard, keep-and-adjust or
+keep-per-line (`plan/lang-stack.md` §8). The scheduler guarantees only that a superseded job's result never
+lands; comparing `buffer.version()` is the caller's job.
 
 ### Rules
 
 - **`drain()` on the UI thread, once per frame.** It returns whether anything is outstanding, so a
   ticker can stop when idle.
-- **Off the UI thread, own a scheduler over the shared pool** and drain it on your own thread:
-  `new JobScheduler(JobScheduler.sharedPool(), System::currentTimeMillis, 1)`. `shared()` is drained by
-  the UI frame, which a dedicated server has none of, and its `onDone` would land on the render thread.
-  `WatchHub` is the reference.
-- **Never touch UI or document state from a job body.** Return an immutable value; the `onDone` handler
-  runs on the UI thread.
+- **Off the UI thread, own a scheduler** (`new JobScheduler()`) and drain it on your own thread.
+  `shared()` is drained by the UI frame, which a dedicated server has none of. `WatchHub` is the reference.
+- **Inside a document's sequence, `shared()` is the sequence's own** and its loop is `CgJobLoop.current()`,
+  so a bare `CgJob.run` there also answers on the sequence.
+- **Never touch UI or document state from a job body.** Return an immutable value; `onDone` runs on the UI
+  thread.
 - **Snapshot what the job needs before submitting**, and stamp it with `buffer.version()`.
 - **`cancelAll(owner)` when a document closes**, or its work arrives for an editor that no longer exists.
-- **`dispose()` does not shut the executor down** — it may be injected or shared, and a scheduler does
-  not own what it was handed.
+- **Work that reports nothing back** — a cache warmed — goes to `CgJob.executor(lane)`; work split across
+  threads within a frame is `CgJob.forEach`. Never a thread pool of your own.
 
 ---
 
@@ -926,7 +909,7 @@ ContentProviders.contribute("library", new LibrarySources()); // the process's
 
 A provider answers three questions and only one is about bytes: `read` (the content), `symbolOf` (what
 the resource *is*, which is how a tab draws its glyph) and `locate` (where a member of it is declared).
-Every answer is a `Reply`, because the work can be real — reading a source archive is I/O and
+Every answer is a `CgReply`, because the work can be real — reading a source archive is I/O and
 decompiling a class is hundreds of milliseconds, and neither may land on a frame.
 
 Register through `Workspace.registerScheme` when the scheme belongs to one server, and through

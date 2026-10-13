@@ -1,10 +1,10 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
@@ -225,7 +225,7 @@ public final class LibrarySources implements ContentProvider {
     private static void scheduleDescribe(Resource resource, String binaryName) {
         if (!PENDING.add(binaryName)) return;
         JobScheduler.shared()
-                .job(JobKey.of(LibrarySources.class, "describe-" + binaryName), JobLane.LATENCY,
+                .job(CgJobKey.of(LibrarySources.class, "describe-" + binaryName), CgJobLane.LATENCY,
                         context -> describe(binaryName, HostClasspath.detect()))
                 .onDone(described -> {
                     // ON THE UI THREAD, during drain -- which is what makes storing and announcing safe
@@ -284,13 +284,13 @@ public final class LibrarySources implements ContentProvider {
     private static final Map<String, SymbolInfo> SYMBOLS = new HashMap<>();
 
     @Override
-    public Reply<byte[]> read(Resource resource) {
-        // OFF THE FRAME THREAD, which is what a Reply is for here: this opens an archive, and when
+    public CgReply<byte[]> read(Resource resource) {
+        // OFF THE FRAME THREAD, which is what a CgReply is for here: this opens an archive, and when
         // there is no attached source it runs a decompiler -- measured in hundreds of milliseconds.
         // The seam it replaces was synchronous and reached from a paint path, so every caller wrapped
         // it in a job anyway and the one that did not decompiled a class on the frame thread.
         return JobScheduler.shared()
-                .job(JobKey.of(LibrarySources.class, "read-" + resource), JobLane.LATENCY,
+                .job(CgJobKey.of(LibrarySources.class, "read-" + resource), CgJobLane.LATENCY,
                         context -> readNow(resource))
                 .submit();
     }
@@ -328,14 +328,14 @@ public final class LibrarySources implements ContentProvider {
      *
      * <p><b>Off the UI thread</b>, because this parses. The text is whatever {@link #read} would
      * return — attached source or the cached decompile, banner included — so the offsets are the ones
-     * the viewer is showing. A {@link Reply} rather than a blocking call is what says so in the
+     * the viewer is showing. A {@link CgReply} rather than a blocking call is what says so in the
      * signature: the seam this replaces was synchronous and its own javadoc asked every caller to
      * remember.</p>
      */
     @Override
-    public Reply<TextPoint> locate(Resource resource, String member) {
+    public CgReply<TextPoint> locate(Resource resource, String member) {
         return JobScheduler.shared()
-                .job(JobKey.of(LibrarySources.class, "locate"), JobLane.LATENCY,
+                .job(CgJobKey.of(LibrarySources.class, "locate"), CgJobLane.LATENCY,
                         context -> locateNow(resource, member))
                 .submit();
     }

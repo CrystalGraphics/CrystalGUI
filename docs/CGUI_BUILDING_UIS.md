@@ -947,7 +947,7 @@ HostThread.SERVER.call(() -> level().getBlockState(pos))                       /
         .then(state -> label.setText(state.getBlock().getName().getString())); // ...answered on the UI's
 ```
 
-`call` answers a `Reply`, so the usual `onError`, `map` and `cancel` apply.
+`call` answers a `CgReply`, so the usual `onError`, `map` and `cancel` apply.
 
 ### The threads
 
@@ -1150,7 +1150,7 @@ workspace.capabilities().isValidName(typed);
 workspace.health().roundTripMillis();
 ```
 
-Every answer is a `Reply`: `then` for the value, `onError` for the failure, `map` to chain, `all` to
+Every answer is a `CgReply`: `then` for the value, `onError` for the failure, `map` to chain, `all` to
 wait on several. **Continuations run on the frame thread**, so you may touch a widget straight from
 inside one.
 
@@ -1171,7 +1171,7 @@ ContentProviders.contribute("mymod-generated", new MyProvider()); // the process
 
 Use `contribute` when you register at mod init and have no workspace to be handed. A provider answers
 `read`, and optionally `symbolOf` (what the thing IS, which is how a tab draws its glyph) and
-`locate`. Every answer is a `Reply`, because opening an archive or running a decompiler must not land
+`locate`. Every answer is a `CgReply`, because opening an archive or running a decompiler must not land
 on a frame.
 
 Then `openResource` opens it exactly as it opens a file — there is one lane, and which side answered

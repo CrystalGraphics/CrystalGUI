@@ -2,7 +2,7 @@ package com.crystalgui.language.engine;
 
 import com.crystalgui.core.cache.DownloadLocations;
 import com.crystalgui.core.cache.Downloads;
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 import com.crystalgui.core.cache.CacheFiles;
 
 import java.io.File;
@@ -225,7 +225,7 @@ public interface EngineSource {
      * is worse than none, because the engine opens and then fails on whichever class was in the jar that
      * did not arrive — so one failure abandons the whole band and says so.</p>
      */
-    static EngineSource downloadedFrom(DownloadLocations locations, Path into, Progress progress) {
+    static EngineSource downloadedFrom(DownloadLocations locations, Path into, CgProgress progress) {
         return new EngineSource() {
             @Override
             public List<URL> jarsFor(EngineBand band) throws IOException {

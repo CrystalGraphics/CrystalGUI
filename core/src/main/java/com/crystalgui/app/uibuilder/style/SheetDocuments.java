@@ -9,7 +9,7 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.TextDocumentModel;
@@ -58,7 +58,7 @@ public final class SheetDocuments {
      */
     @FunctionalInterface
     public interface SheetStore {
-        Reply<DocumentReference> open(Resource resource);
+        CgReply<DocumentReference> open(Resource resource);
     }
 
     /** Opens {@code sheet}'s file in an editor, if the host said how. For the rule itself, @see RuleTextEditor */

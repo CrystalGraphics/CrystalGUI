@@ -611,7 +611,7 @@ registry.register(FsMethods.READ, (args, respond) -> {
 });
 ```
 
-### 4. Client side — call it, and get a `Reply`
+### 4. Client side — call it, and get a `CgReply`
 
 ```java
 workspace.files().read(resource)
@@ -619,7 +619,7 @@ workspace.files().read(resource)
         .onError(failure -> { … });     // a code and a detail, never a String alone
 ```
 
-> **`Reply<T>` is the one async shape**, and its continuation runs on the **frame thread** — which is
+> **`CgReply<T>` is the one async shape**, and its continuation runs on the **frame thread** — which is
 > what lets a `then` touch the tree without a hop. A `Stream<T>` is its many-answers twin, for a paged
 > listing or a chunked read.
 
@@ -683,7 +683,7 @@ registry.register(FsMethods.READ, (args, respond) -> guard(respond, () -> {
 ### The client half (`FileOperations`)
 
 ```java
-public Reply<FileContent> read(Resource file) {
+public CgReply<FileContent> read(Resource file) {
     // THE CONDITION, from the etag this client already holds. Costs the server a stat and no read.
     ReadRequest ask = new ReadRequest(file.toString(), etags.getOrDefault(file, ""));
 

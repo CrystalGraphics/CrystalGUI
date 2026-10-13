@@ -5,7 +5,7 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.document.Document;
@@ -156,11 +156,11 @@ final class ExplorerEditModel implements TreeEditModel<CgPath> {
         });
         if (!unsaved.isEmpty()) {
             Runnable revertThenDelete = () -> {
-                List<Reply<?>> reverts = new ArrayList<>();
+                List<CgReply<?>> reverts = new ArrayList<>();
                 for (Document document : unsaved) reverts.add(workbench.documents().revert(document));
                 // ALWAYS, not then: the author has already agreed to lose these edits, and a revert
                 // that fails must not keep the file they asked to delete.
-                Reply.all(reverts).always(deleteFiles);
+                CgReply.all(reverts).always(deleteFiles);
             };
             InputDialog.confirm(tree, "Delete", unsavedConfirmation(paths, unsaved),
                     "Your changes will be lost if you don't save them.", "Delete", revertThenDelete);

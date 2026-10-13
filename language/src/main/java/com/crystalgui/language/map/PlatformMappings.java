@@ -3,7 +3,7 @@ package com.crystalgui.language.map;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptServices;
@@ -170,7 +170,7 @@ public final class PlatformMappings {
             return;
         }
         Thread thread = new Thread(
-                () -> work.run(Progress.NONE, () -> false), "crystalgui-mappings");
+                () -> work.run(CgProgress.NONE, () -> false), "crystalgui-mappings");
         thread.setDaemon(true);
         thread.start();
     }
@@ -258,7 +258,7 @@ public final class PlatformMappings {
      * <p>Indeterminate: the two CSVs are small and their host declares no length worth trusting, so a
      * sweep is honest where a bar would be invented.</p>
      */
-    private static void fetch(ScriptService platform, Progress progress,
+    private static void fetch(ScriptService platform, CgProgress progress,
                               BooleanSupplier cancelled) {
         MappingCoordinates coordinates = platform.mappings();
         progress.begin("Downloading Minecraft mappings", -1);

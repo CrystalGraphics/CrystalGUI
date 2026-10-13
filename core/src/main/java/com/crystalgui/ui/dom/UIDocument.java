@@ -642,7 +642,7 @@ public final class UIDocument extends UIElement {
             if (delivery != null) delivery.run();
         }
         if (JobScheduler.hasShared()) {
-            CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().runningCount());
+            CgTrace.add(UiTrace.FRAME, "jobs-busy", JobScheduler.shared().pendingCount());
             long drained = CgTrace.stamp(UiTrace.FRAME);
             JobScheduler.shared().drain();
             CgTrace.zoneDone(UiTrace.FRAME, "frame:jobs", drained);

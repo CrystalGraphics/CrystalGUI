@@ -61,7 +61,7 @@ public class StaticHighlightPipelineTest {
     public static void grammarsRegistered() {
         try {
             JobScheduler neverRuns = new JobScheduler(job -> {
-            }, () -> 0L, 1);
+            }, () -> 0L);
             Assume.assumeTrue("no tree-sitter grammar on this platform",
                     TreeSitterLanguages.register(neverRuns));
         } catch (Throwable nativeUnavailable) {

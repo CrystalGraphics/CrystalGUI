@@ -1,6 +1,6 @@
 package com.crystalgui.language.engine;
 
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 import com.crystalgui.core.cache.DownloadLocations;
 
 import com.crystalgui.language.platform.ScriptService;
@@ -243,7 +243,7 @@ public final class EngineHost implements Closeable {
      * absence in this stack.</p>
      */
     public static EngineSource defaultSource() {
-        return defaultSource(Progress.NONE);
+        return defaultSource(CgProgress.NONE);
     }
 
     /**
@@ -253,7 +253,7 @@ public final class EngineHost implements Closeable {
      * whose band is not the bundled one — no ordinary launch touches the network, and the third candidate
      * costs a resource lookup that misses.</p>
      */
-    public static EngineSource defaultSource(Progress progress) {
+    public static EngineSource defaultSource(CgProgress progress) {
         return EngineSource.firstOf(configuredSource(), bundledSource(), downloadedSource(progress));
     }
 
@@ -265,11 +265,11 @@ public final class EngineHost implements Closeable {
     }
 
     /** The fallback: fetch the band this host needs, from where {@code download/locations.json} lists it. */
-    private static EngineSource downloadedSource(Progress progress) {
+    private static EngineSource downloadedSource(CgProgress progress) {
         Path cacheRoot = CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
         if (cacheRoot == null) return EngineSource.NONE;
         return EngineSource.downloadedFrom(DownloadLocations.get(), cacheRoot.resolve("engines"),
-                progress == null ? Progress.NONE : progress);
+                progress == null ? CgProgress.NONE : progress);
     }
 
     private static EngineSource bundledSource() {

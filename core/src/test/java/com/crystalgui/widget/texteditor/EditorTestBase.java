@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor;
 
+import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -137,11 +138,10 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
      */
     protected void settle() {
         for (int i = 0; i < 3; i++) frame();
-        if (com.crystalgui.core.async.JobScheduler.hasShared()) {
-            com.crystalgui.core.async.JobScheduler shared =
-                    com.crystalgui.core.async.JobScheduler.shared();
+        if (JobScheduler.hasShared()) {
+            JobScheduler shared = JobScheduler.shared();
             for (int spin = 0; spin < 200; spin++) {
-                if (shared.waitingCount() == 0 && shared.runningCount() == 0) break;
+                if (shared.pendingCount() == 0) break;
                 // Yield rather than sleep: the work is on another thread and this one has nothing to do
                 // but let it run, and a sleep would put a fixed cost on every settle in the suite.
                 Thread.yield();

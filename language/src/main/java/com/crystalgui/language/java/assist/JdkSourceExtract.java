@@ -1,6 +1,6 @@
 package com.crystalgui.language.java.assist;
 
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 import com.crystalgui.core.cache.CacheFiles;
 import com.crystalgui.core.cache.Download;
 import com.crystalgui.core.cache.DownloadLocations;
@@ -235,12 +235,12 @@ public final class JdkSourceExtract {
      *       dedicated server has no frame to drain one on.</li>
      * </ul>
      */
-    public static Result acquire(Path cacheRoot, Progress progress, BooleanSupplier cancelled) {
+    public static Result acquire(Path cacheRoot, CgProgress progress, BooleanSupplier cancelled) {
         return acquire(cacheRoot, progress, cancelled, DownloadLocations.get());
     }
 
     /** The same, from {@code locations} rather than the process's own. */
-    static Result acquire(Path cacheRoot, Progress progress, BooleanSupplier cancelled,
+    static Result acquire(Path cacheRoot, CgProgress progress, BooleanSupplier cancelled,
                           DownloadLocations locations) {
         int feature = runningFeatureVersion();
         Path target = extractFile(cacheRoot, feature);
@@ -329,7 +329,7 @@ public final class JdkSourceExtract {
      *
      * @return how many files were written
      */
-    static int build(TarArchive archive, ZipOutputStream out, Progress progress) throws IOException {
+    static int build(TarArchive archive, ZipOutputStream out, CgProgress progress) throws IOException {
         Set<String> written = new LinkedHashSet<>();
         int count = 0;
         for (TarArchive.Entry entry = archive.next(); entry != null; entry = archive.next()) {
@@ -374,7 +374,7 @@ public final class JdkSourceExtract {
     }
 
     /** Visible for testing — the bytes of a zip built from one archive, without touching disk. */
-    static byte[] buildToBytes(TarArchive archive, Progress progress) throws IOException {
+    static byte[] buildToBytes(TarArchive archive, CgProgress progress) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ZipOutputStream out = new ZipOutputStream(bytes)) {
             build(archive, out, progress);

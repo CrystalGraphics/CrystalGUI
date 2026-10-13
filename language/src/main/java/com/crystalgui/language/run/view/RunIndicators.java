@@ -1,7 +1,7 @@
 package com.crystalgui.language.run.view;
 
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.language.run.RunSessions;
@@ -52,7 +52,7 @@ public final class RunIndicators {
     private final RunSessions sessions;
     private final ViewContainerRegistry containers;
     @Nullable private final FileDecorations decorations;
-    private final JobKey key = JobKey.of(RunIndicators.class, "run-indicators");
+    private final CgJobKey key = CgJobKey.of(RunIndicators.class, "run-indicators");
 
     @Nullable private Connection watch;
 
@@ -95,7 +95,7 @@ public final class RunIndicators {
                 // the answer is read here rather than in onDone only so that a transition which has since
                 // been superseded still reports the state at the moment it was asked, which is what the
                 // keyed replacement is entitled to assume.
-                .<Boolean>job(key, JobLane.LATENCY, context -> !sessions.active().isEmpty())
+                .<Boolean>job(key, CgJobLane.LATENCY, context -> !sessions.active().isEmpty())
                 .onDone(this::paint)
                 .submit();
     }

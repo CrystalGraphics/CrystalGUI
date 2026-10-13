@@ -184,6 +184,8 @@ dependencies {
     // has been paid for before: two registries let a loader wire up one and forget the other, which is
     // a working backend beside a dead service with nothing to report it. @see CgService
     compileOnly("com.crystalgraphics:platform:1.0.0")
+    // CrystalGraphics' jobs and replies (`CgJob`, `CgReply`), which core's async API is typed in.
+    compileOnly("com.crystalgraphics:core:1.0.0")
 
     // LOG4J, AT CORE'S PIN AND FOR CORE'S REASON. `CrystalGuiCore.LOGGER` is typed
     // org.apache.logging.log4j.Logger, so naming it needs the API here even though the field is core's.
@@ -216,6 +218,7 @@ dependencies {
     // `CgService`, so a test loading it would fail at class init without this. `core` takes it the same
     // way and for the same reason.
     testImplementation("com.crystalgraphics:platform:1.0.0")
+    testImplementation("com.crystalgraphics:core:1.0.0")
 
     // @Nullable, the same way `core/` gets it and for the same reason -- javax.annotation is not on the
     // module path from JDK 11. **compileOnly is the mitigation, not an oversight**: the package only

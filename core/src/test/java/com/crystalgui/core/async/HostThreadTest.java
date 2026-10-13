@@ -1,5 +1,6 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.reply.CgReply;
 import org.junit.After;
 import org.junit.Test;
 
@@ -86,7 +87,7 @@ public class HostThreadTest {
         HostThread.bind(HostThread.SERVER, server);
         server.drain();   // this thread is now the server's
 
-        Reply<Integer> reply = HostThread.SERVER.call(() -> 7);
+        CgReply<Integer> reply = HostThread.SERVER.call(() -> 7);
         assertTrue(reply.isDone());
         assertEquals(Integer.valueOf(7), reply.result());
     }
@@ -95,7 +96,7 @@ public class HostThreadTest {
     public void withNoServerACallFailsAndNothingRuns() {
         assertFalse(HostThread.SERVER.isAvailable());
         boolean[] ran = {false};
-        Reply<Integer> reply = HostThread.SERVER.call(() -> {
+        CgReply<Integer> reply = HostThread.SERVER.call(() -> {
             ran[0] = true;
             return 1;
         });

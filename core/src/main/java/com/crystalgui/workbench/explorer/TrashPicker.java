@@ -1,6 +1,6 @@
 package com.crystalgui.workbench.explorer;
 
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.notify.Notification;
@@ -51,7 +51,7 @@ public final class TrashPicker {
         int[] outstanding = {roots.size()};
         for (CgPath root : roots) {
             // ONE ASK PER PROJECT, and a project whose trash cannot be read does not take the others
-            // down with it: `Reply.all` fails on the first error, which for a picker means one
+            // down with it: `CgReply.all` fails on the first error, which for a picker means one
             // unreadable project makes the whole affordance do nothing.
             workbench.files().trash(Resource.of(root))
                     .onError(failure -> {
@@ -123,7 +123,7 @@ public final class TrashPicker {
     }
 
     private static void restore(Workbench workbench, String trashId) {
-        Reply<String> put = workbench.files().restore(trashId);
+        CgReply<String> put = workbench.files().restore(trashId);
         put.onError(failure -> Notifications.show(Notification.error("Could not restore")
                         .withDetail(failure.detail())))
                 .then(path -> {

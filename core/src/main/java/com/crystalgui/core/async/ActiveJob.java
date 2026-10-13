@@ -1,5 +1,8 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.progress.CgProgressState;
+
 /**
  * One row of {@link JobScheduler#active()} — a job the chrome should be drawing.
  *
@@ -12,5 +15,5 @@ package com.crystalgui.core.async;
  *                        look inert but <b>keep its bar</b>: the work is still running, and a row that
  *                        vanished on the click would claim otherwise
  */
-public record ActiveJob(JobKey key, ProgressState state, boolean cancelRequested) {
+public record ActiveJob(CgJobKey key, CgProgressState state, boolean cancelRequested) {
 }

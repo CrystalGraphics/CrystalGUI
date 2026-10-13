@@ -1,5 +1,7 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.notify.Notifications;
 
 import org.junit.Test;
@@ -13,8 +15,6 @@ import java.util.function.LongSupplier;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -43,27 +43,26 @@ public class JobProgressTest {
     private final LongSupplier clock = () -> now;
 
     private JobScheduler scheduler(Executor executor) {
-        return new JobScheduler(executor, clock, 4);
+        return new JobScheduler(executor, clock);
     }
 
-    private static JobKey key(String kind) {
-        return JobKey.of(JobProgressTest.class, kind);
+    private static CgJobKey key(String kind) {
+        return CgJobKey.of(JobProgressTest.class, kind);
     }
 
     /**
      * A job that has reported and is <b>still running</b>, held until it is finished.
      *
      * <p>The fixture this file needed and did not have at first. With an executor that defers or runs
-     * inline, the work body runs to completion the moment it is released -- so the job is removed from
-     * {@code running} by {@code deliverCompleted()} in the very drain that would have drawn it, and
-     * nothing is ever visible. Progress is a property of work <em>in flight</em>, so the test has to keep
+     * inline, the work body runs to completion the moment it is released -- so the job is delivered
+     * in the very drain that would have drawn it, and nothing is ever visible. Progress is a property of work <em>in flight</em>, so the test has to keep
      * some in flight. Latches rather than sleeps, so nothing here is timing-dependent.</p>
      */
     private Held live(JobScheduler scheduler, String what, long total) {
         CountDownLatch reported = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
-        JobKey key = key(what);
-        scheduler.job(key, JobLane.BACKGROUND, context -> {
+        CgJobKey key = key(what);
+        scheduler.job(key, CgJobLane.BACKGROUND, context -> {
             context.progress().begin(what, total);
             reported.countDown();
             try {
@@ -82,15 +81,15 @@ public class JobProgressTest {
         return new Held(key, release);
     }
 
-    private record Held(JobKey key, CountDownLatch release) {
+    private record Held(CgJobKey key, CountDownLatch release) {
     }
 
     /** Lets a held job end and waits for the scheduler to collect it. */
     private void finishAndCollect(JobScheduler scheduler, Held held) {
         held.release().countDown();
-        for (int attempt = 0; attempt < 500 && scheduler.runningCount() > 0; attempt++) {
+        for (int attempt = 0; attempt < 500 && scheduler.pendingCount() > 0; attempt++) {
             scheduler.drain();
-            if (scheduler.runningCount() == 0) break;
+            if (scheduler.pendingCount() == 0) break;
             try {
                 Thread.sleep(1);
             } catch (InterruptedException interrupted) {
@@ -110,7 +109,7 @@ public class JobProgressTest {
     @Test
     public void aJobThatNeverAnnouncesItselfIsNeverShown() {
         JobScheduler scheduler = scheduler(SAME_THREAD);
-        scheduler.job(key("quiet"), JobLane.BACKGROUND, context -> "done").submit();
+        scheduler.job(key("quiet"), CgJobLane.BACKGROUND, context -> "done").submit();
         scheduler.drain();
 
         now += 10_000L;
@@ -152,7 +151,7 @@ public class JobProgressTest {
         scheduler.drain();
         assertEquals("did not appear", 1, scheduler.active().size());
 
-        // The job finishes here -- its result is delivered and it leaves `running`.
+        // The job finishes here, and its result is delivered.
         finishAndCollect(scheduler, held);
         assertEquals("left as soon as the work finished", 1, scheduler.active().size());
 
@@ -233,7 +232,7 @@ public class JobProgressTest {
         try {
             JobScheduler scheduler = scheduler(SAME_THREAD);
 
-            scheduler.job(key("quiet-failure"), JobLane.BACKGROUND, context -> {
+            scheduler.job(key("quiet-failure"), CgJobLane.BACKGROUND, context -> {
                 throw new IllegalStateException("no bar was ever shown");
             }).submit();
             scheduler.drain();
@@ -241,7 +240,7 @@ public class JobProgressTest {
             scheduler.drain();
             assertTrue("a job nobody could see raised a notification", raised.isEmpty());
 
-            scheduler.job(key("loud-failure"), JobLane.BACKGROUND, context -> {
+            scheduler.job(key("loud-failure"), CgJobLane.BACKGROUND, context -> {
                 context.progress().begin("Downloading engine band", 100);
                 throw new IllegalStateException("the mirror went away");
             }).submit();
@@ -255,109 +254,5 @@ public class JobProgressTest {
         } finally {
             Notifications.resetForTesting();
         }
-    }
-
-    // ── Slots ───────────────────────────────────────────────────────────────────────────────────
-
-    /**
-     * <b>Background work cannot occupy the last slot.</b>
-     *
-     * <p>{@code maxConcurrent} is scheduler-wide and background jobs are the long kind, so without this a
-     * download and an index hold the pool for minutes while an analysis waits on the next keystroke. The
-     * starvation guard cannot help: it promotes a job that has waited too long and cannot evict one that
-     * is running.</p>
-     */
-    @Test
-    public void backgroundWorkLeavesASlotForInteractive() {
-        JobScheduler scheduler = new JobScheduler(THREADS, clock, 2);
-        // Submitted directly rather than through live(), which waits for the worker to start -- and the
-        // whole point here is that the SECOND one deliberately does not.
-        CountDownLatch release = new CountDownLatch(1);
-        for (String name : new String[]{"bg-one", "bg-two"}) {
-            scheduler.job(key(name), JobLane.BACKGROUND, context -> {
-                try {
-                    release.await();
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                }
-                return name;
-            }).submit();
-        }
-        scheduler.drain();
-
-        // Two background jobs, a pool of two -- only ONE may be running, so the other is still waiting.
-        assertEquals("background took the whole pool", 1, scheduler.runningCount());
-
-        List<String> ran = new ArrayList<>();
-        scheduler.job(JobKey.of(JobProgressTest.class, "interactive"), JobLane.INTERACTIVE,
-                context -> {
-                    ran.add("interactive");
-                    return "done";
-                }).submit();
-        for (int attempt = 0; attempt < 200 && ran.isEmpty(); attempt++) {
-            scheduler.drain();
-            try {
-                Thread.sleep(1);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-            }
-        }
-        assertFalse("interactive work could not get a slot", ran.isEmpty());
-        release.countDown();
-    }
-
-    /** A pool of one still runs background work — doing nothing would be worse than doing it. */
-    @Test
-    public void aSingleSlotPoolStillRunsBackgroundWork() {
-        JobScheduler scheduler = new JobScheduler(THREADS, clock, 1);
-        Held only = live(scheduler, "bg-alone", 100);
-        assertEquals(1, scheduler.runningCount());
-        finishAndCollect(scheduler, only);
-    }
-
-    // ── The state itself ────────────────────────────────────────────────────────────────────────
-
-    /** Never null, so a job never branches on whether anyone is watching. */
-    @Test
-    public void progressIsNeverNull() {
-        JobScheduler scheduler = scheduler(SAME_THREAD);
-        scheduler.job(key("checks"), JobLane.BACKGROUND, context -> {
-            assertNotNull("a running job had no progress channel", context.progress());
-            return "done";
-        }).submit();
-        scheduler.drain();
-        assertSame(Progress.NONE, Progress.NONE);
-    }
-
-    /**
-     * <b>A bar is never drawn past its own end</b>, and an over-report is clamped rather than shown.
-     *
-     * <p>A caller that reports more than it promised is reporting its own bug; the chrome is the wrong
-     * place to display it. And a zero total is complete rather than a division by zero — "nothing to do"
-     * is done.</p>
-     */
-    @Test
-    public void theFractionIsClamped() {
-        assertEquals(0f, new ProgressState("x", "", -5, 100, 0L).fraction(), 0.0001f);
-        assertEquals(1f, new ProgressState("x", "", 500, 100, 0L).fraction(), 0.0001f);
-        assertEquals(1f, new ProgressState("x", "", 0, 0, 0L).fraction(), 0.0001f);
-        assertEquals(0.25f, new ProgressState("x", "", 25, 100, 0L).fraction(), 0.0001f);
-        assertTrue(new ProgressState("x", "", 0, -1, 0L).isIndeterminate());
-        assertEquals(-1f, new ProgressState("x", "", 0, -1, 0L).fraction(), 0.0001f);
-    }
-
-    /** Reporting before begin() is meaningless rather than fatal — a library must not throw from it. */
-    @Test
-    public void reportingBeforeBeginIsHarmless() {
-        JobScheduler scheduler = scheduler(SAME_THREAD);
-        scheduler.job(key("early"), JobLane.BACKGROUND, context -> {
-            context.progress().advance(5);
-            context.progress().detail("nothing announced yet");
-            return "done";
-        }).submit();
-        scheduler.drain();
-        now += 10_000L;
-        scheduler.drain();
-        assertTrue(scheduler.active().isEmpty());
     }
 }

@@ -1,7 +1,7 @@
 package com.crystalgui.language.run.view;
 
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
@@ -72,7 +72,7 @@ public final class MappingCommands {
     public static final String REMAP = "script.remapToReadable";
 
     private final WorkbenchContext workbench;
-    private final JobKey remapKey = JobKey.of(MappingCommands.class, "remap-to-readable");
+    private final CgJobKey remapKey = CgJobKey.of(MappingCommands.class, "remap-to-readable");
 
     /** The memoised enablement answer, and what it was computed from. @see #canRemap */
     private WeakReference<TextBuffer> scannedBuffer = new WeakReference<>(null);
@@ -153,7 +153,7 @@ public final class MappingCommands {
         String source = editor.getText();
         int version = editor.buffer().version();
         JobScheduler.shared()
-                .<List<Change>>job(remapKey, JobLane.LATENCY,
+                .<List<Change>>job(remapKey, CgJobLane.LATENCY,
                         context -> ReadableSource.rewrites(mappings, source))
                 .onDone(edits -> apply(editor, version, edits))
                 .submit();

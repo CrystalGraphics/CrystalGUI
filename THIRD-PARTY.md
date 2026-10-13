@@ -270,21 +270,6 @@ delta and capped. A web page builder whose one job is dragging a live tree about
 most-solved form of the problem there is — `plan/crystalgui/shell-ui-builder/reorder-drag.md` says what was
 taken and what was deliberately not.
 
-## Chromium — `RateEstimator` (BSD-3-Clause)
-
-`core/src/main/java/com/crystalgui/core/async/RateEstimator.java` is a port of Chromium's download rate
-estimator — `components/download/public/common/rate_estimator.h` and its implementation under
-`components/download/internal/common/` — Copyright The Chromium Authors, licensed BSD-3-Clause.
-
-A fixed ring of one-second buckets, ten of them, giving a rate over a ten-second sliding window, with the
-divisor counting only the buckets that have actually been populated so an early reading is not divided by
-a window that has not elapsed.
-
-**Ported rather than written, after three home-grown attempts failed in front of a user.** A cumulative
-average cannot track a throughput that changes; an exponential moving average tracks it far too well and
-yo-yos. `AGENTS.md`'s *"Port, don't reinvent"* rule names exactly this class of problem, and both
-references consulted — Chromium and wget — independently land on a sliding window.
-
 ## Chromium — CSS shadow values (BSD-3-Clause)
 
 `core/src/main/java/com/crystalgui/style/property/visual/shadow/ShadowParser.java` ports Blink's
@@ -333,11 +318,6 @@ this class of problem, and table column sizing is one of the most-solved layout 
 > tallest cell laid out at its column's final width — is what `MarkupView.alignTables` does, and it is
 > the shape any correct implementation has. It was not the source because `RenderTable` supports no
 > column or row spanning at all, and javadoc tables use `colspan` freely.
-
-> **wget's `progress.c` is GPL-3.0 and none of its code is here.** What was taken from it is one design
-> idea, stated in its own comment: *"Don't refresh the ETA too often to avoid jerkiness in predictions.
-> This allows ETA to change approximately once per second."* That throttle lives in `JobContext` and is
-> written from scratch. The same read-for-shape-only rule this repository already applies to Zed.
 
 ## Fonts
 

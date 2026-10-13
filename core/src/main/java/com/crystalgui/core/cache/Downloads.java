@@ -1,6 +1,6 @@
 package com.crystalgui.core.cache;
 
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 
 import java.io.Closeable;
 import java.io.FileNotFoundException;
@@ -144,7 +144,7 @@ public final class Downloads {
 
     /** A transfer of {@code url}, undescribed. Add what it is called and where to report it. */
     public static Request from(String url) {
-        return new Request(Collections.singletonList(url), "Downloading", null, Progress.NONE,
+        return new Request(Collections.singletonList(url), "Downloading", null, CgProgress.NONE,
                 NEVER_CANCELLED, null, null);
     }
 
@@ -162,7 +162,7 @@ public final class Downloads {
     public static Request located(DownloadLocations locations, String id) throws IOException {
         DownloadLocations.Location where = locations.find(id);
         if (where == null) throw new FileNotFoundException("download/locations.json lists no " + id);
-        return new Request(where.urls(), "Downloading", where.digest(), Progress.NONE, NEVER_CANCELLED,
+        return new Request(where.urls(), "Downloading", where.digest(), CgProgress.NONE, NEVER_CANCELLED,
                 locations, id);
     }
 
@@ -180,13 +180,13 @@ public final class Downloads {
         private final List<String> urls;
         private final String what;
         private final String digest;
-        private final Progress progress;
+        private final CgProgress progress;
         private final BooleanSupplier cancelled;
         /** Where {@link #urls} came from, so a transfer that runs out can ask again; null when addressed. */
         private final DownloadLocations locations;
         private final String id;
 
-        private Request(List<String> urls, String what, String digest, Progress progress,
+        private Request(List<String> urls, String what, String digest, CgProgress progress,
                         BooleanSupplier cancelled, DownloadLocations locations, String id) {
             this.urls = urls;
             this.what = what;
@@ -202,9 +202,9 @@ public final class Downloads {
             return new Request(urls, what, digest, progress, cancelled, locations, id);
         }
 
-        /** Where to report. Defaults to {@link Progress#NONE}, which is a real answer, not a stub. */
-        public Request reporting(Progress progress) {
-            return new Request(urls, what, digest, progress == null ? Progress.NONE : progress, cancelled,
+        /** Where to report. Defaults to {@link CgProgress#NONE}, which is a real answer, not a stub. */
+        public Request reporting(CgProgress progress) {
+            return new Request(urls, what, digest, progress == null ? CgProgress.NONE : progress, cancelled,
                     locations, id);
         }
 
@@ -351,7 +351,7 @@ public final class Downloads {
 
     /** Several artifacts into one directory, under a single aggregate bar. */
     public static Batch batch(List<Artifact> artifacts) {
-        return new Batch(artifacts, "Downloading", Progress.NONE, NEVER_CANCELLED);
+        return new Batch(artifacts, "Downloading", CgProgress.NONE, NEVER_CANCELLED);
     }
 
     /**
@@ -373,10 +373,10 @@ public final class Downloads {
 
         private final List<Artifact> artifacts;
         private final String what;
-        private final Progress progress;
+        private final CgProgress progress;
         private final BooleanSupplier cancelled;
 
-        private Batch(List<Artifact> artifacts, String what, Progress progress, BooleanSupplier cancelled) {
+        private Batch(List<Artifact> artifacts, String what, CgProgress progress, BooleanSupplier cancelled) {
             this.artifacts = artifacts;
             this.what = what;
             this.progress = progress;
@@ -387,8 +387,8 @@ public final class Downloads {
             return new Batch(artifacts, what, progress, cancelled);
         }
 
-        public Batch reporting(Progress progress) {
-            return new Batch(artifacts, what, progress == null ? Progress.NONE : progress, cancelled);
+        public Batch reporting(CgProgress progress) {
+            return new Batch(artifacts, what, progress == null ? CgProgress.NONE : progress, cancelled);
         }
 
         /** @see Request#cancelledWhen */
@@ -443,7 +443,7 @@ public final class Downloads {
                 }
                 total += length;
             }
-            progress.begin(what, total > 0 ? total : -1, Progress.Unit.BYTES);
+            progress.begin(what, total > 0 ? total : -1, CgProgress.Unit.BYTES);
 
             long done = 0;
             int installed = 0;
@@ -459,7 +459,7 @@ public final class Downloads {
                 Path target = directory.resolve(artifact.fileName());
                 try {
                     if (!CacheFiles.isValid(target, artifact.request().digest())
-                            && !artifact.request().named(what).reporting(Progress.NONE)
+                            && !artifact.request().named(what).reporting(CgProgress.NONE)
                                     .cancelledWhen(cancelled).into(target)) {
                         return new Result(installed, artifacts.size(), artifact.fileName());
                     }
@@ -468,7 +468,7 @@ public final class Downloads {
                 }
                 installed++;
                 // AGGREGATE, and stepped per FILE rather than per chunk: an inner transfer reporting into
-                // the same Progress would reset the bar to its own size fifteen times.
+                // the same CgProgress would reset the bar to its own size fifteen times.
                 try {
                     done += Files.size(target);
                 } catch (IOException unreadable) {
@@ -570,7 +570,7 @@ public final class Downloads {
      * The declared length of {@code url}'s body, or a negative number.
      *
      * <p>Negative is the ordinary answer rather than a failure: a chunked response has no length, and
-     * {@code -1} is exactly what {@link Progress#begin} takes to mean indeterminate — so a caller passes
+     * {@code -1} is exactly what {@link CgProgress#begin} takes to mean indeterminate — so a caller passes
      * it straight through. Prefer {@link #fetch} where the body is wanted too; this exists for
      * {@link Batch}, which has to total up sizes it is not yet ready to read.</p>
      */

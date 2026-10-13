@@ -1,5 +1,7 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import org.junit.After;
@@ -135,7 +137,7 @@ public class UiSequenceTest {
         assertNotSame("a sequence drains the render thread's scheduler", JobScheduler.shared(), aJobs);
 
         AtomicReference<UiSequence> deliveredOn = new AtomicReference<>();
-        on(a, () -> JobScheduler.shared().job(JobKey.of(this, "answer"), JobLane.INTERACTIVE, context -> 42)
+        on(a, () -> JobScheduler.shared().job(CgJobKey.of(this, "answer"), CgJobLane.INTERACTIVE, context -> 42)
                 .onDone(answer -> deliveredOn.set(UiSequence.current()))
                 .submit());
         long deadline = System.currentTimeMillis() + 10_000;
@@ -154,7 +156,7 @@ public class UiSequenceTest {
         JobScheduler kept = JobScheduler.shared();
 
         AtomicReference<UiSequence> deliveredOn = new AtomicReference<>();
-        on(a, () -> kept.job(JobKey.of(this, "kept"), JobLane.INTERACTIVE, context -> 42)
+        on(a, () -> kept.job(CgJobKey.of(this, "kept"), CgJobLane.INTERACTIVE, context -> 42)
                 .onDone(answer -> deliveredOn.set(UiSequence.current()))
                 .submit());
         long deadline = System.currentTimeMillis() + 10_000;

@@ -1,5 +1,6 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.CgJobLoop;
 import com.crystalgui.core.CrystalGuiCore;
 
 import javax.annotation.Nullable;
@@ -23,8 +24,9 @@ import java.util.concurrent.locks.LockSupport;
  * sequence.execute(() -> document.frame(delta, w, h));        // from the render thread
  * }</pre>
  *
- * <p>Each sequence has its own {@link JobScheduler}: {@link JobScheduler#shared()} answers it inside a task, so a
- * job's {@code onDone} comes back to the sequence that posted the job, in that sequence's next drain.</p>
+ * <p>Each sequence has its own {@link JobScheduler}: {@link JobScheduler#shared()} answers it inside a task, and its
+ * loop is {@link CgJobLoop#current()} there, so a job's {@code onDone} — or a bare {@code CgJob.run}'s {@code then} —
+ * comes back to the sequence that started it, in that sequence's next drain.</p>
  *
  * <ul>
  *   <li>A task that throws is logged and the sequence carries on.</li>
@@ -108,7 +110,7 @@ public final class UiSequence implements Executor {
         UiSequence outer = CURRENT.get();
         CURRENT.set(this);
         running = Thread.currentThread();
-        try {
+        try (CgJobLoop.Scope ignored = jobs().loop().enter()) {
             for (Runnable queued; !closed && (queued = tasks.poll()) != null; ) {
                 try {
                     queued.run();
@@ -166,7 +168,7 @@ public final class UiSequence implements Executor {
         UiSequence outer = CURRENT.get();
         CURRENT.set(this);
         running = Thread.currentThread();
-        try {
+        try (CgJobLoop.Scope ignored = jobs().loop().enter()) {
             for (int i = 0; i < TASKS_PER_TURN && !closed; i++) {
                 Runnable task = tasks.poll();
                 if (task == null) break;

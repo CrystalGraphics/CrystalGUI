@@ -2,8 +2,8 @@ package com.crystalgui.fs.client;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.ConnectionGroup;
-import com.crystalgui.core.async.PendingReply;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgPendingReply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
@@ -148,7 +148,7 @@ public final class WorkspaceDocuments implements Disposable {
      * again — which is what makes two split panes one document, and the Problems panel's hold and the
      * tab's hold the same object.</p>
      */
-    public Reply<DocumentReference> open(Resource resource) {
+    public CgReply<DocumentReference> open(Resource resource) {
         return open(resource, null);
     }
 
@@ -165,27 +165,27 @@ public final class WorkspaceDocuments implements Disposable {
      * the open document — hands the caller a tab that looks like the one they asked for and is not, and
      * an "Open With" that silently does nothing is worse than one that explains itself.</p>
      */
-    public Reply<DocumentReference> open(Resource resource, @Nullable String preferredKindId) {
+    public CgReply<DocumentReference> open(Resource resource, @Nullable String preferredKindId) {
         Document existing = documents.get(resource);
         if (existing != null) {
             if (preferredKindId != null && !preferredKindId.equals(existing.kind().id())) {
-                return Reply.failed(new FsError(FsError.CONFLICT, resource.name()
+                return CgReply.failed(FsError.of(FsError.CONFLICT, resource.name()
                         + " is already open as " + existing.kind().displayName()
                         + "; close it before opening it as something else"));
             }
             DocumentReference reference = documents.reference(resource);
-            return Reply.of(reference);
+            return CgReply.of(reference);
         }
 
         DocumentKind kind = preferredKindId == null
                 ? kinds.forResource(resource) : kinds.byId(preferredKindId);
         if (kind == null) {
-            return Reply.failed(new FsError(FsError.INVALID_PATH, preferredKindId == null
+            return CgReply.failed(FsError.of(FsError.INVALID_PATH, preferredKindId == null
                     ? "nothing knows how to open " + resource
                     : "no document kind '" + preferredKindId + "' is registered"));
         }
 
-        PendingReply<DocumentReference> opened = new PendingReply<>(null);
+        CgPendingReply<DocumentReference> opened = new CgPendingReply<>(null);
         boolean fromServer = resource.isProject();
         // ONE DOOR. A project resource goes over the wire; a decompiled class or a generated shader goes
         // to whatever registered its scheme. Routing here is what makes this the ONE open lane -- the
@@ -201,7 +201,7 @@ public final class WorkspaceDocuments implements Disposable {
                         // A model that cannot take the bytes must FAIL rather than open empty: an empty
                         // document reports itself modified against the file it could not read, and the
                         // first save writes that emptiness over somebody's work.
-                        opened.fail(new FsError(FsError.FAILED,
+                        opened.fail(FsError.of(FsError.FAILED,
                                 resource + " could not be opened: " + undecodable));
                         return;
                     }
@@ -333,16 +333,16 @@ public final class WorkspaceDocuments implements Disposable {
     }
 
     /** Takes the server's copy. Refused while dirty unless forced, for the reason above. */
-    public Reply<Void> reload(Document document) {
+    public CgReply<Void> reload(Document document) {
         return reload(document, false);
     }
 
-    public Reply<Void> reload(Document document, boolean force) {
+    public CgReply<Void> reload(Document document, boolean force) {
         if (document.isDirty() && !force) {
-            return Reply.failed(new FsError(FsError.CONFLICT,
+            return CgReply.failed(FsError.conflict(
                     "there is unsaved work; reloading would discard it", document.etag()));
         }
-        PendingReply<Void> done = new PendingReply<>(null);
+        CgPendingReply<Void> done = new CgPendingReply<>(null);
         // THE ONE DOOR, exactly as the open path takes. Read straight through `files().read` this took
         // the response's `content` and stopped, so a file over the server's inline limit came back
         // EMPTY: an external change to a big file replaced the document with nothing and marked it
@@ -382,7 +382,7 @@ public final class WorkspaceDocuments implements Disposable {
 
     // ── Saving ──────────────────────────────────────────────────────────────────────────────────
 
-    public Reply<Void> save(Document document) {
+    public CgReply<Void> save(Document document) {
         return save(document, SaveReason.EXPLICIT, false);
     }
 
@@ -392,7 +392,7 @@ public final class WorkspaceDocuments implements Disposable {
      * @param force write regardless of the etag — the deliberate "mine wins" a person chooses in a
      *              conflict dialog, and never a default
      */
-    public Reply<Void> save(Document document, SaveReason reason, boolean force) {
+    public CgReply<Void> save(Document document, SaveReason reason, boolean force) {
         for (BiConsumer<Document, SaveReason> participant : onWillSave) {
             participant.accept(document, reason);
         }
@@ -401,13 +401,13 @@ public final class WorkspaceDocuments implements Disposable {
         // compare itself against afterwards, and undoing back to it must read as clean.
         int savedAt = document.contentVersion();
 
-        PendingReply<Void> done = new PendingReply<>(null);
+        CgPendingReply<Void> done = new CgPendingReply<>(null);
         workspace.files().write(document.resource(), content, force ? null : document.etag())
                 .onError(error -> {
-                    if (error instanceof FsError failure && failure.is(FsError.CONFLICT)) {
+                    if (error.is(FsError.CONFLICT)) {
                         // THE ETAG THE FILE ACTUALLY HOLDS, as a field. A conflict without it is a
                         // conflict nothing can resolve but an unconditional overwrite.
-                        document.setEtag(failure.actualEtag());
+                        document.setEtag(FsError.actualEtag(error));
                         document.setState(DocumentState.CONFLICTING);
                     }
                     done.fail(error);
@@ -430,7 +430,7 @@ public final class WorkspaceDocuments implements Disposable {
     }
 
     /** Back to what is on disk, discarding this client's edits. */
-    public Reply<Void> revert(Document document) {
+    public CgReply<Void> revert(Document document) {
         return reload(document, true);
     }
 

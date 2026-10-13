@@ -1,11 +1,11 @@
 package com.crystalgui.fs.client;
 
 import com.crystalgraphics.serialization.CgCodec;
-import com.crystalgui.core.async.PendingReply;
-import com.crystalgui.core.async.PendingStream;
-import com.crystalgui.core.async.Reply;
-import com.crystalgui.core.async.ReplyError;
-import com.crystalgui.core.async.Stream;
+import com.crystalgraphics.job.reply.CgPendingReply;
+import com.crystalgraphics.job.reply.CgPendingStream;
+import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgraphics.job.reply.CgReplyError;
+import com.crystalgraphics.job.reply.CgStream;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.core.undo.UndoStack;
@@ -24,7 +24,7 @@ import java.util.function.Supplier;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Reading and writing files — every answer a {@link Reply}, every partial answer a {@link Stream}.
+ * Reading and writing files — every answer a {@link CgReply}, every partial answer a {@link CgStream}.
  *
  * <pre>{@code
  * files.readWhole(resource).then(content -> …).onError(error -> …);
@@ -50,7 +50,7 @@ public final class FileOperations {
     private final AtomicLong operationIds = new AtomicLong();
 
     /** Per resource, the tail of the chain. @see #after */
-    private final Map<Resource, Reply<?>> queues = new LinkedHashMap<>();
+    private final Map<Resource, CgReply<?>> queues = new LinkedHashMap<>();
 
     /** A mutation is about to run. What an undo stack and an audit view both listen to. */
     public final Signal.Value<Resource> onWillRun = new Signal.Value<>();
@@ -61,12 +61,12 @@ public final class FileOperations {
     /**
      * It did not, and why.
      *
-     * <p>A {@code ReplyError} rather than an {@code FsError}, because not every failure is the
+     * <p>A {@code CgReplyError} rather than an {@code FsError}, because not every failure is the
      * filesystem's: a cancelled operation settles with {@code CANCELLED}, and a caller branching on
      * {@code code()} handles both without knowing which layer raised it. {@code FsError} is what a
-     * filesystem failure actually carries, and it is a {@code ReplyError}.</p>
+     * filesystem failure actually carries, and it is a {@code CgReplyError}.</p>
      */
-    public final Signal.Pair<Resource, ReplyError> onDidFail =
+    public final Signal.Pair<Resource, CgReplyError> onDidFail =
             new Signal.Pair<>();
 
     /**
@@ -161,7 +161,7 @@ public final class FileOperations {
      *
      * <p>Coalesced: a second read of one resource while the first is in flight is the same reply.</p>
      */
-    public Reply<FsMessages.ReadResponse> readResponse(Resource resource) {
+    public CgReply<FsMessages.ReadResponse> readResponse(Resource resource) {
         return readResponse(resource, null);
     }
 
@@ -172,7 +172,7 @@ public final class FileOperations {
      * reopening a tab cost one small message. HTTP's {@code If-None-Match}, which the read path already
      * spoke and which nothing above it could reach.</p>
      */
-    public Reply<FsMessages.ReadResponse> readResponse(Resource resource,
+    public CgReply<FsMessages.ReadResponse> readResponse(Resource resource,
                                                        @Nullable String ifNoneMatch) {
         return calls.coalesced("read:" + resource + ":" + (ifNoneMatch == null ? "" : ifNoneMatch),
                 FsMethods.READ, FsMessages.readRequest(),
@@ -185,18 +185,18 @@ public final class FileOperations {
      * A file's bytes, <b>pipelined</b> — the chunks arrive as they land and the whole is the result.
      *
      * <p>A file above the inline limit is answered as a transfer, and this pulls it through: each chunk
-     * reaches {@link Stream#onPartial} as it lands, and the whole sequence is the settled value. Use it
+     * reaches {@link CgStream#onPartial} as it lands, and the whole sequence is the settled value. Use it
      * when there is something to do with a partial answer — a progress bar, a partial parse — and
      * {@link #read} otherwise.</p>
      */
-    public Stream<byte[]> readStream(Resource resource) {
-        PendingStream<byte[]> stream = new PendingStream<>(null);
+    public CgStream<byte[]> readStream(Resource resource) {
+        CgPendingStream<byte[]> stream = new CgPendingStream<>(null);
         readResponse(resource).onError(stream::fail).then(response -> emitFrom(stream, response));
         return stream;
     }
 
     /** Inline content is one chunk; a transfer is pulled. The one place that branch is written. */
-    private void emitFrom(PendingStream<byte[]> stream, FsMessages.ReadResponse response) {
+    private void emitFrom(CgPendingStream<byte[]> stream, FsMessages.ReadResponse response) {
         if (response.transfer().isEmpty()) {
             stream.emit(response.content());
             stream.finish();
@@ -213,7 +213,7 @@ public final class FileOperations {
      * out of order. What the stream buys immediately is that the caller sees each chunk — a progress
      * bar, a partial parse — rather than nothing until the last one.</p>
      */
-    private void pull(PendingStream<byte[]> stream, String transfer, long offset) {
+    private void pull(CgPendingStream<byte[]> stream, String transfer, long offset) {
         calls.send(FsMethods.READ_CHUNK, FsMessages.chunkRequest(),
                         new FsMessages.ChunkRequest(transfer, offset, 0), FsMessages.chunkResponse())
                 .onError(stream::fail)
@@ -237,17 +237,17 @@ public final class FileOperations {
      * sharing one coalesced {@link #readResponse} would pull the same id and whichever finished first
      * would take it out from under the other. Two panes restoring one large file is exactly that.</p>
      */
-    public Reply<Content> readWhole(Resource resource) {
-        Reply<Content> inFlight = wholeReads.get(resource);
+    public CgReply<Content> readWhole(Resource resource) {
+        CgReply<Content> inFlight = wholeReads.get(resource);
         if (inFlight != null && !inFlight.isDone()) return inFlight;
 
-        PendingReply<Content> done = new PendingReply<>(null);
+        CgPendingReply<Content> done = new CgPendingReply<>(null);
         wholeReads.put(resource, done);
         done.always(() -> wholeReads.remove(resource, done));
         readResponse(resource)
                 .onError(done::fail)
                 .then(response -> {
-                    PendingStream<byte[]> chunks = new PendingStream<>(null);
+                    CgPendingStream<byte[]> chunks = new CgPendingStream<>(null);
                     chunks.onError(done::fail)
                             .then(pieces -> done.resolve(new Content(join(pieces), response.etag())));
                     emitFrom(chunks, response);
@@ -260,7 +260,7 @@ public final class FileOperations {
     }
 
     /** Per resource, the whole-file read in flight. @see #readWhole */
-    private final Map<Resource, Reply<Content>> wholeReads = new LinkedHashMap<>();
+    private final Map<Resource, CgReply<Content>> wholeReads = new LinkedHashMap<>();
 
     /** The chunks, in order, as one array. */
     private static byte[] join(List<byte[]> chunks) {
@@ -277,19 +277,19 @@ public final class FileOperations {
     }
 
     /** A file's metadata, with the etag a write must quote back. */
-    public Reply<FsMessages.StatResponse> stat(Resource resource) {
+    public CgReply<FsMessages.StatResponse> stat(Resource resource) {
         return calls.coalesced("stat:" + resource, FsMethods.STAT, FsMessages.pathRequest(),
                 new FsMessages.PathRequest(resource.toString()), FsMessages.statResponse());
     }
 
     /** One directory's entries, the project's ignore rules already applied. */
-    public Reply<FsMessages.ListResponse> list(Resource directory) {
+    public CgReply<FsMessages.ListResponse> list(Resource directory) {
         return calls.coalesced("list:" + directory, FsMethods.LIST, FsMessages.listRequest(),
                 new FsMessages.ListRequest(directory.toString()), FsMessages.listResponse());
     }
 
     /** Every project this actor may see. */
-    public Reply<FsMessages.ProjectsResponse> projects() {
+    public CgReply<FsMessages.ProjectsResponse> projects() {
         return calls.coalesced("projects", FsMethods.PROJECTS, FsMessages.pathRequest(),
                 new FsMessages.PathRequest(""), FsMessages.projectsResponse());
     }
@@ -302,15 +302,15 @@ public final class FileOperations {
      * <p>An unconditional overwrite passes null, which is the deliberate "mine wins" a person chooses
      * in a conflict dialog — never a default.</p>
      */
-    public Reply<String> write(Resource resource, byte[] content, @Nullable String etag) {
+    public CgReply<String> write(Resource resource, byte[] content, @Nullable String etag) {
         return mutate(resource, FsMethods.WRITE, FsMessages.writeRequest(),
                 op -> new FsMessages.WriteRequest(resource.toString(), content,
                         etag == null ? "" : etag, false, true, op));
     }
 
     /** Creates a file that must not already exist. */
-    public Reply<String> create(Resource resource, byte[] content) {
-        Reply<String> created = mutate(resource, FsMethods.CREATE, FsMessages.writeRequest(),
+    public CgReply<String> create(Resource resource, byte[] content) {
+        CgReply<String> created = mutate(resource, FsMethods.CREATE, FsMessages.writeRequest(),
                 op -> new FsMessages.WriteRequest(resource.toString(), content, "", true, false, op));
         record("create " + resource.name(),
                 () -> create(resource, content),
@@ -318,8 +318,8 @@ public final class FileOperations {
         return created;
     }
 
-    public Reply<String> mkdir(Resource resource) {
-        Reply<String> made = mutate(resource, FsMethods.MKDIR, FsMessages.pathRequest(),
+    public CgReply<String> mkdir(Resource resource) {
+        CgReply<String> made = mutate(resource, FsMethods.MKDIR, FsMessages.pathRequest(),
                 op -> new FsMessages.PathRequest(resource.toString(), op));
         record("create " + resource.name(),
                 () -> mkdir(resource),
@@ -335,7 +335,7 @@ public final class FileOperations {
      * delete the server refuses leaves nothing on the stack, which is right: Ctrl+Z must not offer to
      * take back something that never happened.</p>
      */
-    public Reply<String> delete(Resource resource) {
+    public CgReply<String> delete(Resource resource) {
         boolean replay = isReplay();
         return mutate(resource, FsMethods.DELETE, FsMessages.pathRequest(),
                         op -> new FsMessages.PathRequest(resource.toString(), op))
@@ -350,14 +350,14 @@ public final class FileOperations {
     }
 
     /** Puts back what a delete moved to the trash. */
-    public Reply<String> restore(String trashId) {
+    public CgReply<String> restore(String trashId) {
         return calls.send(FsMethods.RESTORE, FsMessages.pathRequest(),
                         new FsMessages.PathRequest(trashId), FsMessages.etagResponse())
                 .map(FsMessages.EtagResponse::etag);
     }
 
-    public Reply<String> rename(Resource from, Resource to, boolean overwrite) {
-        Reply<String> moved = mutate(from, FsMethods.RENAME, FsMessages.moveRequest(),
+    public CgReply<String> rename(Resource from, Resource to, boolean overwrite) {
+        CgReply<String> moved = mutate(from, FsMethods.RENAME, FsMessages.moveRequest(),
                 op -> new FsMessages.MoveRequest(from.toString(), to.toString(), overwrite, op));
         // NEVER OVERWRITING ON THE WAY BACK, whatever the original did: undoing a move that replaced
         // something must not replace whatever is at the source now.
@@ -371,7 +371,7 @@ public final class FileOperations {
      * Runs a mutation: queued behind anything else about this resource, announced, and carrying an
      * operation id so a retry after a timeout is answered rather than performed again.
      */
-    private <A> Reply<String> mutate(Resource resource, String method,
+    private <A> CgReply<String> mutate(Resource resource, String method,
                                      CgCodec<A> codec,
                                      Function<String, A> args) {
         String op = "op-" + operationIds.incrementAndGet();
@@ -390,16 +390,16 @@ public final class FileOperations {
      * <p>The queue is the reply itself: each operation's completion is what starts the next. A resource
      * with nothing outstanding starts immediately, so the ordinary case pays one map lookup.</p>
      */
-    private <R> Reply<R> after(Resource resource, Supplier<Reply<R>> work) {
-        Reply<?> previous = queues.get(resource);
+    private <R> CgReply<R> after(Resource resource, Supplier<CgReply<R>> work) {
+        CgReply<?> previous = queues.get(resource);
         if (previous == null || previous.isDone()) {
-            Reply<R> started = work.get();
+            CgReply<R> started = work.get();
             queues.put(resource, started);
             started.always(() -> queues.remove(resource, started));
             return started;
         }
-        PendingReply<R> chained =
-                new PendingReply<>(null);
+        CgPendingReply<R> chained =
+                new CgPendingReply<>(null);
         queues.put(resource, chained);
         previous.always(() -> work.get()
                 .then(chained::resolve)
@@ -419,8 +419,8 @@ public final class FileOperations {
      * <p>Queued behind the <b>source</b>, as a rename is: what a copy is exposed to is a pending write
      * to the thing it is copying, and a destination that does not exist yet has nothing outstanding.</p>
      */
-    public Reply<String> copy(Resource from, Resource to, boolean overwrite) {
-        Reply<String> copied = mutate(from, FsMethods.COPY, FsMessages.moveRequest(),
+    public CgReply<String> copy(Resource from, Resource to, boolean overwrite) {
+        CgReply<String> copied = mutate(from, FsMethods.COPY, FsMessages.moveRequest(),
                 op -> new FsMessages.MoveRequest(from.toString(), to.toString(), overwrite, op));
         // A COPY'S UNDO IS A DELETE OF WHAT IT MADE, never a restore: nothing was taken away.
         record("copy " + from.name(),
@@ -429,7 +429,7 @@ public final class FileOperations {
         return copied;
     }
 
-    public Reply<String> copy(Resource from, Resource to) {
+    public CgReply<String> copy(Resource from, Resource to) {
         return copy(from, to, false);
     }
 
@@ -443,7 +443,7 @@ public final class FileOperations {
      *
      * @param inProject any resource in the project whose trash is wanted; its project is what is asked
      */
-    public Reply<List<FsMessages.TrashEntry>> trash(Resource inProject) {
+    public CgReply<List<FsMessages.TrashEntry>> trash(Resource inProject) {
         return calls.send(FsMethods.TRASH_LIST, FsMessages.pathRequest(),
                         new FsMessages.PathRequest(inProject.toString()),
                         FsMessages.trashListResponse())
@@ -456,7 +456,7 @@ public final class FileOperations {
      * <p><b>Not undoable, and that is the point of it</b> — the entry is the only copy left, so there is
      * nothing an undo step could put back. Everything else here records one.</p>
      */
-    public Reply<String> purge(String trashId) {
+    public CgReply<String> purge(String trashId) {
         return calls.send(FsMethods.PURGE, FsMessages.pathRequest(),
                         new FsMessages.PathRequest(trashId), FsMessages.etagResponse())
                 .map(FsMessages.EtagResponse::etag);
@@ -493,15 +493,15 @@ public final class FileOperations {
      * files that copied stay copied and the one that did not is reported. Failing wholesale would hand
      * the caller an error and no list, so it could not say which.</p>
      */
-    public Reply<BatchResult> batch(String label, Consumer<Batch> body) {
+    public CgReply<BatchResult> batch(String label, Consumer<Batch> body) {
         Batch batch = new Batch(label);
         body.accept(batch);
 
-        PendingReply<BatchResult> settled =
-                new PendingReply<>(() -> {
-                    for (Reply<?> member : batch.members) member.cancel();
+        CgPendingReply<BatchResult> settled =
+                new CgPendingReply<>(() -> {
+                    for (CgReply<?> member : batch.members) member.cancel();
                 });
-        // SETTLED, not SUCCEEDED. `Reply.all` fails on the first failure, which is right for "I need all
+        // SETTLED, not SUCCEEDED. `CgReply.all` fails on the first failure, which is right for "I need all
         // of these" and wrong for a batch: the point of reporting per item is that the eleven files that
         // copied stay copied and the one that did not is NAMED. A batch that failed wholesale would hand
         // the caller an error and no list, so it could not say which one.
@@ -510,7 +510,7 @@ public final class FileOperations {
             settled.resolve(batch.result());
             return settled;
         }
-        for (Reply<?> member : batch.members) {
+        for (CgReply<?> member : batch.members) {
             member.always(() -> {
                 if (--remaining[0] == 0) settled.resolve(batch.result());
             });
@@ -526,13 +526,13 @@ public final class FileOperations {
         }
     }
 
-    public record Failure(Resource resource, ReplyError error) {
+    public record Failure(Resource resource, CgReplyError error) {
     }
 
     /** The operations of one batch, gathered. */
     public final class Batch {
         private final String label;
-        private final List<Reply<?>> members = new ArrayList<>();
+        private final List<CgReply<?>> members = new ArrayList<>();
         private final List<Failure> failures = new ArrayList<>();
         private int succeeded;
 
@@ -564,7 +564,7 @@ public final class FileOperations {
             return track(resource, FileOperations.this.mkdir(resource));
         }
 
-        private Batch track(Resource resource, Reply<?> member) {
+        private Batch track(Resource resource, CgReply<?> member) {
             members.add(member);
             member.then(ok -> succeeded++)
                     .onError(error -> failures.add(new Failure(resource, error)));

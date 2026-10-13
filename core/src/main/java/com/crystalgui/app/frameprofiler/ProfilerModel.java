@@ -8,8 +8,8 @@ import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceHints;
 import com.crystalgraphics.trace.CgTraceSnapshot;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.trace.TraceFiles;
@@ -168,7 +168,7 @@ public final class ProfilerModel {
         boolean single = !hasRange() || follow;
         boolean viewer = showViewer;
         int submitted = generation;
-        jobs.job(refreshKey, JobLane.BACKGROUND, context -> prepare(previous, follow, was, single, viewer))
+        jobs.job(refreshKey, CgJobLane.BACKGROUND, context -> prepare(previous, follow, was, single, viewer))
                 .onDone(result -> {
                     // A refresh taken on this thread meanwhile is newer than this one.
                     if (submitted == generation) adopt(result.snapshot(), result.prepared());
@@ -183,11 +183,11 @@ public final class ProfilerModel {
     }
 
     private boolean refreshing() {
-        return jobs.runningCount() + jobs.waitingCount() > 0;
+        return jobs.pendingCount() > 0;
     }
 
-    private final JobScheduler jobs = new JobScheduler(JobScheduler.sharedPool(), System::currentTimeMillis, 1);
-    private final JobKey refreshKey = JobKey.of(this, "profiler-refresh");
+    private final JobScheduler jobs = new JobScheduler();
+    private final CgJobKey refreshKey = CgJobKey.of(this, "profiler-refresh");
     /** Bumped by every refresh taken on the owning thread, so a background answer older than it is dropped. */
     private int generation;
 

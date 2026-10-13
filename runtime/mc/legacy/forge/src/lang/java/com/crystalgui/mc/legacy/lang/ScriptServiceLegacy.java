@@ -1,8 +1,8 @@
 package com.crystalgui.mc.legacy.lang;
 
 import com.crystalgraphics.mc.shared.FmlVersion;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.map.ReadableView;
@@ -66,7 +66,7 @@ public final class ScriptServiceLegacy implements ScriptService {
             ScriptService.super.runInBackground(title, work);
             return;
         }
-        JobScheduler.shared().job(JobKey.of(ScriptServiceLegacy.class, title), JobLane.BACKGROUND,
+        JobScheduler.shared().job(CgJobKey.of(ScriptServiceLegacy.class, title), CgJobLane.BACKGROUND,
                 context -> {
                     work.run(context.progress(), context::isCancelled);
                     return null;

@@ -2,8 +2,8 @@ package com.crystalgui.language.java;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.language.engine.AnalysedLanguageServices;
 import com.crystalgui.language.engine.JavaEngine;
@@ -216,7 +216,7 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
      * also why the provider itself stays synchronous: tests drive it directly, and moving the threading
      * inside would make every one of them wait for a frame.</p>
      *
-     * <p>{@code JobLane.INTERACTIVE} because that lane's own documentation names this case — "a human is
+     * <p>{@code CgJobLane.INTERACTIVE} because that lane's own documentation names this case — "a human is
      * mid-gesture and blocked on the answer, a completion query after a keystroke". One key, so a
      * keystroke arriving while the previous query is still running supersedes it rather than queueing
      * behind it; the session would have dropped the older answer regardless.</p>
@@ -228,7 +228,7 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
     private CompletionProvider offThread(JavaCompletionProvider provider) {
         JobScheduler jobs = scheduler();
         if (jobs == null) return provider;
-        JobKey key = JobKey.of(JavaLanguageServices.class, "completion");
+        CgJobKey key = CgJobKey.of(JavaLanguageServices.class, "completion");
         // AN ANONYMOUS CLASS, not a lambda: `CompletionProvider` has a second abstract method, and
         // `resolveItem` belongs to the provider unchanged -- it fills in one already-chosen row and is
         // not the thing that costs.
@@ -236,7 +236,7 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
             @Override
             public void complete(Request request, Consumer<Versioned<CompletionList>> answer) {
                 JavaCompletionProvider.Snapshot snap = provider.snapshot();
-                jobs.<Versioned<CompletionList>>job(key, JobLane.INTERACTIVE,
+                jobs.<Versioned<CompletionList>>job(key, CgJobLane.INTERACTIVE,
                                 context -> provider.completeFrom(snap, request))
                         .onDone(answer::accept)
                         .submit();

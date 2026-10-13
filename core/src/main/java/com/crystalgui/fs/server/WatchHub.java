@@ -1,8 +1,8 @@
 package com.crystalgui.fs.server;
 
 import com.crystalgraphics.trace.CgTrace;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.fs.provider.CgFileEntry;
@@ -94,7 +94,7 @@ public final class WatchHub {
      */
     private final JobScheduler jobs;
     /** Named for the log: a failed sweep is reported as "job ... failed" with this key. */
-    private final JobKey sweepKey = JobKey.of(this, "fs-watch-reconcile");
+    private final CgJobKey sweepKey = CgJobKey.of(this, "fs-watch-reconcile");
     /** Sweeps delivered by {@link #jobs} and not yet applied. */
     private final List<Sweep> swept = new ArrayList<>();
     private float untilSweep = RECONCILE_SECONDS;
@@ -104,7 +104,7 @@ public final class WatchHub {
     }
 
     public WatchHub(WorkspaceService service) {
-        this(service, new JobScheduler(JobScheduler.sharedPool(), System::currentTimeMillis, 1));
+        this(service, new JobScheduler());
     }
 
     /** @param jobs where a sweep's stats run, drained by {@link #update}; a test passes a same-thread one */
@@ -232,7 +232,7 @@ public final class WatchHub {
             // STILL RUNNING is a stat that hangs -- a network drive, an antivirus lock -- and the
             // reconcile stopping rather than hitching. Counted so it can be seen. Not re-submitted:
             // that would supersede the sweep, and a hung one would be superseded for ever.
-            if (jobs.runningCount() + jobs.waitingCount() > 0) CgTrace.add(UiTrace.FS, "watch-sweep-busy", 1);
+            if (jobs.pendingCount() > 0) CgTrace.add(UiTrace.FS, "watch-sweep-busy", 1);
             else startSweep(actor);
         }
 
@@ -245,7 +245,7 @@ public final class WatchHub {
         if (lastEtag.isEmpty()) return;
         Map<CgPath, String> expected = new LinkedHashMap<>(lastEtag);
         Supplier<List<WorkspaceService.Stat>> reads = service.statsFor(actor, new ArrayList<>(expected.keySet()));
-        jobs.job(sweepKey, JobLane.BACKGROUND, context -> {
+        jobs.job(sweepKey, CgJobLane.BACKGROUND, context -> {
                     try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FS, "fs:reconcile.sweep")) {
                         return reads.get();
                     }

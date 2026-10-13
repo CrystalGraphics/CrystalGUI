@@ -1,9 +1,9 @@
 package com.crystalgui.language.java;
 
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.core.async.ProgressState;
+import com.crystalgraphics.job.progress.CgProgressState;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.notify.Notifications;
@@ -34,7 +34,7 @@ import java.nio.file.Path;
  *
  * <ul>
  *   <li>{@code acquire} asked the server for the download's <b>size</b> before calling
- *       {@link com.crystalgui.core.async.Progress#begin}, so the bar did not exist until a request had
+ *       {@link com.crystalgraphics.job.progress.CgProgress#begin}, so the bar did not exist until a request had
  *       completed. Press the command with the host unreachable and nothing happens for fifteen seconds.</li>
  *   <li>A job is only drawn after 400 ms of work, so a fetch that failed <em>fast</em> was never drawn at
  *       all. The bar covers the success it is watching; it cannot cover the failure it never got to.</li>
@@ -78,7 +78,7 @@ public final class JdkSourceCommands {
                 // It is also the only retry path: a cache that has gone bad had no way back except
                 // deleting a file by hand.
                 .run(() -> JobScheduler.shared()
-                        .job(JobKey.of(JdkSourceCommands.class, "jdk-sources"), JobLane.BACKGROUND,
+                        .job(CgJobKey.of(JdkSourceCommands.class, "jdk-sources"), CgJobLane.BACKGROUND,
                                 context -> {
                                     // THE JOB'S OWN PROGRESS, so this reports into the status bar like
                                     // the mapping fetch rather than being a silent stall -- and so it can
@@ -125,7 +125,7 @@ public final class JdkSourceCommands {
                 // The numbers are the part somebody actually wants, and they are on the Result rather than
                 // parsed back out of a sentence.
                 Notifications.info("JDK sources downloaded — " + result.files() + " files, "
-                        + ProgressState.bytes(result.bytes())
+                        + CgProgressState.bytes(result.bytes())
                         + ", cached under the game directory");
                 break;
             case CACHED:

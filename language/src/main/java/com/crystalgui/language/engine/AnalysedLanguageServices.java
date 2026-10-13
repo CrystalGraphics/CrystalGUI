@@ -2,8 +2,8 @@ package com.crystalgui.language.engine;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
@@ -70,7 +70,7 @@ import java.util.function.Consumer;
  *
  * <p>A run of keystrokes must produce one analysis at the end rather than one per key, and an analysis
  * still running when the next keystroke lands must be abandoned rather than raced. {@link JobScheduler}
- * already does exactly this: a {@link JobKey} keyed on <em>this service</em> means every submission
+ * already does exactly this: a {@link CgJobKey} keyed on <em>this service</em> means every submission
  * replaces the last, and the debounce window is what turns typing into one job.</p>
  *
  * <p><b>Answers land on the UI thread, during the drain.</b> Nothing here synchronises, because nothing
@@ -119,7 +119,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
     protected JobScheduler scheduler() {
         return scheduler;
     }
-    private final JobKey analysisKey;
+    private final CgJobKey analysisKey;
     private final String retainedLane;
     private final String runtimeLane;
     @Nullable private final Resource file;
@@ -154,7 +154,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         this.buffer = buffer;
         this.scheduler = scheduler;
         this.file = file;
-        this.analysisKey = JobKey.of(this, id + "-analysis");
+        this.analysisKey = CgJobKey.of(this, id + "-analysis");
         this.retainedLane = id + "-retained-warnings";
         this.runtimeLane = id + "-runtime-problems";
     }
@@ -629,7 +629,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
         final String source = buffer.document().toString();
         final long version = buffer.version();
         analysisPending = true;
-        scheduler.job(analysisKey, JobLane.LATENCY, context -> {
+        scheduler.job(analysisKey, CgJobLane.LATENCY, context -> {
                     Analysis analysed = analyse(source, version);
                     // AND ITS TOKENS, while this thread still owns it exclusively. @see #semanticTokensOf
                     return new Analysed(analysed, semanticTokensOf(analysed));
@@ -901,7 +901,7 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
             // ITS OWN KEY, never the analysis key: single-flight REPLACES, so sharing one would let a
             // hover cancel the analysis that hover is asking about. Single-flight among resolves is
             // exactly right, though -- the newest question is the only one anybody is waiting for.
-            scheduler.job(JobKey.of(AnalysedLanguageServices.this, id + "-resolve"), JobLane.LATENCY,
+            scheduler.job(CgJobKey.of(AnalysedLanguageServices.this, id + "-resolve"), CgJobLane.LATENCY,
                             context -> resolveUnderLock(analysis, offset))
                     .onDone(resolved -> answer.accept(Versioned.of(analysis.version(), resolved)))
                     .submit();

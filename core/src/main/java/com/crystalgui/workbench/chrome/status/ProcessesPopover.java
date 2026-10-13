@@ -4,7 +4,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.core.async.ActiveJob;
-import com.crystalgui.core.async.JobKey;
+import com.crystalgraphics.job.CgJobKey;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.widget.overlay.Popover;
@@ -29,7 +29,7 @@ import java.util.Map;
  *
  * <h3>Rows are reused, not rebuilt</h3>
  *
- * <p>Keyed by {@link JobKey} and updated in place. Rebuilding the list every frame would replace the very
+ * <p>Keyed by {@link CgJobKey} and updated in place. Rebuilding the list every frame would replace the very
  * element a press is being dispatched through — the trap this project has paid for at the table header,
  * the command palette's key chips, and the editor's gutter arrows. A row here carries a cancel button and
  * this list refreshes while a job runs, so it is the same hazard exactly.</p>
@@ -52,7 +52,7 @@ public class ProcessesPopover extends Popover {
     public static final String HIDE_CLASS = "__hide__";
 
     private final UIElement rows = new UIElement();
-    private final Map<JobKey, Row> byKey = new LinkedHashMap<>();
+    private final Map<CgJobKey, Row> byKey = new LinkedHashMap<>();
 
     public ProcessesPopover() {
         super(NAME);
@@ -92,7 +92,7 @@ public class ProcessesPopover extends Popover {
      * status bar is showing inline, and the eye does not have to find it again.</p>
      */
     public void refresh(List<ActiveJob> active) {
-        List<JobKey> present = new ArrayList<>(active.size());
+        List<CgJobKey> present = new ArrayList<>(active.size());
         for (ActiveJob job : active) {
             present.add(job.key());
             Row row = byKey.get(job.key());
@@ -135,7 +135,7 @@ public class ProcessesPopover extends Popover {
         private float shownFraction = Float.NaN;
         private boolean shownCancelling;
 
-        private Row(JobKey key) {
+        private Row(CgJobKey key) {
             element.addClass(ROW_CLASS);
             StyleGroup.defaultPipeline(element.getStyle().getLayoutGroup(),
                     l -> l.flexDirection(FlexDirection.COLUMN));

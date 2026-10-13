@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgPlainOps;
@@ -264,16 +265,16 @@ public class FsProtocolCodecTest {
      */
     @Test
     public void aConflictIsStructured() {
-        FsError error = FsError.conflict("the file moved", "99:7");
+        CgReplyError error = FsError.conflict("the file moved", "99:7");
 
         assertEquals(FsError.CONFLICT, error.code());
-        assertEquals("99:7", error.actualEtag());
+        assertEquals("99:7", FsError.actualEtag(error));
         assertTrue(error.is(FsError.CONFLICT));
     }
 
     @Test
     public void everyOtherErrorHasNoEtag() {
-        assertNull(new FsError(FsError.NOT_FOUND, "no such file").actualEtag());
+        assertNull(FsError.actualEtag(FsError.of(FsError.NOT_FOUND, "no such file")));
     }
 
     @Test

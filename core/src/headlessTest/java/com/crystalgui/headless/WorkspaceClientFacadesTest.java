@@ -291,7 +291,7 @@ public class WorkspaceClientFacadesTest {
         Health health = new Health(() -> 0L);
         health.asked();
 
-        health.failed(new FsError(FsError.CONFLICT, "moved"));
+        health.failed(FsError.of(FsError.CONFLICT, "moved"));
 
         assertNotNull(health.lastError());
         assertEquals(FsError.CONFLICT, health.lastError().code());
@@ -302,7 +302,7 @@ public class WorkspaceClientFacadesTest {
     @Test
     public void reconnectingClearsTheLastError() {
         Health health = new Health(() -> 0L);
-        health.failed(new FsError(FsError.FAILED, "gone"));
+        health.failed(FsError.of(FsError.FAILED, "gone"));
 
         health.reset();
 

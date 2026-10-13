@@ -1,6 +1,6 @@
 package com.crystalgui.core.cache;
 
-import com.crystalgui.core.async.Progress;
+import com.crystalgraphics.job.progress.CgProgress;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -255,8 +255,8 @@ public class DownloadsTest {
     }
 
     /** Counts the reports so a cancel can be asked for partway rather than up front. */
-    private static Progress counting(AtomicLong seen) {
-        return new Progress() {
+    private static CgProgress counting(AtomicLong seen) {
+        return new CgProgress() {
             @Override
             public void begin(String what, long total, Unit unit) {
             }

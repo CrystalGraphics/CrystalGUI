@@ -5,7 +5,7 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
@@ -115,7 +115,7 @@ public class PresenceTest {
         }
 
         Document open(CgPath path) {
-            Reply<DocumentReference> reply = documents.open(Resource.of(path));
+            CgReply<DocumentReference> reply = documents.open(Resource.of(path));
             pump();
             assertNotNull("the open failed: " + reply.error(), reply.result());
             return reply.result().document();

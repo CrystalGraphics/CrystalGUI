@@ -1,6 +1,6 @@
 package com.crystalgui.fs.client;
 
-import com.crystalgui.core.async.ReplyError;
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgui.core.signal.Signal;
 
 import org.jetbrains.annotations.Nullable;
@@ -36,7 +36,7 @@ public final class Health {
     private long sent;
     private long received;
     @Nullable
-    private ReplyError lastError;
+    private CgReplyError lastError;
 
     /** Any of the figures moved. What a status item redraws from. */
     public final Signal.Action onDidChange = new Signal.Action();
@@ -70,7 +70,7 @@ public final class Health {
     }
 
     /** It failed. The error is kept because "what went wrong last" is the second question asked. */
-    public void failed(ReplyError error) {
+    public void failed(CgReplyError error) {
         settle();
         lastError = error;
         onDidChange.emit();
@@ -99,7 +99,7 @@ public final class Health {
     }
 
     @Nullable
-    public ReplyError lastError() {
+    public CgReplyError lastError() {
         return lastError;
     }
 

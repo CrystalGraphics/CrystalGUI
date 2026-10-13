@@ -1,25 +1,26 @@
 package com.crystalgui.fs.protocol;
 
-import com.crystalgui.core.async.ReplyError;
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgui.fs.CgFileError;
 
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Why a filesystem call failed — <b>a code, a detail, and the etag a conflict lost to</b>.
+ * Why a filesystem call failed: the codes a {@link CgReplyError} carries for one, and the etag a conflict lost to,
+ * which rides in its {@code data}.
  *
- * <h3>A code and fields, never a sentence</h3>
+ * <pre>{@code
+ * reply.fail(FsError.of(FsError.NOT_FOUND, path.toString()));
+ * reply.fail(FsError.conflict("the file changed since you last read it", currentEtag));
  *
- * <p>A conflict carries {@link #actualEtag()} as a field, so the one actionable thing in the most
- * important failure the protocol has does not have to be recovered by splitting prose — and a handler
- * branches on {@link #is} rather than comparing strings.</p>
- *
- * <p>A {@link ReplyError}, so a filesystem failure and a cancelled job reach a caller through the same
- * {@code onError}. What this adds is the field a conflict is useless without.</p>
+ * save.onError(error -> {
+ *     if (error.is(FsError.CONFLICT)) reload(FsError.actualEtag(error));
+ * });
+ * }</pre>
  */
-public final class FsError extends ReplyError {
+public final class FsError {
 
-    /** The file moved since the etag the write quoted. {@link #actualEtag()} is what it holds now. */
+    /** The file moved since the etag the write quoted. {@link #actualEtag} is what it holds now. */
     public static final String CONFLICT = "CONFLICT";
 
     /** The actor may not do that to that path. Deliberately the same answer as a missing file. */
@@ -43,37 +44,33 @@ public final class FsError extends ReplyError {
     /** A transfer id that has expired or never existed. */
     public static final String NO_SUCH_TRANSFER = "NO_SUCH_TRANSFER";
 
-    @Nullable
-    private final String actualEtag;
+    /** Anything else. */
+    public static final String FAILED = CgReplyError.FAILED;
 
-    public FsError(String code, String detail) {
-        this(code, detail, null);
+    private FsError() {
     }
 
-    public FsError(String code, String detail, @Nullable String actualEtag) {
-        super(code, detail);
-        this.actualEtag = actualEtag;
-    }
-
-    /**
-     * What the file's etag is <b>now</b>, on a {@link #CONFLICT}. Null for every other code.
-     *
-     * <p>The client re-reads with it, and it is what makes a conflict resolvable rather than merely
-     * reported: without it the only recovery is an unconditional overwrite, which is the thing a
-     * conflict exists to prevent.</p>
-     */
-    @Nullable
-    public String actualEtag() {
-        return actualEtag;
+    public static CgReplyError of(String code, String detail) {
+        return new CgReplyError(code, detail);
     }
 
     /** The provider's own error, mapped. One place, so a new provider error is added once. */
-    public static FsError of(CgFileError error, String detail) {
-        return new FsError(codeFor(error), detail);
+    public static CgReplyError of(CgFileError error, String detail) {
+        return new CgReplyError(codeFor(error), detail);
     }
 
-    public static FsError conflict(String detail, @Nullable String actualEtag) {
-        return new FsError(CONFLICT, detail, actualEtag);
+    /** A {@link #CONFLICT}, carrying what the file's etag is now. */
+    public static CgReplyError conflict(String detail, @Nullable String actualEtag) {
+        return new CgReplyError(CONFLICT, detail, null, actualEtag);
+    }
+
+    /**
+     * What the file's etag is now, on a {@link #CONFLICT}; null for anything else. The client re-reads with it,
+     * which is what makes a conflict resolvable rather than an unconditional overwrite.
+     */
+    @Nullable
+    public static String actualEtag(CgReplyError error) {
+        return error.is(CONFLICT) && error.data() instanceof String etag ? etag : null;
     }
 
     private static String codeFor(CgFileError error) {

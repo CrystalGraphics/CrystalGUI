@@ -1,6 +1,6 @@
 package com.crystalgui.style;
 
-import com.crystalgui.core.async.JobScheduler;
+import com.crystalgraphics.job.CgJob;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.property.FontRelative;
 import com.crystalgui.style.property.StyleProperty;
@@ -14,9 +14,6 @@ import com.crystalgui.core.trace.UiTrace;
 import lombok.Getter;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.CountDownLatch;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -607,7 +604,7 @@ public final class StyleEngine {
     }
 
     /**
-     * Matches a large round's distinct elements across the shared worker pool before the round applies them,
+     * Matches a large round's distinct elements across {@link CgJob#forEach}'s workers before the round applies them,
      * Stylo's split: matching reads the sheets and the tree and writes nothing, applying writes the cascade and runs
      * listeners, so only the first leaves this thread.
      *
@@ -633,39 +630,11 @@ public final class StyleEngine {
         SharingKey[] keys = distinct.keySet().toArray(new SharingKey[0]);
         Styleable[] elements = distinct.values().toArray(new Styleable[0]);
         Match[] matches = new Match[count];
-        AtomicInteger next = new AtomicInteger();
-        CountDownLatch done = new CountDownLatch(count);
-        AtomicReference<Throwable> failed = new AtomicReference<>();
-        Runnable worker = () -> {
-            for (int i; (i = next.getAndIncrement()) < count; ) {
-                try {
-                    matches[i] = match(elements[i], sizes.get(keys[i]));
-                } catch (Throwable thrown) {
-                    failed.compareAndSet(null, thrown);
-                } finally {
-                    done.countDown();
-                }
-            }
-        };
-        int helpers = Math.min(PARALLEL_HELPERS, count / Math.max(1, parallelMin / 4));
-        for (int h = 0; h < helpers; h++) JobScheduler.sharedPool().execute(worker);
-        worker.run();
-        try {
-            done.await();
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            return;
-        }
-        if (failed.get() != null) {
-            throw new IllegalStateException("matching a style round on workers failed", failed.get());
-        }
+        CgJob.forEach(count, i -> matches[i] = match(elements[i], sizes.get(keys[i])));
         for (int i = 0; i < count; i++) sharing.put(keys[i], matches[i]);
         prematched += count;
         CgTrace.zoneDone(UiTrace.FRAME, "style:prematch", timed);
     }
-
-    /** Workers a round may borrow, beside this thread: the pool leaves two cores for the frame. */
-    private static final int PARALLEL_HELPERS = Math.max(0, Runtime.getRuntime().availableProcessors() - 3);
 
     /** Distinct matches made on workers this drain; their uses are counted as shared, so this is subtracted back. */
     private int prematched;

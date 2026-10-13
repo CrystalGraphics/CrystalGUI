@@ -21,7 +21,7 @@ import com.crystalgraphics.net.CgInMemoryTransport;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
@@ -124,7 +124,7 @@ public class WorkspaceHostTest {
         serve(root);
 
         Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
-        Reply<List<FsMessages.ProjectEntry>> projects = workspace.projects();
+        CgReply<List<FsMessages.ProjectEntry>> projects = workspace.projects();
         pump();
 
         assertNotNull("the project listing failed: " + projects.error(), projects.result());
@@ -134,7 +134,7 @@ public class WorkspaceHostTest {
         // THE SEEDED README, which is the whole reason there is one: an empty tree and a broken tree
         // look identical, so the first launch needs something in it that proves a listing crossed.
         assertTrue("the workspace directory was created", Files.isDirectory(root));
-        Reply<FsMessages.ListResponse> listing =
+        CgReply<FsMessages.ListResponse> listing =
                 workspace.files().list(Resource.of(CgPath.of(PROJECT, "")));
         pump();
         assertNotNull("the directory listing failed: " + listing.error(), listing.result());

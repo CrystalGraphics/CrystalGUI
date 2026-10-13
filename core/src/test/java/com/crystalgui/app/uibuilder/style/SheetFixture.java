@@ -2,8 +2,8 @@ package com.crystalgui.app.uibuilder.style;
 
 import java.util.List;
 
-import com.crystalgui.core.async.PendingReply;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgPendingReply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentReference;
@@ -43,8 +43,8 @@ final class SheetFixture {
         };
     }
 
-    static <T> Reply<T> reply(T value) {
-        PendingReply<T> settled = new PendingReply<>(null);
+    static <T> CgReply<T> reply(T value) {
+        CgPendingReply<T> settled = new CgPendingReply<>(null);
         settled.resolve(value);
         return settled;
     }

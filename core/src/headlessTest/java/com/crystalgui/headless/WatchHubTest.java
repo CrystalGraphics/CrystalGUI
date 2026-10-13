@@ -375,7 +375,7 @@ public class WatchHubTest {
     private final List<Runnable> worker = new ArrayList<>();
 
     private WatchHub hubOnWorker() {
-        return new WatchHub(service, new JobScheduler(worker::add, () -> 0L, 1));
+        return new WatchHub(service, new JobScheduler(worker::add, () -> 0L));
     }
 
     private void runWorker() {

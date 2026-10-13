@@ -2,9 +2,9 @@ package com.crystalgui.workbench.editor;
 
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.core.async.PendingReply;
-import com.crystalgui.core.async.Reply;
-import com.crystalgui.core.async.ReplyError;
+import com.crystalgraphics.job.reply.CgPendingReply;
+import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
@@ -193,7 +193,7 @@ public final class EditorService implements Disposable {
      * revealing them one round trip at a time — and it is why a tab's state is a real enum rather than
      * a nullable document.</p>
      */
-    public Reply<Tab> open(EditorInput input) {
+    public CgReply<Tab> open(EditorInput input) {
         return open(input, true);
     }
 
@@ -207,11 +207,11 @@ public final class EditorService implements Disposable {
      * <p>An inactive open still loads, still announces {@link #onDidOpen} and {@link #onDidLoad}, and never
      * moves {@link #active()} — neither now nor when its read lands.</p>
      */
-    public Reply<Tab> open(EditorInput input, boolean activate) {
+    public CgReply<Tab> open(EditorInput input, boolean activate) {
         Tab existing = tabs.get(input);
         if (existing != null) {
             if (activate) activate(existing);
-            return Reply.of(existing);
+            return CgReply.of(existing);
         }
 
         Tab tab = new Tab(input);
@@ -219,7 +219,7 @@ public final class EditorService implements Disposable {
         if (activate) wanted = tab;
         onDidOpen.emit(tab);
 
-        PendingReply<Tab> opened = new PendingReply<>(() -> close(tab));
+        CgPendingReply<Tab> opened = new CgPendingReply<>(() -> close(tab));
         documents.open(input.resource(), input.preferredKindId())
                 .onError(error -> {
                     tab.fail(error);
@@ -239,7 +239,7 @@ public final class EditorService implements Disposable {
         return opened;
     }
 
-    public Reply<Tab> open(Resource resource) {
+    public CgReply<Tab> open(Resource resource) {
         return open(EditorInput.of(resource));
     }
 
@@ -479,17 +479,17 @@ public final class EditorService implements Disposable {
     // ── Saving ──────────────────────────────────────────────────────────────────────────────────
 
     /** Saves what is in front, if anything is and it needs it. */
-    public Reply<Void> saveActive() {
+    public CgReply<Void> saveActive() {
         Document document = activeDocument();
-        if (document == null) return Reply.of(null);
+        if (document == null) return CgReply.of(null);
         return documents.save(document);
     }
 
     /** Saves every dirty document — Save All, and what a close-with-unsaved-work path used to prompt. */
-    public Reply<Void> saveAll() {
-        List<Reply<?>> saves = new ArrayList<>();
+    public CgReply<Void> saveAll() {
+        List<CgReply<?>> saves = new ArrayList<>();
         for (Document document : documents.dirty()) saves.add(documents.save(document));
-        return Reply.all(saves);
+        return CgReply.all(saves);
     }
 
     // ── Hot exit ────────────────────────────────────────────────────────────────────────────────
@@ -630,7 +630,7 @@ public final class EditorService implements Disposable {
         @Nullable
         private View front;
         @Nullable
-        private ReplyError failure;
+        private CgReplyError failure;
         private DocumentState state = DocumentState.LOADING;
 
         private Tab(EditorInput input) {
@@ -668,7 +668,7 @@ public final class EditorService implements Disposable {
 
         /** Why it failed, when it did. */
         @Nullable
-        public ReplyError failure() {
+        public CgReplyError failure() {
             return failure;
         }
 
@@ -813,7 +813,7 @@ public final class EditorService implements Disposable {
             onDidChangeState.emit(this);
         }
 
-        private void fail(ReplyError error) {
+        private void fail(CgReplyError error) {
             this.failure = error;
             this.state = DocumentState.FAILED;
             onDidChangeState.emit(this);
@@ -843,7 +843,7 @@ public final class EditorService implements Disposable {
         }
 
         /** Retries a tab that failed to open — what a "retry" affordance on the tab calls. */
-        public Reply<Tab> retry() {
+        public CgReply<Tab> retry() {
             failure = null;
             state = DocumentState.LOADING;
             onDidChangeState.emit(this);

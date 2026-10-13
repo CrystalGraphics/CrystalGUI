@@ -1,7 +1,7 @@
 package com.crystalgui.language.java;
 
 import com.crystalgui.fs.Resource;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.client.ContentProviders;
 import com.crystalgui.fs.protocol.FsError;
@@ -82,8 +82,8 @@ public final class ProjectSourceSymbols implements ContentProvider {
      * with its own idea of what is current.</p>
      */
     @Override
-    public Reply<byte[]> read(Resource resource) {
-        return Reply.failed(new FsError(FsError.NOT_PERMITTED,
+    public CgReply<byte[]> read(Resource resource) {
+        return CgReply.failed(FsError.of(FsError.NOT_PERMITTED,
                 "a project file's content is the server's; this provider answers symbolOf only"));
     }
 

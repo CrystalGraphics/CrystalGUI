@@ -5,8 +5,8 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.core.async.Reply;
-import com.crystalgui.core.async.ReplyError;
+import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
@@ -142,7 +142,7 @@ public class WorkspaceDocumentsTest {
     }
 
     private Document open(Resource resource) {
-        Reply<DocumentReference> reply = documents.open(resource);
+        CgReply<DocumentReference> reply = documents.open(resource);
         pump();
         assertNotNull("the open failed: " + reply.error(), reply.result());
         return reply.result().document();
@@ -176,7 +176,7 @@ public class WorkspaceDocumentsTest {
 
     @Test
     public void aFileNoKindClaimsIsRefusedRatherThanOpenedEmpty() {
-        Reply<DocumentReference> reply = documents.open(file("image.png"));
+        CgReply<DocumentReference> reply = documents.open(file("image.png"));
         pump();
 
         assertNull(reply.result());
@@ -185,7 +185,7 @@ public class WorkspaceDocumentsTest {
 
     @Test
     public void aMissingFileFailsWithItsCode() {
-        Reply<DocumentReference> reply = documents.open(file("nope.java"));
+        CgReply<DocumentReference> reply = documents.open(file("nope.java"));
         pump();
 
         assertEquals(FsError.NOT_FOUND, reply.error().code());
@@ -201,7 +201,7 @@ public class WorkspaceDocumentsTest {
         assertTrue(document.isDirty());
         assertEquals(DocumentState.DIRTY, document.state());
 
-        Reply<Void> saved = documents.save(document);
+        CgReply<Void> saved = documents.save(document);
         pump();
 
         assertNull("the save failed: " + saved.error(), saved.error());
@@ -224,7 +224,7 @@ public class WorkspaceDocumentsTest {
         Document document = open(MAIN);
         type(document, "// first\n");
 
-        Reply<Void> saving = documents.save(document);
+        CgReply<Void> saving = documents.save(document);
         // The write is on the wire. The person keeps typing.
         type(document, "// second\n");
         pump();
@@ -243,7 +243,7 @@ public class WorkspaceDocumentsTest {
         Document document = open(MAIN);
         type(document, "// first\n");
 
-        Reply<Void> saving = documents.save(document);
+        CgReply<Void> saving = documents.save(document);
         type(document, "// second\n");
         pump();
 
@@ -346,11 +346,11 @@ public class WorkspaceDocumentsTest {
         Document document = open(MAIN);
         type(document, "// mine\n");
 
-        Reply<Void> refused = documents.reload(document);
+        CgReply<Void> refused = documents.reload(document);
         pump();
         assertEquals(FsError.CONFLICT, refused.error().code());
 
-        Reply<Void> forced = documents.reload(document, true);
+        CgReply<Void> forced = documents.reload(document, true);
         pump();
         assertNull(forced.error());
         assertFalse(document.isDirty());
@@ -364,15 +364,15 @@ public class WorkspaceDocumentsTest {
         service.write(WorkspaceActor.LOCAL, MAIN_PATH,
                 "theirs\n".getBytes(StandardCharsets.UTF_8), null);
 
-        List<ReplyError> errors = new ArrayList<>();
+        List<CgReplyError> errors = new ArrayList<>();
         documents.save(document).onError(errors::add);
         pump();
 
         assertEquals(FsError.CONFLICT, errors.get(0).code());
         assertEquals(DocumentState.CONFLICTING, document.state());
-        assertNotNull(((FsError) errors.get(0)).actualEtag());
+        assertNotNull(FsError.actualEtag(errors.get(0)));
         assertEquals("and the etag is taken up, so the forced save can succeed",
-                ((FsError) errors.get(0)).actualEtag(), document.etag());
+                FsError.actualEtag(errors.get(0)), document.etag());
     }
 
     /** "Mine wins" is a deliberate forced save, never a default. */
@@ -385,7 +385,7 @@ public class WorkspaceDocumentsTest {
         documents.save(document);
         pump();
 
-        Reply<Void> forced = documents.save(document, WorkspaceDocuments.SaveReason.EXPLICIT, true);
+        CgReply<Void> forced = documents.save(document, WorkspaceDocuments.SaveReason.EXPLICIT, true);
         pump();
 
         assertNull(forced.error());
@@ -618,7 +618,7 @@ public class WorkspaceDocumentsTest {
     /** The last reference releases the document AND its watch. */
     @Test
     public void closingTheLastReferenceUnwatchesTheFile() {
-        Reply<DocumentReference> first = documents.open(MAIN);
+        CgReply<DocumentReference> first = documents.open(MAIN);
         pump();
         DocumentReference held = documents.reference(MAIN);
         assertEquals(1, hub.subscriptionCount("alice"));
@@ -641,7 +641,7 @@ public class WorkspaceDocumentsTest {
      */
     @Test
     public void closingARenamedDocumentUnwatchesItToo() {
-        Reply<DocumentReference> opened = documents.open(MAIN);
+        CgReply<DocumentReference> opened = documents.open(MAIN);
         pump();
         assertEquals(1, hub.subscriptionCount("alice"));
 

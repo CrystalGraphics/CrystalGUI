@@ -2,8 +2,8 @@ package com.crystalgui.widget.texteditor.fold;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.Rope;
 import com.crystalgui.text.Selection;
@@ -138,7 +138,7 @@ public final class EditorFolding {
             return;
         }
         JobScheduler.shared()
-                .job(JobKey.of(this, "folding"), JobLane.LATENCY,
+                .job(CgJobKey.of(this, "folding"), CgJobLane.LATENCY,
                         context -> provider.compute(document, tabSize))
                 .onDone(next -> {
                     // Null is a cancelled or superseded job -- an edit landed and re-dirtied us, so a

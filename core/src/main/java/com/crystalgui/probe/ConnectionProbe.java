@@ -587,10 +587,10 @@ public final class ConnectionProbe {
         if (!enabled() || reported) return;
         if (!asked && host.clientConnection() != null) {
             asked = true;
-            ASK.ask("ping", answer -> {
+            ASK.ask("ping").then(answer -> {
                 if (answer.startsWith("ping from ")) pass(REQUEST);
                 else CrystalGuiCore.LOGGER.error("[probe] a request came back as {}", answer);
-            }, error -> CrystalGuiCore.LOGGER.error("[probe] a request failed: {}", error));
+            }).onError(error -> CrystalGuiCore.LOGGER.error("[probe] a request failed: {}", error));
         }
         if (!audienceListening) {
             audienceListening = true;

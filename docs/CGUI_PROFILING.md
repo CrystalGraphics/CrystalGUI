@@ -190,7 +190,7 @@ opens that frame in the profiler.
 | The frame's phases | frame | `ui/dom/UIDocument`, `style/StyleEngine`, `ui/box/BoxTree`, `BoxPainter` |
 | Paint, layers, backdrop, images | frame, gpu | `render/CgUiPaintContext`, `LayerPool`, `CgUiBackdrop` |
 | SVG | frame | `render/texture/svg/SvgDocument`, `render/SvgRasterCache` |
-| Jobs | frame | `core/async/JobScheduler` (`done:<job>`) |
+| Jobs | `crystalgraphics.async` | CrystalGraphics' `CgJob`: `job.then` (a job's listeners at the drain), `job.task` (an `executor` task); `frame:jobs` is the drain itself |
 | The editor | frame, flow | `widget/texteditor/TextEditor`, its `part/`, `fold/`, `lang/`, `doc/` |
 | Text model | flow | `text/TextBuffer`, `text/wrap/ProjectedLines` |
 | Markup, syntax | flow | `widget/text/MarkupView`, `SyntaxHighlighting` |

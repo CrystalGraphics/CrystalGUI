@@ -218,7 +218,7 @@ These behaviours are conventions, not derivable answers: each is one line, invis
 | Source | Licence | What you may do |
 |---|---|---|
 | VS Code / Monaco, CodeMirror 6 | **MIT** | **Port the code.** Attribute in the class javadoc, naming the source file. |
-| **Chromium** | **BSD-3-Clause** | **Port the code.** Attribute in the class javadoc and in `THIRD-PARTY.md`. `RateEstimator` is one. |
+| **Chromium** | **BSD-3-Clause** | **Port the code.** Attribute in the class javadoc and in `THIRD-PARTY.md`. CrystalGraphics' `CgRateEstimator` is one. |
 | **Zed**, **wget** | **GPL** | **Read for shape only.** Copying would impose GPL on this repository. `Rope`/`TextSummary` take `SumTree`'s *design*; the progress channel takes wget's *refresh the ETA about once a second* and not a line of its code. |
 
 ### Port the module boundaries too

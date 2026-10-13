@@ -5,8 +5,8 @@ import java.nio.file.Path;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.platform.MappingCoordinates;
@@ -92,7 +92,7 @@ public final class ScriptServiceModern implements ScriptService {
      */
     @Override
     public void runInBackground(String title, BackgroundWork work) {
-        JobScheduler.shared().job(JobKey.of(ScriptService.class, title), JobLane.BACKGROUND,
+        JobScheduler.shared().job(CgJobKey.of(ScriptService.class, title), CgJobLane.BACKGROUND,
                 context -> {
                     work.run(context.progress(), context::isCancelled);
                     return null;

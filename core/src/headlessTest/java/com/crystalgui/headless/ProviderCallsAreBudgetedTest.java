@@ -1,7 +1,7 @@
 package com.crystalgui.headless;
 
 import com.crystalgraphics.serialization.CgPlainOps;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.async.UiBudget;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.fs.Resource;
@@ -39,8 +39,8 @@ public class ProviderCallsAreBudgetedTest {
     /** Answers a symbol, slowly — the shape that reads like a property getter and runs a compile. */
     private static final class Slow implements ContentProvider {
         @Override
-        public Reply<byte[]> read(Resource resource) {
-            return Reply.of(new byte[0]);
+        public CgReply<byte[]> read(Resource resource) {
+            return CgReply.of(new byte[0]);
         }
 
         @Override
@@ -104,8 +104,8 @@ public class ProviderCallsAreBudgetedTest {
     public void aFastCallIsNotReported() {
         ContentProvider quick = new ContentProvider() {
             @Override
-            public Reply<byte[]> read(Resource resource) {
-                return Reply.of(new byte[0]);
+            public CgReply<byte[]> read(Resource resource) {
+                return CgReply.of(new byte[0]);
             }
 
             @Override
@@ -114,7 +114,7 @@ public class ProviderCallsAreBudgetedTest {
             }
         };
         Resource quickly = Resource.of("quick", "x");
-        workspace.registerScheme("quick", quick2 -> Reply.of(new byte[0]));
+        workspace.registerScheme("quick", quick2 -> CgReply.of(new byte[0]));
         workspace.registerScheme("quick", quick);
 
         workspace.providerFor(quickly).symbolOf(quickly);

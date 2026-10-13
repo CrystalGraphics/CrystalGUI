@@ -5,9 +5,9 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.core.async.Reply;
-import com.crystalgui.core.async.ReplyError;
-import com.crystalgui.core.async.Stream;
+import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgraphics.job.reply.CgReplyError;
+import com.crystalgraphics.job.reply.CgStream;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.FileOperations;
@@ -50,7 +50,7 @@ import static org.junit.Assert.assertTrue;
  * {@code plan/fs-rewrite.md} F4 — <b>the new client against the new binding, over a real transport.</b>
  *
  * <p>Both ends together, because a protocol tested from one side is a protocol tested against a mock
- * of the other. Everything asserted here is what a caller sees: a {@code Reply} that settles, a
+ * of the other. Everything asserted here is what a caller sees: a {@code CgReply} that settles, a
  * structured failure, a coalesced round trip, a batch that reports per item.</p>
  */
 public class WorkspaceEndToEndTest {
@@ -146,7 +146,7 @@ public class WorkspaceEndToEndTest {
 
     @Test
     public void aReadAnswersTheBytesAndAnEtag() {
-        Reply<FsMessages.ReadResponse> reply = workspace.files().readResponse(MAIN);
+        CgReply<FsMessages.ReadResponse> reply = workspace.files().readResponse(MAIN);
         pump();
 
         assertNotNull(reply.result());
@@ -158,8 +158,8 @@ public class WorkspaceEndToEndTest {
     @Test
     public void twoReadsOfOneFileAreOneRoundTrip() {
         int before = serverSide.router().pendingRequests();
-        Reply<FsMessages.ReadResponse> first = workspace.files().readResponse(MAIN);
-        Reply<FsMessages.ReadResponse> second = workspace.files().readResponse(MAIN);
+        CgReply<FsMessages.ReadResponse> first = workspace.files().readResponse(MAIN);
+        CgReply<FsMessages.ReadResponse> second = workspace.files().readResponse(MAIN);
 
         assertSame("the second caller joins the first's question", first, second);
         pump();
@@ -169,8 +169,8 @@ public class WorkspaceEndToEndTest {
     /** And two reads of DIFFERENT files are two, which is the counter-control. */
     @Test
     public void twoReadsOfTwoFilesAreTwo() {
-        Reply<FsMessages.ReadResponse> a = workspace.files().readResponse(MAIN);
-        Reply<FsMessages.ReadResponse> b = workspace.files().readResponse(file("README.md"));
+        CgReply<FsMessages.ReadResponse> a = workspace.files().readResponse(MAIN);
+        CgReply<FsMessages.ReadResponse> b = workspace.files().readResponse(file("README.md"));
 
         assertFalse(a == b);
         pump();
@@ -180,11 +180,11 @@ public class WorkspaceEndToEndTest {
     /** A conditional read that matches sends no bytes — HTTP's If-None-Match, reachable at last. */
     @Test
     public void aConditionalReadThatMatchesSendsNothing() {
-        Reply<FsMessages.ReadResponse> first = workspace.files().readResponse(MAIN);
+        CgReply<FsMessages.ReadResponse> first = workspace.files().readResponse(MAIN);
         pump();
         String etag = first.result().etag();
 
-        Reply<FsMessages.ReadResponse> again = workspace.files().readResponse(MAIN, etag);
+        CgReply<FsMessages.ReadResponse> again = workspace.files().readResponse(MAIN, etag);
         pump();
 
         assertTrue(again.result().unchanged());
@@ -199,7 +199,7 @@ public class WorkspaceEndToEndTest {
         files.seed("proj:big.txt", big.toString());
 
         List<byte[]> chunks = new ArrayList<>();
-        Stream<byte[]> stream = workspace.files().readStream(file("big.txt")).onPartial(chunks::add);
+        CgStream<byte[]> stream = workspace.files().readStream(file("big.txt")).onPartial(chunks::add);
         pump();
 
         assertTrue("it did not arrive in one message", chunks.size() > 1);
@@ -227,7 +227,7 @@ public class WorkspaceEndToEndTest {
         while (big.length() < WorkspaceBinding.INLINE_LIMIT + 5000) big.append("0123456789");
         files.seed("proj:big.txt", big.toString());
 
-        Reply<FileOperations.Content> reply = workspace.read(file("big.txt"));
+        CgReply<FileOperations.Content> reply = workspace.read(file("big.txt"));
         pump();
 
         assertNotNull("the read settled", reply.result());
@@ -284,7 +284,7 @@ public class WorkspaceEndToEndTest {
     public void copyingADirectoryIntoItselfIsRefused() {
         files.seed("proj:src/a/one.txt", "1");
 
-        List<ReplyError> errors = new ArrayList<>();
+        List<CgReplyError> errors = new ArrayList<>();
         workspace.files().copy(file("src/a"), file("src/a/inner")).onError(errors::add);
         pump();
 
@@ -307,7 +307,7 @@ public class WorkspaceEndToEndTest {
         workspace.files().delete(MAIN);
         pump();
 
-        Reply<List<FsMessages.TrashEntry>> reply = workspace.files().trash(file("src"));
+        CgReply<List<FsMessages.TrashEntry>> reply = workspace.files().trash(file("src"));
         pump();
 
         assertNotNull("it answered: " + reply.error(), reply.result());
@@ -319,18 +319,18 @@ public class WorkspaceEndToEndTest {
     /** ...and purging one destroys it, so a restore afterwards has nothing to redeem. */
     @Test
     public void purgingATrashedEntryDestroysIt() {
-        Reply<String> deleted = workspace.files().delete(MAIN);
+        CgReply<String> deleted = workspace.files().delete(MAIN);
         pump();
         String trashId = deleted.result();
 
         workspace.files().purge(trashId);
         pump();
 
-        Reply<List<FsMessages.TrashEntry>> after = workspace.files().trash(file("src"));
+        CgReply<List<FsMessages.TrashEntry>> after = workspace.files().trash(file("src"));
         pump();
         assertEquals("nothing left to recover", 0, after.result().size());
 
-        List<ReplyError> errors = new ArrayList<>();
+        List<CgReplyError> errors = new ArrayList<>();
         workspace.files().restore(trashId).onError(errors::add);
         pump();
         assertFalse("and the receipt no longer redeems", errors.isEmpty());
@@ -339,7 +339,7 @@ public class WorkspaceEndToEndTest {
     /** A purge of an id nobody issued is a refusal, never a quiet success. */
     @Test
     public void purgingSomethingThatIsNotThereSaysSo() {
-        List<ReplyError> errors = new ArrayList<>();
+        List<CgReplyError> errors = new ArrayList<>();
         workspace.files().purge("trash-nope").onError(errors::add);
         pump();
 
@@ -361,8 +361,8 @@ public class WorkspaceEndToEndTest {
         String big = bigText();
         files.seed("proj:big.txt", big);
 
-        Reply<FileOperations.Content> first = workspace.files().readWhole(file("big.txt"));
-        Reply<FileOperations.Content> second = workspace.files().readWhole(file("big.txt"));
+        CgReply<FileOperations.Content> first = workspace.files().readWhole(file("big.txt"));
+        CgReply<FileOperations.Content> second = workspace.files().readWhole(file("big.txt"));
         assertSame("the second reader joins the first's transfer", first, second);
         for (int i = 0; i < 6; i++) pump();
 
@@ -375,9 +375,9 @@ public class WorkspaceEndToEndTest {
     public void aWholeReadAfterTheFirstSettlesIsAFreshOne() {
         files.seed("proj:big.txt", bigText());
 
-        Reply<FileOperations.Content> first = workspace.files().readWhole(file("big.txt"));
+        CgReply<FileOperations.Content> first = workspace.files().readWhole(file("big.txt"));
         for (int i = 0; i < 6; i++) pump();
-        Reply<FileOperations.Content> later = workspace.files().readWhole(file("big.txt"));
+        CgReply<FileOperations.Content> later = workspace.files().readWhole(file("big.txt"));
 
         assertNotSame("a settled read is not answered again", first, later);
     }
@@ -391,7 +391,7 @@ public class WorkspaceEndToEndTest {
 
     @Test
     public void aListingCarriesItsEntries() {
-        Reply<FsMessages.ListResponse> reply = workspace.files().list(file("src"));
+        CgReply<FsMessages.ListResponse> reply = workspace.files().list(file("src"));
         pump();
 
         List<String> names = new ArrayList<>();
@@ -403,7 +403,7 @@ public class WorkspaceEndToEndTest {
     /** <b>D22.</b> The ignore rules travel, so the client's crawl can agree with the server. */
     @Test
     public void theProjectsIgnoreRulesReachTheClient() {
-        Reply<List<FsMessages.ProjectEntry>> reply = workspace.projects();
+        CgReply<List<FsMessages.ProjectEntry>> reply = workspace.projects();
         pump();
 
         FsMessages.ProjectEntry project = reply.result().get(0);
@@ -415,10 +415,10 @@ public class WorkspaceEndToEndTest {
 
     @Test
     public void aWriteAnswersTheNewEtag() {
-        Reply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
+        CgReply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
         pump();
 
-        Reply<String> write = workspace.files()
+        CgReply<String> write = workspace.files()
                 .write(MAIN, "changed".getBytes(StandardCharsets.UTF_8), read.result().etag());
         pump();
 
@@ -434,28 +434,28 @@ public class WorkspaceEndToEndTest {
      */
     @Test
     public void aConflictIsStructuredAndCarriesTheActualEtag() {
-        Reply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
+        CgReply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
         pump();
         String stale = read.result().etag();
         service.write(WorkspaceActor.LOCAL, CgPath.parse("proj:src/Main.java"),
                 "somebody else".getBytes(StandardCharsets.UTF_8), null);
 
-        List<ReplyError> errors = new ArrayList<>();
+        List<CgReplyError> errors = new ArrayList<>();
         workspace.files().write(MAIN, "mine".getBytes(StandardCharsets.UTF_8), stale)
                 .onError(errors::add);
         pump();
 
         assertEquals(1, errors.size());
         assertEquals(FsError.CONFLICT, errors.get(0).code());
-        assertTrue(errors.get(0) instanceof FsError);
+        assertTrue(errors.get(0).is(FsError.CONFLICT));
         assertNotNull("and the etag as a FIELD, not inside a sentence",
-                ((FsError) errors.get(0)).actualEtag());
+                FsError.actualEtag(errors.get(0)));
     }
 
     /** A name the host would refuse is refused, and audited as a refusal. */
     @Test
     public void aReservedNameIsRefused() {
-        List<ReplyError> errors = new ArrayList<>();
+        List<CgReplyError> errors = new ArrayList<>();
         workspace.files().create(file("CON"), "x".getBytes(StandardCharsets.UTF_8))
                 .onError(errors::add);
         pump();
@@ -467,7 +467,7 @@ public class WorkspaceEndToEndTest {
     /** <b>D17.</b> A save and a reload of one file must never interleave. */
     @Test
     public void twoOperationsOnOneResourceAreSerialised() {
-        Reply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
+        CgReply<FsMessages.ReadResponse> read = workspace.files().readResponse(MAIN);
         pump();
         String etag = read.result().etag();
 
@@ -490,7 +490,7 @@ public class WorkspaceEndToEndTest {
     /** A batch settles when its members do, and reports failures per item rather than as one. */
     @Test
     public void aBatchReportsPerItemAndDoesNotFailWholesale() {
-        Reply<FileOperations.BatchResult> batch = workspace.files().batch("Create three", work -> {
+        CgReply<FileOperations.BatchResult> batch = workspace.files().batch("Create three", work -> {
             work.create(file("a.txt"), "a".getBytes(StandardCharsets.UTF_8));
             work.create(file("b.txt"), "b".getBytes(StandardCharsets.UTF_8));
             // Already there: this one must fail without taking the other two with it.
@@ -571,7 +571,7 @@ public class WorkspaceEndToEndTest {
 
     @Test
     public void aMissingFileIsNotFound() {
-        List<ReplyError> errors = new ArrayList<>();
+        List<CgReplyError> errors = new ArrayList<>();
         workspace.files().readResponse(file("nope.txt")).onError(errors::add);
         pump();
 
@@ -580,7 +580,7 @@ public class WorkspaceEndToEndTest {
 
     @Test
     public void aFailedReadCarriesNoValue() {
-        Reply<FsMessages.ReadResponse> reply = workspace.files().readResponse(file("nope.txt"));
+        CgReply<FsMessages.ReadResponse> reply = workspace.files().readResponse(file("nope.txt"));
         pump();
 
         assertNull(reply.result());

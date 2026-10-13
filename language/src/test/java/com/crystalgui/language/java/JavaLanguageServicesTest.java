@@ -56,7 +56,7 @@ public class JavaLanguageServicesTest {
         Assume.assumeTrue("no jars supplied for band " + band + "; skipping",
                 !source.jarsFor(band).isEmpty());
         engine = JavaEngine.open(band, source);
-        scheduler = new JobScheduler(Runnable::run, clock::get, 1);
+        scheduler = new JobScheduler(Runnable::run, clock::get);
     }
 
     @After

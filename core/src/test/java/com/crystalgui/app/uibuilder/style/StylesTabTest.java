@@ -20,8 +20,8 @@ import com.crystalgui.app.uibuilder.BuilderInspectorSections;
 import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
-import com.crystalgui.core.async.PendingReply;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgPendingReply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.document.Document;
@@ -354,8 +354,8 @@ public class StylesTabTest extends UiDocumentTestBase {
         };
     }
 
-    private static <T> Reply<T> reply(T value) {
-        PendingReply<T> settled = new PendingReply<>(null);
+    private static <T> CgReply<T> reply(T value) {
+        CgPendingReply<T> settled = new CgPendingReply<>(null);
         settled.resolve(value);
         return settled;
     }

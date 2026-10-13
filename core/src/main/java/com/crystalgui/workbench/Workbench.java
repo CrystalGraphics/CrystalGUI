@@ -27,7 +27,7 @@ import com.crystalgui.core.notify.Notifications;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
@@ -1862,7 +1862,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
 
 
-    /** Every file operation, each answering a {@link Reply}. */
+    /** Every file operation, each answering a {@link CgReply}. */
     public FileOperations files() {
         return files;
     }

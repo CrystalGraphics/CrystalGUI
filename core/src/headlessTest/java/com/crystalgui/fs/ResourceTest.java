@@ -1,7 +1,7 @@
 package com.crystalgui.fs;
 
 import com.crystalgraphics.serialization.CgPlainOps;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.client.Workspace;
@@ -146,7 +146,7 @@ public class ResourceTest {
     @Test
     public void aRegisteredProviderAnswersForItsScheme() {
         Workspace workspace = offline();
-        workspace.registerScheme("greeting", resource -> Reply.of("hello".getBytes()));
+        workspace.registerScheme("greeting", resource -> CgReply.of("hello".getBytes()));
 
         Resource resource = Resource.of("greeting", "x");
         byte[][] got = {null};
@@ -159,7 +159,7 @@ public class ResourceTest {
     public void withdrawingASchemeTakesItsProviderWithIt() {
         Workspace workspace = offline();
         Disposable registration =
-                workspace.registerScheme("greeting", resource -> Reply.of("hello".getBytes()));
+                workspace.registerScheme("greeting", resource -> CgReply.of("hello".getBytes()));
         registration.dispose();
         assertNull(workspace.providerFor(Resource.of("greeting", "x")));
     }
@@ -175,7 +175,7 @@ public class ResourceTest {
     public void theProjectSchemeIsNeverReadThroughAProvider() {
         Workspace workspace = offline();
         workspace.registerScheme(Resource.SCHEME_PROJECT,
-                resource -> Reply.of("leaked".getBytes()));
+                resource -> CgReply.of("leaked".getBytes()));
 
         Resource mine = Resource.parse("mymod.proj:src/Main.java");
         byte[][] got = {null};

@@ -3,7 +3,7 @@ package com.crystalgui.fs.client;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.core.async.Reply;
+import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.async.UiBudget;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
@@ -181,7 +181,7 @@ public final class Workspace implements Disposable {
     /**
      * Times a provider's <b>synchronous</b> answers against the frame budget.
      *
-     * <p>Only the synchronous ones. {@code read} and {@code locate} answer a {@link Reply} — the work is
+     * <p>Only the synchronous ones. {@code read} and {@code locate} answer a {@link CgReply} — the work is
      * off the frame thread by construction, so timing the call measures the submit and reports nothing
      * worth hearing. What is left is what a tab presentation and a tree row bind ask while painting.</p>
      */
@@ -194,17 +194,17 @@ public final class Workspace implements Disposable {
         }
 
         @Override
-        public Reply<byte[]> read(Resource resource) {
+        public CgReply<byte[]> read(Resource resource) {
             return delegate.read(resource);
         }
 
         @Override
-        public Reply<TextPoint> locate(Resource resource, String member) {
+        public CgReply<TextPoint> locate(Resource resource, String member) {
             return delegate.locate(resource, member);
         }
 
         @Override
-        public Reply<String> write(Resource resource, byte[] content) {
+        public CgReply<String> write(Resource resource, byte[] content) {
             return delegate.write(resource, content);
         }
 
@@ -262,7 +262,7 @@ public final class Workspace implements Disposable {
      * <p>A project resource goes over the wire; anything else goes to whatever registered its scheme.
      * The routing lives here so no caller above ever has to ask which kind of thing it is holding.</p>
      */
-    public Reply<FileOperations.Content> read(Resource resource) {
+    public CgReply<FileOperations.Content> read(Resource resource) {
         // THE SCHEME BEFORE THE TABLE. A project file's bytes are the server's whatever has registered
         // to describe the scheme -- a provider is there to say what the file DECLARES, not to serve it.
         if (resource.isProject()) return files.readWhole(resource);
@@ -316,7 +316,7 @@ public final class Workspace implements Disposable {
     }
 
     /** Every project this actor may see, as the server described them. */
-    public Reply<List<FsMessages.ProjectEntry>> projects() {
+    public CgReply<List<FsMessages.ProjectEntry>> projects() {
         return files.projects().map(FsMessages.ProjectsResponse::projects);
     }
 
@@ -353,7 +353,7 @@ public final class Workspace implements Disposable {
      * <p>Sent on the transition, never per keystroke. {@link WorkspaceDocuments} is the caller, because
      * a document's state is what changed.</p>
      */
-    public Reply<String> setEditing(Resource resource, boolean dirty) {
+    public CgReply<String> setEditing(Resource resource, boolean dirty) {
         return calls.send(FsMethods.EDITING, FsMessages.pathRequest(),
                         new FsMessages.PathRequest(resource.toString(), dirty ? "dirty" : ""),
                         FsMessages.etagResponse())
@@ -363,7 +363,7 @@ public final class Workspace implements Disposable {
     // ── The greeting ────────────────────────────────────────────────────────────────────────────
 
     /** Asks what this server is. First, because four client decisions depend on the answer. */
-    public Reply<FsHello> greet() {
+    public CgReply<FsHello> greet() {
         return calls.coalesced("hello", FsMethods.HELLO, FsMessages.pathRequest(),
                         new FsMessages.PathRequest(""), FsHello.CODEC)
                 .then(answer -> {
@@ -388,7 +388,7 @@ public final class Workspace implements Disposable {
      * and what this actor may do on it. Pushed updates still arrive on the subscription — a
      * promotion, a project opened — and this is what makes the first answer exist to be updated.</p>
      */
-    public Reply<FsMessages.CapabilitiesNotification> askCapabilities() {
+    public CgReply<FsMessages.CapabilitiesNotification> askCapabilities() {
         return calls.coalesced("capabilities", FsMethods.CAPABILITIES, FsMessages.pathRequest(),
                         new FsMessages.PathRequest(""), FsMessages.capabilitiesNotification())
                 .then(answer -> {

@@ -5,8 +5,8 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.core.async.Reply;
-import com.crystalgui.core.async.ReplyError;
+import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgui.core.storage.InMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
@@ -137,7 +137,7 @@ public class EditorServiceTest {
     }
 
     private EditorService.Tab open(Resource resource) {
-        Reply<EditorService.Tab> reply = editors.open(resource);
+        CgReply<EditorService.Tab> reply = editors.open(resource);
         pump();
         return reply.result() != null ? reply.result() : editors.tabFor(EditorInput.of(resource));
     }
@@ -226,7 +226,7 @@ public class EditorServiceTest {
 
     @Test
     public void aFileThatCannotBeOpenedFailsItsTabRatherThanVanishing() {
-        Reply<EditorService.Tab> reply = editors.open(file("nope.java"));
+        CgReply<EditorService.Tab> reply = editors.open(file("nope.java"));
         pump();
 
         EditorService.Tab tab = editors.tabFor(EditorInput.of(file("nope.java")));
@@ -239,7 +239,7 @@ public class EditorServiceTest {
     /** And it can be retried, which is what a "retry" affordance on the tab calls. */
     @Test
     public void aFailedTabCanBeRetried() {
-        Reply<EditorService.Tab> first = editors.open(file("later.java"));
+        CgReply<EditorService.Tab> first = editors.open(file("later.java"));
         pump();
         assertEquals(DocumentState.FAILED, editors.tabFor(EditorInput.of(file("later.java"))).state());
 
@@ -464,7 +464,7 @@ public class EditorServiceTest {
         assertEquals("the backup's etag, not the one on the server now",
                 beforeTheyWrote, back.document().etag());
 
-        List<ReplyError> errors = new ArrayList<>();
+        List<CgReplyError> errors = new ArrayList<>();
         documents.save(back.document()).onError(errors::add);
         pump();
         assertFalse("so the save is refused rather than silently winning", errors.isEmpty());
@@ -525,7 +525,7 @@ public class EditorServiceTest {
                 .files(DocumentKind.FilePatterns.extension("notes"))
                 .model(TextDocumentModel::of));
 
-        Reply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:notes"));
+        CgReply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:notes"));
         pump();
 
         assertNotNull("it opened: " + reply.error(), reply.result());
@@ -544,7 +544,7 @@ public class EditorServiceTest {
 
     @Test
     public void openingAsAKindNobodyRegisteredSaysSo() {
-        Reply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:nope"));
+        CgReply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:nope"));
         pump();
 
         assertNull(reply.result());
@@ -566,7 +566,7 @@ public class EditorServiceTest {
                 .model(TextDocumentModel::of));
         open(MAIN);
 
-        Reply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:notes"));
+        CgReply<EditorService.Tab> reply = editors.open(EditorInput.of(MAIN).as("test:notes"));
         pump();
 
         assertNull(reply.result());
@@ -664,7 +664,7 @@ public class EditorServiceTest {
     }
 
     private EditorService.Tab openInput(EditorInput input) {
-        Reply<EditorService.Tab> reply = editors.open(input);
+        CgReply<EditorService.Tab> reply = editors.open(input);
         pump();
         assertNotNull("it opened: " + reply.error(), reply.result());
         return reply.result();

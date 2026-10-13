@@ -1,7 +1,7 @@
 package com.crystalgui.text.diagnostic;
 
-import com.crystalgui.core.async.JobKey;
-import com.crystalgui.core.async.JobLane;
+import com.crystalgraphics.job.CgJobKey;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.text.TextBuffer;
@@ -40,7 +40,7 @@ public final class CheckedDocument implements AutoCloseable {
     private final String owner;
     private final String name;
     @Nullable private final JobScheduler scheduler;
-    private final JobKey key;
+    private final CgJobKey key;
 
     private Connection subscription = Connection.DISCONNECTED;
     private boolean closed;
@@ -58,7 +58,7 @@ public final class CheckedDocument implements AutoCloseable {
         this.diagnostics = diagnostics;
         this.checker = checker;
         this.scheduler = scheduler;
-        this.key = JobKey.of(this, owner + "-check");
+        this.key = CgJobKey.of(this, owner + "-check");
     }
 
     /** Subscribes and checks once, so a file that is opened and not typed in is still checked. */
@@ -77,7 +77,7 @@ public final class CheckedDocument implements AutoCloseable {
         }
         final String source = buffer.document().toString();
         final long version = buffer.version();
-        scheduler.<List<Diagnostic>>job(key, JobLane.LATENCY, context -> checker.check(name, source))
+        scheduler.<List<Diagnostic>>job(key, CgJobLane.LATENCY, context -> checker.check(name, source))
                 .debounce(DEBOUNCE_MILLIS)
                 .onDone(problems -> install(problems, version))
                 .submit();
