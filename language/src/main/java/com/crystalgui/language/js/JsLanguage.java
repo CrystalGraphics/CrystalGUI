@@ -1,5 +1,7 @@
 package com.crystalgui.language.js;
 
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineBand;
@@ -343,22 +345,19 @@ public final class JsLanguage {
      *
      * <p>The same measurement and the same reasoning as {@code JavaLanguage.warm}: the first analysis a
      * Rhino engine performs pays for loading and JIT-ing the parser, and in a client the caller who pays
-     * it is a restored editor tab on the frame after F6. Read that method's note for why this is a daemon
-     * thread rather than a scheduler job, and why a failure here is silent.</p>
+     * it is a restored editor tab on the frame after F6. Read that method's note for why this runs on the
+     * job pool rather than as a scheduler job, and why a failure here is silent.</p>
      */
     private static void warm() {
         JsSourceAnalyzer ready = analyzer;
         if (ready == null) return;
-        Thread worker = new Thread(() -> {
+        CgJob.executor(CgJobLane.BACKGROUND).execute(() -> {
             try {
                 ready.analyze("warm.js", "function f(a) { return a + 1; } f(1);", 0L).close();
             } catch (Throwable ignored) {
                 // An optimisation that fails is silent; a real file will report it loudly enough.
             }
-        }, "crystalgui-js-warm");
-        worker.setDaemon(true);
-        worker.setPriority(Thread.MIN_PRIORITY);
-        worker.start();
+        });
     }
 
     private static void lendTheJavaEngine() {

@@ -2,6 +2,8 @@ package com.crystalgui.language.platform;
 
 import com.crystalgui.language.map.ReadableView;
 
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.job.progress.CgProgress;
 
 import java.nio.file.Path;
@@ -55,26 +57,20 @@ public interface ScriptService {
      * <pre>{@code
      * // A host with a UI, so the work reports into a status bar and can be cancelled:
      * public void runInBackground(String title, BackgroundWork work) {
-     *     JobScheduler.shared().job(key, JobLane.BACKGROUND, context -> {
+     *     JobScheduler.shared().job(key, CgJobLane.BACKGROUND, context -> {
      *         work.run(context.progress(), context::isCancelled);
      *         return null;
      *     }).submit();
      * }
      * }</pre>
      *
-     * <p><b>The default is a daemon thread, and it is the right answer for anything headless.</b>
-     * {@code JobScheduler} is drained by {@code UIDocument.frame} and by nothing else, so a job
-     * submitted where there is no window is never run — a dedicated server would wait for a mapping
-     * for ever with nothing to say why. Overriding this is therefore a claim about having a drained
-     * scheduler, and a host that is sometimes headless must answer for the side it is on.</p>
-     *
-     * <p>Daemon, because acquiring data must never be the reason a game cannot exit.</p>
+     * <p><b>The default is the job pool with no progress, the right answer for anything headless</b>: it
+     * needs no drain. A {@code JobScheduler} job reports back only when a frame drains it, so a host that
+     * overrides this with one claims a drained scheduler, and a host that is sometimes headless must answer
+     * for the side it is on.</p>
      */
     default void runInBackground(String title, BackgroundWork work) {
-        Thread worker = new Thread(() -> work.run(CgProgress.NONE, () -> false),
-                "crystalgui-" + title.toLowerCase().replace(' ', '-'));
-        worker.setDaemon(true);
-        worker.start();
+        CgJob.executor(CgJobLane.BACKGROUND).execute(() -> work.run(CgProgress.NONE, () -> false));
     }
 
     /**

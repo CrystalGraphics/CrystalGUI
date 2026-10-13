@@ -73,12 +73,12 @@ public final class ScriptService1710 implements ScriptService {
     }
 
     /**
-     * A job on a client, a daemon thread on a server — and the side has to be asked.
+     * A job on a client, the job pool on a server — and the side has to be asked.
      *
      * <p>{@code JobScheduler} is drained by {@code UIDocument.frame} and by nothing else, so a job
      * submitted on a dedicated server is never run. This service is deliberately side-agnostic (its
      * other four members are installation-level facts), which makes this the one member that has to
-     * know: a client gets a progress bar and a cancel, a server gets the default thread.</p>
+     * know: a client gets a progress bar and a cancel, a server gets the default.</p>
      *
      * <p>Submitting on both is not a hypothetical mistake — it is what the mod's {@code init} did, and
      * {@code init} fires on both sides. An obfuscated server with no cached mapping waited for one for

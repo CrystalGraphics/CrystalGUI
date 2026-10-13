@@ -262,8 +262,8 @@ already has readable names rather than showing runtime ones and correcting itsel
 download to `ScriptService.runInBackground`.
 
 That last seam is the only part a host knows better: `JobScheduler` is drained by `UIDocument.frame` and
-by nothing else, so a job submitted on a dedicated server is never run. The default is a daemon thread,
-which is right for a server, a test and the harness; a client overrides it to get a progress bar and a
+by nothing else, so a job submitted on a dedicated server is never run. The default is CrystalGraphics'
+job pool (`CgJob.executor`), which needs no drain and is right for a server, a test and the harness; a client overrides it to get a progress bar and a
 cancel. **A platform states the what, the where and the how — never the when.**
 
 ### The loader is never named

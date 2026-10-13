@@ -3,6 +3,8 @@ package com.crystalgui.language.map;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.job.progress.CgProgress;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
@@ -153,7 +155,7 @@ public final class PlatformMappings {
 
         // THE HOST SAYS HOW, THIS SAYS WHEN. A platform states the what, the where and the how; deciding
         // that a fetch is owed is this module's job and used to be copied into every loader. The default
-        // is a daemon thread, so a dedicated server is correct with no code at all, and a host with a UI
+        // is the job pool, which needs no drain, so a dedicated server is correct with no code at all, and a host with a UI
         // overrides it to get a progress bar. @see ScriptService#runInBackground
         ScriptService.BackgroundWork work = (progress, cancelled) -> {
             // AND NOTHING MAY LEAVE THE FETCH EITHER. A host runs this on a thread of its own choosing
@@ -169,10 +171,7 @@ public final class PlatformMappings {
             needsFetch.runInBackground("Downloading Minecraft mappings", work);
             return;
         }
-        Thread thread = new Thread(
-                () -> work.run(CgProgress.NONE, () -> false), "crystalgui-mappings");
-        thread.setDaemon(true);
-        thread.start();
+        CgJob.executor(CgJobLane.BACKGROUND).execute(() -> work.run(CgProgress.NONE, () -> false));
     }
 
     /**

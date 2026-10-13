@@ -1,6 +1,8 @@
 package com.crystalgui.language.grammar;
 
 
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.text.syntax.Language;
 import com.crystalgui.text.syntax.LanguageRegistry;
@@ -91,7 +93,7 @@ public final class TreeSitterLanguages {
         // actually shows samples in. The compile is paid once per language per process either way; this
         // only decides who pays it, and without it that is the first hover over a class whose javadoc has
         // a <pre> block in it. @see SyntaxHighlighting#warm
-        Thread warm = new Thread(() -> {
+        CgJob.executor(CgJobLane.BACKGROUND).execute(() -> {
             try {
                 SyntaxHighlighting.warm(Language.JAVA);
                 SyntaxHighlighting.warm(Language.GLSL);
@@ -99,10 +101,7 @@ public final class TreeSitterLanguages {
                 // An optimisation that fails is silent -- the first sample simply pays for itself, which
                 // is what happened before this existed.
             }
-        }, "crystalgui-static-highlight-warm");
-        warm.setDaemon(true);
-        warm.setPriority(Thread.MIN_PRIORITY);
-        warm.start();
+        });
         return true;
     }
 }

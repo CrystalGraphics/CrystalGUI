@@ -1,5 +1,7 @@
 package com.crystalgui.language.java;
 
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobScheduler;
@@ -239,7 +241,7 @@ public final class JavaLanguage {
     }
 
     /**
-     * <b>One throwaway analysis, on a daemon thread, so the first real one is not the first one.</b>
+     * <b>One throwaway analysis, on the job pool, so the first real one is not the first one.</b>
      *
      * <h3>Measured, not assumed</h3>
      *
@@ -253,12 +255,11 @@ public final class JavaLanguage {
      * different visible place — it moves to a thread nobody is watching, and it overlaps whatever the
      * game does next.</p>
      *
-     * <h3>A daemon thread rather than the scheduler</h3>
+     * <h3>The job pool rather than the scheduler</h3>
      *
-     * <p>The same choice, for the same reason, that {@code PlatformMappings.startLazily} makes:
-     * {@code JobScheduler} is drained by {@code UIWindow.paintFrame}, and there is no window yet when a
-     * language registers. A job submitted here would sit in the queue until the very frame it exists to
-     * make cheaper. Daemon, because a warm-up must never be the reason a game cannot exit.</p>
+     * <p>{@code CgJob.executor} needs no drain: a {@code JobScheduler} job reports back at a frame, and there
+     * is no window yet when a language registers. On the background lane, so it never takes the worker an
+     * urgent job needs.</p>
      *
      * <p>Failures are swallowed on purpose and deliberately not logged at warn: this is an optimisation,
      * and an engine that cannot analyse a trivial class here will say so loudly enough the first time a
@@ -267,7 +268,7 @@ public final class JavaLanguage {
     private static void warm(List<String> classpath) {
         JavaEngine ready = engine;
         if (ready == null) return;
-        Thread worker = new Thread(() -> {
+        CgJob.executor(CgJobLane.BACKGROUND).execute(() -> {
             try {
                 // THE REAL CLASSPATH, which this deliberately did NOT pass until it was measured.
                 //
@@ -279,7 +280,7 @@ public final class JavaLanguage {
                 // frame after F6 -- and an analysis against the real classpath is what that is.
                 //
                 // So the speculation is now on this side of the boundary, where it is free if wrong: a
-                // daemon thread at MIN_PRIORITY that nothing waits on, overlapping whatever the game
+                // background job that nothing waits on, overlapping whatever the game
                 // does next. The index is shared per classpath, so warming THIS classpath is what the
                 // editor's own first analysis will look in -- warming any other would be work nobody
                 // reads, which is the same silent failure the glyph warm has to avoid.
@@ -325,10 +326,7 @@ public final class JavaLanguage {
             } catch (Throwable ignored) {
                 // See the note above: an optimisation that fails is silent.
             }
-        }, "crystalgui-java-warm");
-        worker.setDaemon(true);
-        worker.setPriority(Thread.MIN_PRIORITY);
-        worker.start();
+        });
     }
 
     private static void openEngine() {

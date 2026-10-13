@@ -59,7 +59,7 @@ public final class ScriptServiceLegacy implements ScriptService {
         return LaunchWrapperBytes.SOURCE;
     }
 
-    /** A job on a client, a daemon thread on a server, where nothing drains {@link JobScheduler}. */
+    /** A job on a client, the job pool on a server, where nothing drains {@link JobScheduler}. */
     @Override
     public void runInBackground(String title, BackgroundWork work) {
         if (!FMLCommonHandler.instance().getEffectiveSide().isClient()) {

@@ -1,6 +1,8 @@
 package com.crystalgui.render.texture.svg;
 
 import com.crystalgraphics.gl.render.CgVectorRenderer;
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
@@ -16,8 +18,6 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 import javax.annotation.Nullable;
 
@@ -410,35 +410,10 @@ public final class SvgDocument {
         List<CompletableFuture<Void>> pending = new ArrayList<>(paths.size());
         for (String path : paths) {
             if (CACHE.containsKey(path)) continue;
-            pending.add(CompletableFuture.runAsync(() -> of(path), PreloadPool.INSTANCE));
+            // The job pool: below the render thread's priority and sized to leave the frame its cores.
+            pending.add(CompletableFuture.runAsync(() -> of(path), CgJob.executor(CgJobLane.LATENCY)));
         }
         return CompletableFuture.allOf(pending.toArray(new CompletableFuture[0]));
-    }
-
-    /**
-     * The worker pool preloading runs on, in a holder so it is created on first {@link #preload} and not
-     * before.
-     *
-     * <p>A {@code static final} field here would spin up threads the moment this class is touched — which
-     * on a dedicated server is every time an icon path is merely parsed, for a pool that will never be
-     * handed a task. Class initialisation is the laziness, and it costs nothing to get right.</p>
-     *
-     *
-     * <p>Daemon threads, so a process that exits mid-preload is not held open by icon parsing, and at most
-     * a few of them: this is CPU-bound work competing with the render thread for cores, and the point is to
-     * be finished before the first draw rather than to finish as fast as physically possible. Bounded at
-     * two below the core count because measurements showed the render thread starving when a pool took
-     * everything.</p>
-     */
-    private static final class PreloadPool {
-
-        static final Executor INSTANCE = Executors.newFixedThreadPool(
-                Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() - 2)),
-                runnable -> {
-                    Thread thread = new Thread(runnable, "cgui-svg-preload");
-                    thread.setDaemon(true);
-                    return thread;
-                });
     }
 
     /** Loads {@code "namespace:ui/icons/folder.svg"} through {@code CgIO}, or null when it is unreadable. */
