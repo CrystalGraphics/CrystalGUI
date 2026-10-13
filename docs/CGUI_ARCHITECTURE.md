@@ -558,6 +558,11 @@ absent-value).
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
 | Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
 | **Presenting a cursor** | `CursorService.setCursor(...)` | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
+| The world: levels, entities, players, camera, world sounds | CrystalGraphics' facades: `CgWorldQueries`, `CgEntityQueries`, `CgPlayers`, `CgCamera`, `CgSounds` — never their slots | `platform/world/` |
+
+**A slot is read through its facade, never `CgPlatform.get(X.SERVICE)`**: one SPI per concern, one static facade per
+SPI as its only reader, host objects handed out as `<V> V` getters beside ids. CrystalGraphics' `platform/CLAUDE.md`
+§ *The wiring standard* is the rule; a slot CrystalGUI adds follows it.
 
 > **The clipboard is on `CgInputService`, not a service of its own.** It is not conceptually input, but it
 > is reached the same way and needed by exactly the code that handles keys — two methods do not earn a

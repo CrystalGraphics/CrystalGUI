@@ -19,11 +19,11 @@ import com.crystalgraphics.net.CgPeer;
 import com.crystalgraphics.net.CgRequest;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgraphics.platform.service.CgServerPlayers;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgraphics.world.CgEntityQueries;
+import com.crystalgraphics.world.CgWorldQueries;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -513,16 +513,15 @@ public final class ConnectionProbe {
     /**
      * One message to the dimension the player is not in, then one near them. A connection is in order, so the near one
      * arriving with nothing before it is the proof. Waits until the host can place the player: a host that never fills
-     * {@link CgServerPlayers} never sends, and the check stays unrun.
+     * its levels ({@link CgWorldQueries#dimension}) never sends, and the check stays unrun.
      */
     private static void sendAudiences(Host host) {
         CgProtocolConnection<Object> connection = host.connectionToFirstPlayer();
         Object player = connection != null && connection.peer() instanceof CgPeer
                 ? ((CgPeer) connection.peer()).player() : null;
-        CgServerPlayers players = CgPlatform.get(CgServerPlayers.SERVICE);
         double[] at = new double[3];
-        String here = player == null ? null : players.dimension(player);
-        if (here == null || !players.position(player, at)) return;
+        String here = player == null ? null : CgWorldQueries.dimension(player);
+        if (here == null || !CgEntityQueries.position(player, at)) return;
         audienceSent = true;
         String elsewhere = "minecraft:the_nether".equals(here) ? "minecraft:overworld" : "minecraft:the_nether";
         AUDIENCE.send(CgAudience.dimension(elsewhere), "elsewhere");
