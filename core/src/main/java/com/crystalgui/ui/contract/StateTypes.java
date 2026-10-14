@@ -3,117 +3,46 @@ package com.crystalgui.ui.contract;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
 
 /**
- * The value types a {@link State} slot can carry. {@code plan/engine-rewrite.md} M1.
+ * The value types a {@link State} slot usually carries. {@code plan/engine-rewrite.md} M1.
  *
- * <p>Deliberately a closed, small set. Every one of these is something {@link CgStateMap} already knows
- * how to encode, because widget state has to survive a content hash — see
- * {@code docs/CGUI_SERVER_AND_SERIALIZATION.md} on why a description must be byte-identical for the
- * same tree. A widget wanting something exotic is a widget whose state is not really state.</p>
+ * <p>Each is a codec ({@link StateType#of}); a widget with a value of its own declares a state type over that value's
+ * codec. Widget state has to survive a content hash, so every encoding here is pinned: see
+ * {@code docs/CGUI_SERVER_AND_SERIALIZATION.md} on why a description must be byte-identical for the same tree.</p>
  */
 public final class StateTypes {
 
     private StateTypes() {
     }
 
-    public static final StateType<String> STRING = new StateType<String>() {
-        @Override public <T> void put(CgStateMap<T> out, String key, String value) {
-            out.putString(key, value == null ? "" : value);
-        }
-        @Override public <T> String get(CgStateMap<T> in, String key, String fallback) {
-            return in.getString(key, fallback == null ? "" : fallback);
-        }
-        @Override public Class<?> valueClass() {
-            return String.class;
-        }
-    };
+    public static final StateType<String> STRING = StateType.of(CgCodecs.STRING, String.class).nullAs("");
 
-    public static final StateType<Integer> INT = new StateType<Integer>() {
-        @Override public <T> void put(CgStateMap<T> out, String key, Integer value) {
-            out.putInt(key, value);
-        }
-        @Override public <T> Integer get(CgStateMap<T> in, String key, Integer fallback) {
-            return in.getInt(key, fallback);
-        }
-        @Override public Class<?> valueClass() {
-            return Integer.class;
-        }
-    };
+    public static final StateType<Integer> INT = StateType.of(CgCodecs.INT, Integer.class);
 
-    public static final StateType<Float> FLOAT = new StateType<Float>() {
-        @Override public <T> void put(CgStateMap<T> out, String key, Float value) {
-            out.putFloat(key, value);
-        }
-        @Override public <T> Float get(CgStateMap<T> in, String key, Float fallback) {
-            return in.getFloat(key, fallback);
-        }
-        @Override public Class<?> valueClass() {
-            return Float.class;
-        }
-    };
+    public static final StateType<Float> FLOAT = StateType.of(CgCodecs.FLOAT, Float.class);
 
-    public static final StateType<Double> DOUBLE = new StateType<Double>() {
-        @Override public <T> void put(CgStateMap<T> out, String key, Double value) {
-            out.putDouble(key, value);
-        }
-        @Override public <T> Double get(CgStateMap<T> in, String key, Double fallback) {
-            return in.getDouble(key, fallback);
-        }
-        @Override public Class<?> valueClass() {
-            return Double.class;
-        }
-    };
+    public static final StateType<Double> DOUBLE = StateType.of(CgCodecs.DOUBLE, Double.class);
 
-    public static final StateType<Boolean> BOOL = new StateType<Boolean>() {
-        @Override public <T> void put(CgStateMap<T> out, String key, Boolean value) {
-            out.putBool(key, value);
-        }
-        @Override public <T> Boolean get(CgStateMap<T> in, String key, Boolean fallback) {
-            return in.getBool(key, fallback);
-        }
-        @Override public Class<?> valueClass() {
-            return Boolean.class;
-        }
-    };
+    public static final StateType<Boolean> BOOL = StateType.of(CgCodecs.BOOL, Boolean.class);
 
     /** An enum, by constant name — so adding a constant is compatible and reordering one is not. */
     public static <E extends Enum<E>> StateType<E> enumOf(Class<E> type) {
-        return new StateType<E>() {
-            @Override public <T> void put(CgStateMap<T> out, String key, E value) {
-                out.putEnum(key, value);
-            }
-            @Override public <T> E get(CgStateMap<T> in, String key, E fallback) {
-                return in.getEnum(key, type, fallback);
-            }
-            @Override public Class<?> valueClass() {
-                return type;
-            }
-        };
+        return StateType.of(CgCodecs.enumOf(type), type);
     }
 
     /**
-     * A list of strings, each written as a one-key entry.
+     * A list of strings, each written as a one-key entry; an empty list reads as the slot's fallback.
      *
      * <p>{@code entryKey} is part of the wire format and not cosmetic: {@code Dropdown} has always
      * written its options as {@code [{label: …}]} rather than a bare string array, and changing that
      * would change the content hash of every description holding one.</p>
      */
     public static StateType<List<String>> stringListUnder(String entryKey) {
-        return new StateType<List<String>>() {
-            @Override public <T> void put(CgStateMap<T> out, String key, List<String> value) {
-                out.putList(key, value == null ? List.of() : value,
-                        (entry, item) -> entry.putString(entryKey, item == null ? "" : item));
-            }
-            @Override public <T> List<String> get(CgStateMap<T> in, String key, List<String> fallback) {
-                List<String> read = in.getList(key, entry -> entry.getString(entryKey, ""));
-                return read.isEmpty() ? fallback : read;
-            }
-            @Override public Class<?> valueClass() {
-                return List.class;
-            }
-        };
+        return StateType.of(entries(entryKey, CgCodecs.STRING, ""), List.class)
+                .nullAs(List.of()).absentWhen(List::isEmpty);
     }
 
     /**
@@ -124,63 +53,46 @@ public final class StateTypes {
      * satisfy the contract would be the contract serving itself.</p>
      */
     public static StateType<float[]> floatArrayUnder(String entryKey) {
-        return new StateType<float[]>() {
-            @Override public <T> void put(CgStateMap<T> out, String key, float[] value) {
-                List<Float> boxed = new ArrayList<>(value == null ? 0 : value.length);
-                if (value != null) for (float item : value) boxed.add(item);
-                out.putList(key, boxed, (entry, item) -> entry.putFloat(entryKey, item));
-            }
-            @Override public <T> float[] get(CgStateMap<T> in, String key, float[] fallback) {
-                List<Float> read = in.getList(key, entry -> entry.getFloat(entryKey, 0f));
-                if (read.isEmpty()) return fallback;
-                float[] out = new float[read.size()];
-                for (int i = 0; i < out.length; i++) out[i] = read.get(i);
-                return out;
-            }
-            @Override public Class<?> valueClass() {
-                return float[].class;
-            }
-        };
+        return StateType.of(CgCodecs.xmap(entries(entryKey, CgCodecs.FLOAT, 0f), list -> {
+            float[] out = new float[list.size()];
+            for (int i = 0; i < out.length; i++) out[i] = list.get(i);
+            return out;
+        }, array -> {
+            List<Float> boxed = new ArrayList<>(array.length);
+            for (float item : array) boxed.add(item);
+            return boxed;
+        }), float[].class).nullAs(new float[0]).absentWhen(array -> array.length == 0);
     }
 
     /** A {@code double[]}, for the vector and matrix controls. */
     public static StateType<double[]> doubleArrayUnder(String entryKey) {
-        return new StateType<double[]>() {
-            @Override public <T> void put(CgStateMap<T> out, String key, double[] value) {
-                List<Double> boxed = new ArrayList<>(value == null ? 0 : value.length);
-                if (value != null) for (double item : value) boxed.add(item);
-                out.putList(key, boxed, (entry, item) -> entry.putDouble(entryKey, item));
-            }
-            @Override public <T> double[] get(CgStateMap<T> in, String key, double[] fallback) {
-                List<Double> read = in.getList(key, entry -> entry.getDouble(entryKey, 0d));
-                if (read.isEmpty()) return fallback;
-                double[] out = new double[read.size()];
-                for (int i = 0; i < out.length; i++) out[i] = read.get(i);
-                return out;
-            }
-            @Override public Class<?> valueClass() {
-                return double[].class;
-            }
-        };
+        return StateType.of(CgCodecs.xmap(entries(entryKey, CgCodecs.DOUBLE, 0d), list -> {
+            double[] out = new double[list.size()];
+            for (int i = 0; i < out.length; i++) out[i] = list.get(i);
+            return out;
+        }, array -> {
+            List<Double> boxed = new ArrayList<>(array.length);
+            for (double item : array) boxed.add(item);
+            return boxed;
+        }), double[].class).nullAs(new double[0]).absentWhen(array -> array.length == 0);
     }
+
     /** An {@code int[]}, for a per-entry ARGB — a palette, which no sheet can enumerate. */
     public static StateType<int[]> intArrayUnder(String entryKey) {
-        return new StateType<int[]>() {
-            @Override public <T> void put(CgStateMap<T> out, String key, int[] value) {
-                List<Integer> boxed = new ArrayList<>(value == null ? 0 : value.length);
-                if (value != null) for (int item : value) boxed.add(item);
-                out.putList(key, boxed, (entry, item) -> entry.putInt(entryKey, item));
-            }
-            @Override public <T> int[] get(CgStateMap<T> in, String key, int[] fallback) {
-                List<Integer> read = in.getList(key, entry -> entry.getInt(entryKey, 0));
-                if (read.isEmpty()) return fallback;
-                int[] out = new int[read.size()];
-                for (int i = 0; i < out.length; i++) out[i] = read.get(i);
-                return out;
-            }
-            @Override public Class<?> valueClass() {
-                return int[].class;
-            }
-        };
+        return StateType.of(CgCodecs.xmap(entries(entryKey, CgCodecs.INT, 0), list -> {
+            int[] out = new int[list.size()];
+            for (int i = 0; i < out.length; i++) out[i] = list.get(i);
+            return out;
+        }, array -> {
+            List<Integer> boxed = new ArrayList<>(array.length);
+            for (int item : array) boxed.add(item);
+            return boxed;
+        }), int[].class).nullAs(new int[0]).absentWhen(array -> array.length == 0);
+    }
+
+    /** A list written as {@code [{entryKey: value}, ...]}; a null element as {@code whenAbsent}, a keyless entry read as it. */
+    private static <E> CgCodec<List<E>> entries(String entryKey, CgCodec<E> codec, E whenAbsent) {
+        return CgCodecs.listOf(CgCodecs.record(
+                CgCodecs.fieldOr(entryKey, codec, (E e) -> e == null ? whenAbsent : e, whenAbsent), (E e) -> e));
     }
 }

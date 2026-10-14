@@ -1,6 +1,6 @@
 package com.crystalgui.widget.config.control;
 
-import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgraphics.net.rate.CgRatePolicy;
@@ -52,23 +52,10 @@ public class MaskControl extends ValueControl<Set<String>> {
      * so two descriptions of the same mask hash the same only if the control iterates deterministically.
      * That is why it keeps a {@code LinkedHashSet}.
      */
-    private static final StateType<Set<String>> FLAGS =
-            new StateType<Set<String>>() {
-                @Override public <T> void put(CgStateMap<T> out, String key,
-                                              Set<String> value) {
-                    StateTypes.stringListUnder("f").put(out, key,
-                            new ArrayList<>(value == null ? Set.of() : value));
-                }
-                @Override public <T> Set<String> get(CgStateMap<T> in,
-                                                               String key, Set<String> fallback) {
-                    List<String> read =
-                            StateTypes.stringListUnder("f").get(in, key, List.of());
-                    return read.isEmpty() ? fallback : new LinkedHashSet<>(read);
-                }
-                @Override public Class<?> valueClass() {
-                    return Set.class;
-                }
-            };
+    private static final StateType<Set<String>> FLAGS = StateType.of(
+            CgCodecs.<List<String>, Set<String>>xmap(StateTypes.stringListUnder("f").codec(), LinkedHashSet::new,
+                    ArrayList::new), Set.class)
+            .nullAs(Set.of()).absentWhen(Set::isEmpty);
 
     /** The no-argument constructor the registry's factory needs, over a NEUTRAL
      * descriptor -- an unlabelled control of this kind, which is a real thing rather than a
