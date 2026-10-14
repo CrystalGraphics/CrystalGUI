@@ -32,6 +32,9 @@ public final class GraphCodecs {
     private GraphCodecs() {
     }
 
+    /** Insertion-ordered, as the class doc requires; an empty one is omitted. */
+    private static final CgCodec<Map<String, String>> STRING_MAP = CgCodecs.mapOf(CgCodecs.STRING, CgCodecs.STRING);
+
     public static final CgCodec<PortRef> PORT_REF = new CgCodec<>() {
         @Override
         public <T> T encode(CgDynamicOps<T> ops, PortRef input) {
@@ -92,14 +95,8 @@ public final class GraphCodecs {
                     .field("type", CgCodecs.STRING, input.typeId())
                     .field("x", CgCodecs.FLOAT, input.x())
                     .field("y", CgCodecs.FLOAT, input.y())
-                    .optionalList("ports", PORT_SPEC, input.ports());
-            if (!input.properties().isEmpty()) {
-                Map<T, T> props = new LinkedHashMap<>();
-                for (Map.Entry<String, String> entry : input.properties().entrySet()) {
-                    props.put(ops.createString(entry.getKey()), ops.createString(entry.getValue()));
-                }
-                builder.raw("props", ops.createMap(props));
-            }
+                    .optionalList("ports", PORT_SPEC, input.ports())
+                    .optional("props", STRING_MAP, input.properties(), Map.of());
             return builder.build();
         }
 
@@ -109,13 +106,7 @@ public final class GraphCodecs {
             List<PortSpec> ports = in.has("ports")
                     ? in.field("ports", CgCodecs.listOf(PORT_SPEC))
                     : List.of();
-            Map<String, String> properties = new LinkedHashMap<>();
-            if (in.has("props")) {
-                T raw = in.raw("props");
-                for (Map.Entry<T, T> entry : ops.getMapValue(raw).entrySet()) {
-                    properties.put(ops.getStringValue(entry.getKey()), ops.getStringValue(entry.getValue()));
-                }
-            }
+            Map<String, String> properties = in.optional("props", STRING_MAP, new LinkedHashMap<>());
             return new NodeData(in.field("id", CgCodecs.STRING), in.field("type", CgCodecs.STRING),
                     in.field("x", CgCodecs.FLOAT), in.field("y", CgCodecs.FLOAT), ports, properties);
         }
@@ -134,25 +125,14 @@ public final class GraphCodecs {
             // Omitted when empty rather than written blank, so the encoding of a plain property is
             // stable and its content hash is not disturbed by fields nobody set.
             if (input.isCategorised()) builder.field("cat", CgCodecs.STRING, input.category());
-            if (!input.options().isEmpty()) {
-                Map<T, T> options = new LinkedHashMap<>();
-                for (Map.Entry<String, String> entry : input.options().entrySet()) {
-                    options.put(ops.createString(entry.getKey()), ops.createString(entry.getValue()));
-                }
-                builder.raw("opts", ops.createMap(options));
-            }
+            builder.optional("opts", STRING_MAP, input.options(), Map.of());
             return builder.build();
         }
 
         @Override
         public <T> GraphProperty decode(CgDynamicOps<T> ops, T input) {
             var in = CgCodecs.read(ops, input);
-            Map<String, String> options = new LinkedHashMap<>();
-            if (in.has("opts")) {
-                for (Map.Entry<T, T> entry : ops.getMapValue(in.raw("opts")).entrySet()) {
-                    options.put(ops.getStringValue(entry.getKey()), ops.getStringValue(entry.getValue()));
-                }
-            }
+            Map<String, String> options = in.optional("opts", STRING_MAP, new LinkedHashMap<>());
             return new GraphProperty(
                     in.field("id", CgCodecs.STRING),
                     in.field("name", CgCodecs.STRING),

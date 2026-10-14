@@ -1,12 +1,10 @@
 package com.crystalgui.core.settings;
 
 import com.crystalgraphics.serialization.CgCodec;
-import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.format.CgFormats;
 import com.crystalgui.core.CrystalGuiCore;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
@@ -28,29 +26,13 @@ public final class SettingsCodec {
     private SettingsCodec() {
     }
 
-    public static final CgCodec<SettingsModel> MODEL = new CgCodec<>() {
-        @Override
-        public <T> T encode(CgDynamicOps<T> ops, SettingsModel input) {
-            Map<T, T> encoded = new LinkedHashMap<>();
-            // Insertion order is preserved from the model, which is what keeps the bytes stable — and
-            // byte-stability is the whole reason the model is a LinkedHashMap.
-            for (Map.Entry<String, String> entry : input.asMap().entrySet()) {
-                encoded.put(ops.createString(entry.getKey()), ops.createString(entry.getValue()));
-            }
-            return ops.createMap(encoded);
-        }
-
-        @Override
-        public <T> SettingsModel decode(CgDynamicOps<T> ops, T input) {
-            SettingsModel model = new SettingsModel();
-            Map<String, String> values = new LinkedHashMap<>();
-            for (Map.Entry<T, T> entry : ops.getMapValue(input).entrySet()) {
-                values.put(ops.getStringValue(entry.getKey()), ops.getStringValue(entry.getValue()));
-            }
-            model.replaceAll(values);
-            return model;
-        }
-    };
+    /** In the model's own order, which is what keeps the bytes stable. */
+    public static final CgCodec<SettingsModel> MODEL = CgCodecs.xmap(CgCodecs.mapOf(CgCodecs.STRING, CgCodecs.STRING),
+            values -> {
+                SettingsModel model = new SettingsModel();
+                model.replaceAll(values);
+                return model;
+            }, SettingsModel::asMap);
 
     /** Whether this layer has anything worth encoding. @see SettingsCodec */
     public static boolean isWorthWriting(@Nullable SettingsModel model) {

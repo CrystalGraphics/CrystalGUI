@@ -101,21 +101,8 @@ public final class UserLibrary {
             }
         };
 
-        private static final CgCodec<List<Name>> KINDS = new CgCodec<>() {
-            @Override
-            public <T> T encode(CgDynamicOps<T> ops, List<Name> kinds) {
-                List<String> text = new ArrayList<>(kinds.size());
-                for (Name kind : kinds) text.add(kind.toString());
-                return CgCodecs.listOf(CgCodecs.STRING).encode(ops, text);
-            }
-
-            @Override
-            public <T> List<Name> decode(CgDynamicOps<T> ops, T input) {
-                List<Name> kinds = new ArrayList<>();
-                for (String text : CgCodecs.listOf(CgCodecs.STRING).decode(ops, input)) kinds.add(Name.parse(text));
-                return List.copyOf(kinds);
-            }
-        };
+        private static final CgCodec<List<Name>> KINDS = CgCodecs.xmap(
+                CgCodecs.listOf(CgCodecs.xmap(CgCodecs.STRING, Name::parse, Name::toString)), List::copyOf, kinds -> kinds);
     }
 
     /** After any change to the groups or the view. */
