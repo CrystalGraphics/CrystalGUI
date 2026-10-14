@@ -9,9 +9,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.CodeSource;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -28,8 +31,11 @@ import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.service.CgNetworkChannel;
+import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.CgContentHash;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.CgFormats;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.mirror.UIElementMirror;
@@ -206,6 +212,7 @@ public final class ServerSmoke {
         checkNothingClientSideLoaded(host, lines, failures);
         checkNoGlBackend(lines, failures);
         checkPersistence(lines, failures);
+        checkNbtRoundTrip(lines, failures);
 
         String report = render(host, lines, failures);
         print(report);
@@ -527,6 +534,79 @@ public final class ServerSmoke {
             if (value[0] == null) value[0] = obj.get(KEPT_VALUE);
         });
         return value[0];
+    }
+
+    /** Every kind of value a codec writes, as a map: what a mod saves into an entity's tags. */
+    private static final CgCodec<Map<String, Object>> NBT_SAMPLE = new CgCodec<Map<String, Object>>() {
+        private final CgCodec<List<Long>> longs = CgCodecs.listOf(CgCodecs.LONG);
+        private final CgCodec<Map<String, Integer>> counts = CgCodecs.mapOf(CgCodecs.STRING, CgCodecs.INT);
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> T encode(CgDynamicOps<T> ops, Map<String, Object> v) {
+            return CgCodecs.map(ops).field("s", CgCodecs.STRING, (String) v.get("s"))
+                    .field("i", CgCodecs.INT, (Integer) v.get("i")).field("f", CgCodecs.FLOAT, (Float) v.get("f"))
+                    .field("d", CgCodecs.DOUBLE, (Double) v.get("d")).field("b", CgCodecs.BOOL, (Boolean) v.get("b"))
+                    .field("bytes", CgCodecs.BYTES, (byte[]) v.get("bytes"))
+                    .field("longs", longs, (List<Long>) v.get("longs"))
+                    .field("counts", counts, (Map<String, Integer>) v.get("counts")).build();
+        }
+
+        @Override
+        public <T> Map<String, Object> decode(CgDynamicOps<T> ops, T in) {
+            CgCodecs.MapCodecReader<T> r = CgCodecs.read(ops, in);
+            Map<String, Object> v = new LinkedHashMap<>();
+            v.put("s", r.field("s", CgCodecs.STRING));
+            v.put("i", r.field("i", CgCodecs.INT));
+            v.put("f", r.field("f", CgCodecs.FLOAT));
+            v.put("d", r.field("d", CgCodecs.DOUBLE));
+            v.put("b", r.field("b", CgCodecs.BOOL));
+            v.put("bytes", r.field("bytes", CgCodecs.BYTES));
+            v.put("longs", r.field("longs", longs));
+            v.put("counts", r.field("counts", counts));
+            return v;
+        }
+    };
+
+    /** A codec's value crosses this version's own tags and back, read twice: reading leaves the tag as it was. */
+    private static void checkNbtRoundTrip(List<String> lines, List<String> failures) {
+        String detail = "";
+        boolean ok = false;
+        try {
+            Map<String, Object> want = new LinkedHashMap<>();
+            want.put("s", "kamehameha");
+            want.put("i", -42);
+            want.put("f", 1.5f);
+            want.put("d", Math.PI);
+            want.put("b", true);
+            want.put("bytes", new byte[]{1, -2, 3});
+            want.put("longs", Arrays.asList(Long.MIN_VALUE, 0L, Long.MAX_VALUE));
+            Map<String, Integer> counts = new LinkedHashMap<>();
+            counts.put("goku", 9001);
+            want.put("counts", counts);
+
+            Object tag = CgFormats.toNbt(NBT_SAMPLE, want);
+            Map<String, Object> first = CgFormats.fromNbt(NBT_SAMPLE, tag);
+            Map<String, Object> second = CgFormats.fromNbt(NBT_SAMPLE, tag);
+            ok = sameSample(want, first) && sameSample(want, second);
+            detail = "tag " + tag.getClass().getSimpleName() + ": " + tag + (ok ? "" : " read back as " + first
+                    + " then " + second);
+        } catch (Throwable failed) {
+            detail = String.valueOf(failed);
+        }
+        check(lines, failures, "a codec's value round-trips through the host's NBT", ok, detail);
+        if (ok) lines.add("INFO  nbt round trip is " + detail);
+    }
+
+    private static boolean sameSample(Map<String, Object> want, Map<String, Object> got) {
+        for (Map.Entry<String, Object> e : want.entrySet()) {
+            Object v = got.get(e.getKey());
+            boolean same = e.getValue() instanceof byte[]
+                    ? v instanceof byte[] && Arrays.equals((byte[]) e.getValue(), (byte[]) v)
+                    : e.getValue().equals(v);
+            if (!same) return false;
+        }
+        return true;
     }
 
     // ── reporting and shutdown ──────────────────────────────────────────────────────────────────
