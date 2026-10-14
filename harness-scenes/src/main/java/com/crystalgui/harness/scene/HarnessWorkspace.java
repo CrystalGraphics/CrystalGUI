@@ -166,7 +166,7 @@ final class HarnessWorkspace {
         // watch in the harness was dead: no reload of an open file, no tree refresh, and a conflict
         // discovered only at save time by the etag check. WorkspaceHost fans out with notify too.
         server.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
-                FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                         new FsMessages.ChangedNotification(mine))));
     }
 
