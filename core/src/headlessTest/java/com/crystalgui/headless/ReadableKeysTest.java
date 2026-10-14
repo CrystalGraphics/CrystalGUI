@@ -16,7 +16,7 @@ import com.google.gson.JsonPrimitive;
 import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.text.UIText;
@@ -45,11 +45,11 @@ public class ReadableKeysTest {
     }
 
     private static UIElementMirror<JsonElement> wire() {
-        return new UIElementMirror<>(JsonOps.INSTANCE);
+        return new UIElementMirror<>(CgJsonOps.INSTANCE);
     }
 
     private static UIElementMirror<JsonElement> document() {
-        return new UIElementMirror<>(JsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
+        return new UIElementMirror<>(CgJsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
     }
 
     @Test
@@ -81,8 +81,8 @@ public class ReadableKeysTest {
         UIElement built = tree();
         UIElement fromDocument = document().decode(document().describe(built));
 
-        assertEquals(CgContentHash.of(JsonOps.INSTANCE, wire().describe(built)),
-                CgContentHash.of(JsonOps.INSTANCE, wire().describe(fromDocument)));
+        assertEquals(CgContentHash.of(CgJsonOps.INSTANCE, wire().describe(built)),
+                CgContentHash.of(CgJsonOps.INSTANCE, wire().describe(fromDocument)));
     }
 
     /**
@@ -98,7 +98,7 @@ public class ReadableKeysTest {
                 + "\"v\":{\"text\":\"Status\"}}]}";
 
         assertEquals("30897677676211abc0ee43e9318cbdbc5f4df4d023f9faa10ddb6b835baf2784",
-                CgContentHash.of(JsonOps.INSTANCE, new JsonParser().parse(recorded)));
+                CgContentHash.of(CgJsonOps.INSTANCE, new JsonParser().parse(recorded)));
     }
 
     @Test

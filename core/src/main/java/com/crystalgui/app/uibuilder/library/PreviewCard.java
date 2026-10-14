@@ -13,7 +13,7 @@ import com.crystalgui.app.uibuilder.glyph.GlyphView;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.ScopeGroup;
 import com.crystalgui.style.StyleGroup;
@@ -149,7 +149,7 @@ public final class PreviewCard extends UIElement implements DataProvider {
             built.addClass(PICTURE_CLASS);
             JsonObject style = new JsonObject();
             style.add("background", new JsonPrimitive(picture.background()));
-            InlineStyleCodec.replaceInto(JsonOps.INSTANCE, style, built);
+            InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE, style, built);
             pending = false;
             showPlaceholder(false);
         } else {

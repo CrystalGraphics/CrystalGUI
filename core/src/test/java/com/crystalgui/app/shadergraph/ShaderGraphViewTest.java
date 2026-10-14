@@ -5,7 +5,7 @@ import com.crystalgui.app.shadergraph.node.ShaderPropertyNodes;
 import com.crystalgui.graph.GraphIds;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.graph.NodeData;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.diagnostic.Diagnostic;
@@ -258,7 +258,7 @@ public class ShaderGraphViewTest extends UiDocumentTestBase {
         editor.graph().setPan(-120f, 64f);
 
         byte[] saved = editor.model().encode();
-        CgStateMap<JsonElement> view = new CgStateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> view = new CgStateMap<>(CgJsonOps.INSTANCE);
         editor.writeViewState(view);
 
         ShaderGraphView reopened = new ShaderGraphView();
@@ -267,7 +267,7 @@ public class ShaderGraphViewTest extends UiDocumentTestBase {
         document.append(host);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
         reopened.model().adopt(saved);
-        reopened.readViewState(new CgStateMap<>(JsonOps.INSTANCE, view.encode()));
+        reopened.readViewState(new CgStateMap<>(CgJsonOps.INSTANCE, view.encode()));
 
         assertEquals(2.5f, reopened.graph().getZoom(), 0.001f);
         assertEquals(-120f, reopened.graph().getPanX(), 0.001f);

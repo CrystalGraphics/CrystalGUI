@@ -3,7 +3,7 @@ package com.crystalgui.headless;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
@@ -109,7 +109,7 @@ public class TransformStylePropertiesTest {
         element.getStyle().getGeneralGroup()
                 .transformOrigin(LengthPercent.px(4f), LengthPercent.percent(0f));
 
-        for (CgDynamicOps<?> ops : new CgDynamicOps<?>[]{JsonOps.INSTANCE, CgPlainOps.INSTANCE}) {
+        for (CgDynamicOps<?> ops : new CgDynamicOps<?>[]{CgJsonOps.INSTANCE, CgPlainOps.INSTANCE}) {
             UIElement clone = roundTrip(element, ops);
             assertEquals("the op list survives in order", element.getStyle().getGeneralGroup().transform(), clone.getStyle().getGeneralGroup().transform());
             assertEquals(LengthPercent.px(4f), clone.getStyle().getGeneralGroup().transformOriginX());
@@ -128,7 +128,7 @@ public class TransformStylePropertiesTest {
                 .textOffsetY(LengthPercent.px(1.5f))
                 .outlineWidth(LengthPercent.percent(0.1f));
 
-        var style = roundTrip(element, JsonOps.INSTANCE).getStyle().getGeneralGroup();
+        var style = roundTrip(element, CgJsonOps.INSTANCE).getStyle().getGeneralGroup();
         assertEquals(LengthPercent.px(1.5f), style.textOffsetY());
         assertEquals(LengthPercent.percent(0.1f), style.outlineWidth());
     }

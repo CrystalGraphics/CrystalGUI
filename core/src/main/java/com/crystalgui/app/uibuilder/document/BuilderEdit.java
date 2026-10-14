@@ -12,7 +12,7 @@ import com.google.gson.JsonObject;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.net.mirror.DocumentExtras;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.ui.contract.State;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -243,7 +243,7 @@ public sealed interface BuilderEdit extends Edit {
             if (contract == null || value == null) return;
             JsonObject one = new JsonObject();
             one.add(key, value);
-            CgStateMap<JsonElement> map = new CgStateMap<>(JsonOps.INSTANCE, one);
+            CgStateMap<JsonElement> map = new CgStateMap<>(CgJsonOps.INSTANCE, one);
             for (State<UIElement, ?> state : contract.states()) {
                 if (state.key().equals(key)) state.apply(node, map);
             }
@@ -320,7 +320,7 @@ public sealed interface BuilderEdit extends Edit {
          * edit's visible half was a property the node did not have before.</p>
          */
         private void write(@Nullable JsonElement value) {
-            InlineStyleCodec.replaceInto(JsonOps.INSTANCE,
+            InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE,
                     value == null ? new JsonObject() : value, node);
         }
 

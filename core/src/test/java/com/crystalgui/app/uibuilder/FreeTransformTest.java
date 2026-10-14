@@ -2,7 +2,7 @@ package com.crystalgui.app.uibuilder;
 
 import com.google.gson.JsonElement;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -588,9 +588,9 @@ public class FreeTransformTest extends UiDocumentTestBase {
     public void theBoxFollowsAnEditMadeElsewhere() {
         enterFreeTransform();
         document.update(W, H);
-        JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement was = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> g.transform(Transform.scale(2f, 2f)));
-        model.apply(new BuilderEdit.SetInlineStyle(node, was, InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
+        model.apply(new BuilderEdit.SetInlineStyle(node, was, InlineStyleCodec.encode(CgJsonOps.INSTANCE, node)));
         for (int i = 0; i < 4; i++) frame();
 
         assertEquals("the preview started over from the new transform, not the one the box opened on",
@@ -1173,10 +1173,10 @@ public class FreeTransformTest extends UiDocumentTestBase {
     @Test
     public void convertToSizeRewritesAScaleAsABox() {
         // AS AN EDIT, which is how a document node's style changes: the pane follows the document, not the node.
-        JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(),
                 g -> g.transform(Transform.scale(2f, 3f)));
-        model.apply(new BuilderEdit.SetInlineStyle(node, before, InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
+        model.apply(new BuilderEdit.SetInlineStyle(node, before, InlineStyleCodec.encode(CgJsonOps.INSTANCE, node)));
         document.update(W, H);
         float width = drawn(node).box().width();
         float height = drawn(node).box().height();

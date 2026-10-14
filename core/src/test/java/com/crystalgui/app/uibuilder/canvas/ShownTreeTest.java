@@ -16,7 +16,7 @@ import org.junit.Test;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
@@ -30,7 +30,7 @@ import com.google.gson.JsonElement;
 public class ShownTreeTest {
 
     private static final UIElementMirror<JsonElement> MIRROR =
-            new UIElementMirror<>(JsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
+            new UIElementMirror<>(CgJsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
 
     private UiBuilderDocument model;
     private ShownTree shown;
@@ -90,9 +90,9 @@ public class ShownTreeTest {
     /** A declaration the document drops leaves the copy too: merged instead, an undone {@code absolute} stays. */
     @Test
     public void aRemovedDeclarationLeavesTheCopy() {
-        JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, a);
+        JsonElement before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, a);
         StyleGroup.inlinePipeline(a.getStyle().getLayoutGroup(), l -> l.width(99));
-        model.apply(new BuilderEdit.SetInlineStyle(a, before, InlineStyleCodec.encode(JsonOps.INSTANCE, a)));
+        model.apply(new BuilderEdit.SetInlineStyle(a, before, InlineStyleCodec.encode(CgJsonOps.INSTANCE, a)));
         assertSameTree();
         model.history().undo();
         assertSameTree();

@@ -11,7 +11,7 @@ import org.junit.Test;
 
 import com.google.gson.JsonElement;
 
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.DrawableParts;
 import com.crystalgui.serialization.style.StyleParts;
 
@@ -113,7 +113,7 @@ public class CgUiLayersTest {
 
         for (StyleParts.Part part : parts) {
             assertNotNull("layer " + part.id() + " has nothing to encode",
-                    DrawableParts.INSTANCE.encodePart(JsonOps.INSTANCE, stack, part.id()));
+                    DrawableParts.INSTANCE.encodePart(CgJsonOps.INSTANCE, stack, part.id()));
         }
     }
 
@@ -130,9 +130,9 @@ public class CgUiLayersTest {
         assertNotNull(source);
         assertNotNull(target);
 
-        JsonElement layer = DrawableParts.INSTANCE.encodePart(JsonOps.INSTANCE, source, "layer-0");
+        JsonElement layer = DrawableParts.INSTANCE.encodePart(CgJsonOps.INSTANCE, source, "layer-0");
         assertNotNull(layer);
-        CgUiDrawable merged = DrawableParts.INSTANCE.mergePart(JsonOps.INSTANCE, target, "layer-0", layer);
+        CgUiDrawable merged = DrawableParts.INSTANCE.mergePart(CgJsonOps.INSTANCE, target, "layer-0", layer);
 
         assertTrue(merged instanceof CgUiLayers);
         List<CgUiDrawable> layers = ((CgUiLayers) merged).layers();
@@ -156,9 +156,9 @@ public class CgUiLayersTest {
         CgUiDrawable target = parse("#FF0000FF");
         assertNotNull(source);
 
-        JsonElement layer = DrawableParts.INSTANCE.encodePart(JsonOps.INSTANCE, source, "layer-1");
+        JsonElement layer = DrawableParts.INSTANCE.encodePart(CgJsonOps.INSTANCE, source, "layer-1");
         assertNotNull(layer);
-        CgUiDrawable merged = DrawableParts.INSTANCE.mergePart(JsonOps.INSTANCE, target, "layer-1", layer);
+        CgUiDrawable merged = DrawableParts.INSTANCE.mergePart(CgJsonOps.INSTANCE, target, "layer-1", layer);
 
         String written = StylePropertyRegistry.BACKGROUND.write(merged);
         assertEquals("#FF0000FF, #3574F0FF", written);

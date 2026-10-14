@@ -2,6 +2,8 @@ package com.crystalgui.core.settings;
 
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgui.core.CrystalGuiCore;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -65,8 +67,7 @@ public final class SettingsCodec {
      * is paid here rather than by making the storage layer learn every value type.</p>
      */
     public static String toJson(SettingsModel model) {
-        return new com.google.gson.GsonBuilder().setPrettyPrinting().create()
-                .toJson(MODEL.encode(com.crystalgui.serialization.JsonOps.INSTANCE, model)) + "\n";
+        return CgFormats.JSON.toText(MODEL, model);
     }
 
     /**
@@ -80,10 +81,9 @@ public final class SettingsCodec {
     public static SettingsModel fromJson(@Nullable String json) {
         if (json == null || json.trim().isEmpty()) return new SettingsModel();
         try {
-            return MODEL.decode(com.crystalgui.serialization.JsonOps.INSTANCE,
-                    new com.google.gson.JsonParser().parse(json));
+            return CgFormats.JSON.fromText(MODEL, json);
         } catch (RuntimeException malformed) {
-            com.crystalgui.core.CrystalGuiCore.LOGGER.warn(
+            CrystalGuiCore.LOGGER.warn(
                     "Preferences file could not be read; continuing with the defaults", malformed);
             return new SettingsModel();
         }

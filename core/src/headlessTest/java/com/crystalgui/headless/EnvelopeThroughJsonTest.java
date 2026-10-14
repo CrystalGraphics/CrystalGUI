@@ -5,7 +5,7 @@ import com.crystalgraphics.net.protocol.CgEnvelopeCodec;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -14,7 +14,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The envelope through a second representation, {@link JsonOps}, so nothing about it depends on
+ * The envelope through a second representation, {@link CgJsonOps}, so nothing about it depends on
  * {@code CgPlainOps}. The rest of the envelope and the router are CrystalGraphics' {@code CgProtocolTest}.
  */
 public class EnvelopeThroughJsonTest {
@@ -22,13 +22,13 @@ public class EnvelopeThroughJsonTest {
     @Test
     public void everyKindRoundTripsThroughAnyOps() {
         assertKindsSurvive(CgPlainOps.INSTANCE);
-        assertKindsSurvive(JsonOps.INSTANCE);
+        assertKindsSurvive(CgJsonOps.INSTANCE);
     }
 
     /**
      * Note the payload is built THROUGH the ops under test, not handed in.
      *
-     * <p>A {@code CgPlainOps} map cannot ride a JSON envelope — {@code JsonOps} is
+     * <p>A {@code CgPlainOps} map cannot ride a JSON envelope — {@code CgJsonOps} is
      * {@code CgDynamicOps<JsonElement>}, so a {@code LinkedHashMap} payload is not a value it can carry.
      * Writing the test the other way compiles only by erasure and then fails at the first nesting, which
      * is exactly the mistake a real second transport would make.</p>

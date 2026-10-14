@@ -8,7 +8,7 @@ import com.crystalgui.fs.CgFileError;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsHello;
 import com.crystalgui.fs.protocol.FsMessages;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 
 import org.junit.Test;
 
@@ -30,7 +30,7 @@ import static org.junit.Assert.assertTrue;
  * arrival, and every observable on both sides looks right — which is how identity deltas came to be
  * encoded and never applied (N27's sibling, one layer up).</p>
  *
- * <p>Both {@code JsonOps} and {@code CgPlainOps}, because the protocol is used over the binary transport
+ * <p>Both {@code CgJsonOps} and {@code CgPlainOps}, because the protocol is used over the binary transport
  * and read in a log, and a codec that only works over one of them is a codec that fails whenever
  * somebody looks at it.</p>
  */
@@ -39,7 +39,7 @@ public class FsProtocolCodecTest {
     /** Encodes and decodes through both ops, asserting the value survives each. */
     private static <A> void roundTrips(CgCodec<A> codec, A value) {
         assertEquals("over CgPlainOps", value, through(codec, CgPlainOps.INSTANCE, value));
-        assertEquals("over JsonOps", value, through(codec, JsonOps.INSTANCE, value));
+        assertEquals("over CgJsonOps", value, through(codec, CgJsonOps.INSTANCE, value));
     }
 
     private static <A, T> A through(CgCodec<A> codec, CgDynamicOps<T> ops, A value) {
@@ -88,7 +88,7 @@ public class FsProtocolCodecTest {
     public void arbitraryBytesSurvive() {
         byte[] content = new byte[256];
         for (int i = 0; i < 256; i++) content[i] = (byte) i;
-        FsMessages.ChunkResponse back = through(FsMessages.chunkResponse(), JsonOps.INSTANCE,
+        FsMessages.ChunkResponse back = through(FsMessages.chunkResponse(), CgJsonOps.INSTANCE,
                 new FsMessages.ChunkResponse(content, true));
 
         assertArrayEquals(content, back.content());
@@ -144,7 +144,7 @@ public class FsProtocolCodecTest {
                 new FsMessages.ProjectEntry("mymod.scripts", "Scripts",
                         List.of("src/main/java"), List.of(".git", "build", "*.class"))));
         FsMessages.ProjectsResponse back =
-                through(FsMessages.projectsResponse(), JsonOps.INSTANCE, sent);
+                through(FsMessages.projectsResponse(), CgJsonOps.INSTANCE, sent);
 
         assertEquals(1, back.projects().size());
         assertEquals(List.of(".git", "build", "*.class"), back.projects().get(0).excludes());
@@ -178,7 +178,7 @@ public class FsProtocolCodecTest {
     @Test
     public void presenceCarriesTheEditingFlag() {
         FsMessages.PresenceNotification back = through(FsMessages.presenceNotification(),
-                JsonOps.INSTANCE, new FsMessages.PresenceNotification(List.of(
+                CgJsonOps.INSTANCE, new FsMessages.PresenceNotification(List.of(
                         new FsMessages.PresenceEntry("proj:a.txt", "steve", true),
                         new FsMessages.PresenceEntry("proj:a.txt", "alex", false))));
 

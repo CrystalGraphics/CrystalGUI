@@ -89,7 +89,7 @@ public final class InlineStyleCodec {
      * the visible half of the edit was the added property, and it was the half undo could not reach.</p>
      *
      * <pre>{@code
-     * InlineStyleCodec.replaceInto(JsonOps.INSTANCE, remembered, node);   // exactly `remembered`
+     * InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE, remembered, node);   // exactly `remembered`
      * }</pre>
      */
     public static <T> void replaceInto(CgDynamicOps<T> ops, T encoded, Styleable element) {

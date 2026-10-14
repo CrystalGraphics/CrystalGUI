@@ -28,7 +28,7 @@ import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -343,7 +343,7 @@ public final class TransformBox extends UIElement {
         Box box = node == null ? null : node.box();
         if (box == null) return false;
         target = node;
-        before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         // NOT REFUSED HERE, however tempting: `activated()` has already entered the mode by the time
         // this runs -- its own note says switching tools from inside it re-enters the mode stack -- so a
         // false return leaves the tool live with no target, swallowing every click on the canvas. The
@@ -370,7 +370,7 @@ public final class TransformBox extends UIElement {
             g.transformOriginX(asFraction(gesture.originX(), gesture.width()));
             g.transformOriginY(asFraction(gesture.originY(), gesture.height()));
         });
-        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement after = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         if (DIAGNOSE) CrystalGuiCore.LOGGER.info("[transform] commit before={} after={}", was, after);
         if (after.equals(was)) return;
         again = new Again(gesture.toTransform(),
@@ -482,7 +482,7 @@ public final class TransformBox extends UIElement {
                 && box.width() == seeded.width() && box.height() == seeded.height()) {
             return;
         }
-        before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         history.clear();
         seed(node, box);
         preview();
@@ -704,13 +704,13 @@ public final class TransformBox extends UIElement {
         node = drawnOf(node);
         Again repeat = again;
         if (repeat == null || node == null || node.box() == null) return false;
-        JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement was = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> {
             g.transform(repeat.transform());
             g.transformOriginX(LengthPercent.percent(repeat.pivotX()));
             g.transformOriginY(LengthPercent.percent(repeat.pivotY()));
         });
-        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement after = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         if (after.equals(was)) return false;
         document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
         return true;
@@ -755,11 +755,11 @@ public final class TransformBox extends UIElement {
         float width = Math.abs(box.width() * scaleX);
         float height = Math.abs(box.height() * scaleY);
 
-        JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement was = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         StyleGroup.inlinePipeline(node.getStyle().getGeneralGroup(), g -> g.transform(Transform.IDENTITY));
         StyleGroup.inlinePipeline(node.getStyle().getLayoutGroup(),
                 l -> l.width(Math.round(width)).height(Math.round(height)));
-        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement after = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         if (after.equals(was)) return false;
         document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
         return true;
@@ -945,7 +945,7 @@ public final class TransformBox extends UIElement {
                 worldSpan(box, box.width(), 0f), worldSpan(box, 0f, box.height()),
                 gesture.scaleX(), gesture.scaleY(), gesture.translateX(), gesture.translateY(),
                 (float) Math.toDegrees(gesture.rotation()),
-                InlineStyleCodec.encode(JsonOps.INSTANCE, target));
+                InlineStyleCodec.encode(CgJsonOps.INSTANCE, target));
     }
 
     private static float worldSpan(Box box, float localX, float localY) {

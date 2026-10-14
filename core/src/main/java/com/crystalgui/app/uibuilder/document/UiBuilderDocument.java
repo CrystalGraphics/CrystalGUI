@@ -20,7 +20,7 @@ import com.crystalgui.core.undo.Edit;
 import com.crystalgui.document.AbstractDocumentModel;
 import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.template.UiTemplate;
 import com.crystalgui.template.UiTemplateException;
 import com.crystalgui.template.UiTemplates;
@@ -51,7 +51,7 @@ import com.crystalgui.ui.dom.UIElementTreeSource;
 public final class UiBuilderDocument extends AbstractDocumentModel {
 
     private static final UIElementMirror<JsonElement> MIRROR =
-            new UIElementMirror<>(JsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
+            new UIElementMirror<>(CgJsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
 
     /** The key the tree is written under, and the one header key this class owns. */
     private static final String ROOT = "root";
@@ -150,8 +150,8 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
 
     /** The hash a window built from this tree would send. @see UiTemplate#contentHash() */
     public String contentHash() {
-        return CgContentHash.of(JsonOps.INSTANCE,
-                new UIElementMirror<JsonElement>(JsonOps.INSTANCE).describe(root));
+        return CgContentHash.of(CgJsonOps.INSTANCE,
+                new UIElementMirror<JsonElement>(CgJsonOps.INSTANCE).describe(root));
     }
 
     // ── The one door ────────────────────────────────────────────────────────

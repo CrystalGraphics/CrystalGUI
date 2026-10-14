@@ -2,7 +2,7 @@ package com.crystalgui.headless;
 
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
@@ -34,7 +34,7 @@ public class WidgetStateRoundTripTest {
         E original = factory.get();
         mutate.accept(original);
 
-        UIElementMirror<JsonElement> mirror = new UIElementMirror<>(JsonOps.INSTANCE);
+        UIElementMirror<JsonElement> mirror = new UIElementMirror<>(CgJsonOps.INSTANCE);
         JsonElement written = mirror.encodeState(original);
 
         E restored = factory.get();
@@ -105,7 +105,7 @@ public class WidgetStateRoundTripTest {
     /** A default-valued widget should carry nothing, so the common node stays small on the wire. */
     @Test
     public void anUnmodifiedWidgetWritesNoState() {
-        UIElementMirror<JsonElement> mirror = new UIElementMirror<>(JsonOps.INSTANCE);
+        UIElementMirror<JsonElement> mirror = new UIElementMirror<>(CgJsonOps.INSTANCE);
         assertEquals("a default Checkbox should serialize to nothing at all",
                 0, mirror.encodeState(new Checkbox()).getAsJsonObject().size());
         assertEquals(0, mirror.encodeState(new UIText("")).getAsJsonObject().size());
@@ -116,8 +116,8 @@ public class WidgetStateRoundTripTest {
     public void readingAnEmptyStateLeavesDefaultsIntact() {
         Slider slider = new Slider();
         slider.setRange(0f, 10f).setValue(7f);
-        new UIElementMirror<>(JsonOps.INSTANCE)
-                .applyState(new CgStateMap<JsonElement>(JsonOps.INSTANCE).encode(), slider);
+        new UIElementMirror<>(CgJsonOps.INSTANCE)
+                .applyState(new CgStateMap<JsonElement>(CgJsonOps.INSTANCE).encode(), slider);
         // Absent keys fall back to the documented defaults rather than throwing.
         assertEquals(0f, slider.getValue(), 0.001f);
     }
@@ -126,6 +126,6 @@ public class WidgetStateRoundTripTest {
     @Test
     public void aPlainElementHasNoState() {
         assertNull("a plain node carries no state at all, which the mirror spells as null",
-                new UIElementMirror<>(JsonOps.INSTANCE).encodeState(new UIElement()));
+                new UIElementMirror<>(CgJsonOps.INSTANCE).encodeState(new UIElement()));
     }
 }

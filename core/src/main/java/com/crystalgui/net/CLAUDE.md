@@ -14,7 +14,7 @@ talks to the client over RPC and bindings.
   `CgContentHash`, `CgBinaryFormat`; the transports `CgTransport`/`CgInMemoryTransport`/`CgWireTransport`;
   the four-kind `CgEnvelope`, `CgMessageRouter`, `CgCall`, `CgProtocolConnection` and `CgProtocols`; the
   multiplexed byte transport `CgFrameMultiplexer` over the `CgNetworkChannel` platform slot.
-- **`serialization/`** — `JsonOps` (Gson, for debugging), and `serialization/style/`: `StyleValueCodecs`
+- **`serialization/`** — `serialization/style/` only: `StyleValueCodecs`
   and `InlineStyleCodec`.
 - **`net/`** — `ServerUiSession`, `ClientUiSession`, `UiWindowMux`, `SheetRef`; `net/mirror/` holds **the
   mirror** — `ServerTreeMirror`/`ClientTreeMirror` (generic in the node type, written against the `ui.dom`

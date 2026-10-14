@@ -18,7 +18,7 @@ import com.google.gson.JsonObject;
 import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgui.net.mirror.DocumentExtras;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -171,8 +171,8 @@ public final class UiTemplate {
     public String contentHash() {
         if (contentHash == null) {
             UIElement tree = inflate();
-            contentHash = CgContentHash.of(JsonOps.INSTANCE,
-                    new UIElementMirror<JsonElement>(JsonOps.INSTANCE).describe(tree));
+            contentHash = CgContentHash.of(CgJsonOps.INSTANCE,
+                    new UIElementMirror<JsonElement>(CgJsonOps.INSTANCE).describe(tree));
         }
         return contentHash;
     }
@@ -292,7 +292,7 @@ public final class UiTemplate {
     }
 
     private static UIElementMirror<JsonElement> mirror() {
-        return new UIElementMirror<>(JsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
+        return new UIElementMirror<>(CgJsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
     }
 
     /** Every node in the document, root first, paired with its path — what validation walks. */

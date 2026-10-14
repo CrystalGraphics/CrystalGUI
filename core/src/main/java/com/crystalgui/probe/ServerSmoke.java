@@ -35,8 +35,9 @@ import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgraphics.serialization.CgDynamicOps;
-import com.crystalgraphics.serialization.CgFormats;
 import com.crystalgraphics.serialization.CgPlainOps;
+import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgraphics.serialization.format.CgTextFormat;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.ui.dom.UIElement;
@@ -213,6 +214,7 @@ public final class ServerSmoke {
         checkNoGlBackend(lines, failures);
         checkPersistence(lines, failures);
         checkNbtRoundTrip(lines, failures);
+        checkTextFormats(lines, failures);
 
         String report = render(host, lines, failures);
         print(report);
@@ -573,18 +575,7 @@ public final class ServerSmoke {
         String detail = "";
         boolean ok = false;
         try {
-            Map<String, Object> want = new LinkedHashMap<>();
-            want.put("s", "kamehameha");
-            want.put("i", -42);
-            want.put("f", 1.5f);
-            want.put("d", Math.PI);
-            want.put("b", true);
-            want.put("bytes", new byte[]{1, -2, 3});
-            want.put("longs", Arrays.asList(Long.MIN_VALUE, 0L, Long.MAX_VALUE));
-            Map<String, Integer> counts = new LinkedHashMap<>();
-            counts.put("goku", 9001);
-            want.put("counts", counts);
-
+            Map<String, Object> want = nbtSample();
             Object tag = CgFormats.toNbt(NBT_SAMPLE, want);
             Map<String, Object> first = CgFormats.fromNbt(NBT_SAMPLE, tag);
             Map<String, Object> second = CgFormats.fromNbt(NBT_SAMPLE, tag);
@@ -596,6 +587,38 @@ public final class ServerSmoke {
         }
         check(lines, failures, "a codec's value round-trips through the host's NBT", ok, detail);
         if (ok) lines.add("INFO  nbt round trip is " + detail);
+    }
+
+    private static Map<String, Object> nbtSample() {
+        Map<String, Object> sample = new LinkedHashMap<>();
+        sample.put("s", "kamehameha");
+        sample.put("i", -42);
+        sample.put("f", 1.5f);
+        sample.put("d", Math.PI);
+        sample.put("b", true);
+        sample.put("bytes", new byte[]{1, -2, 3});
+        sample.put("longs", Arrays.asList(Long.MIN_VALUE, 0L, Long.MAX_VALUE));
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        counts.put("goku", 9001);
+        sample.put("counts", counts);
+        return sample;
+    }
+
+    /** JSON through this Minecraft's own Gson, YAML through the SnakeYAML CrystalGraphics carries relocated. */
+    private static void checkTextFormats(List<String> lines, List<String> failures) {
+        for (CgTextFormat format : Arrays.asList(CgFormats.JSON, CgFormats.YAML)) {
+            String name = format == CgFormats.JSON ? "JSON" : "YAML";
+            String detail = "";
+            boolean ok = false;
+            try {
+                Map<String, Object> want = nbtSample();
+                ok = sameSample(want, format.fromText(NBT_SAMPLE, format.toText(NBT_SAMPLE, want)));
+                detail = ok ? "" : "read back differently";
+            } catch (Throwable failed) {
+                detail = String.valueOf(failed);
+            }
+            check(lines, failures, "a codec's value round-trips through " + name, ok, detail);
+        }
     }
 
     private static boolean sameSample(Map<String, Object> want, Map<String, Object> got) {

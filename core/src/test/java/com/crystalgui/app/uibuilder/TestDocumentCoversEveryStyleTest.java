@@ -20,7 +20,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.serialization.style.StyleParts;
 import com.crystalgui.serialization.style.TransformParts;
@@ -149,12 +149,12 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
 
             UIElement node = new UIElement();
             document.append(node);
-            InlineStyleCodec.decodeInto(JsonOps.INSTANCE, applied, node);
+            InlineStyleCodec.decodeInto(CgJsonOps.INSTANCE, applied, node);
             document.update(W, H);
 
             // WHAT COMES BACK OUT, which is the only proof they landed rather than being dropped on
             // the way.
-            JsonElement encoded = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+            JsonElement encoded = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
             assertNotNull(encoded);
             for (String name : applied.keySet()) {
                 if (!encoded.getAsJsonObject().has(name)) lost.add(element.getKey() + "." + name);
@@ -211,7 +211,7 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
                 continue;
             }
             for (StyleParts.Part part : TransformParts.INSTANCE.parts()) {
-                if (TransformParts.INSTANCE.encodePart(JsonOps.INSTANCE, value, part.id()) != null) {
+                if (TransformParts.INSTANCE.encodePart(CgJsonOps.INSTANCE, value, part.id()) != null) {
                     covered.add(part.id());
                 }
             }

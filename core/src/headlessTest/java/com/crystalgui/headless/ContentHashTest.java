@@ -3,7 +3,7 @@ package com.crystalgui.headless;
 import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Checkbox;
 import com.crystalgui.widget.control.Slider;
@@ -42,7 +42,7 @@ public class ContentHashTest {
     }
 
     private String hashOfJson(UIElement element) {
-        return CgContentHash.of(JsonOps.INSTANCE, new UIElementMirror<>(JsonOps.INSTANCE).describe(element));
+        return CgContentHash.of(CgJsonOps.INSTANCE, new UIElementMirror<>(CgJsonOps.INSTANCE).describe(element));
     }
 
     // ── Stability ───────────────────────────────────────────────────────────
@@ -56,8 +56,8 @@ public class ContentHashTest {
     /** Encoding twice must be byte-identical too — the payload itself is what gets transferred. */
     @Test
     public void encodingIsByteIdentical() {
-        JsonElement first = new UIElementMirror<>(JsonOps.INSTANCE).describe(sampleTree().get());
-        JsonElement second = new UIElementMirror<>(JsonOps.INSTANCE).describe(sampleTree().get());
+        JsonElement first = new UIElementMirror<>(CgJsonOps.INSTANCE).describe(sampleTree().get());
+        JsonElement second = new UIElementMirror<>(CgJsonOps.INSTANCE).describe(sampleTree().get());
         assertEquals("a HashMap anywhere in the encode path would break this",
                 first.toString(), second.toString());
     }
@@ -69,8 +69,8 @@ public class ContentHashTest {
     @Test
     public void theSameTreeHashesTheSameThroughDifferentOps() {
         UIElement tree = sampleTree().get();
-        String viaJson = CgContentHash.of(JsonOps.INSTANCE,
-                new UIElementMirror<>(JsonOps.INSTANCE).describe(tree));
+        String viaJson = CgContentHash.of(CgJsonOps.INSTANCE,
+                new UIElementMirror<>(CgJsonOps.INSTANCE).describe(tree));
         String viaPlain = CgContentHash.of(CgPlainOps.INSTANCE,
                 new UIElementMirror<>(CgPlainOps.INSTANCE).describe(tree));
         assertEquals(viaJson, viaPlain);

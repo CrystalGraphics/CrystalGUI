@@ -13,7 +13,7 @@ import com.crystalgui.app.uibuilder.canvas.transform.FreeTransformTool;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -332,7 +332,7 @@ public final class ResizeHandles extends UIElement {
         // movement. A gesture measures from where it began, never from what it has already done.
         float startX = box.x();
         float startY = box.y();
-        JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         // THE WHOLE CHAIN, not just the zoom. These handles are placed through the node's localToWorld,
         // which carries its `transform` -- so on a scaled element they sit on the drawn edges while a
         // delta divided by the zoom alone moves the box by the transform's factor too much. A styled
@@ -395,7 +395,7 @@ public final class ResizeHandles extends UIElement {
             public void onDragCancel() {
                 hideBadge();
                 ctx.smartGuides().clear();
-                InlineStyleCodec.decodeInto(JsonOps.INSTANCE, before, node);
+                InlineStyleCodec.decodeInto(CgJsonOps.INSTANCE, before, node);
             }
         });
     }
@@ -520,7 +520,7 @@ public final class ResizeHandles extends UIElement {
     /** @see ResizeHandles the note on why withdrawing the size is only half of this */
     private void hug(UIElement node, Spot spot) {
         if (!hasContentToHug(node)) return;
-        JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         boolean column = laysOutInColumn(node);
         boolean touchesMain = column ? spot.yDirection() != 0 : spot.xDirection() != 0;
         boolean touchesCross = column ? spot.xDirection() != 0 : spot.yDirection() != 0;
@@ -590,7 +590,7 @@ public final class ResizeHandles extends UIElement {
      * {@code undo} has never had a matching {@code apply}.</p>
      */
     private void commit(UIElement node, JsonElement before) {
-        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement after = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         if (after.equals(before)) return;
         // NAMED BY THE DRAWING, which the document resolves to its own node. @see UiBuilderDocument#resolve
         document.apply(new BuilderEdit.SetInlineStyle(node, before, after));

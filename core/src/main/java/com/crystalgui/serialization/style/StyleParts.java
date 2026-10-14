@@ -11,8 +11,8 @@ import com.crystalgraphics.serialization.CgDynamicOps;
  *
  * <pre>{@code
  * StyleParts<Transform> parts = StylePartRegistry.forProperty(StylePropertyRegistry.TRANSFORM);
- * JsonElement rotation = parts.encodePart(JsonOps.INSTANCE, transform, "rotate");
- * Transform merged = parts.mergePart(JsonOps.INSTANCE, target, "rotate", rotation);
+ * JsonElement rotation = parts.encodePart(CgJsonOps.INSTANCE, transform, "rotate");
+ * Transform merged = parts.mergePart(CgJsonOps.INSTANCE, target, "rotate", rotation);
  * }</pre>
  *
  * <h3>Why the engine needs to say this rather than the window guessing</h3>

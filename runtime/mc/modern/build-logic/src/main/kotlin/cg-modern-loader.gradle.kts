@@ -128,6 +128,8 @@ dependencies {
     // load, so without them the UI classes do not load at all. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":taffy"))
     "runtimeOnly"(project(":taffy"))
+    // CgFormats.YAML's library: the shipped jar carries it relocated, a dev run takes it from here.
+    "runtimeOnly"("org.yaml:snakeyaml:2.7")
 
     // :language -- the grammars, ECJ and Rhino, plus the ScriptService seam. ON `lang` AND NOT ON
     // `main` since J8: the language stack ships as its own jar, and this is what stops the host jar
@@ -431,6 +433,7 @@ afterEvaluate {
     if (devRunLibraries == "additionalRuntimeClasspath") {
         configurations.findByName("additionalRuntimeClasspath")?.let { runtime ->
             dependencies.add(runtime.name, project(":runtime:mc:shared"))
+            dependencies.add(runtime.name, "org.yaml:snakeyaml:2.7")
         }
     }
 }

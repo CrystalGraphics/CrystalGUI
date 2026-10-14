@@ -11,7 +11,7 @@ import com.crystalgraphics.platform.input.CgModifiers;
 
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -108,7 +108,7 @@ public final class MoveOutOfFlow extends UIElement {
         Box box = node.box();
         float startX = box.x();
         float startY = box.y();
-        JsonElement before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         float scale = Math.max(0.0001f, CanvasRects.scaleOf(node.parentElement(), this));
         moving = node;
 
@@ -127,7 +127,7 @@ public final class MoveOutOfFlow extends UIElement {
             @Override
             public void onDragCancel() {
                 end();
-                InlineStyleCodec.decodeInto(JsonOps.INSTANCE, before, node);
+                InlineStyleCodec.decodeInto(CgJsonOps.INSTANCE, before, node);
             }
         });
         return true;
@@ -273,7 +273,7 @@ public final class MoveOutOfFlow extends UIElement {
      * resolves to its own node, so every pane showing the file gets the result. @see UiBuilderDocument#resolve
      */
     private void commit(UIElement node, JsonElement before) {
-        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement after = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         if (after.equals(before)) return;
         document.apply(new BuilderEdit.SetInlineStyle(node, before, after));
     }

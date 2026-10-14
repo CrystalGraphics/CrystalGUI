@@ -47,8 +47,8 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
      * window built from one hashes to the file on disk.</p>
      *
      * <pre>{@code
-     * new UIElementMirror<>(JsonOps.INSTANCE)                        // the wire
-     * new UIElementMirror<>(JsonOps.INSTANCE, Keys.DOCUMENT)         // a .cgui file
+     * new UIElementMirror<>(CgJsonOps.INSTANCE)                        // the wire
+     * new UIElementMirror<>(CgJsonOps.INSTANCE, Keys.DOCUMENT)         // a .cgui file
      * }</pre>
      *
      * <p><b>The content hash is computed over {@link #WIRE} only.</b> A description is content-addressed

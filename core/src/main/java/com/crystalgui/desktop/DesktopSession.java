@@ -4,7 +4,7 @@ import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -98,7 +98,7 @@ public final class DesktopSession {
 
     /** The record as text, without writing it — what a test asserts on. */
     public String toJson() {
-        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(CgJsonOps.INSTANCE);
         out.putInt(KEY_VERSION, VERSION);
 
         List<WindowFrame> keyed = new ArrayList<>();
@@ -204,7 +204,7 @@ public final class DesktopSession {
         if (raw == null || raw.isEmpty()) return List.of();
         CgStateMap<JsonElement> in;
         try {
-            in = new CgStateMap<>(JsonOps.INSTANCE, new JsonParser().parse(raw));
+            in = new CgStateMap<>(CgJsonOps.INSTANCE, new JsonParser().parse(raw));
         } catch (RuntimeException malformed) {
             // A record that will not parse is a record that describes nothing. Discarded rather than
             // reported: there is no user action, and the desktop simply opens at its defaults.
@@ -225,7 +225,7 @@ public final class DesktopSession {
         if (raw == null || raw.isEmpty()) return List.of();
         try {
             CgStateMap<JsonElement> in =
-                    new CgStateMap<>(JsonOps.INSTANCE, new JsonParser().parse(raw));
+                    new CgStateMap<>(CgJsonOps.INSTANCE, new JsonParser().parse(raw));
             if (in.getInt(KEY_VERSION, -1) != VERSION) return List.of();
             return in.getList(KEY_MRU, entry -> entry.getString(KEY_KEY, ""));
         } catch (RuntimeException malformed) {

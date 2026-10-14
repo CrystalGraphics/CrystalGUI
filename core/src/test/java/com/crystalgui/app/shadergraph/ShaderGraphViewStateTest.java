@@ -2,7 +2,7 @@ package com.crystalgui.app.shadergraph;
 
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.undo.Edit;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -105,7 +105,7 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
         editor.graph().setZoom(2.5f);
         editor.graph().setPan(-400f, 175f);
 
-        CgStateMap<JsonElement> saved = new CgStateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> saved = new CgStateMap<>(CgJsonOps.INSTANCE);
         editor.writeViewState(saved);
 
         // A SECOND PERSON'S EDITOR over the same file, with a camera of their own.
@@ -116,7 +116,7 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
         assertEquals("the file carries no camera, so opening it leaves theirs alone",
                 1f, other.graph().getZoom(), 0.001f);
 
-        other.readViewState(new CgStateMap<>(JsonOps.INSTANCE, saved.encode()));
+        other.readViewState(new CgStateMap<>(CgJsonOps.INSTANCE, saved.encode()));
         assertEquals(2.5f, other.graph().getZoom(), 0.001f);
         assertEquals(-400f, other.graph().getPanX(), 0.001f);
         assertEquals(175f, other.graph().getPanY(), 0.001f);
@@ -163,12 +163,12 @@ public class ShaderGraphViewStateTest extends UiDocumentTestBase {
         editor.graph().setZoom(1.75f);
         editor.graph().setPan(-42f, 88f);
 
-        CgStateMap<JsonElement> record = new CgStateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> record = new CgStateMap<>(CgJsonOps.INSTANCE);
         editor.writeViewState(record);
         JsonElement persisted = record.encode();
 
         ShaderGraphView restored = second(editor.model().encode());
-        restored.readViewState(new CgStateMap<>(JsonOps.INSTANCE, persisted));
+        restored.readViewState(new CgStateMap<>(CgJsonOps.INSTANCE, persisted));
 
         assertEquals(1.75f, restored.graph().getZoom(), 0.001f);
         assertEquals(-42f, restored.graph().getPanX(), 0.001f);

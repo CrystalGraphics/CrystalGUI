@@ -11,7 +11,7 @@ import com.google.gson.JsonParser;
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 
 /**
  * One typed record kept as a JSON file in a {@link ConfigStorage} — what a user chose and would miss, rewritten whole on
@@ -78,7 +78,7 @@ public final class ConfigRecord<T> {
         if (next.equals(value)) return;
         value = next;
         store.write(file, new GsonBuilder().setPrettyPrinting().create()
-                .toJson(codec.encode(JsonOps.INSTANCE, next)) + "\n");
+                .toJson(codec.encode(CgJsonOps.INSTANCE, next)) + "\n");
         onChanged.emit(next);
     }
 
@@ -101,7 +101,7 @@ public final class ConfigRecord<T> {
         if (json == null || json.trim().isEmpty()) return empty;
         try {
             // INSTANCE parse, not the static parseString: 1.7.10 ships a gson without it.
-            T decoded = codec.decode(JsonOps.INSTANCE, new JsonParser().parse(json));
+            T decoded = codec.decode(CgJsonOps.INSTANCE, new JsonParser().parse(json));
             return decoded == null ? empty : decoded;
         } catch (RuntimeException unreadable) {
             CrystalGuiCore.LOGGER.warn("[cgui] {} could not be read; continuing with the defaults until it changes",

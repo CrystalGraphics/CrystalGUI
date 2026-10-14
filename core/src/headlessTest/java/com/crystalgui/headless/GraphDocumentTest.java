@@ -11,7 +11,7 @@ import com.crystalgui.graph.NodeData;
 import com.crystalgui.graph.PortRef;
 import com.crystalgui.graph.PortSpec;
 import com.crystalgui.graph.TypeCompatibility;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import org.junit.Test;
 
 import java.util.List;
@@ -197,8 +197,8 @@ public class GraphDocumentTest {
     public void jsonAndPlainOpsAgree() {
         GraphDocument doc = chain("alpha", "beta");
 
-        var json = GraphCodecs.DOCUMENT.encode(JsonOps.INSTANCE, doc);
-        GraphDocument fromJson = GraphCodecs.DOCUMENT.decode(JsonOps.INSTANCE, json);
+        var json = GraphCodecs.DOCUMENT.encode(CgJsonOps.INSTANCE, doc);
+        GraphDocument fromJson = GraphCodecs.DOCUMENT.decode(CgJsonOps.INSTANCE, json);
 
         assertEquals(doc.nodeCount(), fromJson.nodeCount());
         assertEquals(doc.edges(), fromJson.edges());

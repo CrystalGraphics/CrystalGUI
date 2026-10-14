@@ -2,7 +2,7 @@ package com.crystalgui.app.uibuilder.style;
 
 import com.crystalgui.serialization.style.InlineStyleCodec;
 
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 
 import com.crystalgui.app.uibuilder.inspect.NodeFields;
 
@@ -450,7 +450,7 @@ public class StyleLabsTest {
         assertTrue("the row is still there, switched off", hidden != null && hidden.disabled());
 
         UIElement reopened = new UIElement();
-        InlineStyleCodec.replaceInto(JsonOps.INSTANCE, saved, reopened);
+        InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE, saved, reopened);
         assertEquals("and survives a save", saved, NodeFields.inlineStyleOf(reopened));
 
         assertTrue(inline.setEnabled("opacity", true));

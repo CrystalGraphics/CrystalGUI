@@ -17,7 +17,7 @@ import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.attribute.AttributeCarrier;
 import com.crystalgui.core.attribute.AttributeSet;
 import com.crystalgui.core.attribute.AttributeSlot;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.serialization.style.StylePartRegistry;
 import com.crystalgui.serialization.style.StyleParts;
@@ -65,7 +65,7 @@ public final class StyleAttributes implements AttributeCarrier {
     @Override
     public AttributeSet copyAttributes() {
         AttributeSet.Builder builder = AttributeSet.builder(DOMAIN, describe(node));
-        JsonElement encoded = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement encoded = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         if (encoded == null || !encoded.isJsonObject()) return builder.build();
 
         List<Pending> pending = new ArrayList<>();
@@ -112,13 +112,13 @@ public final class StyleAttributes implements AttributeCarrier {
         CgCodec<V> codec = StyleValueCodecs.forProperty(declared);
         if (parts == null || codec == null) return false;
 
-        V decoded = codec.decode(JsonOps.INSTANCE, value);
+        V decoded = codec.decode(CgJsonOps.INSTANCE, value);
         // ALL OF IT OR NONE OF IT. A value only half of which divides would offer the half that does and
         // drop the rest in silence, so ticking every box would not reproduce the source.
         if (!parts.divides(decoded)) return false;
         boolean any = false;
         for (StyleParts.Part part : parts.parts(decoded)) {
-            JsonElement encoded = parts.encodePart(JsonOps.INSTANCE, decoded, part.id());
+            JsonElement encoded = parts.encodePart(CgJsonOps.INSTANCE, decoded, part.id());
             if (encoded == null) continue;
             // NAMED AFTER THE PROPERTY when the part has no label of its own: the section already says
             // what kind of value it is, so the row says which property holds it. @see StyleParts.Part
@@ -143,7 +143,7 @@ public final class StyleAttributes implements AttributeCarrier {
      */
     @Override
     public void pasteAttributes(AttributeSet chosen) {
-        JsonElement current = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement current = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         JsonObject held = current != null && current.isJsonObject()
                 ? current.getAsJsonObject() : new JsonObject();
 
@@ -165,7 +165,7 @@ public final class StyleAttributes implements AttributeCarrier {
             if (result != null) merged.put(property, result);
         }
         merged.forEach(subset::add);
-        InlineStyleCodec.decodeInto(JsonOps.INSTANCE, subset, node);
+        InlineStyleCodec.decodeInto(CgJsonOps.INSTANCE, subset, node);
     }
 
     @Nullable
@@ -184,15 +184,15 @@ public final class StyleAttributes implements AttributeCarrier {
         // THE TARGET'S OWN VALUE IS THE BASE, and the property's INITIAL when it holds none: merging a
         // rotation onto an element with no transform at all has to start from something, and the initial
         // is the only starting point that contributes nothing of its own.
-        V from = base == null ? declared.initialValue : codec.decode(JsonOps.INSTANCE, base);
-        return codec.encode(JsonOps.INSTANCE, parts.mergePart(JsonOps.INSTANCE, from, part, value));
+        V from = base == null ? declared.initialValue : codec.decode(CgJsonOps.INSTANCE, base);
+        return codec.encode(CgJsonOps.INSTANCE, parts.mergePart(CgJsonOps.INSTANCE, from, part, value));
     }
 
     /** The paste as one undoable step, which is the consumer's job rather than the engine's. */
     public boolean applyAsEdit(UiBuilderDocument document, AttributeSet chosen) {
-        JsonElement was = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement was = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         pasteAttributes(chosen);
-        JsonElement after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement after = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         if (after.equals(was)) return false;
         document.apply(new BuilderEdit.SetInlineStyle(node, was, after));
         return true;

@@ -13,7 +13,7 @@ import com.crystalgui.app.uibuilder.document.DocumentDrawing;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.ui.dom.TreeObserver;
 import com.crystalgui.ui.dom.UIElement;
@@ -44,7 +44,7 @@ import com.google.gson.JsonElement;
 public final class ShownTree implements TreeObserver<UIElement>, DocumentDrawing {
 
     private static final UIElementMirror<JsonElement> MIRROR =
-            new UIElementMirror<>(JsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
+            new UIElementMirror<>(CgJsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
 
     private final UiBuilderDocument document;
     private final Connection watching;
@@ -197,7 +197,7 @@ public final class ShownTree implements TreeObserver<UIElement>, DocumentDrawing
         if (state != null) MIRROR.applyState(state, shown);
         // REPLACED, never merged: a declaration the document dropped has to leave the copy too, or an undo of a
         // `position: absolute` leaves every drawing absolute.
-        InlineStyleCodec.replaceInto(JsonOps.INSTANCE, MIRROR.encodeInlineStyle(source), shown);
+        InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE, MIRROR.encodeInlineStyle(source), shown);
     }
 
     /** A copy of {@code source} and everything under it, mapped node for node. */

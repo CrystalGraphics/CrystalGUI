@@ -6,7 +6,7 @@ import com.google.gson.JsonElement;
 
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.undo.UndoStack;
@@ -99,7 +99,7 @@ final class InlineDeclarations implements Declarations {
         touched = null;
         if (was == null) return;
         if (!keep) {
-            InlineStyleCodec.replaceInto(JsonOps.INSTANCE, was, node);
+            InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE, was, node);
             return;
         }
         if (property != null) LiveEdits.dropIfRedundant(node, property);

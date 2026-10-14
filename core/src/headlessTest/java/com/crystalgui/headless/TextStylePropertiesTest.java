@@ -3,7 +3,7 @@ package com.crystalgui.headless;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.TextField;
@@ -100,7 +100,7 @@ public class TextStylePropertiesTest {
                 .caretWidth(4f)
                 .selectionColor(0x40FF00FF);
 
-        for (CgDynamicOps<?> ops : new CgDynamicOps<?>[]{JsonOps.INSTANCE, CgPlainOps.INSTANCE}) {
+        for (CgDynamicOps<?> ops : new CgDynamicOps<?>[]{CgJsonOps.INSTANCE, CgPlainOps.INSTANCE}) {
             var style = roundTrip(element, ops).getStyle().getGeneralGroup();
             assertEquals(1.75f, style.lineHeight(), 0.0001f);
             assertEquals(4f, style.caretWidth(), 0.0001f);
@@ -115,7 +115,7 @@ public class TextStylePropertiesTest {
     /** A widget that never had them set must not carry them over the wire. */
     @Test
     public void defaultsAreNotSent() {
-        JsonObject encoded = new UIElementMirror<>(JsonOps.INSTANCE)
+        JsonObject encoded = new UIElementMirror<>(CgJsonOps.INSTANCE)
                 .describe(new TextField()).getAsJsonObject();
         assertFalse("an unstyled field should carry no style block at all", encoded.has("style"));
     }

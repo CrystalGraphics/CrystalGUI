@@ -20,7 +20,7 @@ import com.google.gson.JsonPrimitive;
 import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgui.app.WidgetCensus;
 import com.crystalgui.net.mirror.UIElementMirror;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.template.TemplateInstance;
 import com.crystalgui.template.UiTemplate;
 import com.crystalgui.template.UiTemplateException;
@@ -73,7 +73,7 @@ public class UiTemplateRoundTripTest {
     }
 
     private static UIElementMirror<JsonElement> document() {
-        return new UIElementMirror<>(JsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
+        return new UIElementMirror<>(CgJsonOps.INSTANCE, UIElementMirror.Keys.DOCUMENT);
     }
 
     /**
@@ -203,8 +203,8 @@ public class UiTemplateRoundTripTest {
     public void aTemplateHashesLikeTheTreeItBuilds() {
         UiTemplate template = sample();
 
-        assertEquals(CgContentHash.of(JsonOps.INSTANCE,
-                        new UIElementMirror<JsonElement>(JsonOps.INSTANCE).describe(template.inflate())),
+        assertEquals(CgContentHash.of(CgJsonOps.INSTANCE,
+                        new UIElementMirror<JsonElement>(CgJsonOps.INSTANCE).describe(template.inflate())),
                 template.contentHash());
     }
 

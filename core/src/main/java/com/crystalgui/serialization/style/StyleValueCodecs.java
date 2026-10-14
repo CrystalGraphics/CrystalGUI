@@ -10,8 +10,8 @@ import com.crystalgui.style.property.StyleProperty;
  *
  * <pre>{@code
  * CgCodec<Integer> codec = StyleValueCodecs.forProperty(StylePropertyRegistry.COLOR);
- * JsonElement wire = codec.encode(JsonOps.INSTANCE, 0xFF3574F0);   // "#3574F0FF"
- * V value = codec.decode(JsonOps.INSTANCE, wire);
+ * JsonElement wire = codec.encode(CgJsonOps.INSTANCE, 0xFF3574F0);   // "#3574F0FF"
+ * V value = codec.decode(CgJsonOps.INSTANCE, wire);
  * }</pre>
  *
  * <p>There is one codec and it is built from the property itself: encoding is

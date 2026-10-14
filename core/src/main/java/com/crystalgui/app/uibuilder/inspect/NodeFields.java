@@ -20,7 +20,7 @@ import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.style.property.StyleProperty;
 
@@ -287,7 +287,7 @@ public final class NodeFields {
 
     /** The node's inline style as the codec writes it: an empty object, never null, for a node with none. */
     public static JsonElement inlineStyleOf(UIElement node) {
-        JsonElement encoded = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        JsonElement encoded = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         return encoded == null ? new JsonObject() : encoded;
     }
 
@@ -388,7 +388,7 @@ public final class NodeFields {
     /** A value in its wire form, as {@code SetState} carries it. */
     @Nullable
     private static JsonElement encode(State<Object, Object> state, Object value) {
-        CgStateMap<JsonElement> out = new CgStateMap<>(JsonOps.INSTANCE);
+        CgStateMap<JsonElement> out = new CgStateMap<>(CgJsonOps.INSTANCE);
         state.type().put(out, state.key(), value);
         JsonElement encoded = out.encode();
         return encoded instanceof JsonObject object ? object.get(state.key()) : null;

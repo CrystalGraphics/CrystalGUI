@@ -15,7 +15,7 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.core.data.DataContext;
-import com.crystalgui.serialization.JsonOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.serialization.style.InlineStyleCodec;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.data.UiDataKeys;
@@ -73,10 +73,10 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
         document.focus().requestFocus(editor.surface());
         document.update(W, H);
 
-        var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        var before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         node.layout(l -> l.width(99));
         model.apply(new BuilderEdit.SetInlineStyle(node, before,
-                InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
+                InlineStyleCodec.encode(CgJsonOps.INSTANCE, node)));
         document.update(W, H);
         UIElement drawn = editor.shownTree().shown(node);
         assertEquals(99f, drawn.box().width(), 0.01f);
@@ -94,9 +94,9 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
         UIBuilderView editor = editorFor(model);
         UIElement node = model.root().children().get(0);
 
-        var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        var before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         node.layout(l -> l.width(99));
-        var after = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        var after = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         model.apply(new BuilderEdit.SetInlineStyle(node, before, after));
         document.update(W, H);
         UIElement drawn = editor.shownTree().shown(node);
@@ -120,10 +120,10 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
         UIBuilderView editor = editorFor(model);
         UIElement node = model.root().children().get(0);
 
-        var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        var before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         node.layout(l -> l.width(99));
         model.apply(new BuilderEdit.SetInlineStyle(node, before,
-                InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
+                InlineStyleCodec.encode(CgJsonOps.INSTANCE, node)));
         // Deliberately selecting something else, so the assertion cannot pass by the selection simply
         // never having moved.
         editor.selection().selectOnly(null);
@@ -142,10 +142,10 @@ public class BuilderAnswersTheUndoStackTest extends UiDocumentTestBase {
         UIBuilderView editor = editorFor(model);
         UIElement node = model.root().children().get(0);
 
-        var before = InlineStyleCodec.encode(JsonOps.INSTANCE, node);
+        var before = InlineStyleCodec.encode(CgJsonOps.INSTANCE, node);
         node.layout(l -> l.width(99));
         model.apply(new BuilderEdit.SetInlineStyle(node, before,
-                InlineStyleCodec.encode(JsonOps.INSTANCE, node)));
+                InlineStyleCodec.encode(CgJsonOps.INSTANCE, node)));
         model.history().undo();
         editor.selection().selectOnly(null);
         document.update(W, H);
