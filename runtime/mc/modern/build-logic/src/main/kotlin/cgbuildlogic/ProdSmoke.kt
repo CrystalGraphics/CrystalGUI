@@ -289,9 +289,10 @@ abstract class ProdSmoke : DefaultTask() {
             return "STAGE DID NOT DRAW: no renderer on crystalgui:screen ran" + logTail(target)
         }
         // CRYSTALGRAPHICS' PROBES: the world probe (-Dcrystalgraphics.worldprobe=true), every world seam checked
-        // against the others, and the net probe (-Dcrystalgraphics.netprobe=true), networked objects through a death.
+        // against the others, the net probe (-Dcrystalgraphics.netprobe=true), networked objects through a death, and
+        // the collision probe (-Dcrystalgraphics.collisionprobe=true), queries and hitboxes on summoned entities.
         // Armed and never finished is a failure: the run quit under it, or it never saw a world.
-        for (probe in listOf("world", "net")) {
+        for (probe in listOf("world", "net", "collision")) {
             val upper = probe.uppercase()
             if (logSays(target, "$probe probe: false")) {
                 return "$upper PROBE FAILED: " + probeFailures(target, probe) + logTail(target)
@@ -396,9 +397,10 @@ abstract class ProdSmoke : DefaultTask() {
     /** And the extra seconds those frames take. */
     private fun runTimeout() = runTimeoutSeconds.get() + (if (languageProbe()) 90 else 0) + (if (crystalProbe()) 30 else 0)
 
-    /** CrystalGraphics' world or net probe: up to twenty seconds past the late capture, which the autotest waits for. */
+    /** One of CrystalGraphics' probes: up to twenty seconds past the late capture, which the autotest waits for. */
     private fun crystalProbe() = extraProperties.get().any {
         it == "crystalgraphics.worldprobe=true" || it == "crystalgraphics.netprobe=true"
+            || it == "crystalgraphics.collisionprobe=true"
     }
 
     /**
