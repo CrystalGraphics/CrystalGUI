@@ -288,13 +288,17 @@ abstract class ProdSmoke : DefaultTask() {
         if (logSays(target, "screen stage drew: false")) {
             return "STAGE DID NOT DRAW: no renderer on crystalgui:screen ran" + logTail(target)
         }
-        // CRYSTALGRAPHICS' WORLD PROBE (-Dcrystalgraphics.worldprobe=true): every world seam, checked against the
-        // others. Armed and never finished is a failure: the run quit under it, or it never saw a world.
-        if (logSays(target, "world probe: false")) {
-            return "WORLD PROBE FAILED: " + probeFailures(target) + logTail(target)
-        }
-        if (logSays(target, "world probe: armed") && !logSays(target, "world probe: true")) {
-            return "WORLD PROBE NEVER FINISHED" + logTail(target)
+        // CRYSTALGRAPHICS' PROBES: the world probe (-Dcrystalgraphics.worldprobe=true), every world seam checked
+        // against the others, and the net probe (-Dcrystalgraphics.netprobe=true), networked objects through a death.
+        // Armed and never finished is a failure: the run quit under it, or it never saw a world.
+        for (probe in listOf("world", "net")) {
+            val upper = probe.uppercase()
+            if (logSays(target, "$probe probe: false")) {
+                return "$upper PROBE FAILED: " + probeFailures(target, probe) + logTail(target)
+            }
+            if (logSays(target, "$probe probe: armed") && !logSays(target, "$probe probe: true")) {
+                return "$upper PROBE NEVER FINISHED" + logTail(target)
+            }
         }
         // The compute self-test, when -PcgSmokeProps asked for it: a stated FAIL fails the client.
         val selfTest = lastLine(target, SELF_TEST_MARKER)
@@ -304,12 +308,12 @@ abstract class ProdSmoke : DefaultTask() {
         return null
     }
 
-    /** The world probe's failed checks, by name. */
-    private fun probeFailures(target: Target): String {
+    /** A probe's failed checks, by name. */
+    private fun probeFailures(target: Target, probe: String): String {
         val log = logFile(target) ?: return "(no log)"
         val failed = runCatching { log.readLines() }.getOrDefault(emptyList())
-            .filter { it.contains("world probe ") && it.contains(": false") }
-            .map { it.substringAfter("world probe ").substringBefore(":") }
+            .filter { it.contains("$probe probe ") && it.contains(": false") }
+            .map { it.substringAfter("$probe probe ").substringBefore(":") }
         return failed.joinToString(", ").ifEmpty { "(none named)" }
     }
 
@@ -390,10 +394,12 @@ abstract class ProdSmoke : DefaultTask() {
     private fun lateFrame() = if (languageProbe()) 700 else 120
 
     /** And the extra seconds those frames take. */
-    private fun runTimeout() = runTimeoutSeconds.get() + (if (languageProbe()) 90 else 0) + (if (worldProbe()) 30 else 0)
+    private fun runTimeout() = runTimeoutSeconds.get() + (if (languageProbe()) 90 else 0) + (if (crystalProbe()) 30 else 0)
 
-    /** CrystalGraphics' world probe: up to fifteen seconds past the late capture, which the autotest waits for. */
-    private fun worldProbe() = extraProperties.get().any { it == "crystalgraphics.worldprobe=true" }
+    /** CrystalGraphics' world or net probe: up to twenty seconds past the late capture, which the autotest waits for. */
+    private fun crystalProbe() = extraProperties.get().any {
+        it == "crystalgraphics.worldprobe=true" || it == "crystalgraphics.netprobe=true"
+    }
 
     /**
      * Puts the two keys back as they were, and nothing else.

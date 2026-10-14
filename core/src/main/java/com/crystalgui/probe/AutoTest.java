@@ -8,6 +8,7 @@ import java.util.TreeMap;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.net.object.CgNetProbe;
 import com.crystalgraphics.probe.CgWorldProbe;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
@@ -229,6 +230,8 @@ public final class AutoTest {
         } else {
             if (++waited < host.openAfter()) return;
         }
+        // The net probe kills the player, and the death screen would replace the desktop under the captures.
+        if (CgNetProbe.running()) return;
 
         opened = true;
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST opening the desktop{}",
@@ -252,9 +255,9 @@ public final class AutoTest {
      */
     public static void settled(Host host, int sinceOpen) {
         if (!ENABLED || !opened) return;
-        // CrystalGraphics' world probe reports on its own clock; quitting under it loses its result.
+        // CrystalGraphics' world and net probes report on their own clocks; quitting under them loses their results.
         if (quitPending) {
-            if (!CgWorldProbe.running()) {
+            if (!CgWorldProbe.running() && !CgNetProbe.running()) {
                 quitPending = false;
                 host.quit();
             }
