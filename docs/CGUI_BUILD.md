@@ -74,7 +74,7 @@ resolves the same property, so both builds pick the same node.
 ./gradlew :core:test --tests "<Class>"                      # name classes: `com.crystalgui.ui.*` never reports
 ./gradlew :runtime:mc:modern:<branch>:<version>:serverSmoke -PcgAcceptEula   # nodes with a dev run
 ./gradlew :runtime:mc:1710:serverSmoke
-python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # legacy, on real servers
+python runtime/mc/legacy/server_smoke.py --java <java8> 1.12.2 1.10.2 1.8.9  # legacy: no serverSmoke task; jars first (§ Legacy Forge servers)
 ./gradlew prodSmoke                                         # THE SWEEP: 30 clients, one per major -- the wide check
 ./gradlew prodSmoke -PcgTargets=<label>,<label>             # just these; deploys both jars first
 ./gradlew prodSmoke -PcgNoDeploy                            # installed jars only; 4 clients at a time (-PcgBatch=<n>;
@@ -196,6 +196,34 @@ harness is a client by design.
 
 Every flag, which nodes have a dev run, and how to read a run: § *Commands* above and § *Verification*
 below.
+
+### Legacy Forge servers (1.8.9–1.12.2): `server_smoke.py`, not Gradle
+
+**Legacy nodes have no `serverSmoke` task**: `./gradlew :runtime:mc:legacy:forge:1.12.2:serverSmoke` fails with
+*task 'serverSmoke' not found*, which reads as "legacy servers cannot run". They can. The legacy check is a script
+that installs real Forge servers and runs the **shipped** jars on them, with the same `ServerSmoke` armed:
+
+```bash
+./gradlew singleJar languageJar :CrystalGraphics:singleJar      # 1. the four jars it copies into mods/ -- every time
+python runtime/mc/legacy/server_smoke.py \
+    --java "/c/Program Files/Java/jdk1.8.0_311/bin/java.exe" 1.12.2 1.8.9    # 2. one server per version named
+```
+
+- **`--java` must be a Java 8**: without it the script runs `java` from `PATH`, a newer one, and neither Forge's
+  installer nor a legacy server starts on it. Any JDK 8 works; `jdk1.8.0_311` is this machine's.
+- **Build the jars first, every time**: the script copies `build/libs/crystalgui-<v>.jar`, its language jar, and
+  CrystalGraphics' two jars, and never builds them. A stale jar tests yesterday's code.
+- Each version gets a server under `build/legacy-server/<version>/`, installed once (Forge's recommended build,
+  downloaded, with MixinBooter 11.17 and the EULA accepted). Later runs reuse it.
+- **The verdict is `build/legacy-server/<version>/smoke.txt`**, printed per version, and the exit code is 0 only if
+  every version passed. `NO REPORT: the smoke never ran` means the server never reached its started event: read
+  `build/legacy-server/<version>/logs/latest.log` (and `fml-server-latest.log` on 1.8.9).
+- It needs the network on a first run (Forge, MixinBooter) and takes a few minutes a version. Run it in the
+  background; never beside another Gradle build in this checkout.
+- 1.10.2 works the same way: name it.
+
+It is also the only server check for legacy at all: what a dev run cannot show (relocation, remapping, the merged
+descriptors) it sees, because the jars are the ones that ship.
 
 ## Verification, and what each check can see
 

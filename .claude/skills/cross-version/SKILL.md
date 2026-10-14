@@ -105,7 +105,10 @@ Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) 
 2. The core tests.
 3. `serverSmoke -PcgAcceptEula` on `forge:1.16.5`, `forge:1.20.1`, `neoforge:1.20.4`, `fabric:1.20.1`,
    `neoforge:1.21.11`, and `:runtime:mc:1710:serverSmoke`. Run in the background; "Done" with no
-   `RESULT` line means hung.
+   `RESULT` line means hung. **Legacy Forge has no `serverSmoke` task but does run**: after step 4's
+   jars, `python runtime/mc/legacy/server_smoke.py --java <a JDK 8> 1.12.2 1.8.9` (real Forge servers,
+   the shipped jars; `docs/CGUI_BUILD.md` § *Legacy Forge servers*). Forge 1.13.2's dev server
+   loads no mods (a known build gap), so its code is proven by compiling only.
 4. `./gradlew singleJar languageJar checkSingleJar checkLanguageJar`.
 5. One sweep `prodSmoke` (needs `local.properties`; say so if absent): `./gradlew prodSmoke` with no
    `-PcgTargets` — one client per Minecraft major plus the first and last of 1.19/1.20/1.21, those of
