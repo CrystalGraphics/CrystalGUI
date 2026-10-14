@@ -623,7 +623,7 @@ public final class ServerSmoke {
         boolean kept = false;
         try {
             CgCodec<Integer> commented = CgCodecs.record(
-                    CgCodecs.field("level", CgCodecs.INT, (Integer level) -> level).comment("ours"), (Integer level) -> level);
+                    CgCodecs.comment("ours").field("level", CgCodecs.INT, (Integer level) -> level), (Integer level) -> level);
             Path file = Files.createTempFile("cgui-smoke", ".yml");
             Files.write(file, "# theirs\nlevel: 1\n".getBytes(StandardCharsets.UTF_8));
             CgFormats.YAML.write(file, commented, 9);
