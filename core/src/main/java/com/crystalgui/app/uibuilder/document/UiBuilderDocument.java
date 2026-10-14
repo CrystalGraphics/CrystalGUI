@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -249,7 +248,7 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
             out.add(entry.getKey(), entry.getValue());
         }
         out.add(ROOT, MIRROR.describe(root, extras));
-        return (new GsonBuilder().setPrettyPrinting().create().toJson(out) + "\n")
+        return (CgJsonOps.toText(out))
                 .getBytes(StandardCharsets.UTF_8);
     }
 

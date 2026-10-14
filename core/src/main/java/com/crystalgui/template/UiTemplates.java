@@ -10,9 +10,8 @@ import javax.annotation.Nullable;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParseException;
-import com.google.gson.JsonParser;
-
+import com.crystalgraphics.serialization.CgCodecException;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgraphics.util.io.CgIO;
 
 import com.crystalgui.core.signal.Signal;
@@ -85,14 +84,12 @@ public final class UiTemplates {
     public static UiTemplate parse(String json, String origin) {
         JsonObject header;
         try {
-            // new JsonParser().parse, NOT the static parseString: 1.7.10 ships gson 2.2.4,
-            // where the static one does not exist. core/build.gradle.kts records the trap.
-            JsonElement parsed = new JsonParser().parse(json);
+            JsonElement parsed = CgJsonOps.fromText(json);
             if (!parsed.isJsonObject()) {
                 throw new UiTemplateException(origin, null, "a document is a JSON object");
             }
             header = parsed.getAsJsonObject();
-        } catch (JsonParseException malformed) {
+        } catch (CgCodecException malformed) {
             throw new UiTemplateException(origin, null, "this is not JSON", malformed);
         }
         return parse(header, origin);

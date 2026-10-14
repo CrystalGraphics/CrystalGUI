@@ -24,9 +24,7 @@ import com.crystalgui.workbench.region.DockRegion;
 
 import com.crystalgui.workbench.toolwindow.ToolWindowLayout;
 import com.crystalgui.workbench.toolwindow.ToolWindowState;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -395,7 +393,7 @@ public final class WorkbenchSession {
             entry.putRaw(KEY_VIEW, files.get(path));
         });
 
-        return new GsonBuilder().setPrettyPrinting().create().toJson(out.encode()) + "\n";
+        return CgJsonOps.toText(out.encode());
     }
 
     /**
@@ -582,7 +580,7 @@ public final class WorkbenchSession {
     public boolean fromJson(String json) {
         CgStateMap<JsonElement> in;
         try {
-            in = new CgStateMap<>(CgJsonOps.INSTANCE, new JsonParser().parse(json));
+            in = new CgStateMap<>(CgJsonOps.INSTANCE, CgJsonOps.fromText(json));
         } catch (RuntimeException malformed) {
             CrystalGuiCore.LOGGER.warn("Session record could not be read; opening with the defaults",
                     malformed);

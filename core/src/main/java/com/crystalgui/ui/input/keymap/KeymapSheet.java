@@ -1,11 +1,11 @@
 package com.crystalgui.ui.input.keymap;
 
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import javax.annotation.Nullable;
 import java.io.InputStream;
@@ -90,7 +90,7 @@ public final class KeymapSheet {
         List<Entry> parsed = new ArrayList<>();
         JsonElement root;
         try {
-            root = new JsonParser().parse(json == null ? "" : json);
+            root = CgJsonOps.fromText(json == null ? "" : json);
         } catch (RuntimeException e) {
             CrystalGuiCore.LOGGER.warn("Keymap sheet is not valid JSON, ignoring it entirely: {}",
                     e.getMessage());
