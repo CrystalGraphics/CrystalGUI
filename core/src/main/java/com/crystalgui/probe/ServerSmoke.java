@@ -619,6 +619,22 @@ public final class ServerSmoke {
             }
             check(lines, failures, "a codec's value round-trips through " + name, ok, detail);
         }
+        String detail = "";
+        boolean kept = false;
+        try {
+            CgCodec<Integer> commented = CgCodecs.record(
+                    CgCodecs.field("level", CgCodecs.INT, (Integer level) -> level).comment("ours"), (Integer level) -> level);
+            Path file = Files.createTempFile("cgui-smoke", ".yml");
+            Files.write(file, "# theirs\nlevel: 1\n".getBytes(StandardCharsets.UTF_8));
+            CgFormats.YAML.write(file, commented, 9);
+            String text = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
+            Files.delete(file);
+            kept = text.contains("# theirs") && CgFormats.YAML.fromText(commented, text) == 9;
+            detail = kept ? "" : text.replace('\n', '|');
+        } catch (Throwable failed) {
+            detail = String.valueOf(failed);
+        }
+        check(lines, failures, "a person's YAML comment survives the mod writing the file", kept, detail);
     }
 
     private static boolean sameSample(Map<String, Object> want, Map<String, Object> got) {
