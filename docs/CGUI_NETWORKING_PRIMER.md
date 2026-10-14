@@ -258,7 +258,7 @@ bytes and back.
 one: `CgDynamicOps` *builds a tree*, and a tree of `byte[]` composes by concatenating its children, so
 every nesting level recopies everything below it.
 
-**Why not JSON?** `JsonOps` works and stays the readable path for debugging. It's a poor *wire*
+**Why not JSON?** CrystalGraphics' `CgJsonOps` works and stays the readable path for debugging. It's a poor *wire*
 format for one measured reason: **32,766 bytes per client→server packet**, and that's the direction
 carrying file saves. Text encoding spends the budget that matters most.
 

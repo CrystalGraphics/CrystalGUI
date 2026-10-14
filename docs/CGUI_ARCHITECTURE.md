@@ -475,8 +475,9 @@ com.crystalgui.fs              FOUR classes, and each is vocabulary every tier b
                                decompiler, a generator; contributed statically, drained per workspace),
                                Backup (hot exit), LocalHistory (per-save, and the merge base), Health
 
-com.crystalgui.serialization   JsonOps. The codecs themselves (CgCodec, CgDynamicOps, CgPlainOps,
-                               CgStateMap, CgContentHash) are CrystalGraphics' com.crystalgraphics.serialization
+com.crystalgui.serialization   style codecs only. The codecs themselves (CgCodec, CgDynamicOps, CgPlainOps,
+                               CgStateMap, CgContentHash) are CrystalGraphics' com.crystalgraphics.serialization,
+                               and JSON (CgJsonOps, CgFormats.JSON) its .format
   .style                       StyleValueCodecs, InlineStyleCodec
 
 com.crystalgui.net             ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux, SheetRef,

@@ -41,7 +41,8 @@ Two consequences shape everything below:
 
 ## 1. Codecs
 
-`serialization/Codec.java`, `CgDynamicOps.java`, `CgCodecs.java`, `JsonOps.java`, `CgPlainOps.java`
+CrystalGraphics' `serialization/`: `CgCodec`, `CgDynamicOps`, `CgCodecs`, `CgPlainOps`; JSON is its
+`serialization/format/CgJsonOps`
 
 A hand-rolled, DFU-shaped codec layer. Not Mojang's DataFixerUpper — no dependency on it — but the
 same two-interface idea:
@@ -62,7 +63,7 @@ Two implementations ship:
 
 | Ops | Backing | Used for |
 |---|---|---|
-| `JsonOps` | Gson `JsonElement` | debugging, tests, anything human-readable |
+| `CgJsonOps` | Gson `JsonElement` | debugging, tests, anything human-readable; `CgFormats.JSON` for files |
 | `CgPlainOps` | plain `Map`/`List`/`String`/`Number`/`Boolean` | the default — no Gson on the server path |
 
 `CgCodecs` holds the helpers: `STRING`/`INT`/`FLOAT`/`DOUBLE`/`LONG`/`BOOL`, `xmap` (transform a codec's
