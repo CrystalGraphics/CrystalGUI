@@ -8,7 +8,6 @@ import com.crystalgui.core.settings.SettingsCodec;
 import com.crystalgui.core.settings.SettingsLayer;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -61,38 +60,18 @@ public final class GraphCodecs {
             CgCodecs.optionalField("props", STRING_MAP, NodeData::properties, Map.of()),
             NodeData::new);
 
-    public static final CgCodec<GraphProperty> PROPERTY = new CgCodec<>() {
-        @Override
-        public <T> T encode(CgDynamicOps<T> ops, GraphProperty input) {
-            var builder = CgCodecs.map(ops)
-                    .field("id", CgCodecs.STRING, input.id())
-                    .field("name", CgCodecs.STRING, input.name())
-                    .field("ref", CgCodecs.STRING, input.reference())
-                    .field("type", CgCodecs.STRING, input.typeId())
-                    .field("def", CgCodecs.STRING, input.defaultValue())
-                    .field("exposed", CgCodecs.BOOL, input.exposed());
+    public static final CgCodec<GraphProperty> PROPERTY = CgCodecs.record(
+            CgCodecs.field("id", CgCodecs.STRING, GraphProperty::id),
+            CgCodecs.field("name", CgCodecs.STRING, GraphProperty::name),
+            CgCodecs.field("ref", CgCodecs.STRING, GraphProperty::reference),
+            CgCodecs.field("type", CgCodecs.STRING, GraphProperty::typeId),
+            CgCodecs.field("def", CgCodecs.STRING, GraphProperty::defaultValue),
+            CgCodecs.fieldOr("exposed", CgCodecs.BOOL, GraphProperty::exposed, true),
             // Omitted when empty rather than written blank, so the encoding of a plain property is
             // stable and its content hash is not disturbed by fields nobody set.
-            if (input.isCategorised()) builder.field("cat", CgCodecs.STRING, input.category());
-            builder.optional("opts", STRING_MAP, input.options(), Map.of());
-            return builder.build();
-        }
-
-        @Override
-        public <T> GraphProperty decode(CgDynamicOps<T> ops, T input) {
-            var in = CgCodecs.read(ops, input);
-            Map<String, String> options = in.optional("opts", STRING_MAP, new LinkedHashMap<>());
-            return new GraphProperty(
-                    in.field("id", CgCodecs.STRING),
-                    in.field("name", CgCodecs.STRING),
-                    in.field("ref", CgCodecs.STRING),
-                    in.field("type", CgCodecs.STRING),
-                    in.field("def", CgCodecs.STRING),
-                    in.optional("exposed", CgCodecs.BOOL, true),
-                    in.optional("cat", CgCodecs.STRING, ""),
-                    options);
-        }
-    };
+            CgCodecs.optionalField("cat", CgCodecs.STRING, GraphProperty::category, ""),
+            CgCodecs.optionalField("opts", STRING_MAP, GraphProperty::options, Map.of()),
+            GraphProperty::new);
 
     public static final CgCodec<GraphDocument> DOCUMENT = new CgCodec<>() {
         @Override
