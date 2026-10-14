@@ -12,8 +12,6 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
-import com.crystalgraphics.serialization.CgDynamicOps;
-import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.app.uibuilder.library.LibraryCatalog.Group;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigRecord;
@@ -81,28 +79,19 @@ public final class UserLibrary {
             return List.copyOf(out);
         }
 
-        static final CgCodec<State> CODEC = new CgCodec<>() {
-            @Override
-            public <T> T encode(CgDynamicOps<T> ops, State state) {
-                return new CgStateMap<>(ops)
-                        .putBool("rows", state.rows())
-                        .putList("groups", state.groups(), (entry, group) -> entry
-                                .putString("name", group.label())
-                                .putRaw("kinds", KINDS.encode(ops, group.kinds())))
-                        .encode();
-            }
-
-            @Override
-            public <T> State decode(CgDynamicOps<T> ops, T input) {
-                CgStateMap<T> map = new CgStateMap<>(ops, input);
-                List<Group> groups = map.getList("groups", entry -> new Group(entry.getString("name", ""),
-                        entry.has("kinds") ? KINDS.decode(ops, entry.getRaw("kinds")) : List.of(), true));
-                return new State(map.getBool("rows", false), groups);
-            }
-        };
-
         private static final CgCodec<List<Name>> KINDS = CgCodecs.xmap(
                 CgCodecs.listOf(CgCodecs.xmap(CgCodecs.STRING, Name::parse, Name::toString)), List::copyOf, kinds -> kinds);
+
+        /** A group the user made: every kept group is one. */
+        private static final CgCodec<Group> GROUP = CgCodecs.record(
+                CgCodecs.fieldOr("name", CgCodecs.STRING, Group::label, ""),
+                CgCodecs.fieldOr("kinds", KINDS, Group::kinds, List.of()),
+                (label, kinds) -> new Group(label, kinds, true));
+
+        static final CgCodec<State> CODEC = CgCodecs.record(
+                CgCodecs.fieldOr("rows", CgCodecs.BOOL, State::rows, false),
+                CgCodecs.fieldOr("groups", CgCodecs.listOf(GROUP), State::groups, List.of()),
+                State::new);
     }
 
     /** After any change to the groups or the view. */

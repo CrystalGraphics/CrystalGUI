@@ -1,11 +1,11 @@
 package com.crystalgui.desktop;
 
-import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgraphics.serialization.format.CgJsonOps;
-import com.google.gson.JsonElement;
+import com.crystalgraphics.serialization.format.CgFormats;
 
 import javax.annotation.Nullable;
 
@@ -96,22 +96,28 @@ public final class DesktopSession {
 
     /** The record as text, without writing it — what a test asserts on. */
     public String toJson() {
-        CgStateMap<JsonElement> out = new CgStateMap<>(CgJsonOps.INSTANCE);
-        out.putInt(KEY_VERSION, VERSION);
-
-        List<WindowFrame> keyed = new ArrayList<>();
+        List<Placement> windows = new ArrayList<>();
         for (WindowFrame frame : desktop.registry().windows()) {
-            if (isPersistable(frame)) keyed.add(frame);
+            if (isPersistable(frame)) windows.add(Placement.of(frame));
         }
-        out.putList(KEY_WINDOWS, keyed, DesktopSession::writeWindow);
-
         List<String> mru = new ArrayList<>();
         for (WindowFrame frame : desktop.registry().mruOrder()) {
             if (isPersistable(frame)) mru.add(frame.key());
         }
-        out.putList(KEY_MRU, mru, (entry, key) -> entry.putString(KEY_KEY, key));
+        return CgFormats.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru));
+    }
 
-        return CgJsonOps.toText(out.encode());
+    /** The whole file. */
+    private record Saved(int version, List<Placement> windows, List<String> mru) {
+
+        private static final CgCodec<String> MRU_ENTRY = CgCodecs.record(
+                CgCodecs.fieldOr(KEY_KEY, CgCodecs.STRING, (String key) -> key, ""), (String key) -> key);
+
+        static final CgCodec<Saved> CODEC = CgCodecs.record(
+                CgCodecs.fieldOr(KEY_VERSION, CgCodecs.INT, Saved::version, -1),
+                CgCodecs.fieldOr(KEY_WINDOWS, CgCodecs.listOf(Placement.CODEC), Saved::windows, List.of()),
+                CgCodecs.fieldOr(KEY_MRU, CgCodecs.listOf(MRU_ENTRY), Saved::mru, List.of()),
+                Saved::new);
     }
 
     /**
@@ -136,42 +142,51 @@ public final class DesktopSession {
                 && !frame.isToolWindow();
     }
 
-    /**
-     * One window's record.
-     *
-     * <h4>The geometry is always the UN-maximised one</h4>
-     *
-     * <p>A maximised window's own box is the work area, which is not worth recording — it is whatever the
-     * screen happens to be next launch. What has to survive is the rect it goes BACK to, so that is what
-     * the four numbers mean, with the maximised state as a flag beside them. Recording the maximised box
-     * as well would be a second set of keys describing something already known, and restoring a maximised
-     * window without the rect leaves nothing to restore to.</p>
-     *
-     * <h4>Position is the INTENT pair; size is the measured box</h4>
-     *
-     * <p>Deliberately asymmetric. {@code getX()} is the CLAMPED placement, so saving it writes the clamp
-     * into the record and every launch pulls the window further in — the frame's own javadoc says as
-     * much. Size has no equivalent hazard: nothing stores a wanted size, and a size clamped up to a
-     * minimum is idempotent, so asking for it again gives the same answer rather than compounding.</p>
-     */
-    private static void writeWindow(CgStateMap<JsonElement> entry, WindowFrame frame) {
-        entry.putString(KEY_KEY, frame.key());
-        boolean maximized = frame.isMaximized();
-        entry.putFloat(KEY_LEFT, maximized ? frame.restoreLeft() : frame.getWantedLeft());
-        entry.putFloat(KEY_TOP, maximized ? frame.restoreTop() : frame.getWantedTop());
-        // recordedWidth, never the measured box: a HIDDEN window is detached, so its box is zero -- and
-        // a 0x0 rect is refused on the way back in, so the window would simply not come back.
-        entry.putFloat(KEY_WIDTH, maximized ? frame.restoreWidth() : frame.recordedWidth());
-        entry.putFloat(KEY_HEIGHT, maximized ? frame.restoreHeight() : frame.recordedHeight());
-        entry.putBoolIfNot(KEY_MAXIMIZED, maximized, false);
-        entry.putBoolIfNot(KEY_HIDDEN, frame.state() == WindowState.HIDDEN, false);
-    }
-
     // ── Restoring ───────────────────────────────────────────────────────────────────────────────
 
-    /** One window's recorded geometry, as read back. */
+    /** One window's recorded geometry. */
     public record Placement(String key, float left, float top, float width, float height,
                             boolean maximized, boolean hidden) {
+
+        static final CgCodec<Placement> CODEC = CgCodecs.record(
+                CgCodecs.fieldOr(KEY_KEY, CgCodecs.STRING, Placement::key, ""),
+                CgCodecs.fieldOr(KEY_LEFT, CgCodecs.FLOAT, Placement::left, 0f),
+                CgCodecs.fieldOr(KEY_TOP, CgCodecs.FLOAT, Placement::top, 0f),
+                CgCodecs.fieldOr(KEY_WIDTH, CgCodecs.FLOAT, Placement::width, 0f),
+                CgCodecs.fieldOr(KEY_HEIGHT, CgCodecs.FLOAT, Placement::height, 0f),
+                CgCodecs.optionalField(KEY_MAXIMIZED, CgCodecs.BOOL, Placement::maximized, false),
+                CgCodecs.optionalField(KEY_HIDDEN, CgCodecs.BOOL, Placement::hidden, false),
+                Placement::new);
+
+        /**
+         * {@code frame} as its record.
+         *
+         * <h4>The geometry is always the UN-maximised one</h4>
+         *
+         * <p>A maximised window's own box is the work area, which is not worth recording — it is whatever the
+         * screen happens to be next launch. What has to survive is the rect it goes BACK to, so that is what
+         * the four numbers mean, with the maximised state as a flag beside them. Recording the maximised box
+         * as well would be a second set of keys describing something already known, and restoring a maximised
+         * window without the rect leaves nothing to restore to.</p>
+         *
+         * <h4>Position is the INTENT pair; size is the measured box</h4>
+         *
+         * <p>Deliberately asymmetric. {@code getX()} is the CLAMPED placement, so saving it writes the clamp
+         * into the record and every launch pulls the window further in — the frame's own javadoc says as
+         * much. Size has no equivalent hazard: nothing stores a wanted size, and a size clamped up to a
+         * minimum is idempotent, so asking for it again gives the same answer rather than compounding.</p>
+         */
+        static Placement of(WindowFrame frame) {
+            boolean maximized = frame.isMaximized();
+            // recordedWidth, never the measured box: a HIDDEN window is detached, so its box is zero -- and
+            // a 0x0 rect is refused on the way back in, so the window would simply not come back.
+            return new Placement(frame.key(),
+                    maximized ? frame.restoreLeft() : frame.getWantedLeft(),
+                    maximized ? frame.restoreTop() : frame.getWantedTop(),
+                    maximized ? frame.restoreWidth() : frame.recordedWidth(),
+                    maximized ? frame.restoreHeight() : frame.recordedHeight(),
+                    maximized, frame.state() == WindowState.HIDDEN);
+        }
 
         /**
          * Whether this describes a window that can actually be put on screen.
@@ -198,47 +213,34 @@ public final class DesktopSession {
      * @return the usable placements, or empty when there is no record this version understands
      */
     public List<Placement> read(String desktopId) {
-        String raw = storage.read(fileNameFor(desktopId));
-        if (raw == null || raw.isEmpty()) return List.of();
-        CgStateMap<JsonElement> in;
-        try {
-            in = new CgStateMap<>(CgJsonOps.INSTANCE, CgJsonOps.fromText(raw));
-        } catch (RuntimeException malformed) {
-            // A record that will not parse is a record that describes nothing. Discarded rather than
-            // reported: there is no user action, and the desktop simply opens at its defaults.
-            return List.of();
-        }
-        if (in.getInt(KEY_VERSION, -1) != VERSION) return List.of();
-
+        Saved saved = saved(desktopId);
+        if (saved == null) return List.of();
         List<Placement> out = new ArrayList<>();
-        for (Placement placement : in.getList(KEY_WINDOWS, DesktopSession::readWindow)) {
-            if (placement != null && placement.isUsable()) out.add(placement);
+        for (Placement placement : saved.windows()) {
+            if (!placement.key().isEmpty() && placement.isUsable()) out.add(placement);
         }
         return out;
     }
 
     /** The keys in most-recently-activated order, first is most recent. Empty when there is no record. */
     public List<String> readMruOrder(String desktopId) {
-        String raw = storage.read(fileNameFor(desktopId));
-        if (raw == null || raw.isEmpty()) return List.of();
-        try {
-            CgStateMap<JsonElement> in =
-                    new CgStateMap<>(CgJsonOps.INSTANCE, CgJsonOps.fromText(raw));
-            if (in.getInt(KEY_VERSION, -1) != VERSION) return List.of();
-            return in.getList(KEY_MRU, entry -> entry.getString(KEY_KEY, ""));
-        } catch (RuntimeException malformed) {
-            return List.of();
-        }
+        Saved saved = saved(desktopId);
+        return saved == null ? List.of() : saved.mru();
     }
 
+    /** The file, or null when there is none, it will not parse, or it is another version's. */
     @Nullable
-    private static Placement readWindow(CgStateMap<JsonElement> entry) {
-        String key = entry.getString(KEY_KEY, "");
-        if (key.isEmpty()) return null;
-        return new Placement(key,
-                entry.getFloat(KEY_LEFT, 0f), entry.getFloat(KEY_TOP, 0f),
-                entry.getFloat(KEY_WIDTH, 0f), entry.getFloat(KEY_HEIGHT, 0f),
-                entry.getBool(KEY_MAXIMIZED, false), entry.getBool(KEY_HIDDEN, false));
+    private Saved saved(String desktopId) {
+        String raw = storage.read(fileNameFor(desktopId));
+        if (raw == null || raw.isEmpty()) return null;
+        try {
+            Saved saved = CgFormats.JSON.fromText(Saved.CODEC, raw);
+            return saved.version() == VERSION ? saved : null;
+        } catch (RuntimeException malformed) {
+            // A record that will not parse is a record that describes nothing. Discarded rather than
+            // reported: there is no user action, and the desktop simply opens at its defaults.
+            return null;
+        }
     }
 
 }

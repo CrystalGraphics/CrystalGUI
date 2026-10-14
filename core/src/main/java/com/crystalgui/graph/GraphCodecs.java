@@ -1,7 +1,6 @@
 package com.crystalgui.graph;
 
 import com.crystalgraphics.serialization.CgCodec;
-import com.crystalgraphics.serialization.CgCodecException;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.core.settings.SettingsCodec;
@@ -73,11 +72,11 @@ public final class GraphCodecs {
             CgCodecs.optionalField("opts", STRING_MAP, GraphProperty::options, Map.of()),
             GraphProperty::new);
 
-    public static final CgCodec<GraphDocument> DOCUMENT = new CgCodec<>() {
+    /** A graph document's keys; {@link #DOCUMENT} puts its version before them. */
+    private static final CgCodec<GraphDocument> BODY = new CgCodec<>() {
         @Override
         public <T> T encode(CgDynamicOps<T> ops, GraphDocument input) {
             var builder = CgCodecs.map(ops)
-                    .field("v", CgCodecs.INT, GraphDocument.SCHEMA_VERSION)
                     .optionalList("nodes", NODE, new ArrayList<>(input.nodes()))
                     .optionalList("edges", EDGE, input.edges())
                     .optionalList("props", PROPERTY, input.properties());
@@ -97,13 +96,6 @@ public final class GraphCodecs {
         @Override
         public <T> GraphDocument decode(CgDynamicOps<T> ops, T input) {
             var in = CgCodecs.read(ops, input);
-            int version = in.optional("v", CgCodecs.INT, GraphDocument.SCHEMA_VERSION);
-            if (version > GraphDocument.SCHEMA_VERSION) {
-                throw new CgCodecException("Graph document is version " + version
-                        + ", which this build does not understand (it writes " + GraphDocument.SCHEMA_VERSION
-                        + "). Refusing rather than dropping whatever is new.");
-            }
-
             GraphDocument document = new GraphDocument();
             if (in.has("settings")) {
                 document.settings().replaceLayer(SettingsLayer.DOCUMENT,
@@ -127,4 +119,10 @@ public final class GraphCodecs {
             return document;
         }
     };
+
+    /**
+     * A graph document, its version under {@code "v"}: a newer one is refused rather than read on a best effort, and a
+     * change to the shape raises {@link GraphDocument#SCHEMA_VERSION} with a step that reads the old one.
+     */
+    public static final CgCodec<GraphDocument> DOCUMENT = CgCodecs.versioned("v", GraphDocument.SCHEMA_VERSION, BODY);
 }
