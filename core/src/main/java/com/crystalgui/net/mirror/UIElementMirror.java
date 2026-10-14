@@ -327,13 +327,12 @@ public final class UIElementMirror<T> implements NodeMirror<UIElement, T> {
     @Override
     @Nullable
     public T encodeInlineStyle(UIElement node) {
-        T style = InlineStyleCodec.encode(ops, node);
-        return style == null ? ops.createMap(Map.of()) : style;
+        return InlineStyleCodec.CODEC.encode(ops, node);
     }
 
     @Override
     public void applyInlineStyle(T value, UIElement node) {
-        InlineStyleCodec.decodeInto(ops, value, node);
+        InlineStyleCodec.CODEC.decode(ops, value, node);
     }
 
     // ── Structure ────────────────────────────────────────────────────────────

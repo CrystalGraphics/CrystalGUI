@@ -127,7 +127,7 @@ public final class MoveOutOfFlow extends UIElement {
             @Override
             public void onDragCancel() {
                 end();
-                InlineStyleCodec.decodeInto(CgJsonOps.INSTANCE, before, node);
+                InlineStyleCodec.CODEC.decode(CgJsonOps.INSTANCE, before, node);
             }
         });
         return true;

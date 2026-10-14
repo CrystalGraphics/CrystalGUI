@@ -395,7 +395,7 @@ public final class ResizeHandles extends UIElement {
             public void onDragCancel() {
                 hideBadge();
                 ctx.smartGuides().clear();
-                InlineStyleCodec.decodeInto(CgJsonOps.INSTANCE, before, node);
+                InlineStyleCodec.CODEC.decode(CgJsonOps.INSTANCE, before, node);
             }
         });
     }

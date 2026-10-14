@@ -134,7 +134,7 @@ public final class StyleAttributes implements AttributeCarrier {
      * <b>Merges</b>, deliberately.
      *
      * <p>Paste Attributes adds the chosen properties to whatever the target already has; it is not
-     * "make this element like that one". So this is {@code decodeInto} and not the replacing variant the
+     * "make this element like that one". So this is {@code CODEC.decode} and not the replacing variant the
      * undo path uses — the properties nobody ticked are the ones being kept.</p>
      *
      * <p>A chosen PART merges into whatever the target already holds for its property, so pasting a
@@ -165,7 +165,7 @@ public final class StyleAttributes implements AttributeCarrier {
             if (result != null) merged.put(property, result);
         }
         merged.forEach(subset::add);
-        InlineStyleCodec.decodeInto(CgJsonOps.INSTANCE, subset, node);
+        InlineStyleCodec.CODEC.decode(CgJsonOps.INSTANCE, subset, node);
     }
 
     @Nullable

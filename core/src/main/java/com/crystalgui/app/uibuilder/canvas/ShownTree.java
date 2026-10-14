@@ -197,7 +197,7 @@ public final class ShownTree implements TreeObserver<UIElement>, DocumentDrawing
         if (state != null) MIRROR.applyState(state, shown);
         // REPLACED, never merged: a declaration the document dropped has to leave the copy too, or an undo of a
         // `position: absolute` leaves every drawing absolute.
-        InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE, MIRROR.encodeInlineStyle(source), shown);
+        InlineStyleCodec.replace(CgJsonOps.INSTANCE, MIRROR.encodeInlineStyle(source), shown);
     }
 
     /** A copy of {@code source} and everything under it, mapped node for node. */

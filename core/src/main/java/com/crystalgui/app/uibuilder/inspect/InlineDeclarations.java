@@ -99,7 +99,7 @@ final class InlineDeclarations implements Declarations {
         touched = null;
         if (was == null) return;
         if (!keep) {
-            InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE, was, node);
+            InlineStyleCodec.replace(CgJsonOps.INSTANCE, was, node);
             return;
         }
         if (property != null) LiveEdits.dropIfRedundant(node, property);

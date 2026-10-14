@@ -10,6 +10,7 @@ import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.StyleSlot;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeMap;
@@ -48,8 +49,41 @@ public final class InlineStyleCodec {
     private InlineStyleCodec() {
     }
 
+    /**
+     * An element's inline style as a codec: encoded as the map {@link #encode} writes (empty when there is none), and
+     * decoded <b>into</b> an element, every property added at {@code INLINE} origin and anything else left as it is.
+     *
+     * <pre>{@code
+     * InlineStyleCodec.CODEC.decode(CgJsonOps.INSTANCE, description, node);   // merged into node's inline style
+     * }</pre>
+     *
+     * <ul>
+     *   <li>A plain {@code decode(ops, in)} throws: there is no element to make. Pass the target.</li>
+     *   <li>To restore a remembered state rather than add to it, {@link #replace}.</li>
+     * </ul>
+     */
+    public static final CgCodec<Styleable> CODEC = new CgCodec<Styleable>() {
+        @Override
+        public <T> T encode(CgDynamicOps<T> ops, Styleable element) {
+            T encoded = InlineStyleCodec.encode(ops, element);
+            return encoded != null ? encoded : ops.createMap(Collections.<T, T>emptyMap());
+        }
+
+        @Override
+        public <T> Styleable decode(CgDynamicOps<T> ops, T input) {
+            throw new CgCodecException("An inline style decodes into an element: decode(ops, in, element)");
+        }
+
+        @Override
+        public <T> Styleable decode(CgDynamicOps<T> ops, T input, @Nullable Styleable element) {
+            if (element == null) return decode(ops, input);
+            merge(ops, input, element);
+            return element;
+        }
+    };
+
     /** Encodes {@code element}'s INLINE-origin candidates. Returns {@code null} when there are none,
-     * so the caller can omit the field entirely rather than writing an empty map. */
+     * so the caller can omit the field entirely rather than writing an empty map; {@link #CODEC} writes the empty map. */
     public static <T> T encode(CgDynamicOps<T> ops, Styleable element) {
         // Sorted by property name so the encoding is a function of the element alone. The cascade
         // stores candidates in a HashMap, whose iteration order varies between JVM runs — and these
@@ -82,24 +116,23 @@ public final class InlineStyleCodec {
     /**
      * Makes the element's inline style <b>exactly</b> the encoded map, dropping anything else it holds.
      *
-     * <p>{@link #decodeInto} merges, which is right for a description that adds to what is there and
+     * <p>{@link #CODEC}'s decode merges, which is right for a description that adds to what is there and
      * wrong for anything that has to restore a remembered state: undoing an edit that ADDED a property
      * would write back the old values and leave the new property standing. In the builder that read as
      * "Ctrl+Z did nothing" on the first transform or the first resize of a node with no inline style —
      * the visible half of the edit was the added property, and it was the half undo could not reach.</p>
      *
      * <pre>{@code
-     * InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE, remembered, node);   // exactly `remembered`
+     * InlineStyleCodec.replace(CgJsonOps.INSTANCE, remembered, node);   // exactly `remembered`
      * }</pre>
      */
-    public static <T> void replaceInto(CgDynamicOps<T> ops, T encoded, Styleable element) {
+    public static <T> void replace(CgDynamicOps<T> ops, T encoded, Styleable element) {
         element.getStyle().removeCandidates(slot -> slot.origin() == StyleOrigin.INLINE);
         element.getStyle().clearInlineTexts();
-        decodeInto(ops, encoded, element);
+        merge(ops, encoded, element);
     }
 
-    /** Adds every property in the map at {@code INLINE} origin, leaving anything else untouched. */
-    public static <T> void decodeInto(CgDynamicOps<T> ops, T encoded, Styleable element) {
+    private static <T> void merge(CgDynamicOps<T> ops, T encoded, Styleable element) {
         for (var entry : ops.getMapValue(encoded).entrySet()) {
             String name = ops.getStringValue(entry.getKey());
             StyleProperty<Object> property = StylePropertyRegistry.byName(name);

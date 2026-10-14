@@ -320,7 +320,7 @@ public sealed interface BuilderEdit extends Edit {
          * edit's visible half was a property the node did not have before.</p>
          */
         private void write(@Nullable JsonElement value) {
-            InlineStyleCodec.replaceInto(CgJsonOps.INSTANCE,
+            InlineStyleCodec.replace(CgJsonOps.INSTANCE,
                     value == null ? new JsonObject() : value, node);
         }
 

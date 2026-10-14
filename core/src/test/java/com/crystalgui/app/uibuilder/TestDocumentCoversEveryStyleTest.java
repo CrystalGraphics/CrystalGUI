@@ -149,7 +149,7 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
 
             UIElement node = new UIElement();
             document.append(node);
-            InlineStyleCodec.decodeInto(CgJsonOps.INSTANCE, applied, node);
+            InlineStyleCodec.CODEC.decode(CgJsonOps.INSTANCE, applied, node);
             document.update(W, H);
 
             // WHAT COMES BACK OUT, which is the only proof they landed rather than being dropped on
