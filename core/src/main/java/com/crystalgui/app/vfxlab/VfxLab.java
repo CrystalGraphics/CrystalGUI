@@ -13,7 +13,9 @@ import com.crystalgraphics.vfx.CgVfxEffect;
 import com.crystalgraphics.vfx.CgVfxRegistry;
 import com.crystalgraphics.vfx.CgVfxSystem;
 import com.crystalgraphics.vfx.effect.beam.CgEnergyWave;
+import com.crystalgraphics.vfx.look.CgVfxLayout;
 import com.crystalgraphics.vfx.look.CgVfxParam;
+import com.crystalgraphics.vfx.look.CgVfxSchema;
 import com.crystalgraphics.vfx.look.CgVfxValues;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
@@ -120,8 +122,8 @@ public class VfxLab extends UIElement {
     private final UIText speedText = new UIText("");
     /** Puts every value back to the look's; shown while any differs. */
     private final UIElement resetAll = new UIElement();
-    /** Each row's reset mark, by its parameter. */
-    private final List<CgVfxParam> markedParams = new ArrayList<>();
+    /** Each row's reset mark, by the value it edits. */
+    private final List<Value> markedValues = new ArrayList<>();
     private final List<UIElement> marks = new ArrayList<>();
     private final Button pause = iconButton("lab-pause", "Pause", this::togglePause);
     private final Button loop = iconButton("lab-loop", "Loop: play the effect again once it ends", this::toggleLoop);
@@ -335,7 +337,7 @@ public class VfxLab extends UIElement {
         if (entry == null || edited == null) return;
         CgVfxEffect effect = entry.spawn(entry.look(), 0.0, LAB_Y + 1.5, 0.0, target, LAB_Y, 0.0);
         effect.ground(LAB_Y);
-        for (CgVfxParam param : edited.schema().params()) apply(effect, edited, param);
+        for (Value value : Value.all(edited.layout())) value.apply(effect, edited);
         if (effect instanceof CgEnergyWave wave) CgVfxDemoControls.get().apply(wave);
         live.add(vfx.play(effect));
     }
@@ -352,14 +354,6 @@ public class VfxLab extends UIElement {
     private void clearAll() {
         for (CgVfxEffect effect : live) effect.kill();
         live.clear();
-    }
-
-    private static void apply(CgVfxEffect effect, CgVfxValues edited, CgVfxParam param) {
-        if (param.size() == 1) {
-            effect.set(param, edited.get(param));
-        } else if (param.size() == 4) {
-            effect.set(param, edited.get(param, 0), edited.get(param, 1), edited.get(param, 2), edited.get(param, 3));
-        }
     }
 
     // ── Toolbar and status ──────────────────────────────────────────────────
@@ -408,16 +402,19 @@ public class VfxLab extends UIElement {
         if (edited == null) return;
         StringBuilder out = new StringBuilder();
         int count = 0;
-        for (CgVfxParam param : edited.schema().params()) {
-            if (param.size() == 1) {
-                out.append(".set(").append(param.name()).append(", ").append(format(edited.get(param))).append("f)\n");
-            } else if (param.size() == 4) {
-                out.append(".set(").append(param.name());
-                for (int c = 0; c < 4; c++) out.append(", ").append(format(edited.get(param, c))).append('f');
-                out.append(")\n");
+        CgVfxLayout layout = edited.layout();
+        for (Value value : Value.all(layout)) {
+            out.append(".set(").append(layout.qualifiedName(value.param));
+            if (value.entry >= 0) out.append(", ").append(value.entry);
+            if (value.size() == 1) {
+                out.append(", ").append(format(value.get(edited, 0))).append('f');
             } else {
-                continue;
+                // A colour as a look takes it: 0xAARRGGBB, and the intensity past white.
+                float k = intensity(edited, value);
+                out.append(", ").append(String.format(Locale.ROOT, "0x%08X", swatch(edited, value)));
+                if (k != 1f) out.append(", ").append(format(k)).append('f');
             }
+            out.append(")\n");
             count++;
         }
         PlatformPort.current().setClipboard(out.toString());
@@ -593,7 +590,7 @@ public class VfxLab extends UIElement {
 
         // A new panel per effect: its rows carry reset marks no refill would take off.
         if (params != null) inspector.remove(params);
-        markedParams.clear();
+        markedValues.clear();
         marks.clear();
         resetAll.setDisplayed(false);
         ConfiguratorPanel panel = new ConfiguratorPanel();
@@ -602,115 +599,175 @@ public class VfxLab extends UIElement {
         inspector.append(panel);
 
         ConfigForm form = panel.form();
-        ConfigForm colours = form.group("Colours");
-        ConfigForm numbers = form.group("Values");
-        ConfigForm curves = form.group("Curves", true);
-        ConfigForm shakes = form.group("Camera shakes", true);
-        for (CgVfxParam param : edited.schema().params()) {
-            if (param.size() == 4) {
-                colour(colours, edited, param);
-            } else if (param.size() == 1) {
-                number(numbers, edited, param);
-            } else {
-                (param.isCurve() ? curves : shakes).prop(ConfigDescriptor.info(param.name(), label(param.name())),
-                        Property.of(param.isCurve() ? "Curve" : "Shake"));
+        CgVfxLayout layout = edited.layout();
+        // A group a schema: the effect's own first, then each element's and kit's.
+        for (CgVfxSchema schema : layout.schemas()) {
+            ConfigForm group = form.group(title(schema), schema != layout.primary());
+            for (CgVfxParam param : schema.params()) {
+                if (param instanceof CgVfxParam.Scalar scalar) {
+                    number(group, edited, new Value(scalar, -1));
+                } else if (param instanceof CgVfxParam.Color) {
+                    colour(group, edited, new Value(param, -1));
+                } else if (param instanceof CgVfxParam.Palette palette) {
+                    for (int e = 0; e < palette.count(); e++) colour(group, edited, new Value(palette, e));
+                } else {
+                    String kind = param instanceof CgVfxParam.Curve ? "Curve" : "Shake";
+                    group.prop(ConfigDescriptor.info(param.name(), label(param.name())), Property.of(kind));
+                }
             }
         }
     }
 
-    private void number(ConfigForm form, CgVfxValues edited, CgVfxParam param) {
-        float start = edited.get(param);
+    /** {@code crystalgraphics:wave/body} as {@code Wave body}. */
+    private static String title(CgVfxSchema schema) {
+        String path = schema.name().substring(schema.name().indexOf(':') + 1).replace('/', ' ');
+        return label(path);
+    }
+
+    private void number(ConfigForm form, CgVfxValues edited, Value value) {
+        float start = value.get(edited, 0);
         UIElement reset = new UIElement();
-        Configurator row = form.prop(ConfigDescriptor.number(param.name(), label(param.name())).decimals(3)
+        Configurator row = form.prop(ConfigDescriptor.number(value.key(), value.label()).decimals(3)
                         .scrubRate(Math.max(0.001, Math.abs(start) * 0.005)),
-                Property.derived(() -> (double) edited.get(param), v -> {
-                    edited.set(param, (float) (double) v);
-                    edited(param, reset);
+                Property.derived(() -> (double) value.get(edited, 0), v -> {
+                    value.set(edited, (float) (double) v, 0f, 0f, 0f);
+                    edited(value, reset);
                 }));
-        withReset(row, reset, param);
+        withReset(row, reset, value);
     }
 
     /** One row: the swatch, its intensity beside it, and the reset mark. */
-    private void colour(ConfigForm form, CgVfxValues edited, CgVfxParam param) {
+    private void colour(ConfigForm form, CgVfxValues edited, Value value) {
         UIElement reset = new UIElement();
-        Configurator row = form.prop(ConfigDescriptor.color(param.name(), label(param.name())),
-                Property.derived(() -> swatch(edited, param), argb -> {
-                    float k = intensity(edited, param);
-                    edited.set(param, ((argb >> 16) & 0xFF) / 255f * k, ((argb >> 8) & 0xFF) / 255f * k,
-                            (argb & 0xFF) / 255f * k, (argb >>> 24) / 255f);
-                    edited(param, reset);
+        Configurator row = form.prop(ConfigDescriptor.color(value.key(), value.label()),
+                Property.derived(() -> swatch(edited, value), argb -> {
+                    float k = intensity(edited, value);
+                    value.set(edited, CgVfxParam.Color.red(argb) * k, CgVfxParam.Color.green(argb) * k,
+                            CgVfxParam.Color.blue(argb) * k, CgVfxParam.Color.alpha(argb));
+                    edited(value, reset);
                 }));
-        NumberControl intensity = new NumberControl(ConfigDescriptor.number(param.name() + ".intensity", "Intensity")
+        NumberControl intensity = new NumberControl(ConfigDescriptor.number(value.key() + ".intensity", "Intensity")
                 .tooltip("Intensity: the swatch's brightest channel").decimals(2).scrubRate(0.01), 1.0);
         intensity.addClass("lab-intensity");
-        intensity.bind(Property.derived(() -> (double) intensity(edited, param), v -> {
-            float from = intensity(edited, param), to = (float) Math.max(0.0, v);
-            edited.set(param, edited.get(param, 0) / from * to, edited.get(param, 1) / from * to,
-                    edited.get(param, 2) / from * to, edited.get(param, 3));
-            edited(param, reset);
+        intensity.bind(Property.derived(() -> (double) intensity(edited, value), v -> {
+            float from = intensity(edited, value), to = (float) Math.max(0.0, v);
+            value.set(edited, value.get(edited, 0) / from * to, value.get(edited, 1) / from * to,
+                    value.get(edited, 2) / from * to, value.get(edited, 3));
+            edited(value, reset);
         }));
         row.inline().append(intensity);
-        withReset(row, reset, param);
+        withReset(row, reset, value);
     }
 
-    private void withReset(Configurator row, UIElement reset, CgVfxParam param) {
+    private void withReset(Configurator row, UIElement reset, Value value) {
         reset.addClass("lab-reset");
         reset.onMouseDown.attachListener((element, event) -> {
             CgVfxValues edited = values, original = defaults;
             if (edited == null || original == null) return;
-            if (param.size() == 1) {
-                edited.set(param, original.get(param));
-            } else {
-                edited.set(param, original.get(param, 0), original.get(param, 1), original.get(param, 2),
-                        original.get(param, 3));
-            }
-            edited(param, reset);
+            value.copy(original, edited);
+            edited(value, reset);
             event.stopPropagation();
         }, false, true);
         row.inline().append(reset);
         reset.setDisplayed(false);
-        markedParams.add(param);
+        markedValues.add(value);
         marks.add(reset);
     }
 
     private void resetEverything() {
         CgVfxValues edited = values, original = defaults;
         if (edited == null || original == null) return;
-        for (int i = 0; i < markedParams.size(); i++) {
-            CgVfxParam param = markedParams.get(i);
-            if (param.size() == 1) {
-                edited.set(param, original.get(param));
-            } else {
-                edited.set(param, original.get(param, 0), original.get(param, 1), original.get(param, 2),
-                        original.get(param, 3));
-            }
-            edited(param, marks.get(i));
+        for (int i = 0; i < markedValues.size(); i++) {
+            markedValues.get(i).copy(original, edited);
+            edited(markedValues.get(i), marks.get(i));
         }
     }
 
     /** After an edit: the mark shows while the value differs from the look's, and playing effects take it. */
-    private void edited(CgVfxParam param, UIElement reset) {
+    private void edited(Value value, UIElement reset) {
         CgVfxValues edited = values, original = defaults;
         if (edited == null || original == null) return;
         boolean changed = false;
-        for (int c = 0; c < param.size(); c++) changed |= edited.get(param, c) != original.get(param, c);
+        for (int c = 0; c < value.size(); c++) changed |= value.get(edited, c) != value.get(original, c);
         reset.setDisplayed(changed);
         boolean any = false;
         for (UIElement mark : marks) any |= mark.isDisplayed();
         resetAll.setDisplayed(any);
         pending.add(() -> {
-            for (CgVfxEffect effect : live) apply(effect, edited, param);
+            for (CgVfxEffect effect : live) value.apply(effect, edited);
         });
     }
 
-    private static float intensity(CgVfxValues values, CgVfxParam param) {
-        return Math.max(1f, Math.max(values.get(param, 0), Math.max(values.get(param, 1), values.get(param, 2))));
+    private static float intensity(CgVfxValues values, Value value) {
+        return Math.max(1f, Math.max(value.get(values, 0), Math.max(value.get(values, 1), value.get(values, 2))));
     }
 
-    private static int swatch(CgVfxValues values, CgVfxParam param) {
-        float k = intensity(values, param);
-        return channel(values.get(param, 3)) << 24 | channel(values.get(param, 0) / k) << 16
-                | channel(values.get(param, 1) / k) << 8 | channel(values.get(param, 2) / k);
+    private static int swatch(CgVfxValues values, Value value) {
+        float k = intensity(values, value);
+        return channel(value.get(values, 3)) << 24 | channel(value.get(values, 0) / k) << 16
+                | channel(value.get(values, 1) / k) << 8 | channel(value.get(values, 2) / k);
+    }
+
+    /** One value a row edits: a number, a colour, or one colour of a palette ({@code entry} 0 up, else -1). */
+    private record Value(CgVfxParam param, int entry) {
+
+        /** Every number and colour of {@code layout}, a palette's colours one each. */
+        static List<Value> all(CgVfxLayout layout) {
+            List<Value> out = new ArrayList<>();
+            for (CgVfxParam param : layout.params()) {
+                if (param instanceof CgVfxParam.Palette palette) {
+                    for (int e = 0; e < palette.count(); e++) out.add(new Value(palette, e));
+                } else if (param.numeric()) {
+                    out.add(new Value(param, -1));
+                }
+            }
+            return out;
+        }
+
+        int size() {
+            return param instanceof CgVfxParam.Scalar ? 1 : 4;
+        }
+
+        /** Unique across the look's schemas: two of them may each have a {@code radius}. */
+        String key() {
+            return entry < 0 ? param.toString() : param + "." + entry;
+        }
+
+        String label() {
+            return entry < 0 ? VfxLab.label(param.name()) : VfxLab.label(param.name()) + " " + (entry + 1);
+        }
+
+        float get(CgVfxValues values, int c) {
+            if (param instanceof CgVfxParam.Scalar scalar) return values.get(scalar);
+            if (param instanceof CgVfxParam.Color colour) return values.get(colour, c);
+            return values.get((CgVfxParam.Palette) param, entry, c);
+        }
+
+        void set(CgVfxValues values, float r, float g, float b, float a) {
+            if (param instanceof CgVfxParam.Scalar scalar) values.set(scalar, r);
+            else if (param instanceof CgVfxParam.Color colour) values.set(colour, r, g, b, a);
+            else values.set((CgVfxParam.Palette) param, entry, r, g, b, a);
+        }
+
+        /** Its value in {@code from} set on {@code to}. */
+        void copy(CgVfxValues from, CgVfxValues to) {
+            set(to, get(from, 0), size() > 1 ? get(from, 1) : 0f, size() > 1 ? get(from, 2) : 0f,
+                    size() > 1 ? get(from, 3) : 0f);
+        }
+
+        /** Its value in {@code values} set on a playing {@code effect}. */
+        void apply(CgVfxEffect effect, CgVfxValues values) {
+            if (param instanceof CgVfxParam.Scalar scalar) {
+                effect.set(scalar, values.get(scalar));
+            } else if (param instanceof CgVfxParam.Color colour) {
+                effect.set(colour, values.get(colour, 0), values.get(colour, 1), values.get(colour, 2),
+                        values.get(colour, 3));
+            } else {
+                CgVfxParam.Palette palette = (CgVfxParam.Palette) param;
+                effect.set(palette, entry, values.get(palette, entry, 0), values.get(palette, entry, 1),
+                        values.get(palette, entry, 2), values.get(palette, entry, 3));
+            }
+        }
     }
 
     private static int channel(float value) {
