@@ -138,7 +138,7 @@ public final class CgUiSprite {
         this.texturePath = null;
         // Don't clobber an author-supplied size reference (sprite()'s "refW refH" arg exists
         // precisely to override the real texture's dimensions, e.g. for resource-pack rescaling).
-        if (texture != null && !textureSizeExplicit && texture != CgTextureManager.get().getFallback()) {
+        if (texture != null && !textureSizeExplicit && !texture.isMissing()) {
             applyTextureSizeReference(texture.getWidth(), texture.getHeight());
         }
         return this;
@@ -337,9 +337,8 @@ public final class CgUiSprite {
         return resolved;
     }
 
-    /** Whether a failed load left the shared fallback checkerboard, which has no sub-rect worth
-     * cropping into. @see CgUiRect */
+    /** Whether a failed load left the checkerboard, which has no sub-rect worth cropping into. @see CgUiRect */
     boolean isFallback(CgTexture2D resolved) {
-        return resolved == CgTextureManager.get().getFallback();
+        return resolved.isMissing();
     }
 }

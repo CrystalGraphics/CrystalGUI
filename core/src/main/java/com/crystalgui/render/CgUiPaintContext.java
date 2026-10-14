@@ -25,7 +25,6 @@ import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.render.CgShapeTable;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.render.draw.CgBindingTable;
 import com.crystalgraphics.render.draw.CgDrawChunk;
@@ -875,7 +874,7 @@ public final class CgUiPaintContext {
         // asked to draw. Was previously enforced centrally in submitQuad; it now lives at the two
         // sites that can actually be handed a fallback (here and CgUiSprite).
         CgTrace.add(UiTrace.FRAME, "drawcalls", 1);
-        boolean missing = texture == CgTextureManager.get().getFallback();
+        boolean missing = texture.isMissing();
         CgQuadRenderer.Quad q = quad().at(x, y).size(width, height).color(argb);
         (missing ? q : q.uv(u0, v0, u1, v1)).submit();
         flush();

@@ -95,7 +95,7 @@ public final class CgUiSpriteRegistry {
      *
      * <p>Must call {@link CgUiSprite#setTextureSizeReference} explicitly — {@link CgUiSprite#setTexture}
      * deliberately skips auto-deriving it specifically when the texture passed in is the fallback
-     * texture (see its own {@code texture != CgTextureManager.get().getFallback()} guard), which
+     * texture (see its own {@code texture.isMissing()} guard), which
      * otherwise leaves the sprite's texture size at its zero default and makes {@code draw()}
      * silently no-op — confirmed live via the harness before adding this line, the fallback sprite
      * rendered nothing at all rather than the visible checkerboard.</p> */
