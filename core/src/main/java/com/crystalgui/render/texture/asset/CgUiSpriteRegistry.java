@@ -5,7 +5,6 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
-import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.format.CgFormats;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
@@ -148,52 +147,26 @@ public final class CgUiSpriteRegistry {
 
     private record ParsedPack(String texture, int[] textureSize, Map<String, ParsedElement> elements) {
 
-        static final CgCodec<ParsedPack> CODEC = new CgCodec<ParsedPack>() {
-            @Override
-            public <T> T encode(CgDynamicOps<T> ops, ParsedPack pack) {
-                return CgCodecs.map(ops)
-                        .optional("texture", CgCodecs.STRING, pack.texture, null)
-                        .optional("textureSize", INTS, pack.textureSize, null)
-                        .field("elements", CgCodecs.mapOf(CgCodecs.STRING, ParsedElement.CODEC), pack.elements)
-                        .build();
-            }
-
-            @Override
-            public <T> ParsedPack decode(CgDynamicOps<T> ops, T in) {
-                CgCodecs.MapCodecReader<T> pack = CgCodecs.read(ops, in);
-                return new ParsedPack(pack.optional("texture", CgCodecs.STRING, null),
-                        pack.optional("textureSize", INTS, null),
-                        pack.optional("elements", CgCodecs.mapOf(CgCodecs.STRING, ParsedElement.CODEC), Map.of()));
-            }
-        };
+        static final CgCodec<ParsedPack> CODEC = CgCodecs.record(
+                CgCodecs.optionalField("texture", CgCodecs.STRING, ParsedPack::texture, null),
+                CgCodecs.optionalField("textureSize", INTS, ParsedPack::textureSize, null),
+                CgCodecs.optionalField("elements", CgCodecs.mapOf(CgCodecs.STRING, ParsedElement.CODEC),
+                        ParsedPack::elements, Map.of()),
+                ParsedPack::new);
     }
 
     private record ParsedElement(String texture, int[] textureSize, int[] sprite, int[] border,
                                  String repeat, Boolean fillCenter, Float borderScale) {
 
-        static final CgCodec<ParsedElement> CODEC = new CgCodec<ParsedElement>() {
-            @Override
-            public <T> T encode(CgDynamicOps<T> ops, ParsedElement e) {
-                return CgCodecs.map(ops)
-                        .optional("texture", CgCodecs.STRING, e.texture, null)
-                        .optional("textureSize", INTS, e.textureSize, null)
-                        .optional("sprite", INTS, e.sprite, null)
-                        .optional("border", INTS, e.border, null)
-                        .optional("repeat", CgCodecs.STRING, e.repeat, null)
-                        .optional("fillCenter", CgCodecs.BOOL, e.fillCenter, null)
-                        .optional("borderScale", CgCodecs.FLOAT, e.borderScale, null)
-                        .build();
-            }
-
-            @Override
-            public <T> ParsedElement decode(CgDynamicOps<T> ops, T in) {
-                CgCodecs.MapCodecReader<T> e = CgCodecs.read(ops, in);
-                return new ParsedElement(e.optional("texture", CgCodecs.STRING, null),
-                        e.optional("textureSize", INTS, null), e.optional("sprite", INTS, null),
-                        e.optional("border", INTS, null), e.optional("repeat", CgCodecs.STRING, null),
-                        e.optional("fillCenter", CgCodecs.BOOL, null), e.optional("borderScale", CgCodecs.FLOAT, null));
-            }
-        };
+        static final CgCodec<ParsedElement> CODEC = CgCodecs.record(
+                CgCodecs.optionalField("texture", CgCodecs.STRING, ParsedElement::texture, null),
+                CgCodecs.optionalField("textureSize", INTS, ParsedElement::textureSize, null),
+                CgCodecs.optionalField("sprite", INTS, ParsedElement::sprite, null),
+                CgCodecs.optionalField("border", INTS, ParsedElement::border, null),
+                CgCodecs.optionalField("repeat", CgCodecs.STRING, ParsedElement::repeat, null),
+                CgCodecs.optionalField("fillCenter", CgCodecs.BOOL, ParsedElement::fillCenter, null),
+                CgCodecs.optionalField("borderScale", CgCodecs.FLOAT, ParsedElement::borderScale, null),
+                ParsedElement::new);
 
         CgUiSprite toSprite(ParsedPack pack) {
             String resolvedTexture = texture != null ? texture : pack.texture;

@@ -111,7 +111,7 @@ public class WatcherReachesTheClientTest {
         List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
         if (mine.isEmpty()) return;
         serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
-                FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                         new FsMessages.ChangedNotification(mine))));
     }
 

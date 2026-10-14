@@ -126,7 +126,7 @@ public class WorkspaceDocumentsTest {
         List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
         if (!mine.isEmpty()) {
             serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
-                    FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                    FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                             new FsMessages.ChangedNotification(mine))));
         }
         pump();
@@ -136,7 +136,7 @@ public class WorkspaceDocumentsTest {
     private void notifyRename(CgPath from, CgPath to, String etag) {
         FsMessages.FileChange change = hub.noteRenamed(from, to, etag);
         serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
-                FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                         new FsMessages.ChangedNotification(List.of(change)))));
         pump();
     }

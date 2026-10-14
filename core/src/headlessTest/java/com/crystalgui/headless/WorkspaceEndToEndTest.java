@@ -115,7 +115,7 @@ public class WorkspaceEndToEndTest {
         if (!mine.isEmpty()) {
             serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(
                     CgPlainOps.INSTANCE,
-                    FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                    FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                             new FsMessages.ChangedNotification(mine))));
         }
         pump();

@@ -105,25 +105,12 @@ public final class DownloadLocations {
     /** A download as the file writes it: its URLs, or Maven coordinates {@code from} named repositories; and a pin. */
     private record Spec(List<String> urls, @Nullable String maven, List<String> from, @Nullable String digest) {
 
-        static final CgCodec<Spec> CODEC = new CgCodec<Spec>() {
-            @Override
-            public <T> T encode(CgDynamicOps<T> ops, Spec spec) {
-                return CgCodecs.map(ops).field("urls", STRINGS, spec.urls())
-                        .optional("maven", CgCodecs.STRING, spec.maven(), null)
-                        .field("from", STRINGS, spec.from())
-                        .optional("digest", CgCodecs.STRING, spec.digest(), null)
-                        .build();
-            }
-
-            @Override
-            public <T> Spec decode(CgDynamicOps<T> ops, T in) {
-                CgCodecs.MapCodecReader<T> spec = CgCodecs.read(ops, in);
-                return new Spec(spec.optional("urls", STRINGS, Collections.<String>emptyList()),
-                        spec.optional("maven", CgCodecs.STRING, null),
-                        spec.optional("from", STRINGS, Collections.<String>emptyList()),
-                        spec.optional("digest", CgCodecs.STRING, null));
-            }
-        };
+        static final CgCodec<Spec> CODEC = CgCodecs.record(
+                CgCodecs.optionalField("urls", STRINGS, Spec::urls, Collections.<String>emptyList()),
+                CgCodecs.optionalField("maven", CgCodecs.STRING, Spec::maven, null),
+                CgCodecs.optionalField("from", STRINGS, Spec::from, Collections.<String>emptyList()),
+                CgCodecs.optionalField("digest", CgCodecs.STRING, Spec::digest, null),
+                Spec::new);
     }
 
     private static final CgCodec<List<String>> STRINGS = CgCodecs.listOf(CgCodecs.STRING);

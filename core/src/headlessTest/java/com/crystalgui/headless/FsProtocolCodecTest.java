@@ -50,22 +50,22 @@ public class FsProtocolCodecTest {
 
     @Test
     public void aPathRequestRoundTrips() {
-        roundTrips(FsMessages.pathRequest(), new FsMessages.PathRequest("proj:src/Main.java", "op-7"));
-        roundTrips(FsMessages.pathRequest(), new FsMessages.PathRequest("proj:src/Main.java"));
+        roundTrips(FsMessages.PATH_REQUEST, new FsMessages.PathRequest("proj:src/Main.java", "op-7"));
+        roundTrips(FsMessages.PATH_REQUEST, new FsMessages.PathRequest("proj:src/Main.java"));
     }
 
     @Test
     public void aMoveRequestRoundTrips() {
-        roundTrips(FsMessages.moveRequest(),
+        roundTrips(FsMessages.MOVE_REQUEST,
                 new FsMessages.MoveRequest("proj:a.txt", "proj:b.txt", true, "op-1"));
-        roundTrips(FsMessages.moveRequest(),
+        roundTrips(FsMessages.MOVE_REQUEST,
                 new FsMessages.MoveRequest("proj:a.txt", "proj:b.txt", false, ""));
     }
 
     @Test
     public void aReadRequestRoundTripsWithAndWithoutItsCondition() {
-        roundTrips(FsMessages.readRequest(), new FsMessages.ReadRequest("proj:a.txt", "12:34"));
-        roundTrips(FsMessages.readRequest(), new FsMessages.ReadRequest("proj:a.txt", ""));
+        roundTrips(FsMessages.READ_REQUEST, new FsMessages.ReadRequest("proj:a.txt", "12:34"));
+        roundTrips(FsMessages.READ_REQUEST, new FsMessages.ReadRequest("proj:a.txt", ""));
     }
 
     @Test
@@ -73,7 +73,7 @@ public class FsProtocolCodecTest {
         byte[] content = "class Main {}\n".getBytes(StandardCharsets.UTF_8);
         FsMessages.WriteRequest sent =
                 new FsMessages.WriteRequest("proj:a.java", content, "12:34", false, true, "op-2");
-        FsMessages.WriteRequest back = through(FsMessages.writeRequest(), CgPlainOps.INSTANCE, sent);
+        FsMessages.WriteRequest back = through(FsMessages.WRITE_REQUEST, CgPlainOps.INSTANCE, sent);
 
         assertEquals(sent.path(), back.path());
         assertArrayEquals(content, back.content());
@@ -88,7 +88,7 @@ public class FsProtocolCodecTest {
     public void arbitraryBytesSurvive() {
         byte[] content = new byte[256];
         for (int i = 0; i < 256; i++) content[i] = (byte) i;
-        FsMessages.ChunkResponse back = through(FsMessages.chunkResponse(), CgJsonOps.INSTANCE,
+        FsMessages.ChunkResponse back = through(FsMessages.CHUNK_RESPONSE, CgJsonOps.INSTANCE,
                 new FsMessages.ChunkResponse(content, true));
 
         assertArrayEquals(content, back.content());
@@ -99,17 +99,17 @@ public class FsProtocolCodecTest {
     public void aReadResponseRoundTripsInAllThreeOfItsShapes() {
         byte[] content = "hi".getBytes(StandardCharsets.UTF_8);
 
-        FsMessages.ReadResponse inline = through(FsMessages.readResponse(), CgPlainOps.INSTANCE,
+        FsMessages.ReadResponse inline = through(FsMessages.READ_RESPONSE, CgPlainOps.INSTANCE,
                 new FsMessages.ReadResponse("12:2", content, false, "", 2));
         assertArrayEquals(content, inline.content());
         assertEquals("12:2", inline.etag());
 
-        FsMessages.ReadResponse unchanged = through(FsMessages.readResponse(), CgPlainOps.INSTANCE,
+        FsMessages.ReadResponse unchanged = through(FsMessages.READ_RESPONSE, CgPlainOps.INSTANCE,
                 new FsMessages.ReadResponse("12:2", new byte[0], true, "", 2));
         assertTrue(unchanged.unchanged());
         assertEquals(0, unchanged.content().length);
 
-        FsMessages.ReadResponse chunked = through(FsMessages.readResponse(), CgPlainOps.INSTANCE,
+        FsMessages.ReadResponse chunked = through(FsMessages.READ_RESPONSE, CgPlainOps.INSTANCE,
                 new FsMessages.ReadResponse("12:900", new byte[0], false, "t-1", 900));
         assertEquals("t-1", chunked.transfer());
         assertEquals(900L, chunked.size());
@@ -117,8 +117,8 @@ public class FsProtocolCodecTest {
 
     @Test
     public void aChunkRequestAndAnEtagResponseRoundTrip() {
-        roundTrips(FsMessages.chunkRequest(), new FsMessages.ChunkRequest("t-1", 4096L, 2048));
-        roundTrips(FsMessages.etagResponse(), new FsMessages.EtagResponse("99:1"));
+        roundTrips(FsMessages.CHUNK_REQUEST, new FsMessages.ChunkRequest("t-1", 4096L, 2048));
+        roundTrips(FsMessages.ETAG_RESPONSE, new FsMessages.EtagResponse("99:1"));
     }
 
     // ── Listings and projects ───────────────────────────────────────────────────────────────────
@@ -128,13 +128,13 @@ public class FsProtocolCodecTest {
         FsMessages.ListResponse sent = new FsMessages.ListResponse(List.of(
                 new FsMessages.Entry("src", true, 0, 0),
                 new FsMessages.Entry("Main.java", false, 42, 1700000000000L)), "page-2");
-        roundTrips(FsMessages.listResponse(), sent);
-        roundTrips(FsMessages.listRequest(), new FsMessages.ListRequest("proj:src", "page-2"));
+        roundTrips(FsMessages.LIST_RESPONSE, sent);
+        roundTrips(FsMessages.LIST_REQUEST, new FsMessages.ListRequest("proj:src", "page-2"));
     }
 
     @Test
     public void anEmptyListingRoundTrips() {
-        roundTrips(FsMessages.listResponse(), new FsMessages.ListResponse(List.of()));
+        roundTrips(FsMessages.LIST_RESPONSE, new FsMessages.ListResponse(List.of()));
     }
 
     /** The ignore rules travel, which is what lets the crawl and the tree agree with the server. */
@@ -144,7 +144,7 @@ public class FsProtocolCodecTest {
                 new FsMessages.ProjectEntry("mymod.scripts", "Scripts",
                         List.of("src/main/java"), List.of(".git", "build", "*.class"))));
         FsMessages.ProjectsResponse back =
-                through(FsMessages.projectsResponse(), CgJsonOps.INSTANCE, sent);
+                through(FsMessages.PROJECTS_RESPONSE, CgJsonOps.INSTANCE, sent);
 
         assertEquals(1, back.projects().size());
         assertEquals(List.of(".git", "build", "*.class"), back.projects().get(0).excludes());
@@ -166,7 +166,7 @@ public class FsProtocolCodecTest {
                 new FsMessages.FileChange("proj:to.txt", FsMessages.ChangeKind.RENAMED, "3:1",
                         "proj:from.txt")));
         FsMessages.ChangedNotification back =
-                through(FsMessages.changedNotification(), CgPlainOps.INSTANCE, sent);
+                through(FsMessages.CHANGED_NOTIFICATION, CgPlainOps.INSTANCE, sent);
 
         assertEquals(4, back.changes().size());
         assertEquals(FsMessages.ChangeKind.RENAMED, back.changes().get(3).kind());
@@ -177,7 +177,7 @@ public class FsProtocolCodecTest {
     /** Presence carries whether the other peer is EDITING, not merely whether it has the file open. */
     @Test
     public void presenceCarriesTheEditingFlag() {
-        FsMessages.PresenceNotification back = through(FsMessages.presenceNotification(),
+        FsMessages.PresenceNotification back = through(FsMessages.PRESENCE_NOTIFICATION,
                 CgJsonOps.INSTANCE, new FsMessages.PresenceNotification(List.of(
                         new FsMessages.PresenceEntry("proj:a.txt", "steve", true),
                         new FsMessages.PresenceEntry("proj:a.txt", "alex", false))));
@@ -188,7 +188,7 @@ public class FsProtocolCodecTest {
 
     @Test
     public void capabilitiesRoundTrip() {
-        roundTrips(FsMessages.capabilitiesNotification(), new FsMessages.CapabilitiesNotification(
+        roundTrips(FsMessages.CAPABILITIES_NOTIFICATION, new FsMessages.CapabilitiesNotification(
                 List.of(new FsMessages.ProjectCapability("mymod.scripts", true, false))));
     }
 
@@ -208,7 +208,7 @@ public class FsProtocolCodecTest {
         raw.put(CgPlainOps.INSTANCE.createString("path"), CgPlainOps.INSTANCE.createString("proj:a.txt"));
         raw.put(CgPlainOps.INSTANCE.createString("op"), CgPlainOps.INSTANCE.createString("op-1"));
         raw.put(CgPlainOps.INSTANCE.createString("somethingNewer"), CgPlainOps.INSTANCE.createNumber(42));
-        FsMessages.PathRequest back = FsMessages.pathRequest()
+        FsMessages.PathRequest back = FsMessages.PATH_REQUEST
                 .decode(CgPlainOps.INSTANCE, CgPlainOps.INSTANCE.createMap(raw));
 
         assertEquals("proj:a.txt", back.path());

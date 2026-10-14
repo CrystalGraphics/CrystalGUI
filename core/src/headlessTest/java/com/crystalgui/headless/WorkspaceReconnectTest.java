@@ -89,7 +89,7 @@ public class WorkspaceReconnectTest {
             List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
             if (mine.isEmpty()) return;
             serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
-                    FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                    FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                             new FsMessages.ChangedNotification(mine))));
         }
     }
@@ -170,7 +170,7 @@ public class WorkspaceReconnectTest {
     @Test
     public void aReconnectForgetsWhatTheOldServerPushed() {
         first.serverSide.notify(FsMethods.PRESENCE, new CgStateMap<>(CgPlainOps.INSTANCE,
-                FsMessages.presenceNotification().encode(CgPlainOps.INSTANCE,
+                FsMessages.PRESENCE_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                         new FsMessages.PresenceNotification(List.of(
                                 new FsMessages.PresenceEntry(FILE.toString(), "bob", true))))));
         first.pump();

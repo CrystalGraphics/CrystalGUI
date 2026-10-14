@@ -2,7 +2,6 @@ package com.crystalgui.net;
 
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
-import com.crystalgraphics.serialization.CgDynamicOps;
 
 import javax.annotation.Nullable;
 
@@ -34,21 +33,10 @@ public record SheetRef(String hash, @Nullable String id) {
      * longer one place that knows every type's encoding — and a type's encoding belongs with the type
      * rather than with whichever message happened to be the first to carry it.</p>
      */
-    public static final CgCodec<SheetRef> CODEC = new CgCodec<SheetRef>() {
-        @Override
-        public <T> T encode(CgDynamicOps<T> ops, SheetRef input) {
-            return CgCodecs.map(ops)
-                    .field("hash", CgCodecs.STRING, input.hash())
-                    .optional("id", CgCodecs.STRING, input.id(), null)
-                    .build();
-        }
-
-        @Override
-        public <T> SheetRef decode(CgDynamicOps<T> ops, T input) {
-            var in = CgCodecs.read(ops, input);
-            return new SheetRef(in.field("hash", CgCodecs.STRING), in.optional("id", CgCodecs.STRING, null));
-        }
-    };
+    public static final CgCodec<SheetRef> CODEC = CgCodecs.record(
+            CgCodecs.field("hash", CgCodecs.STRING, SheetRef::hash),
+            CgCodecs.optionalField("id", CgCodecs.STRING, SheetRef::id, null),
+            SheetRef::new);
 
     public static SheetRef ofResource(String id, String hash) {
         return new SheetRef(hash, id);

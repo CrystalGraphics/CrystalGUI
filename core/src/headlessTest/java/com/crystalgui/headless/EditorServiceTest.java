@@ -130,7 +130,7 @@ public class EditorServiceTest {
         List<FsMessages.FileChange> mine = binding.changesFor(byPeer);
         if (!mine.isEmpty()) {
             serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
-                    FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                    FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                             new FsMessages.ChangedNotification(mine))));
         }
         pump();
@@ -339,7 +339,7 @@ public class EditorServiceTest {
                 List.of(hub.noteRenamed(MAIN_PATH, renamed,
                         service.stat(WorkspaceActor.LOCAL, renamed).etag())));
         serverSide.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
-                FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                         new FsMessages.ChangedNotification(byPeer.get("alice")))));
         pump();
 

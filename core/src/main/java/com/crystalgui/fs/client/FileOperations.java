@@ -175,10 +175,10 @@ public final class FileOperations {
     public CgReply<FsMessages.ReadResponse> readResponse(Resource resource,
                                                        @Nullable String ifNoneMatch) {
         return calls.coalesced("read:" + resource + ":" + (ifNoneMatch == null ? "" : ifNoneMatch),
-                FsMethods.READ, FsMessages.readRequest(),
+                FsMethods.READ, FsMessages.READ_REQUEST,
                 new FsMessages.ReadRequest(resource.toString(),
                         ifNoneMatch == null ? "" : ifNoneMatch),
-                FsMessages.readResponse());
+                FsMessages.READ_RESPONSE);
     }
 
     /**
@@ -214,8 +214,8 @@ public final class FileOperations {
      * bar, a partial parse — rather than nothing until the last one.</p>
      */
     private void pull(CgPendingStream<byte[]> stream, String transfer, long offset) {
-        calls.send(FsMethods.READ_CHUNK, FsMessages.chunkRequest(),
-                        new FsMessages.ChunkRequest(transfer, offset, 0), FsMessages.chunkResponse())
+        calls.send(FsMethods.READ_CHUNK, FsMessages.CHUNK_REQUEST,
+                        new FsMessages.ChunkRequest(transfer, offset, 0), FsMessages.CHUNK_RESPONSE)
                 .onError(stream::fail)
                 .then(chunk -> {
                     if (chunk.content().length > 0) stream.emit(chunk.content());
@@ -278,20 +278,20 @@ public final class FileOperations {
 
     /** A file's metadata, with the etag a write must quote back. */
     public CgReply<FsMessages.StatResponse> stat(Resource resource) {
-        return calls.coalesced("stat:" + resource, FsMethods.STAT, FsMessages.pathRequest(),
-                new FsMessages.PathRequest(resource.toString()), FsMessages.statResponse());
+        return calls.coalesced("stat:" + resource, FsMethods.STAT, FsMessages.PATH_REQUEST,
+                new FsMessages.PathRequest(resource.toString()), FsMessages.STAT_RESPONSE);
     }
 
     /** One directory's entries, the project's ignore rules already applied. */
     public CgReply<FsMessages.ListResponse> list(Resource directory) {
-        return calls.coalesced("list:" + directory, FsMethods.LIST, FsMessages.listRequest(),
-                new FsMessages.ListRequest(directory.toString()), FsMessages.listResponse());
+        return calls.coalesced("list:" + directory, FsMethods.LIST, FsMessages.LIST_REQUEST,
+                new FsMessages.ListRequest(directory.toString()), FsMessages.LIST_RESPONSE);
     }
 
     /** Every project this actor may see. */
     public CgReply<FsMessages.ProjectsResponse> projects() {
-        return calls.coalesced("projects", FsMethods.PROJECTS, FsMessages.pathRequest(),
-                new FsMessages.PathRequest(""), FsMessages.projectsResponse());
+        return calls.coalesced("projects", FsMethods.PROJECTS, FsMessages.PATH_REQUEST,
+                new FsMessages.PathRequest(""), FsMessages.PROJECTS_RESPONSE);
     }
 
     // ── Writing ─────────────────────────────────────────────────────────────────────────────────
@@ -303,14 +303,14 @@ public final class FileOperations {
      * in a conflict dialog — never a default.</p>
      */
     public CgReply<String> write(Resource resource, byte[] content, @Nullable String etag) {
-        return mutate(resource, FsMethods.WRITE, FsMessages.writeRequest(),
+        return mutate(resource, FsMethods.WRITE, FsMessages.WRITE_REQUEST,
                 op -> new FsMessages.WriteRequest(resource.toString(), content,
                         etag == null ? "" : etag, false, true, op));
     }
 
     /** Creates a file that must not already exist. */
     public CgReply<String> create(Resource resource, byte[] content) {
-        CgReply<String> created = mutate(resource, FsMethods.CREATE, FsMessages.writeRequest(),
+        CgReply<String> created = mutate(resource, FsMethods.CREATE, FsMessages.WRITE_REQUEST,
                 op -> new FsMessages.WriteRequest(resource.toString(), content, "", true, false, op));
         record("create " + resource.name(),
                 () -> create(resource, content),
@@ -319,7 +319,7 @@ public final class FileOperations {
     }
 
     public CgReply<String> mkdir(Resource resource) {
-        CgReply<String> made = mutate(resource, FsMethods.MKDIR, FsMessages.pathRequest(),
+        CgReply<String> made = mutate(resource, FsMethods.MKDIR, FsMessages.PATH_REQUEST,
                 op -> new FsMessages.PathRequest(resource.toString(), op));
         record("create " + resource.name(),
                 () -> mkdir(resource),
@@ -337,7 +337,7 @@ public final class FileOperations {
      */
     public CgReply<String> delete(Resource resource) {
         boolean replay = isReplay();
-        return mutate(resource, FsMethods.DELETE, FsMessages.pathRequest(),
+        return mutate(resource, FsMethods.DELETE, FsMessages.PATH_REQUEST,
                         op -> new FsMessages.PathRequest(resource.toString(), op))
                 .then(trashId -> {
                     // NO TRASH, NO UNDO. A host without one deletes for good, and offering to take it
@@ -351,13 +351,13 @@ public final class FileOperations {
 
     /** Puts back what a delete moved to the trash. */
     public CgReply<String> restore(String trashId) {
-        return calls.send(FsMethods.RESTORE, FsMessages.pathRequest(),
-                        new FsMessages.PathRequest(trashId), FsMessages.etagResponse())
+        return calls.send(FsMethods.RESTORE, FsMessages.PATH_REQUEST,
+                        new FsMessages.PathRequest(trashId), FsMessages.ETAG_RESPONSE)
                 .map(FsMessages.EtagResponse::etag);
     }
 
     public CgReply<String> rename(Resource from, Resource to, boolean overwrite) {
-        CgReply<String> moved = mutate(from, FsMethods.RENAME, FsMessages.moveRequest(),
+        CgReply<String> moved = mutate(from, FsMethods.RENAME, FsMessages.MOVE_REQUEST,
                 op -> new FsMessages.MoveRequest(from.toString(), to.toString(), overwrite, op));
         // NEVER OVERWRITING ON THE WAY BACK, whatever the original did: undoing a move that replaced
         // something must not replace whatever is at the source now.
@@ -377,7 +377,7 @@ public final class FileOperations {
         String op = "op-" + operationIds.incrementAndGet();
         return after(resource, () -> {
             onWillRun.emit(resource);
-            return calls.send(method, codec, args.apply(op), FsMessages.etagResponse())
+            return calls.send(method, codec, args.apply(op), FsMessages.ETAG_RESPONSE)
                     .map(FsMessages.EtagResponse::etag)
                     .then(etag -> onDidRun.emit(resource))
                     .onError(error -> onDidFail.emit(resource, error));
@@ -420,7 +420,7 @@ public final class FileOperations {
      * to the thing it is copying, and a destination that does not exist yet has nothing outstanding.</p>
      */
     public CgReply<String> copy(Resource from, Resource to, boolean overwrite) {
-        CgReply<String> copied = mutate(from, FsMethods.COPY, FsMessages.moveRequest(),
+        CgReply<String> copied = mutate(from, FsMethods.COPY, FsMessages.MOVE_REQUEST,
                 op -> new FsMessages.MoveRequest(from.toString(), to.toString(), overwrite, op));
         // A COPY'S UNDO IS A DELETE OF WHAT IT MADE, never a restore: nothing was taken away.
         record("copy " + from.name(),
@@ -444,9 +444,9 @@ public final class FileOperations {
      * @param inProject any resource in the project whose trash is wanted; its project is what is asked
      */
     public CgReply<List<FsMessages.TrashEntry>> trash(Resource inProject) {
-        return calls.send(FsMethods.TRASH_LIST, FsMessages.pathRequest(),
+        return calls.send(FsMethods.TRASH_LIST, FsMessages.PATH_REQUEST,
                         new FsMessages.PathRequest(inProject.toString()),
-                        FsMessages.trashListResponse())
+                        FsMessages.TRASH_LIST_RESPONSE)
                 .map(FsMessages.TrashListResponse::entries);
     }
 
@@ -457,8 +457,8 @@ public final class FileOperations {
      * nothing an undo step could put back. Everything else here records one.</p>
      */
     public CgReply<String> purge(String trashId) {
-        return calls.send(FsMethods.PURGE, FsMessages.pathRequest(),
-                        new FsMessages.PathRequest(trashId), FsMessages.etagResponse())
+        return calls.send(FsMethods.PURGE, FsMessages.PATH_REQUEST,
+                        new FsMessages.PathRequest(trashId), FsMessages.ETAG_RESPONSE)
                 .map(FsMessages.EtagResponse::etag);
     }
 

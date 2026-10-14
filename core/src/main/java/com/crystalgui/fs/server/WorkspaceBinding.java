@@ -124,34 +124,34 @@ public final class WorkspaceBinding<T> {
                 out.add(new FsMessages.ProjectEntry(info.id(), info.displayName(),
                         info.sourceRoots(), info.excludes()));
             }
-            return encode(FsMessages.projectsResponse(), new FsMessages.ProjectsResponse(out));
+            return encode(FsMessages.PROJECTS_RESPONSE, new FsMessages.ProjectsResponse(out));
         }));
 
         registry.register(FsMethods.LIST, (args, respond) -> guard(respond, () -> {
-            FsMessages.ListRequest request = decode(FsMessages.listRequest(), args);
+            FsMessages.ListRequest request = decode(FsMessages.LIST_REQUEST, args);
             List<FsMessages.Entry> entries = new ArrayList<>();
             for (CgFileEntry entry : service.manifest(actor, CgPath.parse(request.path()))) {
                 entries.add(new FsMessages.Entry(entry.name(), entry.isDirectory(),
                         entry.size(), entry.mtime()));
             }
-            return encode(FsMessages.listResponse(), new FsMessages.ListResponse(entries));
+            return encode(FsMessages.LIST_RESPONSE, new FsMessages.ListResponse(entries));
         }));
 
         registry.register(FsMethods.STAT, (args, respond) -> guard(respond, () -> {
-            CgPath path = CgPath.parse(decode(FsMessages.pathRequest(), args).path());
+            CgPath path = CgPath.parse(decode(FsMessages.PATH_REQUEST, args).path());
             CgFileEntry entry = service.stat(actor, path);
-            return encode(FsMessages.statResponse(), new FsMessages.StatResponse(entry.etag(),
+            return encode(FsMessages.STAT_RESPONSE, new FsMessages.StatResponse(entry.etag(),
                     entry.isDirectory(), entry.size(), entry.mtime(), false));
         }));
 
         registry.register(FsMethods.READ, (args, respond) -> guard(respond, () -> {
-            FsMessages.ReadRequest request = decode(FsMessages.readRequest(), args);
+            FsMessages.ReadRequest request = decode(FsMessages.READ_REQUEST, args);
             CgPath path = CgPath.parse(request.path());
             CgFileEntry entry = service.stat(actor, path);
 
             // CONDITIONAL, so re-opening a tab costs one small message. HTTP's If-None-Match.
             if (!request.ifNoneMatch().isEmpty() && request.ifNoneMatch().equals(entry.etag())) {
-                return encode(FsMessages.readResponse(), new FsMessages.ReadResponse(
+                return encode(FsMessages.READ_RESPONSE, new FsMessages.ReadResponse(
                         entry.etag(), new byte[0], true, "", entry.size()));
             }
             // Watching is what having a file open MEANS; the two were one message before and stay one.
@@ -161,16 +161,16 @@ public final class WorkspaceBinding<T> {
             if (entry.size() > INLINE_LIMIT) {
                 String id = "t-" + transferIds.incrementAndGet();
                 transfers.put(id, new Transfer(path, entry.etag(), entry.size()));
-                return encode(FsMessages.readResponse(), new FsMessages.ReadResponse(
+                return encode(FsMessages.READ_RESPONSE, new FsMessages.ReadResponse(
                         entry.etag(), new byte[0], false, id, entry.size()));
             }
             byte[] content = service.read(actor, path).content();
-            return encode(FsMessages.readResponse(), new FsMessages.ReadResponse(
+            return encode(FsMessages.READ_RESPONSE, new FsMessages.ReadResponse(
                     entry.etag(), content, false, "", entry.size()));
         }));
 
         registry.register(FsMethods.READ_CHUNK, (args, respond) -> guard(respond, () -> {
-            FsMessages.ChunkRequest request = decode(FsMessages.chunkRequest(), args);
+            FsMessages.ChunkRequest request = decode(FsMessages.CHUNK_REQUEST, args);
             Transfer transfer = transfers.get(request.transfer());
             if (transfer == null) {
                 throw new CgFileSystemException(CgFileError.FILE_NOT_FOUND,
@@ -180,11 +180,11 @@ public final class WorkspaceBinding<T> {
             byte[] window = service.readRange(actor, transfer.path(), request.offset(), length);
             boolean eof = request.offset() + window.length >= transfer.size();
             if (eof) transfers.remove(request.transfer());
-            return encode(FsMessages.chunkResponse(), new FsMessages.ChunkResponse(window, eof));
+            return encode(FsMessages.CHUNK_RESPONSE, new FsMessages.ChunkResponse(window, eof));
         }));
 
         registry.register(FsMethods.WRITE, (args, respond) -> mutate(respond, () -> {
-            FsMessages.WriteRequest request = decode(FsMessages.writeRequest(), args);
+            FsMessages.WriteRequest request = decode(FsMessages.WRITE_REQUEST, args);
             CgPath path = CgPath.parse(request.path());
             String repeat = operations.answerFor(request.op());
             if (repeat != null) return repeat;
@@ -203,7 +203,7 @@ public final class WorkspaceBinding<T> {
         }));
 
         registry.register(FsMethods.CREATE, (args, respond) -> mutate(respond, () -> {
-            FsMessages.WriteRequest request = decode(FsMessages.writeRequest(), args);
+            FsMessages.WriteRequest request = decode(FsMessages.WRITE_REQUEST, args);
             CgPath path = CgPath.parse(request.path());
             String repeat = operations.answerFor(request.op());
             if (repeat != null) return repeat;
@@ -217,7 +217,7 @@ public final class WorkspaceBinding<T> {
         }));
 
         registry.register(FsMethods.MKDIR, (args, respond) -> mutate(respond, () -> {
-            CgPath path = CgPath.parse(decode(FsMessages.pathRequest(), args).path());
+            CgPath path = CgPath.parse(decode(FsMessages.PATH_REQUEST, args).path());
             requireValidName(path);
             service.mkdir(actor, path);
             audit.record(actor, WorkspaceOperation.WRITE, path);
@@ -225,7 +225,7 @@ public final class WorkspaceBinding<T> {
         }));
 
         registry.register(FsMethods.DELETE, (args, respond) -> mutate(respond, () -> {
-            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            FsMessages.PathRequest request = decode(FsMessages.PATH_REQUEST, args);
             CgPath path = CgPath.parse(request.path());
             String repeat = operations.answerFor(request.op());
             if (repeat != null) return repeat;
@@ -241,7 +241,7 @@ public final class WorkspaceBinding<T> {
         // WHAT MAKES A DELETE REVERSIBLE. `delete` answers a trash id and nothing could redeem it, so
         // the id was a receipt for something the client had no way to ask for.
         registry.register(FsMethods.RESTORE, (args, respond) -> mutate(respond, () -> {
-            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            FsMessages.PathRequest request = decode(FsMessages.PATH_REQUEST, args);
             String repeat = operations.answerFor(request.op());
             if (repeat != null) return repeat;
 
@@ -253,7 +253,7 @@ public final class WorkspaceBinding<T> {
         }));
 
         registry.register(FsMethods.RENAME, (args, respond) -> mutate(respond, () -> {
-            FsMessages.MoveRequest request = decode(FsMessages.moveRequest(), args);
+            FsMessages.MoveRequest request = decode(FsMessages.MOVE_REQUEST, args);
             CgPath from = CgPath.parse(request.from());
             CgPath to = CgPath.parse(request.to());
             String repeat = operations.answerFor(request.op());
@@ -276,7 +276,7 @@ public final class WorkspaceBinding<T> {
          * directory at all, since a read of one is an error.
          */
         registry.register(FsMethods.COPY, (args, respond) -> mutate(respond, () -> {
-            FsMessages.MoveRequest request = decode(FsMessages.moveRequest(), args);
+            FsMessages.MoveRequest request = decode(FsMessages.MOVE_REQUEST, args);
             CgPath from = CgPath.parse(request.from());
             CgPath to = CgPath.parse(request.to());
             String repeat = operations.answerFor(request.op());
@@ -298,18 +298,18 @@ public final class WorkspaceBinding<T> {
          * on disk, kept, and unreachable.
          */
         registry.register(FsMethods.TRASH_LIST, (args, respond) -> guard(respond, () -> {
-            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            FsMessages.PathRequest request = decode(FsMessages.PATH_REQUEST, args);
             String project = CgPath.parse(request.path()).project();
             List<FsMessages.TrashEntry> out = new ArrayList<>();
             for (WorkspaceTrash.Entry entry : service.trashList(actor, project)) {
                 out.add(new FsMessages.TrashEntry(entry.id(), entry.originalPath().toString(),
                         entry.actor(), entry.deletedAt(), entry.directory(), entry.size()));
             }
-            return encode(FsMessages.trashListResponse(), new FsMessages.TrashListResponse(out));
+            return encode(FsMessages.TRASH_LIST_RESPONSE, new FsMessages.TrashListResponse(out));
         }));
 
         registry.register(FsMethods.PURGE, (args, respond) -> mutate(respond, () -> {
-            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            FsMessages.PathRequest request = decode(FsMessages.PATH_REQUEST, args);
             String repeat = operations.answerFor(request.op());
             if (repeat != null) return repeat;
 
@@ -326,7 +326,7 @@ public final class WorkspaceBinding<T> {
         }));
 
         registry.register(FsMethods.WATCH, (args, respond) -> guard(respond, () -> {
-            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            FsMessages.PathRequest request = decode(FsMessages.PATH_REQUEST, args);
             CgPath path = CgPath.parse(request.path());
             // AUTHORISED WITH A STAT. `service.read` reads the whole file to make the same check, so
             // subscribing to a 40 MB log allocated 40 MB and threw it away.
@@ -337,7 +337,7 @@ public final class WorkspaceBinding<T> {
         }));
 
         registry.register(FsMethods.UNWATCH, (args, respond) -> guard(respond, () -> {
-            CgPath path = CgPath.parse(decode(FsMessages.pathRequest(), args).path());
+            CgPath path = CgPath.parse(decode(FsMessages.PATH_REQUEST, args).path());
             hub.unwatch(peer, path);
             service.presence().closed(actor, path);
             return null;
@@ -346,7 +346,7 @@ public final class WorkspaceBinding<T> {
         // DIRTINESS IS THE CLIENT'S TO REPORT. The server cannot observe it -- a file with no writes
         // coming is equally one nobody has touched and one somebody has been typing in for ten minutes.
         registry.register(FsMethods.EDITING, (args, respond) -> guard(respond, () -> {
-            FsMessages.PathRequest request = decode(FsMessages.pathRequest(), args);
+            FsMessages.PathRequest request = decode(FsMessages.PATH_REQUEST, args);
             CgPath path = CgPath.parse(request.path());
             // AUTHORISED AS A READ, which is what having it open already required. Saying you are
             // editing something you may not read would advertise that it exists.
@@ -356,7 +356,7 @@ public final class WorkspaceBinding<T> {
         }));
 
         registry.register(FsMethods.CAPABILITIES, (args, respond) ->
-                answer(respond, FsMessages.capabilitiesNotification(), capabilities()));
+                answer(respond, FsMessages.CAPABILITIES_NOTIFICATION, capabilities()));
     }
 
     /**
@@ -500,7 +500,7 @@ public final class WorkspaceBinding<T> {
             respond.fail(FsError.RATE_LIMITED + " too many changes; slow down");
             return;
         }
-        guard(respond, () -> encode(FsMessages.etagResponse(),
+        guard(respond, () -> encode(FsMessages.ETAG_RESPONSE,
                 new FsMessages.EtagResponse(work.perform())));
     }
 

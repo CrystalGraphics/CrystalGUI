@@ -35,82 +35,31 @@ public final class GraphCodecs {
     /** Insertion-ordered, as the class doc requires; an empty one is omitted. */
     private static final CgCodec<Map<String, String>> STRING_MAP = CgCodecs.mapOf(CgCodecs.STRING, CgCodecs.STRING);
 
-    public static final CgCodec<PortRef> PORT_REF = new CgCodec<>() {
-        @Override
-        public <T> T encode(CgDynamicOps<T> ops, PortRef input) {
-            return CgCodecs.map(ops)
-                    .field("n", CgCodecs.STRING, input.nodeId())
-                    .field("p", CgCodecs.STRING, input.portId())
-                    .build();
-        }
+    public static final CgCodec<PortRef> PORT_REF = CgCodecs.record(
+            CgCodecs.field("n", CgCodecs.STRING, PortRef::nodeId),
+            CgCodecs.field("p", CgCodecs.STRING, PortRef::portId),
+            PortRef::new);
 
-        @Override
-        public <T> PortRef decode(CgDynamicOps<T> ops, T input) {
-            var in = CgCodecs.read(ops, input);
-            return new PortRef(in.field("n", CgCodecs.STRING), in.field("p", CgCodecs.STRING));
-        }
-    };
+    public static final CgCodec<PortSpec> PORT_SPEC = CgCodecs.record(
+            CgCodecs.field("id", CgCodecs.STRING, PortSpec::portId),
+            // By NAME, never ordinal: inserting a constant must not re-point an existing file.
+            CgCodecs.field("dir", CgCodecs.enumOf(PortDirection.class), PortSpec::direction),
+            CgCodecs.field("type", CgCodecs.STRING, PortSpec::typeId),
+            PortSpec::new);
 
-    public static final CgCodec<PortSpec> PORT_SPEC = new CgCodec<>() {
-        @Override
-        public <T> T encode(CgDynamicOps<T> ops, PortSpec input) {
-            return CgCodecs.map(ops)
-                    .field("id", CgCodecs.STRING, input.portId())
-                    // By NAME, never ordinal: inserting a constant must not re-point an existing file.
-                    .field("dir", CgCodecs.enumOf(PortDirection.class), input.direction())
-                    .field("type", CgCodecs.STRING, input.typeId())
-                    .build();
-        }
+    public static final CgCodec<EdgeData> EDGE = CgCodecs.record(
+            CgCodecs.field("from", PORT_REF, EdgeData::from),
+            CgCodecs.field("to", PORT_REF, EdgeData::to),
+            EdgeData::new);
 
-        @Override
-        public <T> PortSpec decode(CgDynamicOps<T> ops, T input) {
-            var in = CgCodecs.read(ops, input);
-            return new PortSpec(in.field("id", CgCodecs.STRING),
-                    in.field("dir", CgCodecs.enumOf(PortDirection.class)),
-                    in.field("type", CgCodecs.STRING));
-        }
-    };
-
-    public static final CgCodec<EdgeData> EDGE = new CgCodec<>() {
-        @Override
-        public <T> T encode(CgDynamicOps<T> ops, EdgeData input) {
-            return CgCodecs.map(ops)
-                    .field("from", PORT_REF, input.from())
-                    .field("to", PORT_REF, input.to())
-                    .build();
-        }
-
-        @Override
-        public <T> EdgeData decode(CgDynamicOps<T> ops, T input) {
-            var in = CgCodecs.read(ops, input);
-            return new EdgeData(in.field("from", PORT_REF), in.field("to", PORT_REF));
-        }
-    };
-
-    public static final CgCodec<NodeData> NODE = new CgCodec<>() {
-        @Override
-        public <T> T encode(CgDynamicOps<T> ops, NodeData input) {
-            var builder = CgCodecs.map(ops)
-                    .field("id", CgCodecs.STRING, input.id())
-                    .field("type", CgCodecs.STRING, input.typeId())
-                    .field("x", CgCodecs.FLOAT, input.x())
-                    .field("y", CgCodecs.FLOAT, input.y())
-                    .optionalList("ports", PORT_SPEC, input.ports())
-                    .optional("props", STRING_MAP, input.properties(), Map.of());
-            return builder.build();
-        }
-
-        @Override
-        public <T> NodeData decode(CgDynamicOps<T> ops, T input) {
-            var in = CgCodecs.read(ops, input);
-            List<PortSpec> ports = in.has("ports")
-                    ? in.field("ports", CgCodecs.listOf(PORT_SPEC))
-                    : List.of();
-            Map<String, String> properties = in.optional("props", STRING_MAP, new LinkedHashMap<>());
-            return new NodeData(in.field("id", CgCodecs.STRING), in.field("type", CgCodecs.STRING),
-                    in.field("x", CgCodecs.FLOAT), in.field("y", CgCodecs.FLOAT), ports, properties);
-        }
-    };
+    public static final CgCodec<NodeData> NODE = CgCodecs.record(
+            CgCodecs.field("id", CgCodecs.STRING, NodeData::id),
+            CgCodecs.field("type", CgCodecs.STRING, NodeData::typeId),
+            CgCodecs.field("x", CgCodecs.FLOAT, NodeData::x),
+            CgCodecs.field("y", CgCodecs.FLOAT, NodeData::y),
+            CgCodecs.optionalField("ports", CgCodecs.listOf(PORT_SPEC), NodeData::ports, List.of()),
+            CgCodecs.optionalField("props", STRING_MAP, NodeData::properties, Map.of()),
+            NodeData::new);
 
     public static final CgCodec<GraphProperty> PROPERTY = new CgCodec<>() {
         @Override

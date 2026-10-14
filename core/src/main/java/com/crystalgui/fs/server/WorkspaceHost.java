@@ -242,7 +242,7 @@ public final class WorkspaceHost {
             if (mine.isEmpty()) continue;
             try {
                 connection.notify(FsMethods.CHANGED, new CgStateMap<>(CgPlainOps.INSTANCE,
-                        FsMessages.changedNotification().encode(CgPlainOps.INSTANCE,
+                        FsMessages.CHANGED_NOTIFICATION.encode(CgPlainOps.INSTANCE,
                                 new FsMessages.ChangedNotification(mine))));
             } catch (RuntimeException failed) {
                 // One player's dispatch must not stop every other player hearing about the change.
@@ -267,7 +267,7 @@ public final class WorkspaceHost {
             if (mine == null) continue;
             try {
                 connection.notify(FsMethods.PRESENCE, new CgStateMap<>(CgPlainOps.INSTANCE,
-                        FsMessages.presenceNotification().encode(CgPlainOps.INSTANCE, mine)));
+                        FsMessages.PRESENCE_NOTIFICATION.encode(CgPlainOps.INSTANCE, mine)));
             } catch (RuntimeException failed) {
                 // One player's dispatch must not stop every other player hearing who is here.
                 CrystalGuiCore.LOGGER.error("[cgui-fs] presence dispatch failed: {}",

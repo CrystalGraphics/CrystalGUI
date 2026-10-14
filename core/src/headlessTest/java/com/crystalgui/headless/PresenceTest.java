@@ -111,7 +111,7 @@ public class PresenceTest {
             FsMessages.PresenceNotification mine = binding.presenceFor();
             if (mine == null) return;
             server.notify(FsMethods.PRESENCE, new CgStateMap<>(CgPlainOps.INSTANCE,
-                    FsMessages.presenceNotification().encode(CgPlainOps.INSTANCE, mine)));
+                    FsMessages.PRESENCE_NOTIFICATION.encode(CgPlainOps.INSTANCE, mine)));
         }
 
         Document open(CgPath path) {

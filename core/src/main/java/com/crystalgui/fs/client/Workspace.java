@@ -334,9 +334,9 @@ public final class Workspace implements Disposable {
         }
         Watch watch = new Watch(resource, recursive);
         watches.put(resource, watch);
-        calls.send(FsMethods.WATCH, FsMessages.pathRequest(),
+        calls.send(FsMethods.WATCH, FsMessages.PATH_REQUEST,
                 new FsMessages.PathRequest(resource.toString(), recursive ? "recursive" : ""),
-                FsMessages.etagResponse());
+                FsMessages.ETAG_RESPONSE);
         return watch;
     }
 
@@ -354,9 +354,9 @@ public final class Workspace implements Disposable {
      * a document's state is what changed.</p>
      */
     public CgReply<String> setEditing(Resource resource, boolean dirty) {
-        return calls.send(FsMethods.EDITING, FsMessages.pathRequest(),
+        return calls.send(FsMethods.EDITING, FsMessages.PATH_REQUEST,
                         new FsMessages.PathRequest(resource.toString(), dirty ? "dirty" : ""),
-                        FsMessages.etagResponse())
+                        FsMessages.ETAG_RESPONSE)
                 .map(FsMessages.EtagResponse::etag);
     }
 
@@ -364,7 +364,7 @@ public final class Workspace implements Disposable {
 
     /** Asks what this server is. First, because four client decisions depend on the answer. */
     public CgReply<FsHello> greet() {
-        return calls.coalesced("hello", FsMethods.HELLO, FsMessages.pathRequest(),
+        return calls.coalesced("hello", FsMethods.HELLO, FsMessages.PATH_REQUEST,
                         new FsMessages.PathRequest(""), FsHello.CODEC)
                 .then(answer -> {
                     if (answer == null) return;
@@ -389,8 +389,8 @@ public final class Workspace implements Disposable {
      * promotion, a project opened — and this is what makes the first answer exist to be updated.</p>
      */
     public CgReply<FsMessages.CapabilitiesNotification> askCapabilities() {
-        return calls.coalesced("capabilities", FsMethods.CAPABILITIES, FsMessages.pathRequest(),
-                        new FsMessages.PathRequest(""), FsMessages.capabilitiesNotification())
+        return calls.coalesced("capabilities", FsMethods.CAPABILITIES, FsMessages.PATH_REQUEST,
+                        new FsMessages.PathRequest(""), FsMessages.CAPABILITIES_NOTIFICATION)
                 .then(answer -> {
                     if (answer != null) capabilities.apply(answer);
                 });
@@ -462,21 +462,21 @@ public final class Workspace implements Disposable {
         greeted = false;
         greet();
         for (Watch watch : new ArrayList<>(watches.values())) {
-            calls.send(FsMethods.WATCH, FsMessages.pathRequest(),
+            calls.send(FsMethods.WATCH, FsMessages.PATH_REQUEST,
                     new FsMessages.PathRequest(watch.resource().toString(),
                             watch.recursive() ? "recursive" : ""),
-                    FsMessages.etagResponse());
+                    FsMessages.ETAG_RESPONSE);
         }
         onDidReconnect.emit();
     }
 
     private void subscribe(Subscriber subscriber, CgDynamicOps<Object> ops) {
         subscriber.subscribe(FsMethods.CHANGED, args ->
-                deliver(FsMessages.changedNotification().decode(ops, args.encode())));
+                deliver(FsMessages.CHANGED_NOTIFICATION.decode(ops, args.encode())));
         subscriber.subscribe(FsMethods.PRESENCE, args ->
-                presence.apply(FsMessages.presenceNotification().decode(ops, args.encode())));
+                presence.apply(FsMessages.PRESENCE_NOTIFICATION.decode(ops, args.encode())));
         subscriber.subscribe(FsMethods.CAPABILITIES, args ->
-                capabilities.apply(FsMessages.capabilitiesNotification().decode(ops, args.encode())));
+                capabilities.apply(FsMessages.CAPABILITIES_NOTIFICATION.decode(ops, args.encode())));
     }
 
     private void deliver(FsMessages.ChangedNotification notification) {
@@ -565,8 +565,8 @@ public final class Workspace implements Disposable {
 
         private void forceDispose() {
             if (watches.remove(resource) == null) return;
-            calls.send(FsMethods.UNWATCH, FsMessages.pathRequest(),
-                    new FsMessages.PathRequest(resource.toString()), FsMessages.etagResponse());
+            calls.send(FsMethods.UNWATCH, FsMessages.PATH_REQUEST,
+                    new FsMessages.PathRequest(resource.toString()), FsMessages.ETAG_RESPONSE);
         }
     }
 
