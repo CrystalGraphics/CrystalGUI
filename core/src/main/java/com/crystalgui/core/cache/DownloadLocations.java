@@ -1,8 +1,10 @@
 package com.crystalgui.core.cache;
 
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 import javax.annotation.Nullable;
 import java.io.ByteArrayInputStream;
@@ -68,8 +70,8 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>{@link #find} answers null for an id the jar does not list. A caller reports that as not
  *       configured; it never guesses a URL.</li>
- *   <li>A copy that is not JSON, or declares a {@code format} other than {@value #FORMAT}, is ignored
- *       whole: an old jar keeps what it shipped with rather than misread a newer layout.</li>
+ *   <li>A copy that is not JSON, holds what this jar cannot read, or declares a {@code format} other than
+ *       {@value #FORMAT}, is ignored whole: an old jar keeps what it shipped with rather than misread a newer layout.</li>
  *   <li>A host calls {@link #useCacheRoot} at startup; without it master's copy is fetched every session.</li>
  *   <li>{@code -Dcrystalgui.download.remote=false} never reads master's copy. The tests run that way.</li>
  * </ul>
@@ -99,6 +101,40 @@ public final class DownloadLocations {
     /** One artifact: the jar's pin, null when nothing can be pinned, and every URL, best first. */
     public record Location(String id, @Nullable String digest, List<String> urls) {
     }
+
+    /** A download as the file writes it: its URLs, or Maven coordinates {@code from} named repositories; and a pin. */
+    private record Spec(List<String> urls, @Nullable String maven, List<String> from, @Nullable String digest) {
+
+        static final CgCodec<Spec> CODEC = new CgCodec<Spec>() {
+            @Override
+            public <T> T encode(CgDynamicOps<T> ops, Spec spec) {
+                return CgCodecs.map(ops).field("urls", STRINGS, spec.urls())
+                        .optional("maven", CgCodecs.STRING, spec.maven(), null)
+                        .field("from", STRINGS, spec.from())
+                        .optional("digest", CgCodecs.STRING, spec.digest(), null)
+                        .build();
+            }
+
+            @Override
+            public <T> Spec decode(CgDynamicOps<T> ops, T in) {
+                CgCodecs.MapCodecReader<T> spec = CgCodecs.read(ops, in);
+                return new Spec(spec.optional("urls", STRINGS, Collections.<String>emptyList()),
+                        spec.optional("maven", CgCodecs.STRING, null),
+                        spec.optional("from", STRINGS, Collections.<String>emptyList()),
+                        spec.optional("digest", CgCodecs.STRING, null));
+            }
+        };
+    }
+
+    private static final CgCodec<List<String>> STRINGS = CgCodecs.listOf(CgCodecs.STRING);
+
+    private static final CgCodec<Map<String, List<String>>> REPOSITORIES = CgCodecs.mapOf(CgCodecs.STRING, STRINGS);
+
+    private static final CgCodec<Map<String, Spec>> FILES = CgCodecs.mapOf(CgCodecs.STRING, Spec.CODEC);
+
+    /** Each engine band's jars: coordinates to digest. */
+    private static final CgCodec<Map<String, Map<String, String>>> BANDS =
+            CgCodecs.mapOf(CgCodecs.STRING, CgCodecs.mapOf(CgCodecs.STRING, CgCodecs.STRING));
 
     /** One way to an artifact: a URL, or Maven coordinates looked up in a named repository. */
     private record Address(@Nullable String url, @Nullable String repository, @Nullable String coordinates) {
@@ -421,81 +457,43 @@ public final class DownloadLocations {
         return copy;
     }
 
-    /** One copy, or null when it is not JSON, not an object, or in a format this jar does not read. */
+    /** One copy, or null when it is not JSON, holds what this jar cannot read, or is in another format. */
     private static @Nullable Copy parse(String text) {
         try {
-            JsonElement root = new JsonParser().parse(text);
-            if (root == null || !root.isJsonObject()) return null;
-            JsonObject file = root.getAsJsonObject();
-            if (file.has("format") && file.get("format").getAsInt() != FORMAT) return null;
-
-            Map<String, List<String>> repositories = new LinkedHashMap<>();
-            for (Map.Entry<String, JsonElement> repository : membersOf(file, "repositories")) {
-                repositories.put(repository.getKey(), stringsOf(repository.getValue()));
-            }
+            CgDynamicOps<JsonElement> ops = CgJsonOps.INSTANCE;
+            CgCodecs.MapCodecReader<JsonElement> file = CgCodecs.read(ops, CgJsonOps.fromText(text));
+            if (file.optional("format", CgCodecs.INT, FORMAT) != FORMAT) return null;
 
             List<Entry> entries = new ArrayList<>();
-            for (Map.Entry<String, JsonElement> member : membersOf(file, "files")) {
-                if (!member.getValue().isJsonObject()) continue;
-                JsonObject spec = member.getValue().getAsJsonObject();
+            for (Map.Entry<String, Spec> member : file.optional("files", FILES, Collections.<String, Spec>emptyMap()).entrySet()) {
+                Spec spec = member.getValue();
                 List<Address> addresses = new ArrayList<>();
-                for (String url : stringsOf(spec.get("urls"))) addresses.add(new Address(url, null, null));
-                String maven = stringOf(spec.get("maven"));
-                if (maven != null && isCoordinates(maven)) {
-                    for (String repository : stringsOf(spec.get("from"))) {
-                        addresses.add(new Address(null, repository, maven));
-                    }
+                for (String url : spec.urls()) addresses.add(new Address(url, null, null));
+                if (spec.maven() != null && isCoordinates(spec.maven())) {
+                    for (String repository : spec.from()) addresses.add(new Address(null, repository, spec.maven()));
                 }
-                entries.add(new Entry(member.getKey(), stringOf(spec.get("digest")), addresses));
+                entries.add(new Entry(member.getKey(), spec.digest(), addresses));
             }
 
-            JsonObject engines = objectOf(file, "engines");
-            if (engines != null) {
-                List<String> from = stringsOf(engines.get("from"));
-                for (Map.Entry<String, JsonElement> band : membersOf(engines, "bands")) {
-                    if (!band.getValue().isJsonObject()) continue;
-                    for (Map.Entry<String, JsonElement> jar : band.getValue().getAsJsonObject().entrySet()) {
+            if (file.has("engines")) {
+                CgCodecs.MapCodecReader<JsonElement> engines = CgCodecs.read(ops, file.raw("engines"));
+                List<String> from = engines.optional("from", STRINGS, Collections.<String>emptyList());
+                Map<String, Map<String, String>> bands = engines.optional("bands", BANDS, Collections.<String, Map<String, String>>emptyMap());
+                for (Map.Entry<String, Map<String, String>> band : bands.entrySet()) {
+                    for (Map.Entry<String, String> jar : band.getValue().entrySet()) {
                         String coordinates = jar.getKey();
                         if (!isCoordinates(coordinates)) continue;
                         List<Address> addresses = new ArrayList<>();
                         for (String repository : from) addresses.add(new Address(null, repository, coordinates));
-                        entries.add(new Entry("engine/" + band.getKey() + "/" + mavenFile(coordinates),
-                                stringOf(jar.getValue()), addresses));
+                        entries.add(new Entry("engine/" + band.getKey() + "/" + mavenFile(coordinates), jar.getValue(), addresses));
                     }
                 }
             }
-            return new Copy(stringsOf(file.get("self")), repositories, entries);
+            return new Copy(file.optional("self", STRINGS, Collections.<String>emptyList()),
+                    file.optional("repositories", REPOSITORIES, Collections.<String, List<String>>emptyMap()), entries);
         } catch (RuntimeException unreadable) {
             return null;
         }
-    }
-
-    private static Set<Map.Entry<String, JsonElement>> membersOf(JsonObject parent, String key) {
-        JsonObject child = objectOf(parent, key);
-        return child == null ? Collections.<Map.Entry<String, JsonElement>>emptySet() : child.entrySet();
-    }
-
-    private static @Nullable JsonObject objectOf(JsonObject parent, String key) {
-        JsonElement child = parent.get(key);
-        return child != null && child.isJsonObject() ? child.getAsJsonObject() : null;
-    }
-
-    private static @Nullable String stringOf(@Nullable JsonElement element) {
-        return element != null && element.isJsonPrimitive() ? element.getAsString() : null;
-    }
-
-    /** A string or an array of them, as a list; anything else is none. */
-    private static List<String> stringsOf(@Nullable JsonElement element) {
-        List<String> strings = new ArrayList<>();
-        if (element == null) return strings;
-        if (element.isJsonPrimitive()) {
-            strings.add(element.getAsString());
-        } else if (element.isJsonArray()) {
-            for (JsonElement item : element.getAsJsonArray()) {
-                if (item.isJsonPrimitive()) strings.add(item.getAsString());
-            }
-        }
-        return strings;
     }
 
     private static @Nullable String resourceText() {

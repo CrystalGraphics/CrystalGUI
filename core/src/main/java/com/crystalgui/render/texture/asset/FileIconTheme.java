@@ -1,12 +1,13 @@
 package com.crystalgui.render.texture.asset;
 
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.format.CgFormats;
 import com.crystalgraphics.util.io.CgIO;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiSvg;
-
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,7 +58,6 @@ import javax.annotation.Nullable;
  */
 public final class FileIconTheme {
 
-    private static final Gson GSON = new Gson();
     private static final ConcurrentHashMap<String, FileIconTheme> CACHE = new ConcurrentHashMap<>();
 
     /** The theme a resource pack overrides by shipping {@code assets/{ns}/ui/icons/default.json}. */
@@ -321,14 +321,7 @@ public final class FileIconTheme {
             return EMPTY;
         }
         try {
-            JsonObject root = GSON.fromJson(json, JsonObject.class);
-            return new FileIconTheme(
-                    optString(root, "file"),
-                    optString(root, "folder"),
-                    optString(root, "folderExpanded"),
-                    optMap(root, "fileExtensions"),
-                    optMap(root, "fileNames"),
-                    optMap(root, "folderNames"));
+            return CgFormats.JSON.fromText(CODEC, json);
         } catch (RuntimeException malformed) {
             CrystalGuiCore.LOGGER.warn("FileIconTheme: failed to parse '{}': {}",
                     themePath, malformed.getMessage());
@@ -357,10 +350,34 @@ public final class FileIconTheme {
         return namespace + ":ui/icons/" + path + ".json";
     }
 
-    @Nullable
-    private static String optString(JsonObject root, String field) {
-        return root.has(field) ? root.get(field).getAsString() : null;
-    }
+    private static final CgCodec<Map<String, String>> ICONS = CgCodecs.mapOf(CgCodecs.STRING, CgCodecs.STRING);
+
+    /** A theme file, as the class doc shows it. */
+    private static final CgCodec<FileIconTheme> CODEC = new CgCodec<FileIconTheme>() {
+        @Override
+        public <T> T encode(CgDynamicOps<T> ops, FileIconTheme theme) {
+            return CgCodecs.map(ops)
+                    .optional("file", CgCodecs.STRING, theme.fileIcon, null)
+                    .optional("folder", CgCodecs.STRING, theme.folderIcon, null)
+                    .optional("folderExpanded", CgCodecs.STRING, theme.folderExpandedIcon, null)
+                    .field("fileExtensions", ICONS, theme.fileExtensions)
+                    .field("fileNames", ICONS, theme.fileNames)
+                    .field("folderNames", ICONS, theme.folderNames)
+                    .build();
+        }
+
+        @Override
+        public <T> FileIconTheme decode(CgDynamicOps<T> ops, T in) {
+            CgCodecs.MapCodecReader<T> theme = CgCodecs.read(ops, in);
+            return new FileIconTheme(
+                    theme.optional("file", CgCodecs.STRING, null),
+                    theme.optional("folder", CgCodecs.STRING, null),
+                    theme.optional("folderExpanded", CgCodecs.STRING, null),
+                    ungrouped(theme.optional("fileExtensions", ICONS, Map.of())),
+                    ungrouped(theme.optional("fileNames", ICONS, Map.of())),
+                    ungrouped(theme.optional("folderNames", ICONS, Map.of())));
+        }
+    };
 
     /**
      * A theme's map, with comma-grouped keys expanded.
@@ -382,12 +399,11 @@ public final class FileIconTheme {
      * An empty member — a trailing comma, a doubled one — is skipped rather than registered as the empty
      * key, which would otherwise match every name with a leading dot.</p>
      */
-    private static Map<String, String> optMap(JsonObject root, String field) {
-        if (!root.has(field)) return Map.of();
+    private static Map<String, String> ungrouped(Map<String, String> grouped) {
+        if (grouped.isEmpty()) return Map.of();
         Map<String, String> out = new LinkedHashMap<>();
-        for (Map.Entry<String, com.google.gson.JsonElement> entry
-                : root.getAsJsonObject(field).entrySet()) {
-            String icon = entry.getValue().getAsString();
+        for (Map.Entry<String, String> entry : grouped.entrySet()) {
+            String icon = entry.getValue();
             for (String key : entry.getKey().split(",")) {
                 String trimmed = key.trim();
                 if (trimmed.isEmpty()) continue;

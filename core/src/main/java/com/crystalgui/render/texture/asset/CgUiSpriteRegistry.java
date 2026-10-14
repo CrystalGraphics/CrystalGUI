@@ -3,17 +3,19 @@ package com.crystalgui.render.texture.asset;
 import com.crystalgraphics.api.texture.CgTextureSpec;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.CgDynamicOps;
+import com.crystalgraphics.serialization.format.CgFormats;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiRepeat;
 import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.CgUiSprite;
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
 
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -45,7 +47,6 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class CgUiSpriteRegistry {
 
-    private static final Gson GSON = new Gson();
     private static final ConcurrentHashMap<String, ParsedPack> CACHE = new ConcurrentHashMap<>();
 
     private CgUiSpriteRegistry() {
@@ -128,37 +129,72 @@ public final class CgUiSpriteRegistry {
     }
 
     private static ParsedPack parsePack(String json) {
-        JsonObject root = GSON.fromJson(json, JsonObject.class);
-        String packTexture = optString(root, "texture");
-        int[] packTextureSize = optIntArray(root, "textureSize");
-
-        Map<String, ParsedElement> elements = new HashMap<>();
-        JsonObject elementsObj = root.has("elements") ? root.getAsJsonObject("elements") : null;
-        if (elementsObj != null) {
-            for (var entry : elementsObj.entrySet()) {
-                JsonObject el = entry.getValue().getAsJsonObject();
-                String texture = optString(el, "texture");
-                int[] textureSize = optIntArray(el, "textureSize");
-                int[] sprite = optIntArray(el, "sprite");
-                int[] border = optIntArray(el, "border");
-                String repeat = optString(el, "repeat");
-                Boolean fillCenter = optBoolean(el, "fillCenter");
-                Float borderScale = optFloat(el, "borderScale");
-                elements.put(entry.getKey(),
-                        new ParsedElement(texture, textureSize, sprite, border, repeat, fillCenter, borderScale));
-            }
-        }
-        if (packTexture == null && elements.values().stream().allMatch(e -> e.texture == null)) {
+        ParsedPack pack = CgFormats.JSON.fromText(ParsedPack.CODEC, json);
+        if (pack.texture == null && pack.elements.values().stream().allMatch(e -> e.texture == null)) {
             throw new IllegalArgumentException("pack has no top-level 'texture' and no element overrides one");
         }
-        return new ParsedPack(packTexture, packTextureSize, elements);
+        return pack;
     }
 
+    private static final CgCodec<int[]> INTS = CgCodecs.xmap(CgCodecs.listOf(CgCodecs.INT), list -> {
+        int[] values = new int[list.size()];
+        for (int i = 0; i < values.length; i++) values[i] = list.get(i);
+        return values;
+    }, values -> {
+        List<Integer> list = new ArrayList<>(values.length);
+        for (int value : values) list.add(value);
+        return list;
+    });
+
     private record ParsedPack(String texture, int[] textureSize, Map<String, ParsedElement> elements) {
+
+        static final CgCodec<ParsedPack> CODEC = new CgCodec<ParsedPack>() {
+            @Override
+            public <T> T encode(CgDynamicOps<T> ops, ParsedPack pack) {
+                return CgCodecs.map(ops)
+                        .optional("texture", CgCodecs.STRING, pack.texture, null)
+                        .optional("textureSize", INTS, pack.textureSize, null)
+                        .field("elements", CgCodecs.mapOf(CgCodecs.STRING, ParsedElement.CODEC), pack.elements)
+                        .build();
+            }
+
+            @Override
+            public <T> ParsedPack decode(CgDynamicOps<T> ops, T in) {
+                CgCodecs.MapCodecReader<T> pack = CgCodecs.read(ops, in);
+                return new ParsedPack(pack.optional("texture", CgCodecs.STRING, null),
+                        pack.optional("textureSize", INTS, null),
+                        pack.optional("elements", CgCodecs.mapOf(CgCodecs.STRING, ParsedElement.CODEC), Map.of()));
+            }
+        };
     }
 
     private record ParsedElement(String texture, int[] textureSize, int[] sprite, int[] border,
                                  String repeat, Boolean fillCenter, Float borderScale) {
+
+        static final CgCodec<ParsedElement> CODEC = new CgCodec<ParsedElement>() {
+            @Override
+            public <T> T encode(CgDynamicOps<T> ops, ParsedElement e) {
+                return CgCodecs.map(ops)
+                        .optional("texture", CgCodecs.STRING, e.texture, null)
+                        .optional("textureSize", INTS, e.textureSize, null)
+                        .optional("sprite", INTS, e.sprite, null)
+                        .optional("border", INTS, e.border, null)
+                        .optional("repeat", CgCodecs.STRING, e.repeat, null)
+                        .optional("fillCenter", CgCodecs.BOOL, e.fillCenter, null)
+                        .optional("borderScale", CgCodecs.FLOAT, e.borderScale, null)
+                        .build();
+            }
+
+            @Override
+            public <T> ParsedElement decode(CgDynamicOps<T> ops, T in) {
+                CgCodecs.MapCodecReader<T> e = CgCodecs.read(ops, in);
+                return new ParsedElement(e.optional("texture", CgCodecs.STRING, null),
+                        e.optional("textureSize", INTS, null), e.optional("sprite", INTS, null),
+                        e.optional("border", INTS, null), e.optional("repeat", CgCodecs.STRING, null),
+                        e.optional("fillCenter", CgCodecs.BOOL, null), e.optional("borderScale", CgCodecs.FLOAT, null));
+            }
+        };
+
         CgUiSprite toSprite(ParsedPack pack) {
             String resolvedTexture = texture != null ? texture : pack.texture;
             int[] resolvedTextureSize = textureSize != null ? textureSize : pack.textureSize;
@@ -203,25 +239,5 @@ public final class CgUiSpriteRegistry {
         CgUiRepeat y = words.length == 2 ? CgUiRepeat.parse(words[1]) : x;
         if (y == null) return null;
         return new CgUiRepeat[]{x, y};
-    }
-
-    private static Boolean optBoolean(JsonObject obj, String field) {
-        return obj.has(field) ? obj.get(field).getAsBoolean() : null;
-    }
-
-    private static Float optFloat(JsonObject obj, String field) {
-        return obj.has(field) ? obj.get(field).getAsFloat() : null;
-    }
-
-    private static String optString(JsonObject obj, String field) {
-        return obj.has(field) ? obj.get(field).getAsString() : null;
-    }
-
-    private static int[] optIntArray(JsonObject obj, String field) {
-        if (!obj.has(field)) return null;
-        JsonArray arr = obj.getAsJsonArray(field);
-        int[] values = new int[arr.size()];
-        for (int i = 0; i < arr.size(); i++) values[i] = arr.get(i).getAsInt();
-        return values;
     }
 }
