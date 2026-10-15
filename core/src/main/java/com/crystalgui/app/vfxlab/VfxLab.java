@@ -102,7 +102,7 @@ public class VfxLab extends UIElement {
 
     private final CgVfxSystem vfx = new CgVfxSystem();
     private final Queue<Runnable> pending = new ConcurrentLinkedQueue<>();
-    private final List<CgVfxEffect> live = new ArrayList<>();
+    private final List<CgVfxEffect<?>> live = new ArrayList<>();
     private final VfxViewport viewport = new VfxViewport();
     private final CgMesh floor = CgMesh.build(CgVertexFormat.SPATIAL, m -> CgMeshShapes.plane(m, 1, 1, FLOOR_FADE * 2.5f, FLOOR_FADE * 2.5f));
     private final CgMesh sky = CgMeshShapes.sphere(24, 32);
@@ -274,7 +274,7 @@ public class VfxLab extends UIElement {
         live.removeIf(effect -> effect.state() == CgVfxEffect.State.DEAD);
         float letGo = hold;
         if (letGo > 0f) {
-            for (CgVfxEffect effect : live) {
+            for (CgVfxEffect<?> effect : live) {
                 if (effect.state() == CgVfxEffect.State.PLAYING && effect.age() >= letGo) effect.stop();
             }
         }
@@ -335,7 +335,7 @@ public class VfxLab extends UIElement {
         CgVfxRegistry.Entry entry = selected;
         CgVfxValues edited = values;
         if (entry == null || edited == null) return;
-        CgVfxEffect effect = entry.spawn(entry.look(), 0.0, LAB_Y + 1.5, 0.0, target, LAB_Y, 0.0);
+        CgVfxEffect<?> effect = entry.spawn(entry.look(), 0.0, LAB_Y + 1.5, 0.0, target, LAB_Y, 0.0);
         effect.ground(LAB_Y);
         for (Value value : Value.all(edited.layout())) value.apply(effect, edited);
         if (effect instanceof CgEnergyWave wave) CgVfxDemoControls.get().apply(wave);
@@ -348,11 +348,11 @@ public class VfxLab extends UIElement {
     }
 
     private void stopAll() {
-        for (CgVfxEffect effect : live) effect.stop();
+        for (CgVfxEffect<?> effect : live) effect.stop();
     }
 
     private void clearAll() {
-        for (CgVfxEffect effect : live) effect.kill();
+        for (CgVfxEffect<?> effect : live) effect.kill();
         live.clear();
     }
 
@@ -694,7 +694,7 @@ public class VfxLab extends UIElement {
         for (UIElement mark : marks) any |= mark.isDisplayed();
         resetAll.setDisplayed(any);
         pending.add(() -> {
-            for (CgVfxEffect effect : live) value.apply(effect, edited);
+            for (CgVfxEffect<?> effect : live) value.apply(effect, edited);
         });
     }
 
@@ -756,7 +756,7 @@ public class VfxLab extends UIElement {
         }
 
         /** Its value in {@code values} set on a playing {@code effect}. */
-        void apply(CgVfxEffect effect, CgVfxValues values) {
+        void apply(CgVfxEffect<?> effect, CgVfxValues values) {
             if (param instanceof CgVfxParam.Scalar scalar) {
                 effect.set(scalar, values.get(scalar));
             } else if (param instanceof CgVfxParam.Color colour) {
