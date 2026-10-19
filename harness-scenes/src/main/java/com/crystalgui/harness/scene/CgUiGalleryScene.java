@@ -2560,7 +2560,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
             float x = 0f;
             float y = 0f;
             // The frame clock, which the harness sets from its fixed delta: a capture at frame N is one picture.
-            float t = CgFrameClock.seconds();
+            double t = CgFrameClock.seconds();
 
             switch (mode) {
                 case BASICS -> paintBasics(ctx, x, y);
@@ -2657,7 +2657,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
          * then a thin bright core. Feather is what makes this work at all; without a per-instance
          * softness the halo would be a hard-edged slab.
          */
-        private void paintNeon(CgUiPaintContext ctx, float x, float y, float t) {
+        private void paintNeon(CgUiPaintContext ctx, float x, float y, double t) {
             float bow = 22f + 10f * (float) Math.sin(t * 1.3f);
             int tint = hue(t * 0.12f);
             float[] widths = { 13f, 6f, 2f };
@@ -2672,7 +2672,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Cubics — one submit() each, split CPU-side into 1-4 quadratics. Gradient must not band. */
-        private void paintCubic(CgUiPaintContext ctx, float x, float y, float t) {
+        private void paintCubic(CgUiPaintContext ctx, float x, float y, double t) {
             for (int i = 0; i < 3; i++) {
                 float cx = x + 16 + i * 136;
                 float wob = 26f + 16f * (float) Math.sin(t * 0.9f + i * 1.1f);
@@ -2689,7 +2689,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** A travelling sine, built from a run of quadratics — the polyline case. */
-        private void paintWave(CgUiPaintContext ctx, float x, float y, float t) {
+        private void paintWave(CgUiPaintContext ctx, float x, float y, double t) {
             final int segments = 34;
             float span = 396f;
             float midY = y + 37;
@@ -2712,16 +2712,16 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
             }
         }
 
-        private static float waveAt(float u, float t) {
+        private static float waveAt(float u, double t) {
             return (float) (Math.sin(u * Math.PI * 4 + t * 2.2) * 20 + Math.sin(u * Math.PI * 7 - t * 1.4) * 7);
         }
 
         /** Stacked tapered arcs — taper plus gradient plus overlap, the "does it look good" row. */
-        private void paintRibbon(CgUiPaintContext ctx, float x, float y, float t) {
+        private void paintRibbon(CgUiPaintContext ctx, float x, float y, double t) {
             final int strands = 14;
             for (int i = 0; i < strands; i++) {
                 float p = i / (float) (strands - 1);
-                float phase = t * 0.7f + p * 2.4f;
+                double phase = t * 0.7 + p * 2.4;
                 float lift = 34f + 26f * (float) Math.sin(phase);
                 ctx.curve()
                         .from(x + 18, y + 84)
@@ -2739,7 +2739,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
          * cubics tinted from source port to destination port, which is the standard idiom and the
          * reason gradient was worth having in the instance record at all.
          */
-        private void paintNodeGraph(CgUiPaintContext ctx, float x, float y, float t) {
+        private void paintNodeGraph(CgUiPaintContext ctx, float x, float y, double t) {
             float[] srcY = { y + 26, y + 52, y + 78 };
             float[] dstY = { y + 34, y + 70 };
             int[] srcColor = { 0xFFFF6B6B, 0xFF6CC4FF, 0xFFFFC24D };
@@ -2774,7 +2774,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Rotating spokes, each a tapered gradient arc. The harness scene's crowd-pleaser. */
-        private void paintFan(CgUiPaintContext ctx, float x, float y, float t) {
+        private void paintFan(CgUiPaintContext ctx, float x, float y, double t) {
             float cx = x + 210;
             float cy = y + 75;
             final int spokes = 18;
@@ -2794,13 +2794,13 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** An expanding spiral in quadratic segments — many strokes, one draw call. */
-        private void paintSpiral(CgUiPaintContext ctx, float x, float y, float t) {
+        private void paintSpiral(CgUiPaintContext ctx, float x, float y, double t) {
             float cx = x + 210;
             float cy = y + 75;
             final int steps = 70;
             float turns = 3.2f;
             float maxR = 66f;
-            float spin = t * 0.5f;
+            double spin = t * 0.5;
             for (int i = 0; i < steps; i++) {
                 float u0 = i / (float) steps;
                 float u1 = (i + 1) / (float) steps;
@@ -2823,12 +2823,12 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** A Lissajous figure — long, self-crossing, and the best look at antialiasing quality. */
-        private void paintLissajous(CgUiPaintContext ctx, float x, float y, float t) {
+        private void paintLissajous(CgUiPaintContext ctx, float x, float y, double t) {
             float cx = x + 210;
             float cy = y + 75;
             float rx = 180f, ry = 60f;
             final int steps = 90;
-            float phase = t * 0.4f;
+            double phase = t * 0.4;
             for (int i = 0; i < steps; i++) {
                 float u0 = i / (float) steps;
                 float u1 = (i + 1) / (float) steps;
@@ -2849,12 +2849,12 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
             }
         }
 
-        private static float lx(float u, float phase) {
+        private static float lx(float u, double phase) {
             return (float) Math.sin(u * Math.PI * 2 * 3 + phase);
         }
 
         /** Second axis at a 2:3 ratio against {@link #lx}, drifting so the figure keeps reshaping. */
-        private static float ly(float u, float phase) {
+        private static float ly(float u, double phase) {
             return (float) Math.sin(u * Math.PI * 2 * 2 + phase * 0.6);
         }
 
@@ -2889,8 +2889,8 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
 
         /** Opaque ARGB from a hue phase — deterministic, and only ever used for demo colour. */
-        private static int hue(float phase) {
-            float h = (phase % 1f + 1f) % 1f;
+        private static int hue(double phase) {
+            float h = (float) ((phase % 1.0 + 1.0) % 1.0);
             float r = clamp01(Math.abs(h * 6f - 3f) - 1f);
             float g = clamp01(2f - Math.abs(h * 6f - 2f));
             float b = clamp01(2f - Math.abs(h * 6f - 4f));
