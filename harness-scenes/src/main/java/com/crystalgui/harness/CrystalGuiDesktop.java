@@ -1,12 +1,13 @@
 package com.crystalgui.harness;
 
+import com.crystalgraphics.frame.CgTickFunction;
+import com.crystalgraphics.frame.CgTickGroup;
+import com.crystalgraphics.frame.CgWorld;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.HarnessDesktop;
 import com.crystalgraphics.harness.config.HarnessContext;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgraphics.render.stage.CgRenderStage;
-import com.crystalgraphics.render.world.CgWorldRenderer;
 import com.crystalgui.app.vfxlab.VfxLab;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -36,7 +37,7 @@ final class CrystalGuiDesktop implements HarnessDesktop {
     private DocumentDriver.Painter<Void> painter;
     private Desktop desktop;
     private volatile VfxLab lab;
-    private CgRenderStage.Registration labFrames;
+    private CgTickFunction labFrames;
     private volatile double seconds;
     private volatile boolean shown;
 
@@ -54,10 +55,10 @@ final class CrystalGuiDesktop implements HarnessDesktop {
             VfxLab.openOn(desktop, lab);
         });
         if (labFrames == null) {
-            labFrames = CgWorldRenderer.get().onFrame(view -> {
+            labFrames = CgWorld.client().schedule().add(CgTickGroup.SUBMIT, "crystalgui:vfx-lab", dt -> {
                 VfxLab running = lab;
                 if (running != null) running.render(seconds);
-            });
+            }).whilePaused(true);
         }
         shown = true;
         return true;

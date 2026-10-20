@@ -61,7 +61,7 @@ import java.util.function.BooleanSupplier;
  * VfxLab lab = new VfxLab();
  * VfxLab.openOn(desktop, lab);                                  // again to bring a closed window back
  * // on the render thread: the effects play while the world fires this...
- * CgRenderStage.Registration frames = CgWorldRenderer.get().onFrame(view -> lab.render(seconds));
+ * CgTickFunction frames = CgWorld.client().schedule().add(CgTickGroup.SUBMIT, "mymod:lab", dt -> lab.render(seconds));
  * // ...and the viewport draws after the frame's world, before the desktop paints
  * lab.drawViewport(worldWidth, worldHeight);
  * // closing for good, on the render thread:
@@ -267,7 +267,7 @@ public class VfxLab extends UIElement {
     /**
      * Runs what the panels asked, spawns again with Loop on once the last effect has died, then updates and submits
      * the effects and lab space's floor and sky. Once a frame on the render thread, from a
-     * {@link CgWorldRenderer#onFrame} listener.
+     * tick function in the world schedule.
      */
     public void render(double seconds) {
         for (Runnable action; (action = pending.poll()) != null; ) action.run();
