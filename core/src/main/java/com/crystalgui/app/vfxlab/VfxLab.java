@@ -339,7 +339,7 @@ public class VfxLab extends UIElement {
         CgVfxEffect<?> effect = entry.spawn(entry.look(), 0.0, LAB_Y + 1.5, 0.0, target, LAB_Y, 0.0);
         effect.ground(LAB_Y);
         for (Value value : Value.all(edited.layout())) value.apply(effect, edited);
-        if (effect instanceof CgVfxSystemInstance beam && beam.behaviour() instanceof CgEnergyWave) {
+        if (effect instanceof CgVfxSystemInstance<?> beam && beam.behaviour() instanceof CgEnergyWave) {
             CgVfxDemoControls.get().apply(beam);
         }
         live.add(vfx.play(effect));
