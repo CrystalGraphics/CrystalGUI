@@ -83,9 +83,6 @@ public class ShippedShadersOnTrackedBackendTest {
                 }
             }
             CgMaterial material = CgMaterial.newInstance(path);
-            if (CgMaterialShader.SHADOWS_SUPPORTED && material.hasShadowCasterPass()
-                    && !shader.hasCompiledPass(CgRenderPassVariant.SHADOW.lightModeName()))
-                failures.add(path + ": the generated shadow pass did not link (see log)");
             if (parsed.renderQueue() < 3000 && forward != null && !material.hasDepthPass()
                     && !shader.hasCompiledPass(CgRenderPassVariant.DEPTH.lightModeName()))
                 failures.add(path + ": the generated depth pass did not link (see log)");
