@@ -5,6 +5,8 @@ import com.crystalgui.render.UiFrame;
 import com.crystalgui.render.UiStages;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.HostThread;
+import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -186,6 +188,8 @@ public final class HostSession {
         // The game's threads, as UI code reaches them. @see HostThread
         HostThread.bind(HostThread.CLIENT, services.clientThread());
         HostThread.bind(HostThread.SERVER, services.serverThread());
+        // The trace's run directory, from client start: a report on exit whether or not the desktop ever opens.
+        UiTrace.useCacheRoot(StorageLayout.cacheIn(services.installationDirectory()));
     }
 
     /**
