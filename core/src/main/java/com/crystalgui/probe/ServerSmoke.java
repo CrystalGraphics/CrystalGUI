@@ -27,6 +27,9 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.frame.CgTickGroup;
 import com.crystalgraphics.frame.CgWorld;
 import com.crystalgraphics.net.CgNetwork;
+import com.crystalgraphics.asset.codec.CgAssetYaml;
+import com.crystalgraphics.asset.kind.CgSequenceKinds;
+import com.crystalgraphics.asset.tree.CgAssetData;
 import com.crystalgraphics.net.object.CgAnchor;
 import com.crystalgraphics.net.object.CgNetField;
 import com.crystalgraphics.net.object.CgNetType;
@@ -41,6 +44,12 @@ import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.format.CgFormats;
 import com.crystalgraphics.serialization.format.CgTextFormat;
+import com.crystalgraphics.sequence.CgSequencePlayer;
+import com.crystalgraphics.sequence.CgSequenceTarget;
+import com.crystalgraphics.sequence.CgSequencer;
+import com.crystalgraphics.sequence.binding.CgSequenceLocator;
+import com.crystalgraphics.sequence.definition.CgSequenceDefinition;
+import com.crystalgraphics.sequence.event.CgSequenceEventListener;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.net.mirror.UIElementMirror;
 import com.crystalgui.ui.dom.UIElement;
@@ -239,6 +248,7 @@ public final class ServerSmoke {
         static final int TICKS = 40;
         final CgWorld world = CgWorld.serverWorld();
         final int[] authority = {0}, notOnServer = {0}, frame = {0};
+        final HeadlessSequence move = new HeadlessSequence(world);
         int seen;
         boolean reported;
 
@@ -260,7 +270,56 @@ public final class ServerSmoke {
                     notOnServer[0] + " runs");
             check(lines, failures, "no frame group runs on a dedicated server", frame[0] == 0 && world.frames() == 0,
                     frame[0] + " frame-group runs, " + world.frames() + " frames");
+            move.check(lines, failures);
             return true;
+        }
+    }
+
+    /**
+     * A move's sequence played headless by the server world's sequencer on the server's own ticks: its {@code rpg}
+     * events heard by gameplay on the server thread, in order, spans as a begin and an end; its {@code ours} events,
+     * the host's presentation, never.
+     */
+    private static final class HeadlessSequence {
+        static final String MOVE = "_v: 1\ntick_resolution: 1000\ndisplay_rate: 50\nrange: [0, 1500]\n"
+                + "roles:\n  - { id: b1, name: caster, kind: caster }\ntracks:\n"
+                + "  - { id: t1, kind: event, side: rpg, binding: { role: caster }, sections: [\n"
+                + "      { id: a, keys: [[150, { event: crystalgui:release, args: { power: 3 } }], [1200, crystalgui:recover]] },\n"
+                + "      { id: b, range: [300, 700], event: crystalgui:hit_window } ] }\n"
+                + "  - { id: t2, kind: event, side: ours, binding: { role: caster }, sections: [ { id: c, keys: [[150, crystalgui:rumble]] } ] }\n";
+        static final List<String> EXPECTED = Arrays.asList("INSTANT crystalgui:release", "BEGIN crystalgui:hit_window",
+                "END crystalgui:hit_window", "INSTANT crystalgui:recover");
+        final List<String> rpg = new ArrayList<>(), ours = new ArrayList<>();
+        final Thread server = Thread.currentThread();
+        boolean offThread;
+        CgSequencePlayer player;
+        String failed;
+
+        HeadlessSequence(CgWorld world) {
+            try {
+                CgSequencer sequencer = world.add(new CgSequencer());
+                sequencer.listen(CgSequenceEventListener.Side.RPG, (p, phase, event, args) -> {
+                    rpg.add(phase + " " + event);
+                    offThread |= Thread.currentThread() != server;
+                });
+                sequencer.listen(CgSequenceEventListener.Side.OURS, (p, phase, event, args) -> ours.add(event));
+                CgSequenceDefinition move = CgSequenceDefinition.compile(CgAssetData.of("crystalgui:smoke/move",
+                        CgSequenceKinds.SEQUENCE, (Map<?, ?>) CgAssetYaml.read(MOVE), null));
+                Map<String, CgSequenceTarget> roles = new LinkedHashMap<>();
+                roles.put("caster", new CgSequenceLocator("caster"));
+                player = sequencer.play(move, roles);
+            } catch (RuntimeException e) {
+                failed = String.valueOf(e);
+            }
+        }
+
+        void check(List<String> lines, List<String> failures) {
+            ServerSmoke.check(lines, failures, "a move's sequence plays headless on the server's ticks",
+                    failed == null && player != null && player.seconds() > 1.2,
+                    failed != null ? failed : "at " + (player == null ? "nothing" : player.seconds() + " s"));
+            ServerSmoke.check(lines, failures, "its rpg events are heard on the server thread, in order",
+                    rpg.equals(EXPECTED) && !offThread, rpg + (offThread ? ", some off the server thread" : ""));
+            ServerSmoke.check(lines, failures, "its ours events never reach a server", ours.isEmpty(), ours.toString());
         }
     }
 
