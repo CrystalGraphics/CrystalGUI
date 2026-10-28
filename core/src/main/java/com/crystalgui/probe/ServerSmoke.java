@@ -24,6 +24,9 @@ import java.util.zip.ZipFile;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.frame.CgTickGroup;
+import com.crystalgraphics.frame.CgWorld;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgraphics.net.object.CgAnchor;
 import com.crystalgraphics.net.object.CgNetField;
 import com.crystalgraphics.net.object.CgNetType;
@@ -163,7 +166,7 @@ public final class ServerSmoke {
         return Boolean.getBoolean(PROPERTY);
     }
 
-    /** Runs every check, prints the report, writes the verdict, and ends the process. */
+    /** Runs every check (those needing the server to tick after its first ticks), prints the report, writes the verdict, and ends the process. */
     public static void run(Host host) {
         List<String> lines = new ArrayList<>();
         List<String> failures = new ArrayList<>();
@@ -216,10 +219,49 @@ public final class ServerSmoke {
         checkNbtRoundTrip(lines, failures);
         checkTextFormats(lines, failures);
 
-        String report = render(host, lines, failures);
-        print(report);
-        ProbeReport.write(REPORT_PROPERTY, failures.isEmpty(), report);
-        stop(host, failures.isEmpty());
+        // What needs the server to tick: checked once it has, on its own tick, then reported.
+        ServerTicks ticked = new ServerTicks();
+        CgNetwork.onServerTick(() -> {
+            if (ticked.after(lines, failures)) {
+                String report = render(host, lines, failures);
+                print(report);
+                ProbeReport.write(REPORT_PROPERTY, failures.isEmpty(), report);
+                stop(host, failures.isEmpty());
+            }
+        });
+    }
+
+    /**
+     * The server world's tick schedule, as the server's own tick drives it: an {@code onServer} function in
+     * {@code AUTHORITY} runs every game tick, one that did not ask never does, and no frame group runs at all.
+     */
+    private static final class ServerTicks {
+        static final int TICKS = 40;
+        final CgWorld world = CgWorld.serverWorld();
+        final int[] authority = {0}, notOnServer = {0}, frame = {0};
+        int seen;
+        boolean reported;
+
+        ServerTicks() {
+            world.schedule().add(CgTickGroup.AUTHORITY, "crystalgui:smoke.authority", dt -> authority[0]++).onServer(true);
+            world.schedule().add(CgTickGroup.GAMEPLAY, "crystalgui:smoke.client-only", dt -> notOnServer[0]++);
+            world.schedule().add(CgTickGroup.EFFECTS, "crystalgui:smoke.frame", dt -> frame[0]++).onServer(true);
+        }
+
+        /** True once, after {@link #TICKS} server ticks, with its checks added. */
+        boolean after(List<String> lines, List<String> failures) {
+            if (reported || ++seen < TICKS) return false;
+            reported = true;
+            // The listener runs before the world's, so the world has ticked one fewer time.
+            check(lines, failures, "the server world ticks its onServer functions each game tick",
+                    authority[0] >= TICKS - 1 && world.ticks() >= TICKS - 1,
+                    authority[0] + " runs over " + world.ticks() + " world ticks of " + TICKS + " server ticks");
+            check(lines, failures, "a tick function without onServer never runs on a server", notOnServer[0] == 0,
+                    notOnServer[0] + " runs");
+            check(lines, failures, "no frame group runs on a dedicated server", frame[0] == 0 && world.frames() == 0,
+                    frame[0] + " frame-group runs, " + world.frames() + " frames");
+            return true;
+        }
     }
 
     // ── the checks ──────────────────────────────────────────────────────────────────────────────
