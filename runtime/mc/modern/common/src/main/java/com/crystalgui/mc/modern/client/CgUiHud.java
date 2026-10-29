@@ -5,9 +5,6 @@ import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import com.crystalgui.ui.input.HostPointer;
-//? if >=26.1 {
-/*import com.crystalgui.lifecycle.CgUiLifecycle;
-*///?}
 
 import net.minecraft.client.Minecraft;
 
@@ -69,32 +66,9 @@ public final class CgUiHud {
                 ? HostSession.session().presentation(HOST) : DesktopPresentation.NONE;
     }
 
-    /** The HUD arm: no screen is up. */
-    public static void paintHud() {
-        paint(DesktopPresentation.HUD);
-    }
-
-    /** The arm for somebody else's screen. */
-    public static void paintOverScreen() {
-        paint(DesktopPresentation.OVERLAY);
-    }
-
-    private static void paint(DesktopPresentation arm) {
-        // 26.1 extracts the GUI before it draws the level, so a paint from its hooks lands under the
-        // world: the arm paints at the frame end instead, over everything. @see CgUiLifecycle#atFrameEnd
-        //? if >=26.1 {
-        /*CgUiLifecycle.atFrameEnd(arm, () -> paintNow(arm));
-        *///?} else {
-        paintNow(arm);
-        //?}
-    }
-
-    private static void paintNow(DesktopPresentation arm) {
-        // Whether there is anything to draw INTO is this loader's question, and it is asked before the
-        // session is: the engine initialises on the first WORLD render, and these hooks also fire over a
-        // title screen where there has never been one.
-        if (!HostSession.isInstalled() || !CgUiHostGl.contextIsLive()) return;
-        HostSession.session().paint(arm, HOST);
+    /** The pinned windows on CrystalGraphics' HUD and screen stages, which its hosts fire. Once, on a client. */
+    public static void attachStages() {
+        HostSession.attachStages(HOST);
     }
 
     // ── Input, offered to the compositor ────────────────────────────────────────────────────────

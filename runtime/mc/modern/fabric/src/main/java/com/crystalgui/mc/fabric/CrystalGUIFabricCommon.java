@@ -1,6 +1,5 @@
 package com.crystalgui.mc.fabric;
 
-import com.crystalgraphics.mc.modern.platform.ResourceIds;
 import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgraphics.mc.shared.VariantEntry;
@@ -13,14 +12,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 /*import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 *///?} else {
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-//?}
-//? if >=26.1 {
-/*import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
-*///?} elif >=1.15 {
-import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-//?}
-//? if >=1.16 {
-import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 //?}
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -42,7 +33,6 @@ import org.lwjgl.glfw.GLFWMouseButtonCallback;
 import org.lwjgl.glfw.GLFWScrollCallback;
 //?}
 
-import static com.crystalgui.mc.modern.platform.CrystalGUI.MODID;
 import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
 
 /**
@@ -92,29 +82,6 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
             CgUiKeybinds.all().forEach(KeyBindingHelper::registerKeyBinding);
             //?}
             ClientTickEvents.END_CLIENT_TICK.register(client -> LifecycleCrystalGUI.clientTick());
-
-            // Pinned windows. ScreenOverlay decides; the loader only forwards and honours the boolean.
-            // Fabric API for 26.1 replaced the callback with HUD elements: one, added last, so on top.
-            // Fabric API for 1.15 hands the HUD callback the tick delta alone; 1.14's has none, and the
-            // HUD is a node mixin there. @see com.crystalgui.mc.fabric.mixin.HudHook
-            //? if >=26.1 {
-            /*HudElementRegistry.addLast(ResourceIds.of(MODID, "hud"), (graphics, delta) -> LifecycleCrystalGUI.paintHud());
-            *///?} elif >=1.16 {
-            HudRenderCallback.EVENT.register((graphics, tickDelta) -> LifecycleCrystalGUI.paintHud());
-            //?} elif >=1.15 {
-            /*HudRenderCallback.EVENT.register(tickDelta -> LifecycleCrystalGUI.paintHud());
-            *///?}
-            // Fabric API for 1.15 has no screen events, so pinned windows do not draw over another
-            // mod's screen there; the desktop, the HUD and input are unaffected.
-            //? if >=26.1 {
-            /*ScreenEvents.AFTER_INIT.register((client, screen, width, height) ->
-                    ScreenEvents.afterExtract(screen).register(
-                            (s, g, mx, my, td) -> LifecycleCrystalGUI.paintOverlay()));
-            *///?} elif >=1.16 {
-            ScreenEvents.AFTER_INIT.register((client, screen, width, height) ->
-                    ScreenEvents.afterRender(screen).register(
-                            (s, g, mx, my, td) -> LifecycleCrystalGUI.paintOverlay()));
-            //?}
 
             ClientLifecycleEvents.CLIENT_STARTED.register(
                     client -> Input.install(Windows.handle(client)));

@@ -4,19 +4,20 @@ import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.graph.CgPassRecorder;
+import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
-import com.crystalgui.render.UiStages;
+import com.crystalgui.desktop.host.HostSession;
 
 /**
- * A renderer of a mod's own on {@link UiStages#SCREEN} and {@link UiStages#HUD}, for an unattended run: a mark in the
- * top-left corner, over CrystalGUI's windows, drawn the way {@code UiStages}' example draws, and a count of what each
+ * A renderer of a mod's own on {@link CgRenderStage#SCREEN} and {@link CgRenderStage#HUD}, for an unattended run: a mark
+ * in the top-left corner, over CrystalGUI's windows, and a count of what each
  * stage drew. {@link AutoTest} starts it with the desktop and states the counts beside each capture; {@code prodSmoke}
  * fails a run whose {@code SCREEN} never drew.
  */
 final class StageProbe {
 
     /** Over CrystalGUI's windows. */
-    private static final int ORDER = UiStages.COMPOSITOR + 1000;
+    private static final int ORDER = HostSession.COMPOSITOR + 1000;
     private static final int MARK = 0xFFFF00FF;
 
     private static boolean started;
@@ -31,11 +32,11 @@ final class StageProbe {
     static void start() {
         if (started) return;
         started = true;
-        UiStages.SCREEN.register(ORDER, frame -> {
+        CgRenderStage.SCREEN.register(ORDER, frame -> {
             draw(frame);
             screenDrew++;
         });
-        UiStages.HUD.register(ORDER, frame -> {
+        CgRenderStage.HUD.register(ORDER, frame -> {
             draw(frame);
             hudDrew++;
         });

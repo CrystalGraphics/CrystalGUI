@@ -18,10 +18,7 @@ carried back from 1.14.4 (`CrystalGraphics/runtime/mc/modern/mappings/`).
 **Three API eras below 1.19**, each a directive in `CrystalGUIForge`: Forge 37 (1.17.1) names screen
 events `GuiScreenEvent.*Event` and keeps servers and networking in `fmlserverevents`/`fmllegacy`;
 Forge 38-40 (1.18.x) name them `ScreenEvent.*Event`; both register keys through `ClientRegistry` in
-client setup and paint the HUD on `RenderGameOverlayEvent.Post` for `ElementType.ALL`.
-
-**Forge 56-57 (1.21.6-1.21.7) have no HUD event either**, and there the HUD is a node mixin on
-`Gui.render` (`mixin/HudHook`, gated by `CrystalGuiForgeMixins` in `runtime/mc/shared`). From 1.21.6 Forge
+client setup. The HUD and screen hooks are CrystalGraphics' (`CgRenderStage.HUD`, `SCREEN`). From 1.21.6 Forge
 is EventBus 7: every subscription in `CrystalGUIForge` has a `>=1.21.6` twin.
 
 ## The loader is registration only

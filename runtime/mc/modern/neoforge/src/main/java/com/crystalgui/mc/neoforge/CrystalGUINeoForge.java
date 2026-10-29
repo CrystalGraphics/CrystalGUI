@@ -9,7 +9,6 @@ import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.RenderGuiEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
@@ -114,8 +113,6 @@ public final class CrystalGUINeoForge implements VariantEntry {
 
                 NeoForge.EVENT_BUS.addListener(ClientBus::onClientTick);
 
-                NeoForge.EVENT_BUS.addListener(ClientBus::onRenderGui);
-                NeoForge.EVENT_BUS.addListener(ClientBus::onScreenRender);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMousePressed);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMouseReleased);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMouseScrolled);
@@ -138,18 +135,6 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.clientTick();
             }
             //?}
-
-            /**
-             * ONCE a frame. RenderGuiOverlayEvent fires per vanilla overlay element, so painting from it
-             * drew the whole compositor a dozen times a frame.
-             */
-            private static void onRenderGui(RenderGuiEvent.Post event) {
-                LifecycleCrystalGUI.paintHud();
-            }
-
-            private static void onScreenRender(ScreenEvent.Render.Post event) {
-                LifecycleCrystalGUI.paintOverlay();
-            }
 
             private static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
                 if (LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f)) event.setCanceled(true);

@@ -4941,8 +4941,6 @@ com/crystalgui/desktop/host/HostSession
   method public offerKey (ICZ)Z
   method public offerMouse (Lcom/crystalgui/desktop/host/HostSession$PaintHost;ZIIIZF)Z
   method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FLcom/crystalgui/desktop/host/HostSession$PaintHost;)V
-  method public paint (Lcom/crystalgui/core/window/DesktopPresentation;Lcom/crystalgui/desktop/host/HostSession$PaintHost;)V
-  method public paintWithoutStage (Lcom/crystalgui/core/window/DesktopPresentation;FLcom/crystalgui/desktop/host/HostSession$PaintHost;)V
   method public presentation (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)Lcom/crystalgui/core/window/DesktopPresentation;
   method public requestApplication ()V
   method public services ()Lcom/crystalgui/desktop/host/HostServices;
@@ -8321,12 +8319,6 @@ com/crystalgui/render/UiGpu
   method public,static presentAgain (II)V
   method public,static presented ()Lcom/crystalgui/render/UiFrame;
   method public,static redraw (IIZ)V
-com/crystalgui/render/UiStages
-  access public,final
-  extends java/lang/Object
-  field public,static,final COMPOSITOR I
-  field public,static,final HUD Lcom/crystalgraphics/render/stage/CgRenderStage;
-  field public,static,final SCREEN Lcom/crystalgraphics/render/stage/CgRenderStage;
 com/crystalgui/render/text/FontFamilyCache
   access public,final
   extends java/lang/Object

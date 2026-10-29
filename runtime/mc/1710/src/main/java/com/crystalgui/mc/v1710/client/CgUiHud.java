@@ -2,7 +2,6 @@ package com.crystalgui.mc.v1710.client;
 
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
 
@@ -15,28 +14,14 @@ import cpw.mods.fml.relauncher.SideOnly;
 import org.lwjgl.input.Mouse;
 
 import net.minecraft.client.Minecraft;
-import net.minecraftforge.client.event.GuiScreenEvent;
-import net.minecraftforge.client.event.RenderGameOverlayEvent;
-import net.minecraftforge.common.MinecraftForge;
 
 /**
  * Paints pinned windows wherever the desktop is not — M16, the 1.7.10 half.
  *
- * <h3>Two hooks, one decision</h3>
+ * <h3>Painting</h3>
  *
- * <p>Neither hook decides anything. Each names the arm it owns and {@link HostSession#paint} paints only
- * if the compositor is in it — which is the whole of the flicker fix. Before that, each path tested a
- * Minecraft condition for itself, and on the frame the desktop closed <b>both concluded it was the
- * other's turn</b>: {@code CgUiScreen} closes itself from inside its own {@code drawScreen}, after that
- * frame's overlay hook had already run and stood down.</p>
- *
- * <ul>
- *   <li>{@link RenderGameOverlayEvent.Post} — no screen at all. After Minecraft's own HUD, so a pinned
- *       window sits over the hotbar and the chat rather than under them.</li>
- *   <li>{@link GuiScreenEvent.DrawScreenEvent.Post} — a screen we do not own. This is also the only one
- *       that fires for a screen with no world behind it: the main menu and the loading screen set
- *       {@code skipRenderWorld}, and the overlay event never runs there.</li>
- * </ul>
+ * <p>The pinned windows paint on CrystalGraphics' HUD and screen stages ({@link HostSession#attachStages}), with
+ * this class's bracket; {@link HostSession} decides which arm each paints, so neither stage decides for itself.</p>
  *
  * <h3>Input, and why there is a mixin</h3>
  *
@@ -106,28 +91,16 @@ public final class CgUiHud {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        // THE FORGE BUS, not FMLCommonHandler's: these are client render events and are posted on
-        // MinecraftForge.EVENT_BUS. The neighbours here register on the FML bus because tick and
-        // connection events live there -- the two are not interchangeable, and a handler on the wrong
-        // one is never called and never complains.
-        CgUiHud.Handler handler = new CgUiHud.Handler();
-        MinecraftForge.EVENT_BUS.register(handler);
-        // AND THE FML BUS for the render tick: TickEvent lives there, not on the Forge bus.
-        FMLCommonHandler.instance().bus().register(handler);
-        CrystalGuiCore.LOGGER.info("[cgui] overlay hooks registered; pinned windows paint over the game "
-                + "and over other GUIs");
+        // The render tick is on FML's bus, not Forge's: a handler on the wrong one is never called and never complains.
+        FMLCommonHandler.instance().bus().register(new CgUiHud.Handler());
+        // The pinned windows paint on CrystalGraphics' HUD and screen stages, which its hosts fire.
+        HostSession.attachStages(HOST);
     }
 
     /** What the desktop should be showing right now. @see HostSession#presentation */
     public static DesktopPresentation presentation() {
         return HostSession.isInstalled()
                 ? HostSession.session().presentation(HOST) : DesktopPresentation.NONE;
-    }
-
-    /** Paints {@code arm}, and only if the compositor is in it. @see HostSession#paint */
-    private static void paint(DesktopPresentation arm) {
-        if (!HostSession.isInstalled()) return;
-        HostSession.session().paint(arm, HOST);
     }
 
     // ── Input, offered to the compositor ────────────────────────────────────────────────────────
@@ -163,28 +136,6 @@ public final class CgUiHud {
             if (event.phase != TickEvent.Phase.START) return;
             if (!CgUiOverlayInput.wants()) return;
             CgUiOverlayInput.drainInto(Minecraft.getMinecraft().currentScreen);
-        }
-
-        /** No screen: the HUD arm. */
-        @SubscribeEvent
-        public void onRenderOverlay(RenderGameOverlayEvent.Post event) {
-            if (event.type != RenderGameOverlayEvent.ElementType.ALL) return;
-            paint(DesktopPresentation.HUD);
-        }
-
-        /**
-         * A screen we do not own: the OVERLAY arm.
-         *
-         * <p><b>Our own screen is skipped, and that guard is not a formality.</b> {@code CgUiScreen}'s
-         * {@code drawScreen} is already painting the whole compositor; painting again here would draw
-         * every window twice, and the second pass would win the {@code localToWorld} reconciliation the
-         * hit test walks — so clicks would land somewhere other than what is on screen. That is the
-         * mirror rule {@code CgUiPaintContext.mirrored} exists for, met from the wrong side.</p>
-         */
-        @SubscribeEvent
-        public void onDrawScreen(GuiScreenEvent.DrawScreenEvent.Post event) {
-            if (event.gui instanceof CgUiScreen) return;
-            paint(DesktopPresentation.OVERLAY);
         }
     }
 }

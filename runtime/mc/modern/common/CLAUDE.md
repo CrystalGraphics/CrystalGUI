@@ -26,14 +26,12 @@ compiles against one loader and is used by three.
   place.
 - **The transport is the exception.** Three loaders mean three networking APIs, so each builds its own
   `CgNetworkChannel` and passes it to `LifecycleCrystalGUI.bootstrap`.
-- **`RenderGuiOverlayEvent` fires once per vanilla overlay ELEMENT** — hotbar, crosshair, boss bar, chat and
-  a dozen more. Painting the compositor from it laid it out and drew it about fifteen times a frame and put
-  the game at ten fps. `RenderGuiEvent.Post` fires once; Fabric's `HudRenderCallback` already did.
-- **One arm per hook.** A frame with a screen open fires the HUD hook AND the screen hook, so each paints only
-  its own presentation (`paintHud` / `paintOverScreen`) — otherwise the compositor is drawn twice.
-- **26.1+ paints at the frame end, not from its hooks.** 26.1 extracts the GUI before it renders the
-  level, so a paint from `extractRenderState` or a HUD element lands under the world. Each arm there hands
-  its paint to `CgUiLifecycle.atFrameEnd`, which runs it from CrystalGraphics' `onFrame`, after the GUI.
+- **The pinned windows paint on CrystalGraphics' `HUD` and `SCREEN` stages**, which its hosts fire once a frame
+  (at the frame end from 26.1): `CgUiHud.attachStages` from `bootstrapClient`. No loader here hooks the HUD or a
+  screen's render.
+- **26.1+ paints our own screen's desktop at the frame end.** 26.1 extracts the GUI before it renders the
+  level, so a paint from `extractRenderState` lands under the world; `CgUiScreen` hands it to
+  `CgUiLifecycle.atFrameEnd`, which runs it from CrystalGraphics' `onFrame`, after the GUI.
 - **No GL in constructors or static initialisers.** GL work waits for the first paint.
 - **Mixin AP comes from the toolchain.** A second `annotationProcessor` for Mixin produces duplicate-AP
   SRG mapping errors.

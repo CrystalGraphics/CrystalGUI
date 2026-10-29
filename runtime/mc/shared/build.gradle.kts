@@ -1,5 +1,5 @@
-// runtime/mc/shared — what every loader variant of CrystalGUI's single jar shares: the nodes' mixin
-// plugins, CrystalGuiForgeMixins and CrystalGuiFabricMixins.
+// runtime/mc/shared — what every loader variant of CrystalGUI's single jar shares: a node's mixin plugin. Empty
+// today: the HUD and screen hooks it once gated are CrystalGraphics'.
 //
 // `LoaderProbe` and `CrashVariant` lived here and are CrystalGraphics' now: CrystalGUI requires
 // CrystalGraphics on every loader, so a second copy bought nothing. Anything added here is merged once,

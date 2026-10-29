@@ -38,7 +38,7 @@ public class NodeCopiesTypeIndexTest {
                 "com/crystalgui/mc/v1122/client/CgUiScreen",
                 "com/crystalgraphics/mc/modern/fabric/v1165/common/platform/Windows",
                 "com/crystalgraphics/mc/modern/fabric/v1201/common/platform/Windows",
-                "com/crystalgui/mc/shared/CrystalGuiForgeMixins")) {
+                "com/crystalgui/mc/shared/SharedType")) {
             Path file = classpath.resolve(type + ".class");
             Files.createDirectories(file.getParent());
             Files.write(file, new byte[0]);
@@ -63,7 +63,7 @@ public class NodeCopiesTypeIndexTest {
 
         assertEquals(List.of("com.crystalgui.mc.fabric.v1165.common.client.CgUiScreen"), found("CgUiScreen"));
         assertEquals(List.of("com.crystalgraphics.mc.modern.fabric.v1165.common.platform.Windows"), found("Windows"));
-        assertEquals(1, found("CrystalGuiForgeMixins").size());
+        assertEquals(1, found("SharedType").size());
     }
 
     /** Outside a merged jar the service is in no node, and every copy stays. */

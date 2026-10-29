@@ -147,13 +147,12 @@ did. Under a node the
 > frame; `-Dcrystalgui.paint.damageCheck=true` paints each window again, whole, beside its surface and logs
 > `[damage-check]` where the two differ.
 
-> **CrystalGUI draws at two render stages** (render-graph G8): `UiStages.SCREEN` over a screen, its own or another
-> mod's, and `UiStages.HUD` over the in-game HUD, fired once a frame by `HostSession.paint` from each host's screen and
-> HUD hooks. The compositor is a renderer on both at `UiStages.COMPOSITOR`, its frame executed in a callback at its
-> place, so a mod registers below it to draw under the windows and above it to draw over them
-> (`docs/CGUI_BUILDING_UIS.md` § 11b). `paintWithoutStage` paints an arm whose stage already fired this frame. In an
-> unattended run `StageProbe` draws a mark on both the way a mod does, and `prodSmoke` fails a client whose screen
-> stage never drew.
+> **The pinned windows draw at CrystalGraphics' GUI stages**: `CgRenderStage.HUD` over the in-game HUD and
+> `CgRenderStage.SCREEN` over a screen, which CrystalGraphics' hosts fire once a frame. `HostSession.attachStages` puts
+> the compositor on both at `HostSession.COMPOSITOR`, its frame executed in a callback at its place: the HUD arm on
+> `HUD`, the overlay arm on `SCREEN`, each painting only when it is the presentation. Our own screen paints its desktop
+> itself (`HostSession.paint`), and `SCREEN` fires after it (`docs/CGUI_BUILDING_UIS.md` § 11b). In an unattended run
+> `StageProbe` draws a mark on both the way a mod does, and `prodSmoke` fails a client whose screen stage never drew.
 
 > **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,
 > so the background never masks the children; nested up to four deep and under any pose. Only a `mask`

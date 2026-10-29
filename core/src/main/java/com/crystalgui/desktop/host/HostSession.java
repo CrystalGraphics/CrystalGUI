@@ -1,8 +1,9 @@
 package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.render.stage.CgRenderStage;
+import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.render.UiFrame;
-import com.crystalgui.render.UiStages;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.HostThread;
 import com.crystalgui.core.storage.StorageLayout;
@@ -379,12 +380,11 @@ public final class HostSession {
     // ── Painting over the game ──────────────────────────────────────────────────────────────────
 
     /**
-     * What a host's paint hook has to answer, and the bracket it paints inside.
+     * What a host's paint has to answer, and the bracket it paints inside.
      *
      * <pre>{@code
-     * // one hook per arm; a frame with a screen open fires both
-     * void onHudHook()    { session.paint(HUD, myPaintHost); }
-     * void onScreenHook() { session.paint(OVERLAY, myPaintHost); }
+     * // once, on a client: the pinned windows over the HUD and over somebody else's screen
+     * HostSession.attachStages(myPaintHost);
      *
      * // our own screen, which also runs the host tick: one read, both uses
      * float delta = session.frameDelta();
@@ -392,7 +392,7 @@ public final class HostSession {
      * session.paint(DESKTOP, delta, myPaintHost);
      * }</pre>
      *
-     * <p>A hook passes no delta: {@link #frameDelta()} advances the clock, and a hook that read it and then
+     * <p>A stage passes no delta: {@link #frameDelta()} advances the clock, and an arm that read it and then
      * stood down would leave the arm that does paint a delta of nearly zero. Every animation then stalls,
      * a smooth scroll included, and its timeline writes the old offset back over a thumb drag.</p>
      */
@@ -518,86 +518,77 @@ public final class HostSession {
         return desktop == null || document() == null ? null : desktop.screenOverlay();
     }
 
+    /** The order CrystalGUI's windows draw at on {@link CgRenderStage#HUD} and {@link CgRenderStage#SCREEN}. */
+    public static final int COMPOSITOR = 0;
+
     /**
-     * Fires {@code arm}'s stage ({@link UiStages#HUD} for the HUD, {@link UiStages#SCREEN} otherwise), and paints
-     * {@code arm} in it, <b>only when the compositor is actually in it</b>. The stage fires whether or not it does: a mod
-     * drawing at it draws over a screen with no window on it too.
+     * Puts the pinned windows on CrystalGraphics' GUI stages: over the HUD, and over a screen that is not ours. Once, on
+     * a client; a later call does nothing.
      *
-     * <p>One arm per hook. A frame with a screen open fires the HUD hook and the screen hook both, and
-     * painting from each draws the whole compositor twice — style, layout and all — with the second pass
-     * winning the {@code localToWorld} reconciliation the hit test walks, so clicks land somewhere other
-     * than what is on screen.</p>
+     * <pre>{@code
+     * HostSession.attachStages(CgUiHud.HOST);
+     * }</pre>
+     */
+    public static void attachStages(PaintHost host) {
+        HostStages.attach(host);
+    }
+
+    /**
+     * Paints {@code arm} in {@code stage}'s frame, at {@link #COMPOSITOR}, <b>only when the compositor is actually in
+     * it</b>: from {@link CgRenderStage#HUD} the HUD arm, from {@link CgRenderStage#SCREEN} the overlay arm, which our
+     * own screen's desktop never is.
      *
      * <p><b>A fault here must not take the game down.</b> This runs inside the game's own render loop
      * every frame, and unlike a screen there is nothing the player can close to escape it. The mode is
      * dropped instead, which puts them back in a working game with their windows intact on the desktop.
      * Deciding what to present is inside the guard too: it reads the compositor and can throw for the
      * same reasons painting it can.</p>
-     *
-     * <p>Reads the frame clock only when {@code arm} paints. @see PaintHost</p>
      */
-    public void paint(DesktopPresentation arm, PaintHost host) {
-        paint(arm, host, false, 0f, true);
+    void paintAt(CgStageFrame stage, DesktopPresentation arm, PaintHost host) {
+        paint(arm, host, false, 0f, stage);
     }
 
     /**
-     * {@link #paint(DesktopPresentation, PaintHost)} with a delta already read this frame, for a caller
-     * that also handed it to {@link #frame}.
+     * Paints {@code arm} now, with a delta already read this frame, for a caller that also handed it to
+     * {@link #frame}: our own screen's desktop, and the HUD arm on the frame a screen closed itself after the HUD drew.
      */
     public void paint(DesktopPresentation arm, float deltaSeconds, PaintHost host) {
-        paint(arm, host, true, deltaSeconds, true);
+        paint(arm, host, true, deltaSeconds, null);
     }
 
-    /**
-     * {@link #paint(DesktopPresentation, float, PaintHost)} without firing the arm's stage, for a frame whose stage
-     * already fired: a screen that closed itself after the HUD drew.
-     */
-    public void paintWithoutStage(DesktopPresentation arm, float deltaSeconds, PaintHost host) {
-        paint(arm, host, true, deltaSeconds, false);
-    }
-
-    private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds, boolean fire) {
-        // EVERY HOOK, painted or not: work and answers for the frame thread must not wait for a desktop to show.
+    private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds,
+                       @Nullable CgStageFrame stage) {
+        // EVERY ARM, painted or not: work and answers for the frame thread must not wait for a desktop to show.
         HostThread.drainFrames();
         Desktop desktop = desktop();
-        boolean draws = desktop != null && document() != null && driver != null;
-
-        DesktopPresentation now = DesktopPresentation.NONE;
-        if (draws) {
-            try {
-                now = presentation(host);
-            } catch (RuntimeException | LinkageError failed) {
-                CrystalGuiCore.LOGGER.error("[cgui] could not decide a presentation; leaving HUD mode", failed);
-                post(desktop::exitHudMode);
-                draws = false;
-            }
+        if (desktop == null || document() == null || driver == null) return;
+        DesktopPresentation now;
+        try {
+            now = presentation(host);
+        } catch (RuntimeException | LinkageError failed) {
+            CrystalGuiCore.LOGGER.error("[cgui] could not decide a presentation; leaving HUD mode", failed);
+            post(desktop::exitHudMode);
+            return;
         }
-        // NONE paints nothing, and the other arm's hook owns the rest.
-        draws &= now == arm;
-        // ONCE A FRAME: a foreign screen's hook runs over ours as well, and ours fires SCREEN itself.
-        fire &= !(arm == DesktopPresentation.OVERLAY && host.ownScreenUp());
-        if (!draws && !fire) return;
-        if (draws) {
-            if (!deltaRead) deltaSeconds = frameDelta();
-            refreshHost();
-            returnUnhandledKeys();
-            host.beforePaint();
-        }
+        // NONE paints nothing, and the other arm's stage owns the rest. One arm per stage: a frame with a screen up
+        // fires both, and painting the compositor twice lets the second pass win the hit test's localToWorld.
+        if (now != arm) return;
+        if (!deltaRead) deltaSeconds = frameDelta();
+        refreshHost();
+        returnUnhandledKeys();
+        host.beforePaint();
         stagedPresentation = now;
         stagedDelta = deltaSeconds;
-        host.enter();
-        try {
-            boolean drawn = !fire || HostStages.fire(arm == DesktopPresentation.HUD ? UiStages.HUD : UiStages.SCREEN,
-                    services.surfaceWidth(), services.surfaceHeight(), services.uiScale(), draws ? paintStaged : null);
-            if (draws && !drawn) paintStaged.run();
-        } finally {
-            host.leave();
-        }
+        stagedHost = host;
+        if (stage != null) stage.callback("crystalgui", paintStaged);
+        else paintStaged.run();
     }
 
     /** What {@link #paintStaged} draws: the presentation and delta of the paint under way. */
     private DesktopPresentation stagedPresentation = DesktopPresentation.NONE;
     private float stagedDelta;
+    @Nullable
+    private PaintHost stagedHost;
 
     /** The compositor, at its place in the arm's stage. Held, so a frame allocates no callback. */
     private final Runnable paintStaged = this::paintCompositor;
@@ -606,7 +597,9 @@ public final class HostSession {
         Desktop desktop = desktop();
         UIDocument document = document();
         DocumentDriver<DesktopFacts> owner = driver;
-        if (desktop == null || document == null || owner == null) return;
+        PaintHost host = stagedHost;
+        if (desktop == null || document == null || owner == null || host == null) return;
+        host.enter();
         try {
             if (owner.frame(stagedDelta, services.surfaceWidth(), services.surfaceHeight(),
                     new DesktopPainter(desktop, document, stagedPresentation))) {
@@ -615,6 +608,8 @@ public final class HostSession {
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
             post(desktop::exitHudMode);
+        } finally {
+            host.leave();
         }
     }
 

@@ -61,6 +61,7 @@ public final class LifecycleCrystalGUI {
         // FIRST: the keybinds and the example both reach the session, and a key pressed before it
         // exists would throw rather than open anything.
         CgUiScreen.install();
+        CgUiHud.attachStages();
         MachineExampleClientModern.registerClient();
 
         // THE CONNECTION PROBE RIDES THE TICK HOOKS, and is registered from HERE rather than called
@@ -181,15 +182,6 @@ public final class LifecycleCrystalGUI {
     }
 
     // ── Pinned windows. ScreenOverlay in core/ makes every decision; these only carry it. ────────
-
-    public static void paintOverlay() {
-        CgUiHud.paintOverScreen();
-    }
-
-    /** The HUD arm, from a hook that fires ONCE a frame -- not once per vanilla overlay element. */
-    public static void paintHud() {
-        CgUiHud.paintHud();
-    }
 
     /** @return whether the desktop consumed it and the foreign screen must not see it */
     public static boolean offerMouse(int button, boolean pressed, float wheel) {

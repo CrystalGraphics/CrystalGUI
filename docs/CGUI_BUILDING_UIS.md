@@ -1355,9 +1355,9 @@ the question gets answered while it is still cheap.
 ## 11b. Drawing under or over the UI
 
 Something that is not a widget -- a badge over the HUD, a crosshair effect, a picture behind every screen -- draws
-at one of CrystalGUI's **render stages**, `UiStages.SCREEN` (over a screen, CrystalGUI's or any other) and
-`UiStages.HUD` (over the in-game HUD). CrystalGUI's own windows are a renderer on each at `UiStages.COMPOSITOR`, so the
-order you register at says which side of them you land on.
+at one of CrystalGraphics' **GUI stages**, `CgRenderStage.SCREEN` (over a screen, CrystalGUI's or any other) and
+`CgRenderStage.HUD` (over the in-game HUD). CrystalGUI's pinned windows are a renderer on each at
+`HostSession.COMPOSITOR`, so the order you register at says which side of them you land on.
 
 ```java
 CgPassRecorder recorder = new CgPassRecorder();
@@ -1365,7 +1365,7 @@ CgQuadRenderer quads = CgQuadRenderer.create();
 quads.sink(recorder);
 CgMaterial material = CgMaterial.load("mymod:shaders/badge.shader");   // declares #pragma cg_use quad
 
-CgRenderStage.Registration badge = UiStages.HUD.register(UiStages.COMPOSITOR + 1, frame -> {   // over the windows
+CgRenderStage.Registration badge = CgRenderStage.HUD.register(HostSession.COMPOSITOR + 1, frame -> {   // over the windows
     recorder.recordInto(frame.recording(), frame.target(), CgLoad.load(), frame.constants());
     quads.useMaterial(material);
     quads.begin();
@@ -1377,11 +1377,12 @@ CgRenderStage.Registration badge = UiStages.HUD.register(UiStages.COMPOSITOR + 1
 badge.close();   // and it stops
 ```
 
-- **Coordinates** are CrystalGUI's logical pixels, origin top left: `frame.constants()` is that camera.
-  `frame.host().width()`/`height()` are the surface's device pixels.
-- **Once a frame each**, on the render thread, from the game's own screen and HUD hooks, on every Minecraft version
-  CrystalGUI runs on. `SCREEN` fires once whoever's screen is up; neither fires on a server.
-- **Below `COMPOSITOR` is under the windows**, above it over them; ties draw in registration order.
+- **Coordinates** are the GUI's logical pixels (Minecraft's GUI scale), origin top left: `frame.constants()` is that
+  camera. `frame.host().width()`/`height()` are the surface's device pixels.
+- **Once a frame each**, on the render thread, from the game's own screen and HUD hooks. `SCREEN` fires once whoever's
+  screen is up; neither fires on a server, and Fabric below 1.16 has no `SCREEN`.
+- **Below `COMPOSITOR` is under the pinned windows**, above it over them; ties draw in registration order. Over
+  CrystalGUI's own screen the desktop is drawn by the screen, before `SCREEN` fires: everything there is over it.
 - **What you record executes at once**, onto the game's target, after the renderers before you. Nothing is kept:
   record every frame.
 - A world-space effect belongs on CrystalGraphics' world stages instead (`CgRenderStage.WORLD_OPAQUE`, or

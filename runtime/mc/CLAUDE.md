@@ -10,7 +10,7 @@ spells something; it decides nothing. The seams it answers, all in `core/`:
 | Seam | A loader answers |
 |---|---|
 | `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection, how to give the current screen a key the desktop left (`reinjectKey`), and the game's client and server threads (`clientThread`, `serverThread`: what `HostThread.CLIENT`/`SERVER` run work on; null where the client thread is the one the desktop is framed on, or there is no integrated server) |
-| `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides), and the `SCREEN`/`HUD` render stages each paint fires (`UiStages`) |
+| `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides), and which arm paints on CrystalGraphics' `HUD` and `SCREEN` stages (`attachStages`) |
 | `desktop.host.HostSession.PaintHost` | whether a screen is up and whose, and how to bracket a draw |
 | `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |
 | `fs.server.WorkspaceRoles` | is this actor the single-player owner, and is it a connected operator |
