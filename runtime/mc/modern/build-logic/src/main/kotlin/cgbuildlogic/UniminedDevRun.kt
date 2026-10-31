@@ -71,6 +71,7 @@ fun Project.uniminedDevRun() {
 
     tasks.withType<JavaExec>().matching { it.name in setOf("runClient", "runServer") }.configureEach {
         workingDir = file(if (name == "runServer") "runs/server" else "runs/client")
+        args(graphicsDevMixinArgs())
         dependsOn(downgrade)
         doFirst {
             val copies = downgrade.get()

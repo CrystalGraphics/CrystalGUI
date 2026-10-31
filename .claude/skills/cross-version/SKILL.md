@@ -117,8 +117,8 @@ Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) 
 6. Anything no smoke exercises: run it on the oldest and newest node of each loader, and say which.
 
 **The order that converges:** dev runs on every node with a new code path (Fabric **twice** — its first run
-after a change uses the previous CrystalGraphics jar; NeoForge dev runs apply no CrystalGraphics mixins, so
-mixin checks there mean nothing) → a targeted `prodSmoke -PcgTargets=` for nodes with no dev run (legacy,
+after a change uses the previous CrystalGraphics jar; a Forge dev run applies CrystalGraphics' mixins through
+`--mixin.config`, which `graphicsDevMixinArgs` adds) → a targeted `prodSmoke -PcgTargets=` for nodes with no dev run (legacy,
 Forge >=1.20.2, NeoForge 1.20.2/1.20.3) → **one** sweep, every failure read and fixed by family → a
 confirm run on just the failing labels. Prism is shared: check for `javaw` and ask other sessions first,
 stop a cancelled run's Gradle client by PID, and use `-PcgBatch=3` with IntelliJ open.

@@ -17,6 +17,7 @@
 
 import cgbuildlogic.commonNode
 import cgbuildlogic.devRunSourceSet
+import cgbuildlogic.graphicsDevMixinArgs
 import cgbuildlogic.registerSrgReobf
 import cgbuildlogic.registerThinRename
 import cgbuildlogic.stubMode
@@ -96,6 +97,7 @@ legacyForge?.apply {
             server()
             gameDirectory = project.file("runs/server")
         }
+        configureEach { programArguments.addAll(graphicsDevMixinArgs()) }
     }
 
     mods {
