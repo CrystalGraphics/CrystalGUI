@@ -24,12 +24,12 @@ import java.util.zip.ZipFile;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.asset.kind.CgGameplayKinds;
 import com.crystalgraphics.asset.load.CgVfxAssets;
 import com.crystalgraphics.cue.CgCueDefinition;
 import com.crystalgraphics.frame.CgTickGroup;
 import com.crystalgraphics.frame.CgWorld;
-import com.crystalgraphics.net.CgNetwork;
 import com.crystalgraphics.asset.codec.CgAssetYaml;
 import com.crystalgraphics.asset.kind.CgSequenceKinds;
 import com.crystalgraphics.asset.tree.CgAssetData;
@@ -234,7 +234,7 @@ public final class ServerSmoke {
 
         // What needs the server to tick: checked once it has, on its own tick, then reported.
         ServerTicks ticked = new ServerTicks();
-        CgNetwork.onServerTick(() -> {
+        CgEngineLifecycle.onServerTick(() -> {
             if (ticked.after(lines, failures)) {
                 String report = render(host, lines, failures);
                 print(report);

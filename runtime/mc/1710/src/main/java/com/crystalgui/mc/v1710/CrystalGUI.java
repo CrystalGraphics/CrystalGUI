@@ -27,7 +27,7 @@ import cpw.mods.fml.common.event.FMLPreInitializationEvent;
  * <p>Depends on {@code crystalgraphics} and does <b>no platform registration of its own</b>. That is
  * not an omission: CrystalGraphics is the parent mod, is always present, and owns every
  * {@code CgPlatformService} implementation — input, sound, cursor, clipboard, GL, resources, lifecycle
- * and reload are all registered by its {@code PlatformService1710.onPreInit()}. CrystalGUI reads them
+ * and reload are all registered by its {@code PlatformService1710.install}. CrystalGUI reads them
  * through {@code CgPlatform} and never holds a registry of its own; a second registry is how a loader
  * ends up with a working GL backend and a dead keyboard.</p>
  */
