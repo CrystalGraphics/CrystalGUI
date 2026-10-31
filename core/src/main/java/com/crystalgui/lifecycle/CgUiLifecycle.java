@@ -2,7 +2,7 @@ package com.crystalgui.lifecycle;
 
 import com.crystalgui.core.dispose.Disposer;
 
-import com.crystalgraphics.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.mc.CgAssetReloader;
 import com.crystalgraphics.mc.CgReloadListener;
 
@@ -52,7 +52,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * <p>{@link #register()} remains public for explicit control and for tests; it is idempotent.</p>
  *
  * <p>The platform adapter already calls
- * {@code CgGraphicsLifecycle.initContext/tickFrame/destroyContext}; this rides along with those, so
+ * {@code CgEngineLifecycle.ensureGraphicsContext/tickFrame/destroyContext}; this rides along with those, so
  * no loader module needs to know CrystalGUI has a lifecycle at all.</p>
  */
 public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListener {
@@ -64,7 +64,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
 
     /**
      * Registers CrystalGUI with the engine lifecycle. Idempotent — {@code CgGraphicsLifecycle}
-     * ignores a duplicate registration, which matters because a double {@code onDestroy} would be a
+     * ignores a duplicate registration, which matters because a double {@code onContextDestroy} would be a
      * double free.
      *
      * <p>Called automatically from {@link CgUiPaintContext}'s static initializer — see the class
@@ -73,11 +73,11 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
      *
      * <p>Safe to call before a GL context exists or after one is already live. In the latter case —
      * which is the <em>normal</em> case here, since the paint context's class initializer runs on the
-     * first paint, long after {@code initContext} — {@code CgGraphicsLifecycle.addListener} delivers
-     * {@link #onInit} immediately, so the callback is not silently skipped.</p>
+     * first paint, long after {@code CgEngineLifecycle.ensureGraphicsContext} — {@code CgEngineLifecycle.addListener} delivers
+     * {@link #onContextInit} immediately, so the callback is not silently skipped.</p>
      */
     public static void register() {
-        CgGraphicsLifecycle.addListener(INSTANCE);
+        CgEngineLifecycle.addListener(INSTANCE);
         CgAssetReloader.addListener(INSTANCE);
     }
 
@@ -97,7 +97,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     }
 
     public static void unregister() {
-        CgGraphicsLifecycle.removeListener(INSTANCE);
+        CgEngineLifecycle.removeListener(INSTANCE);
         CgAssetReloader.removeListener(INSTANCE);
     }
 
@@ -137,13 +137,13 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
      * dedicated server never warms anything.</p>
      *
      * <p><b>This does fire.</b> Because registration happens from a class initializer on the first
-     * paint — after {@code initContext} has already run — this arrives via
-     * {@code CgGraphicsLifecycle.addListener}'s immediate delivery for late registrants rather than
-     * during {@code initContext} itself. Anything added here will run; it does not need the
+     * paint — after the context has already started — this arrives via
+     * {@code CgEngineLifecycle.addListener}'s immediate delivery for late registrants rather than
+     * during the context's start itself. Anything added here will run; it does not need the
      * registration to have been early.</p>
      */
     @Override
-    public void onInit(int width, int height) {
+    public void onContextInit(int width, int height) {
         // The GL gate, installed the moment a context exists.
         //
         // Until now Disposer has been running every disposal immediately, which is correct while there
@@ -152,8 +152,8 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         // onFrame below, because freeing a GL object off the GL thread is silent corruption rather than
         // an exception.
         //
-        // The thread that receives onInit IS the GL thread: CgGraphicsLifecycle.initContext() is called
-        // from it by definition, and a listener registered later is delivered onInit on the caller's
+        // The thread that receives onContextInit IS the GL thread: CgEngineLifecycle.ensureGraphicsContext() is called
+        // from it by definition, and a listener registered later is delivered onContextInit on the caller's
         // thread for the same reason.
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
@@ -166,7 +166,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         warmHeight = height;
     }
 
-    /** The paint context's warm-up, until it finishes, and the size onInit gave. */
+    /** The paint context's warm-up, until it finishes, and the size onContextInit gave. */
     private CgUiPaintContext.Warm warm;
     private int warmWidth, warmHeight;
 
@@ -239,7 +239,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     /**
      * Releases the GL resources CrystalGUI owns outright.
      *
-     * <p>Runs before CrystalGraphics frees anything (see {@link CgLifecycleListener#onDestroy}), so
+     * <p>Runs before CrystalGraphics frees anything (see {@link CgLifecycleListener#onContextDestroy}), so
      * everything touched here is still valid.</p>
      *
      * <h3>Why this is only the paint context</h3>
@@ -266,10 +266,10 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     }
 
     @Override
-    public void onDestroy() {
+    public void onContextDestroy() {
         // NO DOCUMENT TEARDOWN HERE, and that is not an omission. `UIWindow.shutdownAll()` detached
         // each window's desktop and cleared an attached-window back-pointer -- tree bookkeeping on a
-        // tree the process is about to stop having. This file's own rule for `onDestroy` says the same
+        // tree the process is about to stop having. This file's own rule for `onContextDestroy` says the same
         // thing about caches: at game shutdown there is no next context to protect, so anything that
         // only tidies state is ceremony rather than correctness. What genuinely must happen on close
         // -- writing the session -- is the HOST's, and `CgUiScreen` does it when the screen closes.

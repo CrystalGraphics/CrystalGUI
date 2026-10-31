@@ -13,10 +13,10 @@ import com.crystalgui.mc.v1710.example.MachineExampleClient1710;
  * The client half: register the key binding and the input pump.
  *
  * <p>Registration itself does no GL work, but it can <em>cause</em> some, which is the non-obvious
- * part: {@link CgUiLifecycle#register()} delivers {@code onInit} immediately when a context is already
+ * part: {@link CgUiLifecycle#register()} delivers {@code onContextInit} immediately when a context is already
  * live, and that hook constructs and warms the paint context. The warm binds materials, so it writes
  * GL state on the host's context from inside what looks like a pure registration call. It is scoped
- * there — see the comment in {@code CgUiLifecycle.onInit} for what leaks and what it cost.</p>
+ * there — see the comment in {@code CgUiLifecycle.onContextInit} for what leaks and what it cost.</p>
  */
 public class ClientProxy extends CommonProxy {
 

@@ -5,7 +5,7 @@ package com.crystalgui.core.dispose;
  *
  * <h3>What this is for, and what it is not</h3>
  *
- * <p>It is <b>not</b> a replacement for {@code CgGraphicsLifecycle.destroyContext()}. That already
+ * <p>It is <b>not</b> a replacement for {@code CgEngineLifecycle.destroyContext()}. That already
  * sweeps every CrystalGraphics registry in a documented order at context teardown, and nothing escapes
  * the process. This exists for the two things a registry structurally cannot do:</p>
  *

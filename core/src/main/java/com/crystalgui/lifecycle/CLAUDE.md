@@ -6,21 +6,21 @@
 
 CrystalGUI owns GL resources and caches of GL-derived objects, but is not part of CrystalGraphics and
 so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
-`CgLifecycleListener` (CrystalGraphics, `lifecycle/`) — `onInit(w,h)` / `onFrame(frame)` /
-`onDestroy()`, all default no-ops, registered via `CgGraphicsLifecycle.addListener(...)`.
+`CgLifecycleListener` (CrystalGraphics, `lifecycle/`) — `onContextInit(w,h)` / `onFrame(frame)` /
+`onContextDestroy()`, all default no-ops, registered via `CgEngineLifecycle.addListener(...)`.
 
 **CrystalGUI registers exactly one**: `CgUiLifecycle`.
 
 | Moment | What CrystalGUI does |
 |---|---|
-| `onInit` | The disposal GL gate, and starts `CgUiPaintContext.warm()` |
-| `onFrame` | Drains queued GL disposals, steps the warm-up (inside a host section, which `onInit` from a late registrant is not: 26.x's GUI extraction is outside one; its compiles spread over frames within `CgWarmBudget`), then the `atFrameEnd` paints. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
-| `onDestroy` | `UiGpu.destroy()`, and nothing else |
+| `onContextInit` | The disposal GL gate, and starts `CgUiPaintContext.warm()` |
+| `onFrame` | Drains queued GL disposals, steps the warm-up (inside a host section, which `onContextInit` from a late registrant is not: 26.x's GUI extraction is outside one; its compiles spread over frames within `CgWarmBudget`), then the `atFrameEnd` paints. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
+| `onContextDestroy` | `UiGpu.destroy()`, and nothing else |
 
-> **`onInit` reaches late registrants.** CrystalGUI registers from a class initializer on the *first
-> paint*, which is always after `CgGraphicsLifecycle.initContext()` has run — so a fire-only-during-init
-> design would mean `onInit` never fires for CrystalGUI at all. `addListener` therefore delivers
-> `onInit` immediately when a context is already live. The guarantee is **exactly once per context,
+> **`onContextInit` reaches late registrants.** CrystalGUI registers from a class initializer on the *first
+> paint*, which is always after `CgEngineLifecycle.ensureGraphicsContext()` has run — so a fire-only-during-init
+> design would mean `onContextInit` never fires for CrystalGUI at all. `addListener` therefore delivers
+> `onContextInit` immediately when a context is already live. The guarantee is **exactly once per context,
 > regardless of registration time**. Without it the miss would be invisible while the hook is empty
 > and appear as silently-skipped setup the moment it isn't.
 
@@ -28,13 +28,13 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 > process, so there is no "next context" to protect, and **nothing needs invalidating merely because
 > CrystalGraphics is about to free it** — font families, cached stylesheets, sprite packs and shared
 > materials all die with the process. Do not add cache-clearing or material-invalidation to
-> `onDestroy`; it is ceremony, not correctness.
+> `onContextDestroy`; it is ceremony, not correctness.
 
-What `onDestroy` legitimately does is release the one thing nobody else frees: `CgUiPaintContext`'s
+What `onContextDestroy` legitimately does is release the one thing nobody else frees: `CgUiPaintContext`'s
 layer FBO pool is built with `CgFrameBuffer.createOwned`, which bypasses `CgFrameBufferRegistry`, so
 `deleteAll()` never reaches it.
 
-**`onDestroy` fires before CrystalGraphics frees anything** — the only window in which a listener can
+**`onContextDestroy` fires before CrystalGraphics frees anything** — the only window in which a listener can
 release its own FBOs/renderers while the context is whole. Listeners dispatch in *reverse*
 registration order.
 

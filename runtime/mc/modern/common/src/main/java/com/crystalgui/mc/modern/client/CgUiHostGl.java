@@ -1,6 +1,7 @@
 package com.crystalgui.mc.modern.client;
 
 import com.crystalgraphics.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.mc.modern.platform.GraphicsApi;
 import com.crystalgraphics.mc.modern.platform.OwnDepthConvention;
 import com.crystalgraphics.platform.gl.CgGL;
@@ -67,7 +68,7 @@ public final class CgUiHostGl {
      * life of the process and every paint was skipped in silence.</p>
      */
     public static void ensureContext(int width, int height) {
-        if (width > 0 && height > 0) CgGraphicsLifecycle.ensureContext(width, height);
+        if (width > 0 && height > 0) CgEngineLifecycle.ensureGraphicsContext(width, height);
     }
 
     /**

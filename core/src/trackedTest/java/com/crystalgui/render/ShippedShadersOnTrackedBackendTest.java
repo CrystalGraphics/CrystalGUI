@@ -49,7 +49,7 @@ public class ShippedShadersOnTrackedBackendTest {
         CgCapabilities.clearCache();
         CgGlState.reset();
         CgGlState.setProvider(new CgTrackedStateProvider(gl));
-        // CgGraphicsLifecycle.initContext's own steps, less the platform it would ask for a context.
+        // CgEngineLifecycle.ensureGraphicsContext's own steps, less the platform it would ask for a context.
         CgBindingPoints.init(CgCapabilities.detect());
         CgFallbackTextures.init();
     }

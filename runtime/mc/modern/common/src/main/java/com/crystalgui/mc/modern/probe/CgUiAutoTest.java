@@ -157,7 +157,7 @@ public final class CgUiAutoTest {
         quitWaited = Integer.MIN_VALUE;
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST done; quitting");
         // stop() rather than System.exit: it runs Minecraft's own shutdown, which is what
-        // CgGraphicsLifecycle.destroyContext hangs off. Exiting under it would skip the teardown
+        // CgEngineLifecycle.destroyContext hangs off. Exiting under it would skip the teardown
         // this is partly here to exercise.
         Minecraft.getInstance().stop();
     }

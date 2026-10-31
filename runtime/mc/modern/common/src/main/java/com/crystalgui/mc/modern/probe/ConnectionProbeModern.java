@@ -87,7 +87,7 @@ public final class ConnectionProbeModern {
         public void quit() {
             Minecraft mc = Minecraft.getInstance();
             // stop() rather than System.exit: it runs Minecraft's own shutdown, which is what
-            // CgGraphicsLifecycle.destroyContext hangs off.
+            // CgEngineLifecycle.destroyContext hangs off.
             if (mc != null) mc.stop();
         }
     };
