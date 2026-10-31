@@ -3,6 +3,11 @@
 /.idea/
 /.vscode/
 /run/
+# Each legacy node's dev run, as the modern branches ignore theirs.
+/runtime/mc/legacy/*/versions/*/run/
+# A JVM's crash dumps, written into its working directory.
+hs_err_pid*.log
+replay_pid*.log
 /build/
 # Every module's, not only the root's: /build/ is anchored, so a module added later (runtime/mc/shared) has
 # its outputs staged the first time anything runs `git add` over it.
