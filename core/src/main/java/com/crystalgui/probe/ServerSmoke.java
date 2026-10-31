@@ -24,6 +24,9 @@ import java.util.zip.ZipFile;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.asset.kind.CgGameplayKinds;
+import com.crystalgraphics.asset.load.CgVfxAssets;
+import com.crystalgraphics.cue.CgCueDefinition;
 import com.crystalgraphics.frame.CgTickGroup;
 import com.crystalgraphics.frame.CgWorld;
 import com.crystalgraphics.net.CgNetwork;
@@ -222,6 +225,7 @@ public final class ServerSmoke {
                 "expected 'workspace'; the workspace host must register before the connection lifecycle");
 
         checkDescriptionRoundTrip(lines, failures);
+        checkModCue(lines, failures);
         checkNothingClientSideLoaded(host, lines, failures);
         checkNoGlBackend(lines, failures);
         checkPersistence(lines, failures);
@@ -609,6 +613,33 @@ public final class ServerSmoke {
      * so one here means server-side code asked for rendering: on a real server that is a
      * {@code NoClassDefFoundError}, on a dev server's merged classpath it passes silently.
      */
+    /**
+     * A mod jar's cue, named by {@code -Dcrystalgraphics.serverSmoke.cue=<id>}: mounted from its jar on the server and
+     * compiled headless, its shake resolved. Before the client-class check, so loading it is checked too.
+     */
+    private static void checkModCue(List<String> lines, List<String> failures) {
+        String id = System.getProperty("crystalgraphics.serverSmoke.cue");
+        if (id == null) {
+            lines.add("SKIP  a mod jar's cue (-Dcrystalgraphics.serverSmoke.cue=<id>)");
+            return;
+        }
+        boolean mounted = CgVfxAssets.instance().registry().entry(CgGameplayKinds.CUE, id) != null;
+        check(lines, failures, "a mod jar's cue " + id + " is mounted on the server", mounted,
+                CgVfxAssets.instance().registry().namespaces().toString());
+        if (!mounted) return;
+        String detail;
+        boolean ok;
+        try {
+            CgCueDefinition cue = CgVfxAssets.<CgCueDefinition>ref(CgGameplayKinds.CUE, id).get();
+            ok = cue.burst().shake() != null && cue.burst().shake().definition() != null;
+            detail = ok ? "" : "its shake did not resolve";
+        } catch (RuntimeException e) {
+            ok = false;
+            detail = e.toString();
+        }
+        check(lines, failures, "it compiles headless, its shake resolved", ok, detail);
+    }
+
     private static void checkNoGlBackend(List<String> lines, List<String> failures) {
         check(lines, failures, "no GL backend installed", !CgGL.isInstalled(),
                 "something opened CgGL.fromHost, probed CgCapabilities or called CgGL.init on a server");
