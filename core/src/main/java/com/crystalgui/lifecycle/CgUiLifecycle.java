@@ -2,7 +2,7 @@ package com.crystalgui.lifecycle;
 
 import com.crystalgui.core.dispose.Disposer;
 
-import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.mc.CgAssetReloader;
 import com.crystalgraphics.mc.CgReloadListener;
 
@@ -12,7 +12,7 @@ import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
-import com.crystalgraphics.gl.lifecycle.CgLifecycleListener;
+import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;

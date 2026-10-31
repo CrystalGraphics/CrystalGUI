@@ -6,7 +6,7 @@
 
 CrystalGUI owns GL resources and caches of GL-derived objects, but is not part of CrystalGraphics and
 so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
-`CgLifecycleListener` (CrystalGraphics, `gl/lifecycle/`) — `onInit(w,h)` / `onFrame(frame)` /
+`CgLifecycleListener` (CrystalGraphics, `lifecycle/`) — `onInit(w,h)` / `onFrame(frame)` /
 `onDestroy()`, all default no-ops, registered via `CgGraphicsLifecycle.addListener(...)`.
 
 **CrystalGUI registers exactly one**: `CgUiLifecycle`.

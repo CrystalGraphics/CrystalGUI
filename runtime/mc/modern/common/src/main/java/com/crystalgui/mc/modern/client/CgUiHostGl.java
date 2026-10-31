@@ -1,6 +1,6 @@
 package com.crystalgui.mc.modern.client;
 
-import com.crystalgraphics.gl.lifecycle.CgGraphicsLifecycle;
+import com.crystalgraphics.lifecycle.CgGraphicsLifecycle;
 import com.crystalgraphics.mc.modern.platform.GraphicsApi;
 import com.crystalgraphics.mc.modern.platform.OwnDepthConvention;
 import com.crystalgraphics.platform.gl.CgGL;
