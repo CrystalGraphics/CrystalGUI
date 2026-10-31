@@ -97,7 +97,7 @@ legacyForge?.apply {
             server()
             gameDirectory = project.file("runs/server")
         }
-        configureEach { programArguments.addAll(graphicsDevMixinArgs()) }
+        configureEach { programArguments.addAll(graphicsDevMixinArgs(gradle.includedBuild("CrystalGraphics").projectDir)) }
     }
 
     mods {
