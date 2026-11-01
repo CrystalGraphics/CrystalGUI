@@ -158,7 +158,7 @@ public final class CgUiPaintContext {
      *
      * <ul>
      *   <li>{@code CgMaterial.load} only parses; the GLSL is paid for here, by polling each material's
-     *       {@code prepare()}. Once all are built, one empty frame builds the executor's buffers, the ring and the GL
+     *       {@code precache()}. Once all are built, one empty frame builds the executor's buffers, the ring and the GL
      *       state save, which were most of a first frame.</li>
      *   <li>A real frame painted before it finishes compiles what is left itself.</li>
      *   <li>Failures are swallowed: a warm-up must not be what fails a context, and the first real frame reports
@@ -190,7 +190,7 @@ public final class CgUiPaintContext {
             boolean ready = true;
             for (CgMaterial material : materials) {
                 try {
-                    ready &= material.prepare();
+                    ready &= material.precache();
                 } catch (RuntimeException | LinkageError ignored) {
                     // An optimisation that fails is silent.
                 }
