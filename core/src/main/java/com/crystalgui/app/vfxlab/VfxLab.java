@@ -8,6 +8,7 @@ import com.crystalgraphics.demo.CgVfxDemoControls;
 import com.crystalgraphics.render.post.CgPostStack;
 import com.crystalgraphics.render.post.bloom.CgBloom;
 import com.crystalgraphics.render.world.CgSortLayer;
+import com.crystalgraphics.render.world.CgPipelinePrecache;
 import com.crystalgraphics.render.world.CgWorldRenderer;
 import com.crystalgraphics.vfx.CgVfxEffect;
 import com.crystalgraphics.vfx.CgVfxRegistry;
@@ -109,6 +110,7 @@ public class VfxLab extends UIElement {
     private final CgMesh sky = CgMeshShapes.sphere(24, 32);
     @Nullable
     private CgMaterial floorMaterial, skyMaterial;
+    private CgPipelinePrecache.Request stage;
 
     private final SearchField search = new SearchField();
     private final TreeView<Object> tree = new TreeView<>(new Effects());
@@ -290,18 +292,19 @@ public class VfxLab extends UIElement {
         if (floorMaterial == null) {
             floorMaterial = CgMaterial.newInstance(FLOOR_SHADER).applyProperties(b -> b.set1f("_Fade", FLOOR_FADE));
             skyMaterial = CgMaterial.newInstance(SKY_SHADER);
+            stage = CgPipelinePrecache.request(pipelines -> {
+                pipelines.add(floorMaterial, false);
+                pipelines.add(skyMaterial, false);
+            });
         }
         easeNight((float) elapsed);
+        if (!stage.ready()) return;
         double x = viewport.eyeX(), z = viewport.eyeZ();
         // Under the eye, so flying never reaches its edge; the grid's lines are absolute and hold still.
-        if (world.prepare(floorMaterial)) {
-            world.draw(floor, floorMaterial).at(x, LAB_Y, z).layer(CgSortLayer.BACKGROUND).submit();
-        }
+        world.draw(floor, floorMaterial).at(x, LAB_Y, z).layer(CgSortLayer.BACKGROUND).submit();
         // Round the eye.
-        if (world.prepare(skyMaterial)) {
-            world.draw(sky, skyMaterial).at(x, LAB_Y + 1.5 + viewport.eyeY(), z).transform(SKY_SCALE)
-                    .layer(CgSortLayer.BACKGROUND).submit();
-        }
+        world.draw(sky, skyMaterial).at(x, LAB_Y + 1.5 + viewport.eyeY(), z).transform(SKY_SCALE)
+                .layer(CgSortLayer.BACKGROUND).submit();
     }
 
     /** Moves the sky and floor a step toward day or night: the whole change in about 0.4 s. */
