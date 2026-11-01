@@ -105,6 +105,11 @@ gh workflow run release.yml -R CrystalGraphics/CrystalGUI --ref master -f versio
 gh run watch -R CrystalGraphics/CrystalGUI                                                 # follow it
 ```
 
+**Before running it**: if any engine `.shader`, `.glsl` or `.compute` changed since the shipped pipeline list was last
+refreshed (`git log -1 -- CrystalGraphics/core/src/main/resources/assets/crystalgraphics/pipelines/recorded.txt`),
+refresh it first (`CrystalGraphics/docs/PRECACHE.md` § *The shipped pipeline list*). A stale list builds Vulkan
+pipelines at their draws on every player's first launch.
+
 In order:
 
 1. CrystalGraphics moves to its `master`. When that commit is not a released version, it is released first:

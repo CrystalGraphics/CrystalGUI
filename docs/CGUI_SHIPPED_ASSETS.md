@@ -4,6 +4,12 @@
 
 ## Shipped assets
 
+> **A new shader or keyword set must be precached.** A material the UI paints through `CgUiPaintContext` is
+> precached at paint and drawn once built. One drawn any other way, and every keyword set a style can switch to, is
+> named to `CgPipelinePrecache` at load, or it shows late on first use: `CrystalGraphics/docs/PRECACHE.md`. Editing
+> a shipped shader also stales CrystalGraphics' shipped pipeline list, refreshed before a release
+> ([`CGUI_BUILD.md`](CGUI_BUILD.md) § *Releasing*).
+
 `core/src/main/resources/assets/crystalgui/`
 
 | Path | Notes |
