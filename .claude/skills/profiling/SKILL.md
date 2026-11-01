@@ -79,7 +79,7 @@ Show the path list and what you added (file, zone, channel) before running.
 ## 6. Run once; read coverage before numbers
 
 Read `harness-output/<scene>/profile-harness-<n>f/report.txt` (game:
-`<game>/crystalgui/cache/trace/latest/report.txt`); `tree.txt` beside it has every thread's call tree.
+`<game>/crystalgraphics/cache/trace/latest/report.txt`, and `hitch-<frame>/` with `hitchDumpMs`); `tree.txt` beside it has every thread's call tree.
 
 1. **Header** — `NOT recording`, and any `WARNING` (zones dropped, frames holding no zones or no
    counters). Any one invalidates a conclusion that touches it: resize or enable, then run.

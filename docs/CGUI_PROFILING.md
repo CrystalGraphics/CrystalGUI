@@ -111,7 +111,7 @@ cpu mark, so it shows as idle — the verdict names it.
 A workload the scenes do not reproduce belongs in a scene (`gl-debug-harness/AGENTS.md`) — a profile of a
 hand-driven session cannot be repeated, so it cannot be compared.
 
-A desktop scene gives the trace a run directory too: `gl-debug-harness/crystalgui/cache/trace/latest/`
+Every scene gets a run directory from the engine (`CgTraceRun`): `gl-debug-harness/crystalgraphics/cache/trace/latest/`
 (`trace.log`, and `meta.json` and `report.txt` on exit).
 
 ### The game
@@ -129,9 +129,12 @@ A desktop scene gives the trace a run directory too: `gl-debug-harness/crystalgu
   `WARNING … frames hold no zones` says when it was not enough.
 - Every dev run forwards `-Dcrystalgui.*` and `-Dcrystalgraphics.*`; an installed client takes the same
   flags in its instance's JVM arguments.
-- On exit the run directory holds the report: `<game>/crystalgui/cache/trace/latest/report.txt` (the
+- On exit the run directory holds the report: `<game>/crystalgraphics/cache/trace/latest/report.txt` (the
   breakdown, or the tier `-Dcrystalgraphics.trace.report` names), `meta.json` (what was and was not
-  recording) and `trace.log` (a line per slow frame).
+  recording) and `trace.log` (a line per slow frame). CrystalGraphics writes it, with or without CrystalGUI.
+- **A rare hitch in a hand-driven session**: `-Dcrystalgraphics.trace.hitchDumpMs=<ms>` writes the 240 frames before
+  each frame slower than that to `latest/hitch-<frame>/` (`report.txt`, `report-full.txt`, `slow.txt`) as it
+  happens — `CrystalGraphics/docs/PROFILING.md` § *Minecraft*.
 - A repeatable in-game workload is the autotest: `-Dcrystalgui.autotest=true` loads a world, opens the
   editor, photographs it and quits (`docs/CGUI_BUILD.md`). Profile that rather than a hand-driven session.
 - **Two phases of one run**: `-Dcrystalgraphics.trace.splitAt=<marker>` also writes `report-before.txt`,

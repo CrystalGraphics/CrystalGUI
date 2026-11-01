@@ -2999,7 +2999,7 @@ public final class CgUiPaintContext {
     /**
      * Frees what this context made — its surfaces, the backdrop's and the icon raster's textures — and its
      * renderers. {@link UiGpu#destroy} calls it at GL context destruction. Only what is genuinely its own: materials,
-     * the fallback texture and the font atlases are swept by {@code CgEngineLifecycle.destroyContext()}, and freeing
+     * the fallback texture and the font atlases are swept by {@code CgEngineLifecycle.shutdown()}, and freeing
      * them here would be a double free.
      */
     void release() {

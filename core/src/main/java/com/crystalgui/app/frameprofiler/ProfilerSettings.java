@@ -174,7 +174,8 @@ public final class ProfilerSettings {
 
     /** The ring flags a launch may pass; any one of them sizes the ring instead of {@code settings.json}. */
     private static final String[] RING_FLAGS = {
-            "crystalgraphics.trace.frames", "crystalgraphics.trace.firstFrames", "crystalgraphics.trace.zones"};
+            "crystalgraphics.trace.frames", "crystalgraphics.trace.firstFrames", "crystalgraphics.trace.zones",
+            "crystalgraphics.trace.hitchDumpMs"};
 
     /**
      * The settings' ring, unless the launch sized it with a {@code -D} flag: CgTrace read those at class

@@ -1,18 +1,13 @@
 package com.crystalgui.core.trace;
 
-import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceChannel;
 import com.crystalgraphics.trace.CgTraceLog;
-import com.crystalgraphics.trace.CgTraceReport;
-import com.crystalgraphics.trace.CgTraceSnapshot;
+import com.crystalgraphics.trace.CgTraceRun;
 import com.crystalgui.core.CrystalGuiCore;
 import com.sun.management.ThreadMXBean;
 
 import java.lang.management.ManagementFactory;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -58,6 +53,10 @@ public final class UiTrace {
     }
 
     /** Phases and counters inside a frame: {@code paint:tree}, {@code frame:layout}, {@code drawcalls}. */
+    static {
+        CgTraceRun.budget(() -> FrameStats.get().budgetMs());
+    }
+
     public static final CgTraceChannel FRAME = CgTrace.channel("crystalgui.frame");
 
     /**
@@ -200,113 +199,6 @@ public final class UiTrace {
         return CgTrace.isEnabled(FRAME) || CgTrace.isEnabled(FLOW) || CgTrace.isEnabled(BLAME);
     }
 
-    /** {@code -Dcrystalgui.trace.dir=<path>} — a run directory for a host that has no cache root. */
-    public static final String DIR_PROPERTY = "crystalgui.trace.dir";
-
-    /**
-     * Points this run's output at {@code cacheRoot}, which a host gives at startup.
-     *
-     * <pre>{@code
-     * UiTrace.useCacheRoot(StorageLayout.cacheIn(gameDirectory));   // a host, at startup
-     * }</pre>
-     *
-     * <p>{@code cache/} is the right tier by the layout's own rule — deletable at any moment — and the
-     * engine keeps the last few runs, so a before-and-after comparison survives a restart. A null root
-     * changes nothing, so a caller that does not know one need not check.</p>
-     *
-     * <p>Idempotent: a run is a process lifetime rather than a profiling session, so a second call is a
-     * no-op and the directory cannot change under a reader.</p>
-     */
-    public static void useCacheRoot(@Nullable Path cacheRoot) {
-        if (cacheRoot == null) return;
-        CgTraceLog.useRoot(cacheRoot.resolve("trace"));
-        TraceFiles.useRunRoot(cacheRoot.resolve("trace"));
-        closeOnExit();
-    }
-
-    private static boolean closesOnExit;
-    private static boolean exitFilesWritten;
-
-    /** Writes the exit files at JVM exit, for a host that never stops the engine. @see #writeExitFiles */
-    private static synchronized void closeOnExit() {
-        if (closesOnExit || CgTraceLog.dir() == null) return;
-        closesOnExit = true;
-        Runtime.getRuntime().addShutdownHook(new Thread(UiTrace::writeExitFiles, "crystalgui-trace-exit"));
-    }
-
-    /**
-     * Writes {@code meta.json} and — when anything was recorded — {@code report.txt}, at the tier
-     * {@code -Dcrystalgraphics.trace.report} names or the breakdown otherwise, then closes the log. Once.
-     *
-     * <p>{@code CgUiLifecycle.onShutdown} calls it when the game closes, and the JVM exit is the fallback. On
-     * a mod loader that fallback comes too late: the loader's class loader has closed, and the report cannot
-     * load the classes it needs.</p>
-     */
-    public static synchronized void writeExitFiles() {
-        if (exitFilesWritten || CgTraceLog.dir() == null) return;
-        exitFilesWritten = true;
-        writeMeta();
-        if (CgTrace.frameCount() > 0) {
-            String asked = System.getProperty("crystalgraphics.trace.report");
-            if (asked == null || asked.isEmpty()) writeReport(CgTraceReport.Tier.BREAKDOWN);
-            else writeReportIfAsked();
-            writeSplitIfAsked();
-        }
-        CgTraceLog.stop();
-    }
-
-    /** Frames without the marker that must come before the one a split is made at: a new burst, not one going on. */
-    private static final int SPLIT_QUIET = 60;
-
-    /**
-     * {@code -Dcrystalgraphics.trace.splitAt=<marker>}: the run either side of the first such marker after
-     * {@value #SPLIT_QUIET} frames without one, as {@code report-before.txt}, {@code report-after.txt} and their
-     * per-zone {@code report-compare.txt}; {@code -Dcrystalgraphics.trace.splitFrames} (300) frames each at most.
-     *
-     * <pre>{@code
-     * -Dcrystalgraphics.trace.splitAt=vfx.blast    // the beams before the first blast, against the blast
-     * }</pre>
-     */
-    private static void writeSplitIfAsked() {
-        String marker = System.getProperty("crystalgraphics.trace.splitAt");
-        if (marker == null || marker.isEmpty()) return;
-        int most = Integer.getInteger("crystalgraphics.trace.splitFrames", 300);
-        CgTraceSnapshot snap = CgTrace.snapshot();
-        List<CgFrameRecord> frames = snap.frames();
-        if (frames.isEmpty()) return;
-        long previous = frames.get(0).index() - 1, last = frames.get(frames.size() - 1).index(), split = -1L;
-        for (long at : snap.markerFrames(marker)) {
-            if (at - previous > SPLIT_QUIET) {
-                split = at;
-                break;
-            }
-            previous = at;
-        }
-        if (split < 0L) {
-            CgTraceLog.line("trace.splitAt: no '" + marker + "' after " + SPLIT_QUIET + " frames without one; nothing split");
-            return;
-        }
-        long from = Math.max(previous + 1, split - most), to = Math.min(last + 1, split + most);
-        double budget = FrameStats.get().budgetMs();
-        CgTraceLog.write("report-before.txt", CgTraceReport.of(snap.between(from, split)).budget(budget).breakdown());
-        CgTraceLog.write("report-after.txt", CgTraceReport.of(snap.between(split, to)).budget(budget).breakdown());
-        CgTraceLog.write("report-compare.txt", CgTraceReport.of(snap).budget(budget).compare(from, split - 1, split, to - 1));
-    }
-
-    /**
-     * Opens the run directory from {@link #DIR_PROPERTY} if a host has not given one.
-     *
-     * <p>For the harness and for a test, where there is no game directory to hang a cache off. Does
-     * nothing when the property is unset, which is the normal case in production.</p>
-     */
-    public static void useDirectoryProperty() {
-        String configured = System.getProperty(DIR_PROPERTY);
-        if (configured == null || configured.isEmpty()) return;
-        CgTraceLog.useRoot(Paths.get(configured));
-        TraceFiles.useRunRoot(Paths.get(configured));
-        closeOnExit();
-    }
-
     /**
      * Writes one line into this run's {@code trace.log}, from any thread, without blocking.
      *
@@ -316,71 +208,5 @@ public final class UiTrace {
      */
     public static void log(String line) {
         CgTraceLog.line(line);
-    }
-
-    /**
-     * Writes the tiered text report beside the log, and says where it went.
-     *
-     * <p><b>The surface an agent reads.</b> The loop is: run the scene, read one file, edit, run again,
-     * {@code diff} — which needs a path that does not change, and {@link CgTraceLog#LATEST} is it.</p>
-     *
-     * @return the file written, or null when no run directory was given
-     */
-    @Nullable
-    public static Path writeReport(CgTraceReport.Tier tier) {
-        Path dir = CgTraceLog.dir();
-        if (dir == null) return null;
-        String text = CgTraceReport.of(CgTrace.snapshot())
-                .budget(FrameStats.get().budgetMs())
-                .render(tier);
-        CgTraceLog.write("report.txt", text);
-        return dir.resolve("report.txt");
-    }
-
-    /** {@link #writeReport} at the tier {@code -Dcrystalgraphics.trace.report} names, if it names one. */
-    public static void writeReportIfAsked() {
-        String asked = System.getProperty("crystalgraphics.trace.report");
-        if (asked == null || asked.isEmpty()) return;
-        for (CgTraceReport.Tier tier : CgTraceReport.Tier.values()) {
-            if (tier.name().equalsIgnoreCase(asked)) {
-                writeReport(tier);
-                return;
-            }
-        }
-        writeReport(CgTraceReport.Tier.VERDICT);
-    }
-
-    /**
-     * Records what this run was, beside its log — so a partial trace cannot be read as a complete one.
-     *
-     * <p>Channels recording, channels NOT recording, the frames held and anything the writer dropped.
-     * A reader who cannot see which channels were off will read a gap in the timeline as work that did
-     * not happen, which is the one way a trace lies without being wrong.</p>
-     */
-    public static void writeMeta() {
-        if (CgTraceLog.dir() == null) return;
-        StringBuilder out = new StringBuilder(256);
-        out.append("{\n  \"run\": \"").append(CgTraceLog.runId()).append("\",\n");
-        out.append("  \"frames\": ").append(CgTrace.frameCount()).append(",\n");
-        out.append("  \"droppedLines\": ").append(CgTraceLog.dropped()).append(",\n");
-        // AND DROPPED ZONES, which nothing surfaced until this review. A reader who cannot see that
-        // the arena overflowed will read a short frame as a fast one.
-        out.append("  \"droppedZones\": ").append(CgTrace.droppedZones()).append(",\n");
-        out.append("  \"recording\": [");
-        List<String> on = CgTrace.enabledNames();
-        for (int i = 0; i < on.size(); i++) {
-            if (i > 0) out.append(", ");
-            out.append('"').append(on.get(i)).append('"');
-        }
-        out.append("],\n  \"notRecording\": [");
-        boolean first = true;
-        for (CgTraceChannel channel : CgTrace.channels()) {
-            if (channel.isEnabled()) continue;
-            if (!first) out.append(", ");
-            first = false;
-            out.append('"').append(channel.name()).append('"');
-        }
-        out.append("]\n}\n");
-        CgTraceLog.write("meta.json", out.toString());
     }
 }

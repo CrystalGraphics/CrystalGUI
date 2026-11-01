@@ -99,8 +99,7 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                service; it names no GL and no loader
   .trace                       WHAT A FRAME COST, and who asked. UiTrace (CrystalGUI's three channels —
                                `crystalgui.frame` for phases and counters, `.flow` for chains that
-                               outlive a frame, `.blame` for the stack walk — plus `useCacheRoot`, the
-                               run directory, `writeReport()` and `writeMeta()`, and the frame boundary a
+                               outlive a frame, `.blame` for the stack walk — and the frame boundary a
                                UIDocument brackets its frame with -- `frameBegin`/`frameEnd`, `blame`),
                                SlowFrameLog (the `[frame]` line, read back off the ring) and
                                FrameStats (the readout's model — a VIEW over the ring, with no storage
@@ -115,10 +114,9 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                `harness.trace.TraceReport`/`TraceDump`. TraceFiles is EXPORTED TRACES:
                                the Frame Profiler's Export writes Chrome JSON (ui.perfetto.dev opens it)
                                to `cache/trace-exports/`, BESIDE the runs because the run directory is
-                               pruned, and Compare's "Load trace as B" reads one back. A host gives
-                               the directory through `Desktop.useStorage`, which calls
-                               `UiTrace.useCacheRoot` -- until 2026-09-27 nothing did, so no run wrote
-                               a directory at all. The GPU is `CgGpuTrace` (T7): timer queries
+                               pruned, and Compare's "Load trace as B" reads one back. The run
+                               directory, its exit report and hitch dumps are CrystalGraphics'
+                               `CgTraceRun`, opened by the engine's pre-init. The GPU is `CgGpuTrace` (T7): timer queries
                                landing in the frame they were issued in, one to three frames late, as
                                `gpuNanos` and a `gpu:<name>` counter per zone -- absent, never zero.
                                Frame images are `CgFrameImages` (T8), on the `images` channel: the

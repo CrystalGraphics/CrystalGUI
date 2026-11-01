@@ -2,6 +2,7 @@ package com.crystalgui.core.trace;
 
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTraceExport;
+import com.crystalgraphics.trace.CgTraceRun;
 import com.crystalgraphics.trace.CgTraceSnapshot;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
@@ -37,25 +38,19 @@ import java.util.stream.Stream;
  * counters and markers come back; chains do not.</p>
  *
  * <p>The directory is {@code trace-exports/} beside the trace runs, never inside them: the run directory
- * is pruned to the last few runs, and an export is kept until somebody deletes it. It exists once a host
- * has given {@link UiTrace#useCacheRoot}; until then {@link #directory()} is null and export refuses.</p>
+ * is pruned to the last few runs, and an export is kept until somebody deletes it. With the engine's cache off and
+ * no {@code crystalgraphics.trace.dir}, {@link #directory()} is null and export refuses.</p>
  */
 public final class TraceFiles {
-
-    private static volatile Path directory;
 
     private TraceFiles() {
     }
 
-    /** Where exports go, given the trace runs' root. Called by {@link UiTrace}. */
-    static void useRunRoot(Path runRoot) {
-        if (directory == null) directory = runRoot.resolveSibling(runRoot.getFileName() + "-exports");
-    }
-
-    /** The exports directory, or null when no host has said where its cache is. */
+    /** The exports directory, beside the engine's trace runs ({@code CgTraceRun.root()}); null where it keeps none. */
     @Nullable
     public static Path directory() {
-        return directory;
+        Path runs = CgTraceRun.root();
+        return runs == null ? null : runs.resolveSibling(runs.getFileName() + "-exports");
     }
 
     /**
@@ -65,8 +60,8 @@ public final class TraceFiles {
      * @throws IOException also when no directory has been given
      */
     public static Path export(CgTraceSnapshot snapshot, long fromFrame, long toFrame) throws IOException {
-        Path dir = directory;
-        if (dir == null) throw new IOException("no trace directory: the host gave no cache root");
+        Path dir = directory();
+        if (dir == null) throw new IOException("no trace directory: the engine keeps no cache");
         Files.createDirectories(dir);
         long frames = snapshot.frames().stream()
                 .filter(f -> f.index() >= fromFrame && f.index() <= toFrame).count();
@@ -80,7 +75,7 @@ public final class TraceFiles {
 
     /** Every exported trace, newest first. Empty when there is no directory or nothing in it. */
     public static List<Path> list() {
-        Path dir = directory;
+        Path dir = directory();
         if (dir == null || !Files.isDirectory(dir)) return List.of();
         try (Stream<Path> files = Files.list(dir)) {
             return files.filter(f -> f.getFileName().toString().endsWith(".json"))

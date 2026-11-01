@@ -4,6 +4,7 @@ import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceLog;
 import com.crystalgraphics.trace.CgTraceReport;
+import com.crystalgraphics.trace.CgTraceRun;
 import com.crystalgraphics.trace.CgTraceSnapshot;
 
 import org.junit.After;
@@ -39,6 +40,7 @@ public class UiTraceRunTest {
     public void fresh() throws Exception {
         CgTrace.resetForTesting();
         CgTraceLog.resetForTesting();
+        CgTraceRun.resetForTesting();
         for (Path dir : List.of(ROOT, EXPORTS)) {
             if (!Files.isDirectory(dir)) continue;
             try (Stream<Path> walk = Files.walk(dir)) {
@@ -46,13 +48,14 @@ public class UiTraceRunTest {
                 for (int i = all.size() - 1; i >= 0; i--) Files.deleteIfExists(all.get(i));
             }
         }
-        System.setProperty(UiTrace.DIR_PROPERTY, ROOT.toString());
+        System.setProperty("crystalgraphics.trace.dir", ROOT.toString());
     }
 
     @After
     public void closed() {
-        System.clearProperty(UiTrace.DIR_PROPERTY);
+        System.clearProperty("crystalgraphics.trace.dir");
         CgTraceLog.resetForTesting();
+        CgTraceRun.resetForTesting();
         CgTrace.resetForTesting();
     }
 
@@ -64,7 +67,7 @@ public class UiTraceRunTest {
      * boundary, so a test that skipped {@link UiTrace#frameBegin()} would quietly record none.</p>
      */
     private void record() {
-        UiTrace.useDirectoryProperty();
+        CgTraceRun.open();
         FrameStats.get().hold();
         long chain = CgTrace.spanBegin(UiTrace.FLOW, "open file");
         for (int i = 0; i < 120; i++) {
@@ -94,7 +97,7 @@ public class UiTraceRunTest {
     @Test
     public void aRunWritesItsOwnDirectoryAndNotTheGameLog() throws Exception {
         record();
-        UiTrace.writeMeta();
+        CgTraceRun.writeMeta();
         Path exported = TraceFiles.export(CgTrace.snapshot(), Long.MIN_VALUE, Long.MAX_VALUE);
         FrameStats.get().release();
         CgTraceLog.stop();
@@ -115,7 +118,7 @@ public class UiTraceRunTest {
     @Test
     public void theRunWritesTheReportAnAgentReads() throws Exception {
         record();
-        Path written = UiTrace.writeReport(CgTraceReport.Tier.VERDICT);
+        Path written = CgTraceRun.writeReport(CgTraceReport.Tier.VERDICT);
         FrameStats.get().release();
         CgTraceLog.stop();
 
@@ -134,7 +137,7 @@ public class UiTraceRunTest {
     @Test
     public void theMetadataSaysWhatWasNotRecording() throws Exception {
         record();
-        UiTrace.writeMeta();
+        CgTraceRun.writeMeta();
         FrameStats.get().release();
         CgTraceLog.stop();
 

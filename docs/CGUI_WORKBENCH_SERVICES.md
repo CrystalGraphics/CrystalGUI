@@ -131,7 +131,7 @@ Disposer.newDisposable("drag");        // a scope to hang things off when there 
 
 ### What it is NOT
 
-**It does not replace `CgEngineLifecycle.destroyContext()`.** That already sweeps every
+**It does not replace `CgEngineLifecycle.shutdown()`.** That already sweeps every
 CrystalGraphics registry in a documented order at context teardown, and nothing escapes the process.
 Reaching for `Disposer` to "stop GL leaking at shutdown" is solving a solved problem.
 
@@ -198,7 +198,7 @@ graph's cull cannot release another's targets.
 | Memory | scales with graphs **open** | bounded by capacity — what is **visible** |
 | Close a graph | deletes its framebuffers | releases keys; deletes nothing |
 | Reopen | allocates a pool | takes slots back; allocates nothing |
-| Teardown | every renderer's owner had to remember `delete()` | `CgEngineLifecycle.destroyContext()` frees the pool |
+| Teardown | every renderer's owner had to remember `delete()` | `CgEngineLifecycle.shutdown()` frees the pool |
 
 That last row is the ownership point made real: a target's storage is made outside any registry, so no
 registry sweeps it, and release depended on somebody remembering — which is the thing an ownership tree
