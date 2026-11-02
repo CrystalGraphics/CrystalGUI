@@ -12,6 +12,7 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.lifecycle.CgLifecycleListener;
+import com.crystalgraphics.loading.task.CgLoadPlan;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
@@ -157,12 +158,21 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
 
-        // The paint context's warm-up, about a second of compiles on first init: stepped from onFrame, inside a host
-        // section, a budget of it a frame, so the title screen keeps drawing while it runs.
+        // The paint context's warm-up, about a second of compiles on first init: a load task's render part (onLoad),
+        // stepped a budget of it a frame, so the loading screen keeps drawing while it runs.
         if (warm != null) warm.cancel();
         warm = CgUiPaintContext.warm();
         warmWidth = width;
         warmHeight = height;
+    }
+
+    /** The paint context's warm-up as a load task: tracked, named on the loading screen, stepped in its budget. */
+    @Override
+    public void onLoad(CgLoadPlan plan) {
+        plan.task("crystalgui:paint").render(task -> {
+            if (warm != null) stepWarm();
+            return warm == null;
+        }).start();
     }
 
     /** The paint context's warm-up, until it finishes, and the size onContextInit gave. */
@@ -198,7 +208,6 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     public void onFrame(long frame) {
         Runnable due;
         while ((due = pending.poll()) != null) due.run();
-        if (warm != null) stepWarm();
 
         if (atFrameEnd.isEmpty()) return;
         Runnable[] paints = atFrameEnd.values().toArray(new Runnable[0]);
