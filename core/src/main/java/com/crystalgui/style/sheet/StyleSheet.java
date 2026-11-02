@@ -150,6 +150,8 @@ public final class StyleSheet {
      * ({@code StyleSheet.parse(...)} in a scene or test) have no path to re-read from at all.</p>
      */
     private String rawSource;
+    /** {@link #rawSource} compiled, what {@link #rebind} builds from; null exactly when it is. */
+    @Nullable private Compiled compiled;
 
     private StyleSheet(List<StyleRule> rules) {
         this(rules, StyleOrigin.STYLESHEET);
@@ -183,49 +185,87 @@ public final class StyleSheet {
      * point first, so definitions may reference definitions ({@link DeclarationParser#resolveTable}).
      */
     public static StyleSheet parse(String source, Map<String, String> externalVariables) {
-        String stripped = DeclarationParser.stripComments(source);
-        Map<String, String> locals = DeclarationParser.collectVariables(stripped);
-        Map<String, String> variables;
-        if (externalVariables.isEmpty()) {
-            variables = DeclarationParser.resolveTable(locals);
-        } else {
-            Map<String, String> merged = new LinkedHashMap<>(externalVariables);
-            merged.putAll(locals);
-            variables = DeclarationParser.resolveTable(merged);
-        }
-
-        List<StyleRule> rules = new ArrayList<>();
-        int sourceOrder = 0;
-        Matcher ruleMatcher = DeclarationParser.RULE_PATTERN.matcher(stripped);
-        while (ruleMatcher.find()) {
-            String selectorList = ruleMatcher.group(1).trim();
-            if (selectorList.isEmpty()) continue;
-
-            List<StyleRule.Declaration> declarations = DeclarationParser.parseBlock(ruleMatcher.group(2), variables);
-            if (declarations.isEmpty()) continue;
-
-            for (String selectorText : selectorList.split(",")) {
-                String trimmed = selectorText.trim();
-                if (trimmed.isEmpty()) continue;
-                // A BAD SELECTOR INVALIDATES ITS RULE, NEVER THE SHEET. One :focus-within used to take
-                // six unrelated panels down with it (audit §5 S3); CSS drops the rule and keeps going.
-                try {
-                    // A BAD SELECTOR INVALIDATES ITS RULE, NEVER THE SHEET. One :focus-within used to take
-                // six unrelated panels down with it (audit §5 S3); CSS drops the rule and keeps going.
-                try {
-                    rules.add(new StyleRule(Selector.parse(trimmed), declarations, sourceOrder));
-                } catch (IllegalArgumentException unparseable) {
-                    CrystalGuiCore.LOGGER.warn("Dropping the rule for '{}': {}", trimmed, unparseable.getMessage());
-                }
-                } catch (IllegalArgumentException unparseable) {
-                    CrystalGuiCore.LOGGER.warn("Dropping the rule for '{}': {}", trimmed, unparseable.getMessage());
-                }
-            }
-            sourceOrder++;
-        }
-        StyleSheet sheet = new StyleSheet(rules);
+        Compiled compiled = Compiled.of(source);
+        StyleSheet sheet = new StyleSheet(compiled.rules(externalVariables));
         sheet.rawSource = source;
+        sheet.compiled = compiled;
         return sheet;
+    }
+
+    /**
+     * A sheet's source with everything a variable table cannot change done once: comments stripped, rules and
+     * declarations scanned, selectors parsed, and each declaration with no {@code var()} parsed. A rebind against a
+     * new table re-parses only the declarations holding a {@code var()}.
+     */
+    private record Compiled(Map<String, String> locals, List<Rule> rules) {
+
+        /** One rule: its selectors, and per declaration either its fixed parse or its raw text to substitute. */
+        private record Rule(List<Selector> selectors, List<DeclarationParser.Raw> raw,
+                            List<List<StyleRule.Declaration>> fixed) {
+        }
+
+        static Compiled of(String source) {
+            String stripped = DeclarationParser.stripComments(source);
+            Map<String, String> locals = DeclarationParser.collectVariables(stripped);
+            List<Rule> rules = new ArrayList<>();
+            Matcher ruleMatcher = DeclarationParser.RULE_PATTERN.matcher(stripped);
+            while (ruleMatcher.find()) {
+                String selectorList = ruleMatcher.group(1).trim();
+                if (selectorList.isEmpty()) continue;
+                List<DeclarationParser.Raw> raw = DeclarationParser.scanBlock(ruleMatcher.group(2));
+                if (raw.isEmpty()) continue;
+                List<Selector> selectors = new ArrayList<>();
+                for (String selectorText : selectorList.split(",")) {
+                    String trimmed = selectorText.trim();
+                    if (trimmed.isEmpty()) continue;
+                    // A BAD SELECTOR INVALIDATES ITS RULE, NEVER THE SHEET. One :focus-within used to take
+                    // six unrelated panels down with it (audit §5 S3); CSS drops the rule and keeps going.
+                    try {
+                        selectors.add(Selector.parse(trimmed));
+                    } catch (IllegalArgumentException unparseable) {
+                        CrystalGuiCore.LOGGER.warn("Dropping the rule for '{}': {}", trimmed, unparseable.getMessage());
+                    }
+                }
+                List<List<StyleRule.Declaration>> fixed = new ArrayList<>(raw.size());
+                for (DeclarationParser.Raw declaration : raw) {
+                    if (declaration.usesVariables()) {
+                        fixed.add(null);
+                    } else {
+                        List<StyleRule.Declaration> parsed = new ArrayList<>(1);
+                        DeclarationParser.parse(parsed, declaration, Map.of());
+                        fixed.add(parsed);
+                    }
+                }
+                rules.add(new Rule(selectors, raw, fixed));
+            }
+            return new Compiled(locals, rules);
+        }
+
+        /** The rules, {@code var()} resolved against the locals merged over {@code externalVariables}. */
+        List<StyleRule> rules(Map<String, String> externalVariables) {
+            Map<String, String> variables;
+            if (externalVariables.isEmpty()) {
+                variables = DeclarationParser.resolveTable(locals);
+            } else {
+                Map<String, String> merged = new LinkedHashMap<>(externalVariables);
+                merged.putAll(locals);
+                variables = DeclarationParser.resolveTable(merged);
+            }
+            List<StyleRule> out = new ArrayList<>();
+            int sourceOrder = 0;
+            for (Rule rule : rules) {
+                List<StyleRule.Declaration> declarations = new ArrayList<>();
+                for (int i = 0; i < rule.raw().size(); i++) {
+                    List<StyleRule.Declaration> fixed = rule.fixed().get(i);
+                    if (fixed != null) declarations.addAll(fixed);
+                    else DeclarationParser.parse(declarations, rule.raw().get(i), variables);
+                }
+                if (declarations.isEmpty()) continue;
+                for (Selector selector : rule.selectors()) out.add(new StyleRule(selector, declarations, sourceOrder));
+                sourceOrder++;
+            }
+            return out;
+        }
     }
 
     /** Collects the {@code --name: value} definitions in {@code source} (comments stripped, every
@@ -530,8 +570,8 @@ public final class StyleSheet {
      * ({@link #DEFAULT} — the registry mirrors it from the cached source sheet instead).
      */
     void rebind(Map<String, String> externalVariables) {
-        if (rawSource == null) return;
-        replaceRules(parse(rawSource, externalVariables).getRules());
+        if (compiled == null) return;
+        replaceRules(compiled.rules(externalVariables));
     }
 
     /**
@@ -541,7 +581,8 @@ public final class StyleSheet {
      */
     void refill(String newSource, Map<String, String> externalVariables) {
         this.rawSource = newSource;
-        replaceRules(parse(newSource, externalVariables).getRules());
+        this.compiled = Compiled.of(newSource);
+        replaceRules(compiled.rules(externalVariables));
     }
 
     /**
@@ -563,6 +604,7 @@ public final class StyleSheet {
      */
     public void refillFrom(StyleSheet freshlyParsed) {
         this.rawSource = freshlyParsed.rawSource;
+        this.compiled = freshlyParsed.compiled;
         replaceRules(freshlyParsed.getRules());
     }
 }

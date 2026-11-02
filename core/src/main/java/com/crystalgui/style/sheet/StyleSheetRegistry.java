@@ -72,8 +72,8 @@ public final class StyleSheetRegistry {
      * Binds {@code resolvedTable} as the external variable table and re-substitutes every cached
      * sheet in place — <b>the theme-swap primitive</b>.
      *
-     * <p>No I/O: each sheet re-parses from its retained source, so a swap works with the resource
-     * pack long gone and costs one parse per sheet. Identity-stable throughout ({@link
+     * <p>No I/O: each sheet rebuilds from its compiled source, re-parsing only the declarations holding a
+     * {@code var()}, so a swap works with the resource pack long gone. Identity-stable throughout ({@link
      * StyleSheet#rebind} goes through {@code replaceRules}), so no engine's sheet <em>list</em>
      * changes — which is what keeps registration order out of the picture entirely.</p>
      *

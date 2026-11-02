@@ -66,81 +66,101 @@ public final class DeclarationParser {
     /** As {@link #parseBlock(String)}, resolving {@code var(--name)} against {@code variables}. */
     public static List<StyleRule.Declaration> parseBlock(String block, Map<String, String> variables) {
         List<StyleRule.Declaration> declarations = new ArrayList<>();
+        for (Raw raw : scanBlock(block)) parse(declarations, raw, variables);
+        return declarations;
+    }
+
+    /** One declaration as written: its name, its value before {@code var()} substitution, and its {@code !important}. */
+    record Raw(String name, String value, boolean important) {
+        boolean usesVariables() {
+            return value.contains("var(");
+        }
+    }
+
+    /** A block's declarations as written, variable definitions left out. */
+    static List<Raw> scanBlock(String block) {
+        List<Raw> out = new ArrayList<>();
         Matcher declMatcher = DECL_PATTERN.matcher(block);
         while (declMatcher.find()) {
             String name = declMatcher.group(1);
             if (name.startsWith("--")) continue; // a variable definition, collected separately
             String rawValue = declMatcher.group(2).trim();
-
             boolean important = false;
             Matcher importantMatcher = IMPORTANT_SUFFIX.matcher(rawValue);
             if (importantMatcher.find()) {
                 important = true;
                 rawValue = rawValue.substring(0, importantMatcher.start()).trim();
             }
-            rawValue = substituteVariables(rawValue, variables);
-
-            // margin/padding/border-width (and their -all/-horizontal/-vertical aliases) are pure
-            // shorthand syntax, never registered StyleProperty instances — expand into the real
-            // longhand declarations here, at parse time, so normal cascade resolution (origin/
-            // specificity/source-order — all shared with this declaration) decides ties, exactly
-            // like a real browser's shorthand-to-longhand expansion. See BoxEdgeShorthands.
-            BoxEdgeShorthands.Match shorthand = BoxEdgeShorthands.lookup(name);
-            if (shorthand != null) {
-                expandBoxEdgeShorthand(declarations, shorthand, rawValue, important);
-                continue;
-            }
-
-            if (BorderRadiusShorthand.isBorderRadius(name)) {
-                BorderRadiusShorthand.expand(declarations, rawValue, important);
-                continue;
-            }
-
-            // Also a 1-4 value edge shorthand, and — unlike CSS's single-scalar version — the four
-            // edges are the real properties. See OutlineOffsetShorthand for why per-edge.
-            if (OutlineOffsetShorthand.isOutlineOffset(name)) {
-                OutlineOffsetShorthand.expand(declarations, rawValue, important);
-                continue;
-            }
-
-            // 1-2 values (or keywords) over transform-origin-x/-y. `transform` itself is a real
-            // registered property and falls through to the lookup below — only the origin is syntax.
-            if (TransformOriginShorthand.isTransformOrigin(name)) {
-                TransformOriginShorthand.expand(declarations, rawValue, important);
-                continue;
-            }
-
-            // `outline` is polymorphic: a drawable slot OR a width/color shorthand, decided by the
-            // value's shape. Must run before the registry lookup below, which would otherwise always
-            // resolve it to the drawable property.
-            if (OutlineShorthand.isOutline(name)) {
-                OutlineShorthand.expand(declarations, rawValue, important);
-                continue;
-            }
-
-            // <width> and/or <color> over text-stroke-width/-color. Matched exactly, since the name
-            // is a prefix of both longhands.
-            if (TextStrokeShorthand.isTextStroke(name)) {
-                TextStrokeShorthand.expand(declarations, rawValue, important);
-                continue;
-            }
-
-            StyleProperty<?> property = StylePropertyRegistry.byName(name);
-            if (property == null) {
-                CrystalGuiCore.LOGGER.warn("Unknown style property '{}' — skipping declaration", name);
-                continue;
-            }
-            // A property a shorthand owns stays resolvable by name — it still cascades, inherits and
-            // serialises under it — but a sheet may not write it, so there is one spelling to learn.
-            if (property.getAuthoredThrough() != null) {
-                CrystalGuiCore.LOGGER.warn("'{}' is not written directly — use the '{}' shorthand",
-                        name, property.getAuthoredThrough());
-                continue;
-            }
-            var value = property.valueParser.parse(rawValue);
-            declarations.add(new StyleRule.Declaration(property, value, important));
+            out.add(new Raw(name, rawValue, important));
         }
-        return declarations;
+        return out;
+    }
+
+    /** {@code raw} into {@code declarations}: substituted against {@code variables}, a shorthand expanded. */
+    static void parse(List<StyleRule.Declaration> declarations, Raw raw, Map<String, String> variables) {
+        String name = raw.name();
+        boolean important = raw.important();
+        String rawValue = substituteVariables(raw.value(), variables);
+
+        // margin/padding/border-width (and their -all/-horizontal/-vertical aliases) are pure
+        // shorthand syntax, never registered StyleProperty instances — expand into the real
+        // longhand declarations here, at parse time, so normal cascade resolution (origin/
+        // specificity/source-order — all shared with this declaration) decides ties, exactly
+        // like a real browser's shorthand-to-longhand expansion. See BoxEdgeShorthands.
+        BoxEdgeShorthands.Match shorthand = BoxEdgeShorthands.lookup(name);
+        if (shorthand != null) {
+            expandBoxEdgeShorthand(declarations, shorthand, rawValue, important);
+            return;
+        }
+
+        if (BorderRadiusShorthand.isBorderRadius(name)) {
+            BorderRadiusShorthand.expand(declarations, rawValue, important);
+            return;
+        }
+
+        // Also a 1-4 value edge shorthand, and — unlike CSS's single-scalar version — the four
+        // edges are the real properties. See OutlineOffsetShorthand for why per-edge.
+        if (OutlineOffsetShorthand.isOutlineOffset(name)) {
+            OutlineOffsetShorthand.expand(declarations, rawValue, important);
+            return;
+        }
+
+        // 1-2 values (or keywords) over transform-origin-x/-y. `transform` itself is a real
+        // registered property and falls through to the lookup below — only the origin is syntax.
+        if (TransformOriginShorthand.isTransformOrigin(name)) {
+            TransformOriginShorthand.expand(declarations, rawValue, important);
+            return;
+        }
+
+        // `outline` is polymorphic: a drawable slot OR a width/color shorthand, decided by the
+        // value's shape. Must run before the registry lookup below, which would otherwise always
+        // resolve it to the drawable property.
+        if (OutlineShorthand.isOutline(name)) {
+            OutlineShorthand.expand(declarations, rawValue, important);
+            return;
+        }
+
+        // <width> and/or <color> over text-stroke-width/-color. Matched exactly, since the name
+        // is a prefix of both longhands.
+        if (TextStrokeShorthand.isTextStroke(name)) {
+            TextStrokeShorthand.expand(declarations, rawValue, important);
+            return;
+        }
+
+        StyleProperty<?> property = StylePropertyRegistry.byName(name);
+        if (property == null) {
+            CrystalGuiCore.LOGGER.warn("Unknown style property '{}' — skipping declaration", name);
+            return;
+        }
+        // A property a shorthand owns stays resolvable by name — it still cascades, inherits and
+        // serialises under it — but a sheet may not write it, so there is one spelling to learn.
+        if (property.getAuthoredThrough() != null) {
+            CrystalGuiCore.LOGGER.warn("'{}' is not written directly — use the '{}' shorthand",
+                    name, property.getAuthoredThrough());
+            return;
+        }
+        var value = property.valueParser.parse(rawValue);
+        declarations.add(new StyleRule.Declaration(property, value, important));
     }
 
     /**
