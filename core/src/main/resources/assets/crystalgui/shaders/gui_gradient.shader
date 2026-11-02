@@ -49,6 +49,8 @@
 #pragma cg_use clip
 #pragma cg_feature WITH_MASK
 #pragma cg_feature RADIAL
+#pragma cg_permutation WITH_MASK
+#pragma cg_permutation RADIAL
 
 #include "crystalgraphics:shaders/lib/noise.glsl"
 #include "crystalgraphics:shaders/lib/sdf.glsl"

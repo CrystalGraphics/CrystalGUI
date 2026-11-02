@@ -4,9 +4,10 @@
 
 ## Shipped assets
 
-> **A new shader or keyword set must be precached.** A material the UI paints through `CgUiPaintContext` is
-> precached at paint and drawn once built. One drawn any other way, and every keyword set a style can switch to, is
-> named to `CgPipelinePrecache` at load, or it shows late on first use: `CrystalGraphics/docs/PRECACHE.md`. Editing
+> **A new shader or keyword set must be precached.** Every shader the UI draws is listed in `CgUiPaintContext`'s
+> `QUAD_SHADERS` or `CURVE_SHADERS`, registered at client init and built behind the loading screen, and every keyword a
+> style can switch is in its shader's `#pragma cg_permutation`. One missing shows late on first use and counts
+> `pipeline.missed`: `CrystalGraphics/docs/PRECACHE.md`. Editing
 > a shipped shader also stales CrystalGraphics' shipped pipeline list, refreshed before a release
 > ([`CGUI_BUILD.md`](CGUI_BUILD.md) § *Releasing*).
 

@@ -29,6 +29,10 @@
 #pragma cg_feature WITH_CHROMATIC
 #pragma cg_feature WITH_SPECULAR
 #pragma cg_feature WITH_NOISE
+#pragma cg_permutation WITH_REFRACTION
+#pragma cg_permutation WITH_CHROMATIC
+#pragma cg_permutation WITH_SPECULAR
+#pragma cg_permutation WITH_NOISE
 
 #include "crystalgraphics:shaders/lib/sdf.glsl"
 #include "crystalgraphics:shaders/lib/noise.glsl"

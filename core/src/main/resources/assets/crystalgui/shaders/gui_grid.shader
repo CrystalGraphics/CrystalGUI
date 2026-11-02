@@ -44,6 +44,7 @@
 #pragma cg_use quad
 #pragma cg_use clip
 #pragma cg_feature WITH_MASK
+#pragma cg_permutation WITH_MASK
 
 #include "crystalgraphics:shaders/lib/sdf.glsl"
 

@@ -28,6 +28,8 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.render.draw.CgBindingTable;
 import com.crystalgraphics.render.draw.CgDrawChunk;
+import com.crystalgraphics.render.draw.CgInstanceKind;
+import com.crystalgraphics.render.world.CgPipelinePrecache;
 import com.crystalgraphics.render.draw.CgPassConstants;
 import com.crystalgraphics.render.graph.CgUpload;
 import com.crystalgraphics.render.graph.CgFrame;
@@ -247,8 +249,30 @@ public final class CgUiPaintContext {
         }
     }
 
+    /**
+     * Names every shader the UI draws to CrystalGraphics' precache, so they are built behind the host's loading screen and
+     * the desktop's first frame compiles nothing. Once, at client init; any thread.
+     *
+     * <pre>{@code
+     * CgUiPaintContext.precache();   // HostSession.install does it
+     * }</pre>
+     */
+    public static void precache() {
+        CgPipelinePrecache.register("crystalgui:ui", pipelines -> {
+            for (String quad : QUAD_SHADERS) pipelines.addPass(quad, CgInstanceKind.QUAD);
+            for (String curve : CURVE_SHADERS) pipelines.addPass(curve, CgInstanceKind.CURVE);
+        });
+    }
+
     /** Every box the UI draws: fills, textures, shapes, icons, composites. @see CgShapeTable */
     private static final String BOX_SHADER = "crystalgui:shaders/gui_box.shader";
+    private static final String[] QUAD_SHADERS = {BOX_SHADER, "crystalgui:shaders/gui_blur.shader",
+            "crystalgui:shaders/gui_downsample.shader", "crystalgui:shaders/gui_backdrop_filter.shader",
+            "crystalgui:shaders/gui_color_field.shader", "crystalgui:shaders/gui_gradient.shader",
+            "crystalgui:shaders/gui_grid.shader", "crystalgui:shaders/stage_probe.shader"};
+    private static final String[] CURVE_SHADERS = {"crystalgui:shaders/gui_curve.shader",
+            "crystalgui:shaders/gui_curve_accumulate.shader", "crystalgui:shaders/gui_curve_coverage.shader",
+            "crystalgui:shaders/gui_curve_coverage_max.shader"};
 
     private final CgMaterial boxModelMaterial;
 

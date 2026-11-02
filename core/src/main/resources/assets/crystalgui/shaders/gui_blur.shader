@@ -39,6 +39,7 @@
 // radius of r costs r + 1 fetches instead of 2r + 1. Read as Skia's 1D blur effect reads them. Without
 // the keyword the pass is the incremental kernel below, kept for comparison.
 #pragma cg_feature LINEAR_KERNEL
+#pragma cg_permutation LINEAR_KERNEL
 #define CG_BLUR_MAX_PAIRS 9
 
 Tags { "RenderType" = "Transparent" }
